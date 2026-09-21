@@ -8,10 +8,19 @@
 # could not be reproduced. With it, a flake revision names exactly one engine,
 # and moving to a new one is a commit somebody can look at.
 #
-# The url is the release tagged with the engine's own commit, not
+# The url is the release tagged with the engine's own SERIES, not
 # `engine-nightly`: the nightly is deleted and recreated on every release
 # run, and a pin to it stops resolving as soon as the next build lands.
+#
+# `identity` is that series -- the pin, `patches/` and `src/` hashed by
+# content, the same value `engine-series-stamp.sh` uses to decide whether the
+# shared checkout needs rebuilding. It is here so that
+# `scripts/test-the-pinned-engine-is-this-series.sh` can ask, without
+# downloading anything, whether the engine this repository pins is the engine
+# this repository describes. Two commits that do not move the fork have the
+# same identity and so need no repin between them.
 {
+  identity = "67e46f4cb1269362167d760b5a505d91cda12a49f85045e19a8960b76fd091c5";
   commit = "aa0b9bd91cce230a656bf6d34260408f47862540";
   url = "https://github.com/cprussin/domicile/releases/download/engine-aa0b9bd/domicile-engine-aa0b9bd-linux-x64.tar.zst";
   hash = "sha256-aNShRQQL1xe0lEPHYcBGJ184A2RJQ2Qfvhsd12GZZA0=";
