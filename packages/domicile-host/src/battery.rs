@@ -28,6 +28,38 @@ const POWER_SUPPLY: &str = "/sys/class/power_supply";
 /// needs to know which it got — only that both halves came from the same pair.
 const LEVELS: &[(&str, &str)] = &[("energy_now", "energy_full"), ("charge_now", "charge_full")];
 
+/// The field the kernel names a power supply's subsystem with, whole.
+///
+/// Matched entire rather than by prefix: nothing is called
+/// `power_supply_something` today, and a prefix match is the kind of thing
+/// that stays right until it is not.
+const POWER_SUPPLY_SUBSYSTEM: &[u8] = b"SUBSYSTEM=power_supply";
+
+/// Whether a uevent datagram is the kernel reporting a power supply.
+///
+/// **A doorbell rather than a reading.** Nothing is parsed out of the message
+/// and nothing in it is believed: what it means is "go and look", and looking
+/// is [`reading`] against `/sys`, which is the kernel's own answer. That is
+/// what makes a netlink socket safe to hang this on — a datagram from anywhere
+/// at all, malformed or invented, costs one read of four small files and
+/// cannot make the bar say anything untrue.
+///
+/// The filter is for the desktop's sake rather than for correctness: a machine
+/// announces a uevent for every device that comes, goes or changes, and
+/// re-reading the charge because a USB stick was plugged in would be the
+/// polling this replaced, on somebody else's clock.
+///
+/// The format is the kernel's own, which is what group 1 of
+/// `NETLINK_KOBJECT_UEVENT` carries: NUL-separated fields, the first
+/// `ACTION@DEVPATH` and the rest `KEY=VALUE`. (udevd's processed messages are
+/// a different shape on another group, and this never subscribes to them —
+/// see `uevents.rs` in the compositor for why that matters on a bare tty.)
+pub fn announces_a_power_supply(datagram: &[u8]) -> bool {
+    datagram
+        .split(|byte| *byte == 0)
+        .any(|field| field == POWER_SUPPLY_SUBSYSTEM)
+}
+
 /// What the desktop can say about the machine's battery.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Reading {
@@ -187,10 +219,10 @@ fn number(supply: &Path, name: &str, supplies: &impl PowerSupplies) -> Option<f6
 
 /// What the chromes have been told about the battery.
 ///
-/// The charge is polled rather than delivered — nothing signals a percent — so
-/// unlike every other thing a compositor broadcasts this one has a reading on
-/// every turn of a timer, and almost none of them are worth a message:
-/// `energy_now` moves by a few units a second on a machine doing nothing.
+/// A reading is taken whenever the kernel says a supply changed, and again on
+/// a slow backstop — and almost none of them are worth a message, because
+/// `energy_now` moves by a few units a second on a machine doing nothing and
+/// one uevent for a lead is two, the charger's and the battery's.
 ///
 /// **News is a whole percent, or the lead.** That is the resolution the bar
 /// draws at — it rounds the fraction to figures and fills a meter with the

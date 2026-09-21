@@ -85,7 +85,7 @@ use smithay::{
     delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
     delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 mod coalesce;
 mod dmabuf_descriptor;
@@ -100,6 +100,7 @@ mod outbound;
 mod scale;
 mod screens;
 mod timing_window;
+mod uevents;
 mod viewport;
 
 use crate::engine::{Bounds, Capture};
@@ -118,7 +119,7 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use domicile_config::{Config, ConfigError, ConfigStore};
-use domicile_host::battery::{reading, Charge, RealPowerSupplies};
+use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
@@ -719,8 +720,18 @@ struct FrameReport {
     submit_worst_ms: u32,
 }
 
-/// How often the battery is read. See the timer that uses it for the number.
-const BATTERY_POLL: Duration = Duration::from_secs(10);
+/// How often the battery is read when nothing has said it changed.
+///
+/// A BACKSTOP RATHER THAN THE MECHANISM, which is the whole difference from
+/// the ten-second poll this replaced. The kernel announces a charge that moves
+/// — see `uevents.rs` — so a lead going in reaches the bar in the time it
+/// takes to read four small files. What this covers is a driver that does not
+/// call `power_supply_changed()` on every capacity step, which some do not:
+/// without it the figure on the bar could sit still for an afternoon while the
+/// battery drained under it. Two minutes because a percent takes minutes to
+/// move even on a machine running flat, so anything shorter would be the poll
+/// again under another name.
+const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
@@ -4428,21 +4439,45 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     }
 
-    // The battery, on a clock, because a battery has no event.
+    // The battery, off the kernel's own announcement of it.
     //
-    // Everything else a chrome is told arrives from somewhere: a client maps,
-    // a key goes down, a monitor is plugged in. The kernel publishes the
-    // charge as files and knocks on nothing, so this is the one thing the
-    // compositor has to go and look at.
+    // THE CHARGE WAS POLLED AND SHOULD NOT HAVE BEEN. Everything else a chrome
+    // is told arrives from somewhere — a client maps, a key goes down, a
+    // monitor is plugged in — and so does this: `power_supply_changed()` in a
+    // driver is a uevent, sent the moment the lead moves. A ten-second timer
+    // in its place bought a bolt that lit up to ten seconds late and a CPU
+    // woken six times a minute to learn nothing.
     //
-    // TEN SECONDS, and the number is a compromise between two things nobody
-    // notices. A percent takes minutes to move even on a machine running
-    // flat, so nothing on the bar is stale at this rate — but a lead going in
-    // moves the bolt and a user *is* watching for that, which is the half
-    // that wants it short. Reading three small files out of a virtual
-    // filesystem costs nothing measurable; what a shorter interval would cost
-    // is waking a laptop's CPU more often to tell it about its own battery,
-    // which is a funny way to spend a charge.
+    // Level-triggered and drained on each turn, because one lead moving is
+    // two events — the charger and the battery — and a source that took one
+    // datagram per turn would read `/sys` twice for it.
+    //
+    // A FAILED SUBSCRIBE IS NOT FATAL, which is a departure from how this
+    // compositor treats the console it cannot take. What is lost is the
+    // promptness and not the reading: the backstop below still runs, so the
+    // bar is a couple of minutes stale rather than absent, and a desktop that
+    // refused to start over its own battery meter would be the worse answer.
+    // The line names what was lost so it is not a silence.
+    match uevents::subscribe() {
+        Ok(socket) => {
+            handle.insert_source(
+                Generic::new(socket, Interest::READ, Mode::Level),
+                |_, socket, data: &mut CalloopData| {
+                    if uevents::drain(socket, announces_a_power_supply) {
+                        data.state.tell_the_chromes_the_charge();
+                    }
+                    Ok(PostAction::Continue)
+                },
+            )?;
+        }
+        Err(err) => error!(
+            %err,
+            "no netlink socket for device changes, so the charge will only \
+             update on its backstop rather than when a lead moves"
+        ),
+    }
+
+    // And the backstop, which is also what takes the first reading.
     //
     // Armed on every desktop rather than only on a laptop: a machine with no
     // battery reads `/sys/class/power_supply`, finds no cell, and says
@@ -4450,7 +4485,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // decided at startup would be wrong about a battery plugged in later.
     handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
         data.state.tell_the_chromes_the_charge();
-        TimeoutAction::ToDuration(BATTERY_POLL)
+        TimeoutAction::ToDuration(BATTERY_BACKSTOP)
     })?;
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.

@@ -371,9 +371,10 @@ pub enum HostMessage {
     /// **Pushed, not answered.** There is no `ListBattery` beside
     /// [`ChromeMessage::ListFiles`], because a charge changes on its own while
     /// a home directory changes for reasons nothing is watching. The
-    /// compositor polls `/sys/class/power_supply` and sends this when the
-    /// reading moves, and once more to a chrome that has just connected — so a
-    /// page that reloaded is not left blank until the next percent.
+    /// kernel announces a supply that changed and the compositor re-reads
+    /// `/sys/class/power_supply` when it does, sending this if the reading
+    /// moved — plus once more to a chrome that has just connected, so a page
+    /// that reloaded is not left blank until the next percent.
     ///
     /// **Not `navigator.getBattery`, which is where a shell would otherwise
     /// read this.** That API answers through UPower over D-Bus, and a desktop

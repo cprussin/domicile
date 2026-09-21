@@ -458,6 +458,17 @@ is nothing for a shell to ask. It arrives when the reading moves far enough to
 draw — a whole percent, or the lead — and once more to a page that has just
 connected, so a reload does not wait for the next percent.
 
+**And it is not polled**, which it was for one release and should not have
+been. The kernel announces a supply that changed — `power_supply_changed()` in
+the driver is a uevent — so the compositor subscribes to
+`NETLINK_KOBJECT_UEVENT` and re-reads when it is told to. A socket rather than
+libudev, because libudev's monitor is a wrapper over that same socket and
+`domicile-compositor` takes no C library beyond libxkbcommon; group 1 rather
+than udevd's, because a desktop on a bare tty is the machine least likely to
+be running that daemon. Nothing in the datagram is believed: it is a doorbell,
+and the reading that follows comes from `/sys`. A slow backstop is still
+armed, for drivers that do not announce every capacity step.
+
 Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
