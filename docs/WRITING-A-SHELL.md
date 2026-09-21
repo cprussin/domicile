@@ -526,8 +526,10 @@ put it anywhere. So ask: `domicile.warpPointer([x, y])`, in your own page
 coordinates — the ones a `PointerEvent` reports as `clientX`/`clientY`, which
 are the ones you laid the window out in. A point outside your page is clamped
 into it, and where something else owns the pointer — a nested run inside
-another compositor — nothing moves. `shell-manganese` does this on every keyed
-focus change, and only when the pointer is not over the window already.
+another compositor — nothing moves. `shell-manganese` does this on every focus
+change of its own — a keyed one, and a window opening with the keyboard, which
+is the same problem with nobody pressing anything — and only when the pointer
+is not over the window already.
 
 ## A browser window
 
