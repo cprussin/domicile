@@ -363,10 +363,11 @@ Incremental, against a tree already built at the pin:
 
 Net of the floor that is ~1m to lay the series down — `gn` regen, the mojom
 generation, three objects, and relinking `libcontent.so` and `chrome` — and ~6s
-per subsequent edit. The rebase number is still missing: it needs
-`CHROMIUM_PIN` rolled onto a later revision, and that has not happened — the
-roll itself is now a pull request rather than an afternoon on the build host,
-so the number is one repin away. See `ENGINE-FORK.md`'s *Build and CI cost*.
+per subsequent edit. **The rebase number is no longer missing.** Three weeks
+of upstream — `bbbfd22` to `3d77360` — conflicted in three of thirty-five
+patches, and one of those three reached a file in `src/`, which is a copy and
+therefore cannot reject. `ENGINE-FORK.md`'s *Build and CI cost* has the table
+and the lesson.
 
 ## State
 

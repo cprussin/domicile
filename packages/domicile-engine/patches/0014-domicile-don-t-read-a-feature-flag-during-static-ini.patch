@@ -42,7 +42,7 @@ DrmGpuDisplayManagerTest cases cover the call sites.
  4 files changed, 29 insertions(+), 17 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index 8a1474e09a954..af1f9857ea6a6 100644
+index fd6df24808..f7053a20e8 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -669,10 +669,10 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
@@ -60,7 +60,7 @@ index 8a1474e09a954..af1f9857ea6a6 100644
      }
  
 diff --git a/ui/ozone/platform/drm/common/drm_util.h b/ui/ozone/platform/drm/common/drm_util.h
-index fa7e84622c5aa..bfc1853201c3b 100644
+index fa7e84622c..bfc1853201 100644
 --- a/ui/ozone/platform/drm/common/drm_util.h
 +++ b/ui/ozone/platform/drm/common/drm_util.h
 @@ -37,16 +37,28 @@ class DisplayMode;
@@ -98,7 +98,7 @@ index fa7e84622c5aa..bfc1853201c3b 100644
  // Using a moderate size e.g. 256 for the cursor is enough in most cases.
  const int kMaxCursorBufferSize = 256;
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-index a8994855e64e1..7a5b07ffda036 100644
+index a8994855e6..7a5b07ffda 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 @@ -313,10 +313,10 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
@@ -116,7 +116,7 @@ index a8994855e64e1..7a5b07ffda036 100644
      }
  
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
-index fb8b56e6ef1f0..ad044727a4c2a 100644
+index fb8b56e6ef..ad044727a4 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
 @@ -286,8 +286,8 @@ class DrmGpuDisplayManagerTest : public testing::Test {

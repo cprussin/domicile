@@ -52,10 +52,10 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index d83f40402241f..425629d66e552 100644
+index 717ebc28a3..0670a8aacb 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2379,6 +2379,7 @@ source_set("browser") {
+@@ -2389,6 +2389,7 @@ source_set("browser") {
      "//chrome/browser/domicile",
      "//components/domicile:control_channel",
      "//components/domicile:shell_scheme",
@@ -64,7 +64,7 @@ index d83f40402241f..425629d66e552 100644
      "//components/download/content/factory",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index d55fad9fefd13..6c80e940fba07 100644
+index 5afd97d2c9..a45fafa1da 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -75,7 +75,7 @@ index d55fad9fefd13..6c80e940fba07 100644
  #include "content/public/browser/browser_thread.h"
  #include "mojo/public/cpp/bindings/message.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -506,6 +507,30 @@ void PopulateChromeFrameBinders(
+@@ -496,6 +497,30 @@ void PopulateChromeFrameBinders(
                                        std::move(receiver)));
        }));
  
@@ -107,7 +107,7 @@ index d55fad9fefd13..6c80e940fba07 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 34225593922a6..8864335aa1e32 100644
+index 383115087f..9b28e72b1d 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -408,6 +408,11 @@ component("core") {
@@ -123,7 +123,7 @@ index 34225593922a6..8864335aa1e32 100644
      "//components/performance_manager/public/mojom:mojom_blink",
      "//components/shared_highlighting/core/common",
 diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
-index db7a924b957e9..0ac2815adb58d 100644
+index db7a924b95..0ac2815adb 100644
 --- a/third_party/blink/renderer/core/DEPS
 +++ b/third_party/blink/renderer/core/DEPS
 @@ -69,6 +69,8 @@ include_rules = [
@@ -136,7 +136,7 @@ index db7a924b957e9..0ac2815adb58d 100644
      "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
      "+components/viz/common/frame_timing_details.h",
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index 292b88006b434..8828fbd9d7f84 100644
+index d143881cdf..e72ada052d 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -52,7 +52,12 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {

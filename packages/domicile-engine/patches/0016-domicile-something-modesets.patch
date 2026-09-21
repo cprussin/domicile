@@ -40,7 +40,7 @@ which are different types and do not convert; upstream's own
  2 files changed, 19 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index ffee39089df7d..1d789a5ce9f51 100644
+index ffee39089d..1d789a5ce9 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -61,7 +61,7 @@ index ffee39089df7d..1d789a5ce9f51 100644
    ]
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 662ee090043a2..3fd2c99b3baef 100644
+index 662ee09004..3fd2c99b3b 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@

@@ -12,9 +12,13 @@ Letting `gn gen` accept `ozone_platform_drm = true` is a **patch**: nine edits,
 eight of them around the DRM platform rather than inside it. Getting a lit
 screen out of it is a **port**, of the *embedder* ozone/drm has never had off
 ChromeOS. Neither is a fork of ozone/drm: at
-`bbbfd22b56d9df22e578e9faf55b286714b7303c` the 49 `.cc` files in
-`//ui/ozone/platform/drm:gbm` contain **two** references to ChromeOS between
-them and **zero** `BUILDFLAG(IS_CHROMEOS)`.
+`3d773601242cc8a52641671348d4a40ac66af750` the 50 `.cc` files in
+`//ui/ozone/platform/drm:gbm` contain **three** references to ChromeOS between
+them and **zero** `BUILDFLAG(IS_CHROMEOS)` — a protected-media build flag, a
+comment about ChromeOS boards, and one include of
+`ui/events/ozone/chromeos/cursor_controller.h`. Re-counted at this pin rather
+than carried over: the file count and the references both moved by one when the
+pin did, and the claim they support did not.
 
 Every Chromium citation below is read at the pin in
 `packages/domicile-engine/CHROMIUM_PIN`; the rest are read in systemd's sources

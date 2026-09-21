@@ -181,7 +181,8 @@ void HTMLWebViewElement::NavigateGuest() {
 }
 
 void HTMLWebViewElement::SetFocused(bool received,
-                                   mojom::blink::FocusType type) {
+                                    mojom::blink::FocusType type,
+                                    BlurEventBehavior blur_event_behavior) {
   // UNCONDITIONAL, AND BEFORE ANYTHING ELSE. Three engine runs have now ended
   // with this element as document.activeElement and no announcement, and the
   // only way to tell "this override never ran" from "it ran with received
@@ -189,7 +190,7 @@ void HTMLWebViewElement::SetFocused(bool received,
   // DispatchGuestFocus cannot: they are inside the case being asked about.
   LOG(INFO) << "domicile: <webview> SetFocused received=" << received;
 
-  HTMLFrameElementBase::SetFocused(received, type);
+  HTMLFrameElementBase::SetFocused(received, type, blur_event_behavior);
   if (received) {
     DispatchGuestFocus();
   }

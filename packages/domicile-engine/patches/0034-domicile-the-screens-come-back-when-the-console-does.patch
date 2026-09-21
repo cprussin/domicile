@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Thu, 18 Sep 2026 00:00:00 +0000
+Date: Fri, 18 Sep 2026 00:00:00 +0000
 Subject: [PATCH] domicile: the screens come back when the console does
 
 `Ctrl+Alt+F2` and back locked the desktop up. The take on the way back put
@@ -58,10 +58,10 @@ Claude-Session: https://claude.ai/code/session_01FHahS8JpYFNtfjYsdorEfp
  1 file changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 6a07657..b1d4e2f 100644
+index 6a07657260..3469dd6f6e 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -127,9 +127,17 @@ class OzonePlatformDrm : public OzonePlatform {
+@@ -127,8 +127,16 @@ class OzonePlatformDrm : public OzonePlatform {
      // key in the desktop is dispatched through, and it exists by now:
      // `InitializeUI` builds it and a screen is not initialized before a
      // platform is.
@@ -79,7 +79,6 @@ index 6a07657..b1d4e2f 100644
  
      // And the machine this console is on, which can go to sleep under it. A
      // suspend takes nothing away from this session -- logind pauses no device
-     // and drops no master for one -- so unlike the console switch above there
 @@ -476,7 +484,8 @@ class OzonePlatformDrm : public OzonePlatform {
    // delegate it holds.
    std::unique_ptr<DrmModeset> modeset_;

@@ -5,6 +5,12 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
+  # The Blink half of the fork links `:mojom_blink`, and since `3d77360` the
+  # template emits that variant only for a target that asks. It used to emit it
+  # for everything that did not opt out, so this line reads as a no-op against
+  # any older Chromium and is load-bearing against this one.
+  generate_blink = true
+
   sources = [
     "control_channel.mojom",
     "external_surface.mojom",
