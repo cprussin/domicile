@@ -79,6 +79,15 @@ which is every press that moved nothing the pointer is near: a split, a layout,
 a tab of the container it is sitting on. The page cannot move a pointer; the
 engine can, and `warpPointer` is what asks it to.
 
+**A window that opens takes the pointer the same way**, and for the same
+reason with nobody pressing anything: a window lands on the workspace being
+looked at and takes the keyboard — a terminal finishing its startup, a link
+opening a browser window — while the pointer is still over whatever that
+window was laid out beside, which is what would take the focus back. What
+says a window is new is that it was not there a render ago; a window that
+opens WITHOUT the keyboard moves nothing, because the pointer has no quarrel
+with it.
+
 ### The keys are physical, and the layout is written down
 
 sway binds *keysyms* and resolves them through the active keymap. Nothing here
@@ -539,8 +548,8 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
-| `src/window-management/pointer-warp.ts` | Where the pointer goes when a key moves the focus, and the two questions that decide whether it goes anywhere at all. |
-| `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which press was a keyed one, where the pointer is, and the render that is late enough to know the window's new box. |
+| `src/window-management/pointer-warp.ts` | Where the pointer goes when the desktop moves the focus, and the two questions that decide whether it goes anywhere at all. |
+| `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which focus changes were the desktop's own — a keyed press, and a window that has only just opened — where the pointer is, and the render that is late enough to know the window's new box. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar over a `<webview>`, and everywhere the shell has sent it. |
 | `src/window-management/browser/AddressBar.tsx` | That bar: the history controls, the one button that is Reload or Stop, and the address as a pill with its connection indicator inside it. |

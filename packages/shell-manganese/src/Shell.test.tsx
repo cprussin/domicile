@@ -1124,6 +1124,26 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
+    it("takes the pointer to a window that has just opened", () => {
+      // Nobody pressed a key for this one: the client finished starting and
+      // its window took the keyboard. The pointer is wherever it was — over
+      // the window that was there before, in a real session — and the first
+      // pointer event over that window would take the focus straight back.
+      const { container } = renderShell();
+      clientAppears("one");
+      domicile.calls.length = 0;
+
+      clientAppears("two");
+
+      expect(domicile.calls).toContainEqual(["warpPointer", [1445, 571]]);
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        height: "1018px",
+        width: "950px",
+        x: "970px",
+        y: "62px",
+      });
+    });
+
     it("takes the pointer with it when a key moves the focus", () => {
       // `mouse_warping`, and the reason this desktop needs it: the window the
       // focus came from is still under the pointer, and the first pointer

@@ -68,14 +68,20 @@ export const Desktop = ({ domicile }: Props) => {
   );
 
   // And the pointer goes where the keyboard goes, because the pointer is what
-  // moves the keyboard here: focus follows the cursor, so a keyed focus change
-  // that left the pointer over the window it came from would be undone by the
+  // moves the keyboard here: focus follows the cursor, so a focus change the
+  // pointer did not make — a key, or a window opening — would be undone by the
   // next pointer event. `pointer-warp.ts` has the whole of it.
   const focus = useMemo(
     () => focusOn(screenful, windows.activeId),
     [screenful, windows.activeId],
   );
-  const keyed = usePointerWarp({ domicile, focus });
+  // The ids alone: what the warp reads them for is whether the window holding
+  // the keyboard is one that was not there a render ago.
+  const open = useMemo(
+    () => windows.windows.map(({ id }) => id),
+    [windows.windows],
+  );
+  const keyed = usePointerWarp({ domicile, focus, windows: open });
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
