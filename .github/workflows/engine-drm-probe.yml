@@ -150,6 +150,17 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
+      # Which tree, for engine.yml's reason. This one is dispatch-only and so
+      # is never the job racing a repin — but `$CHROMIUM` is a symlink now, and
+      # a workflow that resets that path without choosing what is behind it
+      # resets whichever tree the last run happened to leave there. See
+      # .github/scripts/engine-tree-pool.sh.
+      - name: Which tree this pin builds in
+        run: |
+          set -euo pipefail
+          .github/scripts/engine-tree-pool.sh use \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
       # The same three scripts the other two workflows use, called rather than
       # copied. The reset is where the pin is fetched when the tree has never
       # had it, where the series' own untracked files come off the tree, and

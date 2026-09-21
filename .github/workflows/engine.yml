@@ -237,6 +237,36 @@ jobs:
       - name: Take the tree
         run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
 
+      # WHICH TREE, and it is the reason a repin no longer costs every branch.
+      #
+      # `$CHROMIUM` is a symlink, and this points it at one of the trees
+      # `crux` keeps. A pin some tree already carries is a swap, which makes
+      # the stamp below answer `carries=true` and skips the reset, the sync,
+      # the apply and the compile — the ~1m case, for a pin that used to cost
+      # 4h. A pin nothing carries costs what it costs today, in whichever tree
+      # was least recently asked for.
+      #
+      # WHY THIS EXISTS AT ALL: moving `CHROMIUM_PIN` invalidates out/Domicile
+      # in both directions, so two branches on different pins taking turns in
+      # one tree is that 4h EVERY TURN — and with a pull request run and a
+      # merge run each, two open branches is four of them, on the one slot
+      # everything else queues behind.
+      #
+      # AFTER THE LOCK AND BEFORE EVERY STEP THAT READS THE TREE. The swap is
+      # a write to shared state — the person building through this same path
+      # is who it can land under — so it belongs inside the lock, and
+      # `engine-tree-lock.sh` now keeps the lock at the build root so that
+      # swapping the path cannot strand it.
+      #
+      # It does not look inside a tree. Whether the one it picked really holds
+      # this series is the stamp's question, asked next, against whatever the
+      # path now names. See .github/scripts/engine-tree-pool.sh.
+      - name: Which tree this pin builds in
+        run: |
+          set -euo pipefail
+          .github/scripts/engine-tree-pool.sh use \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
       # In a script, and shared with engine-release.yml, which resets the same
       # tree for the same reason. The two copies of this had already drifted in
       # the order of their steps; a third copy is what the script prevents. It
