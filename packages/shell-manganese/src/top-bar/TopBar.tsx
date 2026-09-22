@@ -84,10 +84,6 @@ export const TopBar = ({
 );
 
 const barStyles = grid({
-  // The workspace buttons come from the component library, whose recipes set
-  // their own color; this is what puts the workspace numbers on the same
-  // footing as the text beside them.
-  "& button": { color: "white" },
   // THE SCRIM, and it hangs below the bar rather than filling it. A gradient
   // inside the bar's own 32px has to be at its weakest at the lower edge and
   // is therefore weakest a few pixels under the text, which is the half of

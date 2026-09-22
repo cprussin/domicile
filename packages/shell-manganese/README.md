@@ -6,10 +6,13 @@ the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
 
-The chrome is a React tree built entirely from
-[`@domicile/component-library`](../component-library/README.md): the bar's
-workspaces and a browser window's controls are its `Button`, the address bar
-its `Input`, the empty-desktop card its `Card`.
+The chrome is a React tree built from
+[`@domicile/component-library`](../component-library/README.md): a browser
+window's controls are its `Button`, the address bar its `Input`, the
+empty-desktop card its `Card`. The one control that is the shell's own is a
+workspace number on the bar, and it is one for the reason the library's own
+`TabRail` has one — what marks it is `aria-current`, which `Button` does not
+dress, and `className` is private there.
 Styling is Panda CSS from the library's preset — the shell defines no
 stylesheet of its own.
 
@@ -467,6 +470,34 @@ The workspaces on it are the ones with windows on them, plus the one being
 looked at — sway's own rule. The desktop keeps all ten all the time, which is
 the one place that difference from sway could show, and it does not: an empty
 workspace nobody is looking at is not on the bar either.
+
+**Each one is a number in a ring**, which is the shape the author's waybar
+draws and the one thing on the bar that is not plain writing: a circle the
+height of the bar's own text, empty until the pointer is over it — which draws
+the ring in white and washes the inside of it — and filled white with the
+number in black for the workspace on screen. The fill is what makes the marked
+one a shape rather than a shade of the same white as its neighbors, which is
+the difference that survives being glanced at over a photograph.
+
+**It is the same circle for all ten of them**, which is what the number being
+set a size smaller than the rest of the bar is for: the tenth workspace is two
+digits wide, and a ring drawn around what is written in it would be a lozenge
+there and a circle around the nine before it. The figures are tabular for the
+other half of that — `11` is the width of `10`, so the digit inside the ring
+does not shift as the workspaces change.
+
+**And the figure is centered on the ring rather than in a line box.** A line
+box is as tall as the font's ascent and descent, and a digit has neither the
+accent the one leaves room for nor the tail the other does, so a box centered
+in the circle puts the number a couple of pixels high in it — which is exactly
+the kind of wrong that is hard to name and impossible to stop seeing.
+`text-box: trim-both cap alphabetic` cuts the box down to the cap above and
+the baseline below, so what gets centered is what is drawn. The trim is
+honored on a block container and quietly ignored on a flex one, which is why
+the chip is a block with its text centered rather than the obvious centering
+flex box. Pressing one gives a little under the pointer; the white and the shadow it is drawn in are the bar's own, inherited
+rather than declared, because a workspace number is a character of the bar's
+one row of writing that happens to be in a circle.
 
 The clock reads `Wednesday 2026-09-16 20:53:40` and ticks every second, in the
 middle of the *bar* rather than in the middle of what the workspaces and the
