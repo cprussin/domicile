@@ -57,11 +57,16 @@ pointer.
   every desk that has not been told gets.
 - **`0` is refused**, by name and at startup: it reads as both "blank at once"
   and "never blank", and "never" already has a spelling.
+- **A film keeps the screens on.** A player that asks the desktop to stay
+  awake — `zwp_idle_inhibit_manager_v1`, which every toolkit reaches through
+  its own idle-inhibit API — is obeyed for as long as it is running, so a video
+  with nobody touching the trackpad does not blank. The desk goes dark when the
+  last such client lets go or exits, without waiting for a hand; a player that
+  *crashes* holding one does not keep the screens on.
 
 **It is not a lock.** The screens go dark and anybody can still walk up and
-type; nothing asks for a password on the way back. And it counts hands rather
-than what is on screen, so a film playing with nobody touching the trackpad
-blanks after the timeout. Both are open work — [/ROADMAP.md](/ROADMAP.md).
+type; nothing asks for a password on the way back. That is open work —
+[/ROADMAP.md](/ROADMAP.md).
 
 ## On NixOS
 

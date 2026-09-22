@@ -68,7 +68,8 @@ The evidence for each of those is in the doc that made the claim —
    The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
    `crate::idle` in the compositor for the decision and the edge, and the one
    thing that seam can already drive — the connectors go dark and come back on
-   the next key, click, scroll or pointer movement
+   the next key, click, scroll or pointer movement, and a client playing a film
+   holds them on through all of it
    ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it)).
    A blank screen is still a screen: anybody can type at one. What is left is
 
@@ -79,11 +80,14 @@ The evidence for each of those is in the doc that made the claim —
      so a shell cannot dim, warn, or show a lock screen a moment before the
      glass goes out. It is a message on the host↔chrome protocol and the
      `Idle` seam already names the moment.
-   - **Idle inhibit.** The timer counts hands, not what is on screen, so a film
-     playing with nobody at the trackpad blanks. Wayland's answer is
-     `zwp_idle_inhibit_manager_v1` and Smithay ships support; what it needs
-     here is a client's inhibitor reaching `Idle` and an answer for an
-     inhibitor held by a client that died.
+   - **An inhibitor on a surface nobody can see still holds.** The inhibit half
+     shipped — `zwp_idle_inhibit_manager_v1` is advertised, a client's
+     inhibitor vetoes the answer in `Idle`, and one held by a client that died
+     stops holding the moment that connection is cleaned up. What it does not
+     ask is whether the surface is *mapped*: a client that takes an inhibitor
+     on a surface it never shows holds the screens on for as long as it runs,
+     and the protocol leaves that to the compositor. It wants the same answer
+     the window path already has about which surfaces are on a desktop.
 
 ## In the engine fork — the agent on `crux`
 

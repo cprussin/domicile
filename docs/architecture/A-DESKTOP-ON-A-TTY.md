@@ -920,6 +920,19 @@ compositor holds one `Idle` and states the connectors only when the answer
 tick — that is a modeset a second on a desk nobody is at — and one that is lit
 must not re-send on every keystroke.
 
+A client can veto the answer. `zwp_idle_inhibit_manager_v1` is advertised, and
+an inhibitor a client holds makes the desk lit whatever the clock says — a
+**veto** rather than a hand on the desk or a clock that is paused, which is
+what makes the two awkward cases fall out of one predicate: a film started on a
+desk that is already dark flips the answer back and takes the same `ComeBack`
+edge a keystroke would, and the last inhibitor going away on a desk nobody has
+touched in an hour goes dark then and there rather than a timeout later. The
+one thing the protocol leaves to the compositor is the client that dies holding
+one — smithay reports an inhibitor released only for the request that releases
+it, so the compositor asks after every turn of its clients whether the surfaces
+it is holding are still alive. A leaked inhibitor is a desk that never blanks
+again with nothing anywhere saying why.
+
 The case that is easy to miss is a monitor plugged in while the screens are
 dark: it arrives lit, off the engine's own modeset, and `adopt_the_desktop`
 would have restated the *desktop's* list and lit the rest of the desk with it.

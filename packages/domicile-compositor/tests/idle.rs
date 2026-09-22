@@ -13,6 +13,11 @@
 //! cannot do anything about — and the case a re-armed clock gets wrong by
 //! doing nothing.
 //!
+//! The film at the foot of this file is here for the same kind of reason: an
+//! inhibitor is a real client binding a real global, and whether a client that
+//! *died* still holds one is a question about a connection being cleaned up.
+//! Neither is arithmetic, and neither can be asked of `crate::idle` alone.
+//!
 //! Read off the compositor's own log rather than off the connectors, because
 //! the connectors are the *engine's* and no engine is attached here. The line
 //! is the edge into dark, which is where the decision is; `e2e` and the
@@ -88,4 +93,36 @@ fn a_timeout_edited_while_the_screens_are_off_turns_them_back_on() {
     compositor.reconfigure(A_DESK_THAT_BLANKS_LATER);
 
     compositor.wait_for_log("the idle timeout changed while the screens were off");
+}
+
+/// A film holds the screens on, and a film whose process died does not.
+///
+/// The one claim in this area that nothing smaller can make: `crate::idle`'s
+/// own tests hand it an inhibitor and a flag saying whether the client is
+/// still there, and both of those are this compositor's readings of a real
+/// `zwp_idle_inhibit_manager_v1` — the global has to be advertised, the
+/// request has to reach `Idle`, and a client's death has to be noticed by
+/// something. A unit test cannot tell whether any of that was wired up.
+///
+/// Both edges are asserted on a desk that is **already dark**, which is the
+/// ordinary way a film starts and the harder direction: the answer changes
+/// with no hand anywhere near the desk.
+///
+/// The client is killed rather than asked to stop, because that is the case
+/// worth proving: a player that crashes sends no
+/// `zwp_idle_inhibitor_v1.destroy`, so the only thing that can let go of its
+/// inhibitor is the compositor noticing that the connection is gone. That path
+/// is the only one that says this second line — the clock coming round says
+/// something else — so a compositor which leaked the inhibitor fails here
+/// rather than passing a timeout later.
+#[test]
+fn a_film_holds_the_screens_on_until_the_client_playing_it_is_gone() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    let film = compositor.client_with("film", &["--hold-the-screens-on"]);
+    compositor.wait_for_log("a client is holding this desktop awake");
+
+    drop(film);
+    compositor.wait_for_log("the client holding this desktop awake is gone");
 }

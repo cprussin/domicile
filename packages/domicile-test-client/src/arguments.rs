@@ -76,6 +76,16 @@ pub struct Arguments {
     /// not show a desktop that confuses them.
     pub copy_primary: Option<String>,
 
+    /// Whether to hold this desktop's screens on for as long as the window
+    /// is open.
+    ///
+    /// Off by default: almost every check wants a plain window, and a client
+    /// that vetoed blanking on every run would make the idle checks about this
+    /// flag. On, it binds `zwp_idle_inhibit_manager_v1` and takes an inhibitor
+    /// on its own surface — what a video player does, and the only way to
+    /// produce one from a real client.
+    pub hold_the_screens_on: bool,
+
     /// Whether to read out whatever is offered on either selection.
     ///
     /// Off by default: a selection is only offered to the client that holds
@@ -109,6 +119,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut translucent = None;
     let mut follow_configure = None;
     let mut ask_for_focus = None;
+    let mut hold_the_screens_on = None;
     let mut copy = None;
     let mut copy_primary = None;
     let mut paste = None;
@@ -132,6 +143,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--ask-for-focus" => {
                 take(&mut ask_for_focus, &flag, true)?;
             }
+            "--hold-the-screens-on" => {
+                take(&mut hold_the_screens_on, &flag, true)?;
+            }
             "--copy" => {
                 take(&mut copy, &flag, value(&mut args, &flag)?)?;
             }
@@ -151,6 +165,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
         ask_for_focus: ask_for_focus.unwrap_or(false),
+        hold_the_screens_on: hold_the_screens_on.unwrap_or(false),
         copy,
         copy_primary,
         paste: paste.unwrap_or(false),

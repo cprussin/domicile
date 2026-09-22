@@ -258,7 +258,11 @@ go dark; they come back on the next key, click, scroll or pointer movement.
 Leaving it out is a desktop that never blanks, which is deliberate — there is
 no lock behind the blank yet and nothing tells the shell a moment before, so a
 screen that went dark on its own would be indistinguishable from a desktop that
-had died. `0` is refused rather than read as either answer.
+had died. `0` is refused rather than read as either answer. An app playing a
+film holds the screens on through the timeout — `zwp_idle_inhibit_manager_v1`,
+which is between that client and the compositor — so a desk that has not
+blanked is not necessarily one whose timeout is wrong; there is nothing here
+for a shell to write either way.
 
 Two of the things it can say about a desktop are different in kind, and which
 one a shell generates depends on whether there is hardware under it:
