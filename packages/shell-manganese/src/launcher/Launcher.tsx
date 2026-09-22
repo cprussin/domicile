@@ -1,7 +1,6 @@
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
-import { ArrowElbowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowElbowDownLeft";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
@@ -10,7 +9,7 @@ import type { ReactNode } from "react";
 import { Fragment, useId, useMemo, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { center, flex, hstack, vstack } from "../../styled-system/patterns";
+import { flex, hstack, vstack } from "../../styled-system/patterns";
 import { directoriesIn, fileRow } from "./file-row";
 import type { Hint } from "./hint";
 import { HintKind, hintFor } from "./hint";
@@ -25,9 +24,6 @@ const PROMPT = "Open a file, a URL, or search";
 
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
-
-/** And the smaller one at the end of the row Enter would take. */
-const ENTER_ICON_SIZE = 13;
 
 type Props = {
   /** What there is to open, in the order the host answered. */
@@ -267,14 +263,6 @@ const Query = ({ files, onLaunch }: QueryProps) => {
                     <Marked marks={marked(row.directory, query)} />
                   </span>
                 )}
-                {/*
-                  On every row and lit on one: the glyph says what Enter does
-                  to the row under it, and one that appeared and vanished
-                  would move the three columns beside it on every arrow key.
-                */}
-                <span className={rowEnterStyles} data-row-enter="">
-                  <ArrowElbowDownLeftIcon size={ENTER_ICON_SIZE} />
-                </span>
               </div>
             );
           })}
@@ -503,10 +491,6 @@ const rowStyles = css({
     backgroundImage:
       "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
   },
-  "&[data-highlighted] [data-row-enter]": {
-    opacity: 1,
-    transform: "translateX(0)",
-  },
   "&[data-highlighted] [data-row-tile]": {
     backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
     borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
@@ -520,10 +504,9 @@ const rowStyles = css({
   display: "grid",
   fontSize: "sm",
   // The tile takes what it needs, the name takes what it needs after that,
-  // the directory takes the rest, and the glyph at the end takes its own —
-  // so a path too long for the panel loses the part that only disambiguates
-  // rather than the part being looked for.
-  gridTemplateColumns: "auto minmax(0, auto) minmax(0, 1fr) auto",
+  // and the directory takes the rest — so a path too long for the panel loses
+  // the part that only disambiguates rather than the part being looked for.
+  gridTemplateColumns: "auto minmax(0, auto) minmax(0, 1fr)",
   paddingBlock: 1.5,
   paddingInline: 2,
   transition: "background-color {durations.fast} {easings.out}",
@@ -556,17 +539,6 @@ const rowGlyphStyles = css({
   transition: "opacity {durations.fast} {easings.out}",
 });
 
-// Out at the end of the row, arriving from further out: the glyph is what
-// Enter would do, so it comes in from the direction the key is.
-const rowEnterStyles = center({
-  color: "accent",
-  flexShrink: 0,
-  opacity: 0,
-  transform: "translateX({spacing.1})",
-  transition:
-    "opacity {durations.fast} {easings.out}, transform {durations.fast} {easings.outBack}",
-});
-
 // The letters the query is responsible for. `mark`'s own yellow is a
 // highlighter pen on a page; what this is marking is why a row is on screen,
 // so it is said in the color the desktop says "this one" in.
@@ -582,9 +554,15 @@ const rowNameStyles = css({
   whiteSpace: "nowrap",
 });
 
+// AT THE FAR END OF THE ROW RATHER THAN BESIDE THE NAME. A directory is what
+// tells two files of one name apart, so it is read when the names alone have
+// not settled it — and a column of them down the panel's edge is a column the
+// eye can run down, where one that started wherever each name happened to end
+// is a ragged line it has to hunt along.
 const rowDirectoryStyles = css({
   color: "muted",
   fontSize: "xs",
+  justifySelf: "end",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
