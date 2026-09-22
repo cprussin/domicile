@@ -421,7 +421,7 @@ jobs:
 
       # EVERY ASSERTION THIS JOB MAKES, IN ONE COMMAND, and none of them
       # defined here. `scripts/check.sh engine` runs the artifact check, the two
-      # gtest suites and the thirteen guard checks with their eleven controls,
+      # gtest suites and the fourteen guard checks with their twelve controls,
       # in that order and stopping at the first failure — which is what the
       # thirty steps this replaced achieved by aborting the job, and is worth
       # keeping because `crux` has one tree slot and the guards are most of the
