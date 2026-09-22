@@ -9,7 +9,6 @@ const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
     scale: "none",
     transform: "none",
     translate: "none",
-    visibility: "",
     ...style,
   }) as CSSStyleDeclaration;
 
@@ -27,17 +26,8 @@ const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
  * failure to say why. A case that wants ancestors wants `measuredInside`,
  * which keys a style per element.
  */
-const measuredWith = (
-  style: Partial<CSSStyleDeclaration>,
-  size?: { width: number; height: number },
-) => {
+const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
   const element = document.createElement("div");
-  // happy-dom lays nothing out, so an element has no box unless the test gives
-  // it one. Only the tests that read `visible` need that.
-  if (size !== undefined) {
-    element.getBoundingClientRect = () =>
-      ({ height: size.height, left: 0, top: 0, width: size.width }) as DOMRect;
-  }
   const computed = blankStyle(style);
   const original = globalThis.getComputedStyle;
   globalThis.getComputedStyle = (() => computed) as typeof original;
@@ -135,8 +125,8 @@ const measuredAnswering = (
 describe("defaultMeasure", () => {
   describe("what it reads off an element", () => {
     it("says it once, not once per measurement", () => {
-      // Measuring happens on every frame, so a value reported each time would
-      // bury the console the moment a window was on screen at all.
+      // Measuring happens on every pointer move over a window, so a value
+      // reported each time would bury the console the moment anyone used one.
       const style = { rotate: "sideways 45deg" };
       expect(warningsFrom(style)).toHaveLength(1);
       expect(warningsFrom(style)).toStrictEqual([]);
@@ -162,8 +152,8 @@ describe("defaultMeasure", () => {
     it("survives the centering idiom, which resolves to a percentage", () => {
       // `translate` keeps its percentages in the computed value, where
       // `transform` does not — and a matrix cannot be built from a relative
-      // length. Measuring runs on every frame and every pointer move, so a
-      // throw here stops a window being sized at all.
+      // length. Measuring runs on every pointer move over a window, so a throw
+      // here stops a click reaching the client at all.
       expect(() => measuredWith({ translate: "-50% -50%" })).not.toThrow();
     });
 
@@ -212,33 +202,6 @@ describe("defaultMeasure", () => {
 
     it("says nothing about a window it can read every style of", () => {
       expect(warningsFrom({ rotate: "30deg", scale: "2 3" })).toStrictEqual([]);
-    });
-
-    it("reports a hidden window as invisible, not just an empty one", () => {
-      // `visibility: hidden` keeps the layout box, so the element still
-      // measures as a size while the page has said it is not to be seen.
-      // Reading only the size configures — and so redraws — a client nobody
-      // is looking at.
-      expect(
-        measuredWith({ visibility: "hidden" }, { height: 50, width: 100 })
-          .visible,
-      ).toBe(false);
-    });
-
-    it("reports a collapsed window as invisible too", () => {
-      // `collapse` is the third value and means `hidden` on anything that is
-      // not a table row or column, which a window never is. It keeps its box
-      // just the same, so it lands in the state the size check cannot see.
-      expect(
-        measuredWith({ visibility: "collapse" }, { height: 50, width: 100 })
-          .visible,
-      ).toBe(false);
-    });
-
-    it("keeps a window whose visibility was never resolved", () => {
-      // Absent is not hidden. Treating it as hidden would leave every client
-      // unconfigured in a DOM implementation that computes nothing.
-      expect(measuredWith({}, { height: 50, width: 100 }).visible).toBe(true);
     });
   });
 });

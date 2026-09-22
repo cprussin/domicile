@@ -7,7 +7,7 @@
 //! Wayland or GPU dependency.
 
 use domicile_host::ipc::apply_chrome_message;
-use domicile_host::{AppId, Host, HostError};
+use domicile_host::{AppId, Host};
 use domicile_protocol::{
     ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, PROTOCOL_VERSION,
 };
@@ -263,36 +263,6 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
         host.focus_change(),
         Some(HostMessage::FocusChanged { app_id: Some(app) }),
         "the delta the other chromes are still owed is untouched"
-    );
-}
-
-#[test]
-fn chrome_resize_records_the_size_to_configure_the_client_to() {
-    let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((640.0, 480.0)));
-    assert_eq!(host.app(&id).unwrap().requested_size, None);
-
-    host.handle_chrome_message(ChromeMessage::ResizeApp {
-        app_id: id.clone(),
-        size: [800.0, 600.0],
-    })
-    .unwrap();
-
-    // The request is recorded separately from the client's own content size,
-    // which only changes once the client has actually redrawn.
-    assert_eq!(host.app(&id).unwrap().requested_size, Some((800.0, 600.0)));
-    assert_eq!(host.app(&id).unwrap().size, Some((640.0, 480.0)));
-}
-
-#[test]
-fn chrome_resize_of_an_unknown_app_is_an_error() {
-    let mut host = Host::new();
-    assert_eq!(
-        host.handle_chrome_message(ChromeMessage::ResizeApp {
-            app_id: "ghost".into(),
-            size: [800.0, 600.0],
-        }),
-        Err(HostError::UnknownApp("ghost".into()))
     );
 }
 

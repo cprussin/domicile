@@ -23,11 +23,13 @@ It provides these:
   tens of milliseconds after the compositor has announced every window already
   running. For the same reason a page must never call `addEventListener` on
   `window.domicile` itself.
-- **`registerElements`** (`./register-elements`) — the input and size routing
-  behind the engine's `<app>` tag. It reports each window's on-screen box to the
-  host, forwards the pointer over one to the client underneath in that client's
-  own surface coordinates, and routes the page's keystrokes to whichever window
-  was last reached for. All of it is delegated from `document` over
+- **`registerElements`** (`./register-elements`) — the input routing behind the
+  engine's `<app>` tag. It forwards the pointer over a window to the client
+  underneath in that client's own surface coordinates, and routes the page's
+  keystrokes to whichever window was last reached for. Nothing here says how big
+  a window is: an `<app>`'s layout box *is* the client's
+  `xdg_toplevel.configure`, and the engine states it off the layout it
+  performed. All of it is delegated from `document` over
   `closest("app")`: the tag is the engine's, so there is no element class to hang
   any of it on, and nothing here is registered. A click on a window fires a
   cancelable `domicile-focus-requested` and then focuses the client, and a press
@@ -75,12 +77,11 @@ It provides these:
   `./host-message` for what the client delivers and how an event becomes one,
   `./cursor-shape` for the keyword set a client can ask for, and `./input`
   keycode mapping.
-- **The routing parts, published so they can be substituted** — `./measure`
-  and `./observe-placement` are what `registerElements` takes overrides of,
-  `./element-transform` and `./surface-coordinates` turn a layout box into
-  what a client is told, `./sample-window` is one window's report and
-  `./placement-timing` is what that costs per frame. A shell needs none of
-  them; a test of one does.
+- **The routing parts, published so they can be substituted** — `./measure` is
+  what `registerElements` takes an override of, and `./element-transform` and
+  `./surface-coordinates` are what invert a window's affine so a click under a
+  CSS rotation lands where the user pressed. A shell needs none of them; a test
+  of one does.
 - **The compositor's own JSON wire**, which **a page no longer speaks** —
   `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
   there for `@domicile/e2e-harness`, a headless stand-in for a chrome that
@@ -174,10 +175,9 @@ bun run turbo test --filter @domicile/chrome-sdk
 
 DOM-dependent suites run against happy-dom via
 [`@domicile/test-support`](../test-support/README.md). That DOM performs no
-layout, so the routing tests inject a `measure` stub — and a frame source —
-through `registerElements(domicile, { measure, observePlacement })` rather than
-relying on `getBoundingClientRect` and on however fast happy-dom serves an
-animation frame.
+layout, so the routing tests inject a `measure` stub through
+`registerElements(domicile, { measure })` rather than relying on
+`getBoundingClientRect`.
 
 happy-dom has never heard of `<app>`, so it creates one as an
 `HTMLUnknownElement`, which React's development build reports on the console as

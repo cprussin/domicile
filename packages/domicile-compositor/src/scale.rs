@@ -42,11 +42,11 @@ pub fn output_scale(ratio: f64, max: u32) -> i32 {
 /// lay out `ratio` times as much content as the box can hold and draws every
 /// bit of it `ratio` times too small.
 ///
-/// The chrome reports the same box in CSS pixels through `resize_app`, and the
-/// two configures race: whichever lands last is the one the client acks. That
-/// is why this was a window whose text changed size when it was floated rather
-/// than one that was simply wrong — the race goes one way on the stage and the
-/// other when the box moves.
+/// The engine is the only thing that states this box now. The chrome used to
+/// report the same one in CSS pixels, from `offsetWidth`/`offsetHeight` — the
+/// border box against this one's content box — and the two configures raced:
+/// whichever landed last was the one the client acked, which is why a floating
+/// window's text changed size when it moved rather than being simply wrong.
 ///
 /// `ratio` arrives from the chrome as JSON, so it is not trusted: anything
 /// that is not a positive, finite number is treated as an unscaled display,

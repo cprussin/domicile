@@ -1,9 +1,11 @@
 // What the chrome has to read off an `<app>`'s box.
 //
-// Two things need it, and neither is where the window goes: the size is the
-// resolution the client is configured at, and the element->screen affine is
-// what a pointer position inverts through to reach the client's surface. How
-// the window is drawn is CSS on this element and never travels.
+// One thing needs it, and it is not where the window goes: a pointer position
+// inverts through the element->screen affine to reach the client's surface,
+// and the size is what scales it into the client's own pixels. How the window
+// is drawn is CSS on this element and never travels, and what resolution the
+// client draws at is the engine's to state — an `<app>`'s layout box *is* the
+// `xdg_toplevel.configure`.
 
 import { elementToScreen } from "./element-transform";
 import type { Matrix } from "./matrix";
@@ -12,8 +14,6 @@ import { accumulate, IDENTITY } from "./matrix";
 export type Measurement = {
   size: readonly [width: number, height: number];
   transform: Matrix;
-  /** Whether this element has a box the client can be sized to. */
-  visible: boolean;
 };
 
 export type Measure = (element: HTMLElement) => Measurement;
@@ -60,7 +60,6 @@ export const defaultMeasure: Measure = (element) => {
       linear: chainToScreen(element, style),
       size,
     }),
-    visible: isVisible(style, size),
   };
 };
 
@@ -87,13 +86,10 @@ export const defaultMeasure: Measure = (element) => {
  * Element-first, each ancestor after it — the order `accumulate` composes, so
  * an ancestor's transform applies to the result of everything inside it.
  *
- * This is a `getComputedStyle` and a `matches` per ancestor, on a path that
- * runs per window per animation frame — and again per `pointermove`, through
- * the bound `measure`, which `placement-timing` does not count. So the reported
- * cost is a floor rather than the whole of it, and a page deep enough for this
- * to matter would show it as pointer latency rather than in that line. The
- * alternative is a click that lands somewhere the user did not press, which is
- * not a trade.
+ * This is a `getComputedStyle` and a `matches` per ancestor, and it runs per
+ * `pointermove` over a window — so a page deep enough for this to matter would
+ * show it as pointer latency. The alternative is a click that lands somewhere
+ * the user did not press, which is not a trade.
  */
 const chainToScreen = (
   element: HTMLElement,
@@ -163,8 +159,8 @@ const paintedInside = (element: Element): HTMLElement | undefined => {
 const inTopLayer = (element: Element): boolean =>
   element.matches(":modal, :popover-open");
 
-// Measurement runs on every frame, so the same unreadable value would
-// otherwise be reported many times a second.
+// Measurement runs on every pointer move over a window, so the same unreadable
+// value would otherwise be reported many times a second.
 //
 // Bounded, because the key is the whole computed string and a `transition` on
 // `rotate` produces a new one every frame. Past the cap the reports stop
@@ -200,30 +196,6 @@ const report = (key: string, message: string): void => {
     console.warn(`domicile: ${message}`);
   }
 };
-
-/**
- * Whether this element has a box a client can be configured to.
- *
- * A size of nothing is the tabbed case: a hidden element has no box, and a
- * client configured to nothing would redraw on every tab switch.
- *
- * `visibility: hidden` — or `collapse` — is the other way to mean it, and it
- * is the dangerous one: it *keeps* the layout box, so the element still
- * measures as a size while the page has said it is not to be seen. A window
- * the user cannot see is not one to make redraw.
- *
- * Absent is not hidden. An unresolved `visibility` would otherwise leave every
- * client unconfigured in a DOM implementation that computes nothing.
- */
-const isVisible = (
-  style: CSSStyleDeclaration,
-  [width, height]: readonly [number, number],
-): boolean => width > 0 && height > 0 && !HIDDEN.has(style.visibility);
-
-// `collapse` is the third value, and on anything that is not a table row or
-// column it means `hidden` — which a window never is. It keeps its box too, so
-// it lands in exactly the state this guards against.
-const HIDDEN = new Set(["collapse", "hidden"]);
 
 // Layout-dependent measurements read 0 before the element has a box; the
 // caller wants the first source that actually produced one.

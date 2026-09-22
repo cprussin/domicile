@@ -145,6 +145,13 @@ Inbound: `welcome`,
 `shortcut`, `modifiers`, `focus_changed`, `focus_requested`, `displays`,
 `keymap`.
 
+`resize_app` is implemented here and nothing sends it. An `<app>`'s layout box
+*is* the client's `xdg_toplevel.configure` — `LayoutAppSurface` reports it and
+`ExternalSurfaceProvider::Embed` carries it — so the chrome's half was a second
+opinion about the same box, and it disagreed by a border. The host no longer
+reads the message and the SDK no longer calls the method; taking the member out
+of the IDL is an engine change, and an engine change is a release.
+
 `keymap` is the one inbound message that stops in the browser process. It
 carries the keymap the compositor compiled from `input.keyboard`, in the text
 `wl_keyboard.keymap` hands a client, and what wants it is this process's own

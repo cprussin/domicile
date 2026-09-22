@@ -118,9 +118,6 @@ class FakeDomicile {
     });
   }
 
-  resizeApp(appId: string, size: readonly number[]): void {
-    this.calls.push(["resize", appId, size]);
-  }
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
@@ -169,14 +166,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
-  registerElements(client, {
-    // Otherwise these suites run the SDK's own animation loop, which happy-dom
-    // serves as fast as it can: every mounted window re-measured tens of
-    // thousands of times a second, for the length of every `await`.
-    observePlacement: () => () => {
-      // Never turned: nothing here tests what happens when a window moves.
-    },
-  });
+  registerElements(client);
   return render(<Shell displays={hostDisplays(client)} domicile={client} />);
 };
 

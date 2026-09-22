@@ -483,9 +483,6 @@ export type DomicileHost = {
    */
   closeApp(appId: string): void;
 
-  /** The layout box, as a resize. For an `<app>` the box *is* the configure. */
-  resizeApp(appId: string, width: number, height: number): void;
-
   setDesktopSize(width: number, height: number): void;
   /** Throws on anything but a positive ratio: the compositor divides by it. */
   setDevicePixelRatio(ratio: number): void;

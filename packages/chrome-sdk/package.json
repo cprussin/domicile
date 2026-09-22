@@ -78,14 +78,6 @@
       "types": "./dist/newline-frames.d.ts",
       "default": "./dist/newline-frames.js"
     },
-    "./observe-placement": {
-      "types": "./dist/observe-placement.d.ts",
-      "default": "./dist/observe-placement.js"
-    },
-    "./placement-timing": {
-      "types": "./dist/placement-timing.d.ts",
-      "default": "./dist/placement-timing.js"
-    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"
@@ -93,10 +85,6 @@
     "./register-elements": {
       "types": "./dist/register-elements.d.ts",
       "default": "./dist/register-elements.js"
-    },
-    "./sample-window": {
-      "types": "./dist/sample-window.d.ts",
-      "default": "./dist/sample-window.js"
     },
     "./surface-coordinates": {
       "types": "./dist/surface-coordinates.d.ts",

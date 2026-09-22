@@ -52,11 +52,6 @@ pub enum ChromeMessage {
     /// First message after connecting; declares the version the chrome speaks.
     Hello { protocol_version: u32 },
 
-    /// The chrome laid an `<app>` element out at a new size. The compositor
-    /// configures the client to match so it re-renders at that resolution,
-    /// rather than having its old buffer stretched into the new box.
-    ResizeApp { app_id: String, size: [f64; 2] },
-
     /// How many physical pixels the chrome paints per CSS pixel — its
     /// `devicePixelRatio`. The compositor advertises this as the `wl_output`
     /// scale, which is what makes a client render at the display's real

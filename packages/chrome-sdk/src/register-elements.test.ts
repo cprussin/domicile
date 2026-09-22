@@ -9,18 +9,15 @@ import {
 import type { DomicileClient, SurfaceSize } from "./domicile-client";
 import { focusApp } from "./focus-app";
 import { BTN_LEFT } from "./input";
-import type { Matrix, Point } from "./matrix";
 import type { Measure } from "./measure";
-import type { ObservePlacement } from "./observe-placement";
-import { placementTiming } from "./placement-timing";
 import { registerElements } from "./register-elements";
 import { claimShortcut } from "./shortcut-claims";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for the domicile client, capturing the size reports and input calls
-// the delegation makes, and answering for what each client has drawn. Only the
-// surface the delegation uses is implemented.
+// A double for the domicile client, capturing the input calls the delegation
+// makes and answering for what each client has drawn. Only the surface the
+// delegation uses is implemented.
 class FakeDomicile {
   readonly calls: Call[] = [];
   readonly #drawn = new Map<string, SurfaceSize>();
@@ -32,9 +29,6 @@ class FakeDomicile {
 
   surfaceSizeOf(appId: string): SurfaceSize | undefined {
     return this.#drawn.get(appId);
-  }
-  resizeApp(appId: string, size: readonly number[]): void {
-    this.calls.push(["resize", appId, size]);
   }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
@@ -66,29 +60,7 @@ class FakeDomicile {
 const stubMeasure: Measure = () => ({
   size: [10, 20],
   transform: [1, 0, 0, 1, 0, 0],
-  visible: true,
 });
-
-// happy-dom does animate frames — and as fast as it can, which is not a clock
-// anything can assert against. The observer is injected so a test says when a
-// frame happened.
-class FakeFrames {
-  #callbacks: (() => void)[] = [];
-
-  readonly observe: ObservePlacement = (onFrame) => {
-    this.#callbacks.push(onFrame);
-    return () => {
-      this.#callbacks = this.#callbacks.filter((entry) => entry !== onFrame);
-    };
-  };
-
-  /** Simulate the page reaching its next animation frame. */
-  turn(): void {
-    for (const callback of this.#callbacks) {
-      callback();
-    }
-  }
-}
 
 const mountApp = (appId?: string): HTMLElement => {
   const element = document.createElement(APP_TAG_NAME);
@@ -105,7 +77,6 @@ const pointer = (type: string, init: MouseEventInit = {}): MouseEvent =>
 
 describe("registerElements", () => {
   let domicile: FakeDomicile;
-  let frames: FakeFrames;
   // A shell listens for focus requests on `document` rather than per window, so
   // those listeners outlive the element that was clicked and the body this
   // empties between tests. Aborting is what takes them off again.
@@ -114,11 +85,9 @@ describe("registerElements", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     domicile = new FakeDomicile();
-    frames = new FakeFrames();
     shell = new AbortController();
     registerElements(domicile as unknown as DomicileClient, {
       measure: stubMeasure,
-      observePlacement: frames.observe,
     });
   });
 
@@ -418,7 +387,6 @@ describe("registerElements", () => {
       const rebound = new FakeDomicile();
       registerElements(rebound as unknown as DomicileClient, {
         measure: stubMeasure,
-        observePlacement: frames.observe,
       });
       domicile.calls.length = 0;
 
@@ -551,206 +519,6 @@ describe("registerElements", () => {
       document.body.dispatchEvent(pointer("pointerdown", { button: 0 }));
 
       expect(domicile.calls).toContainEqual(["focusChrome"]);
-    });
-  });
-
-  describe("the size the page laid a window out at", () => {
-    it("asks the compositor to render the client at the element's size", () => {
-      mountApp("term");
-
-      frames.turn();
-
-      expect(domicile.calls).toContainEqual(["resize", "term", [10, 20]]);
-    });
-
-    it("leaves a client's size alone while its element has no box", () => {
-      // A tabbed chrome hides every inactive window, and a hidden element
-      // measures as nothing: reporting that as a resize would configure the
-      // client to 0x0 and make it redraw on every tab switch.
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: () => ({
-          size: [0, 0],
-          transform: [1, 0, 0, 1, 0, 0],
-          visible: false,
-        }),
-        observePlacement: frames.observe,
-      });
-      mountApp("term");
-
-      frames.turn();
-
-      expect(domicile.calls.some(([kind]) => kind === "resize")).toBe(false);
-    });
-
-    it("says nothing about a window that did not change size", () => {
-      // Measuring happens on every animation frame, so a window that is simply
-      // sitting there would otherwise configure its client sixty times a second
-      // — down a socket shared with every client's pixels, and a client redraws
-      // every time it is configured.
-      mountApp("term");
-      frames.turn();
-      domicile.calls.length = 0;
-
-      frames.turn();
-      frames.turn();
-
-      expect(domicile.calls).toStrictEqual([]);
-    });
-
-    it("does not make a client redraw because its window moved", () => {
-      // A client repaints when it is configured, so sending its size again for
-      // a window that only moved would cost every app on the desktop a repaint
-      // per frame of any animation.
-      const moved = { transform: [1, 0, 0, 1, 0, 0] as Matrix };
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: (element) => ({ ...stubMeasure(element), ...moved }),
-        observePlacement: frames.observe,
-      });
-      mountApp("term");
-      frames.turn();
-      domicile.calls.length = 0;
-
-      moved.transform = [1, 0, 0, 1, 40, 5];
-      frames.turn();
-
-      expect(domicile.calls.some(([kind]) => kind === "resize")).toBe(false);
-    });
-
-    it("configures the client again when the element's box changes", () => {
-      const box = { size: [10, 20] as Point };
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: (element) => ({ ...stubMeasure(element), ...box }),
-        observePlacement: frames.observe,
-      });
-      mountApp("term");
-      frames.turn();
-      domicile.calls.length = 0;
-
-      box.size = [30, 40];
-      frames.turn();
-
-      expect(domicile.calls).toContainEqual(["resize", "term", [30, 40]]);
-    });
-
-    it("tells a newly shown app what size to render at", () => {
-      // What identifies this instruction is what it would say, and the app it
-      // is about is half of that. Keyed on the size alone, an element that
-      // swapped `app-id` while keeping its box would never configure the new
-      // client — it would draw at whatever the previous one happened to be
-      // until the element next resized, which for a window that fills the stage
-      // is never.
-      const element = mountApp("term");
-      frames.turn();
-      domicile.calls.length = 0;
-
-      element.setAttribute("app-id", "editor");
-      frames.turn();
-
-      expect(domicile.calls).toContainEqual(["resize", "editor", [10, 20]]);
-    });
-
-    it("configures a client again when the host never received the last size", () => {
-      // Recording the key before the send would leave the SDK sure it had
-      // reported a size that never arrived — and because the record is what
-      // suppresses the next one, nothing would send it again until the window
-      // changed size.
-      const box = { size: [10, 20] as Point };
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: (element) => ({ ...stubMeasure(element), ...box }),
-        observePlacement: frames.observe,
-      });
-      mountApp("term");
-      frames.turn();
-      const resizeApp = domicile.resizeApp.bind(domicile);
-      domicile.resizeApp = () => {
-        throw new Error("the socket went away");
-      };
-
-      box.size = [30, 40];
-      expect(() => {
-        frames.turn();
-      }).toThrow("the socket went away");
-      domicile.resizeApp = resizeApp;
-      domicile.calls.length = 0;
-      frames.turn();
-
-      expect(domicile.calls).toContainEqual(["resize", "term", [30, 40]]);
-    });
-
-    it("stops measuring a window that has left the page", () => {
-      // A detached element is laid out at nothing, so measuring one reports a
-      // size the page never gave it — and the shell that took it down is not
-      // asking for the client to be reconfigured.
-      const element = mountApp("term");
-      frames.turn();
-      element.remove();
-      placementTiming.take();
-
-      frames.turn();
-
-      expect(placementTiming.take()).toBeUndefined();
-    });
-
-    it("prices every measurement, not only the ones that send something", () => {
-      // What costs is the measuring, and the measuring happens for every window
-      // on every frame whether or not anything changed. A timing that only
-      // counted the frames that resized a window would report an idle desktop
-      // as free, which is exactly the claim in doubt.
-      mountApp("term");
-      placementTiming.take();
-
-      frames.turn();
-      frames.turn();
-
-      expect(placementTiming.take()?.count).toBe(2);
-    });
-
-    it("prices a measurement that threw, which has already cost the same", () => {
-      // `readElementTransform` throws on a computed value it cannot parse, from
-      // after the layout read. Priced only on success, such a window would cost
-      // the desktop a measurement and contribute nothing to the number — so the
-      // desktop where this matters most is the one it would under-report
-      // hardest.
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: () => {
-          throw new Error("a window the SDK could not measure");
-        },
-        observePlacement: frames.observe,
-      });
-      mountApp("term");
-      placementTiming.take();
-
-      expect(() => {
-        frames.turn();
-      }).toThrow("a window the SDK could not measure");
-
-      expect(placementTiming.take()?.count).toBe(1);
-    });
-
-    it("keeps measuring the windows after one that could not be measured", () => {
-      // One loop for every window means one window could take the others down
-      // with it, and a throw is not hypothetical: `new DOMMatrix(…)` throws on a
-      // computed value the SDK cannot parse, and it has. A desktop where the
-      // second window stops being configured because the first has bad CSS is
-      // not a trade anyone made.
-      const failing = mountApp("broken");
-      mountApp("term");
-      registerElements(domicile as unknown as DomicileClient, {
-        measure: (element) => {
-          if (element === failing) {
-            throw new Error("a window the SDK could not measure");
-          } else {
-            return stubMeasure(element);
-          }
-        },
-        observePlacement: frames.observe,
-      });
-
-      expect(() => {
-        frames.turn();
-      }).toThrow("a window the SDK could not measure");
-
-      expect(domicile.calls).toContainEqual(["resize", "term", [10, 20]]);
     });
   });
 });

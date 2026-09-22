@@ -43,9 +43,6 @@ pub struct App {
     /// The client's own content size, as of its latest committed buffer, and
     /// `None` until it has committed one.
     pub size: Option<(f64, f64)>,
-    /// The size the chrome last laid its `<app>` element out at, which the
-    /// compositor configures the client to. `None` until the chrome resizes it.
-    pub requested_size: Option<(f64, f64)>,
 }
 
 /// The compositor's orchestration state.
@@ -142,7 +139,6 @@ impl Host {
                 arrival: self.next_id,
                 title: title.clone(),
                 size,
-                requested_size: None,
             },
         );
         let message = HostMessage::AppAppeared {
@@ -311,10 +307,6 @@ impl Host {
                 // already sends absolute. Intercepted in the compositor beside
                 // the density above.
             }
-            ChromeMessage::ResizeApp { app_id, size } => match self.apps.get_mut(&app_id) {
-                Some(app) => app.requested_size = Some((size[0], size[1])),
-                None => return Err(HostError::UnknownApp(app_id)),
-            },
             ChromeMessage::FocusApp { app_id } => {
                 // Gated on a window this host knows about, which is a window
                 // that has mapped. It used to be gated on the page having

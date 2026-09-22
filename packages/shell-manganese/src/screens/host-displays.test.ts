@@ -54,7 +54,6 @@ class Host implements DomicileHost {
   readonly pointerButton = ignored;
   readonly pointerLeave = ignored;
   readonly pointerMotion = ignored;
-  readonly resizeApp = ignored;
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly spawn = ignored;

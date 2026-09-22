@@ -59,10 +59,6 @@ fn chrome_messages_round_trip() {
         v120_x: 0,
         v120_y: -120,
     });
-    chrome_round_trip(&ChromeMessage::ResizeApp {
-        app_id: "term".into(),
-        size: [800.0, 600.0],
-    });
     chrome_round_trip(&ChromeMessage::Key {
         app_id: "term".into(),
         keycode: 30,
@@ -344,14 +340,6 @@ fn wire_shape_is_pinned() {
     .unwrap();
     assert!(v["size"].is_null());
 
-    let v = serde_json::to_value(ChromeMessage::ResizeApp {
-        app_id: "term".into(),
-        size: [800.0, 600.0],
-    })
-    .unwrap();
-    assert_eq!(v["type"], "resize_app");
-    assert_eq!(v["size"][1], 600.0);
-
     let v = serde_json::to_value(HostMessage::AppCursor {
         app_id: "term".into(),
         cursor: CursorShape::Pointer,
@@ -405,5 +393,23 @@ fn the_roadmap_states_the_version_this_build_speaks() {
     assert!(
         stated[0].starts_with(&format!("`PROTOCOL_VERSION = {PROTOCOL_VERSION}`")),
         "ROADMAP.md does not say `PROTOCOL_VERSION = {PROTOCOL_VERSION}`; a bump left it behind"
+    );
+}
+
+/// A window's box is the engine's to state, so the chrome has stopped saying
+/// it and this crate has stopped listening.
+///
+/// Refused rather than ignored, which is the whole of the change on the wire:
+/// the tag match is exact, so a chrome still sending `resize_app` does not
+/// quietly configure nothing — the compositor logs the line it could not read
+/// and the drift is visible. The other half of it is that an `<app>`'s layout
+/// box already *is* the `xdg_toplevel.configure`, reported natively, so a
+/// second opinion about the same box is not a message that went missing.
+#[test]
+fn a_resize_the_chrome_no_longer_sends_is_not_a_message() {
+    let line = r#"{"type":"resize_app","app_id":"term","size":[800.0,600.0]}"#;
+    assert!(
+        serde_json::from_str::<ChromeMessage>(line).is_err(),
+        "the host still reads a resize the chrome no longer sends"
     );
 }

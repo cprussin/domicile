@@ -341,7 +341,7 @@ the element re-embeds at the new size on its own. The producer sees
 `LocalSurfaceId(1, 1, …) at 120x90` become `LocalSurfaceId(2, 1, …) at
 180x130` — a bumped parent sequence number, which is the `xdg_toplevel.configure`
 — with nothing in the page having asked for it. **That is the sentence the
-placement deletion rests on**, now measured rather than argued:
+chrome's own size reporting was deleted on**, measured rather than argued:
 an `<app>`'s layout box *is* the configure.
 
 `scripts/test-parity-page-uses-the-native-tag.sh` is what keeps it that way. It
