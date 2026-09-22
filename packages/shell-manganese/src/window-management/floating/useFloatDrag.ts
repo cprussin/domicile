@@ -1,3 +1,5 @@
+import type { Display } from "@domicile/component-library/display-source";
+import { offThePage } from "@domicile/component-library/on-the-page";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -15,6 +17,8 @@ import type { Float } from "./float";
 type Drag = {
   /** The window's box when it was taken hold of, which the delta is from. */
   box: Float;
+  /** The screen it is being dragged over, which says what a delta is worth. */
+  display: Display;
   from: { x: number; y: number };
   onDrop: () => void;
   onMove: (x: number, y: number) => void;
@@ -45,6 +49,13 @@ export type FloatDrag = {
 };
 
 type Options = {
+  /**
+   * The screen the window is on, which is the one the chrome is on.
+   *
+   * Here because a pointer's numbers mean nothing without it — see the note on
+   * units below.
+   */
+  display: Display;
   float: Float;
   onDrop: () => void;
   onGrab: () => void;
@@ -79,6 +90,16 @@ type Options = {
  * happens, and a drag that cannot be ended leaves its window see-through,
  * click-through, and following the pointer for ever.
  *
+ * **The pointer's pixels are not the window's.** A `PointerEvent` reports
+ * where the pointer is on the page, and a float is laid out in the desktop's
+ * logical pixels — which are the same numbers only where the page is the whole
+ * desktop. Where the engine scans out, the page IS one monitor and `<Screen>`
+ * covers it with a transform, so a hand that crossed 120 of the page's pixels
+ * crossed 60 of the ones the window was placed at, and sideways to them on a
+ * monitor on its side. A drag that added the event's own numbers moved the
+ * window out from under the hand holding it; `offThePage` is what the travel
+ * goes through, and `pointer-warp.ts` is the same seam in the other direction.
+ *
  * **The drag is a ref, and the state beside it is only what to draw.** A
  * pointer sequence is answered synchronously and a render is not: `setState`
  * schedules, so a handler built by a render sees whatever the drag was when
@@ -88,6 +109,7 @@ type Options = {
  * release that beat it would be the release that never arrived.
  */
 export const useFloatDrag = ({
+  display,
   float,
   onDrop,
   onGrab,
@@ -102,8 +124,10 @@ export const useFloatDrag = ({
     const moved = (event: PointerEvent) => {
       const started = running.current;
       if (started !== undefined) {
-        const dx = event.clientX - started.from.x;
-        const dy = event.clientY - started.from.y;
+        const [dx, dy] = offThePage(started.display, [
+          event.clientX - started.from.x,
+          event.clientY - started.from.y,
+        ]);
         if (started.resizes) {
           started.onResize(started.box.width + dx, started.box.height + dy);
         } else {
@@ -145,6 +169,10 @@ export const useFloatDrag = ({
       const resizing = resizes || event.button === SECONDARY_BUTTON;
       running.current = {
         box: float,
+        // Latched with the box and for the same reason: a desktop re-described
+        // mid-drag would otherwise change what the moves since the press were
+        // worth, and the window would jump.
+        display,
         from: { x: event.clientX, y: event.clientY },
         onDrop,
         onMove,

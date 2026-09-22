@@ -1,3 +1,5 @@
+import type { Display } from "@domicile/component-library/display-source";
+
 import { css, cx } from "../../../styled-system/css";
 import { placedAt } from "../window-styles";
 import type { Float } from "./float";
@@ -7,6 +9,8 @@ import { useFloatDrag } from "./useFloatDrag";
 type Props = {
   /** How it stacks, which is the depth of the window it covers. */
   depth: number;
+  /** The screen it is over, which says what a drag's pixels are worth. */
+  display: Display;
   float: Float;
   onDrop: () => void;
   onGrab: () => void;
@@ -31,8 +35,19 @@ type Props = {
  * surface alone, so a drag started on the title bar resizes like one started
  * anywhere else.
  */
-export const FloatGrab = ({ depth, float, resizes, ...moves }: Props) => {
-  const { drag, ...handlers } = useFloatDrag({ float, resizes, ...moves });
+export const FloatGrab = ({
+  depth,
+  display,
+  float,
+  resizes,
+  ...moves
+}: Props) => {
+  const { drag, ...handlers } = useFloatDrag({
+    display,
+    float,
+    resizes,
+    ...moves,
+  });
   return (
     // Presentational, and `aria-hidden` for that reason: everything this
     // offers is offered by the keyboard as well, so there is nothing here a

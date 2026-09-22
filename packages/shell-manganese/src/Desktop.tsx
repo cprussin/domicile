@@ -115,57 +115,62 @@ export const Desktop = ({ domicile }: Props) => {
       */}
       <Wallpaper />
       <FirstScreen>
-        <TopBar
-          current={windows.current}
-          domicile={domicile}
-          mode={windows.mode}
-          occupied={windows.occupied}
-          onSelectWorkspace={(name) => {
-            act(WindowAction.WorkspaceSelected(name));
-          }}
-        />
-        <Stage
-          activeId={windows.activeId}
-          current={windows.current}
-          domicile={domicile}
-          draggingId={windows.draggingId}
-          floats={workspaceOn(windows).floats}
-          focusedId={windows.focusedId}
-          fullscreenId={workspaceOn(windows).fullscreen?.id}
-          modifiers={modifiers}
-          onClose={(id) => {
-            act(WindowAction.WindowClosed(id));
-          }}
-          onDrop={() => {
-            act(WindowAction.WindowDropped());
-          }}
-          onFullscreen={(id) => {
-            act(WindowAction.WindowFullscreened(id));
-          }}
-          onGrab={(id) => {
-            act(WindowAction.WindowGrabbed(id));
-          }}
-          onHover={(id) => {
-            act(WindowAction.WindowHovered(id));
-          }}
-          onMove={(id, x, y) => {
-            act(WindowAction.WindowMoved(id, x, y));
-          }}
-          onOpenWindow={(url) => {
-            act(WindowAction.BrowserOpened(url));
-          }}
-          onRename={(id, url) => {
-            act(WindowAction.WindowRenamed(id, siteOf(url)));
-          }}
-          onResize={(id, width, height) => {
-            act(WindowAction.WindowResized(id, width, height));
-          }}
-          onSelect={(id) => {
-            act(WindowAction.WindowSelected(id));
-          }}
-          screenful={screenful}
-          windows={windows.windows}
-        />
+        {(display) => (
+          <>
+            <TopBar
+              current={windows.current}
+              domicile={domicile}
+              mode={windows.mode}
+              occupied={windows.occupied}
+              onSelectWorkspace={(name) => {
+                act(WindowAction.WorkspaceSelected(name));
+              }}
+            />
+            <Stage
+              activeId={windows.activeId}
+              current={windows.current}
+              display={display}
+              domicile={domicile}
+              draggingId={windows.draggingId}
+              floats={workspaceOn(windows).floats}
+              focusedId={windows.focusedId}
+              fullscreenId={workspaceOn(windows).fullscreen?.id}
+              modifiers={modifiers}
+              onClose={(id) => {
+                act(WindowAction.WindowClosed(id));
+              }}
+              onDrop={() => {
+                act(WindowAction.WindowDropped());
+              }}
+              onFullscreen={(id) => {
+                act(WindowAction.WindowFullscreened(id));
+              }}
+              onGrab={(id) => {
+                act(WindowAction.WindowGrabbed(id));
+              }}
+              onHover={(id) => {
+                act(WindowAction.WindowHovered(id));
+              }}
+              onMove={(id, x, y) => {
+                act(WindowAction.WindowMoved(id, x, y));
+              }}
+              onOpenWindow={(url) => {
+                act(WindowAction.BrowserOpened(url));
+              }}
+              onRename={(id, url) => {
+                act(WindowAction.WindowRenamed(id, siteOf(url)));
+              }}
+              onResize={(id, width, height) => {
+                act(WindowAction.WindowResized(id, width, height));
+              }}
+              onSelect={(id) => {
+                act(WindowAction.WindowSelected(id));
+              }}
+              screenful={screenful}
+              windows={windows.windows}
+            />
+          </>
+        )}
       </FirstScreen>
       {/*
         Outside every screen, like the wallpaper and for the same reason: the

@@ -151,6 +151,12 @@ knowing about:
   routes to the chrome instead — and a transparent sheet over the window
   catches what falls through. The same mechanism that stops a window
   swallowing the clicks meant for a menu drawn over it.
+- **A drag is measured in the pointer's pixels, and those are not the
+  window's.** Where a page is one monitor, `<Screen>` covers its window with a
+  transform, so a hand that crossed 120 of the page's pixels crossed 60 of the
+  ones the window was laid out in — and crossed them sideways on a monitor on
+  its side. The travel goes through `offThePage` before it is added to the box,
+  which is the seam the pointer warp crosses in the other direction.
 - **The page cannot see the modifier while a window has the keyboard.**
   `wl_keyboard.modifiers` goes to the focused surface, so the compositor
   broadcasts the held set instead and the shell listens (`modifiers`). The
@@ -541,7 +547,7 @@ shell that wants its own pictures owns its own list.
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on, the screens it is not on, and what the page says for a desktop with no screens at all. |
+| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on — handed to the chrome, because what a pointer's pixels are worth is that screen's to say — the screens it is not on, and what the page says for a desktop with no screens at all. |
 | `src/screens/IdleScreen.tsx` | What a screen with no chrome on it shows: the clock. |
 | `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
 | `src/keyboard/programmers-dvorak.ts` | Which physical key each keysym is on, which is what the table above is resolved through. |
@@ -584,7 +590,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/workspace-switch.ts` | The workspace that has just left the screen, with the screenful it had and the way it went. |
 | `src/window-management/useWindowMotion.ts` | Which windows are drawn and what each of them is doing, worked out from the difference between two renders. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
-| `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, and the furniture that offers it. |
+| `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, the pointer's travel read in the pixels the window was laid out in, and the furniture that offers it. |
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
 | `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |

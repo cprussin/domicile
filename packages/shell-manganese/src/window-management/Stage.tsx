@@ -1,4 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Display } from "@domicile/component-library/display-source";
 import { Fragment } from "react";
 
 import type { Modifiers } from "../keyboard/useModifiers";
@@ -19,6 +20,14 @@ type Props = {
   activeId: string | undefined;
   /** The workspace on screen, which is what a switch is noticed against. */
   current: string;
+  /**
+   * The screen the windows are on, which is the one the chrome is on.
+   *
+   * What it is needed for is the drags: a pointer is reported in the pixels
+   * the page draws, and a window is laid out in the desktop's — see
+   * `useFloatDrag`.
+   */
+  display: Display;
   domicile: DomicileClient;
   /** The floating window the user has hold of, or `undefined` when none is. */
   draggingId: string | undefined;
@@ -88,6 +97,7 @@ type Props = {
 export const Stage = ({
   activeId,
   current,
+  display,
   domicile,
   draggingId,
   floats,
@@ -260,6 +270,7 @@ export const Stage = ({
             <Fragment key={window.id}>
               <FloatTitleBar
                 depth={placement.depth}
+                display={display}
                 dragging={window.id === draggingId}
                 float={floating}
                 focus={focus}
@@ -278,6 +289,7 @@ export const Stage = ({
               {(meta || window.id === draggingId) && (
                 <FloatGrab
                   depth={placement.depth}
+                  display={display}
                   float={floating}
                   onDrop={onDrop}
                   onGrab={onGrabThis}

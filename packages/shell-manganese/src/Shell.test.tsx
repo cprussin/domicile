@@ -1099,6 +1099,26 @@ describe("Shell", () => {
       ).toBe(was + 40);
     });
 
+    it("moves it by what the hand crossed of the desktop, not of the window", () => {
+      // THE REGRESSION, and the drag's half of the one above it. A pointer
+      // exists in the pixels the page draws, so a hand that crossed 80 of them
+      // crossed 40 of the ones the window was laid out in — and a window moved
+      // by the 80 runs out from under the hand holding it.
+      const { container } = renderShell([SCANOUT]);
+      clientAppears("term");
+      press("Tab", true);
+      const bar = barFor(container, "app:term");
+      const was = Number.parseFloat(bar.style.insetInlineStart);
+
+      fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
+      fireEvent.pointerMove(window, { clientX: 180, clientY: 100 });
+      fireEvent.pointerUp(window, { clientX: 180, clientY: 100 });
+
+      expect(
+        Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
+      ).toBe(was + 40);
+    });
+
     it("keys a floating window around the desktop instead of retiling it", () => {
       const { container } = renderShell();
       clientAppears("term");
