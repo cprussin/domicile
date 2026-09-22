@@ -209,13 +209,25 @@ if wanted rust; then
   echo "== rust =="
   run "cargo fmt" cargo fmt --all --check
   run "cargo clippy" cargo clippy --workspace --all-targets -- -D warnings
-  # `--no-fail-fast`, because without it cargo stops at the first failing
-  # target and says nothing about the rest. A tree that breaks two test
-  # binaries then reports whichever sorts first, and the second failure is
-  # invisible until the first is fixed — which is how a mutation measurement
-  # taken with this gate came out reading "killed by one file" when two killed
-  # it.
-  run "cargo test" cargo test --workspace --no-fail-fast
+  # The one step in this group that LINKS, which is the one that can fail for
+  # a reason that is nothing to do with the code — see `lib/rust-check.sh`.
+  #
+  # A SUBSHELL BODY, `( )` and not `{ }`, because `require_linkable_libraries`
+  # ends its caller and `run` calls what it is given in this shell. A `{ }`
+  # here would exit `check.sh` itself, taking every later group with it and
+  # printing no table at all.
+  cargo_test() (
+    . "$ROOT/scripts/lib/rust-check.sh"
+    require_linkable_libraries
+    # `--no-fail-fast`, because without it cargo stops at the first failing
+    # target and says nothing about the rest. A tree that breaks two test
+    # binaries then reports whichever sorts first, and the second failure is
+    # invisible until the first is fixed — which is how a mutation measurement
+    # taken with this gate came out reading "killed by one file" when two
+    # killed it.
+    cargo test --workspace --no-fail-fast
+  )
+  run "cargo test" cargo_test
 fi
 
 if wanted typescript; then
