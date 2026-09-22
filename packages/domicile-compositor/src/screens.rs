@@ -193,10 +193,10 @@ impl Advertised {
     /// silent wrong answer that check exists to prevent.
     ///
     /// `fills_the_window` is FALSE HERE AND SET NOWHERE ELSE BUT
-    /// [`as_one_screen`](domicile_host::as_one_screen). This is the desktop as
+    /// [`as_seen_from`](domicile_host::as_seen_from). This is the desktop as
     /// a whole, told to whoever asked about the desktop as a whole; a window
-    /// that is one monitor is a narrowing of it, and the narrowing is the only
-    /// thing that knows one happened.
+    /// is one monitor of it, and the read from that window is the only thing
+    /// that knows which.
     pub fn described(&self) -> DisplayInfo {
         DisplayInfo {
             name: self.name.clone(),
@@ -913,7 +913,7 @@ scale = 2
                 mode: [5120, 2880],
                 transform: DisplayTransform::Normal,
                 // Not this function's to set. A desktop is not anybody's
-                // viewport -- `as_one_screen` is what narrows one to a window.
+                // viewport -- `as_seen_from` is what reads one from a window.
                 fills_the_window: false,
             }
         );

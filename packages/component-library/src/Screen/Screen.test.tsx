@@ -30,6 +30,17 @@ const SIDEWAYS: Display = {
   size: [1800, 3200],
 };
 
+/**
+ * The monitor beside it, as a window on {@link SIDEWAYS} is told about it:
+ * where it is relative to this window's own display, and not this window.
+ */
+const BESIDE_SIDEWAYS: Display = {
+  name: "beside",
+  position: [1800, 0],
+  scale: 2,
+  size: [1800, 3200],
+};
+
 const describing = (
   displays: readonly Display[] | undefined,
 ): DisplaySource => ({
@@ -124,6 +135,45 @@ describe("Screen", () => {
     on([LEFT, RIGHT], <Screen name="right">stuff</Screen>);
     expect(screen.getByText("stuff")).toBeInTheDocument();
     expect(regions()).toEqual(["1920px,120px+2560pxx1440px"]);
+  });
+
+  it("draws nothing on a desk where another display is this window", () => {
+    // A DESK OF SEVERAL MONITORS IS SEVERAL PAGES, and each of them is told
+    // the whole desk so a shell can decide things about it -- which screen the
+    // chrome goes on, where a box across every screen is. What a page may
+    // DRAW on is still the one monitor its window covers, so a region for any
+    // other display is a claim nobody can honor: it lands on top of this
+    // monitor, because a window's page has no coordinates outside itself.
+    //
+    // The cost of getting this wrong is not a misplaced region. Every page
+    // draws the whole chrome and embeds every window, and a client's frame
+    // sink takes ONE parent -- so the last page to embed takes the window off
+    // all the others, and a terminal answers the keyboard while drawing
+    // nothing.
+    on([SIDEWAYS, BESIDE_SIDEWAYS], <Screen name="beside">stuff</Screen>);
+    expect(screen.queryByText("stuff")).not.toBeInTheDocument();
+  });
+
+  it("draws once on a desk of several when one of them is this window", () => {
+    // `everywhere` means every screen of the desktop, and on a desk of windows
+    // the page it is asked of is one of them. The other monitors have pages of
+    // their own, each rendering this same tree, so the clock a shell asks for
+    // on every screen is on every screen -- once each.
+    on([SIDEWAYS, BESIDE_SIDEWAYS], <Screen everywhere>clock</Screen>);
+    expect(screen.getAllByText("clock")).toHaveLength(1);
+    expect(regions()).toEqual(["0px,0px+1800pxx3200px"]);
+  });
+
+  it("still asks a `match` about the display this window is", () => {
+    // The window's own display is not exempt from the selection, only from
+    // being one of several: a shell that puts its chrome on the first screen
+    // asks exactly this question, and the page whose window is the second
+    // screen has to be told no.
+    on(
+      [SIDEWAYS, BESIDE_SIDEWAYS],
+      <Screen match={(d) => d.scale > 2}>bar</Screen>,
+    );
+    expect(screen.queryByText("bar")).not.toBeInTheDocument();
   });
 
   it("renders nothing for a name no display has", () => {

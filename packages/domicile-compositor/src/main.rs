@@ -545,8 +545,8 @@ fn write_responses(
     // `None` is an answer rather than a miss, twice over: a chrome that has
     // not agreed the protocol is not on that list at all -- and the response
     // being written to it is its `welcome` -- and one that has agreed may not
-    // have said which window it is yet. Neither has a display to be narrowed
-    // to, and the whole desktop is what both should get.
+    // have said which window it is yet. Neither has a display to read the desk
+    // from, and the desktop in its own coordinates is what both should get.
     let screen = hub
         .chromes
         .lock()
@@ -592,18 +592,19 @@ fn write_responses(
 /// Any other message passes through: this is the only one whose content is a
 /// fact about the world rather than an answer to what was asked.
 ///
-/// **AND IT IS NARROWED AGAIN, WHICH IS NOT OPTIONAL.** Re-reading the desktop
+/// **AND IT IS MOVED AGAIN, WHICH IS NOT OPTIONAL.** Re-reading the desktop
 /// throws away whatever the caller had already made of it, and one caller had
-/// made something: the answer to `set_screen` is the desktop narrowed to the
-/// one display that window covers, with `fills_the_window` set. This used to
-/// take the fresh desktop and return it, so that answer went out as the whole
-/// desk with the flag false -- every window laying its regions out in the
-/// desktop's coordinates, and a page drawing its logical box at logical size
-/// in the corner of a monitor rather than scaled over the whole of it.
+/// made something: the answer to `set_screen` is the desk seen from the
+/// display that window covers, that one at the origin with
+/// `fills_the_window` set. This used to take the fresh desktop and return it,
+/// so that answer went out unmoved and with the flag false -- every window
+/// laying its regions out in the desktop's coordinates, and a page drawing its
+/// logical box at logical size in the corner of a monitor rather than scaled
+/// over the whole of it.
 ///
-/// So the narrowing is applied here rather than only at the call site, which
-/// is also what makes this agree with [`narrowed_desktop`] on the broadcast
-/// path: both go through `as_one_screen`, keyed on the same `Chrome::screen`.
+/// So the move is applied here rather than only at the call site, which is
+/// also what makes this agree with [`desk_from_the_window`] on the broadcast
+/// path: both go through `as_seen_from`, keyed on the same `Chrome::screen`.
 fn freshened(hub: &ChromeHub, message: HostMessage, screen: Option<&str>) -> HostMessage {
     if !matches!(message, HostMessage::Displays { .. }) {
         return message;
@@ -626,13 +627,13 @@ fn freshened(hub: &ChromeHub, message: HostMessage, screen: Option<&str>) -> Hos
     // it used to be.
     let displays = match screen {
         None => displays,
-        Some(name) => domicile_host::as_one_screen(&displays, name),
+        Some(name) => domicile_host::as_seen_from(&displays, name),
     };
     match screen {
         None => info!("told the chrome about {} display(s)", displays.len()),
         Some(name) => info!(
             screen = %name,
-            "told the chrome about {} display(s): the window it named",
+            "told the chrome about {} display(s), from the window it named",
             displays.len()
         ),
     }
@@ -665,12 +666,12 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
         let mut chromes = hub.chromes.lock().unwrap();
         chromes.retain(|chrome| {
             // THE ONE MESSAGE THAT DIFFERS PER CONNECTION. A desk of several
-            // monitors is several windows, and each is told the display it
-            // covers rather than the desktop -- see `as_one_screen`. Encoded
+            // monitors is several windows, and each is told that desk from
+            // where its own display stands -- see `as_seen_from`. Encoded
             // inside the loop only for those, because re-encoding the desktop
             // per chrome is the cost of the feature and re-encoding a pointer
             // motion per chrome would be the cost of nothing.
-            let own = narrowed_desktop(&message, chrome.screen.as_deref());
+            let own = desk_from_the_window(&message, chrome.screen.as_deref());
             let bytes = own.as_ref().map_or(line.as_str(), String::as_str);
             let mut stream = chrome.writer.lock().unwrap();
             stream
@@ -685,19 +686,19 @@ fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
 }
 
 /// This chrome's own copy of a desktop description, or `None` where there is
-/// nothing to narrow.
+/// nothing to move.
 ///
 /// `None` for every message that is not a desktop, and for a chrome that never
 /// said which window it is -- both of which get the line encoded once for
-/// everyone. A window that DID say is told its own display at the origin,
-/// because a window is its display and a page lays out in the coordinates it
-/// is given.
-fn narrowed_desktop(message: &HostMessage, screen: Option<&str>) -> Option<String> {
+/// everyone. A window that DID say is told the desk with its own display at
+/// the origin and the whole of it, because a window is its display and a page
+/// lays out in the coordinates it is given.
+fn desk_from_the_window(message: &HostMessage, screen: Option<&str>) -> Option<String> {
     let (HostMessage::Displays { displays }, Some(name)) = (message, screen) else {
         return None;
     };
     Some(to_line(&HostMessage::Displays {
-        displays: domicile_host::as_one_screen(displays, name),
+        displays: domicile_host::as_seen_from(displays, name),
     }))
 }
 
@@ -1132,8 +1133,8 @@ fn read_chrome_messages(
             // windows, each loading the same shell on a socket of its own, and
             // this is the one thing that differs between them. Recorded beside
             // this connection's writer -- not on the brain, which they share --
-            // and answered straight back with the desktop narrowed to it, so
-            // the page is laying out on its own display from its first paint
+            // and answered straight back with the desk read from it, so the
+            // page is laying out on its own display from its first paint
             // rather than from the next time the desktop changes.
             //
             // The handshake that came before this one carried the WHOLE
@@ -1158,9 +1159,9 @@ fn read_chrome_messages(
                 };
                 if recorded {
                     info!(screen = %name, "a chrome says which display its window covers");
-                    // NOT NARROWED HERE, and the desktop in it is not the one
+                    // NOT MOVED HERE, and the desktop in it is not the one
                     // that goes out: `freshened` re-reads the desktop under
-                    // the writer lock and narrows it to the screen just
+                    // the writer lock and reads it from the screen just
                     // recorded, so anything built here is overwritten.
                     //
                     // A `Displays` all the same, because that is what makes
@@ -5907,7 +5908,7 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
         broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
-        freshened, narrowed_desktop, parse_find_colors, to_line, write_responses, Chrome,
+        desk_from_the_window, freshened, parse_find_colors, to_line, write_responses, Chrome,
         ChromeHub, ClientRequest, Committer, Handshake, Outbound,
     };
 
@@ -6171,15 +6172,15 @@ mod tests {
 
     #[test]
     fn a_chrome_that_named_its_window_gets_that_display_at_the_origin() {
-        // The window on the right monitor is told one display, and told it
-        // starts at zero -- because within that window it does. Told the desk
-        // instead it would put the LEFT monitor's region on the right monitor,
-        // which is what every window did before this existed.
-        let own = narrowed_desktop(&two_screens(), Some("drm-2")).expect("it is narrowed");
+        // The window on the right monitor is told its own display starts at
+        // zero -- because within that window it does -- and the left one a
+        // screen to the left of it. Left where the desk put them, both regions
+        // would be drawn on the right monitor, which is what every window did
+        // before this existed.
+        let own = desk_from_the_window(&two_screens(), Some("drm-2")).expect("it is moved");
 
-        assert!(own.contains("drm-2"), "{own}");
-        assert!(!own.contains("drm-1"), "{own}");
-        assert!(own.contains("[0,0]"), "{own}");
+        assert!(own.contains(r#""name":"drm-2","position":[0,0]"#), "{own}");
+        assert!(own.contains(r#""name":"drm-1","position":[-1800,0]"#), "{own}");
     }
 
     #[test]
@@ -6190,9 +6191,9 @@ mod tests {
         // last. Both of those pass every other check here, because every other
         // check connects one chrome; what they cost is the left monitor's
         // desktop drawn on the right monitor, which is the whole thing the
-        // narrowing exists to prevent.
+        // move exists to prevent.
         //
-        // `narrowed_desktop` next door is the same claim on the broadcast
+        // `desk_from_the_window` next door is the same claim on the broadcast
         // path. This is the response path, where the lookup lives.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
@@ -6227,12 +6228,12 @@ mod tests {
             .read_line(&mut answer)
             .expect("the answer is one line");
         assert!(
-            answer.contains("drm-2"),
+            answer.contains(r#""name":"drm-2","position":[0,0]"#),
             "the window on the right monitor is told the right monitor: {answer}"
         );
         assert!(
-            !answer.contains("drm-1"),
-            "and is told nothing else, or it lays the desk out on one screen: {answer}"
+            answer.contains(r#""name":"drm-1","position":[-1800,0]"#),
+            "and where the rest of the desk is from there: {answer}"
         );
     }
 
@@ -6241,11 +6242,11 @@ mod tests {
         // A nested run, and every chrome there was before a window could be
         // one display. `None` is what has the caller send the line it encoded
         // once for everybody.
-        assert!(narrowed_desktop(&two_screens(), None).is_none());
+        assert!(desk_from_the_window(&two_screens(), None).is_none());
     }
 
     #[test]
-    fn nothing_but_the_desktop_is_narrowed() {
+    fn nothing_but_the_desktop_is_moved() {
         // A pointer motion is the same event on every screen, and re-encoding
         // one per chrome would be the cost of the feature paid on the traffic
         // that has none of its benefit.
@@ -6253,7 +6254,7 @@ mod tests {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
         };
 
-        assert!(narrowed_desktop(&welcome, Some("drm-2")).is_none());
+        assert!(desk_from_the_window(&welcome, Some("drm-2")).is_none());
     }
 
     #[test]
