@@ -233,6 +233,44 @@ const KEYCODES: Readonly<Record<string, number>> = {
   Tab: 15,
 };
 
+/** Where the page last saw the pointer, which every crossing is read against. */
+const pointerAt = (x: number, y: number): void => {
+  fireEvent.pointerMove(document, { clientX: x, clientY: y, pointerId: 1 });
+};
+
+/**
+ * The pointer crossing into a window at a place on the page.
+ *
+ * The event a browser fires first when a pointer enters an element — before
+ * the `pointermove` behind it — and the one the desktop reads to decide
+ * whether the pointer went to the window or the window came to the pointer.
+ */
+const crossInto = (element: HTMLElement, x: number, y: number): void => {
+  fireEvent.pointerOver(element, { clientX: x, clientY: y, pointerId: 1 });
+};
+
+/**
+ * Where the shell last asked the engine to put the cursor.
+ *
+ * Throws where it has asked for nothing: a case that reads this is one about
+ * the warp, and no warp at all is that case failing rather than passing.
+ */
+const warpedTo = (): readonly [x: number, y: number] => {
+  const asked = [...domicile.calls]
+    .reverse()
+    .find(([kind]) => kind === "warpPointer");
+  const to = asked?.[1];
+  if (
+    !Array.isArray(to) ||
+    typeof to[0] !== "number" ||
+    typeof to[1] !== "number"
+  ) {
+    throw new Error("test: the shell asked for no warp");
+  } else {
+    return [to[0], to[1]];
+  }
+};
+
 /** What the page holds down, which is what hands the shell the pointer. */
 const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
   fireEvent.keyDown(document, {
@@ -1050,6 +1088,79 @@ describe("Shell", () => {
       // And `mod+Shift+a` points them back at the window, which is nothing to
       // draw.
       press("a", true);
+      expect(container.querySelector("[data-selection]")).toBeNull();
+    });
+
+    it("keeps the group when the layout slides a window under the pointer", () => {
+      // What moving a group looks like from the desktop's side: the windows
+      // trade places under a hand that has not moved, and the `pointerover`
+      // one fires as it arrives carries the spot the pointer is already at.
+      // Answering that one handed the keyboard — and with it the selection —
+      // to whichever window the layout happened to slide past.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("v");
+      clientAppears("three");
+      pointerAt(1440, 800);
+
+      press("a");
+      press("h", true);
+
+      crossInto(appElement(container, "one"), 1440, 800);
+      expect(container.querySelector("[data-selection]")).not.toBeNull();
+    });
+
+    it("knows its own warp, at a place that is not a whole pixel", () => {
+      // Three windows divide the workspace into thirds that are not whole
+      // pixels, so the middle of one is a fraction — and the engine puts the
+      // cursor on the pixel beside it (`base::ClampRound`). A page that asked
+      // for the fraction does not recognize its own warp arriving, and reads
+      // the window the cursor came down on as one the user pointed at, in the
+      // middle of the layout easing past.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      clientAppears("three");
+      press("h");
+      press("h");
+      press("v");
+      pointerAt(1700, 900);
+
+      // The group, moved along the row until it is the third of three.
+      press("a");
+      press("l", true);
+      press("l", true);
+
+      // The engine puts the cursor down on a whole pixel whatever it was
+      // asked for, and the window it lands on says so — here the one the
+      // group was moved past, which does not hold the keyboard, so nothing
+      // but this rule stands between the crossing and the selection.
+      const [x, y] = warpedTo();
+      crossInto(appElement(container, "two"), Math.round(x), Math.round(y));
+
+      expect(container.querySelector("[data-selection]")).not.toBeNull();
+    });
+
+    it("and hands it over to a pointer that really crossed into one", () => {
+      // The other half of the same rule, and the half that keeps focus
+      // following the cursor: a crossing at a place the pointer was not is
+      // the user choosing a window, and choosing one outside the group is
+      // choosing to leave it. The crossing says so on its own — a browser
+      // fires it *before* the move behind it, so a desktop that waited for
+      // the move would swallow the window the user had just reached for.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("v");
+      clientAppears("three");
+      pointerAt(1440, 800);
+
+      press("a");
+      press("h", true);
+
+      crossInto(appElement(container, "one"), 300, 500);
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(container.querySelector("[data-selection]")).toBeNull();
     });
 

@@ -10,6 +10,7 @@ import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
+import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
@@ -92,15 +93,18 @@ type Props = {
    */
   onMotionEnded: () => void;
   /**
-   * Called when the pointer moves into this window.
+   * Called when the pointer crosses into this window, with the place on the
+   * page it crossed at.
    *
    * Focus follows the cursor in this shell, so arriving over a window is the
-   * user starting to work in it. The pointer over a client's surface belongs
-   * to the client, and this is not that question: the page hit-tests the
-   * element to decide who the pointer is for, so it knows the pointer is here
-   * whether or not the client is about to be sent it.
+   * user starting to work in it — where the pointer is what did the arriving,
+   * which is what the place is for: see `usePointerWarp`. The pointer over a
+   * client's surface belongs to the client, and this is not that question:
+   * the page hit-tests the element to decide who the pointer is for, so it
+   * knows the pointer is here whether or not the client is about to be sent
+   * it.
    */
-  onHover: () => void;
+  onHover: (at: Spot) => void;
   /**
    * Called when the user clicks into this window.
    *
@@ -304,7 +308,9 @@ export const AppWindow = ({
           onMotionEnded();
         }
       }}
-      onPointerOver={onHover}
+      onPointerOver={(event) => {
+        onHover([event.clientX, event.clientY]);
+      }}
       ref={setElement}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. The cursor is inline for a

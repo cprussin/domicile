@@ -105,6 +105,18 @@ const cascaded = () =>
   floatToggled(reached(floatToggled(tiling("a", "b", "c")), "b"));
 
 describe("reached", () => {
+  it("changes nothing when the window being worked in is reached again", () => {
+    // "A reach that moves nothing returns the state it was given", which is
+    // what `AppWindow` leans on for the press it reports in the window the
+    // user is already in — focus follows the cursor, so that is most presses.
+    // Re-pointing the focus at the window it is already on used to be
+    // invisible; it is not, now that the depth along the chain is what
+    // `focus parent` selected with.
+    const selected = parentFocused(tiling("a", "b"));
+
+    expect(reached(selected, "b")).toBe(selected);
+  });
+
   it("brings a floating window to the front", () => {
     const workspace = reached(cascaded(), "c");
 

@@ -89,7 +89,11 @@ export const Desktop = ({ domicile }: Props) => {
     () => windows.windows.map(({ id }) => id),
     [windows.windows],
   );
-  const keyed = usePointerWarp({ domicile, focus, windows: open });
+  const { keyed, pointing } = usePointerWarp({
+    domicile,
+    focus,
+    windows: open,
+  });
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
@@ -159,8 +163,16 @@ export const Desktop = ({ domicile }: Props) => {
               onGrab={(id) => {
                 act(WindowAction.WindowGrabbed(id));
               }}
-              onHover={(id) => {
-                act(WindowAction.WindowHovered(id));
+              // Only where the pointer is what did the crossing. A window
+              // that arrives under a hand nobody moved says `pointerover`
+              // just as loudly, and answering that one hands the keyboard —
+              // and whatever `focus parent` had selected — to whichever
+              // window the layout happened to slide past. See
+              // `usePointerWarp`.
+              onHover={(id, at) => {
+                if (pointing(at)) {
+                  act(WindowAction.WindowHovered(id));
+                }
               }}
               onMove={(id, x, y) => {
                 act(WindowAction.WindowMoved(id, x, y));

@@ -817,13 +817,26 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
   if (workspace === undefined) {
     return state;
   } else {
-    return onWorkspace(
-      workspace.name === state.current
-        ? state
-        : { ...state, current: workspace.name, previous: state.current },
-      workspace.name,
-      (found) => reached(found, id),
-    );
+    const found = reached(workspace, id);
+    if (found === workspace && workspace.name === state.current) {
+      // A reach that moved nothing gives back the state it was given, object
+      // and all — which is what `AppWindow` says it relies on for the press
+      // it reports in the window the user is already in. Rebuilt anyway, the
+      // desktop re-renders on every click in the window being worked in.
+      //
+      // Only a tiled window comes back the same, because only the tiling has
+      // a focus that can already be where it is being put: a float is raised
+      // as well as focused, and a raise is a new order of the stack.
+      return state;
+    } else {
+      return onWorkspace(
+        workspace.name === state.current
+          ? state
+          : { ...state, current: workspace.name, previous: state.current },
+        workspace.name,
+        () => found,
+      );
+    }
   }
 };
 

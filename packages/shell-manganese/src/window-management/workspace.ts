@@ -307,13 +307,30 @@ const floatFocused = (workspace: Workspace, id: string): Workspace => ({
   tiling: withCommandsOnWindow(workspace.tiling),
 });
 
-// A tiled window taking the keyboard, which is the tree's own focus and also
-// the end of whatever the floating layer was doing in front of it.
-const focusedTiled = (workspace: Workspace, id: string): Workspace => ({
-  ...workspace,
-  floatFocus: undefined,
-  tiling: withFocusOn(workspace.tiling, id),
-});
+/**
+ * A tiled window taking the keyboard, which is the tree's own focus and also
+ * the end of whatever the floating layer was doing in front of it.
+ *
+ * **A tiled window that already has it takes nothing**, and the workspace
+ * comes back as the object it was. Only a tiled one: a float is raised as
+ * well as focused, and a raise is a new order of the stack.
+ *
+ * Re-pointing the focus at the window it is already on moves no keyboard,
+ * but it does run the chain back down to that window — which is `focus
+ * parent` undone by a press that focused nothing, and there are plenty of
+ * those: a click in the window being worked in is reported like any other,
+ * the compositor answers a `focusApp` by saying where the keyboard went,
+ * and a window reconfigured by the move the user just made asks for it
+ * again.
+ */
+const focusedTiled = (workspace: Workspace, id: string): Workspace =>
+  workspace.floatFocus === undefined && focusedIdOf(workspace.tiling) === id
+    ? workspace
+    : {
+        ...workspace,
+        floatFocus: undefined,
+        tiling: withFocusOn(workspace.tiling, id),
+      };
 
 // Whichever layer the keyboard is in answers a keyed command: the box while a
 // float is being worked in, and the tree otherwise.
