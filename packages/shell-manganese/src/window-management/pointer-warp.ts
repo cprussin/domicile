@@ -103,7 +103,15 @@ const holds = (box: Rect, pointer: Spot | undefined): boolean =>
   pointer[1] >= box.y &&
   pointer[1] <= box.y + box.height;
 
+/**
+ * The middle of `box`, at a whole pixel.
+ *
+ * Rounded here rather than left to the engine, which rounds it anyway:
+ * `PointerWarpTarget` pins the spot with `base::ClampRound`, so a fraction
+ * asked for comes back as the pixel next to it — and the page has to be able
+ * to recognize its own warp arriving. See `usePointerWarp`.
+ */
 const middleOf = (box: Rect): Spot => [
-  box.x + box.width / 2,
-  box.y + box.height / 2,
+  Math.round(box.x + box.width / 2),
+  Math.round(box.y + box.height / 2),
 ];

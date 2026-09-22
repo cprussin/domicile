@@ -154,6 +154,44 @@ const nothingEnded = () => {
 };
 
 describe("BrowserWindow", () => {
+  it("reports where the pointer crossed into it", async () => {
+    // The place is the whole of what says whether the pointer went to the
+    // window or the window came to the pointer — see `usePointerWarp` — so
+    // it is the event that carries it rather than the element the crossing
+    // was heard on. A browser window hears its own from whichever of its
+    // parts the pointer reached, the page inside it included.
+    const at = await new Promise<readonly [number, number]>((resolve) => {
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={resolve}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+
+      view(container).dispatchEvent(
+        new MouseEvent("pointerover", {
+          bubbles: true,
+          clientX: 640,
+          clientY: 415,
+        }),
+      );
+    });
+
+    expect(at).toStrictEqual([640, 415]);
+  });
+
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow

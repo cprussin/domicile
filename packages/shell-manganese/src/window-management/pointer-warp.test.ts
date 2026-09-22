@@ -57,6 +57,19 @@ describe("warpTo", () => {
     ).toStrictEqual([600, 350]);
   });
 
+  it("asks for a whole pixel, which is what the engine will give", () => {
+    // The engine rounds what it is asked for — `PointerWarpTarget` pins the
+    // spot with `base::ClampRound` — and the page hears back the pixel it
+    // landed on. A fraction asked for is a fraction the arrival never
+    // matches, and an arrival that matches nothing is read as the user
+    // having pointed at whatever the cursor came down on.
+    const odd = { box: { height: 501, width: 401, x: 0, y: 0 }, id: "kitty" };
+
+    expect(warpTo({ from: LEFT, pointer: [900, 900], to: odd })).toStrictEqual([
+      201, 251,
+    ]);
+  });
+
   it("takes it there when the pointer has never been anywhere", () => {
     // A desktop nobody has touched the trackpad on yet. The pointer is still
     // somewhere — the engine draws it at the middle of the screen — and this

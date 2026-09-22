@@ -57,7 +57,7 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+Shift+** the same | Move the window. Past its neighbor, *into* a neighbor that is a container rather than a window, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
 | **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
-| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it — sway's indicator. |
+| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it, lit inside by a wash of the same accent — sway's indicator. |
 | **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
 | **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
@@ -71,8 +71,13 @@ moved at that column from beside it goes *in* rather than trading places with
 it — beside the window the column last had the focus in, or at the near end of
 one that runs the way the window is moving. **Mod+A** then points the keys at
 the group rather than at the window in it, and says which group with a dashed
-line around it: what splits, lays out, moves and resizes from there is the
-whole container. **Mod+Shift+A** points them back at the window.
+line around it, lit inside by a wash of the accent: what splits, lays out,
+moves and resizes from there is the whole container, and it stays the whole
+container across the keys that act on it. **Mod+Shift+A** points them back at
+the window, and so does the keyboard leaving the tiling for a floating window.
+Reaching for a window is what else ends it — except for the window being
+worked in, which every press in a client is reported as and which is
+therefore no reach at all.
 
 The window being worked in is the one with a **rule of accent across the top
 of its frame**, over a title bar washed with enough of the same accent to find
@@ -91,6 +96,18 @@ of the window it moved to — unless the pointer is over that window already,
 which is every press that moved nothing the pointer is near: a split, a layout,
 a tab of the container it is sitting on. The page cannot move a pointer; the
 engine can, and `warpPointer` is what asks it to.
+
+**The other half of that is a rule rather than a move: the pointer moves the
+focus when the pointer has moved.** A warp is a render late and aimed at a box
+the window is still easing towards, so between the press and the settle the
+window under the cursor is whichever one happens to be passing — and a
+`pointerover` answered then is the desktop pointing at itself. What tells them
+apart is where the crossing happened: a window that arrives under a hand
+nobody moved arrives at the spot the pointer is already at, and the desktop's
+own warp lands where it asked for — while a window the pointer crossed into is
+somewhere it was not. So the keys keep what they were given, which for
+**Mod+A** is a whole group, across the moves and layouts that would otherwise
+hand it to a window sliding past.
 
 **A window that opens takes the pointer the same way**, and for the same
 reason with nobody pressing anything: a window lands on the workspace being

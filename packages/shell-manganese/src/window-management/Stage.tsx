@@ -10,6 +10,7 @@ import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import { GroupOutline } from "./GroupOutline";
 import type { Screenful } from "./placement";
+import type { Spot } from "./pointer-warp";
 import { TitleBar } from "./TitleBar";
 import { titleFocus } from "./title-focus";
 import { useWindowMotion } from "./useWindowMotion";
@@ -59,8 +60,12 @@ type Props = {
   /** The screen, asked for from a window's own bar — `fullscreen`. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
-  /** The pointer moved into a window, which is the user working in it. */
-  onHover: (id: string) => void;
+  /**
+   * The pointer moved into a window, which is the user working in it — with
+   * the place it crossed at, because a window that arrives under a hand
+   * nobody moved fires the same event.
+   */
+  onHover: (id: string, at: Spot) => void;
   onMove: (id: string, x: number, y: number) => void;
   /**
    * A browser window's page asked for a window of its own — a link with
@@ -171,8 +176,8 @@ export const Stage = ({
                 hasKeyboard={window.id === focusedId}
                 key={window.id}
                 motion={motion}
-                onHover={() => {
-                  onHover(window.id);
+                onHover={(at) => {
+                  onHover(window.id, at);
                 }}
                 onMotionEnded={onMotionEnded}
                 onReach={() => {
@@ -193,8 +198,8 @@ export const Stage = ({
                 frame={placement?.frame}
                 key={window.id}
                 motion={motion}
-                onHover={() => {
-                  onHover(window.id);
+                onHover={(at) => {
+                  onHover(window.id, at);
                 }}
                 onMotionEnded={onMotionEnded}
                 onNavigate={(url) => {

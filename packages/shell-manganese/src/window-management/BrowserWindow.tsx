@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
+import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
@@ -68,13 +69,16 @@ type Props = {
    */
   motion: WindowMotion;
   /**
-   * Called when the pointer moves into this window.
+   * Called when the pointer crosses into this window, with the place on the
+   * page it crossed at.
    *
    * Focus follows the cursor in this shell, so arriving over a window is the
-   * user starting to work in it. The chrome is what hears it: a pointer inside
-   * the page is the guest's, the same way a click there is.
+   * user starting to work in it — where the pointer is what did the arriving,
+   * which is what the place is for: see `usePointerWarp`. The chrome is what
+   * hears it: a pointer inside the page is the guest's, the same way a click
+   * there is.
    */
-  onHover: () => void;
+  onHover: (at: Spot) => void;
   /**
    * Called with the address this window was sent to, whenever the shell sends
    * it somewhere.
@@ -399,7 +403,9 @@ export const BrowserWindow = ({
       // Focus follows the cursor: arriving anywhere in this window is the user
       // starting to work in it — the page excepted, because a pointer in there
       // is the guest's, the same way a click in it is.
-      onPointerOver={onHover}
+      onPointerOver={(event) => {
+        onHover([event.clientX, event.clientY]);
+      }}
       ref={element}
       // Inline because the box is a runtime number and Panda reads literals;
       // `window-styles` owns everything static. `undefined` is a window with no

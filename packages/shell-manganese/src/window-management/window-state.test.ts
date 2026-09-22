@@ -352,6 +352,38 @@ describe("the pointer", () => {
     ).toBe(state);
   });
 
+  it("answers a press in the window it is already in with the same state", () => {
+    // `AppWindow` reports every press a client's window takes, the ones that
+    // move no focus included — focus follows the cursor, so that is most of
+    // them — and leans on the reduction to make those cost nothing. An
+    // object that came back different would re-render the desktop on every
+    // click, and would run the focus chain back down to the window, which is
+    // `focus parent` undone.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ParentFocused(),
+    );
+
+    expect(
+      reduceWindows(state, WindowAction.WindowSelected(APP("editor"))),
+    ).toBe(state);
+  });
+
+  it("goes to the workspace of a window that asks to be reached", () => {
+    // `xdg-activation`, which this shell grants: the window is already the
+    // one its own workspace has the focus on, so reaching for it moves
+    // nothing *there* — and going there is the whole of what granting it
+    // means.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToWorkspace("2"),
+    );
+
+    expect(
+      reduceWindows(state, WindowAction.FocusRequested("editor")).current,
+    ).toBe("2");
+  });
+
   it("raises and holds the window a drag takes hold of", () => {
     const state = reduce(
       desktop("kitty", "editor"),

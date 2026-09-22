@@ -21,16 +21,23 @@ type Props = {
  *
  * Dashed rather than solid, and a container's box rather than a window's, so
  * that it cannot be read as one more window's edge: a solid accent line is
- * what the window being worked in already draws around itself. The dashes
- * are what carries it rather than the weight — a line of the same pixel as
- * every other line this desktop draws, which is what `edgeStyles` is.
+ * what the window being worked in already draws around itself.
+ *
+ * **Drawn to be found rather than to be tasteful.** A hairline of accent on
+ * a desktop whose every window already draws a line of its own is something
+ * you have to go looking for, and a selection you cannot see is the mode it
+ * was put there to announce. So it is twice the weight of a window's edge
+ * and carries a wash of the same accent inside it, which is what makes the
+ * group read as one thing at a glance rather than as four edges that happen
+ * to line up.
  *
  * At the depth of the tiling and after every window in the document, which
- * puts it over the windows it rings — their bars, and the outermost pixel of
- * the client surfaces themselves — and under the floats over them. Over a
+ * puts it over the windows it rings — their bars, and the client surfaces
+ * themselves along all four sides — and under the floats over them. Over a
  * client's own pixels is where a line around a group has to be, because the
  * box it is drawn at is exactly the box those windows fill; it takes no
- * pointer, so the edge it draws on them is the whole of what it costs them.
+ * pointer, so a band of accent along their outer edge is the whole of what it
+ * costs them, and it is there only while a group is selected.
  */
 export const GroupOutline = ({ rect }: Props) => (
   <div
@@ -56,12 +63,20 @@ export const GroupOutline = ({ rect }: Props) => (
  * focus-follows-cursor and every client's clicks.
  */
 const outlineStyles = css({
-  border: "1px dashed {colors.accent}",
+  // Twice a window's own edge, off the spacing scale rather than written as
+  // a length: a line that has to be found is not the one-pixel edge that
+  // STYLING's literal is for.
+  border: "{spacing.0.5} dashed {colors.accent}",
   // Rounded at the top and square at the bottom, which is the group's own
   // silhouette: its top two corners are the corners of its topmost windows'
   // bars, which are the only corners the page draws, and its bottom two are
   // where a client's own pixels end squarely — see `TitleBar`.
   borderStartEndRadius: "lg",
   borderStartStartRadius: "lg",
+  // The wash, thrown inwards from the line: the group is lit along its own
+  // edge rather than tinted all over, because what is inside it is clients'
+  // pixels and a sheet of color over those is a desktop seen through glass.
+  boxShadow:
+    "inset 0 0 {spacing.3} color-mix(in oklab, {colors.accent} 45%, transparent)",
   pointerEvents: "none",
 });
