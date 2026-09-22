@@ -326,6 +326,24 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ theme: "light" }]);
     });
 
+    it("delivers whether anybody is at the desk", () => {
+      // Through the same hold as the rest, and that is what this one is for:
+      // the message a page gets on connecting is the one that says the desk
+      // has been idle since before the page existed, and it lands while React
+      // is still on its first render.
+      const seen: unknown[] = [];
+      domicile.on("idle", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "idle",
+        Object.assign(new Event("idle"), { arrival: 0, idle: true }),
+      );
+
+      expect(seen).toStrictEqual([{ idle: true }]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
