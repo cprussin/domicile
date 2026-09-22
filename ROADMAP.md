@@ -46,9 +46,28 @@ The evidence for each of those is in the doc that made the claim —
    app was a client of a Wayland display that went with the compositor, and
    nothing relaunches or reconnects one.
 
-4. **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
-   can walk up to, and blanking a screen after a timeout is the same seam. Not
-   started.
+4. **No lock.** A desktop you walk away from is one anybody can walk up to.
+   The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
+   `crate::idle` in the compositor for the decision and the edge, and the one
+   thing that seam can already drive — the connectors go dark and come back on
+   the next key, click, scroll or pointer movement
+   ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it)).
+   A blank screen is still a screen: anybody can type at one. What is left is
+
+   - **The lock itself**, which needs the shell, the host↔chrome protocol and a
+     decision about where input stops — the seat holds the keyboard, so
+     refusing to deliver it is this compositor's to do rather than the page's.
+   - **Telling the shell.** Nothing but the connectors hears about idle today,
+     so a shell cannot dim, warn, or show a lock screen a moment before the
+     glass goes out. It is a message on the host↔chrome protocol and the
+     `Idle` seam already names the moment.
+   - **Idle inhibit.** The timer counts hands, not what is on screen, so a film
+     playing with nobody at the trackpad blanks. Wayland's answer is
+     `zwp_idle_inhibit_manager_v1` and Smithay ships support; what it needs
+     here is a client's inhibitor reaching `Idle` and an answer for an
+     inhibitor held by a client that died.
+   - **A reloaded timeout.** Read at startup only, with the rest of the config
+     — see the gap below.
 
 ## In the engine fork — the agent on `crux`
 
@@ -101,6 +120,14 @@ these is one run, and each has a line to look for.
   a second and `starting the desktop again in 1s — that is failure 1 of 5 in a
   row.` The windows will not come back, which is the item above rather than a
   fault in the restart.
+- **A desk left alone.** Run with `idle.blank_after_seconds = 60`, walk away for
+  a minute, then touch the trackpad. Expect `nobody is at this desktop; its
+  screens go dark connectors=N`, the panels off, and
+  `somebody is at this desktop again; its screens come back on` with a
+  `configuring N display(s)` behind it under `--vmodule=drm*=1`. Nothing here
+  can see it: no runner has a `/dev/dri` at all, so every check this change
+  brings is arithmetic over an injected instant. Plug a monitor in while it is
+  dark for the second half — the new one must come up dark too.
 - **The first real `./scripts/dev-shell.sh <name>`.**
 - **Which way round the two quarter turns are** — see the gaps below.
 - Anything about orientation or presentation, and re-measuring latency or CSS

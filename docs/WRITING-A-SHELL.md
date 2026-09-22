@@ -227,6 +227,14 @@ nothing else in a desktop can produce — every key wrong, and no message
 anywhere saying why. So a shell whose users do not type US QWERTY has to carry
 their layout into this file; there is no layer below it that will.
 
+**A desktop that blanks says so, and one that says nothing does not.**
+`idle.blank_after_seconds` is how long a desk goes untouched before its screens
+go dark; they come back on the next key, click, scroll or pointer movement.
+Leaving it out is a desktop that never blanks, which is deliberate — there is
+no lock behind the blank yet and nothing tells the shell a moment before, so a
+screen that went dark on its own would be indistinguishable from a desktop that
+had died. `0` is refused rather than read as either answer.
+
 Two of the things it can say about a desktop are different in kind, and which
 one a shell generates depends on whether there is hardware under it:
 

@@ -22,6 +22,7 @@ pub use desktop::{Desktop, Display};
 pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -466,10 +467,53 @@ impl std::fmt::Display for Axis {
     }
 }
 
+/// When a desktop nobody is at turns its screens off.
+///
+/// **ABSENT IS NEVER, AND THAT IS THE DEFAULT.** A blank screen is
+/// indistinguishable from a desktop that has died, and there is nothing behind
+/// this one yet -- no lock, and nothing telling the shell a moment before --
+/// so a desk whose shell never mentioned idle would go dark for the first time
+/// on an upgrade it did not ask for, with no way to tell that from a crash.
+/// A shell that wants the screens off says how long.
+///
+/// Seconds, spelled in the name, because this file is generated: a unit that
+/// has to be read out of a doc comment is one a generator gets wrong, and the
+/// only alternative -- `"10m"` -- is a parser and a second way to be wrong
+/// about what a config says.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IdleConfig {
+    /// How long the desktop goes untouched before its screens go dark.
+    ///
+    /// Absent is a desktop that never blanks. Zero is refused rather than
+    /// read as either one -- see [`IdleConfig::validate`].
+    pub blank_after_seconds: Option<u64>,
+}
+
+impl IdleConfig {
+    /// How long a desktop goes untouched before it blanks, or `None` for one
+    /// that never does.
+    pub fn blank_after(&self) -> Option<Duration> {
+        self.blank_after_seconds.map(Duration::from_secs)
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.blank_after_seconds == Some(0) {
+            return Err(ConfigError::Validation(
+                "idle.blank_after_seconds must be at least 1 second; leave the key out \
+                 for a desktop whose screens never blank"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub idle: IdleConfig,
     pub input: InputConfig,
     pub output: OutputConfig,
 }
@@ -516,6 +560,7 @@ impl Config {
 
     /// Semantic validation beyond what the type system / deserializer enforce.
     fn validate(&self) -> Result<(), ConfigError> {
+        self.idle.validate()?;
         self.input.keyboard.validate()?;
         self.output.validate()
     }

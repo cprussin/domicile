@@ -4,6 +4,8 @@
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
+use std::time::Duration;
+
 use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig};
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -134,6 +136,51 @@ xkb_options = ["caps:swapescape", ""]
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
+// ---- idle -----------------------------------------------------------------
+
+#[test]
+fn a_desk_that_asked_for_no_timeout_never_blanks() {
+    // SAYING NOTHING MEANS NOTHING HAPPENS. A desk whose shell never mentioned
+    // idle should not start turning its screens off after an upgrade -- there
+    // is no lock behind the blank yet and nothing tells the shell, so a screen
+    // that went dark on its own would read as a desktop that had died.
+    assert_eq!(Config::parse("").unwrap().idle.blank_after(), None);
+}
+
+#[test]
+fn a_desk_that_states_a_timeout_gets_it() {
+    let idle = Config::parse(
+        r#"
+[idle]
+blank_after_seconds = 600
+"#,
+    )
+    .unwrap()
+    .idle;
+    assert_eq!(idle.blank_after(), Some(Duration::from_secs(600)));
+}
+
+#[test]
+fn rejects_a_timeout_of_no_time_at_all() {
+    // Zero is the ambiguous one: "blank the moment nobody types" and "never
+    // blank" are both readings of it, and the second already has a spelling --
+    // leave the key out. So it is refused by name rather than guessed at.
+    let err = Config::parse(
+        r#"
+[idle]
+blank_after_seconds = 0
+"#,
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("a zero timeout is refused rather than taken: {err:?}");
+    };
+    assert!(
+        message.contains("idle.blank_after_seconds"),
+        "the message should name the key: {message}"
+    );
+}
+
 #[test]
 fn rejects_invalid_syntax() {
     let err = Config::parse("{ this is not toml").unwrap_err();
@@ -176,6 +223,10 @@ max_scaale = 2
     // guard that covered `Config` alone would have let a misspelled
     // `xkb_optoins` through while reading as though it did not.
     for section in [
+        r#"
+[idle]
+blank_after_secons = 600
+"#,
         r#"
 [input.keyboard]
 xkb_optoins = []
