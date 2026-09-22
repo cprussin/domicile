@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import type { Display } from "@domicile/component-library/display-source";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import type { Float } from "./float";
@@ -11,6 +12,35 @@ const FLOAT: Float = {
   width: 300,
   x: 10,
   y: 20,
+};
+
+/**
+ * The screen the float is on, where the page's pixels are the desktop's.
+ *
+ * Every desktop but one: a nested run, a developer window, a shell in a plain
+ * browser. The one is {@link PANEL}.
+ */
+const DESKTOP: Display = {
+  name: "desk",
+  position: [0, 0],
+  scale: 1,
+  scanout: undefined,
+  size: [1920, 1080],
+};
+
+/**
+ * A desktop on a tty: one monitor, one browser window, and a page laid out in
+ * half the pixels the monitor scans out.
+ *
+ * `<Screen>` covers that window with a transform, so the pointer travels two
+ * of the page's pixels for every one the float was laid out in.
+ */
+const PANEL: Display = {
+  name: "panel",
+  position: [0, 0],
+  scale: 2,
+  scanout: { size: [1920, 1080], transform: "normal" },
+  size: [960, 540],
 };
 
 /** A press, carrying what the hook actually reads off a pointer event. */
@@ -41,7 +71,7 @@ const cancel = (): void => {
   fireEvent.pointerCancel(window, { pointerId: 1 });
 };
 
-const dragging = (resizes = false) => {
+const dragging = (resizes = false, display = DESKTOP) => {
   const calls = {
     onDrop: mock(() => undefined),
     onGrab: mock(() => undefined),
@@ -50,7 +80,7 @@ const dragging = (resizes = false) => {
   };
   const { rerender, result } = renderHook(
     (props: { resizes: boolean }) =>
-      useFloatDrag({ float: FLOAT, ...calls, ...props }),
+      useFloatDrag({ display, float: FLOAT, ...calls, ...props }),
     { initialProps: { resizes } },
   );
   const grab = (x = 0, y = 0) => {
@@ -96,6 +126,19 @@ describe("useFloatDrag", () => {
       expect(calls.onMove).toHaveBeenCalledWith(FLOAT.x + 60, FLOAT.y + 30);
     });
 
+    it("moves it by what the pointer crossed of the desktop, not of the window", () => {
+      // THE BUG THIS EXISTS FOR. A pointer is reported in the pixels the page
+      // draws, and where a page is one monitor those are not the ones a window
+      // is laid out in: a float moved by the numbers off the events crosses
+      // twice the ground the hand holding it did and slides out from under it.
+      const { calls, grab } = dragging(false, PANEL);
+      grab();
+      act(() => {
+        moveTo(120, 60);
+      });
+      expect(calls.onMove).toHaveBeenCalledWith(FLOAT.x + 60, FLOAT.y + 30);
+    });
+
     it("grabs the window as soon as it is pressed", () => {
       const { calls, grab } = dragging();
       grab();
@@ -115,6 +158,20 @@ describe("useFloatDrag", () => {
         FLOAT.height + 30,
       );
       expect(calls.onMove).not.toHaveBeenCalled();
+    });
+
+    it("resizes it by what the pointer crossed of the desktop", () => {
+      // The same units, and the same drag: a corner dragged 120 of the
+      // window's pixels was dragged 60 of the ones the float's width is in.
+      const { calls, grab } = dragging(true, PANEL);
+      grab();
+      act(() => {
+        moveTo(120, 60);
+      });
+      expect(calls.onResize).toHaveBeenCalledWith(
+        FLOAT.width + 60,
+        FLOAT.height + 30,
+      );
     });
 
     it("goes on resizing after Shift is let go of mid-drag", () => {

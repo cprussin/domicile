@@ -1,3 +1,5 @@
+import type { Display } from "@domicile/component-library/display-source";
+
 import type { Rect } from "../rect";
 import { barOf } from "../rect";
 import { TitleBar } from "../TitleBar";
@@ -10,6 +12,8 @@ import { useFloatDrag } from "./useFloatDrag";
 type Props = {
   /** How it stacks, which is the depth of the window it names. */
   depth: number;
+  /** The screen it names, which says what a drag's pixels are worth. */
+  display: Display;
   /** Whether the user has hold of this window — see {@link TitleBar}. */
   dragging: boolean;
   float: Float;
@@ -47,6 +51,7 @@ type Props = {
  */
 export const FloatTitleBar = ({
   depth,
+  display,
   dragging,
   float,
   focus,
@@ -63,6 +68,7 @@ export const FloatTitleBar = ({
   title,
 }: Props) => {
   const { drag: _drag, ...handlers } = useFloatDrag({
+    display,
     float,
     onDrop,
     onGrab,

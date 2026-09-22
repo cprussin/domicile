@@ -52,9 +52,9 @@ export const coverTheWindow = (
 /**
  * How many of the window's pixels one of the region's is worth.
  *
- * Exported for `on-the-page.ts`, which maps a place through the same density
- * this scales a region by: the two have to agree, and they agree by being one
- * function.
+ * Exported for `on-the-page.ts`, which maps a place onto the window and a
+ * pointer's travel back off it through the same density this scales a region
+ * by: the three have to agree, and they agree by being one function.
  *
  * **Measured across the turn.** A quarter turn trades the monitor's width for
  * its height, so a box 1800 wide covers the mode's 2160 rather than its 3840.
@@ -103,9 +103,10 @@ export const densityOf = (
  * quarter turns are the one thing in the whole path that a screen can settle
  * and reading cannot; swapping their two arms is the whole of it.
  *
- * **AND `turnOf` IN `on-the-page.ts` SAYS THE SAME THING AS ARITHMETIC**, for
- * the places a shell has to point at rather than draw. Change either and
- * change both, or a desk comes up drawn one way and pointed at another.
+ * **AND `on-the-page.ts` SAYS THE SAME THING AS ARITHMETIC, TWICE**: `turnOf`
+ * for the places a shell has to point at rather than draw, and `straightened`
+ * for the distances it has to read back out of a pointer. Change one and
+ * change all three, or a desk comes up drawn one way and pointed at another.
  *
  * Empty for `normal`, which would otherwise be a rotation by nothing and a
  * stacking context for free.
