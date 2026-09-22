@@ -60,6 +60,11 @@ export type Geometry = {
 /** Everything the screen shows: the windows, and the tabs of any container. */
 export type Screenful = {
   placements: readonly Placement[];
+  /**
+   * The container `focus parent` selected, or `undefined` while the commands
+   * are pointed at a window — see `tree/frames.ts`.
+   */
+  selection: Rect | undefined;
   tabs: readonly Tab[];
 };
 
@@ -72,7 +77,7 @@ export type Screenful = {
 const INNER_GAP = 20;
 
 /** The `z-index` the tiled windows share: the bottom of the page's stack. */
-const TILED = 0;
+export const TILED = 0;
 
 /** The lowest `z-index` a floating window is given — above every tiled one. */
 const FLOATING = 1;
@@ -131,7 +136,11 @@ export const placementsOf = (
   const workspace = workspaceOn(state);
   // `gaps.smartGaps`: a workspace showing one window gets the whole screen.
   const gap = windowsOf(workspace.tiling).length > 1 ? INNER_GAP : 0;
-  const { frames, tabs } = framesOf(workspace.tiling, geometry.workspace, gap);
+  const { frames, selection, tabs } = framesOf(
+    workspace.tiling,
+    geometry.workspace,
+    gap,
+  );
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
     // Over them, in the order the workspace stacks them.
@@ -153,7 +162,7 @@ export const placementsOf = (
     full === undefined
       ? laidOut
       : [...laidOut.filter(({ id }) => id !== full.id), full];
-  return { placements, tabs };
+  return { placements, selection, tabs };
 };
 
 // The one window a fullscreen workspace shows, or `undefined` when none is

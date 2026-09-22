@@ -95,6 +95,35 @@ export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
   }
 };
 
+/**
+ * The same tree with the focus on the window inside `node`, and the commands
+ * still pointed at `node` itself.
+ *
+ * What carries a `focus parent` selection through a move or a layout change,
+ * which is what sway does with one: the chain is re-pointed at the window the
+ * keyboard is in, and the depth comes back up by however many levels of
+ * container the selection holds. For a window it is {@link withFocusOn}
+ * exactly, because a window holds none.
+ */
+export const withCommandsOn = (tiling: Tiling, node: LayoutNode): Tiling => {
+  const focused = withFocusOn(tiling, focusedWindowIn(node));
+  return { ...focused, depth: focused.depth - focusChainOf(node).length };
+};
+
+/**
+ * The commands back on the window the tiling's focus is in, whatever
+ * `focus parent` had them pointed at.
+ *
+ * What the keyboard leaving the tiling costs a selection: the tree is not
+ * where the keys are going any more, so the container one of them chose is
+ * not a thing for the next one to act on — or for the desktop to draw a line
+ * around.
+ */
+export const withCommandsOnWindow = (tiling: Tiling): Tiling =>
+  tiling.root === undefined
+    ? tiling
+    : { ...tiling, depth: focusChainOf(tiling.root).length };
+
 /** `focus parent`: the container the focus is in, up to the root. */
 export const focusedParent = (tiling: Tiling): Tiling => ({
   ...tiling,
@@ -118,8 +147,11 @@ export const focusedChild = (tiling: Tiling): Tiling => {
  * Throws where that index is not a child, which nothing here can produce: a
  * container holds at least one node and every edit that takes one away brings
  * the index back inside the list.
+ *
+ * Exported because it is also what a container is *entered* through — see
+ * `move.ts` — rather than only what the focus chain runs along.
  */
-const focusedChildIn = (container: Container): LayoutNode => {
+export const focusedChildIn = (container: Container): LayoutNode => {
   const child = container.children[container.focused];
   if (child === undefined) {
     throw new Error(

@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { FLOAT_STEP } from "./floating/float";
-import { Layout } from "./tree/node";
-import { windowsOf } from "./tree/tiling";
+import { Layout, NodeKind } from "./tree/node";
+import { focusedNodeOf, windowsOf } from "./tree/tiling";
 import {
   closed,
   containerLaidOut,
@@ -16,6 +16,7 @@ import {
   holds,
   modeToggled,
   opened,
+  parentFocused,
   pointedAt,
   reached,
   windowGrown,
@@ -159,6 +160,43 @@ describe("the keyed commands", () => {
     expect(
       containerLaidOut(tiling("a", "b"), Layout.Tabbed).tiling.root,
     ).toMatchObject({ layout: Layout.Tabbed });
+  });
+
+  it("leaves the tiling alone while a float has the keyboard", () => {
+    // `focus parent` acts on the layer the keyboard is in, the way every
+    // other keyed command does, and a floating window has left the tree —
+    // so there is no container around it to select. A tiling that selected
+    // one anyway would draw a line round a group nothing is pointed at.
+    const floating = floatToggled(tiling("a", "b", "c"));
+
+    expect(parentFocused(floating)).toBe(floating);
+  });
+
+  it("takes the commands out of the tiling with the keyboard", () => {
+    // A selection is what the keys are pointed at, and the keyboard going to
+    // a float takes them out of the tree with it — so coming back lands on
+    // the window the tiling was in rather than on a container chosen before
+    // the user left it, which is what sway's `mode_toggle` does.
+    const floated = floatToggled(tiling("a", "b", "c"));
+    const selected = parentFocused(modeToggled(floated));
+
+    const away = modeToggled(selected);
+
+    expect(focusedNodeOf(away.tiling)).toMatchObject({ kind: NodeKind.Window });
+  });
+
+  it("takes them out of it when the pointer crosses a float, too", () => {
+    // Focus follows the cursor here, so this is the everyday way out of the
+    // tiling rather than `mod+Tab`: the pointer reaching a floating window
+    // is the keyboard leaving the tree, and the selection goes with it.
+    const floated = floatToggled(tiling("a", "b", "c"));
+    const selected = parentFocused(modeToggled(floated));
+
+    const crossed = pointedAt(selected, "c");
+
+    expect(focusedNodeOf(crossed.tiling)).toMatchObject({
+      kind: NodeKind.Window,
+    });
   });
 
   it("splits the focused window's own box", () => {

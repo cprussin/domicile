@@ -13,7 +13,7 @@ import type { LayoutNode } from "./node";
 import { Layout, LayoutNode as Node, NodeKind, splitFor } from "./node";
 import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
-import { focusedWindowIn, focusPathOf, withFocusOn } from "./tiling";
+import { focusPathOf, withCommandsOn } from "./tiling";
 
 /** `splith` / `splitv`: the focus wrapped in a container of one. */
 export const split = (tiling: Tiling, axis: Axis): Tiling =>
@@ -75,9 +75,10 @@ const relaid = (
 };
 
 // Every command here changes the shape around the focus and none of them move
-// it, so each is the same two steps: edit the tree, then point the focus back
-// at the window it was on — the chain through it is a level longer or shorter
-// than it was.
+// it, so each is the same two steps: edit the tree, then point the commands
+// back at what they were on — the chain through it is a level longer or
+// shorter than it was. At what they were on rather than at the window inside
+// it, because a split of a selected container leaves that container selected.
 const rearranged = (
   tiling: Tiling,
   into: (root: LayoutNode, path: readonly number[]) => LayoutNode,
@@ -87,7 +88,7 @@ const rearranged = (
     return tiling;
   } else {
     const path = focusPathOf(root, tiling.depth);
-    const focused = focusedWindowIn(nodeAt(root, path));
-    return withFocusOn({ ...tiling, root: into(root, path) }, focused);
+    const focused = nodeAt(root, path);
+    return withCommandsOn({ ...tiling, root: into(root, path) }, focused);
   }
 };

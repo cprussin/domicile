@@ -30,6 +30,7 @@ import {
   focusedParent,
   NOTHING_TILED,
   windowsOf,
+  withCommandsOnWindow,
   withFocusOn,
 } from "./tree/tiling";
 
@@ -133,8 +134,7 @@ export const reached = (workspace: Workspace, id: string): Workspace => {
   return float === undefined
     ? focusedTiled(workspace, id)
     : {
-        ...workspace,
-        floatFocus: id,
+        ...floatFocused(workspace, id),
         floats: [...workspace.floats.filter(({ id: at }) => at !== id), float],
       };
 };
@@ -149,7 +149,7 @@ export const reached = (workspace: Workspace, id: string): Workspace => {
 export const pointedAt = (workspace: Workspace, id: string): Workspace =>
   floatOn(workspace, id) === undefined
     ? focusedTiled(workspace, id)
-    : { ...workspace, floatFocus: id };
+    : floatFocused(workspace, id);
 
 /** `floating toggle`: the window being worked in leaves the tiling, or rejoins it. */
 export const floatToggled = (workspace: Workspace): Workspace => {
@@ -162,6 +162,10 @@ export const floatToggled = (workspace: Workspace): Workspace => {
       ...workspace,
       floatFocus: id,
       floats: [...workspace.floats, floatFor(id, workspace.floats.length)],
+      // Not through {@link floatFocused}: this is the window leaving the tree
+      // rather than the keyboard leaving it, and taking it out is already
+      // what puts the commands back on a window — `removed` ends on whatever
+      // chain is left.
       tiling: removed(workspace.tiling, id),
     };
   } else {
@@ -176,8 +180,7 @@ export const floatToggled = (workspace: Workspace): Workspace => {
 
 /** A window up from the scratchpad: floating over the workspace, in front. */
 export const shown = (workspace: Workspace, id: string): Workspace => ({
-  ...workspace,
-  floatFocus: id,
+  ...floatFocused(workspace, id),
   floats: [...workspace.floats, floatFor(id, workspace.floats.length, true)],
 });
 
@@ -186,9 +189,7 @@ export const modeToggled = (workspace: Workspace): Workspace => {
   if (workspace.floatFocus === undefined) {
     // Into the float in front, which is the one the user last raised.
     const front = workspace.floats.at(-1)?.id;
-    return front === undefined
-      ? workspace
-      : { ...workspace, floatFocus: front };
+    return front === undefined ? workspace : floatFocused(workspace, front);
   } else {
     // And back into the tiling, if there is anything tiled to go back to.
     return focusedIdOf(workspace.tiling) === undefined
@@ -206,16 +207,22 @@ export const focusStepped = (
     ? { ...workspace, tiling: focusMoved(workspace.tiling, direction) }
     : workspace;
 
-/** `focus parent` and `focus child`, which only the tiling has. */
-export const parentFocused = (workspace: Workspace): Workspace => ({
-  ...workspace,
-  tiling: focusedParent(workspace.tiling),
-});
+/**
+ * `focus parent` and `focus child`, which only the tiling has.
+ *
+ * A floating window has left the tree, so there is no container around it to
+ * point the commands at and the keys do nothing — the same answer
+ * {@link focusStepped} gives, and for the same reason.
+ */
+export const parentFocused = (workspace: Workspace): Workspace =>
+  workspace.floatFocus === undefined
+    ? { ...workspace, tiling: focusedParent(workspace.tiling) }
+    : workspace;
 
-export const childFocused = (workspace: Workspace): Workspace => ({
-  ...workspace,
-  tiling: focusedChild(workspace.tiling),
-});
+export const childFocused = (workspace: Workspace): Workspace =>
+  workspace.floatFocus === undefined
+    ? { ...workspace, tiling: focusedChild(workspace.tiling) }
+    : workspace;
 
 /** `move <direction>`: through the tree, or ten pixels across the desktop. */
 export const windowMoved = (
@@ -289,6 +296,16 @@ export const floatSized = (
   height: number,
 ): Workspace =>
   withFloat(workspace, id, (float) => sizedTo(float, width, height));
+
+// A floating window taking the keyboard, which is the keyboard out of the
+// tree: whatever `focus parent` had selected in there goes with it, so coming
+// back lands on the window the tiling was in rather than on a container the
+// user chose before they left it.
+const floatFocused = (workspace: Workspace, id: string): Workspace => ({
+  ...workspace,
+  floatFocus: id,
+  tiling: withCommandsOnWindow(workspace.tiling),
+});
 
 // A tiled window taking the keyboard, which is the tree's own focus and also
 // the end of whatever the floating layer was doing in front of it.

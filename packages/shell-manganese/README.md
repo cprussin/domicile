@@ -54,16 +54,25 @@ windows over the tiling, and one window at a time filling the screen.
 | **Mod+Shift+V** | Open the clipboard's history, or put it away. Not sway's: sway has no clipboard manager, and this is where every config that adds one puts it. |
 | **Mod+Shift+Q** | Close the window being worked in. |
 | **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
-| **Mod+Shift+** the same | Move the window. Past its neighbor, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
+| **Mod+Shift+** the same | Move the window. Past its neighbor, *into* a neighbor that is a container rather than a window, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
 | **Mod+W / Mod+S / Mod+E** | `layout tabbed` / `layout stacking` / `layout toggle split` on the container the focus is in. |
-| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. |
+| **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it — sway's indicator. |
 | **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
 | **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
 | **Mod+Minus / Mod+Shift+Minus** | `scratchpad show` / `move scratchpad`. |
 | **Mod+R** | Resize mode — see below. |
 | **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
+
+**A split and a move make a group**, which is the whole of what tiling is for:
+**Mod+V** wraps the window being worked in in a column of one, and a window
+moved at that column from beside it goes *in* rather than trading places with
+it — beside the window the column last had the focus in, or at the near end of
+one that runs the way the window is moving. **Mod+A** then points the keys at
+the group rather than at the window in it, and says which group with a dashed
+line around it: what splits, lays out, moves and resizes from there is the
+whole container. **Mod+Shift+A** points them back at the window.
 
 The window being worked in is the one with a **rule of accent across the top
 of its frame**, over a title bar washed with enough of the same accent to find

@@ -35,8 +35,20 @@ describe("placementsOf", () => {
   it("places nothing on an empty workspace", () => {
     expect(placementsOf(NO_WINDOWS, GEOMETRY)).toEqual({
       placements: [],
+      selection: undefined,
       tabs: [],
     });
+  });
+
+  it("marks out the container `focus parent` selected", () => {
+    // `mod+a` with two windows tiled points the commands at the container
+    // holding both, which is the whole of the workspace.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ParentFocused(),
+    );
+
+    expect(placementsOf(state, GEOMETRY).selection).toEqual(GEOMETRY.workspace);
   });
 
   it("gives a lone tiled window the whole workspace, with no gaps", () => {
