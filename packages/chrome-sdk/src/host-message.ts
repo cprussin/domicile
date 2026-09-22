@@ -33,6 +33,8 @@ import type {
   DomicileAppEvent,
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
+  DomicileClipboardEntry,
+  DomicileClipboardEvent,
   DomicileDisplay,
   DomicileFilesEvent,
   DomicileModifiersEvent,
@@ -203,6 +205,24 @@ export type BatteryMessage = {
   charging: boolean;
 };
 
+/**
+ * What has been copied on this desktop, newest first.
+ *
+ * Pushed rather than asked for, like the battery: it arrives whenever the
+ * history changes and once more when a page connects. An empty list is a
+ * desktop nothing has been copied on yet — an answer, and the ordinary state
+ * of one that has just started, since the history is in memory and never on
+ * disk.
+ *
+ * A row is an id and a preview. The compositor keeps the bytes, so a shell
+ * that wants one back calls `copyClipboardEntry` with the id rather than
+ * holding what was copied — which matters, because a password manager's copy
+ * is a row in this list.
+ */
+export type ClipboardMessage = {
+  entries: readonly DomicileClipboardEntry[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -217,6 +237,7 @@ export type HostMessageMap = {
   displays: DisplaysMessage;
   files: FilesMessage;
   battery: BatteryMessage;
+  clipboard: ClipboardMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -314,6 +335,18 @@ export const files = (event: DomicileFilesEvent): FilesMessage => ({
 export const battery = (event: DomicileBatteryEvent): BatteryMessage => ({
   charge: event.charge,
   charging: event.charging,
+});
+
+/**
+ * The clipboard's history, with the SDK's own `arrival` left behind.
+ *
+ * A pass-through like {@link files}: the engine's rows are already an id and a
+ * preview, which is what a shell draws and what it hands back. The translator
+ * exists so `domicile-client.ts` has the same one call per listener that every
+ * other event gets.
+ */
+export const clipboard = (event: DomicileClipboardEvent): ClipboardMessage => ({
+  entries: event.entries,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

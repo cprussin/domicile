@@ -411,6 +411,37 @@ describe("the buttons on a window's own title bar", () => {
   });
 });
 
+describe("the clipboard panel", () => {
+  it("is shut on a desktop nobody has opened it on", () => {
+    expect(NO_WINDOWS.clipboardOpen).toBe(false);
+  });
+
+  it("opens and shuts on the same key", () => {
+    // The launcher's rule, for the launcher's reason: the press that reaches
+    // the panel is the press that gives up on it.
+    const opened = reduce(NO_WINDOWS, WindowAction.ClipboardToggled());
+    expect(opened.clipboardOpen).toBe(true);
+
+    expect(reduce(opened, WindowAction.ClipboardToggled()).clipboardOpen).toBe(
+      false,
+    );
+  });
+
+  it("shuts when it is dismissed, however many times", () => {
+    // Escape, a click on the backdrop, and a row chosen — the panel reports
+    // its own closing on all three, so dismissing a shut one is a state
+    // nobody should have to think about.
+    const dismissed = reduce(
+      NO_WINDOWS,
+      WindowAction.ClipboardToggled(),
+      WindowAction.ClipboardDismissed(),
+      WindowAction.ClipboardDismissed(),
+    );
+
+    expect(dismissed.clipboardOpen).toBe(false);
+  });
+});
+
 describe("the launcher", () => {
   it("is shut on a desktop nobody has opened it on", () => {
     expect(NO_WINDOWS.launcherOpen).toBe(false);

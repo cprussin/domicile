@@ -183,6 +183,13 @@ costs nothing.
   name that does not match, active mixed content — need an https fixture with a
   cert the browser distrusts, and until one exists `dangerous` is a path no run
   has taken.
+- **The clipboard's history holds text and nothing else.** A selection that
+  offers only an image or a file list is not recorded — a list of previews is
+  not a store, and a manager that drew a row it could not hand back would be
+  worse than one that never drew it. The primary selection is not managed
+  either, deliberately: it changes on every drag over a word, so a history of
+  it would be a history of what the pointer brushed past.
+
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **A `wl_output` that is not a panel reports no physical size and no refresh** —
   zero for both, which is what `wl_output` says a screen with no such number

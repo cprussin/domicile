@@ -80,6 +80,7 @@ import {
   appResized,
   appTitled,
   battery,
+  clipboard,
   files,
   focusChanged,
   focusRequested,
@@ -210,6 +211,9 @@ export class DomicileClient {
     });
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
+    });
+    host.addEventListener("clipboard", (event) => {
+      this.#deliver("clipboard", clipboard(event));
     });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
@@ -409,6 +413,24 @@ export class DomicileClient {
    */
   listFiles(): void {
     this.#host.listFiles();
+  }
+
+  /**
+   * Put a row of the clipboard's history back on the clipboard.
+   *
+   * `entry` is an id from the last `clipboard` message. There is no answer:
+   * what follows is that the next paste in any window is that entry, served by
+   * the compositor rather than by whichever client first copied it — so a row
+   * outlives the terminal it came from, which is the whole of what a manager
+   * is for.
+   *
+   * An id the history has since dropped sets nothing, and the compositor says
+   * so in its log. Nothing else is put on the clipboard in its place: a
+   * desktop that substituted the newest row would be deciding a person meant
+   * something other than what they clicked.
+   */
+  copyClipboardEntry(entry: number): void {
+    this.#host.copyClipboardEntry(entry);
   }
 
   /**

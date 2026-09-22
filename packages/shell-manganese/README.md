@@ -48,6 +48,7 @@ windows over the tiling, and one window at a time filling the screen.
 |---|---|
 | **Mod+Return** | Launch a terminal (`kitty`), which the compositor spawns. |
 | **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The config's launcher keys, in both the places it binds one. |
+| **Mod+Shift+V** | Open the clipboard's history, or put it away. Not sway's: sway has no clipboard manager, and this is where every config that adds one puts it. |
 | **Mod+Shift+Q** | Close the window being worked in. |
 | **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
 | **Mod+Shift+** the same | Move the window. Past its neighbor, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
@@ -385,6 +386,42 @@ Mod+Return opening a terminal and typing a newline into the one already open. It
 reads the claim now, so the chord stops at the page. One ask, honored wherever
 the keyboard happens to be; exactly one path acts for any press.
 
+## The clipboard
+
+**A Wayland clipboard is the client that copied**, and that is the whole
+problem this solves. `wl_data_device.set_selection` hands the compositor a
+source object rather than any bytes, so every paste asks the offering client to
+write what it copied all over again — and closing the terminal you copied out
+of empties the clipboard. Copy a command, close the window, and it is gone.
+
+**Mod+Shift+V** puts up what has been copied, newest first, and choosing a row
+makes it the selection again. What answers the next paste then is the
+*compositor*, not the client that first copied it, so a row outlives the
+terminal it came from.
+
+**The history is the compositor's**, because the compositor is the only process
+a copy arrives at. It reads the selection over a pipe each time a client sets
+one, keeps the last thirty-two, and moves a repeat back to the top rather than
+drawing it twice — `domicile_host::clipboard` is the rule and
+`packages/domicile-host/tests/clipboard.rs` is what pins it. It is **pushed**,
+like the charge and unlike `list_files`: a copy is an event the compositor
+already hears, so the panel is current when it opens rather than fetching on
+the way up.
+
+**A row is an id and a preview, and never the text.** The bytes stay in the
+compositor and the shell hands back the id it was given, which is what
+`copyClipboardEntry` takes. A password manager's copy is a row in this list, so
+the less of it that crosses into a page the better — and the preview is cut to
+a row's worth anyway, because the rest of a copied file is not a row. What goes
+back on the clipboard is always the whole thing.
+
+**Text only, in memory only.** A selection with no text in its mime types — an
+image, a file drag — is not a row: a list of previews is not a store, and a
+manager that offered a row it could not hand back would be worse than one that
+never offered it. And nothing is written to disk, so a history does not survive
+the reason you rebooted. A desktop that has just started says it has nothing
+rather than showing an empty box.
+
 ## The top bar
 
 Across the top of the screen the chrome is on: the workspaces at one end, the
@@ -544,6 +581,7 @@ shell that wants its own pictures owns its own list.
 | `src/clock/` | The live clock, and what it says: in the middle of the bar, and alone on every display the bar is not on. |
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
+| `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |

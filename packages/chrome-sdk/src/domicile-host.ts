@@ -376,6 +376,61 @@ export type DomicileBatteryEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * One thing that was copied, as a row of the clipboard's history.
+ *
+ * An interface on the engine's side rather than a plain object, for
+ * {@link DomicileDisplay}'s reason: WebIDL will not have a dictionary as the
+ * type of an attribute. What a shell does with one is draw the preview and
+ * hand the id back.
+ */
+export type DomicileClipboardEntry = {
+  /**
+   * What {@link DomicileHost.copyClipboardEntry} names this row by.
+   *
+   * Assigned by the compositor and never reused, so an id a shell is holding
+   * either names the row it was told about or names nothing at all. Not a
+   * position: the list a copy re-orders keeps every id it had.
+   */
+  readonly id: number;
+
+  /**
+   * Enough of what was copied to recognize it by, and not necessarily all of
+   * it.
+   *
+   * The whole entry for nearly every copy; a long one is cut, because this is
+   * drawn as a row and the rest of a copied file is not a row. What goes back
+   * on the clipboard is always the whole thing.
+   */
+  readonly preview: string;
+};
+
+/**
+ * What has been copied on this desktop, newest first.
+ *
+ * **A page cannot read this for itself, and `navigator.clipboard` is the trap
+ * that looks like it can.** That API answers out of the browser's own
+ * clipboard, which on the platform this engine scans out on is not connected
+ * to any Wayland client at all — so a shell reading it would be reading what
+ * the shell itself copied and nothing a window did. The compositor is the
+ * process a `wl_data_device.set_selection` arrives at, and this is that.
+ *
+ * Pushed, like the battery: sent whenever the history changes, and again to a
+ * page that has just connected. An empty list is a desktop nothing has been
+ * copied on yet, which is an answer rather than a gap.
+ */
+export type DomicileClipboardEvent = Event & {
+  /** The rows, newest first. */
+  readonly entries: readonly DomicileClipboardEntry[];
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -396,6 +451,8 @@ export type DomicileHostEventMap = {
   files: DomicileFilesEvent;
   /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
   battery: DomicileBatteryEvent;
+  /** What has been copied, whenever that changes. Nobody asked for it either. */
+  clipboard: DomicileClipboardEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -455,6 +512,21 @@ export type DomicileHost = {
    * watching. A launcher asks each time it opens.
    */
   listFiles(): void;
+
+  /**
+   * Put a row of the clipboard's history back on the clipboard.
+   *
+   * **It names a row and carries no text**, which is the same property
+   * `listFiles` has for the same reason: a page that could put arbitrary bytes
+   * on the seat's clipboard would be writing the desktop's clipboard rather
+   * than choosing among what is already on it. The `id` is one the last
+   * `clipboard` event carried.
+   *
+   * There is no answer. What follows is that every Wayland client now pastes
+   * that entry, and the compositor serves it — so the row outlives the client
+   * that first copied it, which is the whole of what a manager is for.
+   */
+  copyClipboardEntry(entry: number): void;
 
   /** Which window has the keyboard. `focusChrome()` takes it back to the page. */
   focusApp(appId: string): void;

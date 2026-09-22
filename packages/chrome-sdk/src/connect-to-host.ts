@@ -134,6 +134,7 @@ const compositorOn = (global: HostGlobal): DomicileHost | undefined =>
 const absentHost = (): DomicileHost => ({
   addEventListener: () => undefined,
   closeApp: () => undefined,
+  copyClipboardEntry: () => undefined,
   displays: null,
   focusApp: () => undefined,
   focusChrome: () => undefined,

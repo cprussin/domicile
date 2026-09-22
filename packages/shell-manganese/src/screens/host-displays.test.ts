@@ -45,6 +45,7 @@ class Host implements DomicileHost {
   // module's half — the adapter only ever reads and listens — so they are one
   // shared no-op rather than fourteen empty bodies.
   readonly closeApp = ignored;
+  readonly copyClipboardEntry = ignored;
   readonly focusApp = ignored;
   readonly focusChrome = ignored;
   readonly grabShortcut = ignored;
