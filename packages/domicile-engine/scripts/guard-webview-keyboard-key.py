@@ -2,12 +2,19 @@
 """Press one key at the engine, from outside it.
 
 guard-webview-keyboard.sh has to drive a keystroke at a running browser while a
-browser window holds the keyboard. There is no keyboard: the guard is headless
-and software-composited, for the reason guard-webview-framing.sh is -- what it
-measures needs no GPU and `crux` has no display. So the key is dispatched over
+browser window holds the keyboard, and guard-webview-escape.sh has to drive one
+while the shell still does. There is no keyboard: both guards are headless and
+software-composited, for the reason guard-webview-framing.sh is -- what they
+measure needs no GPU and `crux` has no display. So the key is dispatched over
 the DevTools protocol instead, down the wire in guard_webview_devtools.py,
 which is also where the argument that this is the real path a key takes rather
 than a way around it is written down.
+
+One driver for both, and its name stays the keyboard guard's because renaming a
+file two guards and a README point at buys nothing: what it does is press one
+key at one browser, and neither guard wants anything else of it. A run's exit
+status is a reading in its own right -- guard-webview-escape.sh takes a press
+that cannot be delivered as its answer to "is that browser still there".
 
 `nativeVirtualKeyCode` is required rather than optional, and is not decoration:
 `ForwardKeyboardEventWithCommands` marks an event `skip_if_unhandled` when it
