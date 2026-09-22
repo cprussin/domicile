@@ -101,6 +101,7 @@ mod dmabuf_import;
 mod engine;
 mod engine_buffers;
 mod engine_session;
+mod engine_surfaces;
 mod idle;
 mod keymap;
 mod latency;
