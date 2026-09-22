@@ -4,9 +4,15 @@
 //! the two differ in where the numbers come from. A described desktop states
 //! its own sizes: it is a nested compositor's arithmetic, there is no hardware
 //! to ask, and the answer is the same every time it is read. A *profile*
-//! states only a placement — a scale, a turn, a corner to put it at — and the
+//! states a placement — a scale, a turn, a corner to put it at — and the
 //! monitor states its mode, so the same config makes a different desktop as
 //! monitors come and go.
+//!
+//! A profile may also state the mode it was written for, and that is an
+//! assertion about the monitor rather than a request to it: nothing here
+//! modesets, so a monitor at some other mode makes the profile inapplicable
+//! and says so, instead of being placed by arithmetic that no longer holds.
+//! [`DisplayPlacement::mode`] argues it.
 //!
 //! That is what the mechanism is for. Matching is a function of what is
 //! connected rather than a decision taken once at startup, so plugging in the
@@ -141,6 +147,35 @@ pub struct DisplayPlacement {
     /// behind a closed lid.
     #[serde(default = "enabled")]
     pub enabled: bool,
+    /// The mode the rest of this entry was written for, in physical pixels,
+    /// or absent for whatever the monitor comes up at.
+    ///
+    /// AN ASSERTION ABOUT THE MONITOR RATHER THAN A REQUEST TO IT, and the
+    /// difference is the whole of what this field is. Nothing on this side
+    /// modesets: the engine holds DRM master and `ModesetParamsFromSnapshots`
+    /// configures every CRTC from the connector's own `native_mode()`, so a
+    /// profile that asked for a mode would be asking nobody. What it can do
+    /// is name the mode its arithmetic assumed — the positions of a profile
+    /// are sums of the sizes it places, so a monitor that comes up at another
+    /// mode moves every display placed after it — and a monitor that is at
+    /// some other mode makes the profile inapplicable rather than merely
+    /// approximate. [`Layout::of`] is where that is refused.
+    ///
+    /// Absent is the behavior that existed before this field: the mode
+    /// arrives with the monitor and nothing is checked, which is right for
+    /// the profile whose displays are placed at the origin or in one row
+    /// left to right, where no position depends on a size.
+    ///
+    /// A SIZE AND NOT A RATE, which kanshi's `mode = "3840x2160@60Hz"` is.
+    /// The rate is the half of a mode that changes no arithmetic here — a
+    /// logical size is a mode turned and divided by a scale, and no hertz
+    /// enters it — and it is also the half that cannot be chosen, for the
+    /// reason above. A monitor legitimately reports no rate at all, which the
+    /// compositor advertises as `wl_output`'s zero, so a profile that
+    /// asserted one would refuse desks that are working. A rate belongs here
+    /// on the day a connector can be asked for a mode, and not before.
+    #[serde(default)]
+    pub mode: Option<(u32, u32)>,
     /// The top-left corner, in the profile's own coordinate space.
     ///
     /// Wherever the user finds it natural — negative included, since "above
@@ -212,6 +247,19 @@ impl DisplayPlacement {
                 "{profile} places {} twice, and only one of the two can be where it goes",
                 self.display
             )));
+        }
+        // A mode with no pixels on an axis is not a mode any connector scans
+        // out, and it is the one thing about a stated mode that can be known
+        // without the monitor. Whether *this* monitor is at it cannot be, and
+        // is [`Layout::of`]'s to refuse.
+        if let Some((width, height)) = self.mode {
+            if width == 0 || height == 0 {
+                return Err(ConfigError::Validation(format!(
+                    "{at} states {} at {width}x{height}, and no connector \
+                     scans out a mode with no pixels on an axis",
+                    self.display
+                )));
+            }
         }
         // Finite and positive is what makes it a density at all: zero divides
         // the mode into a desktop of no size, a negative one turns it inside
@@ -352,13 +400,22 @@ impl Layout {
     /// which is what makes the lookup below an assertion rather than a branch:
     /// every entry of the profile named a display in that list.
     ///
-    /// The `Err` arm is the one failure a profile has that parsing cannot
-    /// catch. The positions are the config's and the sizes are the hardware's,
-    /// so how far apart two displays end up is not known until a monitor is
-    /// plugged in. An error rather than a panic because the caller is a
-    /// compositor holding a working desktop and a config the user can edit
-    /// again.
+    /// The `Err` arm is the failures a profile has that parsing cannot catch,
+    /// and every one of them is the same shape: the positions are the
+    /// config's and the sizes are the hardware's, so how far apart two
+    /// displays end up is not known until a monitor is plugged in. An error
+    /// rather than a panic because the caller is a compositor holding a
+    /// working desktop and a config the user can edit again.
+    ///
+    /// A mode the profile states and the monitor is not at is the first of
+    /// them, and it is checked before anything is placed. Everything below
+    /// this line is arithmetic over modes, so a profile wrong about one is a
+    /// desktop whose every other number is wrong too — and the complaint
+    /// worth printing names the mode, not the far corner it ended up moving.
     pub(crate) fn of(profile: &Profile, connected: &[Connected]) -> Result<Layout, ConfigError> {
+        if let Some((placement, display)) = misstated(profile, connected) {
+            return Err(unavailable(profile, placement, display));
+        }
         let placed = profile
             .displays
             .iter()
@@ -563,6 +620,26 @@ fn scanout(
         .collect())
 }
 
+/// The first entry of `profile` whose monitor is not at the mode it states,
+/// or `None` where every stated mode is the one that arrived.
+///
+/// EVERY ENTRY, including the ones the profile turns off. A stated mode says
+/// what this monitor is rather than what to do with it, and a monitor behind
+/// a shut lid is still the one the rest of the profile was written beside —
+/// its own mode is what the row of connectors steps across in [`scanout`], so
+/// a profile wrong about a dark monitor is wrong about where the dark ones
+/// land.
+fn misstated<'a>(
+    profile: &'a Profile,
+    connected: &'a [Connected],
+) -> Option<(&'a DisplayPlacement, &'a Connected)> {
+    profile
+        .displays
+        .iter()
+        .map(|placement| (placement, found(placement, connected)))
+        .find(|(placement, display)| placement.mode.is_some_and(|stated| stated != display.mode))
+}
+
 /// The connected display an entry of an applied profile names.
 ///
 /// An assertion rather than a branch, for the reason [`placed`] gives: a
@@ -663,6 +740,30 @@ fn unlightable(profile: &Profile, display: &str) -> ConfigError {
         "output profile {} spans so many pixels across that {} starts beyond \
          what a corner of one desktop can describe",
         profile.name, display
+    ))
+}
+
+/// The complaint for a monitor that is not at the mode its profile states.
+///
+/// Names both modes, because either one of them may be the thing that is
+/// wrong: the config was written for a monitor that has since been replaced,
+/// or the monitor negotiated something other than the mode it used to take.
+/// It also says what this compositor will not do about it, which is the part
+/// nobody guesses — a desktop that could pick a mode would simply pick this
+/// one.
+fn unavailable(
+    profile: &Profile,
+    placement: &DisplayPlacement,
+    display: &Connected,
+) -> ConfigError {
+    let (width, height) = placement
+        .mode
+        .expect("only an entry that states a mode is misstated");
+    ConfigError::Validation(format!(
+        "output profile {} is written for {} at {}x{} and it is scanning out \
+         {}x{}; this desktop places a monitor at the mode it reports and does \
+         not set one, so the profile cannot be applied as written",
+        profile.name, placement.display, width, height, display.mode.0, display.mode.1
     ))
 }
 

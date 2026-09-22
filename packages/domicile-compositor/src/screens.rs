@@ -593,9 +593,10 @@ impl Screens {
     /// Three answers rather than two, because a profile brings a third:
     ///
     /// - `Err` is a profile that matched these monitors and cannot be applied
-    ///   to them -- a scale that leaves one with no logical pixels, a
-    ///   placement that spans further than a desktop can. Neither is reachable
-    ///   at parse time, since both need a mode that arrives with the monitor.
+    ///   to them -- a monitor that is not at the mode the profile states it
+    ///   is, a scale that leaves one with no logical pixels, a placement that
+    ///   spans further than a desktop can. None is reachable at parse time,
+    ///   since each needs a mode that arrives with the monitor.
     ///   The caller keeps the desktop that is up and surfaces the complaint,
     ///   which is the bargain `ConfigStore` already makes for an edit that
     ///   does not parse.

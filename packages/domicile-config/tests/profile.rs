@@ -645,6 +645,16 @@ name = "sideways"
 display = "drm-1"
 transform = "rotate-45"
 "#,
+        // A mode with no pixels on an axis, which is not something a
+        // connector scans out. Checkable here, unlike whether *this* monitor
+        // is at the mode: that one waits for the monitor.
+        r#"
+[[output.profiles]]
+name = "flattened"
+[[output.profiles.displays]]
+display = "drm-1"
+mode = [3840, 0]
+"#,
         // A field nobody reads, which is a typo in one that is read.
         r#"
 [[output.profiles]]
@@ -689,6 +699,81 @@ scale = 1e+308
 }
 
 #[test]
+fn a_profile_may_state_the_mode_its_positions_were_written_for() {
+    // A stated mode is an assertion about the monitor rather than a request
+    // to it. Nothing on this side modesets — the engine holds DRM master and
+    // lights every connector at its native mode — so what a profile can do
+    // with a mode is say which one its arithmetic was written against, and a
+    // monitor that is at that mode is placed exactly as it is with nothing
+    // stated.
+    assert_eq!(
+        layout(LAPTOP_AT_ITS_MODE, &[connected(LAPTOP, PANEL_MODE)]),
+        layout(ONE_PANEL, &[connected(LAPTOP, PANEL_MODE)]),
+        "a mode the monitor is at changes nothing about where it goes"
+    );
+}
+
+#[test]
+fn a_monitor_that_is_not_at_the_mode_its_profile_states_is_refused() {
+    // The failure the field exists to make loud. A profile's positions are
+    // sums of the modes it places, so one written for a 2880x1920 panel lays
+    // the rest of the desk out around 1920 logical units that are not there
+    // when the panel comes up at 1920x1080 — every display after it lands
+    // somewhere nobody chose, and nothing says so. Refused rather than
+    // applied at the mode that arrived, which is the silent fallback nobody
+    // can see.
+    let refused = Config::parse(LAPTOP_AT_ITS_MODE)
+        .expect("the config should parse")
+        .output
+        .layout(&[connected(LAPTOP, (1920, 1080))])
+        .expect_err("a monitor at another mode should be refused");
+    let said = refused.to_string();
+    assert!(
+        said.contains("laptop-only")
+            && said.contains("drm-1")
+            && said.contains("2880x1920")
+            && said.contains("1920x1080"),
+        "the complaint should name the profile, the display, the mode it \
+         states and the mode that arrived: {said}"
+    );
+}
+
+#[test]
+fn a_dark_monitor_is_held_to_the_mode_its_profile_states_too() {
+    // Not an oversight and not a special case: a stated mode says what this
+    // monitor *is*, and a monitor a profile turns off is still the monitor
+    // the rest of the profile was written beside. Its own mode is also what
+    // the row of connectors steps across, so a profile wrong about it is
+    // wrong about where the dark ones land.
+    let refused = Config::parse(
+        r#"
+[[output.profiles]]
+name = "lid-shut"
+[[output.profiles.displays]]
+display = "drm-1"
+enabled = false
+mode = [2880, 1920]
+
+[[output.profiles.displays]]
+display = "drm-3"
+scale = 1.2
+"#,
+    )
+    .expect("the config should parse")
+    .output
+    .layout(&[
+        connected(LAPTOP, (1920, 1080)),
+        connected(CENTER, DESK_MODE),
+    ])
+    .expect_err("a dark monitor at another mode should be refused");
+    let said = refused.to_string();
+    assert!(
+        said.contains("lid-shut") && said.contains("drm-1"),
+        "the complaint should name the profile and the dark display: {said}"
+    );
+}
+
+#[test]
 fn a_profile_is_matched_again_on_every_reading_of_the_monitors() {
     // The requirement the whole mechanism exists for. The same config answers
     // differently as monitors come and go, because matching is a function of
@@ -727,6 +812,17 @@ scale = 1.5
 display = "drm-3"
 position = [0, 0]
 scale = 1.2
+"#;
+
+/// The laptop-only profile again, saying out loud which mode its scale was
+/// written to divide.
+const LAPTOP_AT_ITS_MODE: &str = r#"
+[[output.profiles]]
+name = "laptop-only"
+[[output.profiles.displays]]
+display = "drm-1"
+mode = [2880, 1920]
+scale = 1.5
 "#;
 
 /// One display, scaled and nothing else — the laptop with its lid open and

@@ -846,14 +846,29 @@ a screen that was no longer there. Whether a desktop is the config's to define
 is a fact about the config and does not change when a monitor does, so that is
 what it asks now.
 
-**A profile states no mode**, and the positions in one are sums of sizes it
-therefore does not control: the mode arrives with the monitor and the scale
-divides it into the logical size. kanshi pins one per output (`mode =
-"3840x2160@60Hz"`), which is the other real difference between the two. It
-costs nothing today, because `ModesetParamsFromSnapshots` lights a connector
-at its native mode and that is the mode anyone would pin — but a
-monitor that negotiated something else would move every display placed after
-it, with nothing in the config to correct it with.
+**A profile states a mode and cannot set one**, and the two halves of that are
+worth separating. `mode = [3840, 2160]` on a placement is an *assertion about
+the monitor*: the positions in a profile are sums of the sizes it places, so a
+monitor that comes up at another mode moves every display placed after it, and
+a profile that names the mode it was written for turns that from a desk that
+is quietly wrong into one that refuses to come up. `Layout::of` checks it
+before anything is placed and returns `ConfigError::Validation` naming both
+modes, which `reloaded_into` answers the way it answers a config that does not
+parse — the desktop that is up stays up, with the complaint beside it. Never a
+fallback to the mode that arrived: a desk that silently comes up at the wrong
+resolution is the bug this field exists to make visible.
+
+What a profile still cannot do is *ask* for a mode. `DomicileDisplayLayout`
+carries an id, an enabled flag and a corner, and `ModesetParamsFromSnapshots`
+configures every CRTC from that connector's own `native_mode()` — so the mode
+a connector scans out is the hardware's, whatever the config says. That is why
+this is a size and not a rate: kanshi pins `mode = "3840x2160@60Hz"`, and the
+hertz is both the half that changes no arithmetic here (a logical size is a
+mode turned and divided by a scale) and the half that could not be chosen
+anyway. A monitor also legitimately reports no rate at all — `wl_output`'s
+zero — so a profile that asserted one would refuse desks that are working.
+Closing the other half is a field on `DomicileDisplayLayout` and a mode lookup
+in `drm_modeset.cc`, which is the fork.
 
 ### A profile decides which connectors are lit, and in what order
 

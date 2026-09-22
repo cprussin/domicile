@@ -268,7 +268,8 @@ one a shell generates depends on whether there is hardware under it:
   the desktop, and nothing overrules it.
 - `output.profiles` **places the monitors that are actually plugged in**. Each
   profile names exactly the displays it is for and says what to do with each
-  one (`enabled`, `position`, a fractional `scale`, a `transform`); the first
+  one (`enabled`, `position`, a fractional `scale`, a `transform`) and, if it
+  wants, the `mode` it was written for; the first
   profile whose set is connected wins, and the match is made again on every
   hotplug and every reload. A display may be named any of three ways: by its
   `wl_output` name, which on a tty is `drm-<id>`; by its *description* —
@@ -289,6 +290,7 @@ name = "desk"
 
   [[output.profiles.displays]]
   display = "DEL DELL U3219Q 2ZLS413"
+  mode = [3840, 2160]
   position = [0, 0]
   scale = 1.2
   transform = "rotate-270"
@@ -310,6 +312,16 @@ why. A desk of six monitors and five profiles is a wall of braces to read one
 `transform` out of, and `[[output.profiles]]` says which profile a display
 belongs to on the line the display is on. The writer lost nothing — every
 language that generates one of these has a TOML writer too.
+
+**A profile's `mode` asserts, it does not ask.** Domicile does not modeset —
+the engine holds DRM master and lights every connector at its native mode — so
+a stated mode says which one that entry's positions were written against, and
+a monitor that comes up at another makes the profile inapplicable rather than
+approximately right. The desktop that is up stays up and the complaint names
+both modes, which is the same bargain a config that does not parse gets. Left
+out, nothing is checked and the monitor's own mode is used, which is what
+every profile did before the field existed. A size and not a rate: the hertz
+changes no arithmetic here, and a monitor that reports none is ordinary.
 
 **A monitor a profile turns is drawn turned.** Not by the scanout, which the
 compositor still does not reach: a rotated panel scans out exactly as it did
