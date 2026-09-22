@@ -10,7 +10,10 @@ place so it doesn't drift across the monorepo.
   *before* extending bun's `expect` with jest-dom matchers
   (`toBeInTheDocument`, …) and installing Testing Library's `cleanup` as an
   `afterEach`, so a component test's tree never leaks into the next one. They
-  always go together, so they ship as a single preload.
+  always go together, so they ship as a single preload. It also teaches bun's
+  inspector to print a DOM element as its markup — see
+  `src/element-inspection.ts` for why a failed matcher is unusable without
+  that.
 - `matchers.d.ts` (the package's root `types` entry) — the ambient module
   augmentation that teaches `bun:test`'s `expect` about those matchers, so the
   type checker knows about them too.
@@ -32,5 +35,6 @@ and pull the matcher types into that package's `tsconfig.json`:
 
 ## Test
 
-`bun run --filter @domicile/test-support test:types`. There are no unit tests —
-the package is exercised transitively by every consumer's suite.
+`bun run --filter @domicile/test-support test:unit` and `… test:types`. The
+unit test covers the element inspection; the rest of the preload is exercised
+transitively by every consumer's suite.
