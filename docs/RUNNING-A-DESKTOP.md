@@ -78,7 +78,14 @@ baked into `domicile` so it is not typed twice:
     shell = "${domicile.packages.${system}.manganese}/shell.js";
     settings.output.profiles = [{
       name = "desk";
-      displays = [{display = "DEL DELL U3219Q 2ZLS413"; scale = 1.2; transform = "rotate-270";}];
+      displays = [
+        {
+          display = "DEL DELL U3219Q 2ZLS413";
+          mode = [3840 2160];
+          scale = 1.2;
+          transform = "rotate-270";
+        }
+      ];
     }];
   };
 }
@@ -122,3 +129,37 @@ That is the line to look for if `Dell Inc.` is not what you see. Point
 `DOMICILE_PNP_IDS` at a copy of `pnp.ids` to fix it; a `cargo run` out of a
 checkout finds `/usr/share/hwdata/pnp.ids` or `/usr/share/misc/pnp.ids` by
 itself.
+
+### Stating a monitor's mode
+
+`mode` above says which mode the rest of that entry was written for, in
+physical pixels. It does **not** ask for one: Domicile does not modeset — the
+engine holds DRM master and lights every connector at its native mode — so a
+`mode` is something you assert about a monitor rather than something you set
+on it.
+
+It is worth asserting because a profile's positions are sums of the sizes it
+places. Put a 3840x2160 monitor at `[0, 0]` and the next one at `[3200, 0]`,
+and that 3200 is the first monitor's mode divided by its scale; a monitor that
+comes up at 1920x1080 instead leaves a hole nobody chose, on a desk where
+nothing says why. With the mode written down, that desk refuses to come up:
+
+```
+output profile desk is written for DEL DELL U3219Q 2ZLS413 at 3840x2160 and it
+is scanning out 1920x1080; this desktop places a monitor at the mode it
+reports and does not set one, so the profile cannot be applied as written
+```
+
+A profile that cannot be applied leaves the desktop that is up exactly as it
+is — the same bargain a config that does not parse gets — so this is a
+complaint to read and fix, not a desk that goes dark.
+
+**Leave it out and nothing is checked**, which is what every profile did
+before the field existed and is the right answer for a profile whose displays
+sit at the origin or in one row left to right, where no position depends on a
+size.
+
+**It is a size, not a size and a rate.** kanshi pins `3840x2160@60Hz`; the
+hertz is the half that changes none of the arithmetic above, and a monitor
+that reports no rate at all is ordinary rather than broken — asserting one
+would refuse desks that work.

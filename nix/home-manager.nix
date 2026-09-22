@@ -36,11 +36,28 @@
 
   # A width and a height, or an x and a y. Two-element lists because that is
   # what the config file takes: `size = [1920, 1080]`.
+  pairOf = element: lib.types.addCheck (lib.types.listOf element) (xs: lib.length xs == 2);
+
   pair = element: description:
     lib.mkOption {
       inherit description;
-      type = lib.types.addCheck (lib.types.listOf element) (xs: lib.length xs == 2);
+      type = pairOf element;
     };
+
+  # Every null dropped, through lists as well as attrsets.
+  #
+  # TOML has no word for a null, and `domicile` reads several keys' ABSENCE as
+  # a real answer -- `idle.blank_after_seconds` absent is a desktop whose
+  # screens never blank, a placement's `mode` absent is whatever the monitor
+  # comes up at -- so leaving the key out is exactly what an unset option
+  # means. Through lists because `output.profiles` is one, and the nullable
+  # option inside it is in a submodule two lists deep.
+  withoutNulls = value:
+    if lib.isAttrs value
+    then lib.mapAttrs (_: withoutNulls) (lib.filterAttrs (_: each: each != null) value)
+    else if lib.isList value
+    then map withoutNulls value
+    else value;
 
   # The four `wl_output` rotations, named for the turn the CONTENT takes to
   # come out upright -- `rotate-90` is a quarter turn clockwise, for a panel
@@ -87,6 +104,21 @@
         description = "Whether to light this monitor at all. A profile still has to name one it turns off.";
         type = lib.types.bool;
         default = true;
+      };
+      mode = lib.mkOption {
+        description = ''
+          The mode the rest of this entry was written for, in physical
+          pixels. An assertion about the monitor rather than a request to it:
+          nothing here sets a mode -- the engine holds DRM master and lights
+          every connector at its native one -- so a monitor that comes up at
+          some other mode leaves the desktop that is up alone and says which
+          two modes disagree. A size and not a rate, which is the other half
+          of what kanshi's `mode` carries: a rate changes no arithmetic here
+          and cannot be chosen either. Left out is whatever the monitor comes
+          up at, which is what every profile said before this existed.
+        '';
+        type = lib.types.nullOr (pairOf lib.types.ints.positive);
+        default = null;
       };
       position =
         (pair lib.types.int "The top-left corner, in the desktop's logical units.")
@@ -351,14 +383,9 @@ in {
     # THE PATH IS THE INTERFACE: this is where `domicile` looks with no
     # `--config`, so it is not a location this module gets to pick.
     #
-    # NULLS ARE LEFT OUT RATHER THAN WRITTEN, because TOML has no word for
-    # one. A `null` here is an option nobody set, and `domicile` reads several
-    # keys' *absence* as a real answer -- `idle.blank_after_seconds` absent is
-    # a desktop whose screens never blank -- so leaving the key out is exactly
-    # what the default means. Recursive through the attrsets; the lists of
-    # displays and profiles carry no nullable field.
+    # NULLS ARE LEFT OUT RATHER THAN WRITTEN: `withoutNulls` above says why,
+    # and why it walks lists as well as attrsets.
     xdg.configFile."domicile/domicile.toml".source =
-      toml.generate "domicile.toml"
-      (lib.filterAttrsRecursive (_: value: value != null) cfg.settings);
+      toml.generate "domicile.toml" (withoutNulls cfg.settings);
   };
 }

@@ -182,9 +182,20 @@ costs nothing.
   up.** Deliberate: a client rendering at 2× downscaled is sharper than one at 1×
   stretched. Only the integer a client is handed rounds — a profile's own scale
   is fractional and rides `xdg_output`.
-- **A monitor profile states no mode.** It turns a connector on and off, places
-  it, scales and turns it; the mode arrives with the monitor, so a profile's
-  positions are sums of sizes it does not control.
+- **A monitor profile states a mode and cannot set one.** The stating half
+  shipped: `mode = [3840, 2160]` on a placement is the mode that entry's
+  positions were written for, and a monitor that comes up at another one
+  leaves the desktop that is up alone with a complaint naming both — never a
+  quiet fallback to the mode that arrived, which is the desk nobody can see is
+  wrong. Left out, the monitor's own mode is used, as before. What is left is
+  *asking*: `DomicileDisplayLayout` carries an id, an enabled flag and a
+  corner, and `ModesetParamsFromSnapshots` configures every CRTC from that
+  connector's `native_mode()`, so a profile can say which mode it needs and
+  not which mode to take. A field on that struct and a mode lookup beside the
+  native one is the fix, and that is the fork. The rate is the same item: a
+  profile's mode is a size, because a hertz changes no arithmetic on this side
+  and could not be chosen either.
+  [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
 - **Only a desk can say which way the quarter turns go.** `rotate-90` names the
   turn the *content* takes, which is `wl_output`'s convention, and every list
   from `domicile-config` to `turn()` in `cover-the-window.ts` applies it as

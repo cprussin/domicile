@@ -357,10 +357,10 @@ impl OutputConfig {
     /// the behavior that existed before profiles did.
     ///
     /// The `Err` arm is a matched profile that cannot be applied to the
-    /// monitors it matched: a scale that leaves one with no logical pixels, or
-    /// a placement that spans further than a desktop can. Neither is
-    /// reachable at parse time, because both need a mode that arrives with the
-    /// monitor.
+    /// monitors it matched: a monitor that is not at the mode the profile
+    /// states it is, a scale that leaves one with no logical pixels, or a
+    /// placement that spans further than a desktop can. None is reachable at
+    /// parse time, because each needs a mode that arrives with the monitor.
     ///
     /// Rebuilt on each call. That is the point rather than a cost: this is
     /// what a hotplug calls, and the answer is supposed to change.

@@ -732,6 +732,7 @@
                       { display = "drm-1"; enabled = false; }
                       {
                         display = "DEL DELL U3219Q 2ZLS413";
+                        mode = [ 3840 2160 ];
                         position = [ 0 0 ];
                         scale = 1.2;
                         transform = "rotate-270";
@@ -788,6 +789,31 @@
               exit 1
             }
           done
+
+          # A NULL IS THE ONE THING THIS FILE MUST NOT CONTAIN, because TOML
+          # has no word for one and `domicile` would refuse the whole file
+          # over it -- every profile, the keyboard, all of it. The desk above
+          # sets a `mode` on one placement and not on the other, so an unset
+          # option really is a null sitting inside a list here, and
+          # `withoutNulls` walking into that list is what this asserts.
+          if grep -q 'null' config.toml; then
+            echo "the module wrote a null, which domicile refuses" >&2
+            echo "--- what it wrote ---" >&2
+            cat config.toml >&2
+            exit 1
+          fi
+
+          # And the other direction: a mode that IS set reaches the file.
+          # Matched on the number rather than the whole line, because how
+          # `pkgs.formats.toml` lays an array out is its business and no other
+          # number in this desk is 3840.
+          grep -q 3840 config.toml || {
+            echo "the module did not write the profile's mode" >&2
+            echo "--- what it wrote ---" >&2
+            cat config.toml >&2
+            exit 1
+          }
+
           # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
           # invisible in the config file: which words the installed `domicile`
           # is actually run with.
