@@ -27,9 +27,16 @@ The evidence for each of those is in the doc that made the claim —
 1. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
    commit to pixel against a 16.67 ms display frame on every run so far — but in
    a nested compositor with nothing presenting, and with the probe's own round
-   trip inside every figure. What is left is arranging the probe on a machine
-   that lights a panel. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
-   *Keystroke to pixel*.
+   trip inside every figure.
+
+   **The probe is arranged now**: `PLATFORM=drm` takes the same run on the
+   scanout platform, with the window the CRTC's rectangle rather than a size,
+   and the guard refuses each platform in the other's place rather than dying
+   somewhere else about a socket. What is left is somebody running it on a
+   machine that lights a panel — see *Needs a machine with a screen* below.
+   Presentation is still not what it measures, on a panel or off one: the probe
+   is a `CopyOutputRequest` that forces the draw it reads.
+   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md), *Keystroke to pixel*.
 
 2. **A compositor that dies still takes the windows with it.** The engine half
    shipped: an engine that stops is replaced under the compositor that did not,
@@ -164,6 +171,29 @@ these is one run, and each has a line to look for.
   can see it: no runner has a `/dev/dri` at all, so every check this change
   brings is arithmetic over an injected instant. Plug a monitor in while it is
   dark for the second half — the new one must come up dark too.
+- **The latency run, on the panel.** From a console login, in a checkout, with
+  the engine the flake pins:
+
+  ```sh
+  nix build .#engine
+  nix develop .#full --command cargo build -p domicile-compositor
+  ENGINE="$(readlink -f result)"
+  nix develop .#full --command env OUT=. PLATFORM=drm \
+    ./packages/domicile-engine/scripts/guard-latency.sh "$ENGINE"
+  ```
+
+  The verdict line is the guard's own: `commit to pixel` against the run's
+  reported `display frame`, and the answer is the ratio rather than the
+  milliseconds. A `PASS` there is the first reading of this taken against a
+  real CRTC's frame. `answered too late` or `answered too soon` above zero
+  means fewer rounds were measured than the run set out to.
+
+  `OUT=.` because `nix build .#engine` produces a store path that *is* an out
+  directory rather than a tree with one inside it, which is the same reading
+  `pinned-engine.yml` takes. The guard is called directly, not through
+  `scripts/engine-guard-latency.sh`: that one wraps the run in
+  `under-wayland.sh` and takes `crux`'s render-node lock, and neither belongs
+  on a laptop with a panel.
 - **The first real `./scripts/dev-shell.sh <name>`.** Its reload is asserted
   against a `domicile` the test writes — `scripts/test-dev-shell.sh` drives the
   watch loop, the coalescing and a refusal — so what is left is a real engine

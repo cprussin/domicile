@@ -484,6 +484,30 @@ is the run's own reported frame rather than the sampled floor: a floor of
 quantized to probe round trips and that run's was 29.18. `guard-latency.sh`'s
 header carries the whole argument.
 
+**Nested, and it does not have to be.** Every figure above was taken under
+`under-wayland.sh`, which is a headless wlroots compositor — so the display
+frame the ratio is measured against is that nested compositor's rather than a
+panel's, and nothing presented. `PLATFORM=drm` takes the same run on the
+scanout platform. Two things change and the measurement is not one of them:
+the engine is asked for `--start-fullscreen` rather than a window size,
+because `ScreenManager` pairs a window with a controller through an exact
+rectangle against the CRTC's mode and a window of any other size is given no
+controller at all (*[The window has to be the size of the
+CRTC](A-DESKTOP-ON-A-TTY.md#the-window-has-to-be-the-size-of-the-crtc)*); and
+the run refuses to start on the wrong side of a session, since `drm` inside
+one cannot take DRM master and `wayland` outside one has no compositor to be
+a client of. `latency_window_flags` and `latency_platform_refusal` in
+`lib-latency.sh` are those two decisions, and
+`scripts/test-the-latency-run-picks-its-platform.sh` is what asserts them —
+which is all that can be asserted about the scanout path by a machine with no
+panel.
+
+**What a `drm` run would still not measure is presentation.** The probe is a
+`CopyOutputRequest` that forces the draw it then reads, on a panel exactly as
+off one. What it buys is a real CRTC's frame as the denominator and the
+scanout path exercised end to end. Nobody has run it; `ROADMAP.md`'s *Needs a
+machine with a screen* carries the invocation.
+
 **The wait for the client's frame is watched, or the figure is not a
 keystroke's.** Nothing the client draws in answer reaches the screen before the
 frame it commits, so a color change seen before that commit came from a frame
