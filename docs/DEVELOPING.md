@@ -55,6 +55,31 @@ submit_ms submit_worst_ms idle_ms response_ms response_worst_ms chromes
   than ours, and the control on the other two.
 - `idle_ms` — how much of the window nothing happened in.
 
+## Reading a slow launch
+
+Every app the shell starts leaves three lines, in this order:
+
+```
+spawning client pid=1234 command=["kitty"] wayland_display="wayland-2"
+app client connected pid=Some(1234)
+toplevel mapped -> Host::app_appeared app_id=app-1
+```
+
+- **spawn → connected** is the app's own startup, before it has said a word to
+  the compositor: linking, its caches, fontconfig, its GL driver. None of it is
+  ours.
+- **connected → mapped** is the Wayland conversation, so a compositor slow to
+  answer shows up here and nowhere else.
+
+Match on the pid rather than on order. Somebody who presses the launcher key
+again because nothing happened has several spawns in flight and their arrivals
+come back in whatever order the apps get there.
+
+A first launch of seconds where every later one is a tenth of that is a cold
+machine — page cache after a `nix build`, fontconfig, the Mesa shader cache —
+and the split says so by putting the time in spawn → connected. A GPU client
+is separately slow *after* mapping; see the kitty note below.
+
 ## Gotchas that will bite you
 
 - **`nix develop` only sees git-tracked files.** A brand-new untracked file makes
