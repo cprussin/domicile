@@ -164,3 +164,50 @@ latency_within() {
     exit (got <= times * of) ? 0 : 1
   }'
 }
+
+# The flags that ask for the engine's window on `$1`.
+#
+# The one thing that differs between the two readings of this run. A nested run
+# gets a window of a stated size, because it is a window in somebody else's
+# session and nothing else decides how big it is.
+#
+# THE SCANOUT PLATFORM GETS NO SIZE AT ALL, and that is not a preference.
+# `ScreenManager::UpdateControllerToWindowMapping` pairs a window with a
+# controller through `FindWindowAt`, which compares an EXACT rectangle against
+# the controller's origin and mode size (`screen_manager.cc:1001`). No match
+# means the window is given no controller, every page flip is dropped before it
+# reaches the kernel, and the CRTC keeps the blank buffer the modeset put up —
+# a black screen with a clean log, which is how the first desktop on real
+# hardware came up. `--start-fullscreen` is what makes the window the CRTC's
+# rectangle; `domicile-launch`'s `spawn.rs` adds it on the same platform for
+# the same reason, and this is the guard agreeing with that rather than
+# deciding it a second time.
+latency_window_flags() { # platform
+  case "$1" in
+    (drm) printf -- '--start-fullscreen' ;;
+    (*) printf -- '--window-size=1024,768' ;;
+  esac
+}
+
+# Why this platform cannot be run from where this is being run from, or
+# nothing.
+#
+# Each of the two readings is wrong in the other's place, and neither says so
+# on its own. `drm` inside a session cannot take DRM master, because the
+# session already holds it — what that looks like is a GPU process dying,
+# minutes into a run that had already started a browser and a compositor.
+# `wayland` with no session has no compositor to be a client of, which is
+# `under-wayland.sh` having been forgotten and is the ordinary way this gets
+# run wrongly.
+#
+# Refused before anything starts rather than diagnosed afterwards, for the
+# reason `ERRORS.md` gives: the alternative is a run that fails somewhere else
+# and says something about a socket.
+latency_platform_refusal() { # platform, WAYLAND_DISPLAY
+  local platform="$1" session="${2:-}"
+  if [ "$platform" = "drm" ] && [ -n "$session" ]; then
+    printf '%s' "PLATFORM=drm takes DRM master, and WAYLAND_DISPLAY=$session says this is already inside a session holding it. Run it from a console login, and not under under-wayland.sh."
+  elif [ "$platform" != "drm" ] && [ -z "$session" ]; then
+    printf '%s' "PLATFORM=$platform needs a Wayland session to be a client of, and there is no WAYLAND_DISPLAY. Wrap this in under-wayland.sh, or take the run on a console login with PLATFORM=drm."
+  fi
+}

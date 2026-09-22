@@ -5,6 +5,12 @@
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-latency.sh /build/chromium/src
 #
+# and on a console login, where there is a panel to light rather than a session
+# to nest in — NOT under `under-wayland.sh`, which has nothing to nest in:
+#
+#   PLATFORM=drm nix develop .#full --command \
+#     ./packages/domicile-engine/scripts/guard-latency.sh /build/chromium/src
+#
 # WHY THIS EXISTS. Requirement 1 is that a client's window costs the user
 # nothing a plain Wayland compositor would not have cost them, and until this
 # ran nothing measured it. `css_parity.cc` measures the producer's half — a
@@ -145,6 +151,27 @@ NEGATIVE="${NEGATIVE:-0}"
 # frames and not a duration on purpose — see the header.
 MOST_FRAMES="${MOST_FRAMES:-2}"
 
+# Which ozone platform the engine runs on, and so whether this run is nested in
+# a session or is the screen.
+#
+# `wayland` is every CI run and the default: `engine.yml` wraps this in
+# `under-wayland.sh`, which is a headless wlroots compositor, so nothing
+# presents and the display frame the ratio is taken against is that nested
+# compositor's rather than a panel's.
+#
+# `drm` is the same measurement on a machine that lights one, which is what
+# ROADMAP.md's *keystroke to pixel, on a screen* asks for and what no runner
+# here can do. Nothing about the run changes but the window — see
+# `latency_window_flags` — and where it may be started from, which
+# `latency_platform_refusal` is about.
+#
+# WHAT IT STILL DOES NOT MEASURE IS PRESENTATION. The probe is a
+# `CopyOutputRequest` that forces the draw it then reads, so even on a panel
+# this reads what the display compositor drew and not what a photon did. What
+# a `drm` run buys is a real CRTC's frame as the denominator, and the scanout
+# path exercised end to end.
+PLATFORM="${PLATFORM:-wayland}"
+
 # Three numbers: rounds, floor samples, polls per round. The control runs short
 # because what it proves needs three rounds, and sixty rounds each spending
 # every poll is minutes of waiting: a poll costs a display frame, because asking
@@ -180,6 +207,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+REFUSAL="$(latency_platform_refusal "$PLATFORM" "${WAYLAND_DISPLAY:-}")"
+[ -z "$REFUSAL" ] || {
+  annotate "guard-latency: $REFUSAL"
+  exit 1
+}
+
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
   annotate "guard-latency: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
@@ -207,10 +240,10 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 # the window's center and that is only the client's window if the client's
 # window is what is under it.
 "$CHROMIUM/$OUT/chrome" \
-  --ozone-platform=wayland \
+  --ozone-platform="$PLATFORM" \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
-  --window-size=1024,768 \
+  "$(latency_window_flags "$PLATFORM")" \
   --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
