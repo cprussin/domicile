@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Launcher } from "./Launcher";
@@ -31,6 +31,15 @@ const launcher = (files: readonly string[] = FILES) => {
   };
 };
 
+/**
+ * The line under the list saying what Enter would do, read whole.
+ *
+ * `getByText` matches an element's own text nodes, and this line is a glyph,
+ * a verb and what the verb is about — so it is the paragraph's `textContent`
+ * that has the sentence in it.
+ */
+const promised = () => screen.getByRole("paragraph").textContent;
+
 describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
@@ -45,12 +54,22 @@ describe("Launcher", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("offers every file it was handed before anything is typed", () => {
+  it("offers every file it was handed, named before it is placed", () => {
+    // A path is read from its end: the name is what was typed part of and the
+    // directories above it are only there to tell two files of that name
+    // apart, so a row is the two of them in that order rather than one line
+    // of text handed to `text-overflow`. Nothing separates them in
+    // `textContent` because what separates them on screen is the grid's gap.
     launcher();
 
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(FILES);
+    ).toStrictEqual([
+      "april.orgNotes/2026",
+      "today.orgNotes",
+      "src",
+      "todo.txt",
+    ]);
   });
 
   it("narrows to the files still being asked about", async () => {
@@ -60,7 +79,7 @@ describe("Launcher", () => {
 
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["Notes/2026/april.org", "Notes/today.org"]);
+    ).toStrictEqual(["april.orgNotes/2026", "today.orgNotes"]);
   });
 
   it("edits the file that was clicked", async () => {
@@ -121,6 +140,36 @@ describe("Launcher", () => {
         "https://www.youtube.com/results?search_query=kate%20bush",
       ),
     ]);
+  });
+
+  it("says what Enter would do with a query no file matches", async () => {
+    // The one thing a panel with an empty list cannot otherwise show: the
+    // box still does something on Enter, and what that is is the whole
+    // question the user is holding while they type.
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "example.com");
+
+    expect(promised()).toBe("Go to https://example.com");
+  });
+
+  it("brings the row the arrow keys reached into view", async () => {
+    // A home is longer than the list is tall, so a walk that scrolled nothing
+    // would leave the highlight below the fold — the keyboard moving
+    // something the user cannot see.
+    const scrolled: (string | null)[] = [];
+    const scrollIntoView = spyOn(
+      Element.prototype,
+      "scrollIntoView",
+    ).mockImplementation(function (this: Element) {
+      scrolled.push(this.textContent);
+    });
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "{ArrowDown}{ArrowDown}");
+    scrollIntoView.mockRestore();
+
+    expect(scrolled.at(-1)).toBe("today.orgNotes");
   });
 
   it("says it was dismissed when Escape closes it", async () => {

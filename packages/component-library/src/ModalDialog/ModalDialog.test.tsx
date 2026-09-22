@@ -35,6 +35,30 @@ describe(ModalDialog, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    it("renders no close button when it is turned off", () => {
+      render(
+        <ModalDialog closeButton={false} open title="Settings">
+          Body
+        </ModalDialog>,
+      );
+      expect(
+        screen.queryByRole("button", { name: "Close" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Body")).toBeInTheDocument();
+    });
+
+    it("says where the popup sits, so the stylesheet can place it", () => {
+      render(
+        <ModalDialog open placement="top" title="Settings">
+          Body
+        </ModalDialog>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute(
+        "data-placement",
+        "top",
+      );
+    });
+
     it("renders the footer when provided", () => {
       render(
         <ModalDialog footer={<Button variant="solid">Save</Button>} open>

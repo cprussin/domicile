@@ -1348,9 +1348,12 @@ describe("the launcher", () => {
 
     homeHolds("Notes/today.org", "todo.txt");
 
+    // A row is the name and then the directories above it — see
+    // `launcher/file-row.ts` — with the grid's gap, rather than any text,
+    // between the two.
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["Notes/today.org", "todo.txt"]);
+    ).toStrictEqual(["today.orgNotes", "todo.txt"]);
   });
 
   it("opens a file in the user's editor and puts the panel away", async () => {
