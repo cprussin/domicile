@@ -113,11 +113,15 @@ jobs:
     # compositor, 64s for the guard — 2m07s end to end, and 1m51s on the run
     # cited above. A run that is still going at half an hour is stuck.
     #
-    # The half hour now has one thing in it that can legitimately wait: the
-    # render node lock below, which gives up after twenty minutes. That is
-    # deliberately inside this timeout rather than outside it, so a wedged card
-    # fails with the lock's message — which says who holds it and how to clear
-    # it — rather than with GitHub's, which says nothing.
+    # The half hour has two things in it that can legitimately wait. The render
+    # node lock below gives up after twenty minutes, and that is deliberately
+    # inside this timeout rather than outside it, so a wedged card fails with
+    # the lock's message — which says who holds it and how to clear it — rather
+    # than with GitHub's, which says nothing. The guard's own draw poll is the
+    # other: it watches for up to four minutes now, because the other runner
+    # drawing on the same card makes this slower and used to make it red. The
+    # two do not add up to anything near thirty, and both say what they were
+    # waiting for when they give up.
     timeout-minutes: 30
 
     env:
