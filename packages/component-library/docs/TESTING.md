@@ -39,18 +39,23 @@ await waitForElementToBeRemoved(() => screen.queryByText("Too short"));
 
 Not a `waitFor` around `expect(...).not.toBeInTheDocument()`. A poll is
 evaluated once synchronously, before anything has had a chance to unmount, so
-that matcher is expected to fail at least once — and jest-dom builds its
-failure message with `stringify(element.cloneNode(true))`, which on a
-happy-dom node walks the property graph out through `ownerDocument` and
-serializes the whole rendered tree. Measured on the Field error popover, one
-failed poll cost five to nine seconds, and the cost grows with the size of the
-document. It is a wall-clock charge for a test that is otherwise correct, and
-it is what turns a passing case into a timeout when turbo runs the workspace
-suites at once.
+that matcher is expected to fail at least once, and a failing matcher has to
+build a message. `waitForElementToBeRemoved` polls on the query's result and
+throws an error it built up front, so a failing poll formats nothing at all.
+It also asserts the element was there to begin with, which the matcher does
+not — force the popup open and the case fails, where a poll for its absence
+would pass.
 
-`waitForElementToBeRemoved` polls on the query's result and throws an error it
-built up front, so a failing poll serializes nothing. It also asserts the
-element was there to begin with, which the matcher does not.
+The message is why this was once a timeout rather than a style point.
+jest-dom builds it with `stringify(element.cloneNode(true))`, and bun's
+inspector used to answer that by walking a happy-dom node's property graph out
+through `ownerDocument` into the whole rendered tree: 190MB and five to nine
+seconds for one failed poll on the Field error popover, growing with the size
+of the document. `@domicile/test-support`'s preload now answers the inspection
+with the element's own markup instead
+([`element-inspection.ts`](/packages/test-support/src/element-inspection.ts)),
+so that charge is gone — a failed poll there measures 1ms. The reasons above
+stand without it.
 
-The same matcher is fine as a one-shot assertion that passes — it is only the
-failure path that is expensive, and only a retry loop makes failure routine.
+The matcher is fine as a one-shot assertion that passes; a retry loop is what
+makes its failure routine.
