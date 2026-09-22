@@ -46,9 +46,32 @@ cleanup() {
     wait "$desktop" 2>/dev/null
   done
   # The fake components outlive a supervisor killed with a signal: nothing runs
-  # its cleanup, which is true of the real ones too.
-  pkill -f "$WORK/engine/chrome" 2>/dev/null
-  pkill -f "$WORK/domicile-compositor" 2>/dev/null
+  # its cleanup, which is true of the real ones too. Each keeps the name the
+  # patterns below match across the exec it ends on — see the `exec -a` in
+  # each — because for as long as it did not, this reached nothing at all and
+  # every run left two `sleep 60`s behind it.
+  #
+  # KILLED UNTIL THEY ARE GONE rather than killed once, because a signal
+  # posted is not a process gone and these hold the stdout and stderr this
+  # script inherited from whoever ran it. A run that returns while they are
+  # still up hands its caller a pipe with nobody left writing to it: on a CI
+  # runner that is a step which has passed every check in it and does not end.
+  # Once is also not enough on its own terms — a supervisor still on its way
+  # out replaces the engine that was just killed under it, and that one is the
+  # leftover. Five seconds of it, and then said out loud: leaving them behind
+  # quietly is the whole failure this is here to stop.
+  local left=0
+  while pgrep -f "$WORK/(engine/chrome|domicile-compositor)" >/dev/null 2>&1; do
+    if [ "$left" -ge 50 ]; then
+      echo "the fake components would not go, and this run leaves them:" >&2
+      pgrep -af "$WORK/(engine/chrome|domicile-compositor)" >&2
+      break
+    fi
+    pkill -f "$WORK/engine/chrome" 2>/dev/null
+    pkill -f "$WORK/domicile-compositor" 2>/dev/null
+    sleep 0.1
+    left=$((left + 1))
+  done
   rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM
@@ -63,14 +86,19 @@ mkdir -p "$WORK/first" "$WORK/second"
 # The engine: creates the broker socket it was told to create, then stays alive.
 mkdir -p "$WORK/engine"
 cat >"$WORK/engine/chrome" <<'ENGINE'
-#!/bin/sh
+#!/usr/bin/env bash
 for arg in "$@"; do
   case "$arg" in
     --domicile-broker-socket=*) broker="${arg#*=}" ;;
   esac
 done
 : >"$broker"
-exec sleep 60
+# `exec -a "$0"`, so that the name `cleanup` reaches for survives the exec. A
+# plain `exec sleep 60` leaves a process whose whole command line is `sleep
+# 60`: the path `pkill -f` matches on went with the command line it was in, so
+# cleanup found nothing and this fake outlived the run by a minute, still
+# holding the stdout and stderr it inherited. See `cleanup`.
+exec -a "$0" sleep 60
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
@@ -80,14 +108,15 @@ chmod +x "$WORK/engine/chrome"
 # compositor's environment, and every app the compositor spawns inherits it
 # from there.
 cat >"$WORK/domicile-compositor" <<'COMPOSITOR'
-#!/bin/sh
+#!/usr/bin/env bash
 while [ $# -gt 0 ]; do
   case "$1" in --session) session="$2"; shift ;; esac
   shift
 done
 printf '%s' "${DOMICILE_SOCK-}" >"$session.sock-it-was-given"
 : >"$session"
-exec sleep 60
+# Named across the exec for the reason the engine is; see `cleanup`.
+exec -a "$0" sleep 60
 COMPOSITOR
 chmod +x "$WORK/domicile-compositor"
 
@@ -227,7 +256,31 @@ echo "== the socket a killed desktop left behind fails rather than hangs =="
 # SIGKILL, so nothing unlinks the socket: this is what every terminal still
 # open inside that desktop has in its environment afterward.
 kill -9 "$SECOND_PID" 2>/dev/null
-wait "$SECOND_PID" 2>/dev/null
+# AND THEN WAITED FOR, because `kill` only posts the signal. `wait` was what
+# stood here and it is no barrier at all: the supervisor is this shell's
+# *grand*child — the background job is the subshell around it — so waiting on
+# its pid says "not a child of this shell" and returns at once, with the
+# message swallowed by the redirect. The case below would then be asking a
+# desktop that is still running, which answers "took the command and did not
+# answer" — true of a live desktop and not the refusal this case is about. On
+# a loaded machine a killed process waits its turn to die like any other: at
+# load 46 on four cores, 7 runs in 80 read that sentence and failed.
+#
+# Waited out by whether the process is still there rather than by whether the
+# socket still answers, so this stays upstream of what is being asserted: a
+# socket that went on answering after its desktop was gone is exactly what the
+# case exists to catch, and polling on that would be polling the assertion.
+KILLED=0
+while kill -0 "$SECOND_PID" 2>/dev/null; do
+  if [ "$KILLED" -ge 100 ]; then
+    echo "FAIL: the second desktop ($SECOND_PID) took SIGKILL ten seconds ago"
+    echo "      and is still in the process table, so nothing below would be"
+    echo "      about a desktop that is gone."
+    exit 1
+  fi
+  sleep 0.1
+  KILLED=$((KILLED + 1))
+done
 GONE="$WORK/gone.log"
 if [ ! -S "$SECOND_SOCK" ]; then
   echo "FAIL: the killed desktop's socket is gone, so this proves nothing"
