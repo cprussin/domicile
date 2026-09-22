@@ -90,11 +90,24 @@ BLOCK="$(awk '/^DRAWN=""$/,/^fi$/' "$GUARD")"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# What the client draws, which is what the poll now breaks on: it waits for the
+# color the guard asserts rather than for any drawn color at all, so the fixture
+# below and the `COLOR` the poll compares against have to be one value. Read out
+# of the guard so they stay one.
+# scripts/test-the-client-window-guard-waits-for-the-clients-own-color.sh is
+# what asserts that choice; the cases here are about how long it will wait.
+CLIENT="$(sed -n 's/^COLOR="${COLOR:-\([0-9A-F]*\)}"$/\1/p' "$GUARD")"
+case "$CLIENT" in
+  (''|*[!0-9A-F]*)
+    echo "no client color in $GUARD — read '$CLIENT'. Fix this test with it." >&2
+    exit 1 ;;
+esac
+
 # What the compositor writes when viz hands back the center of the browser's
-# window. BUILT from the format string at domicile-compositor's main.rs:2295
+# window. BUILT from the format string at domicile-compositor's main.rs:2319
 # rather than copied: reword that log site and this test keeps passing while
 # the guard stops seeing the line.
-DREW='2026-09-22T00:03:29.112233Z  INFO domicile::engine::spike: engine drew #FF3366CC at the center of the browser'"'"'s window'
+DREW='2026-09-22T00:03:29.112233Z  INFO domicile::engine::spike: engine drew #FF'"$CLIENT"' at the center of the browser'"'"'s window'
 
 # The poll, against a log that gains the line `$2` seconds in. Prints what it
 # read and how long it waited, so a case can assert on either.
@@ -104,6 +117,7 @@ poll() { # $1 how patient, $2 when the line lands
   (
     LOOKS="$1"
     NEGATIVE=0
+    COLOR="$CLIENT"
     COMP_LOG="$dir/comp"
     # Somewhere of its own, so a case cannot read another case's note and the
     # runner's /tmp is left alone.

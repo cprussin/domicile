@@ -279,26 +279,45 @@ fi
 # passed on the slot that was not the one giving up.
 #
 # 240 is ~48x the quiet-machine measurement and four times what a busy card ate
-# through. It is free on a healthy run for the reason above: the loop breaks on
-# the first sighting. What bounds it is `CLIENT_LIVES_FOR` -- the probe runs on
-# the submit path, so the poll has to end while there is still a client
-# committing frames for it to read.
+# through. It is free on a healthy run for the reason below: the loop breaks the
+# moment the client's color lands. What bounds it is `CLIENT_LIVES_FOR` -- the
+# probe runs on the submit path, so the poll has to end while there is still a
+# client committing frames for it to read.
 LOOKS="${LOOKS:-240}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
 
+# WAIT FOR THE COLOR THIS ASSERTS, NOT FOR ANY COLOR AT ALL. The probe runs on
+# the submit path and samples the center of the browser's window as it stands at
+# that moment, so the client's surface has not necessarily been aggregated into
+# the frame yet: the first thing it reports is routinely the PAGE's own paint.
+# Measured on engine run 35678987261 attempt 1 -- `engine drew #FFFFFFFF` 29ms
+# after this app's first frame, then `engine drew #FF3F51B5`, the page's indigo
+# background, 13ms AFTER `embedded "app-1"`. A loop that broke on the first
+# sighting priced one of those as the client's answer and called a working seam
+# broken, with `WAITED=1` out of 240 -- so no amount of patience could reach it.
+#
+# `DRAWN` keeps the last color seen rather than only the matching one, because
+# the verdict below reports it: after a poll that ran out, it is the last thing
+# the page showed within the budget, which is the finding. "Nothing drew at all"
+# stays a different sentence, and it is still the only one the negative control
+# can reach -- no client means no `Committer::App` commit, so `publish_frame`
+# never runs and the probe never reports. The page's own frames go through
+# `publish_chrome_frame`, which has no probe in it.
 DRAWN=""
 WAITED=0
 for _ in $(seq 1 "$LOOKS"); do
   DRAWN=$(grep -oE "engine drew #[0-9A-F]{8}" "$COMP_LOG" | tail -1 | grep -oE "[0-9A-F]{8}$")
-  [ -n "$DRAWN" ] && break
+  [ "${DRAWN#FF}" = "$COLOR" ] && break
   sleep 1
   WAITED=$((WAITED + 1))
 done
 
-# Only what the GUARD measured, and only when it actually saw something: a run
-# that timed out measured its own patience rather than the system's, and the
-# control must not inherit that as though it were a reading.
-if [ "$NEGATIVE" != "1" ] && [ -n "$DRAWN" ]; then
+# Only what the GUARD measured, and only when it saw the thing it was looking
+# for: a run that timed out measured its own patience rather than the system's,
+# and the control must not inherit that as though it were a reading. On the
+# color rather than on `-n`, because a timed-out run now ends holding the page's
+# own color and `-n` would write that patience down as a measurement.
+if [ "$NEGATIVE" != "1" ] && [ "${DRAWN#FF}" = "$COLOR" ]; then
   budget_note client-window "$WAITED"
 fi
 
@@ -316,6 +335,10 @@ echo "the engine drew #$DRAWN; the client drew #$COLOR"
 # kitty's background is opaque, so the alpha is FF and the low 24 bits are the
 # color. Compared as a string because the color is exact: a client's own
 # buffer is not resampled on the way to the page.
+#
+# The same comparison the poll breaks on, so reaching here with it false means
+# the poll ran out: `#$DRAWN` is then the last thing the page showed within the
+# budget rather than its final state, which is what the annotation says.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then
     annotate "guard-client-window negative control: something drew when nothing should have"
