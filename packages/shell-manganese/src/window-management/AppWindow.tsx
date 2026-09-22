@@ -6,6 +6,7 @@ import {
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
+import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
@@ -27,6 +28,14 @@ import {
 } from "./window-styles";
 
 type Props = {
+  /**
+   * Whether a panel of the desktop's own is up over the windows.
+   *
+   * Which is a thing to type into that no click reached and no client knows
+   * about, so the seat is the page's for as long as it is there — see the
+   * effect that answers this.
+   */
+  behindPanel: boolean;
   /**
    * Whether the pointer goes through this window to the page behind it.
    *
@@ -131,6 +140,7 @@ type Props = {
  */
 export const AppWindow = ({
   appId,
+  behindPanel,
   clickThrough,
   cursor,
   depth,
@@ -172,11 +182,30 @@ export const AppWindow = ({
   // was in it — that is what stops a window changing while the user watches it
   // go — but the keyboard itself has moved on to whatever is left, and asking
   // again would take it back off the window the user is now working in.
+  //
+  // AND IT WAITS WHILE A PANEL OF THE DESKTOP'S OWN IS OVER IT. The launcher
+  // is drawn by the page and the keyboard is the compositor's, so a client
+  // left holding the seat goes on receiving every keystroke while the user
+  // types into a box on top of it: the box fills with nothing and the window
+  // underneath takes the letters. The clause above is what would undo any
+  // attempt to fix that elsewhere — it asks for the seat back the moment the
+  // compositor says the keyboard has moved — so this is the same rule with
+  // the panel in it rather than a second rule fighting it.
+  //
+  // The give-back is the same line read the other way. When the panel goes
+  // down the seat is still the page's and the window is still the one being
+  // worked in, so the clause below runs and puts it back — without waiting
+  // for the pointer to cross the window, which under focus-follows-cursor
+  // might be the next thing the user does or might be minutes away.
   useEffect(() => {
-    if (focused && !hasKeyboard && !leaving) {
+    if (behindPanel) {
+      if (hasKeyboard) {
+        focusChrome(domicile);
+      }
+    } else if (focused && !hasKeyboard && !leaving) {
       focusApp(domicile, appId);
     }
-  }, [appId, domicile, focused, hasKeyboard, leaving]);
+  }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
   // A click on a client's window asks for the keyboard, and the SDK grants it
   // unless something answers first. This answers first: the request becomes the

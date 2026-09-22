@@ -1432,6 +1432,55 @@ describe("the launcher", () => {
     ]);
   });
 
+  it("takes the keyboard off the window it is opened over", () => {
+    // THE PANEL IS DRAWN BY THE PAGE AND THE KEYBOARD IS THE COMPOSITOR'S.
+    // A client holding the seat goes on receiving every keystroke while the
+    // launcher is up over it, so the box the user is typing into fills with
+    // nothing and the window underneath takes the letters — which is a
+    // launcher that opens and then cannot be used.
+    renderShell();
+    clientAppears("one");
+    domicile.emit("focus_changed", { app_id: "one" });
+    domicile.calls.length = 0;
+
+    press("space");
+
+    expect(domicile.calls).toContainEqual(["focusChrome"]);
+  });
+
+  it("hands the keyboard back to the window when it is put away", () => {
+    // The other half, and the one that makes taking it safe: the seat is the
+    // window's again the moment the panel is down, without waiting for the
+    // pointer to cross it.
+    renderShell();
+    clientAppears("one");
+    domicile.emit("focus_changed", { app_id: "one" });
+    press("space");
+    // The compositor carrying out the request above, which is how the shell
+    // learns the seat has moved.
+    domicile.emit("focus_changed", { app_id: undefined });
+    domicile.calls.length = 0;
+
+    press("space");
+
+    expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+  });
+
+  it("keeps the box focused over a browser window", async () => {
+    // A browser window's page is a guest frame, and a guest holding the
+    // page's focus hears the keyboard in a browsing context this document
+    // cannot: the window pulls the focus back to itself on its own, so a
+    // panel over it has to be the thing that says otherwise.
+    const { container } = renderShell();
+    press("space");
+    await typeIntoLauncher("example.com{Enter}");
+    expect(container.querySelector("webview")).not.toBeNull();
+
+    press("space");
+
+    expect(launcherBox()).toHaveFocus();
+  });
+
   it("answers the same key handed back by the host", () => {
     // A browser window has the keyboard, so `mod+space` never reaches this
     // document. The launcher is the one thing on the desktop you most want to

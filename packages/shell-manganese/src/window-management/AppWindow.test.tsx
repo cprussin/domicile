@@ -72,6 +72,9 @@ const lengthOf = (shorthand: string): string => {
 /** The props every case here shares; each overrides the one it is about. */
 const windowProps = {
   appId: "term",
+  // No panel of the desktop's own over this window: what happens when there
+  // is one is `Shell.test.tsx`'s, where the launcher that puts it up lives.
+  behindPanel: false,
   clickThrough: false,
   cursor: undefined,
   depth: 0,

@@ -343,7 +343,7 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 It is not required. A shell may drive `window.domicile` itself — it is a
 typed surface rather than a wire, described in
@@ -501,7 +501,31 @@ window the seat while every keystroke stays in the page.
 It goes one way only. Which client holds the keyboard is one seat's answer and
 something is always in it, so "this window has it" is an instruction the
 compositor can carry out and "this window does not" is not one. The keyboard
-leaves a window when another takes it or when a click lands on the chrome.
+leaves a window when another takes it, when a click lands on the chrome, or
+when you say so:
+
+```ts
+import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
+
+focusChrome(domicile);
+```
+
+**Which is a thing to reach for exactly once: a panel your shell puts up over
+the windows.** A launcher, a switcher, a palette — something to type into that
+no click reached and no client knows about. The window under it is still
+holding the seat, so without this the compositor goes on delivering every
+keystroke to the client while the user types into a box on top of it: the box
+fills with nothing and the window underneath takes the letters.
+
+`focusChrome` rather than `domicile.focusChrome()`, for the reason `focusApp`
+is not `domicile.focusApp` either — both halves, or the page forwards to a
+window it has left.
+
+Putting it back is the job of whatever asks for the seat in the first place. In
+`shell-manganese` that is one effect in `AppWindow`: the window being worked in
+asks for the keyboard whenever the compositor says the keyboard is elsewhere,
+so taking it for a panel and giving it back when the panel goes down are the
+same rule with the panel in it, rather than a second rule fighting the first.
 
 **A click on chrome you drew for a window** is the same question the other way
 round, and it is the one a shell with window furniture has to answer. The SDK
