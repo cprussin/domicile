@@ -1,5 +1,6 @@
 //! `domicile ./my-desktop/dist/shell.js` — a desktop, in one command. And
-//! `domicile which-shell` — a command for the desktop already running.
+//! `domicile which-shell` or `domicile load-shell <path>` — commands for the
+//! desktop already running.
 //!
 //! Everything with a decision in it is a module of `domicile_launch` with
 //! tests of its own; this is the part that reads the world and starts things.
@@ -9,7 +10,9 @@
 //! `scripts/test-a-desktop-that-fails-says-why.sh` are what cover the wiring
 //! below that the unit tests cannot reach — the second of them starts this
 //! binary against components that die on purpose, which is the only place the
-//! restart loop is driven by real processes rather than by a closure.
+//! restart loop is driven by real processes rather than by a closure, and
+//! `scripts/test-a-running-desktop-takes-a-new-shell.sh` is where a
+//! `load-shell` goes all the way from a command line to an engine's socket.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -17,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::cli::{invocation, Invocation};
+use domicile_launch::command_socket::load_shell;
 use domicile_launch::components::{components, Components};
 use domicile_launch::config_path::config_file;
 use domicile_launch::control::{answer, Request, Response};
@@ -58,7 +62,35 @@ fn run() -> Result<ExitCode, String> {
     match invocation(std::env::args().skip(1)).map_err(|why| why.to_string())? {
         Invocation::Run { shell, config } => desktop(&shell, config.as_deref()),
         Invocation::Ask { request } => asked(&request),
+        Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
     }
+}
+
+/// Which shell `domicile load-shell <path>` names, resolved here and sent
+/// resolved.
+///
+/// IN FRONT OF THE PERSON WHO TYPED IT. A relative path and a `~` mean what
+/// they mean on this command line, in this terminal — and neither the desktop
+/// answering the control socket nor the engine serving the page shares this
+/// working directory. So the same [`shell_module`] a run resolves its own
+/// shell with resolves this one, against the same filesystem, and a typo is
+/// answered here rather than by an engine reporting a module that would not
+/// load.
+///
+/// `DOMICILE_PAGE` has no part in it: a packaged desktop hands over the module
+/// it was built with, and this command is somebody naming another one.
+fn shell_to_load(shell: &str) -> Result<Request, String> {
+    let here = std::env::current_dir()
+        .map_err(|why| format!("cannot tell where this was typed: {why}"))?;
+    let home = std::env::var("HOME").ok().map(PathBuf::from);
+    let page = shell_module(shell, None, &here, home.as_deref(), &|path| {
+        path.metadata().ok().map(|found| found.is_dir())
+    })
+    .map_err(|why| why.to_string())?;
+    Ok(Request::LoadShell {
+        module: page.module,
+        root: page.root,
+    })
 }
 
 /// Put one command to the desktop that is already running, and say what it
@@ -128,6 +160,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     let places = Runtime {
         broker: runtime.join("broker"),
         chrome_socket: runtime.join("chrome.sock"),
+        command: runtime.join("command.sock"),
         control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
         profile: runtime.join("profile"),
         session: runtime.join("session.json"),
@@ -161,7 +194,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // display the compositor will bind does not exist yet, and a desktop
     // cannot be named after something that has not happened.
     let control = take(&places.control).map_err(|why| why.to_string())?;
-    answering(&control, module)?;
+    answering(&control, module, places.command.clone())?;
     println!("{VARIABLE}={}", places.control.display());
 
     let platform = platform(
@@ -367,7 +400,8 @@ fn wait_or_notice_a_stop(wait: Duration) {
 /// killed by a signal and one that returned 11 do not read the same.
 const CLEANLY: &str = "exit status: 0";
 
-/// Answer the control socket for as long as the desktop is up.
+/// Answer the control socket for as long as the desktop is up, with `engine`
+/// the socket the one command that routes is routed to.
 ///
 /// On a thread of its own because the rest of this program is a supervisor
 /// that blocks: it waits on a file, then on a pair of children, and a command
@@ -378,17 +412,27 @@ const CLEANLY: &str = "exit status: 0";
 /// nothing to recover from — the asker is gone, or said nothing — and a
 /// desktop that stopped answering because one client hung up would be a
 /// control socket that goes away at the first misbehaving caller.
-fn answering(control: &Control, module: PathBuf) -> Result<(), String> {
+///
+/// WHICH SHELL IS SERVED IS KEPT HERE, and it changes: a `load-shell` the
+/// engine carried out makes every later `which-shell` a different answer, and
+/// a supervisor that went on naming the module its run started with would be
+/// answering for a desktop that no longer exists. Read out before the line is
+/// answered and written after the engine has taken it, so the dial never
+/// happens with the lock held.
+fn answering(control: &Control, module: PathBuf, engine: PathBuf) -> Result<(), String> {
     let listener = control
         .listener()
         .map_err(|why| format!("cannot answer the control socket: {why}"))?;
     std::thread::spawn(move || {
+        let serving = Mutex::new(module);
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    if let Err(why) =
-                        answer_one(stream, ANSWER_WITHIN, &|line| answer(line, &module))
-                    {
+                    if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
+                        answer(line, &shell(&serving), &|root, module| {
+                            load_the_shell(&engine, root, module, &serving)
+                        })
+                    }) {
                         eprintln!("domicile: a command went unanswered: {why}");
                     }
                 }
@@ -396,6 +440,33 @@ fn answering(control: &Control, module: PathBuf) -> Result<(), String> {
             }
         }
     });
+    Ok(())
+}
+
+/// The module this desktop is serving as of this command.
+fn shell(serving: &Mutex<PathBuf>) -> PathBuf {
+    serving
+        .lock()
+        .expect("nothing panics holding which shell is served")
+        .clone()
+}
+
+/// Put one `load_shell` to the engine, and remember what it is serving once it
+/// has taken it.
+///
+/// Written only on the way out of a load the engine answered `loaded` to: an
+/// engine that refused is still serving what it was, and a supervisor that
+/// wrote first would answer `which-shell` with a shell nothing is on.
+fn load_the_shell(
+    engine: &Path,
+    root: &Path,
+    module: &Path,
+    serving: &Mutex<PathBuf>,
+) -> Result<(), String> {
+    load_shell(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())?;
+    *serving
+        .lock()
+        .expect("nothing panics holding which shell is served") = root.join(module);
     Ok(())
 }
 

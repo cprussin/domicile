@@ -34,6 +34,7 @@ the crate stays in `default-members` and its tests stay cheap.
 domicile <shell>                  # the built JavaScript module the shell is
 domicile --config <path> <shell>  # ...with the compositor's own file
 domicile <command>                # ...or a command for the desktop already running
+domicile load-shell <shell>       # ...one of which takes a shell of its own
 ```
 
 `--config` may come on either side of the shell, and leaving it off is an
@@ -43,8 +44,10 @@ there is no such file — a single output that follows the engine's own window.
 What is refused is the half-stated form — the flag with nothing behind it, or
 twice — because the compositor runs its defaults on a missing file and refuses
 one it cannot load, and guessing between those picks one answer for somebody
-who meant the other. A verb takes nothing, `--config` included: the desktop it
-questions read its config when it started.
+who meant the other. A verb takes what that verb takes and never `--config`:
+the desktop it is put to read its config when it started, so a flag there would
+be a file handed to a process that is not going to read one. `which-shell`
+takes nothing; `load-shell` takes the shell to serve from now on.
 
 **That default path is `domicile`'s, and deliberately not the compositor's.**
 `arguments` below states the compositor's rule — every value given, nothing
@@ -63,7 +66,8 @@ The modules, and the split is by what each needs to be tested:
 | `components` | yes | the engine and the compositor, from the binary's own path or the environment |
 | `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → the ozone platform (a console login takes `drm` on its own), or the refusal that names what to do instead |
-| `control` | yes | what a running desktop can be asked, and what it answers |
+| `control` | yes | what a running desktop can be asked, and what it answers — with the one command it routes rather than answers taking the dial as an argument |
+| `command` | yes | what the engine can be told about the shell it serves: the line, its version, and the reply |
 | `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
 | `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
 
@@ -83,6 +87,7 @@ refuses the whole file, so the desk comes up on its defaults.
 | `restart` | yes | whether a desktop that died gets another one, how long it waits, and when it stops getting them |
 | `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
 | `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
+| `command_socket` | no | where the engine answers, and carrying one line each way to it |
 
 The pure ones are where the subtle rules are, and they become ordinary unit
 tests against strings and a temp directory. `supervise` is the part that
@@ -116,9 +121,10 @@ thin enough to read.
   a token endpoint on the bridge plus a poller written into every served
   document, asking twice a second, for the life of the desktop, whether the
   bundle changed. All of it went with the bridge, and the C++ that writes the
-  document has nothing in its place — **so a dev desktop has no reload at all
-  until this lands**, and a rebuilt shell needs the desktop restarted. See
-  *The engine's half, which is in* below.
+  document has nothing in its place — **and nothing in a served document ever
+  will have again**: a rebuilt shell is one `domicile load-shell` away, from a
+  watch script or from a person's own hands, and the desktop it reaches did
+  not have to be started in a dev mode to take it.
 
 - **A component that dies restarts the desktop, not the component.** Neither
   can be replaced under the other: the compositor dials the engine's broker
@@ -206,10 +212,10 @@ declines. A socket whose desktop was killed refuses on connect and says so;
 anything at that path that is not a socket is somebody else's file and is left
 alone.
 
-### The engine's half, which is in
+### The command socket, both halves of it
 
-The page is the engine's, so `load-shell` is an engine-side change, and there
-were two shapes for it:
+The page is the engine's, so `load-shell` is an engine-side change too, and
+there were two shapes for it:
 
 | | Route | What it does to the layering |
 |---|---|---|
@@ -246,12 +252,26 @@ either.
 | `components/domicile/browser/command_protocol.{h,cc}` | the wire: a line in, a line out, the applying injected. Where the tests are |
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. `//chrome` because reloading needs `GlobalBrowserCollection`, which a `//components/domicile` target may not depend on |
 
-**What is left is the supervisor's half**: `--domicile-command-socket` on the
-engine's command line in `spawn`, a `load-shell` verb in `cli` and `control`,
-and `answer` dialing the engine rather than holding the answer itself. The
-engine side is no longer the thing to wait for — the release `engine-release.nix`
-pins is built past it, so the switch is there on the engine a desktop actually
-runs, and nothing is asking for it.
+**The supervisor's half is in beside it**: `--domicile-command-socket` on the
+engine's command line in `spawn`, under the run's own directory because the
+supervisor is the only thing that dials it; a `load-shell` verb in `cli` and
+`control`, which is the first verb that takes an argument and the reason a
+verb's argument list is now a rule per verb; and `answer` taking the dial as a
+parameter rather than holding the answer itself, so the routing is still a
+string in and a string out under test.
+
+**The path is resolved in the client, not in the desktop.** `domicile
+load-shell ./dist/shell.js` is typed in some terminal with a working directory
+and a `HOME` of its own, and neither the supervisor nor the engine shares
+either — so the same `shell_path` a run resolves its own shell with resolves
+this one, in front of the person who typed it, and what goes over both sockets
+is an absolute root and the module in it. A path that names nothing is refused
+at that terminal and no engine hears about it.
+
+**Which shell is served is kept by the supervisor and changes when one is
+loaded**, so `domicile which-shell` after a `load-shell` answers with the shell
+that was loaded. It is written only once the engine has answered `loaded`: an
+engine that refused is still serving what it was.
 
 ## Plan
 
@@ -270,7 +290,7 @@ runs, and nothing is asking for it.
       `load_shell` wire and its version, and the reload that carries it out.
       The half that is a patch to the fork, and the half nothing in this
       repository can build
-- [ ] `domicile load-shell <path>` — the supervisor's half of it: the switch
+- [x] `domicile load-shell <path>` — the supervisor's half of it: the switch
       on the engine's command line, the verb, and the dial. It is what a dev
       reload would use
 - [ ] `guard-shell.sh` calls the binary rather than repeating the launch

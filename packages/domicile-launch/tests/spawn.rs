@@ -25,6 +25,7 @@ fn runtime() -> Runtime {
     Runtime {
         broker: PathBuf::from("/run/d/broker"),
         chrome_socket: PathBuf::from("/run/d/chrome.sock"),
+        command: PathBuf::from("/run/d/command.sock"),
         control: PathBuf::from("/run/d/domicile-ipc.4242.sock"),
         profile: PathBuf::from("/run/d/profile"),
         session: PathBuf::from("/run/d/session.json"),
@@ -83,6 +84,29 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
     );
     assert!(
         args.contains(&"--user-data-dir=/run/d/profile".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
+    // WITHOUT THIS SWITCH `domicile load-shell` HAS NOWHERE TO GO. The engine
+    // binds this path and answers `load_shell` on it; an engine that was not
+    // given one binds nothing, and a desktop running that engine is one whose
+    // shell cannot be replaced.
+    //
+    // Under the run's own directory rather than where `control_socket::address`
+    // puts the control socket: this one is dialed by the supervisor that named
+    // it, the way the broker and chrome sockets are, and nobody types its path.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--domicile-command-socket=/run/d/command.sock".to_string()),
         "{args:?}"
     );
 }

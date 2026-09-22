@@ -232,7 +232,10 @@ fn next(policy: &Policy, failures: u32, lived: Duration) -> Next {
 /// document left by the desktop that just died is the next desktop reported up
 /// before its compositor has bound anything, and every failure after that
 /// reads as something else. The two sockets are the loud version of the same
-/// thing: a path that is already there is a bind that fails.
+/// thing: a path that is already there is a bind that fails. The engine's
+/// command socket is the loudest of the three — `StartCommandSocket` `CHECK`s
+/// the bind, so a file the last engine left is the next desktop's browser
+/// process ending on a line about a path rather than a desktop.
 ///
 /// The profile goes too. It is this run's own temporary directory rather than
 /// anybody's browser profile, and what a Chromium killed with `SIGKILL` leaves
@@ -247,7 +250,12 @@ fn next(policy: &Policy, failures: u32, lived: Duration) -> Next {
 /// failure. Anything else is returned: a leftover this process cannot take
 /// away is not something to start a desktop on top of and hope.
 pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
-    for path in [&runtime.broker, &runtime.chrome_socket, &runtime.session] {
+    for path in [
+        &runtime.broker,
+        &runtime.chrome_socket,
+        &runtime.command,
+        &runtime.session,
+    ] {
         gone(path, std::fs::remove_file(path))?;
     }
     gone(&runtime.profile, std::fs::remove_dir_all(&runtime.profile))

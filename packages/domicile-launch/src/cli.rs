@@ -26,7 +26,8 @@ pub enum CliError {
          domicile ./my-desktop/dist/shell.js\n\n\
          Your monitors come from ~/.config/domicile/domicile.toml, or from \
          --config <path>.\n\
-         Or a command for the desktop already running: which-shell.\n"
+         Or a command for the desktop already running: which-shell, or \
+         load-shell <path>.\n"
     )]
     NoShell,
     #[error(
@@ -36,6 +37,18 @@ pub enum CliError {
     TooMany { extra: String },
     #[error("{verb} takes no arguments, and it was given {extra}.")]
     Extra { verb: String, extra: String },
+    #[error(
+        "load-shell takes the path to the JavaScript module the shell you want \
+         is, and was given nothing:\n\n    \
+         domicile load-shell ./my-desktop/dist/shell.js\n"
+    )]
+    NoShellToLoad,
+    #[error(
+        "load-shell takes one shell, and it was given {extra} as well. A \
+         desktop serves one shell at a time, and it read its config when it \
+         started — so there is no --config here either."
+    )]
+    ExtraToLoad { extra: String },
     #[error(
         "--config takes the path to the compositor's config file and was given \
          nothing. Leaving the flag off reads ~/.config/domicile/domicile.toml \
@@ -67,6 +80,13 @@ pub enum Invocation {
     },
     /// Ask the desktop that is already running.
     Ask { request: Request },
+    /// Tell the desktop that is already running to serve this shell instead.
+    ///
+    /// The word as it was typed, and the one verb that carries one. What file
+    /// it names is a question about the directory it was typed in and the home
+    /// directory of whoever typed it — `shell_path` has those rules and an
+    /// injected filesystem to ask them against, and this module has neither.
+    Load { shell: String },
 }
 
 /// Read the command line, or refuse it and say what to type instead.
@@ -84,11 +104,17 @@ pub enum Invocation {
 /// have a file called that beside them. A shell named after a verb is run the
 /// way every path is: `domicile ./which-shell`.
 ///
-/// **A VERB STILL TAKES NOTHING, `--config` INCLUDED.** It is a question put to
-/// a desktop that is already running, and that desktop read its config when it
-/// started — so a flag here would be a config handed to a process that is not
-/// going to read one, which is worse than refused because it looks like it
-/// worked.
+/// **A VERB TAKES WHAT THAT VERB TAKES, AND NEVER A FLAG.** `which-shell`
+/// takes nothing: it is a question a desktop answers out of what it already
+/// knows. `load-shell` takes one word, the shell to serve from now on, and is
+/// the reason this is a rule per verb rather than the blanket "a verb takes
+/// nothing" it used to be. What neither takes is `--config`: the desktop being
+/// spoken to read its config when it started, so a flag here would be a config
+/// handed to a process that is not going to read one, which is worse than
+/// refused because it looks like it worked. `load-shell --config x.toml
+/// ./shell.js` is refused by [`CliError::ExtraToLoad`] for that reason and not
+/// by accident — a verb's argument list is closed the same way the set of
+/// verbs is.
 ///
 /// The flag may come on either side of the shell. A run is two values and
 /// neither is positional against the other, so the order somebody types them
@@ -96,10 +122,17 @@ pub enum Invocation {
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
     let first = args.next().ok_or(CliError::NoShell)?;
-    if let Some(request) = verb(&first) {
-        return match args.next() {
-            None => Ok(Invocation::Ask { request }),
-            Some(extra) => Err(CliError::Extra { extra, verb: first }),
+    if let Some(verb) = verb(&first) {
+        return match verb {
+            Verb::Asking(request) => match args.next() {
+                None => Ok(Invocation::Ask { request }),
+                Some(extra) => Err(CliError::Extra { extra, verb: first }),
+            },
+            Verb::Loading => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NoShellToLoad),
+                (Some(shell), None) => Ok(Invocation::Load { shell }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
+            },
         };
     }
     let mut shell: Option<String> = None;
@@ -138,14 +171,29 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
 /// handed on rather than a second name for it.
 const CONFIG: &str = "--config";
 
-/// The request a word names, if it names one.
+/// A verb, and what it goes on to take.
 ///
-/// The other spelling of [`Request`]: every verb here is a variant there, and
-/// a variant with no verb is a question a desktop can answer that nobody can
-/// ask.
-fn verb(word: &str) -> Option<Request> {
+/// The distinction is the whole of why this type exists: a request that is
+/// complete as soon as its word is read can be built here, and one that is not
+/// cannot. There is no `Verb::Loading(Request)` to build, because the
+/// [`Request::LoadShell`] that word leads to carries the resolved shell and
+/// resolving it is a question about a filesystem this module does not have.
+enum Verb {
+    /// A question a desktop answers out of what it already knows.
+    Asking(Request),
+    /// `load-shell`: the word, with the shell still to come.
+    Loading,
+}
+
+/// The verb a word names, if it names one.
+///
+/// The other spelling of [`Request`]: every verb here leads to a variant
+/// there, and a variant no verb leads to is a question a desktop can answer
+/// that nobody can ask.
+fn verb(word: &str) -> Option<Verb> {
     match word {
-        "which-shell" => Some(Request::WhichShell),
+        "which-shell" => Some(Verb::Asking(Request::WhichShell)),
+        "load-shell" => Some(Verb::Loading),
         _ => None,
     }
 }

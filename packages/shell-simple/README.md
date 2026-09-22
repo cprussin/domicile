@@ -128,8 +128,9 @@ plugin in `vite.config.ts`.
 
 `bun run --filter @domicile/shell-simple start:dev` runs this shell in a real
 desktop and rebuilds it as you edit — the engine the flake pins and the
-compositor out of this checkout. A rebuilt shell needs the desktop restarted —
-nothing reloads the page for you until `domicile load-shell` lands, see
+compositor out of this checkout. Nothing reloads the page for you; `domicile
+load-shell .vite/renderer/main_window/shell.js`, typed in a terminal inside
+that desktop, puts the rebuilt shell on it without stopping it. See
 `scripts/dev-shell.sh`.
 
 ## Test

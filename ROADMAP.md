@@ -24,29 +24,20 @@ The evidence for each of those is in the doc that made the claim —
 
 ## In this repository
 
-1. **`domicile load-shell <path>`** — the supervisor's half. The engine answers
-   `load_shell` on `--domicile-command-socket` and every pinned release carries
-   it; what is left is that switch on the engine's command line in `spawn`, the
-   verb in `cli` and `control`, and `answer` dialing the engine instead of
-   holding the answer itself.
-   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md). Dev
-   reload comes back with it — until then `scripts/dev-shell.sh` restarts the
-   desktop on every rebuild.
-
-2. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
+1. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
    commit to pixel against a 16.67 ms display frame on every run so far — but in
    a nested compositor with nothing presenting, and with the probe's own round
    trip inside every figure. What is left is arranging the probe on a machine
    that lights a panel. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    *Keystroke to pixel*.
 
-3. **A component that dies takes the windows with it.** `domicile-launch`'s
+2. **A component that dies takes the windows with it.** `domicile-launch`'s
    `restart` stands a whole new desktop up when either component stops, so a
    crash is no longer a dead console. The windows are what is still lost: every
    app was a client of a Wayland display that went with the compositor, and
    nothing relaunches or reconnects one.
 
-4. **No lock.** A desktop you walk away from is one anybody can walk up to.
+3. **No lock.** A desktop you walk away from is one anybody can walk up to.
    The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
    `crate::idle` in the compositor for the decision and the edge, and the one
    thing that seam can already drive — the connectors go dark and come back on
@@ -193,8 +184,9 @@ costs nothing.
   CRTCs are configured from.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
-  Nothing a user runs asks for one; `scripts/dev-shell.sh` does, on every
-  rebuild.
+  `domicile load-shell` is what asks for one, so a shell that keeps state in
+  its page loses it on every swap; the windows do not go, because the
+  compositor never hears about any of this.
 
 ---
 

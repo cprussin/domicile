@@ -76,6 +76,50 @@ fn a_verb_given_an_argument_is_refused_and_named() {
 }
 
 #[test]
+fn load_shell_is_the_verb_that_takes_a_shell() {
+    // THE FIRST VERB WITH AN ARGUMENT. `which-shell` is a question a desktop
+    // answers out of what it already knows; this one says which shell to serve
+    // from now on, and that shell is the whole of what it says. Carried as
+    // typed rather than resolved: which file a relative path names is a
+    // question about the directory the person was standing in, and
+    // `shell_path` is what asks it.
+    assert_eq!(
+        run(&["load-shell", "./my-desktop/dist/shell.js"]).unwrap(),
+        Invocation::Load {
+            shell: "./my-desktop/dist/shell.js".to_string()
+        }
+    );
+}
+
+#[test]
+fn load_shell_with_nothing_to_load_is_refused() {
+    // There is no shell this could mean, and the desktop it is put to is
+    // already running one: a bare `load-shell` that quietly reloaded that one
+    // would be a different command wearing this one's name.
+    assert_eq!(run(&["load-shell"]), Err(CliError::NoShellToLoad));
+}
+
+#[test]
+fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
+    // A desktop serves one shell, so a second word is somebody saying two
+    // things -- and `--config` is one of the words this catches, which is the
+    // rule every verb keeps: the desktop being asked read its config when it
+    // started.
+    assert_eq!(
+        run(&["load-shell", "./dist/shell.js", "./other.js"]),
+        Err(CliError::ExtraToLoad {
+            extra: "./other.js".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["load-shell", "--config", "/a.json"]),
+        Err(CliError::ExtraToLoad {
+            extra: "/a.json".to_string()
+        })
+    );
+}
+
+#[test]
 fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
     // THE VERBS WIN, and they are a closed set for exactly this reason: which
     // reading a bare word gets cannot depend on what happens to be on disk

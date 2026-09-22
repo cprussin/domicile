@@ -42,7 +42,17 @@ pub struct Runtime {
     /// The host protocol: the compositor listens, and the engine dials it for
     /// the page's control channel.
     pub chrome_socket: PathBuf,
-    /// Where this desktop answers `domicile which-shell`.
+    /// Where the engine takes `load_shell`, and what the supervisor dials to
+    /// carry `domicile load-shell` out.
+    ///
+    /// Under the run's own directory, beside the two above and unlike
+    /// [`Runtime::control`]: the supervisor names this path and then dials it
+    /// itself, so nothing outside this run has to be able to find it. The
+    /// control socket is the other case — a person types a command in some
+    /// other terminal — and that is what pays for a name anybody can work out.
+    pub command: PathBuf,
+    /// Where this desktop answers `domicile which-shell` and takes a
+    /// `domicile load-shell`.
     ///
     /// The one socket of the run that is not under the run's own directory:
     /// the others are dialed by something this launcher started and told, and
@@ -115,6 +125,13 @@ pub fn engine(
             runtime.chrome_socket.display()
         )
         .into(),
+        // WHERE A RUNNING DESKTOP IS TOLD TO SERVE ANOTHER SHELL. The engine
+        // binds this and answers `load_shell` on it; the supervisor dials it
+        // when somebody types `domicile load-shell`. Given on every run rather
+        // than only in a dev loop: which shell a desktop serves is not a
+        // developer's question, and an engine started without it is one whose
+        // shell cannot be replaced without stopping the desktop.
+        format!("--domicile-command-socket={}", runtime.command.display()).into(),
         // WHAT THE ENGINE SAYS ABOUT A DEAF DESKTOP IS ONE SEVERITY BELOW
         // WHAT IT PRINTS. `base/logging.cc` writes a message to stderr when
         // `LOG_TO_STDERR` is in the destination OR when the message is at
