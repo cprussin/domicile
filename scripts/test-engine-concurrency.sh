@@ -250,6 +250,61 @@ else
     "only $holders workflow(s) take $LOCK_SH; a lock one side does not take is not a lock"
 fi
 
+# --- THE HOLD IS THE GUARD RUN, NOT THE TIMED STEP --------------------------
+
+# WHAT THE NARROW HOLD ASSUMED, AND WHAT MEASURED IT FALSE. The lock was first
+# taken around `guard-latency.sh` alone, on the reasoning that a second job on
+# the card makes a pixel comparison slower rather than wrong. Measured on
+# 2026-09-22, with `Engine` run 513 and `Pinned engine` run 192 on the machine
+# together: engine.yml's own `A client's window on the page` took 67s where it
+# takes 6s alone, and the other job's engine lost its Wayland connection
+# outright -- `Fatal Wayland communication error: Broken pipe` at 01:04:21,
+# one second after run 513 entered that step. A guard with a bound is wrong
+# when it is eleven times slower, and a guard whose engine is dead is not slow
+# at all.
+#
+# So the rule is about the card rather than about timing: every step that
+# drives the render node runs while this workflow holds it. `under-wayland.sh`
+# is what says a step does -- it starts a wlroots compositor on
+# `/dev/dri/renderD128` and runs a real engine as its client, and nothing
+# reaches the card here without going through it.
+#
+# ORDER IN THE FILE IS THE ORDER THE STEPS RUN, which is what makes this
+# readable with awk: a `take` opens a hold, the next `drop` closes it, and an
+# `under-wayland.sh` outside any hold is a step on the card with nothing
+# serializing it. A workflow is free to open more than one -- engine.yml drops
+# the card before the release build, which is four hours that touch no card,
+# and takes it again for the guard against the packaged tarball.
+carded=0
+for workflow in "$WORKFLOWS"/*.yml; do
+  name="$(basename "$workflow")"
+  commands "$workflow" | grep -q 'under-wayland.sh' || continue
+  carded=$((carded + 1))
+
+  counts="$(commands "$workflow" |
+    awk -v take="$LOCK_SH take" -v drop="$LOCK_SH drop" '
+      index($0, take) { held = 1; next }
+      index($0, drop) { held = 0; next }
+      /under-wayland\.sh/ { total++; if (!held) { loose++ } }
+      END { printf "%d %d\n", total + 0, loose + 0 }')"
+  total="${counts% *}"
+  loose="${counts#* }"
+
+  if [ "$loose" -eq 0 ]; then
+    ok "$name holds the render node across all $total of its steps that drive it"
+  else
+    fail "$name holds the render node across all $total of its steps that drive it" \
+      "$loose of them run outside any hold, so the other runner's job draws on the same card"
+  fi
+done
+
+if [ "$carded" -ge 2 ]; then
+  ok "the workflows that drive the card were found at all ($carded of them)"
+else
+  fail "the workflows that drive the card were found at all" \
+    "only $carded workflow(s) run under-wayland.sh; the rule above asserted nothing"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

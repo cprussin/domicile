@@ -188,17 +188,25 @@ jobs:
       #
       # This job and `engine.yml` are now two slots on one machine, which is
       # what stopped this waiting hours for a tarball fetch. The card did not
-      # get a second one. Most of what either job does is fine beside the other
-      # -- a pixel comparison asks whether a color landed, and a busy machine
-      # makes that slower rather than wrong -- but `engine.yml` ends in
-      # `guard-latency.sh`, which times sixty keystroke-to-pixel rounds, and a
-      # second client on the render node is indistinguishable from the
-      # regression that guard is there to catch.
+      # get a second one, and the step below is a whole engine drawing a whole
+      # client's window on 4G of VRAM.
       #
-      # Taken here rather than for the whole job, because holding it from
-      # checkout to drop would put these two back into one queue and undo the
-      # change that gave this job its own slot. The fetch and the cargo build
-      # above touch no card.
+      # WHAT THIS USED TO WAIT FOR WAS `guard-latency.sh` AND IS NOW EVERY
+      # GUARD OVER THERE. The reasoning was that only a timed guard can be made
+      # wrong by a second job -- a pixel comparison asks whether a color landed,
+      # and a busy machine makes that slower rather than wrong. This step is the
+      # one that disproved it: on 2026-09-22 it ran beside `Engine` run 513's
+      # own client-window guard, its engine died with `Fatal Wayland
+      # communication error: Broken pipe` 43 seconds in, and it then polled a
+      # dead process for the whole four minutes `LOOKS` had just been raised
+      # to. `engine.yml` now holds the card across all of its guards, so the
+      # wait here is up to ~10 minutes rather than ~16 seconds -- inside the
+      # `timeout-minutes: 30` above, and inside the lock's own 20-minute
+      # give-up, which is what this is meant to fail on if the card wedges.
+      #
+      # Still taken here rather than for the whole job: the fetch and the cargo
+      # build above touch no card, and holding it across them would make this
+      # job's queue the other job's problem for nothing.
       #
       # It waits where the tree lock refuses; see the script's header for why
       # the second slot is what makes that safe.

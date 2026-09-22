@@ -160,6 +160,44 @@ expect "a lock timestamped in the future is not stolen" 1 "$(status_of "$r")"
 expect "and its owner keeps it too" "engine-run-4" \
   "$(cat "$WORK/lock/owner" 2>/dev/null)"
 
+# --- the bounds themselves ---------------------------------------------------
+
+# A STALE BOUND IS A CLAIM ABOUT HOW LONG A HOLD CAN LEGITIMATELY LAST, and the
+# hold is no longer one timed step. It spans every step of `engine.yml` that
+# drives the card -- see scripts/test-engine-concurrency.sh for why -- and that
+# span was measured on `crux` off the jobs API: 462s on run 516 (warm tree,
+# 2026-09-22) and 587s on run 495 (a pin roll, whose 3h51m build is outside the
+# hold because the card is taken after it). The build's length does not enter
+# it; the guards' does, and they are the same guards either way.
+#
+# 600s was above the old hold "by a wide margin" and is thirteen seconds above
+# the new one, which is not a margin. A bound below the hold does not fail
+# safe: the waiter steals a card its holder is still drawing on, and both runs
+# are then wrong rather than one being slow.
+default_of() { # env var suffix
+  sed -n "s/.*\${DOMICILE_RENDER_NODE_$1:-\([0-9][0-9]*\)}.*/\1/p" "$LOCK_SH" | head -1
+}
+stale="$(default_of STALE_AFTER)"
+max_wait="$(default_of MAX_WAIT)"
+
+if [ "${stale:-0}" -ge 900 ]; then
+  ok "the stale bound leaves room for a hold that spans a guard run ($stale s)"
+else
+  fail "the stale bound leaves room for a hold that spans a guard run" \
+    "it is ${stale:-unreadable}s, and the longest hold measured on crux is 587s"
+fi
+
+# AND IT HAS TO BE REACHABLE. The steal is tried on every pass of the wait
+# loop and the give-up is checked after it, so a stale bound at or above the
+# give-up bound is one that never fires: a leaked lock would turn into a red
+# check on the every-pull-request job instead of a warning and a re-run.
+if [ "${stale:-0}" -lt "${max_wait:-0}" ]; then
+  ok "and a lock nothing will come back for is stolen before the wait gives up ($stale < $max_wait)"
+else
+  fail "and a lock nothing will come back for is stolen before the wait gives up" \
+    "stale after ${stale:-unreadable}s, gives up after ${max_wait:-unreadable}s"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

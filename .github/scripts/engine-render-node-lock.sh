@@ -13,14 +13,22 @@
 # 2026-09-19. Splitting the queue gave back those hours and gave away the one
 # thing the single slot was quietly providing.
 #
-# MOST GUARDS DO NOT CARE, AND ONE DOES. A pixel comparison asks whether a
-# color landed; a second job on the card makes it slower and does not make it
-# wrong. `guard-latency.sh` asks what a keystroke costs to reach a pixel, over
-# sixty rounds, and a concurrent job is indistinguishable from the regression
-# it exists to catch. So this is not taken around every guard -- that would put
-# the two runners back into one queue and undo the change that created it. It
-# is taken around the steps that time something, and `pinned-engine.yml`'s
-# guard, which is the only thing on the other runner that can perturb them.
+# EVERY GUARD THAT DRIVES THE CARD, WHICH IS NOT WHAT THIS FIRST SAID. It said
+# that a pixel comparison asks whether a color landed, so a second job on the
+# card makes it slower and not wrong, and that only `guard-latency.sh` -- sixty
+# keystroke-to-pixel rounds -- could be made wrong by one. That premise was
+# measured false on 2026-09-22, with `Engine` run 513 and `Pinned engine` run
+# 192 on the machine together: run 192's engine died of a broken Wayland pipe
+# a second after run 513 entered its own client-window guard, and that guard
+# took 67s where it takes 6s alone. A GTX 970 has 4G of VRAM and the two jobs
+# each want an engine, a compositor and a nested wlroots on it.
+#
+# So the scope is the card rather than the clock: taken around every step of
+# either job that runs `under-wayland.sh`, and around nothing else.
+# `scripts/test-engine-concurrency.sh` is what says so, by reading the
+# workflows. It is still NOT taken around a whole job -- the Chromium build,
+# the unit tests and the release build touch no render node, and between them
+# they are the hours that splitting the slot was for.
 #
 # IT WAITS, WHERE THE TREE LOCK REFUSES, AND THE DIFFERENCE IS THE SLOT COUNT.
 # `engine-tree-lock.sh` refuses and exits 1 because on a one-slot machine a run
@@ -33,11 +41,15 @@
 # AND IT STEALS A LOCK THAT IS TOO OLD, WHERE THE TREE LOCK WILL NOT. That is
 # the same difference read the other way. A stale tree lock must be cleared by
 # a person because guessing wrong means a reset landing inside somebody's
-# four-hour build. Guessing wrong here means one guard runs beside another job
-# and may report a latency it should not -- a re-run, not a lost afternoon. A
-# canceled run is the ordinary way this leaks, and `pinned-engine.yml` cancels
+# four-hour build. Guessing wrong here means two engines on the card at once,
+# which costs the two runs that were going and not the afternoon. A canceled
+# run is the ordinary way this leaks, and `pinned-engine.yml` cancels
 # superseded runs now, so a lock nothing can clear would wedge the every-PR
 # job within a day.
+#
+# THE PRICE OF GUESSING WRONG WENT UP WITH THE HOLD, which is why the stale
+# bound moved with it -- see below. It used to be a latency number worth
+# re-running; it is now a guard whose engine may not survive the company.
 set -u
 
 usage() {
@@ -57,12 +69,32 @@ owner="${2:-}"
 LOCK="${DOMICILE_RENDER_NODE_LOCK:-/build/.domicile-render-node-lock}"
 
 # How long to wait for the card before giving up, and how old a lock has to be
-# before it is read as abandoned rather than held. The stale bound is above the
-# longest run of guarded steps by a wide margin -- the timed steps are seconds
-# and `pinned-engine.yml`'s guard is ~65s -- so a lock older than this is not a
-# job that is taking its time.
+# before it is read as abandoned rather than held.
+#
+# THE STALE BOUND IS A CLAIM ABOUT THE LONGEST LEGITIMATE HOLD, and that hold
+# grew by thirty times. It was 600s when `engine.yml` took this around two
+# timed steps and `pinned-engine.yml` around a ~65s guard; it is now taken
+# around every step of either job that drives the card, because two engines on
+# one GTX 970 is not slower, it is one of them dying. Measured on `crux` off
+# the jobs API: `engine.yml` holds it for 462s on run 516 (warm tree) and 587s
+# on run 495 (a pin roll, whose 3h51m build is outside the hold). 600 would
+# have been thirteen seconds of margin over the second of those, and a stale
+# bound below the hold does not fail safe -- the waiter steals a card its
+# holder is still drawing on, and then both runs are wrong instead of one of
+# them being slow.
+#
+# 900 is that 587 with half again on top. What it costs when it is wrong is a
+# lock left by a machine that went away being held onto for fifteen minutes
+# instead of ten, which is a wait rather than a wedge: `pinned-engine.yml`'s
+# `timeout-minutes: 30` is above both.
+#
+# AND IT STAYS BELOW MAX_WAIT, which is not decoration. The steal is tried on
+# every pass of the loop and the give-up is checked after it, so a stale bound
+# at or above the give-up bound is one that never fires -- a leaked lock would
+# become a red check on the every-pull-request job rather than a warning and a
+# re-run. scripts/test-engine-render-node-lock.sh asserts both numbers.
 MAX_WAIT="${DOMICILE_RENDER_NODE_MAX_WAIT:-1200}"
-STALE_AFTER="${DOMICILE_RENDER_NODE_STALE_AFTER:-600}"
+STALE_AFTER="${DOMICILE_RENDER_NODE_STALE_AFTER:-900}"
 
 now() { date +%s; }
 

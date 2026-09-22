@@ -649,6 +649,57 @@ jobs:
       - name: Build the compositor
         run: nix develop .#full --command cargo build -p domicile-compositor
 
+      # ONE JOB AT A TIME ON THE CARD, FROM HERE TO THE LAST GUARD.
+      #
+      # `crux` runs two jobs at once (cprussin/dotfiles:
+      # config/machines/crux/domicile-ci.nix). That is what stopped
+      # `pinned-engine.yml` -- 1m51s of work, no Chromium tree, every pull
+      # request -- from queueing three hours behind this build. The machine's
+      # single job slot was what made that queue, and it was also, by accident,
+      # a lock over the render node. Nothing but this replaces it.
+      #
+      # THIS WAS TAKEN AROUND `guard-latency.sh` ALONE, AND THE PREMISE FOR
+      # THAT IS NOW MEASURED FALSE. The premise was that timing is the only
+      # thing a second job makes WRONG rather than merely slower, so the rest
+      # could be bought off with patience: a pixel comparison asks whether a
+      # color landed, and a busy card still lands it. Three bounds were raised
+      # on that reasoning inside ninety minutes -- `LOOKS` 60 -> 240 among them
+      # -- and here is what the fourth failure looked like, with `Engine` run
+      # 513 and `Pinned engine` run 192 on the machine together:
+      #
+      #   01:04:20  run 513 enters this step
+      #   01:04:21  run 192's engine: Fatal Wayland communication error:
+      #             Broken pipe   <- eighteen seconds before its client appeared
+      #   01:05:27  run 513 leaves this step: 67s for what takes 6s alone
+      #   01:08:41  run 192 gives up, having polled a dead engine for 240s
+      #
+      # Neither half of that is a timeout. A guard eleven times slower spends
+      # whatever patience it was given, which is what the 240 was and what the
+      # 240 did; and a guard whose engine has died is not being slow, it is
+      # polling a corpse. No bound fixes a process that is gone, so the answer
+      # to the fourth failure is not a fourth bound.
+      #
+      # WHAT THE WIDER HOLD COSTS, off the jobs API rather than off intuition.
+      # The span from here to the drop below is 462s on run 516 (warm tree) and
+      # 587s on run 495 (a pin roll). It does not scale with the build: run
+      # 495's build was 3h51m and is entirely above this line, because the card
+      # is taken after it. So the every-pull-request job waits at most ~10
+      # minutes, against the 3h01m of queue that splitting the slot gave it
+      # back -- 5% of that saving, and only on the pull requests that touch the
+      # engine at all.
+      #
+      # NOT AROUND THE WHOLE JOB EITHER, and that part of the old note stands.
+      # The build, the unit tests and the release build below touch no card,
+      # and the release build is four hours. The card is dropped before it and
+      # taken again for the one guard down there that drives it.
+      #
+      # It waits where the tree lock refuses; see the script's header for why
+      # the second slot is what makes that safe. What has to stay above the
+      # span measured here is the lock's own stale bound, and
+      # scripts/test-engine-render-node-lock.sh is what says so.
+      - name: Take the render node
+        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
+
       # The guard. A real Wayland client draws a color, the compositor submits
       # its buffer to the engine, and the page's canvas is read back — the one
       # check that says a client's own pixels reach the page.
@@ -1031,42 +1082,25 @@ jobs:
       # The one requirement nothing measured until now. Last of the guards
       # because it is the longest: sixty rounds, each a keystroke and a wait
       # for the browser to draw.
-      # THE CARD, TAKEN FOR THE TWO STEPS THAT TIME SOMETHING AND NO OTHERS.
-      #
-      # `crux` runs two jobs at once now (cprussin/dotfiles:
-      # config/machines/crux/domicile-ci.nix). That is what stopped
-      # `pinned-engine.yml` -- 1m51s of work, no Chromium tree, every pull
-      # request -- from queueing three hours behind this build. The machine's
-      # single job slot was what made that queue, and it was also, by accident,
-      # a lock over the render node.
-      #
-      # Every other guard in this job survives losing it: they ask whether a
-      # color landed, and a second client on the card makes that slower rather
-      # than wrong. THAT IS TRUE ONLY WHILE EACH OF THEM IS PATIENT ENOUGH TO
-      # BE SLOWED, which `guard-client-window.sh` stopped being once #485 made
-      # an engine run eleven minutes of mostly guards rather than four hours of
-      # mostly compiling: it gave up after 60s and `pinned-engine.yml` went red
-      # on `main` beside a green run of this job. Its poll waits four minutes
-      # now, and `scripts/test-the-client-window-guard-outwaits-a-busy-card.sh`
-      # is what keeps it there. The answer was patience rather than this lock,
-      # because a pixel guard beside another client is slow and not wrong.
-      #
-      # These two are the ones that are wrong. `guard-latency.sh` reports what a
+      # STILL INSIDE THE HOLD TAKEN ABOVE, and this is the step whose failure
+      # would be the quietest if it were not. `guard-latency.sh` reports what a
       # keystroke costs to reach a pixel over sixty rounds, and another job
       # drawing on the same node during those rounds is indistinguishable from
       # the regression it exists to catch -- a red check nobody caused, which
       # is the failure mode that teaches people to re-run until green.
       #
+      # It used to be the only thing this lock covered, and the patience
+      # `guard-client-window.sh` was given instead is still worth having:
+      # `LOOKS` waits four minutes and
+      # `scripts/test-the-client-window-guard-outwaits-a-busy-card.sh` keeps it
+      # there. Patience is what survives a machine that is merely busy -- a
+      # `nix` fetch, an interactive build, the person whose house this is. It
+      # is not what survives a second engine on the card, which is what the
+      # hold above is for.
+      #
       # Held across the control as well as the measurement, because the control
       # is a second run of the same script and a number taken beside somebody
       # else's client is not a control for one that was not.
-      #
-      # NOT AROUND THE WHOLE JOB. That would hold the card for ~15 minutes of
-      # guards that do not need it, which is the one-queue arrangement this
-      # change exists to leave.
-      - name: Take the render node
-        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
-
       - name: What a keystroke costs to reach a pixel
         run: |
           set -euo pipefail
@@ -1087,8 +1121,20 @@ jobs:
             packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
 
-      # Before the diagnostics and before the tree, because the card is the
-      # thing another job is waiting on and none of what follows needs it.
+      # THE LAST GUARD IS DONE, so the card goes back before anything else
+      # does. What follows is a release build, an upload and a git push, and
+      # the only part of it that wants a render node takes one of its own
+      # below. The other job on this machine is waiting on this line.
+      #
+      # AND THIS IS THE STEP THAT WIDENING THE HOLD PUT MOST WEIGHT ON. The
+      # hold is now eight to ten minutes rather than the ~16 seconds it was, so
+      # the window in which a job killed outright leaves the card locked is
+      # thirty times wider.
+      # `always()` covers a cancel and a failure, which is every way this job
+      # ends short of the machine going away; the lock's stale bound covers
+      # that one, and it has to be above the span above -- see
+      # scripts/test-engine-render-node-lock.sh.
+      #
       # `drop` is a no-op unless the lock is still ours, so a run that failed
       # before taking it reaches here harmlessly -- the tree lock's rule, for
       # the tree lock's reason.
@@ -1189,12 +1235,16 @@ jobs:
       # directory of its own and the same pixel guard is pointed at it. An
       # artifact that cannot show a client's window is not a release.
       #
-      # AFTER THE RENDER NODE IS DROPPED, AND THAT IS RIGHT. The card lock is
-      # held around `guard-latency.sh` alone, because timing is the one thing
-      # a second client on the node makes WRONG rather than merely slower.
-      # This is a did-the-color-land guard, which is the kind that survives
-      # sharing — see the note on `Take the render node` above, and
-      # engine-release.yml, which runs this same guard holding nothing.
+      # THE CARD AGAIN, FOR THIS STEP ALONE. It was dropped above so that the
+      # release build -- four hours that touch no render node -- would not hold
+      # it, and this is a real engine drawing a real client's window, so it can
+      # no more run beside `pinned-engine.yml`'s guard than the ones above it
+      # could. The `if:` matches the guard's, so a run that publishes nothing
+      # never takes the card at all.
+      - name: Take the render node for the packaged release
+        if: ${{ steps.release.outputs.build == 'true' }}
+        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
+
       - name: The packaged release passes the guard
         if: ${{ steps.release.outputs.build == 'true' }}
         env:
@@ -1209,6 +1259,14 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
+
+      # Before the publish, which is an upload and wants no card, and
+      # `always()` for the reason the first drop is: the guard that just failed
+      # reaches here too, and a card left locked is the every-pull-request job
+      # waiting out the stale bound to steal it.
+      - name: Drop the render node after the packaged release
+        if: ${{ always() }}
+        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
 
       - name: Publish the release
         if: ${{ steps.release.outputs.build == 'true' }}

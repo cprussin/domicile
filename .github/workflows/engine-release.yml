@@ -43,6 +43,10 @@ jobs:
       # can act on. See engine.yml.
       LOCK_OWNER: engine-release.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
+      # And who holds the render node, which is a different lock over a
+      # different thing and is why it has a name of its own. See engine.yml.
+      CARD_OWNER: engine-release.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
       # `git am` refuses to write a commit without an identity, and this unit
       # has no ~/.gitconfig: its HOME is the work directory, which is deleted
       # on every start. See engine.yml, where this failed the apply step in
@@ -191,6 +195,20 @@ jobs:
           set -euo pipefail
           .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT" "$STAGE"
 
+      # ONE JOB AT A TIME ON THE CARD. This runs on `crux` and
+      # `pinned-engine.yml` runs on `crux-light`, which is the same machine and
+      # the same render node (cprussin/dotfiles:
+      # config/machines/crux/domicile-ci.nix). The guard below is a real engine
+      # drawing a real client's window, and two of those on one GTX 970 is what
+      # `Engine` run 513 and `Pinned engine` run 192 were on 2026-09-22: one
+      # engine died with a broken Wayland pipe and the other took 67s for a 6s
+      # step. This job ran that guard holding nothing, which engine.yml's own
+      # note used to cite as evidence that holding nothing was fine.
+      #
+      # Only around the guard. The build above it is hours and touches no card.
+      - name: Take the render node
+        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
+
       # The release artifact is asserted by the same pixel guard that asserts
       # the dev build: the tarball is unpacked back into the checkout as an out
       # directory of its own and the guard is pointed at it with OUT. An
@@ -209,6 +227,13 @@ jobs:
           nix develop .#full --command \
             packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
             packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
+
+      # Even when the guard failed, and even when this run is being canceled.
+      # `drop` is a no-op unless the lock is still ours, so a run that never
+      # took it reaches here harmlessly.
+      - name: Drop the render node
+        if: ${{ always() }}
+        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
 
       - name: Publish
         env:
