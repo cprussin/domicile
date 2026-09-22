@@ -24,8 +24,12 @@ app:not([data-drawn])::after {
   position: absolute;
 }
 
-/* The keys, on a desktop with nothing else on it to say what it answers to.
-   Paint and never a hit target: a drag across an empty desktop is nobody's
+/* The keys, painted into the desktop's background rather than over it: a
+   window opens in front of the legend instead of taking it away, and the
+   desktop goes on saying what it answers to. Every window carries a z-index
+   from 1 up, so the zero here is what puts this behind all of them.
+
+   Paint and never a hit target: a drag across the desktop is nobody's
    gesture, and would take the legend with it. */
 .keys {
   align-content: center;
@@ -42,6 +46,7 @@ app:not([data-drawn])::after {
   position: fixed;
   row-gap: 0.25rem;
   user-select: none;
+  z-index: 0;
 }
 
 .keys dt {
