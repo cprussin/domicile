@@ -37,7 +37,11 @@ It provides these:
   `domicile-focus-release-requested` on the window that holds the keyboard and
   then hands it back to the page — so a shell that wants focus to be its own
   decision calls `preventDefault()` on either, and a shell with no opinion needs
-  to know nothing about them.
+  to know nothing about them. A right-click over a window also loses the
+  browser's own context menu, because the press is forwarded and the menu a
+  right-click asked for is the client's, drawn inside its surface. Only over an
+  `<app>`: a `contextmenu` anywhere else — the desktop, a shell's chrome, the
+  page inside a `<webview>` — is left uncanceled and keeps its menu.
 - **`<app>`** (`./app-element`) — the tag name, the two focus events, and the
   TypeScript for the element, which is the fork's. The surface embed and the size
   a client is configured at are both the layout box's and the engine reports
