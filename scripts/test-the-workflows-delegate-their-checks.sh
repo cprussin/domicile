@@ -151,7 +151,7 @@ fi
 
 # --- the group itself never opts out of its controls -------------------------
 
-# ELEVEN OF THE THIRTEEN GUARD CHECKS HAVE A CONTROL, and
+# TWELVE OF THE FOURTEEN GUARD CHECKS HAVE A CONTROL, and
 # `DOMICILE_GUARD_CONTROL=0` turns one off. That switch exists because `pinned-engine.yml` and
 # `engine-release.yml` each run one guard and said in prose that a second run
 # would buy nothing and spend the slot twice — and the job it must never be set

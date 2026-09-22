@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 22 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an Escape with no guest manager is not a crash
+
+A plain Escape pressed at a shell with a browser window open took the
+whole desktop down, and did it again on the next Escape after the
+restart.
+
+A `<webview>`'s page is a guest, so attaching one builds a
+`BrowserPluginEmbedder` on the shell's own WebContents --
+`BrowserPluginGuest::Init` does it -- and every key the shell's page
+leaves unhandled comes back to `WebContentsImpl::HandleKeyboardEvent`,
+which offers it to that object first. For a plain Escape, and for no
+other key, the object then walks the browser context's
+`BrowserPluginGuestManager`. This fork has none: it depends on neither
+//extensions nor //components/guest_view, so `ProfileImpl::GetGuestManager`
+answers null, and this is the one of the class's four methods that does
+not check before dereferencing it. `CancelGuestDialogs` and
+`AreAnyGuestsCurrentlyAudible` both do.
+
+`GetFullPageGuest` is the same omission on the same object, reached from
+`WebContentsImpl::SaveFrameWithHeaders` rather than from a keystroke, so
+it is closed here too rather than left for whoever asks a browser window
+to save a page.
+
+NOTHING IS LOST BY RETURNING EARLY. The loop body this skips rejects a
+pointer-lock request on each guest, and a guest in this fork cannot hold
+one: `WebViewGuest` does not override `RequestPointerLock`, so
+WebContentsDelegate's default drops the request and no page behind a
+<webview> is ever locked. A guest manager built to satisfy content would
+therefore be a manager with nothing to manage.
+
+Upstream's bug rather than the fork's, and written to be filed:
+`upstream/browser-plugin-embedder-null-guest-manager.md`. The guard is
+`scripts/guard-webview-escape.sh`, which presses the key that crashed.
+
+WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT, but with
+both blobs computed rather than zeroed: no other patch in the series
+touches this file, so its pre-image is the pin's and the post-image is
+the pin's file with these six lines in it.
+---
+ content/browser/browser_plugin/browser_plugin_embedder.cc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/content/browser/browser_plugin/browser_plugin_embedder.cc b/content/browser/browser_plugin/browser_plugin_embedder.cc
+index dba1fc6..bb5a5d2 100644
+--- a/content/browser/browser_plugin/browser_plugin_embedder.cc
++++ b/content/browser/browser_plugin/browser_plugin_embedder.cc
+@@ -50,6 +50,9 @@ bool BrowserPluginEmbedder::HandleKeyboardEvent(
+     return false;
+   }
+ 
++  if (!GetBrowserPluginGuestManager())
++    return false;
++
+   GetBrowserPluginGuestManager()->ForEachGuest(
+       web_contents_, [](WebContents* guest) {
+         guest->GotResponseToPointerLockRequest(
+@@ -63,6 +66,9 @@ bool BrowserPluginEmbedder::HandleKeyboardEvent(
+ }
+ 
+ BrowserPluginGuest* BrowserPluginEmbedder::GetFullPageGuest() {
++  if (!GetBrowserPluginGuestManager())
++    return nullptr;
++
+   WebContentsImpl* guest_contents = static_cast<WebContentsImpl*>(
+       GetBrowserPluginGuestManager()->GetFullPageGuest(web_contents_));
+   if (!guest_contents)

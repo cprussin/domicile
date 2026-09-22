@@ -33,7 +33,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 
 # The tree is required here as much as anywhere in the group, so that a machine
-# without one reports seventeen skips rather than sixteen skips and a cargo
+# without one reports eighteen skips rather than seventeen skips and a cargo
 # build. It is the same reason every other check in the group asks first.
 require_engine_out
 
