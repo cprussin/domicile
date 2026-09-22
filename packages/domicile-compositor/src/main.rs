@@ -102,6 +102,7 @@ mod latency;
 mod modifiers;
 mod outbound;
 mod peer_process;
+mod pnp_ids;
 mod restatement;
 mod scale;
 mod screens;
@@ -1318,6 +1319,15 @@ struct DomicileCompositor {
     /// answered, and a profile would take effect only when a monitor was next
     /// unplugged.
     engine_displays: Vec<engine::Display>,
+    /// hwdata's `pnp.ids`, which is what turns the three letters an EDID names
+    /// a maker with into the vendor's own name.
+    ///
+    /// Read once, at startup, because it is a file the machine ships rather
+    /// than anything about this desk: it cannot change between hotplugs, and
+    /// re-reading it per monitor would be two and a half thousand lines parsed
+    /// every time somebody plugged a cable in. Empty on a machine that has no
+    /// copy, which [`pnp_ids::read_the_table`]'s caller says out loud.
+    vendors: pnp_ids::Vendors,
     /// The chrome's `devicePixelRatio`, as it last reported it.
     ///
     /// Only one thing reads it, and it is not the output's density: Blink lays
@@ -1884,10 +1894,11 @@ impl DomicileCompositor {
                     // which is what the engine sends: what is absent from it
                     // has been unplugged.
                     self.engine_displays = displays.clone();
-                    match self
-                        .screens
-                        .replugged_into(&displays, &self.config.current().output)
-                    {
+                    match self.screens.replugged_into(
+                        &displays,
+                        &self.config.current().output,
+                        &self.vendors,
+                    ) {
                         // A desktop the config describes outright, which DRM
                         // does not overrule -- but a monitor that arrives
                         // while the screens are dark arrives LIT, and this is
@@ -4945,6 +4956,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // The table a monitor's maker is spelled out of. A machine without one
+    // names its monitors the way their firmware does, which is what every
+    // desktop here did before this table was read at all and is a perfectly
+    // usable desk — but it is also invisible from the outside, so the reason
+    // is said once, here, rather than left to be noticed by somebody wondering
+    // why their monitor is called `DEL`.
+    let vendors = match pnp_ids::read_the_table() {
+        Ok(vendors) => vendors,
+        Err(why) => {
+            warn!(
+                %why,
+                "monitors will be named the way their EDID spells them — `DEL DELL U3219Q \
+                 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`. An output.profiles \
+                 entry matches either spelling, so a profile written against either one \
+                 still applies; set DOMICILE_PNP_IDS to a copy of hwdata's table to get the \
+                 longer one back"
+            );
+            pnp_ids::Vendors::none()
+        }
+    };
+
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
@@ -4960,6 +4992,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         outputs,
         config: ConfigStore::new(config.clone()),
         engine_displays: Vec::new(),
+        vendors,
         // Modern toolkits ask for cursors by name through this global, which
         // maps straight onto CSS cursor keywords.
         cursor_shape_state: CursorShapeManagerState::new::<DomicileCompositor>(&dh),
@@ -5243,6 +5276,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     let rebuilt = data.state.screens.reloaded_into(
                         &data.state.config.current().output,
                         &data.state.engine_displays,
+                        &data.state.vendors,
                     );
                     match rebuilt {
                         // Nothing to say about the desktop: an undescribed

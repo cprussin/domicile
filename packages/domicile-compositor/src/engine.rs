@@ -158,7 +158,16 @@ pub struct Display {
     /// point: an int64 ozone derived from an EDID cannot be guessed from
     /// looking at a desk, so it is no use to somebody writing down which
     /// monitor a layout means. This is what an `output.profiles` entry matches
-    /// on, and it is the same string kanshi and sway match.
+    /// on.
+    ///
+    /// MAKE is the three letters an EDID holds and nothing more -- `DEL`, not
+    /// `Dell Inc.` -- because that is all the firmware states. The vendor's
+    /// own name is hwdata's `pnp.ids`, which libdisplay-info carries and
+    /// Chromium does not, so the string kanshi and sway match is this one with
+    /// its first word spelled out. `crate::pnp_ids` is where this side reads
+    /// that table, and `Screens` is where it is applied: a `wl_output` states
+    /// the spelled-out name and a profile matches either spelling, so this
+    /// string goes on being one of the names a monitor answers to.
     ///
     /// Called a description rather than a name because that is what it becomes
     /// one layer up: the `wl_output` keeps `drm-<id>` as its name, which is

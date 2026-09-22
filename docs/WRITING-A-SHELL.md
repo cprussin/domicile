@@ -270,12 +270,14 @@ one a shell generates depends on whether there is hardware under it:
   profile names exactly the displays it is for and says what to do with each
   one (`enabled`, `position`, a fractional `scale`, a `transform`); the first
   profile whose set is connected wins, and the match is made again on every
-  hotplug and every reload. A display may be named either way round: by its
-  `wl_output` name, which on a tty is `drm-<id>`, or by its *description* —
-  `"<MAKE> <MODEL> <SERIAL>"` off the panel's EDID, which is the string kanshi
-  and sway match on and the one a person can write down. Both survive being
-  unplugged; the description is empty for a monitor that states none of the
-  three.
+  hotplug and every reload. A display may be named any of three ways: by its
+  `wl_output` name, which on a tty is `drm-<id>`; by its *description* —
+  `"<MAKE> <MODEL> <SERIAL>"` off the panel's EDID, `DEL DELL U3219Q 2ZLS413`;
+  or by that description with the maker spelled out of hwdata's `pnp.ids`,
+  `Dell Inc. DELL U3219Q 2ZLS413`, which is the string kanshi and sway match on
+  and what the `wl_output` states. All three match, so a profile written
+  against any of them applies. All survive being unplugged; the description is
+  empty for a monitor that states none of the three.
 
 ```toml
 [[output.profiles]]

@@ -89,3 +89,36 @@ machine's decision, not a home directory's. `settings` is freeform and the
 fields are the compositor config's, which
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#the-configuration) walks
 through.
+
+### Naming a monitor
+
+`display` above is a monitor's name, and it takes any of the three a monitor
+answers to:
+
+- **`drm-<id>`** — always there, an int64 off the EDID, and no use to anybody
+  reading it off a desk.
+- **`DEL DELL U3219Q 2ZLS413`** — the panel's own name, exactly as its EDID
+  spells it: the maker in three letters, the model, the serial.
+- **`Dell Inc. DELL U3219Q 2ZLS413`** — the same name with the maker spelled
+  out of hwdata's `pnp.ids`, which is what sway and kanshi print. This is the
+  one Domicile advertises on the `wl_output`, so it is what a "which monitor is
+  this" client shows you.
+
+**Both panel spellings match, so nothing you have written stops working.** The
+three-letter form was the only one Domicile knew until recently and is still a
+name it answers to; a profile written against either applies.
+
+The table behind the longer form is hwdata's, read at run time — the flake's
+wrapper points the compositor at it, so a desktop installed from this flake
+has it. A compositor that finds no table names monitors the way their firmware
+does and says so once at startup:
+
+```
+monitors will be named the way their EDID spells them — `DEL DELL U3219Q
+2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`. …
+```
+
+That is the line to look for if `Dell Inc.` is not what you see. Point
+`DOMICILE_PNP_IDS` at a copy of `pnp.ids` to fix it; a `cargo run` out of a
+checkout finds `/usr/share/hwdata/pnp.ids` or `/usr/share/misc/pnp.ids` by
+itself.

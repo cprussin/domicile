@@ -74,9 +74,12 @@
     options = {
       display = lib.mkOption {
         description = ''
-          Which monitor this places: either the output's name (`drm-<id>`) or
-          the panel's own `"<MAKE> <MODEL> <SERIAL>"` off its EDID, which is
-          the string kanshi and sway match on.
+          Which monitor this places: the output's name (`drm-<id>`), the
+          panel's own `"<MAKE> <MODEL> <SERIAL>"` off its EDID
+          (`DEL DELL U3219Q 2ZLS413`), or that name with the maker spelled
+          out of hwdata's `pnp.ids` (`Dell Inc. DELL U3219Q 2ZLS413`), which
+          is the string kanshi and sway match on. All three match, so a
+          profile written against any of them applies.
         '';
         type = lib.types.str;
       };

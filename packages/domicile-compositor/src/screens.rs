@@ -27,6 +27,7 @@ use domicile_protocol::{DisplayInfo, DisplayTransform};
 use domicile_scene::{Bounds, Point};
 
 use crate::engine::{Connector, Display};
+use crate::pnp_ids::Vendors;
 
 /// What `wl_output` states for a screen whose physical size is not a number
 /// anybody has.
@@ -93,8 +94,15 @@ pub struct Advertised {
     pub scale: f64,
     /// Which way up the monitor is, as `wl_output.geometry` states it.
     pub transform: Transform,
-    /// The panel's own name — `"<MAKE> <MODEL> <SERIAL>"` off its EDID — or
-    /// empty for a display that has none.
+    /// The panel's own name — `"<MAKE> <MODEL> <SERIAL>"` off its EDID, with
+    /// the maker spelled out the way hwdata's `pnp.ids` spells it — or empty
+    /// for a display that has none.
+    ///
+    /// `Dell Inc. DELL U3219Q 2ZLS413` rather than `DEL DELL U3219Q 2ZLS413`,
+    /// which is what sway prints for the same monitor, and the three letters
+    /// on a machine with no such table — `advertised_description` below. An
+    /// `output.profiles` entry matches either spelling, so this being the
+    /// longer one breaks nothing that was written against the shorter.
     ///
     /// `wl_output.description`, and the other name an `output.profiles` entry
     /// may match. The *name* beside it stays `drm-<id>`: short, always there,
@@ -322,7 +330,7 @@ impl Screens {
     /// Positions are the engine's, unshifted. Ozone lays its displays out from
     /// the origin rightwards, so the desktop's corner is already (0, 0) and
     /// normalizing would be arithmetic over a fact rather than a fix.
-    pub fn from_the_engine(displays: &[Display]) -> Screens {
+    pub fn from_the_engine(displays: &[Display], vendors: &Vendors) -> Screens {
         let outputs: Vec<Advertised> = displays
             .iter()
             .map(|display| {
@@ -337,7 +345,7 @@ impl Screens {
                     position: display.position,
                     scale: 1.0,
                     transform: Transform::Normal,
-                    description: display.description.clone(),
+                    description: advertised_description(display, vendors),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
                 }
@@ -414,7 +422,7 @@ impl Screens {
     /// Not window-following, for the reason `described` and `from_the_engine`
     /// are not: these are the user's actual monitors, placed the way the user
     /// asked.
-    pub fn from_the_layout(layout: &Layout, displays: &[Display]) -> Screens {
+    pub fn from_the_layout(layout: &Layout, displays: &[Display], vendors: &Vendors) -> Screens {
         Screens {
             follows_the_window: false,
             // By the engine's own id rather than the output's name. The
@@ -450,7 +458,7 @@ impl Screens {
                         position: placed.position,
                         scale: placed.scale,
                         transform: placed.transform,
-                        description: display.description.clone(),
+                        description: advertised_description(display, vendors),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
                     }
@@ -515,6 +523,7 @@ impl Screens {
         &self,
         output: &OutputConfig,
         displays: &[Display],
+        vendors: &Vendors,
     ) -> Result<Option<Screens>, ConfigError> {
         match output.desktop() {
             Some(desktop) => Ok(Some(Screens::described(&desktop))),
@@ -522,7 +531,7 @@ impl Screens {
             // the other side: these monitors, this config, which profile. That
             // it has already established the desktop is not described is why
             // this arm cannot come back `None`.
-            None if !displays.is_empty() => self.replugged_into(displays, output),
+            None if !displays.is_empty() => self.replugged_into(displays, output, vendors),
             None if self.follows_the_window() => Ok(None),
             None => Ok(Some(Screens::nested())),
         }
@@ -599,6 +608,7 @@ impl Screens {
         &self,
         displays: &[Display],
         output: &OutputConfig,
+        vendors: &Vendors,
     ) -> Result<Option<Screens>, ConfigError> {
         if output.desktop().is_some() {
             Ok(None)
@@ -608,12 +618,15 @@ impl Screens {
                 .map(|display| Connected {
                     name: name_of(display),
                     description: display.description.clone(),
+                    spelled_out: vendors
+                        .spelled_out(&display.description)
+                        .unwrap_or_default(),
                     mode: display.size,
                 })
                 .collect();
             Ok(Some(match output.layout(&connected)? {
-                Some(layout) => Screens::from_the_layout(&layout, displays),
-                None => Screens::from_the_engine(displays),
+                Some(layout) => Screens::from_the_layout(&layout, displays, vendors),
+                None => Screens::from_the_engine(displays, vendors),
             }))
         }
     }
@@ -675,6 +688,24 @@ impl Screens {
     pub fn follows_the_window(&self) -> bool {
         self.follows_the_window
     }
+}
+
+/// The panel's own name as the `wl_output` advertising it states it.
+///
+/// The maker spelled out where this machine's table spells it, and the three
+/// letters the EDID states where it does not. That second case is not a
+/// fallback papering over a failure: a monitor whose id no table names is an
+/// ordinary monitor, and the reading that *is* a failure -- no table on this
+/// machine at all -- is stated once at startup rather than once per display.
+///
+/// The fuller name here and both spellings in `Connected` is the whole of the
+/// bargain. What a client reads off `wl_output` agrees with what sway prints,
+/// and every `output.profiles` entry ever written against the three letters
+/// goes on matching.
+fn advertised_description(display: &Display, vendors: &Vendors) -> String {
+    vendors
+        .spelled_out(&display.description)
+        .unwrap_or_else(|| display.description.clone())
 }
 
 /// What the `wl_output` for one of the engine's displays is called.
@@ -1129,24 +1160,27 @@ size = [800, 600]
         // what the screens are. Before this the compositor had no third
         // source and fell back to the window it did not have, advertising a
         // 1050x1900 desktop at a CRTC running 2880x1920.
-        let screens = Screens::from_the_engine(&[
-            Display {
-                id: 1,
-                description: "BOE NE135A1M-NY1".into(),
-                position: (0, 0),
-                size: (2880, 1920),
-                physical_mm: (597, 336),
-                refresh_mhz: 59_997,
-            },
-            Display {
-                id: 2,
-                description: String::new(),
-                position: (2880, 0),
-                size: (1920, 1080),
-                physical_mm: (0, 0),
-                refresh_mhz: 0,
-            },
-        ]);
+        let screens = Screens::from_the_engine(
+            &[
+                Display {
+                    id: 1,
+                    description: "BOE NE135A1M-NY1".into(),
+                    position: (0, 0),
+                    size: (2880, 1920),
+                    physical_mm: (597, 336),
+                    refresh_mhz: 59_997,
+                },
+                Display {
+                    id: 2,
+                    description: String::new(),
+                    position: (2880, 0),
+                    size: (1920, 1080),
+                    physical_mm: (0, 0),
+                    refresh_mhz: 0,
+                },
+            ],
+            &unspelled(),
+        );
         assert_eq!(
             screens.outputs().cloned().collect::<Vec<_>>(),
             vec![
@@ -1225,7 +1259,7 @@ size = [800, 600]
         let described_in_the_config = output(LEFT);
         assert_eq!(
             described(LEFT)
-                .replugged_into(&plugged_in(), &described_in_the_config)
+                .replugged_into(&plugged_in(), &described_in_the_config, &unspelled())
                 .expect("a described desktop is not a layout that failed"),
             None
         );
@@ -1234,7 +1268,7 @@ size = [800, 600]
     #[test]
     fn a_desktop_nothing_described_is_the_engines_to_define() {
         let taken = Screens::nested()
-            .replugged_into(&plugged_in(), &unconfigured())
+            .replugged_into(&plugged_in(), &unconfigured(), &unspelled())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         assert_eq!(taken.size(), (2880, 1920));
@@ -1250,11 +1284,11 @@ size = [800, 600]
         // away, and the desktop kept describing a screen that was no longer
         // plugged in.
         let one_monitor = Screens::nested()
-            .replugged_into(&plugged_in(), &unconfigured())
+            .replugged_into(&plugged_in(), &unconfigured(), &unspelled())
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         let both = one_monitor
-            .replugged_into(&two_plugged_in(), &unconfigured())
+            .replugged_into(&two_plugged_in(), &unconfigured(), &unspelled())
             .expect("nothing here can fail to be applied")
             .expect("a desktop the engine defined is still the engine's");
         assert_eq!(both.size(), (4800, 1920));
@@ -1268,7 +1302,7 @@ size = [800, 600]
         // about is carried through: the mode, the millimeters and the rate are
         // the panel's own and no profile invents them.
         let placed = Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(
@@ -1319,7 +1353,7 @@ size = [800, 600]
         // this is what a CRTC has to be set to for that desktop to exist at
         // all, and it is the engine that owns the CRTCs.
         let placed = Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE))
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(
@@ -1351,7 +1385,7 @@ size = [800, 600]
         // that turned a panel off stops matching the moment a monitor is
         // unplugged, and the panel has to come back on.
         let unplanned = Screens::nested()
-            .replugged_into(&plugged_in(), &output(HOME_OFFICE))
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled())
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
         assert!(unplanned.scanout().is_empty());
@@ -1381,6 +1415,7 @@ position = [0, 1080]
 scale = 1.5
 "#
                 )),
+                &unspelled(),
             )
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1401,16 +1436,84 @@ scale = 1.5
     }
 
     #[test]
+    fn a_monitors_maker_is_spelled_out_where_this_machine_has_a_table() {
+        // What the `wl_output` states, and what sway prints for the same
+        // monitor. Both displays are here because the difference between them
+        // is the whole behavior: `DEL` is in this table and `BOE` is not, and
+        // a monitor whose id nothing names keeps the three letters its EDID
+        // states rather than losing them.
+        let spelled = Screens::from_the_engine(&two_plugged_in(), &desk_vendors());
+        assert_eq!(
+            spelled
+                .outputs()
+                .map(|output| output.description.as_str())
+                .collect::<Vec<_>>(),
+            vec![LAPTOP_PANEL, "Dell Inc. DELL U3219Q G3MS413"]
+        );
+    }
+
+    #[test]
+    fn a_profile_can_name_a_monitor_by_the_vendor_spelled_out() {
+        // The other half of the table, and the reason it reaches matching at
+        // all: a desk written down off a running sway names `Dell Inc.`,
+        // because that is what sway shows. The three letters go on matching —
+        // `domicile-config` is where both spellings are tried.
+        let placed = Screens::nested()
+            .replugged_into(
+                &two_plugged_in(),
+                &output(
+                    r#"
+[[output.profiles]]
+name = "by-vendor"
+
+[[output.profiles.displays]]
+display = "Dell Inc. DELL U3219Q G3MS413"
+position = [0, 0]
+
+[[output.profiles.displays]]
+display = "BOE NE135A1M-NY1"
+position = [0, 1080]
+"#,
+                ),
+                &desk_vendors(),
+            )
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            placed
+                .outputs()
+                .map(|output| output.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["drm-2", "drm-1"]
+        );
+    }
+
+    /// A table naming the desk monitor's maker and not the laptop panel's.
+    fn desk_vendors() -> Vendors {
+        Vendors::listed_in("DEL\tDell Inc.\n")
+    }
+
+    /// A machine with no `pnp.ids` at all, which is every test but the two
+    /// above: what a table does to a name is their business and nothing
+    /// else's.
+    fn unspelled() -> Vendors {
+        Vendors::none()
+    }
+
+    #[test]
     fn monitors_no_profile_names_are_left_where_the_engine_put_them() {
         // A config with profiles in it is not a config that has a profile for
         // *this* desk. The answer is the engine's own reading rather than an
         // error or an empty desktop: a monitor plugged into a laptop on a
         // train is a desktop, it is just not one anybody wrote down.
         let unplanned = Screens::nested()
-            .replugged_into(&plugged_in(), &output(HOME_OFFICE))
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled())
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
-        assert_eq!(unplanned, Screens::from_the_engine(&plugged_in()));
+        assert_eq!(
+            unplanned,
+            Screens::from_the_engine(&plugged_in(), &unspelled())
+        );
     }
 
     #[test]
@@ -1432,6 +1535,7 @@ display = "drm-1"
 scale = 4000
 "#,
                 ),
+                &unspelled(),
             )
             .expect_err("a profile that cannot be applied says so");
         assert!(
@@ -1491,7 +1595,7 @@ scale = 1.5
         // DrmScreen answers with kDisplaylessBounds rather than an empty list,
         // so this is an engine that broke its own contract. A zero-sized
         // desktop is not a smaller desktop: every window lands off it.
-        let _ = Screens::from_the_engine(&[]);
+        let _ = Screens::from_the_engine(&[], &unspelled());
     }
 
     #[test]
@@ -1671,7 +1775,7 @@ size = [1920, 1080]
         let config = output(LEFT);
         let described = desktop(LEFT);
         assert_eq!(
-            now.reloaded_into(&config, NOTHING_PLUGGED_IN)
+            now.reloaded_into(&config, NOTHING_PLUGGED_IN, &unspelled())
                 .expect("a described desktop cannot fail to be applied"),
             Some(Screens::described(&described))
         );
@@ -1688,8 +1792,8 @@ size = [1920, 1080]
         // config knows, which is why this needs them passed in at all. With
         // none -- a nested run, or a tty before the first display event -- the
         // rules below are the ones that were here before profiles existed.
-        let placed = Screens::from_the_engine(&two_plugged_in())
-            .reloaded_into(&output(HOME_OFFICE), &two_plugged_in())
+        let placed = Screens::from_the_engine(&two_plugged_in(), &unspelled())
+            .reloaded_into(&output(HOME_OFFICE), &two_plugged_in(), &unspelled())
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(placed.size(), (1920, 3200));
@@ -1710,7 +1814,7 @@ size = [1920, 1080]
         // because that is how an atomic rename is caught.
         let now = Screens::following_the_window((1920, 1200), 2);
         assert_eq!(
-            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN)
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled())
                 .expect("an undescribed config cannot fail to be applied"),
             None
         );
@@ -1725,7 +1829,7 @@ size = [1920, 1080]
         // exactly what an undescribed desktop is.
         let now = described(&format!("{LEFT}{RIGHT}"));
         assert_eq!(
-            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN)
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled())
                 .expect("an undescribed config cannot fail to be applied"),
             Some(Screens::nested())
         );
