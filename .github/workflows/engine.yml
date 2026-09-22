@@ -176,11 +176,52 @@ jobs:
     # check on the change, and the approval gate is the control either way.
     runs-on: [self-hosted, crux]
 
-    # An incremental build is ~1m and the guard a few minutes more. The budget
+    # An incremental build is ~1m and the guards a few minutes more. The budget
     # is for the case this exists to survive: a pin roll, where the series
-    # lands on a fresh upstream revision and the build is not incremental at
-    # all.
-    timeout-minutes: 360
+    # lands on a fresh upstream revision and NEITHER build is incremental.
+    #
+    # IT WAS 360 AND THAT HELD ONE OF THE TWO. Run 35714578006, the pull
+    # request that rolled `CHROMIUM_PIN` to `86298bb`:
+    #
+    #   set up, reset, sync, apply, stamp  13:13:01 -> 13:14:56   1m55s
+    #   Build (out/Domicile, cold)         13:14:56 -> 18:22:13   5h07m
+    #   The engine's checks                18:22:13 -> 18:31:13   9m
+    #   Build the release configuration    18:31:13 -> 19:18:35   KILLED 47m in
+    #   package / guard / publish / repin                         SKIPPED
+    #
+    # Six hours and five minutes of the one slot for nothing: no tarball, no
+    # release, and `engine-release.nix` never written back — which is the step
+    # that turns a repin pull request green, so the branch stayed red for the
+    # absence of what the run was killed before producing. The budget has to
+    # hold BOTH compiles, because the steps below are both of them.
+    #
+    # 720 AGAINST A MEASURED 9h09m. The second half is `engine-release.yml`'s
+    # own number for the same `engine-release-build.sh` into the same
+    # `out/Release` after a pin moved — 3h46m on run 35559130923, 3h25m on run
+    # 35620485558 — so a finished version of the run above is 1m55s + 5h07m +
+    # 9m + 3h46m + ~4m of package, guard, publish and write-back. The headroom
+    # over that is deliberate and not round-number padding: the same cold
+    # `out/Domicile` has measured 4h16m on a quiet machine and 5h07m here, and
+    # `crux` also serves its owner's interactive builds. 600 would leave 51
+    # minutes over the only cold repin anybody has timed, and being an hour
+    # short costs the whole nine and publishes nothing.
+    #
+    # WHAT THE LARGER NUMBER COSTS is that a WEDGED job holds the one slot for
+    # twelve hours rather than six. That is the right trade and not a close
+    # one: the failure this repository has actually had is a working job killed
+    # at its budget, which wastes the slot for the full budget AND produces
+    # nothing, where a wedge wastes the same slot and was never going to
+    # produce anything either. A budget is a ceiling, not a spend — the ~11m
+    # run that most pull requests get is unchanged.
+    #
+    # IT CANNOT DIFFER PER CASE. `timeout-minutes` is fixed before the job
+    # starts, and which case a run is in — does the checkout carry this series,
+    # does this series still owe a release — is decided by `steps.series` and
+    # `steps.release` INSIDE it. So one number, and it has to be the expensive
+    # run's. See scripts/test-the-engine-budget-holds-both-builds.sh, which
+    # asserts this against that measurement and against
+    # `engine-release.yml`'s budget for the strictly smaller job.
+    timeout-minutes: 720
 
     env:
       # The warm tree. Outside the workspace on purpose, and for a stronger
