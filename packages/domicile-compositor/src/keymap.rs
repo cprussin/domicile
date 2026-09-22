@@ -24,10 +24,16 @@ use smithay::input::keyboard::xkb;
 
 /// xkb would not build a keymap out of what the config names.
 ///
-/// Fatal, and deliberately so: a desktop that came up on whatever layout
-/// libxkbcommon fell back to would be one typing in a layout nobody chose,
-/// which is the failure this whole message exists to end rather than a
+/// Fatal at startup, and deliberately so: a desktop that came up on whatever
+/// layout libxkbcommon fell back to would be one typing in a layout nobody
+/// chose, which is the failure this whole message exists to end rather than a
 /// degraded mode to run in.
+///
+/// On a *reload* it is refused rather than fatal — the desk is already typing
+/// on a layout that compiled, and taking it down over a typo in a file
+/// somebody is mid-edit costs them every window that was open. Same error,
+/// different answer, because the two moments have different things to lose;
+/// see `retype_the_desktop`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
     "xkb cannot compile a keymap for input.keyboard: rules={rules:?} model={model:?} \

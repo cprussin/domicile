@@ -32,6 +32,22 @@ size = [2560, 1440]
 scale = 2
 "#;
 
+/// A desktop nothing describes, so the window's own density decides it, with
+/// room for a retina one.
+///
+/// No `output.displays`: `max_scale` governs the single output that follows
+/// Domicile's window, and a described display states its own scale instead.
+const A_CAP_OF_TWO: &str = r#"
+[output]
+max_scale = 2
+"#;
+
+/// The same desk with scaling turned off, which is what `1` means.
+const A_CAP_OF_ONE: &str = r#"
+[output]
+max_scale = 1
+"#;
+
 #[test]
 fn a_chrome_is_told_the_whole_desktop_at_the_handshake() {
     let compositor = Compositor::started_with(SIDE_BY_SIDE);
@@ -243,6 +259,102 @@ size = [1024, 768]
         vec!["only"],
         "a chrome that connected after the change must not be told the old desktop"
     );
+}
+
+/// A cap edited on disk is the cap the desktop is advertised under, now and
+/// for the next density a chrome reports.
+///
+/// `output.max_scale` is a cost dial — a client asked for scale N draws N²
+/// times the pixels — so the edit a person makes is the one they make when a
+/// desk is too slow, with windows open on it. A reload that stored the number
+/// and left the desktop at the old one is the shape of "the save did nothing".
+///
+/// Both claims in one check, because they are one sequence and the second
+/// needs the first to have happened to be observable at all. They are separate
+/// mutations, though, and the assertions say which is which: the scale the
+/// desktop is restated at is the compositor's own, while the cap a later
+/// `SetDevicePixelRatio` is bounded by is read on the connection thread, from
+/// the hub.
+///
+/// The second half asserts an absence without waiting for one. A density that
+/// is refused sends nothing, so the desktop is resized *after* it and the
+/// answer to that carries the scale: the two messages are handled in order on
+/// the one Wayland thread, so a cap that had gone stale would have raised the
+/// scale before the size arrived and be reported by the line that reads it.
+///
+/// **Every wait names a size no earlier message carried.** A match is consumed
+/// but the messages it was found behind stay waitable, so a wait for "scale 1"
+/// on a desktop that *started* at scale 1 is answered by the handshake — the
+/// reload need never have happened. The window is resized between the phases
+/// so each one is a desktop nothing has described before.
+#[test]
+fn a_cap_edited_on_disk_bounds_the_desktop_and_the_next_density() {
+    let compositor = Compositor::started_with(A_CAP_OF_TWO);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SetDevicePixelRatio { ratio: 2.0 })
+        .expect("the chrome reports its density");
+    chrome
+        .say(&ChromeMessage::SetDesktopSize {
+            size: [1000.0, 700.0],
+        })
+        .expect("and how big its window is");
+    chrome
+        .wait_for(|message| desktop_is(message, [1000, 700], 2))
+        .expect("a chrome on a dense display takes the desktop up to scale 2");
+
+    compositor.reconfigure(A_CAP_OF_ONE);
+
+    let told = chrome
+        .wait_for(|message| desktop_is(message, [1000, 700], 1))
+        .expect("the reloaded cap reaches the desktop that is up");
+    let HostMessage::Displays { displays } = told else {
+        unreachable!("the wait matched on this");
+    };
+    // The mode comes down with the scale and the logical size holds: the mode
+    // is physical pixels, so a desktop that dropped a density draws fewer of
+    // them over the same screen.
+    assert_eq!(
+        displays[0].mode,
+        [1000, 700],
+        "the mode is the logical size at the cap the file now states"
+    );
+
+    chrome
+        .say(&ChromeMessage::SetDevicePixelRatio { ratio: 3.0 })
+        .expect("the chrome reports a density the new cap refuses");
+    chrome
+        .say(&ChromeMessage::SetDesktopSize {
+            size: [900.0, 600.0],
+        })
+        .expect("and then a size, which is answered");
+
+    let told = chrome
+        .wait_for(|message| match message {
+            HostMessage::Displays { displays } => {
+                displays.iter().any(|display| display.size == [900, 600])
+            }
+            _ => false,
+        })
+        .expect("the resized desktop reaches the chrome");
+    let HostMessage::Displays { displays } = told else {
+        unreachable!("the wait matched on this");
+    };
+    assert_eq!(
+        displays[0].scale, 1,
+        "a density reported after the edit is bounded by the cap the edit set"
+    );
+}
+
+/// Whether a message describes a one-display desktop of exactly this size and
+/// density.
+fn desktop_is(message: &HostMessage, size: [u32; 2], scale: u32) -> bool {
+    match message {
+        HostMessage::Displays { displays } => displays
+            .iter()
+            .any(|display| display.size == size && display.scale == scale),
+        _ => false,
+    }
 }
 
 /// And a described desktop keeps the scale its config gave it.

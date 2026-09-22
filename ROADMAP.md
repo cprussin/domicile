@@ -57,8 +57,6 @@ The evidence for each of those is in the doc that made the claim —
      `zwp_idle_inhibit_manager_v1` and Smithay ships support; what it needs
      here is a client's inhibitor reaching `Idle` and an answer for an
      inhibitor held by a client that died.
-   - **A reloaded timeout.** Read at startup only, with the rest of the config
-     — see the gap below.
 
 ## In the engine fork — the agent on `crux`
 
@@ -181,8 +179,6 @@ costs nothing.
   name that does not match, active mixed content — need an https fixture with a
   cert the browser distrusts, and until one exists `dangerous` is a path no run
   has taken.
-- **A config reload acts on the display list and nothing else.** `output.max_scale`,
-  the keymap and the rest are stored and keep their startup values.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **A `wl_output` that is not a panel reports no physical size and no refresh** —
   zero for both, which is what `wl_output` says a screen with no such number
