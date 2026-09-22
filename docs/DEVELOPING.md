@@ -104,6 +104,13 @@ is separately slow *after* mapping; see the kitty note below.
   tab was dragged.
 - **gpg signing fails in the agent container.** Commit with
   `git -c commit.gpgsign=false …`.
+- **Outside `nix develop`, `cargo test` may not be able to link.**
+  `domicile-compositor` is the one crate that links a system library, and a
+  container without a linkable libxkbcommon fails it with `rust-lld: error:
+  unable to find library -lxkbcommon` after `fmt` and `clippy` have both
+  passed. `check.sh` now skips `cargo test` and says so rather than showing
+  you the linker; the fix is `nix develop .#full`, or the
+  `libxkbcommon-dev` that `cargo-test.yml` installs on its runner.
 
 Smithay, specifically:
 

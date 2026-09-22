@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# The two libraries that decide whether a check can run here, driven directly.
+# The three libraries that decide whether a check can run here, driven directly.
 #
 # `check.sh` reads exit 77 as "did not run" and everything else non-zero as
 # "failed", and under `DOMICILE_CHECK_STRICT=1` a skip is itself a failure that
 # names which check stopped running. All of that depends on a check getting the
-# status right when its prerequisite is missing, and the two prerequisites here
-# are absent on most machines: `nix`, and a warm Chromium tree.
+# status right when its prerequisite is missing, and all three prerequisites
+# here are absent on most machines: `nix`, a warm Chromium tree, and a
+# libxkbcommon the C compiler can resolve.
 #
 # Getting it wrong is expensive in both directions. Exit 1 without nix makes
 # `./scripts/check.sh` unrunnable on a laptop, which is how a suite stops being
@@ -23,8 +24,10 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE_LIB="$ROOT/scripts/lib/engine-guard.sh"
 NIX_LIB="$ROOT/scripts/lib/nix-check.sh"
+RUST_LIB="$ROOT/scripts/lib/rust-check.sh"
 [ -f "$ENGINE_LIB" ] || { echo "no $ENGINE_LIB" >&2; exit 1; }
 [ -f "$NIX_LIB" ] || { echo "no $NIX_LIB" >&2; exit 1; }
+[ -f "$RUST_LIB" ] || { echo "no $RUST_LIB" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -278,6 +281,54 @@ case "$got" in
       "nothing ran at all, so the check would pass having measured nothing" ;;
   (*) ok "opting out drops the control and not the guard" ;;
 esac
+
+echo "a rust check with nothing to link against"
+
+# A `cc` of our own, because what the library asks is whether the COMPILER can
+# resolve `-lxkbcommon` -- which is a question about its search path, and nix's
+# search path is not the distribution's. Looking for the file under
+# `/usr/lib/x86_64-linux-gnu` instead would report it missing inside
+# `nix develop .#full`, where it is present and nowhere near there.
+STANDIN_CC="$WORK/cc"
+mkdir -p "$STANDIN_CC"
+cc_that() { # exit status the stand-in compiler gives every invocation
+  printf '#!/bin/sh\nexit %s\n' "$1" >"$STANDIN_CC/cc"
+  chmod +x "$STANDIN_CC/cc"
+}
+
+cc_that 1
+expect_skip "a cc that cannot resolve -lxkbcommon is a skip, not a failure of the code" \
+  "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries"
+
+# The words have to name the library and a way to get one, because replacing a
+# message nobody can act on is the whole point. What it replaces is
+# `rust-lld: error: unable to find library -lxkbcommon` under two hundred lines
+# of object file names, arriving after `cargo fmt` and `cargo clippy` have both
+# passed -- which reads as a broken tree rather than as a library nobody
+# installed, and cost this repository a baseline run to tell apart.
+why="$(drive "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
+case "$why" in
+  (*xkbcommon*"nix develop"*) ok "it names the library and where to get one" ;;
+  (*) fail "it names the library and where to get one" "the skip said: $why" ;;
+esac
+
+# No compiler at all is its own answer. A machine with no `cc` links nothing,
+# and telling it to install a development package would be advice that does
+# not help.
+expect_skip "no cc is a skip, not a failure of the code" \
+  "$RUST_LIB" "PATH='$WORK/nowhere' require_linkable_libraries"
+
+# AND THE POSITIVE, for the reason the nix one below gives: every assertion
+# above is satisfied by a library that skips unconditionally, which would be a
+# `cargo test` that never runs and never fails.
+cc_that 0
+status="$(drive_status "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
+if [ "$status" -eq 0 ]; then
+  ok "a cc that links is not a skip"
+else
+  fail "a cc that links is not a skip" \
+    "it exited $status where the library resolved, so cargo test would never run"
+fi
 
 echo "a nix check with no nix"
 
