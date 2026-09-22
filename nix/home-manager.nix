@@ -195,7 +195,9 @@ in {
         `''${config.xdg.configHome}/domicile/domicile.toml` -- which is where
         `domicile` looks when nothing hands it a `--config`.
 
-        Re-read while it runs, so a rebuild reaches a desk that is already up.
+        Re-read while it runs, so a rebuild reaches a desk that is already
+        up -- every field of it, the keyboard and the scale as well as the
+        displays, with the windows left open.
 
         This is the `domicile-config` schema in Nix, and it is freeform: a key
         this module has not caught up with is written through rather than
@@ -216,6 +218,11 @@ in {
                 is no lock behind the blank yet and nothing tells the shell a
                 moment before, so this is opt-in: a desk that says nothing
                 keeps its screens on.
+
+                Followed on a reload, from either direction: a rebuild can
+                give a running desk a timeout it never had, or take one away.
+                A desk whose screens were off when this changed gets them
+                back.
               '';
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
@@ -277,6 +284,9 @@ in {
 
                 Governs only the output that follows Domicile's own window --
                 a described display states its own scale.
+
+                Followed on a reload: turning it down on a desk that is up
+                re-advertises that desk at the new cap.
               '';
               type = lib.types.ints.positive;
               default = 2;

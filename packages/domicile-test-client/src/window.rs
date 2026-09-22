@@ -1178,7 +1178,10 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
 ///
 /// `modifiers` as well as `key`: a compositor that loses a key release leaves
 /// a modifier held for good, and the count of one against the other is what
-/// says so.
+/// says so. And `keymap`, which is the layout those keys are read against: it
+/// arrives once when the keyboard is bound and again whenever the compositor
+/// changes it, so a check that counts them can tell a desk that took up an
+/// edited config from one that merely said it had.
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     fn event(
         _: &mut Client,
@@ -1203,6 +1206,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                     key,
                     number(state)
                 );
+            }
+            wl_keyboard::Event::Keymap { fd, size, .. } => {
+                crate::say!(keyboard.id(), "keymap({})", layout_named_by(fd, size));
             }
             wl_keyboard::Event::Modifiers {
                 serial,
@@ -1303,6 +1309,41 @@ fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
     match stated {
         WEnum::Value(known) => known.into(),
         WEnum::Unknown(raw) => raw,
+    }
+}
+
+/// What the keymap on `fd` calls its first group — `English (Dvorak)`.
+///
+/// The one line of a compiled keymap that names the layout in words, which is
+/// what makes a trace line worth reading: the text itself is sixty kilobytes,
+/// and a length or a checksum would say two keymaps differ without saying
+/// which is which.
+///
+/// Read rather than mapped, because a `wl_keyboard.keymap` fd is a file this
+/// client is handed and `read_exact_at` needs no `unsafe` to take it. The
+/// compositor states the size, and it counts the trailing NUL the protocol
+/// requires — so the text is everything before it.
+///
+/// A keymap this cannot read is reported as what was found rather than
+/// resolved into a plausible layout: a check waiting for a layout fails on
+/// the line, with the reason in it, instead of passing on a guess.
+fn layout_named_by(fd: std::os::fd::OwnedFd, size: u32) -> String {
+    let file = std::fs::File::from(fd);
+    let mut text = vec![0u8; size as usize];
+    if let Err(why) = file.read_exact_at(&mut text, 0) {
+        return format!("unreadable: {why}");
+    }
+    let Ok(text) = String::from_utf8(text) else {
+        return "not text".to_string();
+    };
+    let opens = "name[Group1]=\"";
+    let Some(at) = text.find(opens) else {
+        return "no group name".to_string();
+    };
+    let rest = &text[at + opens.len()..];
+    match rest.find('"') {
+        None => "an unclosed group name".to_string(),
+        Some(ends) => rest[..ends].to_string(),
     }
 }
 

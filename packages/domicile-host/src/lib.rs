@@ -106,10 +106,16 @@ impl Host {
     /// Hand over the keymap the compositor compiled, for every chrome that
     /// connects after.
     ///
-    /// Set once, at startup, out of the same `input.keyboard` the seat is
-    /// built from — so the browser decodes a key against the compositor's own
-    /// reading of the config rather than against a second reading of its own,
-    /// which is two readings that can disagree.
+    /// Out of the same `input.keyboard` the seat is built from — so the
+    /// browser decodes a key against the compositor's own reading of the
+    /// config rather than against a second reading of its own, which is two
+    /// readings that can disagree.
+    ///
+    /// Set at startup and again whenever a reload changes the keyboard, which
+    /// is why it replaces rather than accumulates: the argument is the layout
+    /// the desk types on now. The compositor broadcasts the same text to the
+    /// chromes already connected, so this retained copy is for the ones that
+    /// connect next.
     pub fn set_keymap(&mut self, keymap: String) {
         self.keymap = Some(keymap);
     }

@@ -21,7 +21,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Command, ExitCode};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -40,7 +40,7 @@ use smithay::reexports::{
         channel::{channel, Event as ChannelEvent, Sender},
         generic::Generic,
         timer::{TimeoutAction, Timer},
-        EventLoop, Interest, Mode, PostAction,
+        EventLoop, InsertError, Interest, LoopHandle, Mode, PostAction, RegistrationToken,
     },
     wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_server::{
@@ -99,6 +99,7 @@ mod latency;
 mod modifiers;
 mod outbound;
 mod peer_process;
+mod restatement;
 mod scale;
 mod screens;
 mod timing_window;
@@ -118,11 +119,12 @@ use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
+use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
-use domicile_config::{Config, ConfigError, ConfigStore};
+use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -205,6 +207,16 @@ mod grepped {
     /// the accept callback in `run`, and the second of the two. Pinned the
     /// same way and for the same reason as [`SPAWNING`] above.
     pub const ARRIVED: &str = "app client connected";
+    /// `tests/input.rs::a_keymap_the_reload_cannot_compile_leaves_the_desktop_typing`:
+    /// the refusing arm of
+    /// [`retype_the_desktop`](crate::DomicileCompositor::retype_the_desktop).
+    ///
+    /// [`DENSITY_REFUSED`]'s arrangement — a Rust test that spells the string
+    /// — and load-bearing for the same reason: a reload that refuses a keymap
+    /// sends no message, so this line is the only thing that distinguishes a
+    /// desk that kept its layout deliberately from one where the save never
+    /// arrived.
+    pub const KEYMAP_REFUSED: &str = "keeping the keymap the desktop is typing on";
 }
 
 /// The renderer client buffers are imported on.
@@ -318,9 +330,14 @@ struct ChromeHub {
     outbound: OutboundSender,
     timings: Mutex<FrameTimings>,
     /// The highest output scale to advertise, whatever the chrome reports.
-    /// Read-only config, held here because it is the chrome connections that
-    /// receive the density and have to bound it.
-    max_scale: u32,
+    ///
+    /// Held here because it is the chrome connections that receive the density
+    /// and have to bound it — and atomic because a reload changes it. The
+    /// Wayland thread writes it while a connection thread reads it, and there
+    /// is nothing for the two to agree about beyond the number itself: a
+    /// density that crossed the wire before the edit landed is a density
+    /// reported against the cap that was live when it was sent.
+    max_scale: AtomicU32,
     /// The name of *our* Wayland socket, which is what a client we spawn must
     /// connect to.
     wayland_display: OsString,
@@ -339,7 +356,7 @@ impl ChromeHub {
             request_tx: Mutex::new(request_tx),
             outbound,
             timings: Mutex::new(FrameTimings::default()),
-            max_scale,
+            max_scale: AtomicU32::new(max_scale),
             wayland_display,
         });
         (hub, outbound_rx)
@@ -1042,7 +1059,7 @@ fn read_chrome_messages(
             Ok(ChromeMessage::SetDevicePixelRatio { ratio }) => {
                 hub.send_request(ClientRequest::SetOutputScale {
                     ratio,
-                    scale: output_scale(ratio, hub.max_scale),
+                    scale: output_scale(ratio, hub.max_scale.load(Ordering::Relaxed)),
                 });
                 Vec::new()
             }
@@ -1240,9 +1257,15 @@ struct DomicileCompositor {
     /// A store rather than a `Config`, because the file is watched: an edit
     /// that does not parse leaves the live one in place and is remembered,
     /// which is the guarantee `ConfigStore` makes and this type would have to
-    /// reimplement. Only the display list is acted on — see
-    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) — so the
-    /// rest of a reloaded config is stored and not yet obeyed.
+    /// reimplement.
+    ///
+    /// Live in both directions: what is read back off this is the config the
+    /// desktop is actually running, because a reload acts on every field —
+    /// the display list through
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop) and the
+    /// rest through
+    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config).
+    /// [`crate::restatement`] is the field-by-field account.
     ///
     /// Note what this does *not* cover: a save caught half-written parses
     /// perfectly, it just says less. Keeping that from reaching the desktop is
@@ -1441,11 +1464,27 @@ struct DomicileCompositor {
     /// Whether anybody is at this desktop, for a desktop that blanks.
     ///
     /// `None` is one that never does, which is what a config saying nothing
-    /// about idle means — and then nothing here has a timer either. Read from
-    /// the *startup* config: a reloaded timeout is stored and not obeyed, the
-    /// same gap the display list is the only exception to. `ROADMAP.md`
-    /// carries it.
+    /// about idle means — and then nothing here has a timer either. Replaced
+    /// when a reload changes `[idle]`, which is
+    /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock).
     idle: Option<Idle>,
+    /// The timer that asks the clock, where there is a clock to ask.
+    ///
+    /// Held so a reload can take it away again: a desk whose timeout is
+    /// removed must stop waking for it, and one whose timeout changed wants
+    /// the new duration rather than whatever the old source was counting
+    /// down. Without the token neither is reachable — a calloop source is
+    /// removed by the registration it was inserted under, and by nothing
+    /// else.
+    idle_clock: Option<RegistrationToken>,
+    /// The loop this compositor is dispatched by, so that it can arm a source
+    /// of its own after startup.
+    ///
+    /// Only one thing does: the idle clock, which a reload may have to insert
+    /// where the startup config stated no timeout and so left no timer at
+    /// all. Everything else this compositor listens to is known when `run`
+    /// builds the loop.
+    loop_handle: LoopHandle<'static, CalloopData>,
 }
 
 /// Per-client state required by the compositor global.
@@ -2552,9 +2591,12 @@ impl DomicileCompositor {
     /// events for one edit. Re-advertising the same displays each time would
     /// have every client redraw for nothing.
     ///
-    /// The display list is the only thing a reload acts on. `output.max_scale`,
-    /// the keymap and the rest are stored and keep their startup values, which
-    /// is a gap rather than a decision — `ROADMAP.md` carries it.
+    /// The display list is the only thing *this* acts on, and no longer the
+    /// only thing a reload does: the rest of the file is
+    /// [`adopt_the_rest_of_the_config`](DomicileCompositor::adopt_the_rest_of_the_config)'s,
+    /// which the same callback calls straight after this.
+    /// [`crate::restatement`] carries the table of which field takes which
+    /// path, and is the one place to read — or to add to.
     fn adopt_the_desktop(&mut self, dh: &DisplayHandle, screens: Screens) {
         if screens == self.screens {
             return;
@@ -2757,6 +2799,180 @@ impl DomicileCompositor {
             self.state_the_connectors();
         }
         next
+    }
+
+    /// Take up everything in a reloaded config that is not the display list.
+    ///
+    /// The other half of a reload, beside
+    /// [`adopt_the_desktop`](DomicileCompositor::adopt_the_desktop): that one
+    /// is the desktop the file describes, this is the rest of what the file
+    /// says. What has to move is decided before anything moves — see
+    /// [`Restatement`] — so the question "what did this edit change" is
+    /// answered by arithmetic over two configs rather than by this function
+    /// restating everything and hoping the ends below it deduplicate.
+    ///
+    /// That matters for the same reason `adopt_the_desktop`'s early return
+    /// does: a config file is rewritten for all sorts of reasons, and an edit
+    /// to the display list must not hand every client a keymap it already has.
+    fn adopt_the_rest_of_the_config(&mut self, restated: &Restatement) {
+        if let Some(keyboard) = &restated.keyboard {
+            self.retype_the_desktop(keyboard);
+        }
+        if let Some(max_scale) = restated.max_scale {
+            self.cap_the_scale_at(max_scale);
+        }
+        if let Some(idle) = &restated.idle {
+            self.reset_the_idle_clock(idle);
+        }
+    }
+
+    /// Take up a new `[idle]`: when a desktop nobody is at turns its screens
+    /// off.
+    ///
+    /// The clock starts again from now rather than carrying the old one's
+    /// count: a config written is not a hand on the desk, but it is the moment
+    /// this desktop's answer changed, and counting a new timeout from an
+    /// instant that belonged to the old one is arithmetic nobody asked for.
+    ///
+    /// **A DARK DESKTOP COMES BACK ON.** The clock is replaced, and the one
+    /// being replaced is the only thing that knew the screens were off —
+    /// [`Idle::after`] builds a desk that has just been stirred, so a
+    /// compositor keeping the old `dark` would be one believing the screens
+    /// are on while they are off. Nothing would then relight them: a hand on
+    /// the desk asks [`Idle::stirred`], which answers
+    /// [`Blanking::ComeBack`] only on the edge out of dark, and this clock has
+    /// no such edge left to give. So the glass is put back where the state
+    /// says it is, and the desk blanks again a fresh timeout later.
+    fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
+        let was_dark = self.the_screens_are_dark();
+        self.idle = Idle::after(idle.blank_after(), Instant::now());
+        // A failed insert is not fatal here, which is the difference between
+        // this and the same call at startup. What is lost is the blanking —
+        // the desk runs on, lit, exactly as one that never stated a timeout —
+        // and a reload that took the desktop down to report a timer is the
+        // trade `retype_the_desktop` refuses for the keymap, for the same
+        // reason. The line names what was lost so it is not a silence.
+        if let Err(why) = self.arm_the_idle_clock(idle.blank_after()) {
+            error!(
+                %why,
+                "no clock for the reloaded idle timeout, so this desktop's screens \
+                 will not blank until it is restarted"
+            );
+        }
+        if was_dark {
+            info!("the idle timeout changed while the screens were off; they come back on");
+            self.state_the_connectors();
+        }
+    }
+
+    /// Arm the timer that asks the idle clock, replacing whatever was armed.
+    ///
+    /// `None` is a desktop that never blanks, and it leaves no timer at all —
+    /// the rule `run` states when it arms this the first time, kept here
+    /// because a reload can turn a blanking desktop back into one. A timer
+    /// that fires for a clock that is gone would find `the_idle_clock_came_round`
+    /// with nothing to ask.
+    ///
+    /// The old registration is removed rather than left beside the new one:
+    /// two timers for one clock is two wakes per timeout, and every reload
+    /// would add another.
+    fn arm_the_idle_clock(&mut self, after: Option<Duration>) -> Result<(), InsertError<Timer>> {
+        if let Some(armed) = self.idle_clock.take() {
+            self.loop_handle.remove(armed);
+        }
+        if let Some(after) = after {
+            self.idle_clock = Some(self.loop_handle.insert_source(
+                Timer::from_duration(after),
+                |_, _, data: &mut CalloopData| {
+                    TimeoutAction::ToDuration(data.state.the_idle_clock_came_round())
+                },
+            )?);
+        }
+        Ok(())
+    }
+
+    /// Take up a new `output.max_scale`: the cap on how dense a display the
+    /// desktop will be advertised at.
+    ///
+    /// Two ends, because the cap is applied in two places and an edit that
+    /// reached one of them would be half a reload. The hub's copy is what
+    /// bounds the *next* density a chrome reports, on the connection thread
+    /// that receives it; the restatement below is the desktop that is already
+    /// up, which nothing else would revisit — a person who turns scaling down
+    /// does it because the desk in front of them is too slow now.
+    ///
+    /// The density is the chrome's last reported one rather than the advertised
+    /// scale, because the cap and the ratio are different facts and only the
+    /// cap moved: a desk capped back up to 2 in front of a 2x window goes back
+    /// to 2, and one whose window was never dense stays where it is.
+    ///
+    /// Nothing happens where the cap does not change any output's scale, and
+    /// that is [`set_output`](DomicileCompositor::set_output)'s own staleness
+    /// check rather than a second one here — a described desktop refuses this
+    /// outright, for the reason
+    /// [`set_output_scale`](DomicileCompositor::set_output_scale) gives.
+    fn cap_the_scale_at(&mut self, max_scale: u32) {
+        self.hub.max_scale.store(max_scale, Ordering::Relaxed);
+        self.set_output_scale(output_scale(self.device_pixel_ratio, max_scale));
+    }
+
+    /// Compile the config's keyboard and give it to everything that types.
+    ///
+    /// Three ends and one compilation, which is the point: the seat hands
+    /// every Wayland client a `wl_keyboard.keymap` fd, the browser process
+    /// drawing the desktop is handed the same text over the chrome socket
+    /// because it has no fd to take, and a chrome connecting later is handed
+    /// the retained copy. Two compilations would be two readings of one file
+    /// with nothing comparing them — see [`crate::keymap`].
+    ///
+    /// **A KEYMAP THAT WILL NOT COMPILE IS REFUSED, NOT FATAL.** At startup it
+    /// is fatal: `run` takes the `?`, because a desktop that came up on
+    /// whatever libxkbcommon fell back to would be typing in a layout nobody
+    /// chose and nothing would say so. Here there is a desktop already, with
+    /// windows on it, and taking it down over a typo in a file somebody is
+    /// editing costs them everything that was open to fix nothing. So the live
+    /// keymap stays live — which is the last one that compiled, never xkb's
+    /// own fallback — and the refusal is said out loud, because the alternative
+    /// is a save that looks applied and a keyboard that did not change.
+    fn retype_the_desktop(&mut self, keyboard: &KeyboardConfig) {
+        match compiled_keymap(keyboard) {
+            Err(why) => warn!(%why, "{}", grepped::KEYMAP_REFUSED),
+            Ok(keymap) => {
+                info!(
+                    layout = %keyboard.xkb_layout,
+                    variant = %keyboard.xkb_variant,
+                    "the desktop types on the keyboard the config now names"
+                );
+                // The seat first, which is every Wayland client: Smithay
+                // writes the text into the keymap file behind the handle and
+                // sends the new fd to each bound `wl_keyboard`, so the clients
+                // are restated by this one call.
+                //
+                // From the text rather than from the `XkbConfig`, so the seat
+                // and the chrome are handed the same bytes. `set_xkb_config`
+                // would compile the names a second time, and a second
+                // compilation is the thing `keymap`'s own doc comment is about.
+                let typing = self
+                    .seat
+                    .get_keyboard()
+                    .expect("the seat was given a keyboard at startup");
+                typing
+                    .set_keymap_from_string(self, keymap.clone())
+                    .expect("xkb reads back the keymap text it has just written");
+                // And the browser process. Retained and then broadcast, in
+                // that order, for the reason `set_output` gives about the
+                // desktop: the chrome that connects next has to be told the
+                // keymap this desk types on rather than the one it started on.
+                let told = {
+                    let mut host = self.hub.host.lock().unwrap();
+                    host.set_keymap(keymap);
+                    host.describe_keymap()
+                };
+                self.hub.broadcast(
+                    told.expect("a host that has just been given a keymap has one to state"),
+                );
+            }
+        }
     }
 
     /// Give the chrome the keyboard.
@@ -4305,6 +4521,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // the config's keyboard section lands here and nowhere else. A keymap xkb
     // cannot compile (a layout or variant that does not exist) fails the boot
     // rather than silently handing clients a keymap they did not ask for.
+    //
+    // At boot, which is the whole of the difference between this and a
+    // reload: there is no desktop to lose yet, so the strict answer costs
+    // nothing. `retype_the_desktop` refuses the same keymap instead, because
+    // by then there are windows open on the layout that did compile.
     let keyboard = &config.input.keyboard;
     seat.add_keyboard(
         XkbConfig {
@@ -4527,6 +4748,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         stop: Arc::new(AtomicBool::new(false)),
         engine,
         idle: Idle::after(config.idle.blank_after(), Instant::now()),
+        // Armed below rather than here, through the one path a reload uses
+        // too — see `arm_the_idle_clock`.
+        idle_clock: None,
+        loop_handle: event_loop.handle(),
     };
 
     let mut data = CalloopData { display, state };
@@ -4665,14 +4890,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     //
     // The re-arm is the clock's own answer rather than a fixed tick: see
     // `Idle::next_check`.
-    if let Some(after) = config.idle.blank_after() {
-        handle.insert_source(
-            Timer::from_duration(after),
-            |_, _, data: &mut CalloopData| {
-                TimeoutAction::ToDuration(data.state.the_idle_clock_came_round())
-            },
-        )?;
-    }
+    //
+    // Through the compositor rather than on `handle` directly, because a
+    // reload arms exactly this and there should be one place that knows how.
+    // A failure here is still fatal, which is what startup and a reload
+    // differ on: nothing is running yet to lose.
+    data.state.arm_the_idle_clock(config.idle.blank_after())?;
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
@@ -4754,6 +4977,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     let ChannelEvent::Msg(parsed) = event else {
                         return;
                     };
+                    // The config that is about to stop being live, kept so the
+                    // edit can be read as a difference rather than as a file.
+                    // Everything but the display list is restated only where
+                    // it moved — see `Restatement` — and this is the only
+                    // moment the old values still exist to compare against.
+                    let was = data.state.config.current().clone();
                     // Through the store, which is what keeps a half-written save
                     // from taking the desktop down: a config that does not parse
                     // leaves the live one in place and is remembered as the last
@@ -4762,6 +4991,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         tracing::warn!(%err, "keeping the last config that parsed");
                         return;
                     }
+                    let restated = Restatement::between(&was, data.state.config.current());
                     let rebuilt = data.state.screens.reloaded_into(
                         &data.state.config.current().output,
                         &data.state.engine_displays,
@@ -4787,6 +5017,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                              describe one these monitors can make"
                         ),
                     }
+                    // And the rest of the file, whatever the display list did.
+                    // After the desktop rather than before it, because a
+                    // window-following desktop's scale is advertised against
+                    // the outputs the lines above have just settled — and
+                    // unconditionally, because a profile that describes no
+                    // desktop these monitors can make is still an edit that
+                    // may have changed the keyboard.
+                    data.state.adopt_the_rest_of_the_config(&restated);
                 })?;
             }
             Err(err) => {

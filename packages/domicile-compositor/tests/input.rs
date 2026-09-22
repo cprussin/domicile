@@ -67,6 +67,33 @@ xkb_layout = "us"
 xkb_variant = "dvorak"
 "#;
 
+/// The same desk, typing US QWERTY as it comes.
+///
+/// The display list is the one above, byte for byte: a reload that changed the
+/// desktop as well would leave the keymap and the displays as one event, and
+/// the keyboard is supposed to move on its own.
+const A_PLAIN_KEYBOARD: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[input.keyboard]
+xkb_layout = "us"
+"#;
+
+/// A keyboard that parses and that xkb will not build.
+///
+/// Rules rather than a layout, because the rules file is looked up by name and
+/// a missing one is a failure xkb reports rather than one it papers over.
+const A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF: &str = r#"
+[[output.displays]]
+name = "left"
+size = [1920, 1080]
+
+[input.keyboard]
+xkb_rules = "no-such-rules"
+"#;
+
 /// The left mouse button, as Linux names it and the protocol carries it.
 const BTN_LEFT: u32 = 0x110;
 
@@ -301,6 +328,102 @@ fn the_keymap_the_config_names_reaches_the_chrome() {
     );
 }
 
+/// A keyboard edited on disk is the one the desktop types on afterward — for
+/// the clients and for the chrome alike.
+///
+/// Both ends in one check, because the reload compiles *one* keymap and hands
+/// it to both: there is no mutation that gives the seat a reloaded layout and
+/// the browser the startup one, so a second compositor would buy nothing. What
+/// each end is asserted on is its own, though. The client reads a
+/// `wl_keyboard.keymap` fd, which is the only thing an application ever gets;
+/// the chrome reads the text off its socket, which is the only thing the
+/// browser process ever gets.
+///
+/// The layout's own name rather than a key's symbols, because it is the one
+/// line of a compiled keymap that says which layout this is in words — and a
+/// compositor that recompiled the *old* config would pass anything that only
+/// asserted a keymap arrived at all.
+#[test]
+fn a_keyboard_edited_on_disk_reaches_the_client_and_the_chrome() {
+    let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
+    let mut typing = compositor.client("typing");
+    assert!(
+        typing.wait_for_trace("keymap(", 1),
+        "a client binds a keyboard and is handed the config's keymap:\n{}",
+        typing.trace()
+    );
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Keymap { .. }))
+        .expect("the keymap rides with the handshake");
+
+    compositor.reconfigure(A_PLAIN_KEYBOARD);
+
+    let told = chrome
+        .wait_for(|message| matches!(message, HostMessage::Keymap { .. }))
+        .expect("the chrome is told the keymap the reload compiled");
+    let HostMessage::Keymap { keymap } = told else {
+        unreachable!("the wait matched on the variant");
+    };
+    assert_eq!(
+        group_name(&keymap),
+        "English (US)",
+        "the browser process is typing on the layout the file now names"
+    );
+    assert!(
+        typing.wait_for_trace("keymap(", 2),
+        "a window open across the reload is handed the new keymap too:\n{}",
+        typing.trace()
+    );
+    let last = typing
+        .trace()
+        .rsplit("keymap(")
+        .next()
+        .expect("rsplit yields at least one piece")
+        .to_string();
+    assert!(
+        last.starts_with("English (US)"),
+        "and it is the new layout rather than a second copy of the old one: {last}"
+    );
+}
+
+/// A keymap the reloaded config cannot compile leaves the desktop typing on
+/// the one it has.
+///
+/// The one place the startup rule is deliberately not the reload rule.
+/// `main`'s `?` on `compiled_keymap` fails the boot rather than hand clients a
+/// layout nobody chose — there is no desktop to lose yet, and coming up on
+/// xkb's fallback is the silent wrongness the whole message exists to end. By
+/// the time a file is edited there *is* a desktop, with windows on it, and
+/// taking it down over a typo costs the user everything that was open to fix
+/// nothing: the layout they are already typing on is the last one that
+/// compiled.
+///
+/// So it is refused, said out loud, and the desk carries on. Asserted by the
+/// keymap a chrome connecting afterward is handed, rather than by the log
+/// alone: a compositor that logged the refusal and then handed out a keymap
+/// xkb had invented would pass a check that only read its complaint.
+#[test]
+fn a_keymap_the_reload_cannot_compile_leaves_the_desktop_typing() {
+    let compositor = Compositor::started_with(A_DVORAK_KEYBOARD);
+
+    compositor.reconfigure(A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF);
+
+    compositor.wait_for_log("keeping the keymap the desktop is typing on");
+    let mut chrome = compositor.chrome();
+    let told = chrome
+        .wait_for(|message| matches!(message, HostMessage::Keymap { .. }))
+        .expect("a chrome that connects after the bad edit is told a keymap");
+    let HostMessage::Keymap { keymap } = told else {
+        unreachable!("the wait matched on the variant");
+    };
+    assert_eq!(
+        group_name(&keymap),
+        "English (Dvorak)",
+        "the retained keymap is the last one that compiled, not xkb's own fallback"
+    );
+}
+
 /// The `key <NAME> { ... };` block of a compiled keymap.
 fn key_block(keymap: &str, name: &str) -> String {
     let opens = format!("key <{name}>");
@@ -309,5 +432,20 @@ fn key_block(keymap: &str, name: &str) -> String {
         .unwrap_or_else(|| panic!("no key <{name}> in the keymap:\n{keymap}"));
     let rest = &keymap[at..];
     let ends = rest.find("};").expect("a key block closes");
+    rest[..ends].to_string()
+}
+
+/// What a compiled keymap calls its first group — `English (Dvorak)`.
+///
+/// The same reading the test client makes of the fd it is handed, so the two
+/// ends of the check are compared on one field rather than on two spellings
+/// of it.
+fn group_name(keymap: &str) -> String {
+    let opens = "name[Group1]=\"";
+    let at = keymap
+        .find(opens)
+        .unwrap_or_else(|| panic!("no group name in the keymap:\n{keymap}"));
+    let rest = &keymap[at + opens.len()..];
+    let ends = rest.find('"').expect("a group name closes");
     rest[..ends].to_string()
 }

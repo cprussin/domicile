@@ -229,6 +229,19 @@ nested developer run wants. What is refused is the half-stated form: a
 runs its defaults on a missing file and refuses a path it cannot load, and
 guessing between those picks one for somebody who meant the other.
 
+**An edit to that file reaches the desk that is running it**, whichever field
+it touched: the compositor watches the config and takes up the whole of a
+reload, so a new `xkb_layout` retypes the desktop, a new `output.max_scale`
+re-advertises it, a new `idle.blank_after_seconds` restarts the clock its
+screens go dark on, and the display list and the profiles rearrange it. The
+windows stay open through all of it — and a desk edited while its screens were
+off gets them back, because the clock that knew they were off is the one the
+edit replaced.
+
+Two edits are refused rather than applied, and each says so in the log: a file
+that will not parse, which leaves the last one that did in place, and a keyboard
+xkb cannot compile, which leaves the desk typing on the layout it has.
+
 **The keyboard is one of the things a shell owns, and it is not optional in
 the way it looks.** `input.keyboard` takes the `xkb_*` fields sway names —
 `xkb_layout`, `xkb_variant`, `xkb_options` and the rest — and a config that

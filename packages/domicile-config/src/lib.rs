@@ -69,7 +69,11 @@ pub enum ConfigError {
 /// every key is wrong. A shell that wants a layout states one -- that is what
 /// the config is for -- and a desk that states nothing gets the plain `us`
 /// that saying nothing ought to mean.
-#[derive(Debug, Clone, Deserialize)]
+///
+/// Compared, which is what `PartialEq` is for: a reload asks what moved
+/// between two configs, and the keyboard is one of the answers — see the
+/// compositor's `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
     pub xkb_rules: String,
@@ -480,7 +484,11 @@ impl std::fmt::Display for Axis {
 /// has to be read out of a doc comment is one a generator gets wrong, and the
 /// only alternative -- `"10m"` -- is a parser and a second way to be wrong
 /// about what a config says.
-#[derive(Debug, Clone, Default, Deserialize)]
+///
+/// Compared, which is what `PartialEq` is for: a reload asks what moved
+/// between two configs, and when the screens go dark is one of the answers --
+/// see the compositor's `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IdleConfig {
     /// How long the desktop goes untouched before its screens go dark.
