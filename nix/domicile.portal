@@ -1,0 +1,36 @@
+# Which portal interfaces a Domicile desktop implements itself.
+#
+# `xdg-desktop-portal` is the process an application talks to; a desktop
+# supplies backends for it to route to, and this file is how it finds one. It
+# is read out of `share/xdg-desktop-portal/portals/`, and `UseIn` is matched
+# against `XDG_CURRENT_DESKTOP`.
+#
+# AGAINST THE FRONTEND'S OWN, NOT THE CALLING CLIENT'S, which is the thing to
+# know about this file: setting the variable on the clients the compositor
+# spawns does nothing for the routing. What reaches the frontend is
+# `appearance::say_which_desktop`, which puts the name into the D-Bus and
+# systemd activation environments the way every Wayland compositor does at
+# startup. A frontend already running under another desktop's name keeps it.
+#
+# ONE INTERFACE, AND THE REST DELIBERATELY ABSENT. A desktop's backend usually
+# implements a dozen: FileChooser, AppChooser, Print, Notification, ScreenCast.
+# Domicile implements none of them, and claiming one would take it away from
+# whichever backend does -- an interface this file does not name is one the
+# frontend routes elsewhere, which is the right answer and the reason this list
+# is short rather than aspirational.
+#
+# Elsewhere is `xdg-desktop-portal-gtk` for most of them. NOT for screenshot or
+# screencast, which gtk does not implement either: those are wlroots-protocol
+# backends, domicile serves no wlroots protocol, and so a domicile desk has no
+# backend for them at all. That is a gap of the desktop rather than of this
+# file -- naming the interface here would only move the failure.
+#
+# `Settings` is here because a theme has to reach the windows. The chrome hears
+# about one over the host protocol, and every other window on the desk is a
+# Wayland client that has never heard of that socket -- `org.freedesktop.
+# appearance`'s `color-scheme` is what GTK4, Qt6, Electron and Firefox all read
+# instead. See `packages/domicile-compositor/src/appearance.rs`.
+[portal]
+DBusName=org.freedesktop.impl.portal.desktop.domicile
+Interfaces=org.freedesktop.impl.portal.Settings;
+UseIn=domicile

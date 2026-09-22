@@ -41,6 +41,7 @@
 // `key` because `KeyboardEvent.key` already means a string ("Enter").
 
 import type { CursorShape } from "./cursor-shape";
+import type { Theme } from "./theme";
 
 /**
  * A key combination the desktop claims for itself, and the same shape the
@@ -448,6 +449,33 @@ export type DomicileClipboardEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * Which way round the desktop is drawn now.
+ *
+ * **A page cannot work this out for itself, and `prefers-color-scheme` is the
+ * trap that looks like it can.** That media query reports the engine's own
+ * notion of a system preference, and under Domicile there is no system above
+ * the desktop to have one — the shell *is* the desktop's chrome. The theme is
+ * the compositor's: out of `[theme] mode` in its config, and out of whatever
+ * {@link DomicileHost.setTheme} has done to it since.
+ *
+ * Pushed, like the battery, and the one pushed event a page can cause: it
+ * answers a `setTheme`, to every chrome on the desk rather than to the one
+ * that called. It also arrives when this page connects — so a shell paints in
+ * the desk's theme rather than painting and flipping — and whenever a reload
+ * of the config moves the theme.
+ */
+export type DomicileThemeEvent = Event & {
+  readonly theme: Theme;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -473,6 +501,11 @@ export type DomicileHostEventMap = {
   battery: DomicileBatteryEvent;
   /** What has been copied, whenever that changes. Nobody asked for it either. */
   clipboard: DomicileClipboardEvent;
+  /**
+   * Which way round the desktop is drawn. Pushed like the two above, and the
+   * one of the three a page can cause — see {@link DomicileHost.setTheme}.
+   */
+  theme: DomicileThemeEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -580,6 +613,26 @@ export type DomicileHost = {
   setDesktopSize(width: number, height: number): void;
   /** Throws on anything but a positive ratio: the compositor divides by it. */
   setDevicePixelRatio(ratio: number): void;
+
+  /**
+   * Draw the desktop the other way round.
+   *
+   * **The one call here that says what the desktop *is*** rather than asking
+   * it for something. It reaches the compositor and comes back as a `theme`
+   * event — to every chrome on the desk, this one included, which is why a
+   * shell renders from the event rather than from its own click. Three
+   * monitors are three pages and the toggle is on one of them.
+   *
+   * It leaves the page at all because the compositor is the only process the
+   * desk's *clients* can hear: it answers the settings portal GTK, Qt and
+   * Electron read a color scheme from, out of this same value. A theme kept in
+   * the page would be a desktop whose panels went dark and whose windows
+   * stayed light.
+   *
+   * Not written back to the config file, which is generated — `[theme] mode`
+   * is what the desk comes up on, and a toggle lasts as long as the desktop.
+   */
+  setTheme(theme: Theme): void;
 
   /**
    * Route a key combination to the page rather than to the focused client.

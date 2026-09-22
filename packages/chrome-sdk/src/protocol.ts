@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { cursorShapeSchema } from "./cursor-shape";
 import { displayTransformSchema } from "./display-transform";
+import { themeSchema } from "./theme";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;
@@ -314,6 +315,24 @@ const clipboardSchema = z.looseObject({
   type: z.literal("clipboard"),
 });
 
+// Which way round the desktop is drawn now.
+//
+// Pushed like the battery, and the one pushed message a page can cause: a
+// shell's toggle calls `setTheme` and the compositor answers this to every
+// chrome on the desk, the one that asked included. It also arrives with the
+// handshake -- so a page paints in the desk's theme rather than painting and
+// flipping -- and whenever a reload of the config moves `[theme]`.
+//
+// Refused rather than defaulted, which is `battery`'s answer rather than
+// `displays`'s and for a sharper version of its reason: a theme defaulted to
+// dark is not a missing reading, it is a decision, and one that would repaint
+// a desk somebody had just put into light. `themeSchema` has no fallback for
+// the same reason.
+const themeMessageSchema = z.looseObject({
+  theme: themeSchema,
+  type: z.literal("theme"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -335,6 +354,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   filesSchema,
   batterySchema,
   clipboardSchema,
+  themeMessageSchema,
 ]);
 
 /** A decoded host message. */
@@ -363,6 +383,7 @@ export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FilesMessage = z.infer<typeof filesSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
+export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 
 /** One thing that was copied, as a row of the clipboard's history. */
 export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;

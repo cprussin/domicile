@@ -10,14 +10,16 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
-use domicile_protocol::{ChromeMessage, HostMessage, PROTOCOL_VERSION};
+use domicile_protocol::{ChromeMessage, HostMessage, Theme, PROTOCOL_VERSION};
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
-    // Two messages, in this order. The desktop rides with the handshake
+    // Three messages, in this order. The desktop rides with the handshake
     // because a chrome has no other way to learn what it is laying out
     // against — and it comes second, after the version it is written in has
-    // been agreed.
+    // been agreed. The theme rides for the same reason one layer up: it is
+    // what the page paints in, and a page told it late paints once in the
+    // wrong one.
     let mut session = Session::new();
     assert!(!session.is_ready());
 
@@ -32,6 +34,7 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
                 protocol_version: PROTOCOL_VERSION
             },
             HostMessage::Displays { displays: vec![] },
+            HostMessage::Theme { theme: Theme::Dark },
         ]
     );
 }
@@ -211,6 +214,7 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
                 protocol_version: PROTOCOL_VERSION
             },
             HostMessage::Displays { displays: vec![] },
+            HostMessage::Theme { theme: Theme::Dark },
             HostMessage::Keymap {
                 keymap: KEYMAP.into()
             },

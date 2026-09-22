@@ -91,6 +91,26 @@
   [CallWith=ScriptState, RaisesException] undefined setDevicePixelRatio(
       double ratio);
 
+  // Draw the desktop the other way round.
+  //
+  // THE ONE CALL HERE THAT SAYS WHAT THE DESKTOP IS rather than asking it for
+  // something. It reaches the compositor and comes back as a `theme` event --
+  // to every chrome on the desk, this one included, which is why a shell
+  // renders from the event rather than from its own click. Three monitors are
+  // three pages and the toggle is on one of them.
+  //
+  // It has to leave the page at all because the compositor is the only process
+  // the desk's CLIENTS can hear: it answers the settings portal GTK, Qt and
+  // Electron read a color scheme from, out of this same value. A theme kept in
+  // the renderer would be a desktop whose panels went dark and whose windows
+  // stayed light.
+  //
+  // A DomicileTheme rather than a DOMString, so a word that is not one of the
+  // two is refused at the call instead of at the socket -- see
+  // domicile_theme.idl.
+  [CallWith=ScriptState, RaisesException] undefined setTheme(
+      DomicileTheme theme);
+
   // Route a key combination to the page rather than to the focused client.
   //
   // The press comes back as a `shortcut` event carrying the same fields, so a
@@ -146,6 +166,19 @@
   // when the reading moves far enough to draw, and once more to a page that
   // has only just connected.
   attribute EventHandler onbattery;
+
+  // Which way round the desktop is drawn, as a DomicileThemeEvent.
+  //
+  // Pushed like onbattery, and the one pushed event this page can cause:
+  // setTheme() above is answered with it. It also arrives on connecting -- so
+  // a shell paints in the desk's theme rather than painting and flipping --
+  // and whenever a reload of the compositor's config moves `[theme]`.
+  //
+  // NOT `prefers-color-scheme`, which is the media query this looks like it
+  // duplicates. That answers out of this engine's own notion of a system
+  // preference, and under Domicile there is no system above the desktop to
+  // have one. The theme is the compositor's, and this is how it arrives.
+  attribute EventHandler ontheme;
 
   // What has been copied on this desktop, as a DomicileClipboardEvent.
   //

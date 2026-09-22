@@ -145,6 +145,15 @@ libraries — build it in `nix develop .#full`:
   `viewport.rs`, `coalesce.rs`, `timing_window.rs`, `modifiers.rs` and
   `latency.rs` are each one small thing named after itself.
 
+  `appearance.rs` is the one thing in here that talks to something other than
+  the engine, the clients or the chrome: it answers
+  `org.freedesktop.impl.portal.Settings` on the session bus, which is where
+  every GTK, Qt, Electron and Firefox window on the desk reads its color
+  scheme. The chrome hears about a theme over the host protocol because it is a
+  page on the end of a socket this process already owns; every other window is
+  a Wayland client that has never heard of that socket, and there is no Wayland
+  protocol for which way round a desktop is drawn.
+
   **Two rules the chrome queue is built around, both from freezes.** Never write
   to a chrome from the Wayland loop — a chrome that reads slowly fills the socket
   buffer and a blocking write stops frame callbacks for *every* client. Never

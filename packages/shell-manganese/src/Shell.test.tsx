@@ -4,6 +4,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -184,8 +185,16 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
   registerElements(client);
+  // A standalone theme source rather than `hostTheme`: what the bar's toggle
+  // does with the compositor is `host-theme.test.ts`'s, and a double that had
+  // to answer `theme` as well would make every test here depend on it.
   return render(
-    <Shell desk={alone()} displays={hostDisplays(client)} domicile={client} />,
+    <Shell
+      desk={alone()}
+      displays={hostDisplays(client)}
+      domicile={client}
+      theme={standaloneThemeSource()}
+    />,
   );
 };
 
@@ -670,7 +679,19 @@ describe("Shell", () => {
 
       expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
       expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
-      expect(screen.queryByLabelText(/theme/i)).not.toBeInTheDocument();
+    });
+
+    it("carries the theme toggle, which launches nothing either", () => {
+      // The one control on the bar, and it is on the right side of the line
+      // above: it changes what is already on screen rather than opening
+      // something, and there is no key to press instead. Two positions and no
+      // `system` — this bar is the system.
+      renderShell();
+
+      expect(
+        screen.getByRole("button", { name: "Dark theme — click for light" }),
+      ).toBeVisible();
+      expect(screen.queryByLabelText(/system/i)).toBeNull();
     });
   });
 

@@ -2,103 +2,150 @@ import { flushSync } from "react-dom";
 
 import { token } from "../../styled-system/tokens";
 
-// The theme model and its cycle mechanics, with no React or context deps, so the
+// The theme model and its flip mechanics, with no React or context deps, so the
 // controller (`ThemeProvider`) and the toggle (`ThemeSwitch`) can both build on
 // it without importing each other.
 
-export const THEMES = ["light", "dark"] as const;
-/** The concrete theme actually applied to the page — a resolved `preference`
- *  with `system` collapsed to `light` or `dark`. */
-export type ResolvedTheme = (typeof THEMES)[number];
+export const THEMES = ["dark", "light"] as const;
 
-export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
-export type ThemePreference = (typeof THEME_PREFERENCES)[number];
+/**
+ * Which way round the page is drawn.
+ *
+ * **Two, and there is no `system`.** Every other theme control has a third
+ * position because it belongs to a program running *on* a desktop, with an OS
+ * preference above it to defer to. This library dresses Domicile's own chrome,
+ * and Domicile is the system — so `prefers-color-scheme` under it reports what
+ * the engine was told rather than anything above the engine, and a `system`
+ * here would be the desk deferring to itself.
+ *
+ * What the desk *is* on comes from outside this package entirely; see
+ * {@link ThemeSource}.
+ */
+export type Theme = (typeof THEMES)[number];
 
-/** Cycle order used by `ThemeSwitch` clicks: light → dark → system → light. */
-export const THEME_CYCLE: Record<ThemePreference, ThemePreference> = {
-  dark: "system",
-  light: "dark",
-  system: "light",
+/**
+ * The theme a page is in before anything has said otherwise.
+ *
+ * Dark, because dark is the attribute-less state of `<html>` — the preset
+ * publishes dark as `base` and light behind `[data-theme=light]` — and because
+ * it is what `[theme] mode` in the compositor's config defaults to. The two
+ * agree on purpose: a page that paints before the desk has told it anything
+ * paints in the theme the desk most likely has.
+ */
+export const DEFAULT_THEME: Theme = "dark";
+
+/** What the preset's `_light` condition selects on. */
+const THEME_ATTRIBUTE = "data-theme";
+
+/**
+ * Put a theme on `<html>`, which is what makes the tokens resolve to it.
+ *
+ * Dark removes the attribute rather than setting `data-theme="dark"`: the
+ * preset's condition is `[data-theme=light] &`, so dark is the absence and
+ * writing it out would be a second spelling of the same state.
+ *
+ * Safe before React mounts — a shell calls it from its entry point so the
+ * first paint is already the right way round.
+ */
+export const applyTheme = (theme: Theme): void => {
+  const root = globalThis.document?.documentElement;
+  if (theme === "light") {
+    root?.setAttribute(THEME_ATTRIBUTE, "light");
+  } else {
+    root?.removeAttribute(THEME_ATTRIBUTE);
+  }
 };
 
-export type CycleThemeOptions = {
-  previousResolved: ResolvedTheme;
-  nextResolved: ResolvedTheme;
+/** The other one. A toggle with two positions flips rather than cycles. */
+export const OTHER_THEME: Record<Theme, Theme> = {
+  dark: "light",
+  light: "dark",
+};
+
+export type FlipThemeOptions = {
+  previous: Theme;
+  next: Theme;
   /**
-   * Flip the page's resolved theme. Called inside the wipe's view
-   * transition update callback (or synchronously in the no-wipe branch).
-   * Typically toggles a `light` class on `<html>` so design tokens
-   * resolve to the new theme's values.
+   * Flip the page's theme. Called inside the wipe's view transition update
+   * callback (or synchronously in the no-wipe branch). Normally
+   * {@link applyTheme}, so the design tokens resolve to the new theme's values.
    */
-  applyResolvedTheme: () => void;
+  applyNextTheme: () => void;
   /**
-   * Commit the new preference to React state. Called inside `flushSync`
-   * after the wipe finishes (and before the rise), so that the toggle's
-   * `data-theme-preference` attribute has the new value committed
-   * *before* the slot override is dropped — otherwise the OLD active
-   * slot would briefly retarget center before React commits the NEW
-   * preference and re-parks it.
+   * Commit the new theme to React state. Called inside `flushSync` after the
+   * wipe finishes (and before the rise), so that the toggle's
+   * `data-theme-mode` attribute has the new value committed *before* the slot
+   * override is dropped — otherwise the OLD active slot would briefly retarget
+   * center before React commits the NEW theme and re-parks it.
    */
-  commitPreference: () => void;
+  commitTheme: () => void;
 };
 
 /**
- * Run the ThemeSwitch's set → wipe → rise animation around the
- * caller's preference change. Wires `data-theme-setting` (slot
- * sequencing) and `data-theme-flipping` / `data-theme-flip-to` (page
- * wipe) on `<html>`, runs the wipe via `document.startViewTransition`
- * when the resolved theme is actually changing and the browser
- * supports it, and falls back to a snap apply otherwise. Total
- * animation: 150ms set + 500ms wipe + 200ms rise.
+ * Run the ThemeSwitch's set → wipe → rise animation around a theme change.
+ *
+ * Wires `data-theme-setting` (slot sequencing) and `data-theme-flipping` /
+ * `data-theme-flip-to` (page wipe) on `<html>`, runs the wipe via
+ * `document.startViewTransition` where the browser supports it, and falls back
+ * to a snap apply otherwise. Total animation: 150ms set + 500ms wipe + 200ms
+ * rise.
+ *
+ * **Driven by the theme *arriving*, not by the click.** The desk owns the
+ * theme, so a shell's toggle asks and the answer comes back to every page on
+ * the desk — which means this also runs when the config is edited, or when the
+ * toggle on another monitor is the one that was clicked. The click is not the
+ * event; being told is.
  */
-export const cycleThemeWithAnimation = ({
-  previousResolved,
-  nextResolved,
-  applyResolvedTheme,
-  commitPreference,
-}: CycleThemeOptions): void => {
+export const flipThemeWithAnimation = ({
+  previous,
+  next,
+  applyNextTheme,
+  commitTheme,
+}: FlipThemeOptions): void => {
   const root = document.documentElement;
   // Phase 1 (set): force every slot below the window via the
-  // `data-theme-setting` descendant rule. Only the currently active
-  // slot actually moves.
+  // `data-theme-setting` descendant rule. Only the currently active slot
+  // actually moves.
   root.setAttribute("data-theme-setting", "");
   window.setTimeout(() => {
     const startRise = () => {
-      // flushSync so the new `data-theme-preference` attribute is
-      // committed *before* the override drops — otherwise removing
-      // `data-theme-setting` while preference is still OLD would let
-      // the OLD active slot's target snap back to translateY(0) and
-      // start rising before React commits the NEW preference.
+      // flushSync so the new `data-theme-mode` attribute is committed *before*
+      // the override drops — otherwise removing `data-theme-setting` while the
+      // attribute is still OLD would let the OLD active slot's target snap
+      // back to translateY(0) and start rising before React commits the new
+      // theme.
       flushSync(() => {
-        commitPreference();
+        commitTheme();
       });
       root.removeAttribute("data-theme-setting");
     };
     if (
-      previousResolved === nextResolved ||
+      previous === next ||
       typeof document.startViewTransition !== "function"
     ) {
-      applyResolvedTheme();
+      // Nothing to wipe between, or nothing to wipe with: the slots still
+      // set and rise, and the theme snaps over in between.
+      applyNextTheme();
       startRise();
-      return;
+    } else {
+      // Phase 2 (wipe). The two attributes drive the rules in the
+      // pandacss preset: `data-theme-flipping` suppresses per-element
+      // transitions so color changes don't bleed into the snapshots, and
+      // `data-theme-flip-to` picks the wipe direction (dark = top-down,
+      // light = bottom-up). Both are cleared in `finished`, immediately
+      // before the rise triggers.
+      root.setAttribute("data-theme-flipping", "");
+      root.setAttribute("data-theme-flip-to", next);
+      const transition = document.startViewTransition(() => {
+        applyNextTheme();
+      });
+      const cleanup = () => {
+        root.removeAttribute("data-theme-flipping");
+        root.removeAttribute("data-theme-flip-to");
+        startRise();
+      };
+      transition.finished.then(cleanup, cleanup);
     }
-    // Phase 2 (wipe). The two attributes drive the rules in the
-    // pandacss preset: `data-theme-flipping` suppresses per-element
-    // transitions so color changes don't bleed into the snapshots, and
-    // `data-theme-flip-to` picks the wipe direction (dark = top-down,
-    // light = bottom-up). Both are cleared in `finished`, immediately
-    // before the rise triggers.
-    root.setAttribute("data-theme-flipping", "");
-    root.setAttribute("data-theme-flip-to", nextResolved);
-    const transition = document.startViewTransition(() => {
-      applyResolvedTheme();
-    });
-    const cleanup = () => {
-      root.removeAttribute("data-theme-flipping");
-      root.removeAttribute("data-theme-flip-to");
-      startRise();
-    };
-    transition.finished.then(cleanup, cleanup);
   }, SET_DURATION_MS);
 };
 

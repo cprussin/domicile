@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
+#include "components/domicile/common/theme.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "net/base/net_errors.h"
 
@@ -286,6 +287,21 @@ void ControlChannel::SetDesktopSize(double width, double height) {
 void ControlChannel::SetDevicePixelRatio(double ratio) {
   base::DictValue message = Typed("set_device_pixel_ratio");
   message.Set("ratio", ratio);
+  SendMessage(std::move(message));
+}
+
+// THE ONE MEMBER THAT RELAYS A DECISION rather than a measurement or a
+// request. What goes down this socket is the theme the user just picked, and
+// what comes back up is `theme` to every chrome -- including this one, which
+// is how a page comes to repaint without believing its own click.
+//
+// Through the wire name for the reason `AppCursor` goes through one on the way
+// in: the only mapping in either direction is the X-macro in
+// components/domicile/common/theme.h, so the list stays singular and
+// scripts/test-themes-agree.sh can read every writing of it.
+void ControlChannel::SetTheme(mojom::Theme theme) {
+  base::DictValue message = Typed("set_theme");
+  message.Set("theme", std::string(ThemeToWire(theme)));
   SendMessage(std::move(message));
 }
 
@@ -730,6 +746,26 @@ void ControlChannel::DispatchLine(const std::string& line,
       return;
     }
     client_->Battery(*charge, *charging, arrival);
+    return;
+  }
+
+  if (*type == "theme") {
+    // REFUSED RATHER THAN DEFAULTED, which is `battery` above's answer rather
+    // than `displays`'s, and for a sharper version of its reason. A theme
+    // defaulted to dark is not a missing reading -- it is a *decision*, and one
+    // that would repaint a desk somebody had just put into light. The desk is
+    // already painting in one of the two, which is a better answer than the
+    // other one picked by a name nothing here knows.
+    const std::string* named = message.FindString("theme");
+    if (!named) {
+      return;
+    }
+    const std::optional<mojom::Theme> theme =
+        ThemeFromWire<mojom::Theme>(*named);
+    if (!theme) {
+      return;
+    }
+    client_->ThemeChanged(*theme, arrival);
     return;
   }
 

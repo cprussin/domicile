@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig};
+use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, ThemeMode};
 
 // ---- parsing & defaults ---------------------------------------------------
 
@@ -179,6 +179,45 @@ blank_after_seconds = 0
         message.contains("idle.blank_after_seconds"),
         "the message should name the key: {message}"
     );
+}
+
+// ---- theme ----------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_the_theme_is_dark() {
+    // DARK IS THE DEFAULT BECAUSE DOMICILE HAS NO OTHER ANSWER TO FALL BACK
+    // ON. Every other desktop reads a system preference here; this one *is*
+    // the system, so a desk that states no theme is not deferring to anything
+    // -- it is taking the one the chrome was designed against.
+    assert_eq!(Config::parse("").unwrap().theme.mode, ThemeMode::Dark);
+}
+
+#[test]
+fn a_desk_that_states_a_theme_gets_it() {
+    let theme = Config::parse(
+        r#"
+[theme]
+mode = "light"
+"#,
+    )
+    .unwrap()
+    .theme;
+    assert_eq!(theme.mode, ThemeMode::Light);
+}
+
+#[test]
+fn rejects_a_theme_that_is_neither() {
+    // There are two, and a third word is a shell writing something no desktop
+    // can be -- including `system`, which reads like the one every other
+    // desktop takes and would be Domicile deferring to itself.
+    let err = Config::parse(
+        r#"
+[theme]
+mode = "system"
+"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 #[test]

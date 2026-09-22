@@ -111,6 +111,23 @@ enum DisplayTransform {
   kRotate270,
 };
 
+// Which way round the desktop is drawn.
+//
+// An enum rather than the string it arrives as, for the reason CursorShape
+// above is one: the set is closed at both ends of the wire, and carrying it
+// across here as text would mean nothing between the socket and the page ever
+// asked whether a name named anything. The wire names live in
+// components/domicile/common/theme.h, which is the codec both directions go
+// through -- and this is the one type here that crosses in BOTH, because the
+// shell has a toggle on it.
+//
+// TWO MEMBERS, AND NO kSystem. "Follow the system" is what a program running
+// on a desktop offers; this engine paints the desktop.
+enum Theme {
+  kDark,
+  kLight,
+};
+
 // One screen of the desktop.
 //
 // Integers, unlike the sizes above. Those come from a layout box, where a CSS
@@ -212,6 +229,25 @@ interface ControlChannel {
   // The desktop's own geometry, and the scale the page is drawn at.
   SetDesktopSize(double width, double height);
   SetDevicePixelRatio(double ratio);
+
+  // The user picked a theme off the shell's toggle.
+  //
+  // THE ONLY MEMBER HERE THAT TELLS THE COMPOSITOR WHAT THE DESKTOP IS rather
+  // than asking it for something. Everything else on this interface is a
+  // request about a window, a device or a process; this is the page saying the
+  // desk is light now.
+  //
+  // It has to go down rather than stay in the renderer, because a theme that
+  // lived in the page would be a desktop whose panels went dark and whose
+  // windows stayed light. The compositor is the process the desk's clients can
+  // hear -- it answers the settings portal GTK, Qt and Electron read their
+  // color scheme from -- and it is the process that read the theme out of the
+  // config file to begin with.
+  //
+  // Answered with ControlChannelClient::ThemeChanged, to every chrome rather
+  // than to this one: a desk of three monitors is three of these channels, and
+  // a toggle clicked on one of them is the whole desktop changing.
+  SetTheme(Theme theme);
 
   // A key combination the compositor should route to the page rather than to
   // whichever client has focus.
@@ -363,6 +399,20 @@ interface ControlChannelClient {
   // clipboard, which on the platform this engine scans out on is connected to
   // no Wayland client at all.
   Clipboard(array<ClipboardEntry> entries, mojo_base.mojom.TimeTicks arrival);
+
+  // Which way round the desktop is drawn now.
+  //
+  // Named for the event rather than the enum, which would shadow the type
+  // inside the generated class -- the same reason ShortcutPressed is not
+  // called Shortcut.
+  //
+  // Pushed like Battery, and the one pushed message whose cause can be this
+  // page: it arrives when a chrome has just connected, when a reload of the
+  // compositor's config moved `[theme]`, and when any chrome calls
+  // ControlChannel::SetTheme. The sender is told again as part of that last
+  // one, which is deliberate -- one path sets the theme, rather than a page
+  // that believes its own click.
+  ThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);

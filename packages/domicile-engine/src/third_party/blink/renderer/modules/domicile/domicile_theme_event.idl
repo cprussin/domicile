@@ -1,0 +1,29 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// The event behind navigator.domicile.ontheme.
+//
+// Its own interface rather than a field on DomicileAppEvent, which carries the
+// events that differ only in which window they name: this one names no window.
+// The desktop has one theme.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileThemeEvent : Event {
+  constructor(DOMString type, optional DomicileThemeEventInit eventInitDict = {});
+
+  // Which way round the desktop is drawn now.
+  //
+  // Arrives when this page connects -- so a shell can paint in it rather than
+  // paint and flip -- when a reload of the compositor's config moves the
+  // theme, and whenever ANY chrome on the desk calls setTheme(). That last one
+  // includes this one: a desk of three monitors is three pages, and the toggle
+  // is on one of them.
+  readonly attribute DomicileTheme theme;
+
+  // When the browser process had this message, on `performance.now()`'s
+  // clock. See DomicileAppCursorEvent.arrival for what this is and is not.
+  readonly attribute DOMHighResTimeStamp arrival;
+};

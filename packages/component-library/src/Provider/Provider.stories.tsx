@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { Card } from "../Card/Card";
+import { standaloneThemeSource } from "../ThemeSwitch/standalone-theme-source";
 import { ThemeSwitch } from "../ThemeSwitch/ThemeSwitch";
 
 import { Provider as ProviderComponent } from "./Provider";
@@ -25,12 +26,12 @@ export const Provider: StoryObj<typeof ProviderComponent> = {
     docs: {
       description: {
         story:
-          "A `ThemeSwitch` mounted inside the Provider: it reads the theme from context and clicking it flips the page theme — no app-side wiring beyond the one `<Provider>`.",
+          "A `ThemeSwitch` mounted inside the Provider: it reads the theme from context and clicking it asks the source to flip it — no app-side wiring beyond the one `<Provider>`. Storybook has no desktop behind it, so the source here answers its own request; a shell passes one built on its `DomicileClient` instead.",
       },
     },
   },
   render: () => (
-    <ProviderComponent>
+    <ProviderComponent theme={standaloneThemeSource()}>
       <Card title="Preferences">
         <ThemeSwitch />
       </Card>

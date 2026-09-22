@@ -167,6 +167,35 @@ pub enum ChromeMessage {
     /// and sets nothing.
     CopyClipboardEntry { entry: u32 },
 
+    /// The user picked a theme off the shell's toggle.
+    ///
+    /// **THE ONE PIECE OF DESKTOP STATE A PAGE OWNS, AND IT IS OWNED BY THE
+    /// PAGE BECAUSE THE SWITCH IS DRAWN THERE.** Everything else on this
+    /// socket going up is a request about a window or a device; this is the
+    /// shell saying what the desktop now *is*, and the compositor takes it
+    /// rather than deciding about it.
+    ///
+    /// It has to come back here rather than stay in the page, because a theme
+    /// that lived in the chrome would be a desktop where the panels went dark
+    /// and every window stayed light. The compositor is the process the
+    /// desktop's clients can hear — see `domicile_compositor::appearance`,
+    /// which answers the settings portal GTK, Qt and Electron read their color
+    /// scheme from — and it is the process that read
+    /// [`domicile_config::ThemeConfig`] in the first place.
+    ///
+    /// Answered with [`HostMessage::Theme`] to *every* chrome rather than to
+    /// this one: a desk of three monitors is three pages, and a toggle clicked
+    /// on one of them is the whole desktop changing. The sender is told again
+    /// as part of that, which is the same catch-up
+    /// [`HostMessage::FocusChanged`] does and for the same reason — one path
+    /// that sets the theme, rather than a page that believes its own click.
+    ///
+    /// **Not written back to the config file.** The file is generated — a
+    /// shell owns it, and on NixOS home-manager owns the shell — so a desktop
+    /// that edited it would be overwriting a build product. A toggle lasts as
+    /// long as the desktop does, and `[theme]` is what it comes up as.
+    SetTheme { theme: Theme },
+
     /// What is there to open? Answered with [`HostMessage::Files`].
     ///
     /// A shell's launcher is a page, and a page has no filesystem: there is no
@@ -484,6 +513,28 @@ pub enum HostMessage {
     /// rather than a silence — and the ordinary state of a desktop that has
     /// just started, because the history is in memory and never on disk.
     Clipboard { entries: Vec<ClipboardEntry> },
+
+    /// Which way round the desktop is drawn now.
+    ///
+    /// **Pushed, and there is no `ListTheme` to go with it** — the asymmetry
+    /// [`HostMessage::Battery`] draws, arrived at from the other side. A theme
+    /// does not change on its own the way a charge does; it changes because
+    /// somebody clicked the toggle or edited the config, and both of those are
+    /// events the compositor already has in hand.
+    ///
+    /// Sent to a chrome that has just connected, so a page's first paint is
+    /// the theme the desk is actually on; on every reload of a config whose
+    /// `[theme]` moved; and to every chrome when one of them sends
+    /// [`ChromeMessage::SetTheme`]. That last one is why this is a broadcast
+    /// rather than an answer: a desk of three monitors is three pages, and a
+    /// theme half of them are on is not a theme.
+    ///
+    /// A fact rather than a preference. `[theme] mode` is where a desk states
+    /// the one it comes up on, and there is no `system` for it to be resolved
+    /// against — Domicile *is* the system, so there is nothing above the
+    /// desktop whose preference a page could be deferring to. See
+    /// [`domicile_config::ThemeMode`].
+    Theme { theme: Theme },
 }
 
 /// One thing that was copied, as the shell is told about it.
@@ -657,6 +708,28 @@ pub enum CursorShape {
     ZoomOut,
 }
 
+/// Which way round a desktop is drawn.
+///
+/// The same two words the config file spells, and deliberately the same two:
+/// `[theme] mode = "light"` is where a desk states the one it starts on, and
+/// this is that value on the wire. Mapped rather than shared — this crate
+/// carries serde and nothing else, which is what keeps it a portable
+/// description of the protocol — the way [`DisplayTransform`] is mapped from
+/// `domicile_config::Transform` beside it.
+///
+/// **There is no third variant and there is not going to be one.** "Follow the
+/// system" is what a program running *on* a desktop offers; this is the
+/// desktop. See `domicile_config::ThemeMode`, which refuses the word.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    /// What the chrome was drawn against, and so what a desk that stated
+    /// nothing comes up on.
+    #[default]
+    Dark,
+    Light,
+}
+
 /// Version negotiation failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("incompatible protocol version: host speaks {host}, chrome speaks {chrome}")]
@@ -683,6 +756,25 @@ pub fn negotiate(chrome_version: u32) -> Result<u32, VersionMismatch> {
 #[cfg(test)]
 mod wire_names {
     use super::*;
+
+    /// The exact JSON `@domicile/chrome-sdk` puts on the wire for a theme the
+    /// user picked off the toggle, spelled out.
+    ///
+    /// Here for [`the_desktop_size_the_sdk_sends_parses`]'s reason and with a
+    /// sharper edge: the host half of this message rides the shared fixture
+    /// in `wire/`, and the chrome half has no fixture at all — so this is the
+    /// only thing anywhere that fails when the SDK's spelling and this enum
+    /// drift apart.
+    #[test]
+    fn the_theme_the_sdk_sends_parses() {
+        let sent = r#"{"type":"set_theme","theme":"light"}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::SetTheme {
+                theme: Theme::Light
+            }
+        );
+    }
 
     /// The exact JSON `@domicile/chrome-sdk` puts on the wire for the desktop
     /// size, spelled out.

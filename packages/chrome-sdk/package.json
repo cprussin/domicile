@@ -94,6 +94,10 @@
       "types": "./dist/surface-coordinates.d.ts",
       "default": "./dist/surface-coordinates.js"
     },
+    "./theme": {
+      "types": "./dist/theme.d.ts",
+      "default": "./dist/theme.js"
+    },
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"
