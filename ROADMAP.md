@@ -119,7 +119,11 @@ these is one run, and each has a line to look for.
   can see it: no runner has a `/dev/dri` at all, so every check this change
   brings is arithmetic over an injected instant. Plug a monitor in while it is
   dark for the second half — the new one must come up dark too.
-- **The first real `./scripts/dev-shell.sh <name>`.**
+- **The first real `./scripts/dev-shell.sh <name>`.** Its reload is asserted
+  against a `domicile` the test writes — `scripts/test-dev-shell.sh` drives the
+  watch loop, the coalescing and a refusal — so what is left is a real engine
+  taking a rebuilt shell: a saved edit on the screen, the windows where they
+  were, and a shell that would not load leaving the desk on the one it had.
 - **Which way round the two quarter turns are** — see the gaps below.
 - Anything about orientation or presentation, and re-measuring latency or CSS
   parity after a change that could move either.

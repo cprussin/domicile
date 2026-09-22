@@ -14,12 +14,14 @@
 # So dev mode is the desktop now. The engine, the compositor and the shell,
 # exactly as `nix run .#manganese` assembles them — with one difference, and it
 # is there to make an edit cheap: the page is rebuilt on save, by the shell's
-# own vite in watch mode. THIS SCRIPT DOES NOT RELOAD IT, and it no longer has
-# to be a restart either: `domicile load-shell <path>` puts the rebuilt module
-# on the running desktop, from another terminal inside it, and the windows stay
-# where they are. Teaching this script to run that after each build is a
-# separate change -- it needs the desktop's DOMICILE_SOCK and a way to know a
-# build finished, and neither is in hand here.
+# own vite in watch mode, and the rebuilt module is handed to the desktop that
+# is already running. `domicile load-shell <path>` is what does that and the
+# desktop takes it without stopping, so the windows stay where they are and an
+# edit costs a build rather than a restart. `dev-shell-reload.sh` is the half
+# that waits for a build to finish and runs it; what is here is the two things
+# it needs, which are the module to watch and the socket the desktop answers
+# on. THE DESKTOP IS NOT RESTARTED ON A REBUILD, and never was: what used to
+# restart it was the person at the keyboard, for want of this.
 #
 # Where each piece comes from is the point. The engine is the published one the
 # flake pins, because building Chromium is four hours and a shell author is not
@@ -73,6 +75,15 @@ echo "watching $SHELL_DIR"
 (cd "$SHELL_DIR" && exec bunx vite build --watch) &
 WATCHING+=($!)
 
+# And what each of those builds is for. The loop waits for the socket file
+# below before it does anything, so starting it here — before the binary it
+# calls has been built — is starting it before it can run: by the time a
+# desktop has printed a socket, the `cargo build` further down has long since
+# produced the `domicile` that loop runs.
+"$ROOT/scripts/dev-shell-reload.sh" \
+  "$ROOT/target/debug/domicile" "$PAGE_DIR/shell.js" "$WORK/sock" &
+WATCHING+=($!)
+
 # The engine: the published one, fetched and pinned by the flake, because the
 # alternative is a four-hour Chromium build. `DOMICILE_ENGINE` overrides it for
 # somebody who has one already — the engine agent's own `out/Agent`, say — and
@@ -114,8 +125,30 @@ cargo build -p domicile-launch --bin domicile \
 # is not set here. What replaced it is a command every desktop takes rather
 # than a mode this one is started in: `domicile load-shell ./path/to/shell.js`
 # — see docs/architecture/THE-DOMICILE-BINARY.md.
+#
+# WHAT IT PRINTS IS READ AS IT GOES PAST, and that is the whole of how the
+# reload loop finds the desktop. `domicile` puts `DOMICILE_SOCK` in the
+# environment of what it spawns, and this script started it rather than the
+# other way around, so nothing here inherits it; the supervisor also prints it,
+# beside the shell and the config it chose, and reading that line is asking the
+# thing that knows instead of keeping a second copy of
+# `control_socket::address` in bash. The path is not written down until the
+# desktop has said it is up, because the socket is bound before the engine
+# starts and a shell loaded onto a desktop with no engine yet is a refusal
+# nobody caused.
 echo "starting $SHELL_NAME"
+SOCK=""
 DOMICILE_ENGINE="$ENGINE" \
 DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \
 DOMICILE_PAGE="$PAGE_DIR/shell.js" \
-  "$ROOT/target/debug/domicile" "$SHELL_NAME"
+  "$ROOT/target/debug/domicile" "$SHELL_NAME" | while IFS= read -r line; do
+  printf '%s\n' "$line"
+  case "$line" in
+    (DOMICILE_SOCK=*) SOCK="${line#DOMICILE_SOCK=}" ;;
+    ("domicile is up."*) printf '%s\n' "$SOCK" >"$WORK/sock" ;;
+  esac
+done
+# The desktop's own status, not the reader's: a desk that would not come up
+# exits non-zero, and a pipeline's last command is the one whose status a shell
+# would otherwise report.
+exit "${PIPESTATUS[0]}"
