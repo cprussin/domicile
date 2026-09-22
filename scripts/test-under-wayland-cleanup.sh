@@ -15,6 +15,15 @@
 # cases below are mostly about what must *survive* a sweep rather than what
 # must not. The shape under test is the shape that leaked: a bookkeeper with
 # two forked children, killed the way the old code killed it.
+#
+# AND A FIXTURE THAT IS NOT THE PRODUCTION SHAPE IS A CHECK THAT CANNOT FAIL.
+# The live-run case below used to stand up its starter with `exec sleep 300`
+# after exporting a marker, which put that marker in a fresh process's exec
+# environment — and `under-wayland.sh` never execs, so its own marker was in no
+# such place. A check that could not succeed was green for a month because the
+# only process it was ever asked about was one the production script could not
+# produce. So the starter here is a shell that goes on being itself, and what a
+# run is named by is read from outside it.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,6 +47,10 @@ trap 'for p in $SPAWNED; do kill -KILL "$p" 2>/dev/null; done
 
 # shellcheck source=packages/domicile-engine/scripts/lib-compositor-cleanup.sh
 . "$LIB"
+
+# This script standing in for one under-wayland.sh run, named the way the
+# library names one.
+MINE="$(compositor_owner)"
 
 FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
@@ -93,45 +106,61 @@ settle() { # how many, owner
 
 # --- the shape that leaked ---------------------------------------------------
 
-BOOKKEEPER="$(a_compositor "$$")"
-expect "a compositor is three processes, not one" 3 "$(alive "$$")"
+BOOKKEEPER="$(a_compositor "$MINE")"
+expect "a compositor is three processes, not one" 3 "$(alive "$MINE")"
 
 kill "$BOOKKEEPER" 2>/dev/null
-settle 2 "$$"
+settle 2 "$MINE"
 expect "killing the pid the shell has leaves the other two behind" \
-  2 "$(alive "$$")"
+  2 "$(alive "$MINE")"
 
-SAID="$(kill_compositors "$$" 2>&1)"
-settle 0 "$$"
-expect "and the sweep takes them" 0 "$(alive "$$")"
+SAID="$(kill_compositors "$MINE" 2>&1)"
+settle 0 "$MINE"
+expect "and the sweep takes them" 0 "$(alive "$MINE")"
 says "which it says, with a count" '2 processes' "$SAID"
 
 # --- a run only ever collects its own ---------------------------------------
 
-a_compositor "$$" >/dev/null
-a_compositor 999999 >/dev/null
-kill_compositors "$$" >/dev/null 2>&1
-settle 0 "$$"
-expect "this run's compositor is gone" 0 "$(alive "$$")"
-expect "and another run's is untouched" 3 "$(alive 999999)"
+# 999999:1 is a run that cannot be: no process holds that pid here, and none
+# started one clock tick after boot. It stands in for another run's compositor
+# throughout — what a sweep by name must not reach.
+a_compositor "$MINE" >/dev/null
+a_compositor 999999:1 >/dev/null
+kill_compositors "$MINE" >/dev/null 2>&1
+settle 0 "$MINE"
+expect "this run's compositor is gone" 0 "$(alive "$MINE")"
+expect "and another run's is untouched" 3 "$(alive 999999:1)"
 # Taken properly rather than by pid: two orphaned children left here would be
 # leftover compositor processes, which is exactly what the next case counts.
-kill_compositors 999999 >/dev/null 2>&1
+kill_compositors 999999:1 >/dev/null 2>&1
 
 # --- the leftover sweep spares a run that is still going ---------------------
 
-# A process marked the way under-wayland.sh marks itself, so that the sweep can
-# see there is still somebody behind the compositor below.
-bash -c 'export DOMICILE_UNDER_WAYLAND=$$; exec sleep 300' >/dev/null 2>&1 &
+# A second run, of the shape under-wayland.sh has: a shell that names itself
+# with the library's own `compositor_owner` and then goes on being that same
+# shell — no `exec`, and nothing exported that anything out here reads. It says
+# what it is called through a file, because a `&` hands back a pid and what the
+# sweep goes on is the name the run gave itself.
+#
+# THIS IS THE CASE THAT BIT. Everything below the sweep here is one runner's
+# startup sweep with another runner's job already going beside it, as the same
+# user and against the same XDG_RUNTIME_DIR path.
+TOKEN_FILE="$XDG_RUNTIME_DIR/starter-token"
+bash -c ". '$LIB'; compositor_owner > '$TOKEN_FILE'; sleep 300 & wait" \
+  >/dev/null 2>&1 &
 STARTER=$!
 disown "$STARTER"
 SPAWNED="$SPAWNED $STARTER"
-sleep 0.3
-a_compositor "$STARTER" >/dev/null
+for attempt in $(seq 1 50); do
+  [ -s "$TOKEN_FILE" ] && break
+  sleep 0.1
+done
+THEIRS="$(cat "$TOKEN_FILE")"
+a_compositor "$THEIRS" >/dev/null
 expect "a compositor whose starter is still running is not leftover" \
   0 "$(alive)"
 kill_compositors >/dev/null 2>&1
-expect "so the sweep leaves it alone" 3 "$(alive "$STARTER")"
+expect "so the sweep leaves it alone" 3 "$(alive "$THEIRS")"
 
 # --- and collects one whose starter is gone ----------------------------------
 
@@ -139,32 +168,34 @@ kill -KILL "$STARTER" 2>/dev/null
 wait "$STARTER" 2>/dev/null
 expect "once the starter is gone its compositor is leftover" 3 "$(alive)"
 SAID="$(kill_compositors 2>&1)"
-settle 0 "$STARTER"
-expect "and the sweep takes it" 0 "$(alive "$STARTER")"
+settle 0 "$THEIRS"
+expect "and the sweep takes it" 0 "$(alive "$THEIRS")"
 says "saying whose it was not" 'previous run' "$SAID"
 
 # --- a pid is not a starter --------------------------------------------------
 
-# THE REASON THE STARTER CARRIES A MARKER OF ITS OWN. A pid alone answers "yes,
-# still running" for whatever process inherited that number next, and these
-# runners are up for weeks. A live process that is not an under-wayland.sh must
-# not protect the compositor that pid once started.
+# THE REASON A RUN IS NAMED BY A START TIME AND NOT BY A PID. A pid alone
+# answers "yes, still running" for whatever process inherited that number next,
+# and these runners are up for weeks. A live process that is not the
+# under-wayland.sh that started this compositor must not protect it — so the
+# marker below names this pid at a moment one tick after boot, which is not
+# when the process now holding it started.
 sleep 300 >/dev/null 2>&1 &
 IMPOSTOR=$!
 disown "$IMPOSTOR"
 SPAWNED="$SPAWNED $IMPOSTOR"
-a_compositor "$IMPOSTOR" >/dev/null
+a_compositor "$IMPOSTOR:1" >/dev/null
 expect "a compositor whose pid belongs to something else is leftover" \
   3 "$(alive)"
 kill_compositors >/dev/null 2>&1
-settle 0 "$IMPOSTOR"
-expect "and the sweep takes it" 0 "$(alive "$IMPOSTOR")"
+settle 0 "$IMPOSTOR:1"
+expect "and the sweep takes it" 0 "$(alive "$IMPOSTOR:1")"
 kill -KILL "$IMPOSTOR" 2>/dev/null
 
 # --- somebody else's runtime directory ---------------------------------------
 
 ELSEWHERE_DIR="$(mktemp -d)"
-env DOMICILE_COMPOSITOR=999998 XDG_RUNTIME_DIR="$ELSEWHERE_DIR" \
+env DOMICILE_COMPOSITOR=999998:1 XDG_RUNTIME_DIR="$ELSEWHERE_DIR" \
   sleep 300 >/dev/null 2>&1 &
 ELSEWHERE=$!
 disown "$ELSEWHERE"
@@ -172,7 +203,7 @@ SPAWNED="$SPAWNED $ELSEWHERE"
 sleep 0.3
 expect "a compositor in another runtime directory is none of this one's business" \
   0 "$(alive)"
-expect "not even by name" 0 "$(alive 999998)"
+expect "not even by name" 0 "$(alive 999998:1)"
 kill -KILL "$ELSEWHERE" 2>/dev/null
 rm -rf "$ELSEWHERE_DIR"
 
@@ -180,10 +211,10 @@ rm -rf "$ELSEWHERE_DIR"
 
 # A hang here is a job that never ends, which is worse than the leak, so the
 # second pass is not optional.
-a_compositor "$$" 'trap "" TERM; sleep 300' >/dev/null
-SAID="$(kill_compositors "$$" 2>&1)"
-settle 0 "$$"
-expect "one that ignores SIGTERM is killed anyway" 0 "$(alive "$$")"
+a_compositor "$MINE" 'trap "" TERM; sleep 300' >/dev/null
+SAID="$(kill_compositors "$MINE" 2>&1)"
+settle 0 "$MINE"
+expect "one that ignores SIGTERM is killed anyway" 0 "$(alive "$MINE")"
 says "and is named as having needed it" 'would not take SIGTERM' "$SAID"
 
 
@@ -191,7 +222,7 @@ says "and is named as having needed it" 'would not take SIGTERM' "$SAID"
 
 # A LIBRARY NOTHING CALLS IS A LEAK THAT QUIETLY CAME BACK. Every case above
 # stays green if `under-wayland.sh` goes on ending its compositor the old way.
-for call in lib-compositor-cleanup.sh compositor_env DOMICILE_UNDER_WAYLAND; do
+for call in lib-compositor-cleanup.sh compositor_env compositor_owner; do
   if grep -q "$call" "$SCRIPT"; then
     ok "under-wayland.sh has $call"
   else
@@ -199,7 +230,7 @@ for call in lib-compositor-cleanup.sh compositor_env DOMICILE_UNDER_WAYLAND; do
     FAILED=$((FAILED + 1))
   fi
 done
-if grep -q 'kill_compositors "\$\$"' "$SCRIPT"; then
+if grep -q 'kill_compositors "\$(compositor_owner)"' "$SCRIPT"; then
   ok "under-wayland.sh stops its own compositor at exit"
 else
   printf '  FAIL  under-wayland.sh stops its own compositor at exit\n'
