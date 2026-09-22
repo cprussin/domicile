@@ -242,3 +242,47 @@ fn a_selection_that_is_not_text_is_left_alone() {
 
     assert_eq!(text_mime(&offered), None);
 }
+
+/// The row a paste would serve, by the id the compositor names it under.
+///
+/// **A copy has to be findable the moment it is taken.** A copy made in the
+/// browser reaches the seat as a selection the *compositor* offers, and a
+/// compositor offering one has to name which row it is offering — which it
+/// cannot do from `record`, whose answer is whether the list moved.
+#[test]
+fn the_newest_row_is_the_one_a_copy_just_made() {
+    let mut history = History::default();
+
+    history.record("first".to_string());
+    history.record("second".to_string());
+
+    let newest = history.newest().expect("a history with rows has a newest");
+    assert_eq!(history.text(newest), Some("second"));
+}
+
+/// Copying what is already on the clipboard still names that row.
+///
+/// The case `record` answers `false` to, which is a client re-offering the
+/// selection it already holds — ordinary, and still an id a caller needs: a
+/// browser that copied the same thing twice must set the selection both times
+/// or the second copy does nothing.
+#[test]
+fn copying_the_same_thing_twice_still_names_its_row() {
+    let mut history = History::default();
+    history.record("once".to_string());
+
+    assert!(!history.record("once".to_string()));
+
+    let newest = history.newest().expect("a history with rows has a newest");
+    assert_eq!(history.text(newest), Some("once"));
+}
+
+/// A desktop nothing has been copied on has no newest row.
+///
+/// Not an error and not a zero: it is the ordinary state of a desktop that has
+/// just started, and a caller asking what to offer is answered with nothing to
+/// offer.
+#[test]
+fn a_history_with_no_rows_has_no_newest() {
+    assert_eq!(History::default().newest(), None);
+}

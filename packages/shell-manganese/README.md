@@ -453,6 +453,15 @@ like the charge and unlike `list_files`: a copy is an event the compositor
 already hears, so the panel is current when it opens rather than fetching on
 the way up.
 
+**Every window pastes out of the same one, this page included.** A browser
+window is not a Wayland client of this compositor, so Chromium's own clipboard
+used to be a second one that nothing else could reach — copy in a terminal,
+paste in a tab, and nothing arrived. On a tty the engine now reads and writes
+the desktop's: `ui/ozone/platform/drm/domicile/drm_clipboard.h` in the fork is
+the browser's end of it, and the compositor is the clipboard. A nested run is
+still split, because the browser there is a window inside the host's session
+and reads the host's clipboard; `ROADMAP.md` carries that gap.
+
 **A row is an id and a preview, and never the text.** The bytes stay in the
 compositor and the shell hands back the id it was given, which is what
 `copyClipboardEntry` takes. A password manager's copy is a row in this list, so

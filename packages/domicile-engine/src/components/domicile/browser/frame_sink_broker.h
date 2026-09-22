@@ -61,6 +61,14 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // tty -- and the answer is dropped.
   using DisplayLayoutSetter =
       base::RepeatingCallback<void(std::vector<mojom::DisplayLayoutPtr>)>;
+  // How what the producer says is on a clipboard reaches the clipboard this
+  // process pastes out of. Injected for the reason above: the clipboard the
+  // browser reads is `ui::OzonePlatform`'s, and this target depends on neither
+  // //ui/ozone nor //content. An empty callback is an embedder with no
+  // clipboard of the desktop's -- which is every one that is a window inside
+  // somebody else's session -- and what the producer said is dropped.
+  using ClipboardSetter =
+      base::RepeatingCallback<void(mojom::Clipboard, const std::string&)>;
 
   // `get_shared_image_interface` is how an imported dmabuf reaches a GPU, and
   // is injected for the same reason the allocator is: the only route to one is
@@ -71,7 +79,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       FrameSinkIdAllocator allocate_frame_sink_id,
       SharedImageInterfaceGetter get_shared_image_interface =
           SharedImageInterfaceGetter(),
-      DisplayLayoutSetter set_display_layout = DisplayLayoutSetter());
+      DisplayLayoutSetter set_display_layout = DisplayLayoutSetter(),
+      ClipboardSetter set_clipboard = ClipboardSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -117,6 +126,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // on, which is worse than one it has not been told about yet.
   void OnDisplaysChanged(std::vector<mojom::DisplayPtr> displays);
 
+  // Something was copied in this browser. Forwarded to every producer
+  // watching, and not remembered: what a producer connecting afterward would
+  // be caught up on is a copy it made itself, and the clipboard it should hold
+  // is its own to state.
+  void OnCopied(mojom::Clipboard clipboard, const std::string& text);
+
   // mojom::FrameSinkBroker implementation.
   void CreateFrameSink(
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
@@ -137,6 +152,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                      uint64_t buffer_id) override;
   void ConfigureDisplays(
       std::vector<mojom::DisplayLayoutPtr> layout) override;
+  void SetClipboard(mojom::Clipboard clipboard,
+                    const std::string& text) override;
+  void ObserveClipboard(
+      mojo::PendingRemote<mojom::ClipboardObserver> observer) override;
   void ObserveDisplays(
       mojo::PendingRemote<mojom::DisplayListObserver> observer) override;
 
@@ -178,6 +197,9 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const SharedImageInterfaceGetter get_shared_image_interface_;
   // Empty on every embedder with no CRTC of its own. See DisplayLayoutSetter.
   const DisplayLayoutSetter set_display_layout_;
+  // Empty on every embedder with no clipboard of the desktop's. See
+  // ClipboardSetter.
+  const ClipboardSetter set_clipboard_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
 
@@ -187,6 +209,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   std::vector<PendingEmbed> pending_embeds_;
 
   mojo::RemoteSet<mojom::DisplayListObserver> display_observers_;
+
+  mojo::RemoteSet<mojom::ClipboardObserver> clipboard_observers_;
 
   // The last reading, or empty for "not read yet". See OnDisplaysChanged.
   std::vector<mojom::DisplayPtr> displays_;

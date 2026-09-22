@@ -12,11 +12,10 @@ import { useEffect, useState } from "react";
  * So there is nothing to ask and nothing to ask on — a panel that fetched on
  * opening would be fetching what it has already been told.
  *
- * **Not `navigator.clipboard`, which is the trap that looks like this.** That
- * API answers out of the browser's own clipboard, which on the platform this
- * engine scans out on is connected to no Wayland client at all: a shell
- * reading it would see what the shell itself copied and nothing any window
- * did.
+ * **Not `navigator.clipboard`, which is the thing that looks like this and is
+ * not.** That API answers what is on the clipboard *now* — one string, the
+ * last one — where this is the history, which nothing but the compositor has.
+ * It is also a read behind a permission prompt, where this arrives unasked.
  *
  * The empty list before the compositor has said anything is not a failure
  * state and is not drawn as one — it is also what a desktop nothing has been
