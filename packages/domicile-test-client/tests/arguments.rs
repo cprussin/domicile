@@ -47,6 +47,22 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.paste,
         "a client reads neither selection unless a check asks it to",
     );
+    assert!(
+        !asked.hold_the_screens_on,
+        "and a window is not a film: a client lets the desk blank under it",
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_hold_the_screens_on() {
+    // `zwp_idle_inhibit_manager_v1`, which is how a film says a desk nobody is
+    // touching is not idle. Nothing else in this client takes an inhibitor, so
+    // a check about a desktop that will not blank has no other way to make
+    // one.
+    let asked = given(&["--hold-the-screens-on"]).expect("a client that keeps a desk awake");
+
+    assert!(asked.hold_the_screens_on);
+    assert!(!asked.ask_for_focus, "and nothing else came on with it");
 }
 
 #[test]

@@ -25,6 +25,9 @@ use wayland_client::{
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
 };
+use wayland_protocols::wp::idle_inhibit::zv1::client::{
+    zwp_idle_inhibit_manager_v1, zwp_idle_inhibitor_v1,
+};
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
@@ -195,6 +198,9 @@ struct Client {
     /// Whether this client asks for the keyboard once its window is up — see
     /// [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: bool,
+    /// Whether this client holds the desktop's screens on — see
+    /// [`crate::arguments::Arguments::hold_the_screens_on`].
+    hold_the_screens_on: bool,
     /// What to put on the clipboard — see [`Arguments::copy`].
     copy: Option<String>,
     /// What to put on the middle-click selection — see
@@ -340,6 +346,8 @@ struct Globals {
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
+    /// What a film asks the desktop to stay awake through.
+    inhibit: Option<zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1>,
     /// Kept rather than dropped like the rest of what the seat is for, because
     /// a data device is made *from* a seat: both selections belong to one, and
     /// `get_data_device` is the request that says which.
@@ -359,6 +367,7 @@ impl Client {
             translucent: asked.translucent,
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
+            hold_the_screens_on: asked.hold_the_screens_on,
             copy: asked.copy.clone(),
             copy_primary: asked.copy_primary.clone(),
             paste: asked.paste,
@@ -400,6 +409,9 @@ impl Client {
                 }
                 "xdg_activation_v1" => {
                     self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_idle_inhibit_manager_v1" => {
+                    self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 // A seat is what carries the keyboard and the pointer, and a
                 // compositor only sends input to a client that asked for them.
@@ -476,6 +488,18 @@ impl Client {
         // the compositor answers it with the size the surface may use, and
         // attaching before that is asking for a size nobody agreed to.
         surface.commit();
+        if self.hold_the_screens_on {
+            let inhibit = self.globals.inhibit.as_ref().ok_or(ClientError::Missing {
+                global: "zwp_idle_inhibit_manager_v1",
+            })?;
+            // Kept by the connection rather than by this client: an inhibitor
+            // holds for as long as the object exists, and `wayland-client`
+            // sends no destroy of its own when the handle is dropped. Which is
+            // also the case the compositor has to answer for — nothing this
+            // client does when it is killed either.
+            let inhibitor = inhibit.create_inhibitor(&surface, handle, ());
+            crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
+        }
         self.window = Some(Window {
             surface,
             pixels,
@@ -1357,6 +1381,8 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 }
 
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1);
+delegate_noop!(Client: ignore zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1);
 delegate_noop!(Client: ignore wl_data_device_manager::WlDataDeviceManager);
 delegate_noop!(Client: ignore wl_data_offer::WlDataOffer);
 delegate_noop!(Client: ignore zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1);

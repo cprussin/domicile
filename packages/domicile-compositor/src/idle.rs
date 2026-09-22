@@ -13,18 +13,17 @@
 //! answers come back only when the answer *changed*, and [`Idle::dark`] is
 //! what everything else asks about the state.
 //!
-//! Two things this deliberately is not:
+//! What the desktop is *doing* gets one say in it, and only one: a client
+//! holding a `zwp_idle_inhibit_manager_v1` inhibitor — a film playing, with
+//! nobody near the trackpad — vetoes the answer. A veto rather than a hand on
+//! the desk or a clock that is paused; `Idle::should_be_dark` is where that
+//! choice is argued, and [`StillThere`] is the half of it that says what an
+//! inhibitor held by a client that *died* is worth.
 //!
-//! - **It is not a lock.** A dark screen is a screen, and anybody can still
-//!   type at this desktop. The lock needs the shell, the host↔chrome protocol
-//!   and a decision about where input stops; `ROADMAP.md` carries it.
-//! - **It does not know what the desktop is doing**, only what the person at
-//!   it is. A film playing full-screen with nobody touching the trackpad
-//!   blanks after the timeout, which is wrong and is a known gap rather than a
-//!   decision: Wayland's answer is `zwp_idle_inhibit_manager_v1`, Smithay
-//!   ships it, and wiring it is its own change — a client's inhibitor has to
-//!   reach here, and the compositor has to decide what an inhibitor held by a
-//!   *dead* client means. `ROADMAP.md` carries that too.
+//! One thing this deliberately is not: **it is not a lock.** A dark screen is
+//! a screen, and anybody can still type at this desktop. The lock needs the
+//! shell, the host↔chrome protocol and a decision about where input stops;
+//! `ROADMAP.md` carries it.
 
 use std::time::{Duration, Instant};
 
@@ -41,26 +40,48 @@ pub enum Blanking {
     ComeBack,
 }
 
+/// Whether a client's inhibitor is still anybody's to hold.
+///
+/// A CLIENT THAT CRASHES SENDS NO DESTROY. Smithay reports an inhibitor gone
+/// only for the request that asks — its own docs say the rest is the
+/// compositor's — so an inhibitor forgotten only when asked is one a dead
+/// client keeps forever, and that is a desktop whose screens never blank again
+/// with nothing anywhere saying why. The compositor's answer is
+/// `WlSurface::is_alive`, which is false for every object of a client that
+/// went; this is that question with no Wayland in it, so the arithmetic below
+/// can be tested against a client that dies on a machine with no display.
+pub trait StillThere {
+    fn still_there(&self) -> bool;
+}
+
 /// Whether anybody is at this desktop, and when that last changed.
 ///
 /// Built only for a desktop that states a timeout — `None` is a desktop that
 /// never blanks, which is what saying nothing means (`domicile_config`'s
 /// `IdleConfig`), and there is then nothing here to hold and no timer to arm.
-pub struct Idle {
+pub struct Idle<S> {
     blank_after: Duration,
     /// When somebody was last known to be here. The clock starts at whatever
     /// instant this was built at rather than at zero: a desktop that comes up
     /// and is left alone has been left alone since it came up.
     stirred_at: Instant,
     dark: bool,
+    /// What is asking that the screens stay on whatever the clock says.
+    ///
+    /// A list rather than a count or a set, because a surface can carry more
+    /// than one inhibitor — a player and the toolkit under it each take their
+    /// own — and `zwp_idle_inhibitor_v1.destroy` names nothing but the
+    /// surface. So letting one go has to take one of them rather than all.
+    inhibitors: Vec<S>,
 }
 
-impl Idle {
-    pub fn after(blank_after: Option<Duration>, now: Instant) -> Option<Idle> {
+impl<S: StillThere + PartialEq> Idle<S> {
+    pub fn after(blank_after: Option<Duration>, now: Instant) -> Option<Idle<S>> {
         blank_after.map(|blank_after| Idle {
             blank_after,
             stirred_at: now,
             dark: false,
+            inhibitors: Vec::new(),
         })
     }
 
@@ -75,15 +96,69 @@ impl Idle {
     /// The clock came round. `Some` only on the edge into a dark desktop.
     ///
     /// Written so that it cannot relight anything: the only state it can reach
-    /// is dark. A desktop comes back because a hand moved, which is
-    /// [`Idle::stirred`], and never because a timer fired.
+    /// is dark. A desktop comes back because a hand moved or because something
+    /// asked it to stay awake — [`Idle::stirred`] and [`Idle::inhibited_by`] —
+    /// and never because a timer fired.
     pub fn elapsed(&mut self, now: Instant) -> Option<Blanking> {
-        if self.dark || now.duration_since(self.stirred_at) < self.blank_after {
+        if self.should_be_dark(now) {
+            self.settle(now)
+        } else {
+            None
+        }
+    }
+
+    /// A client asked that this desktop stay awake. `Some` only on the edge
+    /// out of a dark desktop.
+    pub fn inhibited_by(&mut self, inhibitor: S, now: Instant) -> Option<Blanking> {
+        self.inhibitors.push(inhibitor);
+        self.settle(now)
+    }
+
+    /// A client let one of them go. `Some` only on the edge into a dark
+    /// desktop.
+    ///
+    /// One of them rather than every inhibitor on that surface, and nothing at
+    /// all for a surface this desk is not holding one on — which is a client
+    /// destroying an inhibitor it took while the config stated no timeout, so
+    /// there was no clock to hold it. Nothing changed then, and a desk is
+    /// blanked by the clock rather than by an answer to something that did not
+    /// happen.
+    pub fn uninhibited_by(&mut self, inhibitor: &S, now: Instant) -> Option<Blanking> {
+        match self.inhibitors.iter().position(|held| held == inhibitor) {
+            Some(one) => {
+                self.inhibitors.remove(one);
+                self.settle(now)
+            }
+            None => None,
+        }
+    }
+
+    /// Let go of everything the clients that are gone were holding.
+    ///
+    /// Answers nothing when they were holding nothing, which is the ordinary
+    /// case: this is asked after every turn of a compositor's clients, and
+    /// almost none of them ever took an inhibitor.
+    pub fn the_dead_let_go(&mut self, now: Instant) -> Option<Blanking> {
+        let held = self.inhibitors.len();
+        self.inhibitors.retain(StillThere::still_there);
+        if self.inhibitors.len() == held {
             None
         } else {
-            self.dark = true;
-            Some(Blanking::GoDark)
+            self.settle(now)
         }
+    }
+
+    /// Take over the inhibitors another clock was holding.
+    ///
+    /// For a reloaded `[idle]`, which replaces the clock outright: the timeout
+    /// is the config's to change and the moment it changed is a fresh count,
+    /// but *what is holding the screens on* belongs to the clients, and no
+    /// client resends an inhibitor because a file on disk was rewritten. A
+    /// clock that dropped them would blank a desk halfway through a film and
+    /// stay blanked, the thing that would have vetoed it being gone.
+    pub fn takes_over_from(mut self, previous: &mut Idle<S>) -> Idle<S> {
+        self.inhibitors = std::mem::take(&mut previous.inhibitors);
+        self
     }
 
     /// Whether the screens are off right now.
@@ -102,12 +177,53 @@ impl Idle {
     /// has nothing the clock can tell it — the next answer arrives on the
     /// input path — so it waits out another whole timeout, which keeps the
     /// source armed for one wake per timeout instead of one per second.
+    ///
+    /// **NEVER ZERO.** A desktop held awake past the moment it would have
+    /// blanked is a deadline in the past, and re-arming a timer for the time
+    /// left until it is re-arming for no time at all — an event loop spinning
+    /// flat out for as long as the film lasts. There is nothing the clock can
+    /// tell that desktop either, for the same reason a dark one has nothing:
+    /// the next answer comes from whoever lets go.
     pub fn next_check(&self, now: Instant) -> Duration {
-        if self.dark {
+        let until_the_deadline =
+            (self.stirred_at + self.blank_after).saturating_duration_since(now);
+        if self.dark || until_the_deadline.is_zero() {
             self.blank_after
         } else {
-            (self.stirred_at + self.blank_after).saturating_duration_since(now)
+            until_the_deadline
         }
+    }
+
+    /// Take up the answer the facts now give, and report it only if it
+    /// changed.
+    fn settle(&mut self, now: Instant) -> Option<Blanking> {
+        let should_be_dark = self.should_be_dark(now);
+        let changed = should_be_dark != self.dark;
+        self.dark = should_be_dark;
+        if !changed {
+            None
+        } else if should_be_dark {
+            Some(Blanking::GoDark)
+        } else {
+            Some(Blanking::ComeBack)
+        }
+    }
+
+    /// Whether the screens belong off, from the facts alone.
+    ///
+    /// The whole decision, and a function of nothing but when somebody was
+    /// last here, how long a timeout is, what is inhibiting and what time it
+    /// is now. An inhibitor is a **veto on the answer** rather than a hand on
+    /// the desk or a clock that is paused, and that is what makes both of the
+    /// cases that are easy to get wrong fall out of it: a film starting on a
+    /// desk that is already dark flips the answer back to lit, and the last
+    /// inhibitor going away on a desk nobody has touched in an hour flips it
+    /// to dark then and there rather than a timeout later.
+    ///
+    /// An inhibitor nobody is left to hold is not one. See [`StillThere`].
+    fn should_be_dark(&self, now: Instant) -> bool {
+        now.duration_since(self.stirred_at) >= self.blank_after
+            && !self.inhibitors.iter().any(StillThere::still_there)
     }
 }
 
@@ -183,13 +299,59 @@ pub fn darkened(displays: &[Display]) -> Vec<Connector> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
     use std::time::{Duration, Instant};
 
-    use super::{darkened, somebody_is_here, Blanking, Idle};
+    use super::{darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::engine::{Connector, Display};
     use crate::ClientRequest;
 
     const AFTER: Duration = Duration::from_secs(600);
+
+    /// A client's inhibitor, as `Idle` has to see one.
+    ///
+    /// Two facts and no Wayland: which surface it was taken on, which is all a
+    /// client destroying one names, and whether the client that took it is
+    /// still there — `WlSurface::is_alive` on the compositor's side, and a
+    /// flag a test can put out here.
+    #[derive(Clone)]
+    struct Inhibitor {
+        surface: u32,
+        client: Rc<Cell<bool>>,
+    }
+
+    impl Inhibitor {
+        fn on(surface: u32) -> Inhibitor {
+            Inhibitor {
+                surface,
+                client: Rc::new(Cell::new(true)),
+            }
+        }
+
+        fn the_client_died(&self) {
+            self.client.set(false);
+        }
+    }
+
+    impl StillThere for Inhibitor {
+        fn still_there(&self) -> bool {
+            self.client.get()
+        }
+    }
+
+    /// Two inhibitors are alike when they name the same surface, because that
+    /// is the whole of what a destroyed one arrives as.
+    impl PartialEq for Inhibitor {
+        fn eq(&self, other: &Inhibitor) -> bool {
+            self.surface == other.surface
+        }
+    }
+
+    /// A desk that blanks after [`AFTER`] alone, counting from `start`.
+    fn desk(start: Instant) -> Idle<Inhibitor> {
+        Idle::after(Some(AFTER), start).expect("a timeout was stated")
+    }
 
     fn monitor(id: i64, position: (i32, i32)) -> Display {
         Display {
@@ -204,13 +366,13 @@ mod tests {
 
     #[test]
     fn a_desktop_that_states_no_timeout_has_nothing_to_watch() {
-        assert!(Idle::after(None, Instant::now()).is_none());
+        assert!(Idle::<Inhibitor>::after(None, Instant::now()).is_none());
     }
 
     #[test]
     fn a_desktop_still_inside_its_timeout_stays_lit() {
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         assert_eq!(idle.elapsed(start + AFTER - Duration::from_millis(1)), None);
         assert!(!idle.dark());
     }
@@ -218,7 +380,7 @@ mod tests {
     #[test]
     fn a_desktop_nobody_touched_for_the_whole_timeout_goes_dark() {
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
         assert!(idle.dark());
     }
@@ -228,7 +390,7 @@ mod tests {
         // THE EDGE IS THE WHOLE POINT. A configure per tick is a modeset per
         // tick, on a desk nobody is at.
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         idle.elapsed(start + AFTER);
         assert_eq!(idle.elapsed(start + AFTER * 2), None);
         assert!(idle.dark());
@@ -237,7 +399,7 @@ mod tests {
     #[test]
     fn a_key_at_the_last_moment_puts_the_timeout_back() {
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         let stirred = start + AFTER - Duration::from_millis(1);
         assert_eq!(idle.stirred(stirred), None);
         assert_eq!(
@@ -251,7 +413,7 @@ mod tests {
     #[test]
     fn the_next_input_lights_a_dark_desktop_back_up() {
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         idle.elapsed(start + AFTER);
         assert_eq!(idle.stirred(start + AFTER * 2), Some(Blanking::ComeBack));
         assert!(!idle.dark());
@@ -261,7 +423,7 @@ mod tests {
     fn a_desktop_somebody_is_already_at_is_not_relit_on_every_keystroke() {
         // The other edge, and the one that would send a configure per key.
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         assert_eq!(idle.stirred(start + Duration::from_secs(1)), None);
         assert_eq!(idle.stirred(start + Duration::from_secs(2)), None);
     }
@@ -269,7 +431,7 @@ mod tests {
     #[test]
     fn a_lit_desktop_is_asked_again_when_its_timeout_would_be_up() {
         let start = Instant::now();
-        let idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let idle = desk(start);
         assert_eq!(
             idle.next_check(start + Duration::from_secs(60)),
             AFTER - Duration::from_secs(60)
@@ -282,9 +444,161 @@ mod tests {
         // from a hand, off the input path -- so this is only the wake that
         // keeps the timer armed, once a timeout rather than once a second.
         let start = Instant::now();
-        let mut idle = Idle::after(Some(AFTER), start).expect("a timeout was stated");
+        let mut idle = desk(start);
         idle.elapsed(start + AFTER);
         assert_eq!(idle.next_check(start + AFTER), AFTER);
+    }
+
+    #[test]
+    fn a_film_playing_holds_a_desktop_nobody_is_touching_awake() {
+        // The gap this whole seam exists for: the clock counts hands, and
+        // nobody's hand is on a trackpad during a film.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        assert_eq!(
+            idle.inhibited_by(Inhibitor::on(1), start),
+            None,
+            "a desk somebody is at is already lit"
+        );
+        assert_eq!(idle.elapsed(start + AFTER), None);
+        assert!(!idle.dark());
+    }
+
+    #[test]
+    fn a_film_starting_on_a_dark_desk_brings_the_screens_back() {
+        // A video begun on a blanked screen, which is the ordinary way of it:
+        // the answer changed without a hand, so the edge is real.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.elapsed(start + AFTER);
+        assert_eq!(
+            idle.inhibited_by(Inhibitor::on(1), start + AFTER),
+            Some(Blanking::ComeBack)
+        );
+        assert!(!idle.dark());
+    }
+
+    #[test]
+    fn the_desk_goes_dark_when_the_film_ends_rather_than_waiting_for_a_hand() {
+        // The veto lifting is the whole of what changed, and the desk has been
+        // untouched throughout — so it belongs dark now, not a timeout later.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start);
+        idle.elapsed(start + AFTER);
+        assert_eq!(
+            idle.uninhibited_by(&film, start + AFTER * 2),
+            Some(Blanking::GoDark)
+        );
+        assert!(idle.dark());
+    }
+
+    #[test]
+    fn an_inhibitor_let_go_inside_the_timeout_leaves_the_clock_where_it_was() {
+        // AN INHIBITOR IS NOT A HAND. Counting it as one would put the
+        // deadline a whole timeout past the film rather than past the last
+        // person, which is a desk that stays lit ten minutes after a
+        // notification sound.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start);
+        assert_eq!(idle.uninhibited_by(&film, start + AFTER / 2), None);
+        assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
+    }
+
+    #[test]
+    fn a_surface_carrying_two_inhibitors_is_let_go_of_twice() {
+        // A player and the toolkit under it each take their own, and the
+        // destroy names nothing but the surface: dropping both on the first
+        // one is a film that blanks halfway through.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start);
+        idle.inhibited_by(film.clone(), start);
+        assert_eq!(
+            idle.uninhibited_by(&film, start + AFTER),
+            None,
+            "the other one still holds"
+        );
+        assert_eq!(
+            idle.uninhibited_by(&film, start + AFTER),
+            Some(Blanking::GoDark)
+        );
+    }
+
+    #[test]
+    fn an_inhibitor_whose_client_died_holds_nothing() {
+        // The half that makes this correct rather than plausible, and it does
+        // not wait on anybody having noticed the death: a leaked inhibitor is
+        // a desktop that never blanks again and nobody would know why.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start);
+        film.the_client_died();
+        assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
+    }
+
+    #[test]
+    fn the_desk_goes_dark_when_the_client_holding_it_awake_dies() {
+        // The same death, noticed rather than waited out: the compositor asks
+        // this the moment it has finished with a client's last message, so a
+        // player that crashed mid-film does not keep the glass lit until the
+        // clock next comes round.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start);
+        idle.elapsed(start + AFTER);
+        film.the_client_died();
+        assert_eq!(idle.the_dead_let_go(start + AFTER), Some(Blanking::GoDark));
+        assert!(idle.dark());
+    }
+
+    #[test]
+    fn nothing_is_decided_by_an_inhibitor_this_desk_never_had() {
+        // Neither of these is the thing that blanks a desk nobody is at — the
+        // clock is, and it says so in a line of its own. One is asked after
+        // every turn of the clients, most of which were holding nothing; the
+        // other answers a client destroying an inhibitor it took before a
+        // reload gave this desk a clock at all. An answer from either would be
+        // a desk going dark for a film that never played.
+        let start = Instant::now();
+        let mut idle = desk(start);
+
+        assert_eq!(idle.the_dead_let_go(start + AFTER), None);
+        assert_eq!(idle.uninhibited_by(&Inhibitor::on(1), start + AFTER), None);
+        assert!(!idle.dark());
+    }
+
+    #[test]
+    fn a_reloaded_clock_goes_on_holding_the_film_the_old_one_was() {
+        // A config rewritten is not a film ending: no client resends an
+        // inhibitor because a file on disk changed, so a clock that dropped
+        // them would blank the desk halfway through — and stay blanked, since
+        // the thing that would have vetoed it is gone.
+        let start = Instant::now();
+        let mut old = desk(start);
+        old.inhibited_by(Inhibitor::on(1), start);
+
+        let mut reloaded = desk(start).takes_over_from(&mut old);
+
+        assert_eq!(reloaded.elapsed(start + AFTER), None);
+        assert!(!reloaded.dark());
+    }
+
+    #[test]
+    fn a_desk_held_awake_past_its_deadline_is_not_asked_again_at_once() {
+        // A zero here is a timer that re-arms for no time at all, which is
+        // this compositor's event loop spinning flat out for as long as the
+        // film lasts.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.inhibited_by(Inhibitor::on(1), start);
+        assert_eq!(idle.next_check(start + AFTER * 2), AFTER);
     }
 
     #[test]

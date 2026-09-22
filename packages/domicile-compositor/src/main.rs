@@ -63,6 +63,7 @@ use smithay::wayland::{
     dmabuf::{
         get_dmabuf, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
     },
+    idle_inhibit::{IdleInhibitHandler, IdleInhibitManagerState},
     output::{OutputHandler, OutputManagerState},
     selection::data_device::{
         request_data_device_client_selection, set_data_device_focus, set_data_device_selection,
@@ -87,8 +88,9 @@ use smithay::wayland::{
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
-    delegate_dmabuf, delegate_output, delegate_primary_selection, delegate_seat, delegate_shm,
-    delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
+    delegate_dmabuf, delegate_idle_inhibit, delegate_output, delegate_primary_selection,
+    delegate_seat, delegate_shm, delegate_single_pixel_buffer, delegate_viewporter,
+    delegate_xdg_activation, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -122,7 +124,7 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
-use crate::idle::{darkened, somebody_is_here, Blanking, Idle};
+use crate::idle::{darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -1583,7 +1585,12 @@ struct DomicileCompositor {
     /// about idle means — and then nothing here has a timer either. Replaced
     /// when a reload changes `[idle]`, which is
     /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock).
-    idle: Option<Idle>,
+    ///
+    /// What it holds its inhibitors as is the surface each was taken on, which
+    /// is what `zwp_idle_inhibit_manager_v1` hands over in both directions —
+    /// and what [`StillThere`] asks about, because a surface of a client that
+    /// is gone is not alive.
+    idle: Option<Idle<WlSurface>>,
     /// The timer that asks the clock, where there is a clock to ask.
     ///
     /// Held so a reload can take it away again: a desk whose timeout is
@@ -3014,6 +3021,72 @@ impl DomicileCompositor {
         }
     }
 
+    /// A client asked that this desktop stay awake for as long as it holds an
+    /// inhibitor.
+    ///
+    /// A desk that states no timeout has no clock to veto, so there is nothing
+    /// here to keep: it never blanks, which is what the client was asking for.
+    fn hold_the_screens_on(&mut self, surface: WlSurface) {
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        let edge = idle.inhibited_by(surface, Instant::now());
+        self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
+    }
+
+    /// A client let one go, which is the only half of this that a client says.
+    fn let_the_screens_go(&mut self, surface: &WlSurface) {
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        let edge = idle.uninhibited_by(surface, Instant::now());
+        self.the_inhibitors_changed(edge, "nothing is holding this desktop awake now");
+    }
+
+    /// Let go of the inhibitors of clients that are gone.
+    ///
+    /// **A CLIENT THAT DIED SAYS NOTHING**, so this is asked after every turn
+    /// of the clients rather than waited for: the destroy that would have
+    /// released an inhibitor is the one request a crash does not send, and an
+    /// inhibitor nobody is left to hold is a desktop that never blanks again
+    /// with nothing anywhere saying why.
+    ///
+    /// Here rather than on a `destroyed` hook because smithay's own object
+    /// data is what carries the surface an inhibitor was taken on, and it
+    /// hands that back on the request alone. Cheap enough to ask every time:
+    /// it is a liveness check over the handful of things holding this desktop
+    /// awake, and it states the connectors only when the answer *changed* —
+    /// which, for every client that was holding nothing, it did not.
+    ///
+    /// The clock is the backstop rather than the mechanism. It would find the
+    /// same dead inhibitor the next time it came round, but "the next time"
+    /// is a whole timeout, which on the desk this is for is ten minutes of
+    /// glass lit for a player that is not running.
+    fn let_go_of_what_the_dead_were_holding(&mut self) {
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        let edge = idle.the_dead_let_go(Instant::now());
+        self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
+    }
+
+    /// Act on an answer that the inhibitors changed, saying why.
+    ///
+    /// One place for all three, because they are one sentence with a different
+    /// reason in front of it — and because the edge is the whole rule: a
+    /// desktop states its connectors when the answer *changed* and at no other
+    /// time, whether what changed it was a hand, a clock or a film.
+    fn the_inhibitors_changed(&mut self, edge: Option<Blanking>, why: &str) {
+        let Some(edge) = edge else {
+            return;
+        };
+        match edge {
+            Blanking::GoDark => info!("{why}; this desktop's screens go dark"),
+            Blanking::ComeBack => info!("{why}; this desktop's screens come back on"),
+        }
+        self.state_the_connectors();
+    }
+
     /// The idle clock came round. Answers with when to ask again.
     ///
     /// A timer rather than a thread, and one whose next wake this decides:
@@ -3083,7 +3156,16 @@ impl DomicileCompositor {
     /// says it is, and the desk blanks again a fresh timeout later.
     fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
         let was_dark = self.the_screens_are_dark();
-        self.idle = Idle::after(idle.blank_after(), Instant::now());
+        // Carrying over whatever is holding the screens on, which is the one
+        // thing here that is the clients' rather than the config's — see
+        // [`Idle::takes_over_from`].
+        self.idle = match (
+            Idle::after(idle.blank_after(), Instant::now()),
+            self.idle.as_mut(),
+        ) {
+            (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
+            (clock, _) => clock,
+        };
         // A failed insert is not fatal here, which is the difference between
         // this and the same call at startup. What is lost is the blanking —
         // the desk runs on, lit, exactly as one that never stated a timeout —
@@ -4141,6 +4223,41 @@ delegate_content_type!(DomicileCompositor);
 delegate_shm!(DomicileCompositor);
 delegate_dmabuf!(DomicileCompositor);
 
+// ---- idle inhibit ---------------------------------------------------------
+
+/// A client's `zwp_idle_inhibitor_v1`, reaching the clock that would blank the
+/// screens.
+///
+/// Smithay hands over the surface in both directions and nothing else, which
+/// is why that is what `Idle` holds. `uninhibit` is the client saying so —
+/// and only that; the inhibitors of clients that never will are let go of by
+/// [`DomicileCompositor::let_go_of_what_the_dead_were_holding`].
+impl IdleInhibitHandler for DomicileCompositor {
+    fn inhibit(&mut self, surface: WlSurface) {
+        self.hold_the_screens_on(surface);
+    }
+
+    fn uninhibit(&mut self, surface: WlSurface) {
+        self.let_the_screens_go(&surface);
+    }
+}
+
+delegate_idle_inhibit!(DomicileCompositor);
+
+/// An inhibitor is held for exactly as long as the surface it was taken on
+/// exists.
+///
+/// Which is the answer to the client that died holding one: every object of a
+/// gone client stops being alive when this compositor finishes with its
+/// connection, so the inhibitor it never destroyed holds nothing from that
+/// moment on — see [`StillThere`], which says why waiting for the destroy is
+/// not an option.
+impl StillThere for WlSurface {
+    fn still_there(&self) -> bool {
+        self.is_alive()
+    }
+}
+
 // ---- seat (required by xdg-shell delegation) ------------------------------
 
 impl SeatHandler for DomicileCompositor {
@@ -4984,6 +5101,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     ViewporterState::new::<DomicileCompositor>(&dh);
     SinglePixelBufferState::new::<DomicileCompositor>(&dh);
     ContentTypeState::new::<DomicileCompositor>(&dh);
+    // Advertised on every desktop, including one that states no timeout and so
+    // never blanks: a client asking that desk to stay awake is asking for
+    // something already true, and a global that came and went with a reloaded
+    // config would be one a running player had bound and lost.
+    IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
@@ -5286,6 +5408,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Generic::new(poll_fd, Interest::READ, Mode::Level),
         |_, _, data: &mut CalloopData| {
             data.display.dispatch_clients(&mut data.state).unwrap();
+            // After the dispatch, because that is when a client that went away
+            // stops being alive — and an inhibitor it never destroyed stops
+            // holding the screens on. See
+            // `let_go_of_what_the_dead_were_holding`.
+            data.state.let_go_of_what_the_dead_were_holding();
             data.display.flush_clients().unwrap();
             Ok(PostAction::Continue)
         },
