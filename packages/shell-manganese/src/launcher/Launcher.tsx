@@ -1,6 +1,7 @@
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
+import { CircleNotchIcon } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
@@ -25,9 +26,31 @@ const PROMPT = "Open a file, a URL, or search";
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
 
+/**
+ * How many rows are drawn, however many the query left.
+ *
+ * **A home is a hundred thousand paths.** The list used to be a few hundred
+ * because the walk behind it stopped a level into each directory; it is an
+ * index of the whole home now, and a row per path is a panel that hangs the
+ * shell on the keystroke that opens it. Nothing is lost by the cap: the rows
+ * past it are not rows anybody scrolls to — what narrows this list is typing —
+ * and the counter beside the box goes on saying how many there really are, so
+ * what is drawn is never mistaken for what matched.
+ */
+const ROWS = 200;
+
 type Props = {
   /** What there is to open, in the order the host answered. */
   files: readonly string[];
+  /**
+   * Whether the desktop is still walking the home the list came out of.
+   *
+   * Drawn, and it has to be: a list that is a third of a home looks exactly
+   * like a home with a third as much in it, so a person who types the name of
+   * a file the walk has not reached would otherwise be told they do not have
+   * it, with nothing on screen to say otherwise.
+   */
+  indexing: boolean;
   /** Escape, or a click on the backdrop. The desktop decides what that means. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
@@ -49,13 +72,19 @@ type Props = {
  * the first time `mod+space` was pressed over one the desktop thought was
  * shut.
  */
-export const Launcher = ({ files, onDismiss, onLaunch, open }: Props) => (
+export const Launcher = ({
+  files,
+  indexing,
+  onDismiss,
+  onLaunch,
+  open,
+}: Props) => (
   <ModalDialog
     // Escape and the backdrop are what put it away, and the footer says the
     // first of those — a corner ✕ on a panel driven from the keyboard is a
     // button nobody aims at and a line of chrome over the thing being read.
     closeButton={false}
-    footer={<Keys />}
+    footer={<Footer indexing={indexing} />}
     onOpenChange={(next) => {
       if (!next) {
         onDismiss();
@@ -103,7 +132,10 @@ const Query = ({ files, onLaunch }: QueryProps) => {
   // "nobody has walked it" into "the first match, because they typed".
   const [stepped, setStepped] = useState<number | undefined>(undefined);
 
-  const shown = useMemo(() => matching(files, query), [files, query]);
+  // Two lists, and the difference between them is the whole of `ROWS`: what
+  // matched is what the counter reports, and what is drawn is the front of it.
+  const matched = useMemo(() => matching(files, query), [files, query]);
+  const shown = useMemo(() => matched.slice(0, ROWS), [matched]);
   // Over everything offered rather than over what is shown: `Notes` is a
   // directory whether or not the query still asks about anything inside it.
   const directories = useMemo(() => directoriesIn(files), [files]);
@@ -179,7 +211,7 @@ const Query = ({ files, onLaunch }: QueryProps) => {
         suffixIcon={
           files.length === 0 ? undefined : (
             <span aria-hidden="true" className={countStyles}>
-              {`${shown.length.toString()} of ${files.length.toString()}`}
+              {`${matched.length.toString()} of ${files.length.toString()}`}
             </span>
           )
         }
@@ -344,6 +376,38 @@ const drawnAs = (
     }
   }
 };
+
+/**
+ * Under the panel: what the desktop is still doing, and the keys it answers.
+ *
+ * The notice goes here rather than among the rows because it is about the list
+ * rather than about any row in it — and because the footer is the one part of
+ * this panel that does not move when a letter is typed. A line that appeared
+ * and vanished between the box and the rows would shift everything under it on
+ * the keystroke that made it appear.
+ */
+const Footer = ({ indexing }: { indexing: boolean }) => (
+  <>
+    {indexing && <StillIndexing />}
+    <Keys />
+  </>
+);
+
+/**
+ * The line that says the list is not all of the home yet.
+ *
+ * `role="status"` so it is announced rather than only drawn: a person driving
+ * this from the keyboard with a screen reader is the person least able to
+ * notice rows arriving on their own.
+ */
+const StillIndexing = () => (
+  <p className={indexingStyles} role="status">
+    <span className={spinnerStyles}>
+      <CircleNotchIcon size={ICON_SIZE} />
+    </span>
+    Still finding your files
+  </p>
+);
 
 /**
  * The three keys the panel answers, spelled out under it.
@@ -599,6 +663,35 @@ const countStyles = css({
   fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
+});
+
+// Beside the keys and at the other end of the footer, in the color the panel
+// says everything provisional in. Pushed left of them by `marginInlineEnd`,
+// because the footer lays its children out to the right and this is the half
+// that is news.
+const indexingStyles = hstack({
+  color: "muted",
+  fontSize: "xs",
+  gap: 1.5,
+  margin: 0,
+  marginInlineEnd: "auto",
+});
+
+// A full turn, for the one thing on this panel that is still happening. On the
+// span rather than on the glyph, because a Phosphor icon is somebody else's
+// component and this panel styles its icons by what they sit in — the same
+// wrapper the hint line and the row tiles use.
+//
+// `prefers-reduced-motion` stops it: what the line says is in the words, and
+// the turn is only what keeps them from reading as a state nobody is working
+// on.
+const spinnerStyles = css({
+  _motionReduce: { animationName: "none" },
+  alignItems: "center",
+  animation: "spin {durations.spin} {easings.linear} infinite",
+  color: "accent",
+  display: "inline-flex",
+  flexShrink: 0,
 });
 
 const keysStyles = hstack({

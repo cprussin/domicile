@@ -23,13 +23,16 @@ DomicileFilesEvent::DomicileFilesEvent(
     : Event(type, initializer),
       files_(MakeGarbageCollected<FrozenArray<IDLString>>(
           initializer->files())),
+      indexing_(initializer->indexing()),
       arrival_(initializer->arrival()) {}
 
 DomicileFilesEvent::DomicileFilesEvent(const AtomicString& type,
                                        Vector<String> files,
+                                       bool indexing,
                                        DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       files_(MakeGarbageCollected<FrozenArray<IDLString>>(std::move(files))),
+      indexing_(indexing),
       arrival_(arrival) {}
 
 DomicileFilesEvent::~DomicileFilesEvent() = default;

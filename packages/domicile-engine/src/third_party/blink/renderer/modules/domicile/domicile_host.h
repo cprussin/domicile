@@ -151,7 +151,9 @@ class MODULES_EXPORT DomicileHost final
                  bool shift,
                  bool meta,
                  base::TimeTicks arrival) override;
-  void Files(const Vector<String>& files, base::TimeTicks arrival) override;
+  void Files(const Vector<String>& files,
+             bool indexing,
+             base::TimeTicks arrival) override;
   void Battery(double charge,
                bool charging,
                base::TimeTicks arrival) override;
