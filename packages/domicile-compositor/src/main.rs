@@ -97,6 +97,7 @@ mod keymap;
 mod latency;
 mod modifiers;
 mod outbound;
+mod peer_process;
 mod scale;
 mod screens;
 mod timing_window;
@@ -114,6 +115,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
+use crate::peer_process::peer_pid;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
@@ -188,6 +190,19 @@ mod grepped {
     /// came up at, which is the first thing to read when a chrome is laid out
     /// for the wrong screen.
     pub const ADVERTISING: &str = "advertising output scale";
+    /// `tests/apps.rs::a_spawn_says_which_process_it_started`: the fork in
+    /// `spawn_client`, and the first of the two lines a slow launch is read
+    /// from.
+    ///
+    /// [`DENSITY_REFUSED`]'s arrangement — a Rust test that spells the string
+    /// — rather than [`UNPARSEABLE`]'s nothing, because the test waits on it
+    /// by text and a rename here would leave that wait timing out with a
+    /// verdict against the compositor for a string that moved.
+    pub const SPAWNING: &str = "spawning client";
+    /// `tests/apps.rs::a_client_that_reaches_the_socket_is_said_to_have_arrived`:
+    /// the accept callback in `run`, and the second of the two. Pinned the
+    /// same way and for the same reason as [`SPAWNING`] above.
+    pub const ARRIVED: &str = "app client connected";
 }
 
 /// The renderer client buffers are imported on.
@@ -3943,9 +3958,21 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
     let Some(mut child) = client_command(command, wayland_display) else {
         return;
     };
-    info!(?command, ?wayland_display, "spawning client");
     match child.spawn() {
         Ok(mut child) => {
+            // After the fork rather than before it, because the line carries
+            // the pid and there is none until then. That pid is the whole
+            // reason the line moved: it is what an `app client connected`
+            // says back, and without it a launcher opening three windows
+            // produces three spawns and three arrivals that cannot be paired.
+            // See `peer_process` for what the pair is for.
+            info!(
+                pid = child.id(),
+                ?command,
+                ?wayland_display,
+                "{}",
+                grepped::SPAWNING
+            );
             thread::spawn(move || {
                 let _ = child.wait();
             });
@@ -4123,10 +4150,20 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
-        tracing_subscriber::fmt().with_env_filter(filter).init();
-    } else {
-        tracing_subscriber::fmt().init();
+    // Color only on a terminal. A desktop is nearly always started with its
+    // output going to a file — that is how anybody gets a log to read
+    // afterward — and `tracing_subscriber` colors regardless of where it is
+    // writing, so what lands there is a field name wrapped in escapes on
+    // every line. `grep pid=1234` finds nothing in it, which is the one thing
+    // a person reading a slow launch wants to do. Interactively nothing
+    // changes.
+    let colored = std::io::IsTerminal::is_terminal(&std::io::stdout());
+    match tracing_subscriber::EnvFilter::try_from_default_env() {
+        Ok(filter) => tracing_subscriber::fmt()
+            .with_ansi(colored)
+            .with_env_filter(filter)
+            .init(),
+        Err(_) => tracing_subscriber::fmt().with_ansi(colored).init(),
     }
 
     // The whole command line, read before anything is bound: it is written by
@@ -4403,6 +4440,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Start accepting on the sockets bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
+        // The answer to `spawning client`, and the only line between a spawn
+        // and the `toplevel mapped` seconds later that says which of the two
+        // the wait was. Before `insert_client`, which takes the stream.
+        info!(pid = ?peer_pid(&stream), "{}", grepped::ARRIVED);
         data.display
             .handle()
             .insert_client(stream, Arc::new(ClientState::default()))

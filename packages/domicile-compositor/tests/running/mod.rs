@@ -763,6 +763,12 @@ pub struct Client {
 }
 
 impl Client {
+    /// The process this client is, which is the process the compositor sees
+    /// on the other end of its connection.
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
     /// Wait for the client to exit, and answer whether it did so cleanly.
     ///
     /// The end of `e2e-close`'s question: a client told to close is one that

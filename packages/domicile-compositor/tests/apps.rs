@@ -288,3 +288,65 @@ fn a_spawn_with_no_command_does_not_stop_the_compositor_listening() {
         "the compositor stopped reading this chrome after it sent an empty spawn"
     );
 }
+
+/// A launched app can be followed from the spawn to the socket it arrives on.
+///
+/// **The two lines this pins are the ones that were not there when a `kitty`
+/// took 3.6s to appear.** A launched client used to leave `spawning client`
+/// and then, seconds later, `toplevel mapped`, and the gap between them is
+/// two things stacked: the app starting up, and the app talking to us. With
+/// nothing in between, a compositor that was up and idle four seconds before
+/// the spawn was as good a suspect as the terminal, and neither could be
+/// ruled out from a log.
+///
+/// The pid is what makes the pair readable rather than merely present:
+/// somebody who presses the launcher key again because nothing happened has
+/// several spawns in flight, and arrivals in no particular order. `$$` is the
+/// shell's own pid, which is the process the compositor started.
+///
+/// An e2e-level test because both halves are a real process: the spawn's is
+/// one the compositor forked, and the arrival's is what the *kernel* says
+/// about a connected socket. `peer_pid` is unit-tested against a socket pair,
+/// and a pair cannot show that the fd reaching this callback is the client's.
+#[test]
+fn a_spawn_says_which_process_it_started() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+
+    let reported = compositor.scratch_file("spawned-pid");
+    chrome
+        .say(&ChromeMessage::Spawn {
+            command: vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                // By rename, for the reason the test above says: a plain
+                // redirect is observable while the file is still empty.
+                format!(
+                    "printf '%s' $$ > {0}.new && mv {0}.new {0}",
+                    reported.display()
+                ),
+            ],
+        })
+        .expect("the chrome socket takes a spawn");
+
+    let pid = compositor.await_file(&reported);
+
+    compositor.wait_for_log(&format!("spawning client pid={pid}"));
+}
+
+/// A client that reaches the socket is said to have reached it, and named.
+///
+/// The other half of the pair above, and the half that says where a slow
+/// start went: an arrival logged late is an app that was slow to *start*, and
+/// one logged at once followed by a late `toplevel mapped` is an app that
+/// reached us quickly and then took its time — which is the compositor's
+/// business rather than the app's. The line cannot tell them apart; it is
+/// what lets a reader do so.
+#[test]
+fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+
+    let client = compositor.client("arriving");
+
+    compositor.wait_for_log(&format!("app client connected pid=Some({})", client.pid()));
+}
