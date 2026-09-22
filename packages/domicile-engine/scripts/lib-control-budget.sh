@@ -65,7 +65,7 @@
 # is for; `engine.yml` empties the directory at the top of a run as well.
 #
 # AND IT STAYS PINNED EVEN THOUGH THE ENGINE GROUP NO LONGER NEEDS IT TO BE.
-# `engine.yml` runs its seventeen checks as one `./scripts/check.sh engine` inside
+# `engine.yml` runs its eighteen checks as one `./scripts/check.sh engine` inside
 # one `nix develop`, and `scripts/lib/engine-guard.sh` runs each guard and its
 # control back to back in that one process tree -- so for that job the two now
 # share a $TMPDIR as well as a /tmp, and either location would carry the note.

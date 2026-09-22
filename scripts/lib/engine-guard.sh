@@ -17,8 +17,8 @@
 # `DOMICILE_CHROMIUM` is that directory and `DOMICILE_ENGINE_OUT` is that
 # `OUT`.
 #
-# THE CONTROLS ARE HERE AND NOT IN YAML, WHICH IS THE POINT OF THE FILE. Eleven
-# of the thirteen guard checks have one — the same run with the client absent, or drawing
+# THE CONTROLS ARE HERE AND NOT IN YAML, WHICH IS THE POINT OF THE FILE. Twelve
+# of the fourteen guard checks have one — the same run with the client absent, or drawing
 # another color, or with an `<iframe>` in the element's place — and it is
 # selected by `NEGATIVE=1` and nothing else. While that lived in a workflow's
 # `env:` block, a guard and the only thing establishing that it can fail were
@@ -117,7 +117,7 @@ engine_guard_and_control() { # guard script name, args...
 # `DOMICILE_GUARD_CONTROL=0`.
 #
 # DEFAULT ON, and the direction is the safety: a caller that forgets to ask gets
-# the control anyway. The reverse — opt in — would drop all eleven of the
+# the control anyway. The reverse — opt in — would drop all twelve of the
 # group's controls the first time somebody forgot, and a control that silently stopped
 # running is the exact failure the controls exist to prevent, one level up.
 # `scripts/test-the-workflows-delegate-their-checks.sh` asserts that `engine.yml`

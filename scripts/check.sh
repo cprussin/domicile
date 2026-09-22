@@ -281,6 +281,7 @@ if wanted engine; then
     scripts/engine-guard-shell-manganese.sh \
     scripts/engine-guard-webview-framing.sh \
     scripts/engine-guard-webview-keyboard.sh \
+    scripts/engine-guard-webview-escape.sh \
     scripts/engine-guard-webview-history.sh \
     scripts/engine-guard-webview-click.sh \
     scripts/engine-guard-webview-new-window.sh \
@@ -291,7 +292,7 @@ if wanted engine; then
   ; do
     run "$(basename "$script" .sh)" "$script"
     # A skip is not a stop: on a machine with no tree every one of these skips,
-    # and bailing on the first would report one skip where there are seventeen —
+    # and bailing on the first would report one skip where there are eighteen —
     # which under STRICT is one failure naming one check instead of the list of
     # what is not running.
     [ "${#FAILED[@]}" -eq 0 ] || {

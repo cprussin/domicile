@@ -33,8 +33,19 @@ namespace domicile {
 // It is one object wearing three of content's hats, the way
 // components/guest_view's GuestViewBase does -- and deliberately NOT that
 // class: this fork depends on neither //extensions nor //components/guest_view,
-// and the four virtuals of BrowserPluginGuestDelegate are the entire cost of
-// staying that way.
+// and the four virtuals of BrowserPluginGuestDelegate are almost the entire
+// cost of staying that way.
+//
+// AND THE REST OF THAT COST IS A GUEST MANAGER THERE IS NOT. //components/
+// guest_view is what installs one, so `ProfileImpl::GetGuestManager()` answers
+// null here -- and content is not uniformly ready for that even though its own
+// profile can return it. Attaching a guest builds a BrowserPluginEmbedder on
+// the OWNER's WebContents, and two of that class's four methods walk the guest
+// manager without checking: a plain Escape anywhere in the shell reached one of
+// them and took the desktop down. Patch 0037 is the check, and
+// `upstream/browser-plugin-embedder-null-guest-manager.md` is the bug it is.
+// Expect the same shape from anything else in content that assumes a guest
+// implies a manager.
 //
 //   BrowserPluginGuestDelegate  makes the inner WebContents a *guest*, which
 //                               is what gives it a WebContentsViewChildFrame

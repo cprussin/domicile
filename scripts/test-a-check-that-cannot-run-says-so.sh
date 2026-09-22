@@ -236,7 +236,7 @@ fi
 #
 # DEFAULT ON, OPT OUT, and that direction is the whole safety of it: a caller
 # that forgets to ask for the control gets it anyway, where the reverse would
-# drop all eleven of the group's controls the first time somebody forgot. What
+# drop all twelve of the group's controls the first time somebody forgot. What
 # stops the group ITSELF from opting out is asserted in
 # `scripts/test-the-workflows-delegate-their-checks.sh`.
 echo "whether the control runs"
