@@ -32,6 +32,18 @@ describe("split", () => {
     });
   });
 
+  it("keeps a selected container selected, one level deeper", () => {
+    // sway splits whatever `focus parent` is pointed at and leaves it
+    // pointed there: the container is inside a new one, and it is still the
+    // container the next key acts on.
+    const selected = focusedParent(withFocusOn(ROW, "a"));
+
+    expect(focusedNodeOf(split(selected, Axis.Vertical))).toMatchObject({
+      children: [{}, {}],
+      layout: Layout.SplitH,
+    });
+  });
+
   it("leaves the focus on the window inside it", () => {
     expect(focusedNodeOf(split(ROW, Axis.Vertical))).toEqual(
       LayoutNode.Window("a"),
@@ -79,6 +91,16 @@ describe("laidOut", () => {
     expect(stacked.root).toMatchObject({
       children: [{}, { layout: Layout.Stacking }],
       layout: Layout.SplitH,
+    });
+  });
+
+  it("leaves the container it rearranged as the selected one", () => {
+    // What `mod+a mod+s mod+w` has to be able to mean: a stack laid out
+    // again as tabs, rather than the second key acting on the window.
+    const stacked = laidOut(focusedParent(ROW), Layout.Stacking);
+
+    expect(focusedNodeOf(laidOut(stacked, Layout.Tabbed))).toMatchObject({
+      layout: Layout.Tabbed,
     });
   });
 

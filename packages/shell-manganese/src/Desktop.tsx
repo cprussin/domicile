@@ -70,7 +70,7 @@ export const Desktop = ({ domicile }: Props) => {
   const screenful = useMemo(
     () =>
       geometry === undefined
-        ? { placements: [], tabs: [] }
+        ? { placements: [], selection: undefined, tabs: [] }
         : placementsOf(windows, geometry),
     [geometry, windows],
   );

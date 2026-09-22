@@ -8,6 +8,7 @@ import { BrowserWindow } from "./BrowserWindow";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
+import { GroupOutline } from "./GroupOutline";
 import type { Screenful } from "./placement";
 import { TitleBar } from "./TitleBar";
 import { titleFocus } from "./title-focus";
@@ -120,7 +121,7 @@ export const Stage = ({
   onRename,
   onResize,
   onSelect,
-  screenful: { placements, tabs },
+  screenful: { placements, selection, tabs },
   windows,
 }: Props) => {
   const motions = useWindowMotion({
@@ -355,6 +356,12 @@ export const Stage = ({
           window={tab.id}
         />
       ))}
+      {/*
+        And over all of it, the group `focus parent` selected — after the
+        windows and their bars, because it rings them: two elements at one
+        `z-index` are decided by the order they come in the document.
+      */}
+      {selection !== undefined && <GroupOutline rect={selection} />}
     </main>
   );
 };

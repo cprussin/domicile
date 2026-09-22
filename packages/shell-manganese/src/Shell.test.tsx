@@ -341,6 +341,22 @@ const addressesShowing = (): string[] =>
     .getAllByRole<HTMLInputElement>("combobox", { name: "Address" })
     .map((field) => field.value);
 
+/**
+ * The line around the container `focus parent` selected.
+ *
+ * Throws where there is none: a case that asks for its box is one that has
+ * just selected a container, and the absence is what the cases about nothing
+ * being selected assert for themselves.
+ */
+const groupOutline = (container: HTMLElement): HTMLElement => {
+  const outline = container.querySelector<HTMLElement>("[data-selection]");
+  if (outline === null) {
+    throw new Error("test: nothing on screen marks out a selected container");
+  } else {
+    return outline;
+  }
+};
+
 /** Where an element was placed, as the numbers the layout worked out. */
 const boxOf = (element: HTMLElement) => ({
   height: element.style.blockSize,
@@ -972,6 +988,30 @@ describe("Shell", () => {
       expect(boxOf(appElement(container, "one"))).toMatchObject({ x: "970px" });
     });
 
+    it("makes one group of a split window and a window moved into it", () => {
+      // The whole of what a split is for: `mod+v` wraps the window being
+      // worked in in a column of one, and the window moved at that column
+      // from beside it joins it rather than trading places with it.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("v");
+      press("h");
+      press("l", true);
+
+      // One column of two, each the width of the workspace — not two windows
+      // side by side, which is what a swap would have left.
+      expect(boxOf(appElement(container, "one"))).toMatchObject({
+        width: "1920px",
+        y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
+      });
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        width: "1920px",
+        y: `${(TOP_BAR + 514 + 20 + TITLE_BAR).toString()}px`,
+      });
+    });
+
     it("lays the container out in tabs, which are the windows' own bars", () => {
       const { container } = renderShell();
       clientAppears("one");
@@ -986,6 +1026,31 @@ describe("Shell", () => {
         x: "0px",
       });
       expect(windowsOnScreen(container)).toEqual(["two"]);
+    });
+
+    it("draws a line around the group `focus parent` selects", () => {
+      // The whole of what `mod+a` does on screen. What it points the commands
+      // at is the container around the focus rather than the window in it, and
+      // nothing else on the desktop says which container that is.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(container.querySelector("[data-selection]")).toBeNull();
+      press("a");
+
+      // The container holding both windows, which is the whole workspace
+      // under the top bar.
+      expect(boxOf(groupOutline(container))).toEqual({
+        height: `${(1080 - TOP_BAR).toString()}px`,
+        width: "1920px",
+        x: "0px",
+        y: `${TOP_BAR.toString()}px`,
+      });
+      // And `mod+Shift+a` points them back at the window, which is nothing to
+      // draw.
+      press("a", true);
+      expect(container.querySelector("[data-selection]")).toBeNull();
     });
 
     it("fills the screen with the window being worked in", () => {

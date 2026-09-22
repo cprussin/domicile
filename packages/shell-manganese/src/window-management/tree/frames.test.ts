@@ -7,6 +7,22 @@ import { NOTHING_TILED } from "./tiling";
 
 const AREA = { height: 1000, width: 1000, x: 0, y: 0 };
 
+/** A window beside a column of two, with the commands pointed into the column. */
+const COLUMN_BESIDE_A_WINDOW = {
+  depth: 2,
+  root: LayoutNode.Container(
+    Layout.SplitH,
+    [
+      LayoutNode.Window("a"),
+      LayoutNode.Container(Layout.SplitV, [
+        LayoutNode.Window("b"),
+        LayoutNode.Window("c"),
+      ]),
+    ],
+    1,
+  ),
+};
+
 const frameFor = (
   tiled: ReturnType<typeof framesOf>,
   id: string,
@@ -21,7 +37,11 @@ const frameFor = (
 
 describe("framesOf", () => {
   it("places nothing for a workspace with nothing tiled", () => {
-    expect(framesOf(NOTHING_TILED, AREA, 0)).toEqual({ frames: [], tabs: [] });
+    expect(framesOf(NOTHING_TILED, AREA, 0)).toEqual({
+      frames: [],
+      selection: undefined,
+      tabs: [],
+    });
   });
 
   it("gives a lone window the whole area, bar included", () => {
@@ -203,5 +223,48 @@ describe("framesOf", () => {
         rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
       },
     ]);
+  });
+
+  it("marks out the container `focus parent` selected", () => {
+    const tiled = framesOf({ ...COLUMN_BESIDE_A_WINDOW, depth: 1 }, AREA, 0);
+
+    expect(tiled.selection).toEqual({
+      height: 1000,
+      width: 500,
+      x: 500,
+      y: 0,
+    });
+  });
+
+  it("marks nothing out while the commands are pointed at a window", () => {
+    expect(framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0).selection).toBeUndefined();
+  });
+
+  it("marks out a container under the tabs it is shown behind", () => {
+    const tiled = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(
+          Layout.Tabbed,
+          [
+            LayoutNode.Window("a"),
+            LayoutNode.Container(Layout.SplitV, [
+              LayoutNode.Window("b"),
+              LayoutNode.Window("c"),
+            ]),
+          ],
+          1,
+        ),
+      },
+      AREA,
+      0,
+    );
+
+    expect(tiled.selection).toEqual({
+      height: 1000 - TITLE_BAR,
+      width: 1000,
+      x: 0,
+      y: TITLE_BAR,
+    });
   });
 });
