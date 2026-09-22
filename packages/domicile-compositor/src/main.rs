@@ -102,6 +102,7 @@ mod engine;
 mod engine_buffers;
 mod engine_session;
 mod engine_surfaces;
+mod file_indexing;
 mod idle;
 mod keymap;
 mod latency;
@@ -125,6 +126,7 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
+use crate::file_indexing::{keep_the_index, kept_at, Offered};
 use crate::idle::{darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
@@ -139,7 +141,6 @@ use crate::which_engine::another_engine;
 use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
-use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
@@ -381,6 +382,20 @@ struct ChromeHub {
     /// The name of *our* Wayland socket, which is what a client we spawn must
     /// connect to.
     wayland_display: OsString,
+    /// What a launcher is offered, as the indexing thread last worked it out.
+    ///
+    /// **Here rather than on the Wayland thread because this is what reads
+    /// it**: `list_files` is answered on the connection it arrived on, and the
+    /// answer must not wait for a disk or for a compositor mid-frame. The
+    /// index itself never leaves the indexing thread — see
+    /// [`crate::file_indexing`] — so what is behind this lock is a value that
+    /// a connection clones and lets go of.
+    ///
+    /// `None` is a desktop with no index: no `HOME`, or a home directory that
+    /// could not be read. `list_files` then answers nothing at all, which is
+    /// what it has always done on a broken desktop — a launcher told "you have
+    /// no files" would draw that breakage as an ordinary empty home.
+    offered: Mutex<Option<Offered>>,
 }
 
 impl ChromeHub {
@@ -398,6 +413,7 @@ impl ChromeHub {
             timings: Mutex::new(FrameTimings::default()),
             max_scale: AtomicU32::new(max_scale),
             wayland_display,
+            offered: Mutex::new(None),
         });
         (hub, outbound_rx)
     }
@@ -1048,32 +1064,40 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::CopyClipboardEntry { entry });
                 Vec::new()
             }
-            // The one message here the compositor answers rather than acts on.
-            // A shell's launcher is a page and a page has no filesystem, so the
-            // walk is the compositor's -- and it can be, safely, because
-            // `list_files` names no path: what is read is decided here and
-            // nowhere a document can reach. `domicile_host::files` is the walk
-            // itself, which is why there is almost nothing of it in this arm.
-            Ok(ChromeMessage::ListFiles) => match home_directory() {
-                Some(home) => match listing(&home, DEEP_ROOTS, &RealDirectory) {
-                    Ok(files) => vec![HostMessage::Files { files }],
-                    // Answered with nothing rather than with an empty list. A
-                    // home directory that will not open is a broken desktop,
-                    // and "you have no files" is that breakage wearing the face
-                    // of an ordinary answer -- a shell told it would draw an
-                    // empty launcher and nobody would ever find this line. Left
-                    // unanswered, the launcher still opens and still takes a
-                    // path, a URL or a query; what it has not got is a list.
-                    Err(err) => {
-                        tracing::error!(%err, home = %home.display(), "the home directory could not be read");
-                        Vec::new()
-                    }
-                },
-                None => {
-                    tracing::error!("no HOME in the environment, so there is no home to list");
-                    Vec::new()
-                }
-            },
+            // The one message here the compositor answers rather than acts
+            // on, and it is answered out of memory. A shell's launcher is a
+            // page and a page has no filesystem, so the reading is the
+            // compositor's -- and it can be, safely, because `list_files`
+            // names no path: what is read is decided here and nowhere a
+            // document can reach.
+            //
+            // IT USED TO WALK THE HOME IN THIS ARM, one level deep plus two
+            // named trees, because a panel opening was waiting on it. There is
+            // an index now -- `crate::file_indexing` builds it at startup and
+            // a watch keeps it -- so this is a clone of the last answer, and
+            // what a launcher is offered is the whole home at every depth.
+            //
+            // Still asked for as well as broadcast: a page that has just
+            // reloaded missed every announcement there has ever been.
+            Ok(ChromeMessage::ListFiles) => hub
+                .offered
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|offered| HostMessage::Files {
+                    files: offered.files.clone(),
+                    indexing: offered.indexing,
+                })
+                // Answered with nothing rather than with an empty list, which
+                // is what a desktop with no index has to say -- no HOME, or a
+                // home directory that would not open. "You have no files" is
+                // that breakage wearing the face of an ordinary answer: a
+                // shell told it would draw an empty launcher and nobody would
+                // ever find the line that explains it. Left unanswered, the
+                // panel still opens and still takes a path, a URL or a query;
+                // what it has not got is a list.
+                .into_iter()
+                .collect(),
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
@@ -5502,6 +5526,40 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data.state.tell_the_chromes_the_charge();
         TimeoutAction::ToDuration(BATTERY_BACKSTOP)
     })?;
+
+    // The file index, built from the home directory and then kept by a watch.
+    //
+    // AT STARTUP RATHER THAN WHEN A LAUNCHER OPENS, which is the whole of the
+    // change: the panel used to wait on a `find` of the home and so could only
+    // be offered a shallow slice of it. Walking once into an index buys the
+    // whole home at every depth, at the cost of a walk that has to happen
+    // somewhere — and the somewhere is here, on a thread, finishing while the
+    // desk is still being looked at for the first time.
+    //
+    // A desktop with no `HOME` has nothing to index. It is the one thing this
+    // compositor reads from its environment that is not instrumentation --
+    // see `home_directory` -- and without it `list_files` goes on answering
+    // nothing, which is what it did before this existed.
+    match home_directory() {
+        Some(home) => {
+            let hub = data.state.hub.clone();
+            thread::spawn(move || {
+                keep_the_index(home, kept_at(), |offered| {
+                    // Published for `list_files` to answer from *and*
+                    // broadcast, because the two reach different pages: a
+                    // chrome connected now is told, and one that reloads in an
+                    // hour asks. The list is cloned once for the copy that
+                    // stays behind.
+                    *hub.offered.lock().unwrap() = Some(offered.clone());
+                    hub.broadcast(HostMessage::Files {
+                        files: offered.files,
+                        indexing: offered.indexing,
+                    });
+                });
+            });
+        }
+        None => error!("no HOME in the environment, so there is no home to index"),
+    }
 
     // A desktop nobody is at, and the one thing this can already do about it:
     // turn the screens off, and turn them back on at the next input.
