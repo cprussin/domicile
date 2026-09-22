@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::arguments::{arguments, ArgumentError, Arguments};
+use domicile_launch::handshake::Expected;
 
 fn parse<const N: usize>(args: [&str; N]) -> Result<Arguments, ArgumentError> {
     arguments(args.into_iter().map(OsString::from))
@@ -210,5 +211,74 @@ fn the_engine_socket_is_read_as_a_path() {
     assert_eq!(
         parsed.engine_socket.as_deref(),
         Some(Path::new("/run/domicile-engine.sock"))
+    );
+}
+
+/// A compositor that is loading a shell is the ordinary case, and a page
+/// arriving on the control socket is what it is waiting for. So the watchdog
+/// in `domicile_launch::handshake` is on unless a command line says otherwise.
+#[test]
+fn a_page_is_expected_unless_the_command_line_says_otherwise() {
+    let parsed = parse(the_required_two()).expect("both are there");
+
+    assert_eq!(parsed.expect_a_page, Expected::APage);
+}
+
+/// And the case it exists for: the engine spike's harnesses start chrome on a
+/// broker socket with no control socket, so nothing can dial the compositor's
+/// — and it complained about that on every passing run until it could be told.
+#[test]
+fn a_harness_with_no_shell_in_it_can_say_no_page_is_coming() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--expect-a-page",
+        "no",
+    ])
+    .expect("a command line that says no page is coming parses");
+
+    assert_eq!(parsed.expect_a_page, Expected::NoPage);
+}
+
+/// Both words, because a flag that only has one is a flag without a value
+/// wearing one: a shell that means the default and says so must be able to.
+#[test]
+fn saying_a_page_is_coming_is_the_same_as_not_saying() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--expect-a-page=yes",
+    ])
+    .expect("a command line that says a page is coming parses");
+
+    assert_eq!(parsed.expect_a_page, Expected::APage);
+}
+
+/// Not "anything that is not `no` means yes". A value this does not understand
+/// is a request that would silently not happen, which is what every other
+/// refusal on this command line is about — and the one it would silently not
+/// do is turn a watchdog off.
+#[test]
+fn a_word_that_is_neither_is_refused() {
+    let err = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--expect-a-page",
+        "maybe",
+    ])
+    .expect_err("there is no third answer");
+
+    assert_eq!(
+        err,
+        ArgumentError::NotYesOrNo {
+            flag: "--expect-a-page",
+            value: "maybe".into()
+        }
     );
 }
