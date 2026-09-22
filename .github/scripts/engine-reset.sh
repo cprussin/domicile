@@ -47,6 +47,30 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CHROMIUM="${1:-}"
 [ -n "$CHROMIUM" ] || { echo "usage: $(basename "$0") <chromium checkout>" >&2; exit 2; }
 
+# A CHECKOUT THAT IS NOT THERE IS NOT A SERVER REFUSING A REVISION. Every
+# `git -C` below fails identically against a path that does not exist, and the
+# first of them is inside the fetch — so on run 35703990131, where
+# `engine-tree-pool.sh` had pointed /build/chromium at a slot with no Chromium
+# in it, this script announced "origin would not serve that one revision". That
+# is a sentence about Gitiles' `uploadpack.allowReachableSHA1InWant` and it had
+# nothing to do with what was wrong; the job then died on `fatal: cannot change
+# to '/build/chromium/src'` with that sentence as the only explanation offered.
+# The pool no longer hands out a slot with no checkout in it. This is what says
+# so the next time a path arrives here empty by some other route.
+[ -d "$CHROMIUM" ] || {
+  echo "::error::$CHROMIUM does not exist, so there is no checkout to reset" >&2
+  echo "This is the path engine-tree-pool.sh pointed /build/chromium at, plus" >&2
+  echo "/src. A pool slot the unit made and never filled is how it has been" >&2
+  echo "empty before." >&2
+  exit 1
+}
+git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1 || {
+  echo "::error::$CHROMIUM is not a git checkout" >&2
+  echo "The directory is there and holds no repository, so nothing here can put" >&2
+  echo "it on a pin. A slot left part-way through a first sync looks like this." >&2
+  exit 1
+}
+
 SERIES="$ROOT/packages/domicile-engine/src"
 pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
