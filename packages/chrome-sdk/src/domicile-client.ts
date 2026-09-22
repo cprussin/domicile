@@ -326,21 +326,6 @@ export class DomicileClient {
     return this;
   }
 
-  /**
-   * Tell the compositor what resolution to configure this client at.
-   *
-   * A pair here and two arguments on the host, because a box is one value to a
-   * shell and WebIDL has no tuple. Fractional on purpose: this comes from a
-   * layout box and a CSS pixel is fractional, so the whole path is `double` —
-   * reading it as an integer is what opened every window at zero.
-   */
-  resizeApp(
-    appId: string,
-    size: readonly [width: number, height: number],
-  ): void {
-    this.#host.resizeApp(appId, size[0], size[1]);
-  }
-
   /** Tell the compositor the display density it should advertise to clients. */
   setDevicePixelRatio(ratio: number): void {
     this.#host.setDevicePixelRatio(ratio);
@@ -351,6 +336,9 @@ export class DomicileClient {
    *
    * The chrome's window *is* the desktop, and under an engine whose window the
    * compositor does not own this is the only way it can learn the size.
+   *
+   * A pair here and two arguments on the host, because a size is one value to
+   * a shell and WebIDL has no tuple.
    */
   setDesktopSize(size: readonly [width: number, height: number]): void {
     this.#host.setDesktopSize(size[0], size[1]);
@@ -386,8 +374,8 @@ export class DomicileClient {
    * moves the one it is drawing.
    *
    * A pair here and two arguments on the host, for the reason
-   * {@link resizeApp} states: a place is one value to a shell and WebIDL has
-   * no tuple.
+   * {@link setDesktopSize} states: a place is one value to a shell and WebIDL
+   * has no tuple.
    */
   warpPointer(to: readonly [x: number, y: number]): void {
     this.#host.warpPointer(to[0], to[1]);

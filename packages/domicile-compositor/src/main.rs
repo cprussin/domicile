@@ -283,13 +283,6 @@ enum ClientRequest {
     CloseApp {
         app_id: String,
     },
-    /// The chrome laid an app's element out at a new size; configure the client
-    /// to match so it redraws at that resolution.
-    ConfigureApp {
-        app_id: String,
-        width: i32,
-        height: i32,
-    },
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
     ChromeHello,
 }
@@ -1119,20 +1112,6 @@ fn read_chrome_messages(
                     logical: (size[0].round() as i32, size[1].round() as i32),
                 });
                 Vec::new()
-            }
-            // A resize drives both the client's configure and the brain's model.
-            Ok(ChromeMessage::ResizeApp { app_id, size }) => {
-                hub.send_request(ClientRequest::ConfigureApp {
-                    app_id: app_id.clone(),
-                    width: size[0].round() as i32,
-                    height: size[1].round() as i32,
-                });
-                let mut host = hub.host.lock().unwrap();
-                apply_chrome_message(
-                    &mut host,
-                    &mut ready,
-                    ChromeMessage::ResizeApp { app_id, size },
-                )
             }
             // THE BRAIN DECIDES AND THE SEAT FOLLOWS, in that order, and the
             // disagreement it settled is gone rather than fixed. The seat
@@ -2924,23 +2903,6 @@ impl DomicileCompositor {
                 // the passing over it claims not to be.
                 None => info!(%app_id, "close: a window with no toplevel"),
             },
-            ClientRequest::ConfigureApp {
-                app_id,
-                width,
-                height,
-            } => {
-                let Some(toplevel) = self.toplevel_for(&app_id) else {
-                    tracing::debug!(%app_id, "configure: no toplevel");
-                    return;
-                };
-                tracing::debug!(%app_id, width, height, "configure -> client");
-                toplevel.with_pending_state(|state| {
-                    state.size = Some((width, height).into());
-                });
-                // Only sends when the size actually differs from the last
-                // configure the client acknowledged.
-                toplevel.send_pending_configure();
-            }
         }
     }
 

@@ -16,7 +16,6 @@ import { BrowserWindow } from "./BrowserWindow";
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-  resizeApp: () => undefined,
 } as unknown as DomicileClient;
 
 /** A domicile client that keeps what the window told the host, in order. */

@@ -221,11 +221,11 @@ A window is not simply *there* and then gone.
 
 **The arrivals and the departures are a transform, and the settling is the box
 itself**, which is not a stylistic difference. The size of an `<app>` is the
-resolution its client is configured at — the SDK measures the element every
-animation frame and the host sends the client a `configure` — so a window that
-*grew* by laying out smaller would make its client redraw on every frame of the
-animation. A transform leaves the box alone: the page's own compositor scales
-or slides the layer the client's buffer is already in. A settling window really
+resolution its client is configured at — the element's layout box *is* the
+`xdg_toplevel.configure`, which the engine states off the layout it performed —
+so a window that *grew* by laying out smaller would make its client redraw on
+every frame of the animation. A transform leaves the box alone: the page's own
+compositor scales or slides the layer the client's buffer is already in. A settling window really
 is a different size afterwards and its client really does have to be told,
 which is the same stream of sizes dragging a floating window's corner already
 produces, over a sixth of a second instead of as long as the user holds it.
@@ -536,14 +536,13 @@ shell that wants its own pictures owns its own list.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, prints the diagnostics line. |
+| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | What is on the desktop: the window state, the keys, the bar over the windows, and the rectangles each screen offers them. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar, and alone on every display the bar is not on. |
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
-| `src/placement-line.ts` | What the chrome has to say about its own timings, which is what measuring every window on every frame costs. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |

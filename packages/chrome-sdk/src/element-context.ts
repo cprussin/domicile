@@ -1,12 +1,12 @@
 // What the chrome bound the SDK with, and which app has the keyboard.
 //
-// The input routing and the size pass are installed on `document` once, at
-// startup, and they outlive any particular client: `registerElements` binds a
-// domicile client (and optionally a measurement strategy and a frame source)
-// into the one cell below, and everything it installs reads that cell at dispatch
-// rather than closing over what it was handed. So a rebind reaches listeners that
-// are already registered, and tests bind their own to inject a double — which is
-// why the setter is exported.
+// The input routing is installed on `document` once, at startup, and it
+// outlives any particular client: `registerElements` binds a domicile client
+// (and optionally a measurement strategy) into the one cell below, and
+// everything it installs reads that cell at dispatch rather than closing over
+// what it was handed. So a rebind reaches listeners that are already
+// registered, and tests bind their own to inject a double — which is why the
+// setter is exported.
 //
 // This used to exist because a custom element is constructed by the DOM, which
 // hands it nothing, so `<domicile-app>` could not take its collaborators as
@@ -17,8 +17,6 @@
 import type { DomicileClient } from "./domicile-client";
 import type { Measure } from "./measure";
 import { defaultMeasure } from "./measure";
-import type { ObservePlacement } from "./observe-placement";
-import { defaultObservePlacement } from "./observe-placement";
 
 /**
  * What the SDK was bound with, as one cell that outlives the binding.
@@ -34,7 +32,6 @@ import { defaultObservePlacement } from "./observe-placement";
 export type ElementContext = {
   domicile: DomicileClient;
   measure: Measure;
-  observePlacement: ObservePlacement;
 };
 
 let context: ElementContext | undefined;
@@ -43,12 +40,10 @@ let focusedAppId: string | undefined;
 export const bindElementContext = (
   domicile: DomicileClient,
   measure: Measure = defaultMeasure,
-  observePlacement: ObservePlacement = defaultObservePlacement,
 ): ElementContext => {
-  const bound = context ?? { domicile, measure, observePlacement };
+  const bound = context ?? { domicile, measure };
   bound.domicile = domicile;
   bound.measure = measure;
-  bound.observePlacement = observePlacement;
   context = bound;
   return bound;
 };

@@ -20,9 +20,10 @@
 # that lesson.
 #
 # BOTH PAGES, and the resize one is in here for a reason the CSS one is not.
-# "An <app>'s layout box *is* the xdg_toplevel.configure" is what the placement
-# deletion in ROADMAP.md rests on, and through the canvas that row was a page
-# calling embed a second time — a claim about a method, not about layout.
+# "An <app>'s layout box *is* the xdg_toplevel.configure" is the sentence the
+# chrome's own size reporting was deleted on, and through the canvas that row
+# was a page calling embed a second time — a claim about a method, not about
+# layout.
 # Through the tag nothing calls anything: the box changes, LayoutAppSurface
 # reports it, and the element re-embeds at the new size on its own.
 #

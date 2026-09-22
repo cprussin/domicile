@@ -308,14 +308,14 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input and size routing over your `<app>` elements), `focusApp`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 It is not required. A shell may drive `window.domicile` itself — it is a
 typed surface rather than a wire, described in
 `@domicile/chrome-sdk/domicile-host` and, definitively, in the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 Doing so means handling the registration order above yourself, along with the
-input mapping and the size reporting that `registerElements` does.
+input mapping that `registerElements` does.
 
 `@domicile/component-library` is **not** part of the contract. It is the React
 and Panda CSS design system this repo's own shells are built from, and it exists
@@ -413,12 +413,16 @@ That is all of it. The element is yours — you position it, size it, round it a
 blur it — and its cursor is the same kind of act. A React shell writes
 `<app style={{ cursor }}>` and is done.
 
-**The size the client drew at is not yours to carry.** `app_resized` still
-arrives, and you are welcome to it — `shell-simple` uses it to take a "nothing
-here yet" placeholder down — but you do not have to route it anywhere: the SDK
-records it off the channel as the message goes past, because scaling a pointer
-position into the client's own pixels is the only use anyone has for it. A shell
-that holds that size is a courier.
+**Neither size is yours to carry.** How big to draw is not something a shell
+says at all: an `<app>`'s layout box *is* the client's
+`xdg_toplevel.configure`, and the engine states it off the layout it performed,
+so styling the element is the whole of resizing a window. And the size the
+client drew at comes back on its own. `app_resized` still arrives, and you are
+welcome to it — `shell-simple` uses it to take a "nothing here yet" placeholder
+down — but you do not have to route it anywhere: the SDK records it off the
+channel as the message goes past, because scaling a pointer position into the
+client's own pixels is the only use anyone has for it. A shell that holds that
+size is a courier.
 
 The element is the engine's, and it has no methods of its own for either of
 these: a cursor is a style and a size is something the SDK already has.

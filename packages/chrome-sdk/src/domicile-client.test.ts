@@ -94,9 +94,6 @@ class FakeHost implements DomicileHost {
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
-  resizeApp(appId: string, width: number, height: number): void {
-    this.calls.push(["resizeApp", appId, width, height]);
-  }
   setDesktopSize(width: number, height: number): void {
     this.calls.push(["setDesktopSize", width, height]);
   }
@@ -440,7 +437,7 @@ describe("DomicileClient", () => {
     });
 
     it("spreads a pointer's destination into the two doubles the host takes", () => {
-      // The same unpacking `resizeApp` does below, for the same reason: a
+      // The same unpacking `setDesktopSize` does below, for the same reason: a
       // place on the desktop is one value to a shell and two arguments to
       // WebIDL, and a CSS pixel is fractional the whole way across.
       domicile.warpPointer([960.5, 540.25]);
@@ -471,14 +468,6 @@ describe("DomicileClient", () => {
       // no tuple. Unpacked here rather than at every call site — and the
       // fractions survive, because a CSS pixel is fractional and the whole
       // path is `double`.
-      domicile.resizeApp("term", [800.5, 600.25]);
-      expect(host.lastCall()).toStrictEqual([
-        "resizeApp",
-        "term",
-        800.5,
-        600.25,
-      ]);
-
       domicile.setDesktopSize([1280.5, 800]);
       expect(host.lastCall()).toStrictEqual(["setDesktopSize", 1280.5, 800]);
     });

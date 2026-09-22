@@ -24,20 +24,7 @@ The evidence for each of those is in the doc that made the claim —
 
 ## In this repository
 
-1. **Delete the SDK's placement reporting** — `observe-placement.ts`,
-   `placement-timing.ts`, `report-app-sizes.ts` and `resizeApp`. An `<app>`'s
-   layout box *is* the `xdg_toplevel.configure`: the fork reports it natively
-   and `ExternalSurfaceProvider::Embed` already carries the size, so the
-   chrome's half is redundant. `measure.ts`, `element-transform.ts` and
-   `matrix.ts` stay — `pointer-input.ts` inverts that affine so a click lands
-   correctly on a window under a CSS rotation.
-
-   Unblocked, and it closes the two-configures gap below. Run `guard-shell.sh`
-   against the deletion deliberately: `engine.yml` filters on
-   `packages/domicile-engine/**`, so nothing in CI drives the native tag on a
-   change that is entirely inside the SDK.
-
-2. **`domicile load-shell <path>`** — the supervisor's half. The engine answers
+1. **`domicile load-shell <path>`** — the supervisor's half. The engine answers
    `load_shell` on `--domicile-command-socket` and every pinned release carries
    it; what is left is that switch on the engine's command line in `spawn`, the
    verb in `cli` and `control`, and `answer` dialing the engine instead of
@@ -46,20 +33,20 @@ The evidence for each of those is in the doc that made the claim —
    reload comes back with it — until then `scripts/dev-shell.sh` restarts the
    desktop on every rebuild.
 
-3. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
+2. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
    commit to pixel against a 16.67 ms display frame on every run so far — but in
    a nested compositor with nothing presenting, and with the probe's own round
    trip inside every figure. What is left is arranging the probe on a machine
    that lights a panel. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    *Keystroke to pixel*.
 
-4. **A component that dies takes the windows with it.** `domicile-launch`'s
+3. **A component that dies takes the windows with it.** `domicile-launch`'s
    `restart` stands a whole new desktop up when either component stops, so a
    crash is no longer a dead console. The windows are what is still lost: every
    app was a client of a Wayland display that went with the compositor, and
    nothing relaunches or reconnects one.
 
-5. **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
+4. **No idle, no lock, no DPMS.** A desktop you walk away from is one anybody
    can walk up to, and blanking a screen after a timeout is the same seam. Not
    started.
 
@@ -150,7 +137,9 @@ costs nothing.
 - **A 3D transform or a `zoom` above a window is invisible to the SDK.**
   `defaultMeasure` reads each ancestor's computed style, but a perspective does
   not reach the child's matrix and `zoom` scales the box without being a
-  transform — so the compositor is told two wrong things about one window.
+  transform — so a click on a window under either is inverted through the wrong
+  affine and reaches the client somewhere the user did not press. The size is
+  no longer the SDK's to get wrong: the engine states the box.
 - **A guest refuses everything an embedder is asked for.** Permissions and
   dialogs route through `WebViewGuest`'s `WebContentsDelegate` and get the
   default answer. The window a page asks for is the one that has been answered:
@@ -168,11 +157,6 @@ costs nothing.
   name that does not match, active mixed content — need an https fixture with a
   cert the browser distrusts, and until one exists `dangerous` is a path no run
   has taken.
-- **Two things configure a client, and they disagree by a border.** The engine
-  states an `<app>`'s box from `ReplacedContentRect` — the content box — and
-  `resize_app` reports `offsetWidth`/`offsetHeight`, the border box, so a
-  floating window gets two configures a layout change. Closes with the deletion
-  above.
 - **A config reload acts on the display list and nothing else.** `output.max_scale`,
   the keymap and the rest are stored and keep their startup values.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
