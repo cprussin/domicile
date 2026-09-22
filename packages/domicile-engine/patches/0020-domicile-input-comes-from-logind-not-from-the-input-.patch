@@ -147,7 +147,7 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  create mode 100644 ui/events/ozone/evdev/input_device_opener.cc
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 20597d0300..00bc1e7f84 100644
+index 20597d030062..00bc1e7f841a 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -73,6 +73,7 @@ component("evdev") {
@@ -159,7 +159,7 @@ index 20597d0300..00bc1e7f84 100644
      "input_device_opener_evdev.cc",
      "input_device_opener_evdev.h",
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 6b80cf2449..193323e477 100644
+index 6b80cf2449a7..193323e47702 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -220,9 +220,11 @@ PointerDetails GetTransformedEventPointerDetails(const T& params) {
@@ -195,7 +195,7 @@ index 6b80cf2449..193323e477 100644
  
  void EventFactoryEvdev::OnThreadStarted(
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.h b/ui/events/ozone/evdev/event_factory_evdev.h
-index c252511791..b374fc8301 100644
+index c252511791ef..b374fc8301b4 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.h
 +++ b/ui/events/ozone/evdev/event_factory_evdev.h
 @@ -17,6 +17,8 @@
@@ -236,7 +236,7 @@ index c252511791..b374fc8301 100644
    EventThreadEvdev thread_;
  
 diff --git a/ui/events/ozone/evdev/event_thread_evdev.cc b/ui/events/ozone/evdev/event_thread_evdev.cc
-index 946793e0eb..d6c711088d 100644
+index 946793e0eb4e..d6c711088d4c 100644
 --- a/ui/events/ozone/evdev/event_thread_evdev.cc
 +++ b/ui/events/ozone/evdev/event_thread_evdev.cc
 @@ -20,7 +20,6 @@
@@ -301,7 +301,7 @@ index 946793e0eb..d6c711088d 100644
    thread_options.message_pump_type = base::MessagePumpType::UI;
    thread_options.thread_type = base::ThreadType::kPresentation;
 diff --git a/ui/events/ozone/evdev/event_thread_evdev.h b/ui/events/ozone/evdev/event_thread_evdev.h
-index 5be4718878..b3bb623997 100644
+index 5be4718878a5..b3bb623997bd 100644
 --- a/ui/events/ozone/evdev/event_thread_evdev.h
 +++ b/ui/events/ozone/evdev/event_thread_evdev.h
 @@ -9,6 +9,7 @@
@@ -329,7 +329,7 @@ index 5be4718878..b3bb623997 100644
   private:
    std::unique_ptr<base::Thread> thread_;
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 5e26d25b6a..79074020a3 100644
+index 5e26d25b6a89..79074020a3a3 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
 @@ -112,6 +112,24 @@ InputDeviceFactoryEvdev::InputDeviceFactoryEvdev(
@@ -359,7 +359,7 @@ index 5e26d25b6a..79074020a3 100644
  InputDeviceFactoryEvdev::~InputDeviceFactoryEvdev() = default;
 diff --git a/ui/events/ozone/evdev/input_device_opener.cc b/ui/events/ozone/evdev/input_device_opener.cc
 new file mode 100644
-index 0000000000..dec71d017b
+index 000000000000..dec71d017bbf
 --- /dev/null
 +++ b/ui/events/ozone/evdev/input_device_opener.cc
 @@ -0,0 +1,19 @@
@@ -383,7 +383,7 @@ index 0000000000..dec71d017b
 +
 +}  // namespace ui
 diff --git a/ui/events/ozone/evdev/input_device_opener.h b/ui/events/ozone/evdev/input_device_opener.h
-index fda925ba72..7d6ca2a9b8 100644
+index fda925ba72c6..7d6ca2a9b876 100644
 --- a/ui/events/ozone/evdev/input_device_opener.h
 +++ b/ui/events/ozone/evdev/input_device_opener.h
 @@ -5,7 +5,11 @@
@@ -453,7 +453,7 @@ index fda925ba72..7d6ca2a9b8 100644
  
  #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_H_
 diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
-index 1a7e671b49..e9b64c7d7d 100644
+index 1a7e671b4921..e9b64c7d7d80 100644
 --- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
 @@ -7,10 +7,12 @@
@@ -496,7 +496,7 @@ index 1a7e671b49..e9b64c7d7d 100644
 +
  }  // namespace ui
 diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.h b/ui/events/ozone/evdev/input_device_opener_evdev.h
-index 7a89eae7ef..4afe766ca4 100644
+index 7a89eae7efb7..4afe766ca4a5 100644
 --- a/ui/events/ozone/evdev/input_device_opener_evdev.h
 +++ b/ui/events/ozone/evdev/input_device_opener_evdev.h
 @@ -24,7 +24,26 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceOpenerEvdev
@@ -527,7 +527,7 @@ index 7a89eae7ef..4afe766ca4 100644
  
  #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_EVDEV_H_
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 54fcfd4ca1..98850d6d0a 100644
+index 54fcfd4ca1bd..98850d6d0aaa 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -122,6 +122,10 @@ source_set("gbm") {
@@ -563,7 +563,7 @@ index 54fcfd4ca1..98850d6d0a 100644
      "domicile/drm_modeset_unittest.cc",
      "domicile/drm_screen_unittest.cc",
 diff --git a/ui/ozone/platform/drm/DEPS b/ui/ozone/platform/drm/DEPS
-index 110e1a7d0e..2652ce937f 100644
+index 110e1a7d0e38..2652ce937ff9 100644
 --- a/ui/ozone/platform/drm/DEPS
 +++ b/ui/ozone/platform/drm/DEPS
 @@ -1,4 +1,5 @@
@@ -573,7 +573,7 @@ index 110e1a7d0e..2652ce937f 100644
    "+services/service_manager",
    "+services/viz/public/mojom",
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3c23bee3cf..aabe8e62c1 100644
+index 3c23bee3cf3e..aabe8e62c1ed 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -50,6 +50,7 @@

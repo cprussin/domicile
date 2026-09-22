@@ -85,7 +85,7 @@ cursor plane is the next thing to look at and
  2 files changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 303195bef4..07f08aab36 100644
+index 303195bef42a..07f08aab3652 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -106,7 +106,7 @@ index 303195bef4..07f08aab36 100644
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index dff327ec92..d4c5eee580 100644
+index dff327ec921d..d4c5eee5808b 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -46,6 +46,7 @@

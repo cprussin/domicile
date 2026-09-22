@@ -52,7 +52,7 @@ the keymap decoding it as `o`/`VKEY_O`.
  2 files changed, 22 insertions(+), 4 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 0670a8aacb..53f1870596 100644
+index ec8baa3dc2a3..620549168ac8 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -2384,10 +2384,11 @@ source_set("browser") {
@@ -70,7 +70,7 @@ index 0670a8aacb..53f1870596 100644
      "//components/domicile:web_view_guest",
  
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index a45fafa1da..0de5171403 100644
+index 99aa96e5ca17..ec672a5d5fbe 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -4,7 +4,9 @@
@@ -83,7 +83,7 @@ index a45fafa1da..0de5171403 100644
  #include "components/domicile/browser/web_view_guest.h"
  #include "content/public/browser/browser_thread.h"
  #include "mojo/public/cpp/bindings/message.h"
-@@ -492,9 +494,24 @@ void PopulateChromeFrameBinders(
+@@ -488,9 +490,24 @@ void PopulateChromeFrameBinders(
          // On the IO thread: the channel talks to a unix socket through
          // net::SocketPosix, which DCHECKs that it is on a thread with an IO
          // message pump. Binders run on the UI thread, so this has to hop.

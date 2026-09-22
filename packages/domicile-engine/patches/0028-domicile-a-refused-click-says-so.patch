@@ -71,7 +71,7 @@ this returns.
  2 files changed, 53 insertions(+), 3 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index f0f0412801..5227fd20b0 100644
+index f0f0412801fc..5227fd20b0e3 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -396,7 +396,19 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -153,7 +153,7 @@ index f0f0412801..5227fd20b0 100644
  }
  
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index a0d9a09cf6..b29db82526 100644
+index a0d9a09cf623..b29db82526ed 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -142,6 +142,8 @@ class DrmWindowHost : public PlatformWindow,

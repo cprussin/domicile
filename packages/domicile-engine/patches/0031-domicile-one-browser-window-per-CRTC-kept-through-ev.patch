@@ -47,7 +47,7 @@ toggle afterwards keeps it from drawing a frame on the wrong monitor first.
  1 file changed, 8 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 7c1796ae73..4c10686c62 100644
+index 7c1796ae73a5..4c10686c62b5 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -5,6 +5,7 @@

@@ -22,7 +22,7 @@ half and lives outside this package.
  1 file changed, 11 insertions(+), 4 deletions(-)
 
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index df1246095d..b22ccc04dd 100644
+index 10326c5b890a..5667b394d765 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
 @@ -2560,13 +2560,20 @@

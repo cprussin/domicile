@@ -116,7 +116,7 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  1 file changed, 44 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 9ef47dc514..e7ca5f8531 100644
+index 9ef47dc514aa..e7ca5f8531aa 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -77,7 +77,50 @@ void DrmWindowHost::Hide() {

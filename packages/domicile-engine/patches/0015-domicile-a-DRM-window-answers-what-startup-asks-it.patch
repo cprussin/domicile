@@ -54,7 +54,7 @@ worth re-encoding here.
  2 files changed, 34 insertions(+), 11 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index f31e0aa31a..5a85c15dd0 100644
+index f31e0aa31a99..5a85c15dd052 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -66,14 +66,18 @@ gfx::Rect DrmWindowHost::GetCursorConfinedBounds() const {
@@ -135,7 +135,7 @@ index f31e0aa31a..5a85c15dd0 100644
  
  void DrmWindowHost::OnCursorUpdate() {
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index 1d9a66f641..3250e6b7c9 100644
+index 1d9a66f641da..3250e6b7c9c2 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -8,6 +8,7 @@

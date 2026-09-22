@@ -28,7 +28,7 @@ setting.
  1 file changed, 3 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 07f08aab36..bc0be3c353 100644
+index 07f08aab3652..bc0be3c35329 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -136,6 +136,8 @@ source_set("gbm") {

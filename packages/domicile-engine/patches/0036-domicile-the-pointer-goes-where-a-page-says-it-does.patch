@@ -36,7 +36,7 @@ is what will say so, on the next patch that touches this file.
  1 file changed, 11 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index a3d5250c07..cde1bc0596 100644
+index b00851ab8bf3..0e90e7074e00 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -47,7 +47,7 @@ index a3d5250c07..cde1bc0596 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -513,6 +514,16 @@ void PopulateChromeFrameBinders(
+@@ -509,6 +510,16 @@ void PopulateChromeFrameBinders(
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::SetProcessKeymap)),

@@ -20,7 +20,7 @@ rather than a page written for the guard.
  1 file changed, 13 insertions(+)
 
 diff --git a/content/browser/browser_main_loop.cc b/content/browser/browser_main_loop.cc
-index 0559ec1a95..ebdfd810aa 100644
+index 0559ec1a959f..ebdfd810aa4b 100644
 --- a/content/browser/browser_main_loop.cc
 +++ b/content/browser/browser_main_loop.cc
 @@ -74,6 +74,7 @@
