@@ -88,7 +88,6 @@ pub struct Offered {
 /// path, a URL or a query.
 pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Offered)) {
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
-    announce(&mut index, &tell);
 
     loop {
         if !walk_the_home(&home, &mut index, &tell) {
@@ -119,7 +118,6 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
         }
         info!("the kernel dropped filesystem events, so the home is being walked again");
         index.rebuilding();
-        announce(&mut index, &tell);
     }
 }
 
@@ -141,6 +139,13 @@ fn walk_the_home(home: &Path, index: &mut FileIndex, tell: &impl Fn(Offered)) ->
             return false;
         }
     };
+
+    // AFTER THE HOME HAS BEEN OPENED AND NOT BEFORE. This is what publishes
+    // last session's list, and it must not go out on a desktop whose home
+    // turns out to be unreadable — that would be a launcher holding a list of
+    // a home it cannot see, under a notice saying it is still looking, for as
+    // long as the session lasts.
+    announce(index, tell);
 
     let started = Instant::now();
     let mut last_told = Instant::now();
@@ -246,7 +251,7 @@ fn hold_it_current(
                     rescan |= event.need_rescan();
                     for change in changes(&event, home) {
                         match change {
-                            Change::Appeared(path) => index.appeared(path),
+                            Change::Appeared(path) => appeared(index, home, path),
                             Change::Vanished(path) => index.vanished(&path),
                         }
                     }
@@ -264,6 +269,27 @@ fn hold_it_current(
         }
     }
     false
+}
+
+/// Take in a path that has turned up, and everything already inside it.
+///
+/// **A WATCH ON A TREE IS ALWAYS BEHIND A DIRECTORY THAT IS BEING FILLED.** The
+/// kernel watches directories, not trees, so a directory that appears is only
+/// watched once its own creation has been *read* — and `mkdir -p a/b && touch
+/// a/b/c`, a `mv` of a populated tree into the home, or a checkout being
+/// written all reach the disk faster than that. The events for what went
+/// inside are never sent to anybody. Left alone, the index would hold the
+/// directory and none of its contents until the next boot.
+///
+/// So anything that appears is walked. A plain file is a `read_dir` that
+/// fails, which is the walk's own answer for a leaf — see
+/// [`domicile_host::home_walk`] — so the ordinary case costs one failed system
+/// call and says nothing.
+fn appeared(index: &mut FileIndex, home: &Path, path: String) {
+    if let Ok(inside) = walk(&home.join(&path), &RealDirectory) {
+        index.found(inside.map(|under| format!("{path}/{under}")));
+    }
+    index.appeared(path);
 }
 
 /// Hand on what a launcher is offered, when it is not what was handed on last.

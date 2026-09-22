@@ -18,7 +18,7 @@ import type { Launch } from "./launch";
 import { launchFor } from "./launch";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
-import { matching } from "./matching";
+import { folded, matching } from "./matching";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
 const PROMPT = "Open a file, a URL, or search";
@@ -132,9 +132,14 @@ const Query = ({ files, onLaunch }: QueryProps) => {
   // "nobody has walked it" into "the first match, because they typed".
   const [stepped, setStepped] = useState<number | undefined>(undefined);
 
+  // Folded once per list rather than once per keystroke, which on a home of a
+  // hundred thousand paths is the difference between a launcher and a launcher
+  // that drops a frame of the desktop on every letter. `matching.ts` has the
+  // measurement.
+  const offered = useMemo(() => folded(files), [files]);
   // Two lists, and the difference between them is the whole of `ROWS`: what
   // matched is what the counter reports, and what is drawn is the front of it.
-  const matched = useMemo(() => matching(files, query), [files, query]);
+  const matched = useMemo(() => matching(offered, query), [offered, query]);
   const shown = useMemo(() => matched.slice(0, ROWS), [matched]);
   // Over everything offered rather than over what is shown: `Notes` is a
   // directory whether or not the query still asks about anything inside it.
