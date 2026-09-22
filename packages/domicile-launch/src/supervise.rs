@@ -239,6 +239,28 @@ impl Running {
         Ok(())
     }
 
+    /// Stop holding one component, and stop everything it started.
+    ///
+    /// FOR THE ONE THAT IS BEING REPLACED RATHER THAN FOR A TEARDOWN. An
+    /// engine that died leaves the group it led behind — Chromium's GPU
+    /// process and its zygote outlive the browser, and on a tty one of them is
+    /// still on the card — so the group is signaled here exactly as it is on
+    /// the way out, and only then is the entry dropped.
+    ///
+    /// DROPPED, and it has to be: a `wait` on a child that has already exited
+    /// answers the same thing forever, so a run that kept the corpse would
+    /// report it on every poll and never notice the engine that replaced it.
+    ///
+    /// A name nothing is holding is the outcome being asked for rather than a
+    /// failure — an engine that could not be started is one there is nothing
+    /// to let go of — so nothing comes back.
+    pub fn let_go_of(&mut self, what: &'static str) {
+        for (_, child) in self.components.iter_mut().filter(|(held, _)| *held == what) {
+            end_the_group(child);
+        }
+        self.components.retain(|(held, _)| *held != what);
+    }
+
     /// The first component that has stopped being one, if any has.
     ///
     /// Asked rather than waited on: this is what a startup wait consults

@@ -31,11 +31,38 @@ The evidence for each of those is in the doc that made the claim —
    that lights a panel. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    *Keystroke to pixel*.
 
-2. **A component that dies takes the windows with it.** `domicile-launch`'s
-   `restart` stands a whole new desktop up when either component stops, so a
-   crash is no longer a dead console. The windows are what is still lost: every
-   app was a client of a Wayland display that went with the compositor, and
-   nothing relaunches or reconnects one.
+2. **A compositor that dies still takes the windows with it.** The engine half
+   shipped: an engine that stops is replaced under the compositor that did not,
+   which re-dials the broker socket the new one bound and states this desktop
+   to it again — a frame sink per window, every client buffer imported again,
+   and the frame each window had on screen put straight back up, so the clients
+   keep the `wl_display` they are connected to and never hear about any of it
+   ([how](docs/architecture/THE-DOMICILE-BINARY.md)). What is left is the other
+   direction and one gap the first one leaves:
+
+   - **A compositor that dies is still a whole new desktop**, and the apps go
+     with it. The page dials the compositor's control socket and that channel
+     deletes itself when either end goes away, with only a bounded reach at
+     startup (`kReachFor`) — so nothing on this side can reopen it. Making a
+     page re-reach a compositor that replaced the one it had is a C++ change in
+     `control_channel.cc`, which is the fork.
+   - **Nothing in the C ABI says the engine went away.** `domicile_engine.h`
+     carries four callbacks and none of them is a disconnect, so the compositor
+     recognizes a new engine by the process serving the page that says hello —
+     `SO_PEERCRED`, the kernel's word, in
+     `packages/domicile-compositor/src/which_engine.rs`. It works and it is a
+     proxy. A `disconnected` callback would make it the engine's own statement
+     and would also cover an engine that dies with no page to replace it.
+   - **The rejoin itself has never met a real engine.** Every decision in it is
+     unit-tested — which buffers come back and which go straight up again, and
+     which process counts as another engine — but the `dlopen`, the second
+     `domicile_engine_connect` and the re-import need a built
+     `libdomicile_engine.so` and a GPU. See the `pkill` below.
+   - **On a tty there is no screen between two engines**, because the engine is
+     what holds DRM master. Deliberate rather than overlooked: the new engine
+     modesets from the same `DisplaySnapshot`s and the compositor states its
+     connectors to it again, so the desk comes back — it just goes dark for the
+     second or two it takes.
 
 3. **No lock.** A desktop you walk away from is one anybody can walk up to.
    The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
@@ -105,10 +132,26 @@ these is one run, and each has a line to look for.
 - **A console switch.** `Ctrl+Alt+F<n>` away and back — same
   `configuring N display(s)` line. Before `DrmModeset::Relight` this froze and
   killed the GPU process fifteen seconds later.
-- **A dead component.** `pkill domicile-compositor`: expect a new desktop within
+- **A dead compositor.** `pkill domicile-compositor`: expect a new desktop within
   a second and `starting the desktop again in 1s — that is failure 1 of 5 in a
   row.` The windows will not come back, which is the item above rather than a
   fault in the restart.
+- **A dead engine, with windows open.** Start a desktop, put two clients on it
+  — one that keeps drawing and one that is idle, a terminal nobody is typing in
+  — and `pkill -f 'chrome.*--domicile-broker-socket'`. Expect, in order:
+  `the engine exited`, `starting the engine again in 1s — that is failure 1 of
+  5 in a row.`, one new engine and **no** second `domicile is up`; then, from
+  the compositor, `the engine this desktop was drawing through has been
+  replaced; rejoining it` and `rejoined the engine and restated this desktop to
+  it shown=2 blank=0`. **The assertion is that both windows are still there,
+  showing what they were showing** — the idle one especially, because nothing
+  makes its client draw and it is the one a re-brokered sink alone would leave
+  empty. `blank=` above zero, or an `on the page with nothing in it` line, is
+  the failure this run exists to catch. Nothing in this container can reach any
+  of it: there is no `libdomicile_engine.so`, no engine binary and no
+  `/dev/dri`, so the launcher's half is proved by
+  `scripts/test-a-desktop-that-fails-says-why.sh` against fake components and
+  the compositor's half is proved only by unit tests over the decisions.
 - **A desk left alone.** Run with `idle.blank_after_seconds = 60`, walk away for
   a minute, then touch the trackpad. Expect `nobody is at this desktop; its
   screens go dark connectors=N`, the panels off, and

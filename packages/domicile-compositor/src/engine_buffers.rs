@@ -67,6 +67,20 @@ pub enum Returned {
     Abandoned,
 }
 
+/// Everything an engine that went away was holding, sorted by what the caller
+/// owes each one. See [`HeldBuffers::take_all`].
+#[derive(Debug)]
+pub struct Taken<B> {
+    /// The frame each surface had on screen, to import and submit again to the
+    /// engine that replaced the one that had it. Still the client's buffer and
+    /// still not to be released.
+    pub on_screen: Vec<((SurfaceId, BufferId), B)>,
+    /// Frames a newer one had already replaced. Nothing was drawing them and
+    /// nothing ever will, so every one is a `wl_buffer.release` the client is
+    /// owed.
+    pub superseded: Vec<((SurfaceId, BufferId), B)>,
+}
+
 /// The buffers the engine is holding, keyed by the surface **and** the id it
 /// knows them by.
 ///
@@ -172,6 +186,56 @@ impl<B> HeldBuffers<B> {
         overdue
             .into_iter()
             .filter_map(|key| self.held.remove(&key).map(|held| (key, held.buffer)))
+            .collect()
+    }
+
+    /// Everything held, because the engine holding it is gone, sorted into the
+    /// frame each surface had on screen and the rest.
+    ///
+    /// THE SPLIT IS WHAT MAKES A WINDOW COME BACK RATHER THAN COME BACK BLANK.
+    /// A new engine knows none of these ids, so no release will ever arrive
+    /// for any of them and nothing may stay held. But the newest submission
+    /// for a surface is the frame that was on the screen — see [`expired`],
+    /// which is the same rule read the other way — so it is the one to import
+    /// and submit again to the engine that replaced the one that had it. The
+    /// rest are frames nothing was drawing, and their clients are owed them
+    /// back.
+    ///
+    /// [`expired`]: HeldBuffers::expired
+    pub fn take_all(&mut self) -> Taken<B> {
+        let on_screen = self.newest_of_each_surface();
+        let (kept, returned) = self
+            .held
+            .drain()
+            .partition::<Vec<_>, _>(|(key, _)| on_screen.get(&key.0) == Some(&key.1));
+        Taken {
+            on_screen: kept
+                .into_iter()
+                .map(|(key, held)| (key, held.buffer))
+                .collect(),
+            superseded: returned
+                .into_iter()
+                .map(|(key, held)| (key, held.buffer))
+                .collect(),
+        }
+    }
+
+    /// Which buffer each surface had on screen: the newest submission, with
+    /// the higher id breaking a tie so that exactly one comes back per
+    /// surface. Ties go the other way in [`HeldBuffers::expired`], and for the
+    /// opposite reason — there an unresolved tie means holding a buffer that
+    /// may be on screen, and here it would mean showing a frame that is not.
+    fn newest_of_each_surface(&self) -> HashMap<SurfaceId, BufferId> {
+        let mut newest: HashMap<SurfaceId, (Instant, BufferId)> = HashMap::new();
+        for ((surface, id), held) in &self.held {
+            newest
+                .entry(*surface)
+                .and_modify(|best| *best = (*best).max((held.since, *id)))
+                .or_insert((held.since, *id));
+        }
+        newest
+            .into_iter()
+            .map(|(surface, (_, id))| (surface, id))
             .collect()
     }
 
@@ -311,6 +375,55 @@ mod tests {
             Some("theirs"),
             "the other surface keeps its own"
         );
+    }
+
+    // THE ENGINE WENT AWAY, so every hold is owed back — and which one each
+    // surface had on screen is the difference between a window that comes back
+    // and a window that is there and blank. The new engine knows none of these
+    // ids, so nothing will ever release any of them.
+    #[test]
+    fn a_new_engine_takes_every_hold_and_says_which_was_on_screen() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::default();
+        held.hold(SURFACE, 1, "superseded", now);
+        held.hold(SURFACE, 2, "on screen", at(now, 10));
+        held.hold(SURFACE + 1, 1, "the other window", at(now, 5));
+
+        let mut taken = held.take_all();
+        taken.on_screen.sort_by_key(|(key, _)| *key);
+        taken.superseded.sort_by_key(|(key, _)| *key);
+
+        assert_eq!(
+            taken.on_screen,
+            vec![
+                ((SURFACE, 2), "on screen"),
+                ((SURFACE + 1, 1), "the other window"),
+            ]
+        );
+        assert_eq!(taken.superseded, vec![((SURFACE, 1), "superseded")]);
+        assert!(
+            held.is_empty(),
+            "a hold kept past a reconnect is a release nothing will ever send"
+        );
+    }
+
+    // A SURFACE HAS ONE FRAME ON SCREEN, and two holds stamped the same
+    // instant must not make it two: the caller re-submits what comes back
+    // under `on_screen`, and submitting two buffers for one window would put
+    // the older of them up. `expired` breaks that tie the other way — towards
+    // holding both — because there the cost of guessing is handing out a
+    // buffer viz is reading, and here it is showing the wrong frame.
+    #[test]
+    fn two_frames_stamped_the_same_instant_leave_one_on_screen() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::default();
+        held.hold(SURFACE, 1, "first", now);
+        held.hold(SURFACE, 2, "second", now);
+
+        let taken = held.take_all();
+
+        assert_eq!(taken.on_screen, vec![((SURFACE, 2), "second")]);
+        assert_eq!(taken.superseded, vec![((SURFACE, 1), "first")]);
     }
 
     // THE TWO-WINDOW BUG, and the reason this map is keyed by a pair.

@@ -139,7 +139,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
         | ClientRequest::CloseApp { .. }
-        | ClientRequest::ChromeHello
+        | ClientRequest::ChromeHello { .. }
         // NEITHER HALF OF THE CLIPBOARD IS A HAND. A client sets the
         // selection whenever it likes — a program copying on a timer is a
         // client, and the Ctrl+C that a person did press has already arrived
@@ -385,7 +385,10 @@ mod tests {
                     app_id: "app-1".into(),
                 },
             ),
-            ("a page saying hello", ClientRequest::ChromeHello),
+            (
+                "a page saying hello",
+                ClientRequest::ChromeHello { served_by: None },
+            ),
             (
                 "a client putting something on the clipboard",
                 ClientRequest::ClipboardCopied {

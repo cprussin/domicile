@@ -8,7 +8,10 @@
 use std::cell::Cell;
 use std::time::Duration;
 
-use domicile_launch::restart::{clear_the_last_one, keep_a_desktop_up, Attempt, Ending, Policy};
+use domicile_launch::restart::{
+    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
+    Ending, Policy,
+};
 use domicile_launch::spawn::Runtime;
 
 #[test]
@@ -266,6 +269,116 @@ fn what_cannot_be_cleared_is_said_rather_than_started_over() {
 
     let said = leftover.to_string();
     assert!(said.contains("session.json"), "{said}");
+}
+
+#[test]
+fn an_engine_that_dies_is_started_again_under_the_compositor_that_did_not() {
+    // The same policy, counted on its own and said about the engine rather
+    // than about the desktop: what is being started again is one component,
+    // and a sentence that named the desktop would be describing a restart
+    // nobody asked for and the windows did not survive.
+    let policy = Policy::default();
+    let attempts = Cell::new(0);
+    let mut waited: Vec<Duration> = Vec::new();
+    let mut said: Vec<String> = Vec::new();
+
+    let ending = keep_the_engine_up(
+        &policy,
+        &mut || {
+            attempts.set(attempts.get() + 1);
+            Attempt::Failed {
+                lived: Duration::from_millis(3),
+            }
+        },
+        &|| false,
+        &mut |wait| waited.push(wait),
+        &mut |next| said.push(next.to_string()),
+    );
+
+    assert_eq!(attempts.get(), policy.give_up_after);
+    assert_eq!(
+        waited,
+        vec![
+            Duration::from_secs(1),
+            Duration::from_secs(2),
+            Duration::from_secs(4),
+            Duration::from_secs(8),
+        ]
+    );
+    assert!(
+        said[0].contains("starting the engine again in 1s"),
+        "{}",
+        said[0]
+    );
+    let last = said.last().expect("every failure was said");
+    assert!(last.contains("5 engines in a row have failed"), "{last}");
+    assert_eq!(
+        ending,
+        Ending::GaveUp {
+            failures: policy.give_up_after,
+        }
+    );
+}
+
+#[test]
+fn a_compositor_that_outlives_its_engines_ends_the_run_rather_than_the_engine() {
+    // `Attempt::Ended` on the engine's loop is the compositor going, which is
+    // the desktop being over: there is nothing left to put an engine under.
+    let attempts = Cell::new(0);
+
+    let ending = keep_the_engine_up(
+        &Policy::default(),
+        &mut || {
+            attempts.set(attempts.get() + 1);
+            Attempt::Ended
+        },
+        &|| false,
+        &mut |_| panic!("nothing failed, so nothing is waited for"),
+        &mut |_| panic!("nothing failed, so there is nothing to say"),
+    );
+
+    assert_eq!(ending, Ending::Over);
+    assert_eq!(attempts.get(), 1);
+}
+
+#[test]
+fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
+    // An engine started again under a compositor that is still serving. The
+    // engine's own paths are leftovers the next one cannot bind over; the
+    // compositor's are a socket it is still listening on and a document that
+    // is still true, and taking either away would be this run deleting a live
+    // desktop's answer to "is it up".
+    let directory = tempfile::tempdir().expect("a temp directory");
+    let runtime = runtime(directory.path());
+    for path in [
+        &runtime.broker,
+        &runtime.chrome_socket,
+        &runtime.command,
+        &runtime.session,
+    ] {
+        std::fs::write(path, "the desktop's").expect("it is written");
+    }
+    std::fs::create_dir(&runtime.profile).expect("it is created");
+
+    clear_the_last_engine(&runtime).expect("it clears");
+
+    assert!(!runtime.broker.exists(), "the broker socket is still there");
+    assert!(
+        !runtime.command.exists(),
+        "the engine's command socket is still there"
+    );
+    assert!(
+        !runtime.profile.exists(),
+        "the engine's profile is still there"
+    );
+    assert!(
+        runtime.chrome_socket.exists(),
+        "the compositor is still listening on the chrome socket and this took it away"
+    );
+    assert!(
+        runtime.session.exists(),
+        "the compositor is still serving and this took away the document that says so"
+    );
 }
 
 fn runtime(directory: &std::path::Path) -> Runtime {
