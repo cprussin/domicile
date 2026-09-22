@@ -18,6 +18,11 @@ import { WindowKind } from "./window";
 type Props = {
   /** The window the user is working in, which every bar is drawn against. */
   activeId: string | undefined;
+  /**
+   * Whether a panel of the desktop's own — the launcher, the clipboard — is up
+   * over the windows, which is what takes the keyboard off them.
+   */
+  behindPanel: boolean;
   /** The workspace on screen, which is what a switch is noticed against. */
   current: string;
   /**
@@ -96,6 +101,7 @@ type Props = {
  */
 export const Stage = ({
   activeId,
+  behindPanel,
   current,
   display,
   domicile,
@@ -153,6 +159,7 @@ export const Stage = ({
             return (
               <AppWindow
                 appId={window.appId}
+                behindPanel={behindPanel}
                 clickThrough={clickThrough}
                 cursor={window.cursor}
                 depth={depth}

@@ -10,7 +10,8 @@
 import type { AppFocusReleaseRequest } from "./app-element";
 import { APP_FOCUS_RELEASE_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
 import type { ElementContext } from "./element-context";
-import { focusedApp, setFocusedApp } from "./element-context";
+import { focusedApp } from "./element-context";
+import { focusChrome } from "./focus-chrome";
 import { evdevFromCode } from "./input";
 import type { KeyPress } from "./shortcut-claims";
 import { isClaimed } from "./shortcut-claims";
@@ -113,8 +114,7 @@ const releaseFocusOffApp =
       appId !== undefined &&
       releaseAllowed(appId, pressed)
     ) {
-      setFocusedApp(undefined);
-      context.domicile.focusChrome();
+      focusChrome(context.domicile);
     }
   };
 
@@ -171,8 +171,7 @@ const releaseAllowed = (
 const keyboardTarget = (context: ElementContext): string | undefined => {
   const appId = focusedApp();
   if (appId !== undefined && !onPage(appId)) {
-    setFocusedApp(undefined);
-    context.domicile.focusChrome();
+    focusChrome(context.domicile);
     return undefined;
   } else {
     return appId;

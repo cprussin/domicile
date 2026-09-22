@@ -54,6 +54,10 @@
       "types": "./dist/focus-app.d.ts",
       "default": "./dist/focus-app.js"
     },
+    "./focus-chrome": {
+      "types": "./dist/focus-chrome.d.ts",
+      "default": "./dist/focus-chrome.js"
+    },
     "./host-message": {
       "types": "./dist/host-message.d.ts",
       "default": "./dist/host-message.js"

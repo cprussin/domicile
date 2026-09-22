@@ -135,6 +135,10 @@ export const Desktop = ({ domicile }: Props) => {
             />
             <Stage
               activeId={windows.activeId}
+              // A panel of the desktop's own is a thing to type into that no
+              // window knows about, so for as long as one is up the keyboard
+              // is the page's — see `AppWindow`.
+              behindPanel={windows.launcherOpen || windows.clipboardOpen}
               current={windows.current}
               display={display}
               domicile={domicile}
