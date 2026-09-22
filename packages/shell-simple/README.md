@@ -28,16 +28,16 @@ ends it sits between:
 
 | Path | What |
 |---|---|
-| `src/Shell.tsx` | The whole desktop: the windows, the Alt gestures, the terminal shortcut, and the legend on an empty screen. All of the shell's state is the window list in here. |
+| `src/Shell.tsx` | The whole desktop: the windows, the Alt gestures, the terminal shortcut, and the legend in the background. All of the shell's state is the window list in here. |
 | `src/index.tsx` | The entry: build the `DomicileClient`, bind the SDK, mount the React root, report the density and the desktop size. |
 | `src/shell.css` | Plain CSS — where a window sits, the placeholder over one with nothing behind it yet, and the legend. |
 | `vite.config.ts` | The module build, and the plugin that folds the stylesheet back into it. |
 
 ## What it deliberately does not do
 
-- **No chrome.** Nothing is drawn that a pointer can reach, and nothing at all
-  once there are windows: the legend naming the keys takes no event and is
-  rendered only on an empty desktop, and the one thing drawn over a window is
+- **No chrome.** Nothing is drawn that a pointer can reach: the legend naming
+  the keys is painted into the background, takes no event, and stays there
+  under whatever opens in front of it, and the one thing drawn over a window is
   its own placeholder label, until it has a surface.
 - **No keyboard of its own beyond Alt+Enter.** Every other key goes to the
   window that has the keyboard: the one that opened most recently, or one

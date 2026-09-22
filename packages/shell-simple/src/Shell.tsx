@@ -204,7 +204,7 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
       onPointerMove={continueDrag}
       onPointerUp={endDrag}
     >
-      {windows.length === 0 && <Keys />}
+      <Keys />
       {windows.map((window) => (
         <app
           app-id={window.appId}
@@ -217,7 +217,7 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
   );
 };
 
-/** What the keys do, on a desktop with nothing else on it to say so. */
+/** What the keys do, painted into the desktop behind whatever opens on it. */
 const Keys = () => (
   <dl className="keys">
     {KEYBINDINGS.map(([chord, means]) => (

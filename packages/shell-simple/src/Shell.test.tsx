@@ -318,19 +318,19 @@ describe("Shell", () => {
   });
 
   describe("the legend", () => {
-    it("names the keys on a desktop with nothing on it", () => {
+    it("names the keys the desktop answers to", () => {
       shell();
       expect(screen.getByText("Alt + Enter")).toBeInTheDocument();
     });
 
-    it("takes them away once there is a window to look at", () => {
+    it("stays on the background under a window that opened over it", () => {
       const host = shell();
       host.emit("app_appeared", {
         app_id: "term",
         size: [640, 480],
         title: undefined,
       });
-      expect(screen.queryByText("Alt + Enter")).toBeNull();
+      expect(screen.getByText("Alt + Enter")).toBeInTheDocument();
     });
   });
 });
