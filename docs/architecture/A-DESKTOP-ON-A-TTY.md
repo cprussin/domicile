@@ -882,6 +882,47 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 | **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
 | **All on one row** | Nothing is ever drawn across two connectors, so the only thing this arrangement decides is where a pointer crosses. Two monitors stacked vertically is the one thing a profile can say that this does not carry |
 
+### Blanking is that same layout with the light taken out of it
+
+A desktop nobody has touched for `idle.blank_after_seconds` turns its screens
+off, and there is no second mechanism for it: DPMS here is
+`domicile_displays_configure` again, carrying every connector the engine
+reported with `enabled: false`. The path above is the whole path, and the
+modeset that darkens a CRTC is the modeset that lit it.
+
+Three things about that list are load-bearing, and each is the opposite of the
+obvious answer:
+
+| Rule | Why |
+|---|---|
+| **Dark is not the empty list** | An empty layout is the compositor having no opinion, which the engine answers by lighting what the hardware reports — so the shortest way to write "light nothing" is the one way to light everything |
+| **Dark is built from the engine's display list, not from `Screens::scanout`** | A scanout list names the displays a *profile* named. A monitor no profile mentions is absent from it, and absent means untouched, which means still on. `crate::idle::darkened` reads `engine::Event::Displays`' own reading instead — every connector there is, at the origins the engine already put them |
+| **Relighting restates what the desktop wants, which is usually nothing** | Coming back is `Screens::scanout` again: a profile's connectors on a desk that has one, and the empty "hardware decides" list on every desk that does not. The desktop is not stored twice |
+
+The clock and the edge are `crate::idle`, which is pure and unit-tested; the
+compositor holds one `Idle` and states the connectors only when the answer
+*changed*. A desk that is already dark must not re-send a configure on every
+tick — that is a modeset a second on a desk nobody is at — and one that is lit
+must not re-send on every keystroke.
+
+The case that is easy to miss is a monitor plugged in while the screens are
+dark: it arrives lit, off the engine's own modeset, and `adopt_the_desktop`
+would have restated the *desktop's* list and lit the rest of the desk with it.
+So both paths go through one place, and a hotplug that does not rebuild the
+desktop at all still keeps the dark (`keep_the_screens_dark`).
+
+Nothing in this repository's checks can watch a panel go dark — no runner here
+has a `/dev/dri` at all. What a person at a desk looks for is one line each
+way:
+
+```
+nobody is at this desktop; its screens go dark connectors=2
+somebody is at this desktop again; its screens come back on
+```
+
+and, under `--vmodule=drm*=1`, the `configuring N display(s)` that says the
+modeset behind them ran.
+
 ### Turning a monitor is the page's job, and it took a window each to get there
 
 **The modeset does not turn a pixel and never will.**

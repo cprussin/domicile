@@ -93,6 +93,7 @@ mod dmabuf_import;
 mod engine;
 mod engine_buffers;
 mod engine_session;
+mod idle;
 mod keymap;
 mod latency;
 mod modifiers;
@@ -112,6 +113,7 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
+use crate::idle::{darkened, somebody_is_here, Blanking, Idle};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -1436,6 +1438,14 @@ struct DomicileCompositor {
     /// own dmabuf to viz, and with it takes on holding `wl_buffer.release` until
     /// viz is done sampling — see [`engine_session::EngineSession`].
     engine: Option<EngineSession>,
+    /// Whether anybody is at this desktop, for a desktop that blanks.
+    ///
+    /// `None` is one that never does, which is what a config saying nothing
+    /// about idle means — and then nothing here has a timer either. Read from
+    /// the *startup* config: a reloaded timeout is stored and not obeyed, the
+    /// same gap the display list is the only exception to. `ROADMAP.md`
+    /// carries it.
+    idle: Option<Idle>,
 }
 
 /// Per-client state required by the compositor global.
@@ -1780,8 +1790,12 @@ impl DomicileCompositor {
                         .replugged_into(&displays, &self.config.current().output)
                     {
                         // A desktop the config describes outright, which DRM
-                        // does not overrule.
-                        Ok(None) => {}
+                        // does not overrule -- but a monitor that arrives
+                        // while the screens are dark arrives LIT, and this is
+                        // the arm where nothing else would say otherwise.
+                        Ok(None) => self.keep_the_screens_dark(),
+                        // `adopt_the_desktop` states the connectors itself,
+                        // dark ones included.
                         Ok(Some(screens)) => self.adopt_the_desktop(dh, screens),
                         // A profile that matched these monitors and cannot be
                         // applied to them. The desktop that is up keeps
@@ -1789,11 +1803,17 @@ impl DomicileCompositor {
                         // an edit that does not parse -- and the complaint
                         // names what is wrong with the config, which is the
                         // only place this can be fixed.
-                        Err(err) => tracing::warn!(
-                            %err,
-                            "the profile these monitors matched cannot be applied to them; \
-                             keeping the desktop that is up"
-                        ),
+                        Err(err) => {
+                            tracing::warn!(
+                                %err,
+                                "the profile these monitors matched cannot be applied to them; \
+                                 keeping the desktop that is up"
+                            );
+                            // And keeping it dark, if it was: the monitor that
+                            // could not be placed is still a monitor that came
+                            // up lit.
+                            self.keep_the_screens_dark();
+                        }
                     }
                 }
             }
@@ -2599,9 +2619,14 @@ impl DomicileCompositor {
         // Sent on every adoption, empty list included, for the reason
         // `Screens::scanout` gives: an empty one is what undoes a profile
         // whose displays are no longer plugged in.
-        if let Some(session) = self.engine.as_ref() {
-            session.configure_displays(self.screens.scanout());
-        }
+        //
+        // Through `state_the_connectors` rather than straight at the session,
+        // because a desktop that is blanked has to stay blanked through a
+        // reload and a hotplug: stating the desktop's own list here would
+        // light the screens back up behind the idle clock's back, and the
+        // person who walked away would come back to a lit desk because a
+        // monitor was plugged in.
+        self.state_the_connectors();
         // The chrome is on every display, because it *is* the desktop — so a
         // display that just appeared is one it has to be told it is on, and a
         // toolkit picks its density from exactly this.
@@ -2639,6 +2664,99 @@ impl DomicileCompositor {
             host.describe_desktop()
         };
         self.hub.broadcast(desktop);
+    }
+
+    /// Tell the engine what the connectors have to be doing, now.
+    ///
+    /// Two answers and one place that gives them, because they are the same
+    /// sentence: a desktop somebody is at wants the list it has always
+    /// wanted — [`Screens::scanout`], which is a profile's connectors or the
+    /// empty "no opinion" every other desktop has — and a desktop nobody is at
+    /// wants none of them lit.
+    ///
+    /// Blanking is NOT that empty list, which would light everything: it is
+    /// every connector the engine reported, turned off. See
+    /// [`crate::idle::darkened`], including why an empty answer from it is one
+    /// this must not send.
+    fn state_the_connectors(&self) {
+        let Some(session) = self.engine.as_ref() else {
+            return;
+        };
+        if self.the_screens_are_dark() {
+            let dark = darkened(&self.engine_displays);
+            if !dark.is_empty() {
+                session.configure_displays(&dark);
+            }
+        } else {
+            session.configure_displays(self.screens.scanout());
+        }
+    }
+
+    /// Whether this desktop's screens are off because nobody is here.
+    fn the_screens_are_dark(&self) -> bool {
+        self.idle.as_ref().is_some_and(Idle::dark)
+    }
+
+    /// Keep a blanked desktop blanked through something that lit it.
+    ///
+    /// A hotplug is the one event that hands this compositor glass it never
+    /// turned off: the monitor arrives lit, off the engine's own modeset. On
+    /// a desktop the config describes outright — or one whose reloaded profile
+    /// cannot be applied — nothing else states the connectors at all, so
+    /// without this a monitor plugged in beside a dark desk lights it.
+    ///
+    /// Only the dark case. An awake desktop wants exactly what the engine has
+    /// just done on its own, and restating it would be a modeset per hotplug
+    /// for nothing.
+    fn keep_the_screens_dark(&self) {
+        if self.the_screens_are_dark() {
+            self.state_the_connectors();
+        }
+    }
+
+    /// Note a request that is a person, and light the screens back up if they
+    /// had gone dark.
+    ///
+    /// The page owns the input on this system and forwards it, so every hand
+    /// on this desktop arrives here — which is what makes one honest answer
+    /// possible. Which requests are a person is
+    /// [`crate::idle::somebody_is_here`].
+    fn keep_the_desktop_awake(&mut self, request: &ClientRequest) {
+        if !somebody_is_here(request) {
+            return;
+        }
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        if idle.stirred(Instant::now()) == Some(Blanking::ComeBack) {
+            info!("somebody is at this desktop again; its screens come back on");
+            self.state_the_connectors();
+        }
+    }
+
+    /// The idle clock came round. Answers with when to ask again.
+    ///
+    /// A timer rather than a thread, and one whose next wake this decides:
+    /// an untouched desktop is asked once at the moment it would blank, and a
+    /// blanked one once a timeout after that — see [`Idle::next_check`].
+    fn the_idle_clock_came_round(&mut self) -> Duration {
+        let now = Instant::now();
+        let idle = self
+            .idle
+            .as_mut()
+            .expect("the idle clock is armed only where a timeout was stated");
+        let going_dark = idle.elapsed(now);
+        // Before the edge is acted on, because acting on it borrows the rest
+        // of this compositor.
+        let next = idle.next_check(now);
+        if going_dark == Some(Blanking::GoDark) {
+            info!(
+                connectors = self.engine_displays.len(),
+                "nobody is at this desktop; its screens go dark"
+            );
+            self.state_the_connectors();
+        }
+        next
     }
 
     /// Give the chrome the keyboard.
@@ -2739,6 +2857,9 @@ impl DomicileCompositor {
 
     /// Inject a forwarded input event into the appropriate client via the seat.
     fn handle_client_request(&mut self, event: ClientRequest) {
+        // First, and for every request: this is the whole of what the
+        // compositor knows about somebody being at the desk.
+        self.keep_the_desktop_awake(&event);
         match event {
             ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
@@ -4405,6 +4526,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         charge: Charge::default(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
+        idle: Idle::after(config.idle.blank_after(), Instant::now()),
     };
 
     let mut data = CalloopData { display, state };
@@ -4532,6 +4654,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data.state.tell_the_chromes_the_charge();
         TimeoutAction::ToDuration(BATTERY_BACKSTOP)
     })?;
+
+    // A desktop nobody is at, and the one thing this can already do about it:
+    // turn the screens off, and turn them back on at the next input.
+    //
+    // Only where a timeout was stated. A desktop that never blanks should not
+    // have a timer at all — the same rule the latency run's source follows
+    // above — and `Idle::after` and this are two readings of one `Option`, so
+    // a compositor with a clock always has something for it to ask.
+    //
+    // The re-arm is the clock's own answer rather than a fixed tick: see
+    // `Idle::next_check`.
+    if let Some(after) = config.idle.blank_after() {
+        handle.insert_source(
+            Timer::from_duration(after),
+            |_, _, data: &mut CalloopData| {
+                TimeoutAction::ToDuration(data.state.the_idle_clock_came_round())
+            },
+        )?;
+    }
 
     // Inject forwarded input (from chrome threads) on the Wayland thread.
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {

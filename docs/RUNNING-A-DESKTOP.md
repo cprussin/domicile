@@ -39,6 +39,30 @@ client. Each desktop also launches a terminal on a key of its own, and
 everything started from that terminal lands here too:
 [the long answer](/packages/shell-simple/README.md#launch-an-app-into-it).
 
+## The screen going dark
+
+A desktop left alone turns its screens off — if you ask it to. Nothing blanks
+by default; say how long:
+
+```toml
+[idle]
+blank_after_seconds = 600
+```
+
+On NixOS that is `programs.domicile.settings.idle.blank_after_seconds = 600;`.
+The screens come back on the next key, click, scroll, or movement of the
+pointer.
+
+- **Leaving the key out is a desktop whose screens never blank**, which is what
+  every desk that has not been told gets.
+- **`0` is refused**, by name and at startup: it reads as both "blank at once"
+  and "never blank", and "never" already has a spelling.
+
+**It is not a lock.** The screens go dark and anybody can still walk up and
+type; nothing asks for a password on the way back. And it counts hands rather
+than what is on screen, so a film playing with nobody touching the trackpad
+blanks after the timeout. Both are open work — [/ROADMAP.md](/ROADMAP.md).
+
 ## On NixOS
 
 `homeManagerModules.default` describes a desk where the rest of your

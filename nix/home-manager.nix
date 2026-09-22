@@ -203,6 +203,24 @@ in {
       type = lib.types.submodule {
         freeformType = toml.type;
         options = {
+          idle = {
+            blank_after_seconds = lib.mkOption {
+              description = ''
+                How long a desktop goes untouched before its screens go dark.
+                They come back on the next key, click, scroll or movement of
+                the pointer.
+
+                `null` -- the default -- is a desktop that never blanks. There
+                is no lock behind the blank yet and nothing tells the shell a
+                moment before, so this is opt-in: a desk that says nothing
+                keeps its screens on.
+              '';
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              example = 600;
+            };
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Handed to xkb verbatim. Empty means whatever libxkbcommon defaults to.";
@@ -317,7 +335,15 @@ in {
 
     # THE PATH IS THE INTERFACE: this is where `domicile` looks with no
     # `--config`, so it is not a location this module gets to pick.
+    #
+    # NULLS ARE LEFT OUT RATHER THAN WRITTEN, because TOML has no word for
+    # one. A `null` here is an option nobody set, and `domicile` reads several
+    # keys' *absence* as a real answer -- `idle.blank_after_seconds` absent is
+    # a desktop whose screens never blank -- so leaving the key out is exactly
+    # what the default means. Recursive through the attrsets; the lists of
+    # displays and profiles carry no nullable field.
     xdg.configFile."domicile/domicile.toml".source =
-      toml.generate "domicile.toml" cfg.settings;
+      toml.generate "domicile.toml"
+      (lib.filterAttrsRecursive (_: value: value != null) cfg.settings);
   };
 }
