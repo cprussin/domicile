@@ -43,6 +43,16 @@ blank window, and a `backdrop-filter` over an `<app>` should work and has not
 been run — [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md)
 keeps that list.
 
+**One CSS construct is drawn right and clicked wrong: a perspective.** A window
+projected by a `perspective` above it — or by a `perspective()` in a transform
+over it — is painted exactly as the page asked, but the pointer position the
+client is handed comes from inverting an affine, and a projection is not one.
+The SDK detects that and says so on the console rather than guessing quietly;
+until it can be inverted, keep a `perspective` off the ancestors of an `<app>`
+you expect to be clickable. `zoom`, `rotate`, `scale` and 2D `transform`s on
+any ancestor are all carried, including a 3D rotation with no perspective over
+it, which CSS draws by dropping z and the SDK maps the same way.
+
 ```sh
 nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
 ```

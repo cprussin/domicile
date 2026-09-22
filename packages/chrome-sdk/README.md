@@ -80,8 +80,11 @@ It provides these:
 - **The routing parts, published so they can be substituted** — `./measure` is
   what `registerElements` takes an override of, and `./element-transform` and
   `./surface-coordinates` are what invert a window's affine so a click under a
-  CSS rotation lands where the user pressed. A shell needs none of them; a test
-  of one does.
+  CSS rotation — or a `zoom`, which is not a transform and is carried
+  separately — lands where the user pressed. The one construct they cannot
+  invert is a perspective projection, which is not an affine at all; `./measure`
+  maps the window flat and says so on the console. A shell needs none of them;
+  a test of one does.
 - **The compositor's own JSON wire**, which **a page no longer speaks** —
   `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
   there for `@domicile/e2e-harness`, a headless stand-in for a chrome that
