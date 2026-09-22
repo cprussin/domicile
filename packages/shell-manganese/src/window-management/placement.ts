@@ -21,8 +21,12 @@ export type Placement = {
   /** Its title bar: its own, or its tab in the container it is in. */
   bar: Rect;
   /**
-   * The window's own `z-index`, which the SDK reports with the placement and
-   * the compositor hit-tests and stacks the client's surface by.
+   * The window's own `z-index`.
+   *
+   * Nothing reports it. The window is a layer in this page's layer tree, so
+   * the page's compositor stacks the client's surface by this the way it
+   * stacks anything else, and the element it is written on is the one the
+   * pointer hit-tests against.
    */
   depth: number;
   /**

@@ -163,16 +163,18 @@ knowing about:
   page's own keyboard events are the fallback for a shell opened in a plain
   browser with no host to ask.
 
-The window is **half transparent while it is being dragged**, and that
-translucency is the compositor's rather than the page's: the SDK reports the
-element's `opacity` with the placement and the shader applies it to the
-client's own buffer, so what shows through a dragged window is the desktop
-behind it.
+The window is **half transparent while it is being dragged**, and nothing
+here arranges that. `opacity` on the element is `opacity` on a layer, because
+the window *is* a layer in this page's own layer tree — so the page's
+compositor applies it to the client's buffer the way it would to a
+hardware-composited `<video>`, and what shows through a dragged window is the
+desktop behind it. The shell writes the CSS and stops.
 
 The float order is the stacking order, and the shell writes it as the
-`z-index` of the window's *own* element — which is what stacks the window,
-because the window is a layer in this page's own layer tree, and what the SDK
-reports with the placement so the compositor hit-tests in the same order.
+`z-index` of the window's *own* element — which is what stacks the window, for
+the same reason: it is a layer in this page's layer tree, and it is the
+element the pointer hit-tests against, so the order it draws in and the order
+it is hit in are one fact rather than two that have to be kept in step.
 
 ### Every window has a title bar
 

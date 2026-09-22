@@ -33,10 +33,11 @@ export const windowStyles = css({
  * Panda extracts styles by reading literals at build time: a class built from
  * a number that does not exist yet comes out with no rule behind it.
  *
- * `depth` becomes the element's *own* `z-index` — which is what the SDK
- * reports with the placement and what the compositor stacks the client's
- * surface by. On the element rather than on a wrapper for exactly that reason:
- * a wrapper's `z-index` is one the page can see and the desktop cannot.
+ * `depth` becomes the element's *own* `z-index`, which is what stacks the
+ * client's surface: the window is a layer in this page's layer tree, so the
+ * page's compositor orders it by this the way it orders anything else. On the
+ * element rather than on a wrapper for exactly that reason — a wrapper's
+ * `z-index` stacks the wrapper, and the window is not in it.
  *
  * **In the desktop's coordinates rather than any container's.** The page spans
  * every display, so the viewport *is* the desktop: a window at 0 is at its
@@ -55,9 +56,10 @@ export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
 /**
  * What a window looks like while it is being dragged: most of the way there.
  *
- * A real translucency rather than a hint of one, because it is the compositor
- * that draws it: the SDK reports the element's `opacity` with the placement and
- * the shader applies it to the client's own buffer, so what shows through a
+ * A real translucency rather than a hint of one, because it is the page's own
+ * compositor that draws it: `opacity` on the element is `opacity` on a layer,
+ * and the window is one — so it is applied to the client's buffer the way it
+ * would be to a hardware-composited `<video>`, and what shows through a
  * half-transparent window is the desktop behind it rather than anything the
  * page could have painted over it.
  */
