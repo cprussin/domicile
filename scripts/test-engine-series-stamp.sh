@@ -286,6 +286,50 @@ expect "refusing to record does not fail the run" 0 "$status"
 contains "and it says so loudly anyway" "::warning::" "$out"
 expect_carries "and nothing it wrote can make the next run skip" false
 
+# WHAT THE SERIES IS, NAMED, AND WHY IT IS THIS SCRIPT THAT SAYS SO.
+#
+# `engine-release-publish.sh` tags each published engine after the series it
+# was built from rather than after the domicile commit that happened to
+# produce it, so that two commits which do not touch the fork map to the same
+# engine and need no repin between them. That tag and this stamp have to mean
+# the same thing by construction: if the release's idea of "the same series"
+# were computed anywhere else, the two could drift and the drift would show up
+# as a repin that changed nothing, or -- worse -- as no repin for a change
+# that did.
+#
+# So the identity is read out of the one function that already decides it.
+out="$(stamp identity)"
+expect "the identity is a sha256, and nothing else on the line" ok \
+  "$(printf '%s' "$out" | grep -qE '^[0-9a-f]{64}$' && echo ok || echo "said: $out")"
+
+# It is a fact about this repository's series, not about any checkout, which
+# is what lets a job on `ubuntu-latest` compute it without /build.
+expect "it needs no checkout to answer" "$out" "$(stamp identity)"
+
+# THE TWO DIRECTIONS THAT MATTER. Moving the pin has to move it -- a repin
+# rebuilds the most and is the change most likely to be waved through -- and
+# moving a patch has to move it too, since that is what a release is FOR.
+cp "$FAKE/packages/domicile-engine/CHROMIUM_PIN" "$WORK/pin.bak"
+echo "0000000000000000000000000000000000000000" \
+  >"$FAKE/packages/domicile-engine/CHROMIUM_PIN"
+expect "moving the pin is a different series" ok \
+  "$([ "$(stamp identity)" != "$out" ] && echo ok || echo "it did not move")"
+cp "$WORK/pin.bak" "$FAKE/packages/domicile-engine/CHROMIUM_PIN"
+expect "and putting it back is the same series again" "$out" "$(stamp identity)"
+
+echo "another patch" >"$FAKE/packages/domicile-engine/patches/0002-second.patch"
+expect "adding a patch is a different series" ok \
+  "$([ "$(stamp identity)" != "$out" ] && echo ok || echo "it did not move")"
+rm -f "$FAKE/packages/domicile-engine/patches/0002-second.patch"
+
+# AND THE ONE THAT WOULD BE SILENT. `src/` is copied into the checkout rather
+# than applied, so a change there rejects nothing and fails at the compiler
+# four hours later. A release keyed on an identity blind to it would publish
+# the old engine under a tag claiming the new series.
+echo "edited" >>"$FAKE/packages/domicile-engine/src/components/domicile/thing.cc"
+expect "editing a laid-down file is a different series" ok \
+  "$([ "$(stamp identity)" != "$out" ] && echo ok || echo "it did not move")"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

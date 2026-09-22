@@ -65,7 +65,18 @@ OPTIONAL=(
 
 REV="$(git rev-parse --short HEAD)"
 PIN="$(grep -v '^#' "$(dirname "$0")/../../packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
-NAME="domicile-engine-${REV}-linux-x64"
+
+# NAMED AFTER THE SERIES, NOT AFTER THE COMMIT, and the tag this ends up under
+# is named the same way for the same reason -- see engine-release-publish.sh,
+# where the argument is written out. The short form here is the twelve
+# characters that tag carries, so a downloaded file and the release it came
+# from can be matched by eye.
+#
+# `engine-series-stamp.sh` is what decides it, rather than a second hash
+# computed here: the tag, the filename and the checkout's own "do I need to
+# rebuild" question all have to mean the same thing by construction.
+IDENTITY="$("$(dirname "$0")/engine-series-stamp.sh" identity)"
+NAME="domicile-engine-s${IDENTITY:0:12}-linux-x64"
 
 rm -rf "$STAGE/$NAME"
 mkdir -p "$STAGE/$NAME"
@@ -99,6 +110,7 @@ cp -a "$BUILD/locales" "$STAGE/$NAME/"
 # downloaded twice is a tarball whose provenance is a guess.
 cat > "$STAGE/$NAME/PROVENANCE" <<PROV
 domicile engine, built on crux
+series identity: $IDENTITY
 domicile commit: $(git rev-parse HEAD)
 chromium pin:    $PIN
 built:           $(date -u +%Y-%m-%dT%H:%M:%SZ)

@@ -77,6 +77,53 @@ work on NixOS, where a generic-linux Chromium cannot start at all.
 `DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
 `out/Domicile`, say. It names the directory holding `chrome`.
 
+### A change to the fork is one pull request
+
+It was two, and the second one is the one that got skipped. This workflow
+proved a change on the pull request and again on the merge; a release was
+`engine-release.yml`, dispatched by hand; and moving `engine-release.nix` onto
+what that produced was a second pull request, which ran the engine job twice
+more. Four engine builds and a manual step — and because the manual step was
+manual, changes that needed a release shipped without one. Main at the time of
+writing pins an engine built at Chromium `3d77360` while `CHROMIUM_PIN` says
+`fa0ce55`: two pin rolls landed with nothing published behind either.
+
+**What made it two was that neither half of `engine-release.nix` could be
+written in advance.** The url named the domicile commit, which does not exist
+until the branch merges. The hash is of the tarball, and Chromium does not
+build byte-for-byte twice, so it cannot be predicted from source at all.
+
+The first half is gone: **a release is named after the series, not the
+commit.** The tag is `engine-s<identity>`, where the identity is
+`CHROMIUM_PIN`, `patches/` and `src/` hashed by content — the same value
+`engine-series-stamp.sh` uses to decide whether the shared checkout needs
+rebuilding, and computable from a branch without merging anything. Two commits
+that do not move the fork are the same engine, publish under the same tag, and
+need no repin between them.
+
+The second half is not fixable, so the build moved instead. On a pull request
+that moves the fork, `engine.yml` builds the release configuration, publishes
+it, and pushes the regenerated `engine-release.nix` back onto the branch. So:
+
+| | |
+|---|---|
+| `.github/scripts/engine-release-needed.sh` | whether this run owes a release at all — most do not, and saying "build" wrongly is four hours of `crux` |
+| `.github/scripts/engine-release-repin.sh` | the commit that replaces the second pull request, put on the **branch tip** rather than on the merge ref this job is standing on |
+| `/scripts/test-the-pinned-engine-is-this-series.sh` | whether the engine this repository pins is the engine this repository describes — a string comparison, on `ubuntu-latest`, in seconds |
+
+**Red on that last one means "not yet", not "wrong".** A change that moves the
+fork is red there until the engine job publishes and writes back, in the same
+pull request. Red that survives that is the real signal, and is what nothing
+said before.
+
+A force-push over the written-back commit costs nothing: the series is
+unchanged, so the next run finds the release already published, skips the
+build, and rewrites the identical file.
+
+`engine-release.yml` still exists and is still what an `engine-v*` tag
+publishes through. It is no longer how an ordinary engine change reaches a
+release.
+
 ## The control channel's protocol, and what of it is here
 
 `window.domicile` is the shell's control channel, and `navigator.domicile` is

@@ -9,6 +9,20 @@
 # a commit rather than a silent change of behavior under an unchanged
 # revision. This regenerates that file; the diff is the review.
 #
+# IN CI THIS RUNS INSIDE THE PULL REQUEST THAT MOVED THE FORK, and the commit
+# it produces is pushed back onto that branch — which is what makes an engine
+# change one pull request rather than two. `engine.yml` publishes the engine
+# from the branch head under a tag naming the SERIES rather than the commit,
+# so the url is knowable before anything is merged; the hash is not, because
+# Chromium does not build byte-for-byte twice, and that is the whole reason
+# this step has to come after a build rather than before one.
+#
+# THE SERIES IDENTITY IS WRITTEN DOWN TOO, and it is what
+# `scripts/test-the-pinned-engine-is-this-series.sh` compares against the fork
+# in the checkout. Without it, "this repository describes one engine and ships
+# another" is a question nothing can answer locally — which is the state that
+# produced #411 and every silent skipped release after it.
+#
 # WHAT IS PINNED IS NOT THE NIGHTLY. The nightly is deleted and recreated on
 # every release run, so a url under that tag stops resolving the moment the
 # next build is published -- `nix run` on main answers `cannot download ...
@@ -74,6 +88,19 @@ url="$(printf '%s' "$release" |
   exit 1
 }
 
+# WHICH SERIES THE PUBLISHED BUILD IS OF, out of the body, where the publisher
+# states it. Not derived from the tag: the tag carries twelve characters of it
+# and the check that reads this file compares the whole thing, so deriving it
+# would answer a weaker question than the one asked.
+identity="$(printf '%s' "$release" |
+  jq -r '.body // ""' |
+  sed -n 's/.*series identity: `\([0-9a-f]\{64\}\)`.*/\1/p' | head -1)"
+[ -n "$identity" ] || {
+  echo "update-engine-release: that release does not say which series it was built from." >&2
+  echo "Releases published before this existed do not carry it; cut a new one." >&2
+  exit 1
+}
+
 commit="$(printf '%s' "$release" | jq -r '.target_commitish // ""')"
 # A rolling tag's `target_commitish` can be a branch name rather than a sha, so
 # the body — which the publish step writes — is where the commit is stated.
@@ -106,14 +133,23 @@ cat > "$OUT" <<EOF
 # could not be reproduced. With it, a flake revision names exactly one engine,
 # and moving to a new one is a commit somebody can look at.
 #
-# The url is the release tagged with the engine's own commit, not
+# The url is the release tagged with the engine's own SERIES, not
 # \`engine-nightly\`: the nightly is deleted and recreated on every release
 # run, and a pin to it stops resolving as soon as the next build lands.
+#
+# \`identity\` is that series — the pin, \`patches/\` and \`src/\` hashed by
+# content, the same value \`engine-series-stamp.sh\` uses to decide whether the
+# shared checkout needs rebuilding. It is here so that
+# \`scripts/test-the-pinned-engine-is-this-series.sh\` can ask, without
+# downloading anything, whether the engine this repository pins is the engine
+# this repository describes. Two commits that do not move the fork have the
+# same identity and so need no repin between them.
 {
+  identity = "$identity";
   commit = "$commit";
   url = "$url";
   hash = "$hash";
 }
 EOF
 
-echo "update-engine-release: $OUT now points at ${commit:0:7}" >&2
+echo "update-engine-release: $OUT now points at ${commit:0:7}, series ${identity:0:12}" >&2

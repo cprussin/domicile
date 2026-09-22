@@ -2,8 +2,9 @@
 # What series the shared Chromium checkout is already carrying, written down
 # beside it so the next run can skip putting it there again.
 #
-#   .github/scripts/engine-series-stamp.sh carries <chromium/src>
-#   .github/scripts/engine-series-stamp.sh record  <chromium/src>
+#   .github/scripts/engine-series-stamp.sh carries  <chromium/src>
+#   .github/scripts/engine-series-stamp.sh record   <chromium/src>
+#   .github/scripts/engine-series-stamp.sh identity
 #
 # `carries` writes `carries=true` or `carries=false` to $GITHUB_OUTPUT and
 # exits 0 — it is a question, and a question that cannot be answered answers
@@ -50,12 +51,23 @@
 # ordinary price, not a failure.
 set -euo pipefail
 
-action="${1:-}"
-CHROMIUM="${2:-}"
-[ -n "$action" ] && [ -n "$CHROMIUM" ] || {
+usage() {
   echo "usage: $(basename "$0") <carries|record> <chromium/src>" >&2
+  echo "       $(basename "$0") identity" >&2
   exit 2
 }
+
+action="${1:-}"
+CHROMIUM="${2:-}"
+# `identity` is the odd one out and deliberately so: it is a question about
+# THIS REPOSITORY's series and not about any checkout, which is what lets a job
+# on `ubuntu-latest` — or `update-engine-release.sh` on a laptop — ask it
+# without /build.
+[ -n "$action" ] || usage
+case "$action" in
+  (identity) ;;
+  (*) [ -n "$CHROMIUM" ] || usage ;;
+esac
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PACKAGE="$ROOT/packages/domicile-engine"
@@ -273,8 +285,23 @@ case "$action" in
     echo "wrote down the series this checkout carries, over $(pin)"
     ;;
 
-  *)
-    echo "usage: $(basename "$0") <carries|record> <chromium/src>" >&2
-    exit 2
+  identity)
+    # WHAT THE SERIES IS, NAMED, so that something other than this script can
+    # key on it. `engine-release-publish.sh` tags a published engine after the
+    # series it was built from rather than after the domicile commit that
+    # produced it — two commits that do not touch the fork are the same engine
+    # and need no repin between them, and until releases were keyed this way
+    # every engine change cost a second pull request whether or not the engine
+    # had moved.
+    #
+    # READ OUT OF THIS SCRIPT RATHER THAN COMPUTED AGAIN, and that is the whole
+    # reason it lives here. The tag and the stamp have to mean the same thing
+    # by construction. A second implementation of "the same series" would
+    # drift, and the drift would show up either as a repin that changed nothing
+    # or — the direction that costs something — as no repin for a change that
+    # did, which is #411's failure with a new cause.
+    series_identity
     ;;
+
+  *) usage ;;
 esac

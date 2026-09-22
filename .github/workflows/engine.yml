@@ -121,8 +121,17 @@ concurrency:
   group: engine-${{ github.ref }}
   cancel-in-progress: false
 
+# `write`, and the reason is the whole of what this workflow now does beyond
+# proving a change. An engine change used to be two pull requests: this one,
+# and a second one moving `engine-release.nix` onto the tarball a manually
+# dispatched release produced. The second one is what got forgotten, so
+# changes that needed a release shipped without one.
+#
+# The release is built and published here now, and `engine-release.nix` is
+# written back onto the branch — a commit this job pushes, which is what the
+# token needs `contents: write` for. See `.github/scripts/engine-release-needed.sh`.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   engine:
@@ -133,6 +142,17 @@ jobs:
     # user on a machine in a house, and this repository is public and forkable.
     # It is safe only while fork pull requests cannot run on it — Settings ->
     # Actions -> "Require approval for all external contributors".
+    #
+    # THE TOKEN IS `contents: write` NOW, because this job pushes a commit
+    # back onto the branch -- see the release steps below -- and that does not
+    # widen what the gate has to cover. GitHub hands a FORK's pull request a
+    # read-only token whatever a workflow asks for, and the write-back step
+    # refuses any head repository that is not this one, so those two are belt
+    # and braces over a case the platform already forbids. What it widens is
+    # what a same-repository branch can do, and a same-repository branch
+    # already runs arbitrary code as a real user on this machine -- which is
+    # the exposure the gate is for, and it is unchanged.
+    #
     # Same-repository branches are the intended case and are what makes an
     # engine change reviewable before it merges — which is why this is on
     # `pull_request` and not only `push`, against the more cautious advice in
@@ -166,6 +186,20 @@ jobs:
       # clients off the card while something is being timed. They are held over
       # different spans and released by different steps.
       CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
+      # The RELEASE configuration's output directory, which is not the one
+      # everything above builds. `out/Domicile` is `is_component_build = true`
+      # with no symbols — small, fast, and linked to several hundred .so files
+      # in a tree nobody can move. This is the shape that goes in a tarball,
+      # and it is ~40G of its own. Kept warm between releases for the reason
+      # the other one is: a clean Chromium build is four hours.
+      OUT_RELEASE: out/Release
+
+      # Where the tarball is assembled and where the packaged tree is put back
+      # to be tested, both under /build for the reason everything else is.
+      # Shared with engine-release.yml, which is still what an `engine-v*` tag
+      # publishes through.
+      STAGE: /build/engine-release
 
       # `apply.sh` ends in `git am`, which writes commits, and git refuses to
       # write one without an identity. The runner's HOME is the work directory
@@ -266,6 +300,33 @@ jobs:
           set -euo pipefail
           .github/scripts/engine-tree-pool.sh use \
             "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
+      # ASKED HERE, BEFORE ANYTHING IS BUILT OR PROVED, FOR TWO REASONS.
+      #
+      # It is a decision and not an action: it reads this checkout's series and
+      # asks GitHub whether that series is published, and it touches neither
+      # the tree nor the engine. Nothing below it is skipped or run differently
+      # because it ran early — the steps that act on its answer are still after
+      # the guards, where a release may only be published by a build that
+      # passed them.
+      #
+      # WHAT IT BUYS IS THAT A GUARD FAILURE NO LONGER HIDES IT. Every step
+      # between here and there can go red, and on a flaky one they have; with
+      # the decision down beside the steps it gates, a run that never reached
+      # it left no record of what this branch owed, and the answer `build=false,
+      # write=false` — the one almost every run gets — had never once been
+      # printed in CI. It also fails fast: a branch that moves the fork learns
+      # in the first minute that it is buying a release build, rather than in
+      # the eleventh.
+      # AND MOST RUNS DO NONE OF IT. `engine-release-needed.sh` answers
+      # `build=false, write=false` whenever `engine-release.nix` already names
+      # this series, which is every pull request that touches this package
+      # without moving the fork — a script, a BUILD arg, this workflow.
+      - name: Does this series still owe a release?
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/engine-release-needed.sh
 
       # In a script, and shared with engine-release.yml, which resets the same
       # tree for the same reason. The two copies of this had already drifted in
@@ -1026,6 +1087,166 @@ jobs:
         if: ${{ always() }}
         run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
 
+      # ===================================================================
+      # THE RELEASE, WHICH IS WHY AN ENGINE CHANGE IS ONE PULL REQUEST NOW
+      # ===================================================================
+      #
+      # Everything above proves the change. What follows publishes it, and
+      # then writes `engine-release.nix` back onto the branch — so the pull
+      # request that moves the fork is also the pull request that repins it,
+      # and merging it is sufficient.
+      #
+      # IT WAS TWO PULL REQUESTS AND A MANUAL STEP. This workflow proved a
+      # change on the pull request and again on the merge; a release was
+      # `engine-release.yml`, dispatched by hand; and moving
+      # `engine-release.nix` onto what that produced was a second pull
+      # request, which ran this job twice more. Four engine builds and a
+      # manual step for one change — and the manual step is the one that got
+      # skipped. It had been skipped twice when this was written: #470 and
+      # #482 each rolled `CHROMIUM_PIN` with no release behind either, so main
+      # named an engine built at Chromium `3d77360` while the pin said
+      # `fa0ce55`, and #487 was the third pull request that had to be opened
+      # by hand to say so.
+      #
+      # WHAT MADE IT TWO was `engine-release.nix` holding a url and a hash.
+      # The url named the domicile commit, which does not exist until the
+      # branch merges. The hash is of the tarball, and Chromium does not build
+      # byte-for-byte twice, so it cannot be predicted from source at all.
+      # Naming releases after the SERIES — the pin, `patches/` and `src/`
+      # hashed by content — fixes the first: that value is computable from the
+      # branch and is identical to what the merge would produce. The second is
+      # not fixable and does not need to be, because the build happens here.
+      #
+      # WHAT IS LEFT HERE IS THE ACTING. The deciding is step 5, up beside the
+      # tree, and `steps.release.outputs` is what every `if:` below reads.
+
+      # `is_component_build = false`, in its own output directory, through
+      # Chromium's shell with the sentinel that proves the shell ran the
+      # command — see the Build step above, where NIX_SHELL_RUN returned
+      # success having built nothing.
+      - name: Build the release configuration
+        if: ${{ steps.release.outputs.build == 'true' }}
+        run: |
+          set -euo pipefail
+          done=/tmp/domicile-release-build-ran
+          rm -f "$done"
+
+          # A non-component Chromium is ~40G of objects, and /build is also
+          # where this machine's interactive builds live. Under 60 free there
+          # is no point starting: the failure four hours in is a full dataset.
+          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
+          echo "/build has ${free_gb}G free"
+          [ "$free_gb" -ge 60 ] || {
+            echo "::error::only ${free_gb}G free on /build; a release build needs ~40G and this will not fit" >&2
+            echo "Reclaim it by removing $CHROMIUM/$OUT_RELEASE, which is a cache and nothing else." >&2
+            exit 1
+          }
+
+          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          export NIX_PATH="nixpkgs=$nixpkgs"
+
+          cat > /tmp/domicile-release-build <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh" "$CHROMIUM" "$OUT_RELEASE"
+          touch "$done"
+          EOF
+          chmod +x /tmp/domicile-release-build
+
+          if NIX_SHELL_RUN=/tmp/domicile-release-build \
+               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-release-shell.log 2>&1; then
+            echo "the shell exited 0"
+          else
+            echo "the shell exited $?"
+          fi
+          grep -aE 'error:|FAILED:|ninja: build stopped|Error:' /tmp/domicile-release-shell.log |
+            tail -40 | sed 's/^/  E /' || true
+          tail -120 /tmp/domicile-release-shell.log | sed 's/^/  | /'
+
+          [ -e "$done" ] || {
+            echo "::error::Chromium's shell did not run the release build; its last words are above" >&2
+            exit 1
+          }
+
+      - name: Package the release
+        id: package
+        if: ${{ steps.release.outputs.build == 'true' }}
+        run: .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
+
+      # THE ARTIFACT IS ASSERTED, NOT ASSUMED. The guards above ran against
+      # `out/Domicile`, which is a different build with a different linkage;
+      # nothing in them would notice a file left out of the release manifest.
+      # So the tarball is unpacked back into the checkout as an output
+      # directory of its own and the same pixel guard is pointed at it. An
+      # artifact that cannot show a client's window is not a release.
+      #
+      # AFTER THE RENDER NODE IS DROPPED, AND THAT IS RIGHT. The card lock is
+      # held around `guard-latency.sh` alone, because timing is the one thing
+      # a second client on the node makes WRONG rather than merely slower.
+      # This is a did-the-color-land guard, which is the kind that survives
+      # sharing — see the note on `Take the render node` above, and
+      # engine-release.yml, which runs this same guard holding nothing.
+      - name: The packaged release passes the guard
+        if: ${{ steps.release.outputs.build == 'true' }}
+        env:
+          OUT: out/Release-staged
+        run: |
+          set -euo pipefail
+          rm -rf "$CHROMIUM/out/Release-staged"
+          mkdir -p "$CHROMIUM/out/Release-staged"
+          tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
+            -C "$CHROMIUM/out/Release-staged" --strip-components=1
+          nix develop .#full --command cargo build -p domicile-compositor
+          nix develop .#full --command \
+            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
+            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
+
+      - name: Publish the release
+        if: ${{ steps.release.outputs.build == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARBALL: ${{ steps.package.outputs.tarball }}
+        run: .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
+
+      # THE COMMIT THAT REPLACES THE SECOND PULL REQUEST.
+      #
+      # ONLY ON A PULL REQUEST, AND ONLY ONE FROM THIS REPOSITORY. On `main`
+      # there is no branch to write to that is not `main` itself, and a job
+      # committing to `main` is not a thing this repository does; the red
+      # `scripts/test-the-pinned-engine-is-this-series.sh` is what says so
+      # there instead, which is the right place for it — main carrying a
+      # series nothing published means a change reached it without this job.
+      # A fork's branch is not ours to push to and the token cannot anyway.
+      #
+      # THE BRANCH TIP, NOT THE MERGE REF. A `pull_request` run is checked out
+      # at `refs/pull/N/merge`, which is the head merged into main; pushing
+      # that to the branch would quietly merge main into somebody's branch.
+      # So the tip is fetched and the generated file put on it. If main moved
+      # the fork while this ran, the identity written here is the merge's
+      # rather than the tip's — the check goes red, the next run fixes it, and
+      # that is the cheap direction.
+      #
+      # A FORCE-PUSH OVER THIS COSTS NOTHING. The series is unchanged, so the
+      # next run finds the release already published, skips the build, and
+      # rewrites the identical file.
+      - name: Write engine-release.nix back onto this branch
+        if: >-
+          ${{ steps.release.outputs.write == 'true'
+              && github.event_name == 'pull_request'
+              && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The series' own tag rather than the rolling one: `engine-nightly`
+          # is whatever was published last, and on a busy day that is not
+          # necessarily this series.
+          DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: .github/scripts/engine-release-repin.sh "$HEAD_REF"
+
+      # In a script, not inline. GitHub echoes every step's script into the
+      # log before running it, so forty lines of dump here is forty lines
+      # between a failure and the end of the log — which is exactly where a
+      # failure gets read from, and it cost four fetches to notice.
       # Everything the guard writes down, because none of it is on stdout.
       #
       # `under-wayland.sh` sends sway's output to a file and then says only "no
@@ -1035,10 +1256,6 @@ jobs:
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
       # are unreachable once the job ends — they have to be printed here or
       # they are lost.
-      # In a script, not inline. GitHub echoes every step's script into the
-      # log before running it, so forty lines of dump here is forty lines
-      # between a failure and the end of the log — which is exactly where a
-      # failure gets read from, and it cost four fetches to notice.
       - name: What the guard wrote down
         if: ${{ failure() }}
         run: .github/scripts/engine-diagnostics.sh

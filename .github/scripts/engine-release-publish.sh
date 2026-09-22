@@ -31,6 +31,13 @@ api() { curl -sS -f -H "Authorization: Bearer $GITHUB_TOKEN" \
              -H "Accept: application/vnd.github+json" \
              -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
 
+# WHICH SERIES THIS BUILD IS OF. Stated in every release's body whichever kind
+# it is, because `update-engine-release.sh` reads it back out of there and
+# writes it into `engine-release.nix` -- which is what lets a checkout say
+# whether the engine it pins was built from the series it carries without
+# downloading anything.
+IDENTITY="$(.github/scripts/engine-series-stamp.sh identity)"
+
 if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   TAG="$GITHUB_REF_NAME"
   PRERELEASE=false
@@ -50,9 +57,32 @@ else
   # engine-release.nix's own header -- "a flake revision names exactly one
   # engine" -- false.
   #
-  # The same short revision the tarball is named after, so the tag and the
+  # NAMED AFTER THE SERIES, NOT AFTER THE COMMIT, and that is what stopped
+  # most repins from having to happen at all.
+  #
+  # It was `engine-<short sha>`, so every release was a different release as
+  # far as anything downstream could tell: a commit that touched
+  # `packages/domicile-engine` at all -- a script, a BUILD arg, a line in a
+  # patch header -- produced a new tag and a new hash, and therefore a second
+  # pull request to move `engine-release.nix` onto it. Most of those repins
+  # changed which bytes were fetched and nothing whatsoever about what was in
+  # them.
+  #
+  # The series identity is the pin, `patches/` and `src/` hashed by content,
+  # which is precisely what decides whether the shared Chromium checkout has
+  # to be rebuilt. Two commits that do not move the fork are the same engine,
+  # publish to the same tag, and need no repin between them.
+  #
+  # READ OUT OF `engine-series-stamp.sh` RATHER THAN COMPUTED HERE. That
+  # script already answers this question for the checkout, and a second
+  # implementation of "the same series" is a second thing that can drift. The
+  # cheap direction of a drift is a repin that changes nothing; the expensive
+  # one is no repin for a change that needed one, which is #411's failure
+  # with a new cause.
+  #
+  # The same twelve characters the tarball is named after, so the tag and the
   # filename cannot drift apart.
-  PINNABLE="engine-$(git rev-parse --short HEAD)"
+  PINNABLE="engine-s${IDENTITY:0:12}"
 fi
 
 # A release for this tag may exist: the nightly always does after the first
@@ -76,6 +106,7 @@ BODY=$(cat <<BODY
 A patched Chromium, built on crux, that \`domicile-compositor\` can use as its
 engine without anybody building one.
 
+- series identity: \`$IDENTITY\`
 - domicile commit: \`$GITHUB_SHA\`
 - chromium pin: \`$PIN\`
 - gn args: \`.github/scripts/engine-release-build.sh\` at that commit${PINNABLE:+
