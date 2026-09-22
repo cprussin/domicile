@@ -152,12 +152,18 @@ costs nothing.
   U3219Q 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`. The table behind
   the id is hwdata's `pnp.ids`, which libdisplay-info carries and Chromium does
   not. A profile may name the output `drm-<id>` instead.
-- **A 3D transform or a `zoom` above a window is invisible to the SDK.**
-  `defaultMeasure` reads each ancestor's computed style, but a perspective does
-  not reach the child's matrix and `zoom` scales the box without being a
-  transform — so a click on a window under either is inverted through the wrong
-  affine and reaches the client somewhere the user did not press. The size is
-  no longer the SDK's to get wrong: the engine states the box.
+- **A perspective over a window is reported, not corrected.** A projection is
+  not an affine and no `Matrix` can hold one, so `defaultMeasure` composes the
+  flattened 2D part — what CSS itself draws with no perspective in the chain —
+  and says on the console that a pointer over that window is mapped as if the
+  projection were not there. Correcting it wants a projective map through
+  `surface-coordinates` rather than a 6-tuple. One shape is not even detected:
+  a bare `perspective()` in an *ancestor's* transform list over a turn that
+  `preserve-3d` carried up to it. `zoom` is fixed — the affine carries
+  `currentCSSZoom`, the compounded factor the engine states — but only unit
+  tests stand behind it, and unit tests here lay nothing out: no run in a
+  browser has put a pointer on a zoomed window. A click guard on the engine, in
+  the shape of `guard-webview-click.sh`, is what would carry that.
 - **A guest refuses everything an embedder is asked for.** Permissions and
   dialogs route through `WebViewGuest`'s `WebContentsDelegate` and get the
   default answer. The window a page asks for is the one that has been answered:

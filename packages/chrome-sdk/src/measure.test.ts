@@ -5,9 +5,11 @@ import { defaultMeasure } from "./measure";
 /** A computed style with nothing set, plus whatever the case cares about. */
 const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
   ({
+    perspective: "none",
     rotate: "none",
     scale: "none",
     transform: "none",
+    transformStyle: "flat",
     translate: "none",
     ...style,
   }) as CSSStyleDeclaration;
@@ -26,8 +28,15 @@ const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
  * failure to say why. A case that wants ancestors wants `measuredInside`,
  * which keys a style per element.
  */
-const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
+const measuredWith = (style: Partial<CSSStyleDeclaration>, zoom?: number) => {
   const element = document.createElement("div");
+  // `currentCSSZoom` is the engine's own statement of the compounded zoom over
+  // an element, and happy-dom has no such property — it is a getter with no
+  // seam to inject, so the case assigns it the way the slot case assigns
+  // `assignedSlot`.
+  if (zoom !== undefined) {
+    Object.defineProperty(element, "currentCSSZoom", { value: zoom });
+  }
   const computed = blankStyle(style);
   const original = globalThis.getComputedStyle;
   globalThis.getComputedStyle = (() => computed) as typeof original;
@@ -39,15 +48,15 @@ const measuredWith = (style: Partial<CSSStyleDeclaration>) => {
 };
 
 /**
- * What `defaultMeasure` writes to the console while measuring an element.
+ * What the SDK writes to the console while `measuring` runs.
  *
  * The record of what has already been said is module state that outlives any
  * one test, so every case here has to reach for a value no other case uses:
  * the record is keyed on the property and the computed value together, so a
- * case that reused another's `rotate` would find it already reported and see
- * nothing.
+ * case that reused another's `rotate` — or another's `perspective` — would
+ * find it already reported and see nothing.
  */
-const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] => {
+const warningsWhile = (measuring: () => void): string[] => {
   const warnings: string[] = [];
   // biome-ignore lint/suspicious/noConsole: capturing what the SDK reports
   const original = console.warn;
@@ -55,14 +64,19 @@ const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] => {
     warnings.push(args.join(" "));
   };
   try {
-    for (const style of styles) {
-      measuredWith(style);
-    }
+    measuring();
   } finally {
     console.warn = original;
   }
   return warnings;
 };
+
+const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] =>
+  warningsWhile(() => {
+    for (const style of styles) {
+      measuredWith(style);
+    }
+  });
 
 /**
  * An `<app>` inside a chain of ancestors, each with its own computed
@@ -206,9 +220,100 @@ describe("defaultMeasure", () => {
   });
 });
 
+describe("a zoom over the window, which is not a transform", () => {
+  it("maps a click through the zoom in effect over the window", () => {
+    // `zoom` scales the element's box without appearing in any transform, and
+    // `getBoundingClientRect` already reports the scaled box — so a mapping
+    // built from the transforms alone inverted a click by exactly the zoom
+    // factor, and a window at `zoom: 2` was clicked half way to where the user
+    // pressed.
+    expect(measuredWith({}, 2).transform.slice(0, 4)).toStrictEqual([
+      2, 0, 0, 2,
+    ]);
+  });
+
+  it("composes the zoom with the window's own transform", () => {
+    // The zoom is what takes the element's own pixels into the space its
+    // transform is written in, so the two multiply. Replacing one with the
+    // other reads the same in the commonest case — either alone — and is
+    // wrong wherever a shell uses both.
+    expect(
+      measuredWith({ scale: "3" }, 2).transform.slice(0, 4).map(Math.round),
+    ).toStrictEqual([6, 0, 0, 6]);
+  });
+});
+
+describe("a projection no affine can express", () => {
+  it("says so when a perspective above the window projects it", () => {
+    // The classic idiom: a container states a `perspective` and the thing
+    // inside it turns out of the plane. What the engine draws is a projection,
+    // which divides by a different number at every corner — not something a
+    // 6-tuple can hold, so the mapping cannot be corrected and has to be
+    // declared instead.
+    const warnings = warningsWhile(() => {
+      measuredInside([{ perspective: "501px" }], {
+        transform: "rotateY(40deg)",
+      });
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("perspective");
+  });
+
+  it("says so when the window's own transform carries the perspective", () => {
+    // `perspective()` is also a transform function, so the projection can
+    // arrive without the property ever being set — and then it is the
+    // element's own matrix that stops being affine over its plane.
+    const warnings = warningsWhile(() => {
+      measuredWith({ transform: "perspective(601px) rotateY(40deg)" });
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("transform");
+  });
+
+  it("says nothing about a 3D turn with no perspective over it", () => {
+    // Without a perspective, CSS draws a 3D rotation by dropping z — which is
+    // exactly the 2D part of the matrix the mapping already composes. Warning
+    // here would cry wolf about the case the SDK gets right.
+    expect(
+      warningsWhile(() => {
+        measuredWith({ transform: "rotateX(35deg)" });
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("says nothing when a flat ancestor flattens the turn first", () => {
+    // `transform-style: flat` is the default, and it flattens a child into the
+    // plane before anything above it is applied — so the perspective two
+    // levels up has a flat plane to project, and the composed affine is right.
+    expect(
+      warningsWhile(() => {
+        measuredInside([{ perspective: "802px" }, {}], {
+          transform: "rotateX(35deg)",
+        });
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it("says so when preserve-3d carries the turn up to the perspective", () => {
+    // The other half of that: an ancestor that preserves the 3D space hands
+    // the turn to the perspective above it, so the projection is back.
+    const warnings = warningsWhile(() => {
+      measuredInside(
+        [{ perspective: "903px" }, { transformStyle: "preserve-3d" }],
+        { transform: "rotateX(35deg)" },
+      );
+    });
+
+    expect(warnings).toHaveLength(1);
+  });
+});
+
 describe("how many unreadable transforms it will report", () => {
-  // Last in the file on purpose: this fills the module's record of what it has
-  // already said, so a test after it would find the reporting exhausted.
+  // After every case that asserts what is reported, on purpose: this fills the
+  // module's record of what it has already said, so such a case below it would
+  // find the reporting exhausted and see nothing.
   it("stops rather than growing without a bound", () => {
     // The key is the whole computed string, and a `transition` on `rotate`
     // produces a new one every frame — so the record has to stop somewhere or

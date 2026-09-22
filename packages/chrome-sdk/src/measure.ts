@@ -9,7 +9,7 @@
 
 import { elementToScreen } from "./element-transform";
 import type { Matrix } from "./matrix";
-import { accumulate, IDENTITY } from "./matrix";
+import { accumulate, IDENTITY, multiply, scale } from "./matrix";
 
 export type Measurement = {
   size: readonly [width: number, height: number];
@@ -22,23 +22,23 @@ export type Measure = (element: HTMLElement) => Measurement;
  * Default DOM measurement: element-local size plus an element->screen affine.
  *
  * The affine composes the CSS transforms between this element and the screen
- * — its own and each ancestor's along the flat tree — with where
- * `getBoundingClientRect` puts the result, so an app maps correctly in both
- * directions through a page that rotated, scaled or skewed it. The engine
- * integration, which knows each layer's transform outright, replaces this when
- * running inside the compositor.
+ * — its own and each ancestor's along the flat tree — with the `zoom` in
+ * effect over it and with where `getBoundingClientRect` puts the result, so an
+ * app maps correctly in both directions through a page that rotated, scaled,
+ * skewed or zoomed it. The engine integration, which knows each layer's
+ * transform outright, replaces this when running inside the compositor.
  *
  * What it does not follow, and what that costs:
  *
- * - A **3D or perspective** ancestor, in the cases where flattening is not
- *   what the engine does. Only the 2D part of each ancestor's transform is
- *   composed. That is the right answer when the ancestor flattens — the
- *   default — and the wrong one under `transform-style: preserve-3d` or a
- *   `perspective` above it, where the descendant is projected rather than
- *   flattened.
- * - **`zoom`** on the element or any ancestor. It scales the box but is not a
- *   transform, so the linear part misses it while `getBoundingClientRect`
- *   already includes it — the two disagree by exactly the zoom factor.
+ * - A **perspective projection**: a `perspective` above a window that has
+ *   turned out of its plane, or a `perspective()` in a transform over one.
+ *   That is not an affine and no `Matrix` can hold it, so this composes the
+ *   flattened 2D part — what CSS itself draws with no perspective in the chain
+ *   — and {@link reportProjection} says on the console that a pointer over
+ *   that window is mapped as though the projection were not there. Detected
+ *   and declared rather than approximated in silence; mapping nothing at all
+ *   would be a window that ignores the pointer, which answers the same
+ *   question worse.
  * - Anything **between the flat tree and the paint order** that neither
  *   `assignedSlot` nor the shadow host explains.
  *
@@ -86,6 +86,10 @@ export const defaultMeasure: Measure = (element) => {
  * Element-first, each ancestor after it — the order `accumulate` composes, so
  * an ancestor's transform applies to the result of everything inside it.
  *
+ * The zoom multiplies all of it, and it is not part of the chain because it is
+ * not a transform — see {@link zoomOver} for which of the two spaces each
+ * thing this reads is in.
+ *
  * This is a `getComputedStyle` and a `matches` per ancestor, and it runs per
  * `pointermove` over a window — so a page deep enough for this to matter would
  * show it as pointer latency. The alternative is a click that lands somewhere
@@ -95,7 +99,27 @@ const chainToScreen = (
   element: HTMLElement,
   style: CSSStyleDeclaration,
 ): Matrix => {
-  const chain = [readElementTransform(style)];
+  const chain = layersToScreen(element, style);
+  reportProjection(chain);
+  const zoom = zoomOver(element);
+  return multiply(
+    accumulate(chain.map(({ matrix }) => linearPart(matrix))),
+    scale(zoom, zoom),
+  );
+};
+
+/** One element on the way to the screen, and what it asked to be drawn as. */
+type Layer = {
+  style: CSSStyleDeclaration;
+  matrix: DOMMatrix | undefined;
+};
+
+/** The element and everything it is painted inside, element-first. */
+const layersToScreen = (
+  element: HTMLElement,
+  style: CSSStyleDeclaration,
+): Layer[] => {
+  const chain = [readLayer(style)];
   // Nothing above a top-layer element contributes, so the walk does not start.
   if (!inTopLayer(element)) {
     for (
@@ -103,7 +127,7 @@ const chainToScreen = (
       above !== undefined;
       above = paintedInside(above)
     ) {
-      chain.push(readElementTransform(getComputedStyle(above)));
+      chain.push(readLayer(getComputedStyle(above)));
       // Its own transform applies — the element is inside it — but its
       // ancestors' do not, because it is painted outside them.
       if (inTopLayer(above)) {
@@ -111,8 +135,13 @@ const chainToScreen = (
       }
     }
   }
-  return accumulate(chain);
+  return chain;
 };
+
+const readLayer = (style: CSSStyleDeclaration): Layer => ({
+  matrix: readElementTransform(style),
+  style,
+});
 
 /**
  * What this element is painted inside, which is not always its parent element.
@@ -158,6 +187,118 @@ const paintedInside = (element: Element): HTMLElement | undefined => {
  */
 const inTopLayer = (element: Element): boolean =>
   element.matches(":modal, :popover-open");
+
+/**
+ * Every `zoom` between this element's own pixels and the space its transform
+ * is written in, as one factor.
+ *
+ * `zoom` is the one thing that moves and scales a window on screen without
+ * being a transform, and it compounds down the tree — so neither an element's
+ * own computed `zoom`, which is only its own factor, nor any transform's
+ * linear part has the whole of it. `currentCSSZoom` is the engine's own
+ * statement of the compounded one, which is the number layout used.
+ *
+ * It belongs in the affine because it is exactly the factor between the two
+ * things measured here, read at the engine's pin rather than assumed:
+ * `Element::OffsetWidth` divides the layout box by the element's *effective*
+ * zoom (`AdjustForAbsoluteZoom::AdjustLayoutUnit`), so the size is in unzoomed
+ * element pixels; `getBoundingClientRect` goes through
+ * `AdjustRectMaybeExcludingCSSZoom`, which under `StandardizedBrowserZoom` —
+ * stable in the pinned engine — takes only the *browser's* zoom back out, so
+ * the box keeps the CSS zoom. A `MouseEvent`'s `clientX` is divided by that
+ * same browser factor and no other, so the pointer arrives in the box's space.
+ * Unzoomed in, zoomed out, and this is the step between them.
+ *
+ * Uniform, so where it is multiplied in does not matter: a scalar commutes
+ * with every linear part in the chain.
+ *
+ * Absent in a DOM implementation that lays nothing out, where 1 is right for
+ * the same reason a missing `DOMMatrix` means identity — nothing that does no
+ * layout has zoomed anything.
+ */
+const zoomOver = (element: Element): number => {
+  const zoom: number | undefined = element.currentCSSZoom;
+  return zoom ?? 1;
+};
+
+/**
+ * Say so when the chain draws this window with a projection, which is not
+ * something an affine can be.
+ *
+ * A perspective divides x and y by a number that varies across the window, so
+ * no two corners scale alike — there is no `Matrix` that does that, and
+ * composing the 2D part regardless yields a plausible mapping that lands a
+ * click where the user did not press. The console is the only channel the SDK
+ * has to whoever wrote the CSS, and this is invisible from anywhere else: the
+ * engine turns the window exactly as the page asked, and only the coordinate
+ * the client is handed disagrees with what the user is looking at.
+ *
+ * Two shapes reach here. A `perspective()` inside an element's own transform
+ * list bends that element's own plane, which is {@link bendsThePlane}. The
+ * `perspective` property does it from above instead — it projects its
+ * children's transforms — so it matters exactly when something below it has
+ * left the plane, and CSS flattens that at every element that is not
+ * `preserve-3d`. Hence the walk carries the answer outward rather than asking
+ * whether anything anywhere in the chain is 3D: a turn a flat ancestor has
+ * already flattened is drawn by the 2D part, and warning about it would cry
+ * wolf over the case this gets right.
+ *
+ * One shape it does not detect, stated rather than hidden: a bare
+ * `perspective()` in an *ancestor's* transform list, projecting a turn that
+ * `preserve-3d` carried up to it. Both halves are exotic and the pair is
+ * rarer still, and detecting it means modeling where each 3D rendering context
+ * begins rather than reading one matrix at a time.
+ */
+const reportProjection = (chain: readonly Layer[]): void => {
+  let turnedBelow = false;
+  for (const { style, matrix } of chain) {
+    if (bendsThePlane(matrix)) {
+      reportProjected("transform", style.transform);
+    }
+    if (turnedBelow && isSet(style.perspective)) {
+      reportProjected("perspective", style.perspective);
+    }
+    turnedBelow =
+      (turnedBelow && style.transformStyle === "preserve-3d") ||
+      leavesThePlane(matrix);
+  }
+};
+
+/**
+ * Whether this transform maps the element's own plane projectively rather than
+ * affinely — a `perspective()` in its list with something turned behind it.
+ *
+ * A point of the window is `(x, y, 0)`, and a 4x4 matrix sends its `w` to
+ * `m14·x + m24·y + m44`. An affine keeps `w` constant over the plane, so
+ * anything that varies it — which is `m14` or `m24`, and only those — divides
+ * each corner by a different number.
+ */
+const bendsThePlane = (matrix: DOMMatrix | undefined): boolean =>
+  matrix !== undefined && (matrix.m14 !== 0 || matrix.m24 !== 0);
+
+/**
+ * Whether this transform takes the element's plane out of `z = 0`, which is
+ * what gives a perspective above it anything to project. The `z` of a point
+ * `(x, y, 0)` is `m13·x + m23·y + m43`.
+ */
+const leavesThePlane = (matrix: DOMMatrix | undefined): boolean =>
+  matrix !== undefined &&
+  (matrix.m13 !== 0 || matrix.m23 !== 0 || matrix.m43 !== 0);
+
+/**
+ * Say so, once, that a window is drawn through a projection this cannot
+ * invert. Shares {@link report}'s bounded record with the unreadable values,
+ * because it is on the same per-`pointermove` path and would otherwise be said
+ * many times a second.
+ */
+const reportProjected = (property: string, computed: string): void => {
+  report(
+    `${property}: ${computed}`,
+    `cannot invert ${property} ${JSON.stringify(computed)}; a perspective ` +
+      `projects this window, which no affine can express, so a pointer over ` +
+      `it is mapped as if the window were flat`,
+  );
+};
 
 // Measurement runs on every pointer move over a window, so the same unreadable
 // value would otherwise be reported many times a second.
@@ -223,13 +364,19 @@ const firstNonZero = (preferred: number, fallback: number): number =>
  * resolves them, and a matrix cannot be built from a relative length, so
  * `translate: -50% -50%` threw out of every measurement.
  *
- * `DOMMatrix` is absent in some non-browser DOM implementations, where an
- * identity transform is the correct answer: those environments do no layout and
- * so apply no transform either.
+ * The whole 4x4 is kept rather than the six numbers the mapping uses, because
+ * the three slots the mapping drops are what say whether dropping them is
+ * honest — see {@link reportProjection}.
+ *
+ * `DOMMatrix` is absent in some non-browser DOM implementations, where no
+ * transform is the correct answer: those environments do no layout and so
+ * apply no transform either.
  */
-const readElementTransform = (style: CSSStyleDeclaration): Matrix => {
+const readElementTransform = (
+  style: CSSStyleDeclaration,
+): DOMMatrix | undefined => {
   if (typeof DOMMatrix === "undefined") {
-    return IDENTITY;
+    return undefined;
   }
   const parts = [
     asRotate(style.rotate),
@@ -238,7 +385,7 @@ const readElementTransform = (style: CSSStyleDeclaration): Matrix => {
     isSet(style.transform) ? style.transform : undefined,
   ].filter((part) => part !== undefined);
   if (parts.length === 0) {
-    return IDENTITY;
+    return undefined;
   }
   // Multiplied one at a time rather than concatenated into a list for
   // `DOMMatrix` to parse. happy-dom's implementation — the one the unit tests
@@ -246,12 +393,21 @@ const readElementTransform = (style: CSSStyleDeclaration): Matrix => {
   // matrix(...)` silently loses the scale. Chromium composes the list
   // correctly, so this is not a production bug; it is what stops the unit
   // tests measuring a happy-dom artifact instead of the real arithmetic.
-  const matrix = parts.reduce(
+  return parts.reduce(
     (composed, part) => composed.multiply(new DOMMatrix(part)),
     new DOMMatrix(),
   );
-  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
 };
+
+/**
+ * The 2D part of a transform: what CSS itself draws for a 3D one with no
+ * perspective over it — the drop-z orthographic projection — and the nearest
+ * affine to it when there is one, which {@link reportProjection} reports.
+ */
+const linearPart = (matrix: DOMMatrix | undefined): Matrix =>
+  matrix === undefined
+    ? IDENTITY
+    : [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
 
 /**
  * `rotate` as a CSS transform function.
