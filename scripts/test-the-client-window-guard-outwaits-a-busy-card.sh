@@ -116,10 +116,32 @@ PAGE="$(drew_line FF3F51B5)"
 BLANK="$(drew_line FFFFFFFF)"
 
 # The poll, against a log that already holds `$3...` and gains the CLIENT's
-# line `$2` seconds in. Prints what it read, how long it waited, and what it
-# wrote down for the control -- `none` when it wrote nothing -- so a case can
-# assert on any of the three.
-poll() { # $1 how patient, $2 when the client's line lands, $3... what the log holds
+# line once the guard has looked `$2` times. Prints what it read, how many
+# looks it waited, and what it wrote down for the control -- `none` when it
+# wrote nothing -- so a case can assert on any of the three.
+#
+# LOOKS RATHER THAN SECONDS, AND THAT IS THE WHOLE OF WHY THIS IS RELIABLE.
+# `WAITED` counts the guard's OWN iterations, and this fixture used to land the
+# client's line `$2` SECONDS in, off a background `sleep`. So the case below
+# asking for three looks was really asking whether three iterations fit inside
+# three seconds. They do on a quiet machine and they do not on a busy one: the
+# loop sleeps a second per look and forks three processes around it, and once
+# that overhead passes half a second the third look happens after the line has
+# already landed and `WAITED` comes out 2. There was no margin to lose -- a
+# counter that ticks about once a second, asserted against a three-second
+# event, is a coin flip wearing a number.
+#
+# So the line lands on the same seam the count is made of. The loop's own
+# `sleep` is what separates one look from the next, and a shell function of
+# that name is what it finds here -- so the fixture is handed every look as it
+# ends, appends the client's line on the `$2`th, and `WAITED` comes out exactly
+# `$2` on any machine at any load. Nothing waits on a clock any more, which is
+# also why this file now runs in well under a second rather than a minute.
+#
+# It is still the guard's REAL block doing the looking: the `awk` above takes
+# it out of the shipped script and nothing in it is stubbed. What is stood in
+# for is the machine's clock, which is not part of the behavior under test.
+poll() { # $1 how patient, $2 how many looks before the client's line lands, $3... what the log holds
   local dir; dir="$(mktemp -d "$WORK/XXXXXX")"
   : >"$dir/comp"
   local held
@@ -133,7 +155,19 @@ poll() { # $1 how patient, $2 when the client's line lands, $3... what the log h
     # Somewhere of its own, so a case cannot read another case's note and the
     # runner's /tmp is left alone.
     DOMICILE_CONTROL_BUDGET_DIR="$dir/budgets"
-    ( sleep "$2"; printf '%s\n' "$DREW" >>"$dir/comp" ) &
+    LANDS_AFTER="$2"
+    LOOKED=0
+    # What the guard does between one look and the next, and so what the
+    # fixture counts. A `$2` past the guard's patience is a line that never
+    # lands at all, which is what the give-up cases want -- and a block
+    # rewritten to stop sleeping between looks lands nothing either, so it
+    # fails here loudly rather than passing against a poll nobody measured.
+    sleep() {
+      LOOKED=$((LOOKED + 1))
+      if [ "$LOOKED" -ge "$LANDS_AFTER" ]; then
+        printf '%s\n' "$DREW" >>"$COMP_LOG"
+      fi
+    }
     eval "$BLOCK" 2>/dev/null
     # `none` is a reading in its own right rather than a missing one: whether
     # the guard wrote a note at all is what two of the cases below are about.
@@ -149,8 +183,9 @@ read -r saw waited noted <<<"$(poll 240 2)"
 expect "the client's color turning up is read" "FF3366CC" "$saw"
 # THE FLOOR IS FREE BECAUSE OF THIS. The poll breaks on the sighting it is
 # waiting for, so how patient it is willing to be costs a healthy run nothing
-# at all. Four rather than two, because the loop sleeps a second between looks
-# and the line lands between two of them.
+# at all. A ceiling rather than the exact count, because what this case is
+# about is that the poll stopped instead of spending the 240 it was given --
+# the count itself is what the case below pins.
 if [ "$waited" -le 4 ]; then
   printf '  ok    %s\n' "and the poll stops there rather than spending its budget"
 else
