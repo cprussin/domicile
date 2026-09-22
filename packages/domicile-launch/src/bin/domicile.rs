@@ -30,7 +30,10 @@ use domicile_launch::control_socket::{
 use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
-use domicile_launch::restart::{clear_the_last_one, keep_a_desktop_up, Attempt, Ending, Policy};
+use domicile_launch::restart::{
+    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
+    Ending, Policy,
+};
 use domicile_launch::shell_path::{shell_module, Shell};
 use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
@@ -216,9 +219,9 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // BE HAD AGAIN. A missing engine, a refused platform and a control socket
     // that could not be taken are the same answer however many times they are
     // asked, so a run that started them again would be a run that never
-    // stopped being wrong; a desktop is a pair of processes and a wait, and
-    // that is what is started again. `domicile_launch::restart` holds why the
-    // unit is the whole desktop rather than the component that died.
+    // stopped being wrong. What is started again is an engine, for as long as
+    // there is a compositor to put one under, and a whole desktop when there
+    // is not. `domicile_launch::restart` holds why those are the two units.
     let policy = Policy::default();
     let desktop = Desktop {
         components: &components,
@@ -227,6 +230,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
         page: &page,
         places: &places,
         platform: &platform,
+        policy: &policy,
     };
     // What the last desktop's compositor said, kept across the loop so that a
     // run which gives up ends on the reason rather than on a pointer to it.
@@ -273,16 +277,22 @@ struct Desktop<'a> {
     page: &'a Shell,
     places: &'a Runtime,
     platform: &'a str,
+    /// Shared by the two loops and counted separately by each: how long an
+    /// engine started again waits is the same question as how long a desktop
+    /// started again waits, and the answer is not two numbers.
+    policy: &'a Policy,
 }
 
 /// One desktop, from its first process to its last.
 ///
-/// WHAT THE COMPONENT THAT DID NOT DIE GETS IS THE SAME TEARDOWN AN ORDINARY
-/// EXIT GETS, and it gets it here: the [`Running`] holding both is dropped when
-/// this returns, which signals each process group and waits for it. That is
-/// deliberate rather than incidental — neither component can be replaced under
-/// the other, and `domicile_launch::restart` says at which line of which file
-/// that is decided.
+/// A DESKTOP IS AS LONG AS ITS COMPOSITOR, AND THAT IS WHAT MAKES ONE THE
+/// UNIT. An engine that dies inside it is replaced inside it — the loop for
+/// that is in [`up`] — so the failure that reaches here is a compositor that
+/// went, or an engine that would not stay up under one that did not. Whichever
+/// it was, the [`Running`] holding both is dropped when this returns, which
+/// signals each process group and waits for it.
+/// `domicile_launch::restart` holds why the compositor is the half that cannot
+/// be replaced under the other.
 ///
 /// The failure is said here rather than carried out, because this is where the
 /// sentence is: an exit and a milestone that was never reached each already
@@ -312,8 +322,9 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
     attempt
 }
 
-/// Start the two components in the one order they can be started in, and wait
-/// for one of them to stop being one.
+/// Start the two components in the one order they can be started in, keep an
+/// engine under the compositor for as long as the compositor lasts, and return
+/// when the compositor does not.
 fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     // WHAT THE LAST DESKTOP LEFT WOULD BE READ AS THIS ONE'S. The session
     // document is the one that matters: the wait below is for that file to
@@ -322,27 +333,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     clear_the_last_one(desktop.places).map_err(|leftover| leftover.to_string())?;
 
     let mut running = Running::new();
-    running
-        .start(
-            "engine",
-            &engine(
-                &desktop.components.engine,
-                desktop.page,
-                desktop.platform,
-                desktop.places,
-                (desktop.env)("DOMICILE_ENGINE_ARGS").as_deref(),
-            ),
-        )
-        .map_err(|why| why.to_string())?;
-    // Every wait from here down is watched rather than slept through. What a
-    // component did instead of the thing being waited for is the answer, and
-    // it is most often that it is no longer running — which used to be thirty
-    // seconds of nothing followed by a sentence about a socket.
-    wait_for(
-        &broker(&desktop.places.broker, &desktop.components.engine),
-        &desktop.places.broker,
-        &mut running,
-    )?;
+    start_an_engine(desktop, &mut running)?;
 
     // Overheard, where the engine is not: this one's stderr is its own -- its
     // tracing goes to stdout -- so what arrives is the fatal complaint and
@@ -370,15 +361,125 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     println!();
     println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
     println!("Ctrl-C to stop.");
-    // Whichever of the two goes first, said out loud. Waiting on the
-    // compositor alone made an engine that died a run that hung: the window
-    // was gone, the compositor was still up, and there was nothing on the
-    // terminal to read.
-    let exit = running.until_one_exits();
-    match exit.how == CLEANLY {
-        true => Ok(()),
-        false => Err(exit.to_string()),
+
+    // AN ENGINE THAT DIES IS REPLACED UNDER THE COMPOSITOR AND A COMPOSITOR
+    // THAT DIES IS NOT. `domicile_launch::restart` holds which way round that
+    // is and why; what it means here is that the loop below is the engine's,
+    // and the one thing that ends it is the compositor — whose death, or whose
+    // clean exit, is this desktop being over.
+    //
+    // `over` carries that out rather than being returned, because the loop's
+    // own return value is about the engine: `Ending::Over` is "the attempt
+    // said there is nothing more to start", and what actually happened is the
+    // exit the attempt saw.
+    let mut over = None;
+    let mut first = true;
+    let ending = keep_the_engine_up(
+        desktop.policy,
+        &mut || one_engine(desktop, &mut running, &mut first, &mut over),
+        &interrupted,
+        &mut wait_or_notice_a_stop,
+        &mut |next| eprintln!("domicile: {next}"),
+    );
+    match ending {
+        Ending::Over => over.expect("the engine's loop ends on an exit it recorded"),
+        Ending::Stopped => Err("a stop was asked for".to_string()),
+        // Not this loop's to fix. A whole new desktop is a different thing to
+        // try — a fresh compositor, a fresh page, a directory cleared of
+        // everything either of them bound — and the loop that stands one up is
+        // the caller's.
+        Ending::GaveUp { failures } => Err(format!(
+            "{failures} engines in a row have failed under this compositor, so the desktop \
+             goes with them"
+        )),
     }
+}
+
+/// One engine, from the process starting to whatever ended the wait.
+///
+/// `first` is whether the engine this attempt is about has already been
+/// started — the first one of a desktop is, above, because the compositor
+/// cannot be started until its broker socket is there. Every one after it is
+/// started here, which is what puts it AFTER the backoff the last one's death
+/// earned rather than before it.
+///
+/// [`Attempt::Ended`] is the compositor going rather than the engine, and the
+/// exit that says so is put in `over` for [`up`] to return: there is nothing
+/// left to put an engine under, so this desktop is finished either way.
+fn one_engine(
+    desktop: &Desktop,
+    running: &mut Running,
+    first: &mut bool,
+    over: &mut Option<Result<(), String>>,
+) -> Attempt {
+    let started = Instant::now();
+    if !*first {
+        // What the last engine bound and the next one binds over. NOT the
+        // compositor's socket or its session document, which are a live
+        // desktop's — see `clear_the_last_engine`.
+        let cleared = clear_the_last_engine(desktop.places)
+            .map_err(|leftover| leftover.to_string())
+            .and_then(|()| start_an_engine(desktop, running));
+        if let Err(why) = cleared {
+            eprintln!("domicile: {why}");
+            return Attempt::Failed {
+                lived: started.elapsed(),
+            };
+        }
+    }
+    *first = false;
+    let exit = running.until_one_exits();
+    match exit.what == "engine" && exit.how != CLEANLY {
+        // The compositor is still serving, its clients are still connected,
+        // and it re-dials the engine that replaces this one the moment that
+        // engine's page reaches it -- `engine_restart` in the compositor is
+        // the other half of this sentence.
+        true => {
+            // SAID HERE, because this is the one exit nothing further up sees:
+            // `one_desktop` prints what `up` returns, and what `up` returns
+            // for a desktop that is still serving is nothing at all. An engine
+            // that went without a line saying which status it went with is a
+            // window that vanished for no stated reason.
+            eprintln!("domicile: {exit}");
+            running.let_go_of("engine");
+            Attempt::Failed {
+                lived: started.elapsed(),
+            }
+        }
+        false => {
+            *over = Some(match exit.how == CLEANLY {
+                true => Ok(()),
+                false => Err(exit.to_string()),
+            });
+            Attempt::Ended
+        }
+    }
+}
+
+/// Start an engine and wait for the broker socket it exists to create.
+///
+/// Every wait here is watched rather than slept through. What a component did
+/// instead of the thing being waited for is the answer, and it is most often
+/// that it is no longer running — which used to be thirty seconds of nothing
+/// followed by a sentence about a socket.
+fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), String> {
+    running
+        .start(
+            "engine",
+            &engine(
+                &desktop.components.engine,
+                desktop.page,
+                desktop.platform,
+                desktop.places,
+                (desktop.env)("DOMICILE_ENGINE_ARGS").as_deref(),
+            ),
+        )
+        .map_err(|why| why.to_string())?;
+    wait_for(
+        &broker(&desktop.places.broker, &desktop.components.engine),
+        &desktop.places.broker,
+        running,
+    )
 }
 
 /// Wait out the backoff, in the same slices everything else here waits in, so

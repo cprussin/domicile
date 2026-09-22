@@ -109,6 +109,7 @@ mod screens;
 mod timing_window;
 mod uevents;
 mod viewport;
+mod which_engine;
 
 use crate::engine::{Bounds, Capture};
 use crate::engine_buffers::Returned;
@@ -128,6 +129,7 @@ use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
+use crate::which_engine::another_engine;
 use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
@@ -303,7 +305,16 @@ enum ClientRequest {
         app_id: String,
     },
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
-    ChromeHello,
+    ///
+    /// `served_by` is the process on the other end of the connection the hello
+    /// came in on, as the kernel stamped it — the browser process, because the
+    /// fork's `ControlChannel` lives there. It is how this compositor tells a
+    /// page its own engine reloaded from a page a NEW engine is serving, which
+    /// is the only notice it gets that the engine was replaced. See
+    /// [`crate::which_engine`].
+    ChromeHello {
+        served_by: Option<i32>,
+    },
     /// A client handed over what it had copied, read off the pipe it was given.
     ///
     /// Comes from the thread that did the reading rather than from a chrome —
@@ -910,6 +921,12 @@ fn read_chrome_messages(
     writer: &Arc<Mutex<UnixStream>>,
     handshake: &Arc<Handshake>,
 ) {
+    // BEFORE THE STREAM GOES INTO THE READER, which takes it. Read once per
+    // connection rather than per hello: `SO_PEERCRED` is stamped at
+    // `connect(2)` and cannot change under a connection, and the answer is
+    // what says whether a later hello is a new engine's — see
+    // [`crate::which_engine`].
+    let served_by = peer_pid(&stream);
     let reader = BufReader::new(stream);
     let mut ready = false;
     // Whether this connection is in the hub's broadcast list. Separate from
@@ -993,7 +1010,7 @@ fn read_chrome_messages(
                     // 3. So a reader who swaps them, sees green and concludes
                     // this comment is stale has reproduced nothing; the race
                     // is narrow, not absent.
-                    hub.send_request(ClientRequest::ChromeHello);
+                    hub.send_request(ClientRequest::ChromeHello { served_by });
                 } else if joined {
                     // Taken back out. This connection agreed a version earlier
                     // and has now named one this build cannot speak, so it has
@@ -1531,6 +1548,21 @@ struct DomicileCompositor {
     /// own dmabuf to viz, and with it takes on holding `wl_buffer.release` until
     /// viz is done sampling — see [`engine_session::EngineSession`].
     engine: Option<EngineSession>,
+    /// The registration the engine's fd is watched under.
+    ///
+    /// Held so that an engine which replaced another can be watched instead:
+    /// the fd belongs to the `DomicileEngine` whose queue it is, and a source
+    /// left on the old one is a source on a descriptor the library closed. A
+    /// calloop source is removed by the registration it was inserted under and
+    /// by nothing else, which is the same reason `idle_clock` is kept below.
+    engine_source: Option<RegistrationToken>,
+    /// The process serving the last page that said hello, which is the browser
+    /// this desktop is drawing through.
+    ///
+    /// `None` until one has: the first page of a run is served by the engine
+    /// this compositor dialed at startup, so there is nothing to compare it
+    /// against and nothing to rejoin. See [`crate::which_engine`].
+    engine_process: Option<i32>,
     /// Whether anybody is at this desktop, for a desktop that blanks.
     ///
     /// `None` is one that never does, which is what a config saying nothing
@@ -2779,6 +2811,127 @@ impl DomicileCompositor {
         self.hub.broadcast(desktop);
     }
 
+    /// Join the engine that replaced the one this compositor was submitting
+    /// to, and put back everything the old one knew.
+    ///
+    /// **THE COMPOSITOR OUTLIVES ITS ENGINE, and this is the whole of why it
+    /// can.** `domicile-launch` starts another engine under a compositor that
+    /// is still serving (`domicile_launch::restart`), so the clients on this
+    /// desktop keep the `wl_display` they are connected to and their windows
+    /// are still theirs. What they cannot keep is anything the old browser
+    /// minted: [`EngineSession::reconnect`] says which of it there is and what
+    /// is done with each piece.
+    ///
+    /// Nothing happens for a page that is the engine already joined reloading
+    /// — a `domicile load-shell` — which is what
+    /// [`EngineSession::another_engine_is_there`] is for.
+    ///
+    /// **A DIAL THAT FAILS IS SAID AND THE SESSION IS KEPT.** The buffers
+    /// still come back either way, because a client owed a release that cannot
+    /// arrive has stopped drawing forever, and the next page to reach this
+    /// compositor asks again. What is not done is carrying on quietly: a
+    /// desktop whose windows have gone blank has to say why.
+    fn rejoin_the_engine(&mut self, served_by: Option<i32>) {
+        let replaced = another_engine(self.engine_process, served_by);
+        // Whether or not anything is rejoined: this is now the process serving
+        // this desktop's pages, and the one a later hello is compared against.
+        // `or` rather than an assignment, because a credential the kernel
+        // would not give is an attribution lost rather than an engine that
+        // has stopped existing.
+        self.engine_process = served_by.or(self.engine_process);
+        if !replaced || self.engine.is_none() {
+            return;
+        }
+        warn!(
+            served_by,
+            "the engine this desktop was drawing through has been replaced; rejoining it"
+        );
+        let session = self
+            .engine
+            .as_mut()
+            .expect("a desktop with no engine has nothing to rejoin, and said so above");
+        // The fds are the `wl_buffer`'s rather than this clone's: a Smithay
+        // `Dmabuf` is reference-counted and the client's buffer holds the
+        // original, which the session holds for as long as it holds the
+        // buffer. Same reading `publish_frame` takes of the same buffer.
+        let rejoined = session.reconnect(
+            &|buffer| match committed_buffer(buffer) {
+                Some(CommittedBuffer::Gpu(dmabuf)) => Some(descriptor_from(&dmabuf)),
+                Some(CommittedBuffer::Pixels { .. }) | None => None,
+            },
+            Instant::now(),
+        );
+        match &rejoined.dialed {
+            Ok(()) => {
+                self.watch_the_engines_fd();
+                // The new engine read the hardware for itself and will send
+                // its own display list, but it has no memory of a profile:
+                // `Screens::replugged_into` answers a list that says what the
+                // last one said with "nothing to do", so a connector this
+                // desktop's config turned off would come back lit.
+                self.state_the_connectors();
+                info!(
+                    shown = rejoined.shown.len(),
+                    blank = rejoined.blank.len(),
+                    returned = rejoined.releases.len(),
+                    "rejoined the engine and restated this desktop to it"
+                );
+            }
+            Err(err) => error!(
+                %err,
+                "there is a new engine at the broker socket and this compositor could not \
+                 join it; every window on this desktop will be blank until one it can join \
+                 arrives"
+            ),
+        }
+        for app_id in &rejoined.blank {
+            error!(
+                app_id,
+                "this window's last frame could not be put back on the new engine, so it is \
+                 on the page with nothing in it until its client draws again"
+            );
+        }
+        // Every buffer the old engine was holding, whether or not the new one
+        // was joined. A release that cannot arrive is a client that never
+        // draws again.
+        for release in rejoined.releases {
+            release.buffer.release();
+        }
+    }
+
+    /// Watch the fd of whichever engine is joined now, and stop watching the
+    /// one before it.
+    ///
+    /// A source on an old engine's fd is a source on a descriptor the library
+    /// closed with it, so the removal is not tidying — it is the difference
+    /// between a loop that wakes for this engine and one that spins on a
+    /// closed fd.
+    fn watch_the_engines_fd(&mut self) {
+        if let Some(watching) = self.engine_source.take() {
+            self.loop_handle.remove(watching);
+        }
+        let Some(session) = self.engine.as_ref() else {
+            return;
+        };
+        match poll_the_engine(&self.loop_handle, session.fd()) {
+            Ok(watching) => self.engine_source = Some(watching),
+            // Nothing arrives from an engine nothing is polling: no configure,
+            // no release, no display list. The desktop is up and deaf, which
+            // is not a state to discover from the symptoms.
+            //
+            // SAID RATHER THAN FATAL, and that is the recovery: a descriptor
+            // that could not be duplicated is not a reason to end every client
+            // on this desktop, which is the one thing the compositor
+            // outliving its engine exists to prevent. The run this leaves is
+            // one a person can stop, and it has the reason on the terminal.
+            Err(err) => error!(
+                %err,
+                "the engine's fd could not be watched, so nothing it says will be heard; \
+                 this desktop is still serving its clients and has to be restarted to draw"
+            ),
+        }
+    }
+
     /// Tell the engine what the connectors have to be doing, now.
     ///
     /// Two answers and one place that gives them, because they are the same
@@ -3359,7 +3512,7 @@ impl DomicileCompositor {
                     "the shell asked for a clipboard entry this desktop no longer holds"
                 ),
             },
-            ClientRequest::ChromeHello => {
+            ClientRequest::ChromeHello { served_by } => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
                 // those releases, and the seat keeps a key down until
@@ -3372,6 +3525,14 @@ impl DomicileCompositor {
                 // back leaves them down until some page connects. `held` is
                 // cleared here on the same terms and for the same reason.
                 self.release_pressed_keys();
+                // A PAGE SAYING HELLO IS HOW THIS COMPOSITOR HEARS THAT THE
+                // ENGINE WAS REPLACED. Nothing in the C ABI says a browser
+                // went away — `crate::broker_socket` holds why, and why the
+                // socket's own inode is what tells a new engine from the same
+                // engine reloading its page. Before the announcement below,
+                // so that by the time the page is told which windows are open
+                // each of them has a frame sink again.
+                self.rejoin_the_engine(served_by);
                 // Nothing is held and nothing is owed. The windows a chrome
                 // needs are re-supplied by the hand-over pass in `present`,
                 announce_open_apps(&self.hub);
@@ -4621,6 +4782,34 @@ fn advertise_dmabuf(
 
 /// Classify a newly-attached buffer. A dmabuf carries its `Dmabuf` as the
 /// `wl_buffer`'s user data, which is what tells the two kinds apart.
+/// Put the engine's fd in the loop, so that [`DomicileCompositor::pump_the_engine`]
+/// runs when the engine has something to say and at no other time.
+///
+/// Here rather than inline because an engine that replaced another brings a
+/// new one: the fd is its event queue's, and the queue belongs to the
+/// `DomicileEngine` that made it. A source still watching the old fd is a
+/// source watching a descriptor the library closed.
+fn poll_the_engine(
+    handle: &LoopHandle<'static, CalloopData>,
+    fd: std::os::fd::RawFd,
+) -> Result<RegistrationToken, Box<dyn std::error::Error>> {
+    // Duplicated rather than borrowed: the source outlives this call, and the
+    // engine owns the original and closes it when it is dropped.
+    //
+    // SAFETY: the fd is the live engine's, which the caller has just asked for
+    // and which is valid until that engine is destroyed; it is duplicated
+    // before this returns and never used as a borrow afterward.
+    let owned = unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()?;
+    Ok(handle.insert_source(
+        Generic::new(owned, Interest::READ, Mode::Level),
+        |_, _, data: &mut CalloopData| {
+            let dh = data.display.handle();
+            data.state.pump_the_engine(&dh);
+            Ok(PostAction::Continue)
+        },
+    )?)
+}
+
 fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(CommittedBuffer::Gpu(dmabuf.clone())),
@@ -5028,6 +5217,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         charge: Charge::default(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
+        // Armed below rather than here, and re-armed on every engine that
+        // replaces another — see `rejoin_the_engine`.
+        engine_source: None,
+        // Learned from the first page that says hello, which is the first
+        // moment anything on this side knows which process is serving one.
+        engine_process: None,
         idle: Idle::after(config.idle.blank_after(), Instant::now()),
         // Armed below rather than here, through the one path a reload uses
         // too — see `arm_the_idle_clock`.
@@ -5072,18 +5267,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // compositor already has one, so the library does its work when told and
     // never on a thread this does not know about.
     if let Some(session) = data.state.engine.as_ref() {
-        // Duplicated rather than borrowed: the source outlives this scope, and
-        // the engine owns the original and closes it when it is dropped.
-        let engine_fd =
-            unsafe { std::os::fd::BorrowedFd::borrow_raw(session.fd()) }.try_clone_to_owned()?;
-        handle.insert_source(
-            Generic::new(engine_fd, Interest::READ, Mode::Level),
-            |_, _, data: &mut CalloopData| {
-                let dh = data.display.handle();
-                data.state.pump_the_engine(&dh);
-                Ok(PostAction::Continue)
-            },
-        )?;
+        data.state.engine_source = Some(poll_the_engine(&handle, session.fd())?);
     }
 
     // The latency run's own turn of the loop.
@@ -6102,8 +6286,10 @@ mod tests {
         assert!(
             matches!(
                 asked.as_slice(),
-                [ClientRequest::ChromeHello, ClientRequest::CloseApp { app_id }]
-                    if app_id == "term"
+                [
+                    ClientRequest::ChromeHello { .. },
+                    ClientRequest::CloseApp { app_id }
+                ] if app_id == "term"
             ),
             "the handshake, and then the one client asked to close"
         );

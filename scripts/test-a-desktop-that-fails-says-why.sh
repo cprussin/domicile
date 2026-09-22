@@ -69,14 +69,33 @@ done
 [ -n "${DOMICILE_FAKE_STARTS:-}" ] && printf 'x' >>"$DOMICILE_FAKE_STARTS"
 [ -n "${DOMICILE_FAKE_ENGINE_DIES:-}" ] && exit 3
 : >"$broker"
+# An engine that came up, was joined, and then died -- which is the failure the
+# compositor is meant to outlive. The second of grace is what makes it that
+# rather than a race with the milestone, exactly as the compositor's own is.
+#
+# It dies for the first N starts and lives after that, so the run RECOVERS
+# rather than flapping to a give-up: a desktop still serving on its third
+# engine is the claim, and a give-up would prove only that the supervisor
+# stopped.
+if [ -n "${DOMICILE_FAKE_ENGINE_DIES_AFTER_UP:-}" ]; then
+  so_far="$(wc -c <"$DOMICILE_FAKE_STARTS" | tr -d ' ')"
+  if [ "$so_far" -le "$DOMICILE_FAKE_ENGINE_DIES_AFTER_UP" ]; then
+    sleep 1
+    exit 5
+  fi
+fi
 exec sleep 30
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
 # The compositor: publishes the session document it was told to publish, then
-# stays alive.
+# stays alive. It counts its own starts for the same reason the engine does --
+# an engine replaced under a live compositor and a whole desktop stood up again
+# print different sentences, and only a count can tell the sentence from the
+# thing it claims.
 cat >"$WORK/domicile-compositor" <<'COMPOSITOR'
 #!/bin/sh
+[ -n "${DOMICILE_FAKE_COMPOSITOR_STARTS:-}" ] && printf 'x' >>"$DOMICILE_FAKE_COMPOSITOR_STARTS"
 while [ $# -gt 0 ]; do
   case "$1" in --session) session="$2"; shift ;; esac
   shift
@@ -181,6 +200,69 @@ else
   echo "FAIL: it exited $STATUS (124 is the timeout, which means it was still"
   echo "      going). What it said:"
   sed 's/^/    /' "$GONE"
+  FAILED=1
+fi
+
+# ---- an engine that dies under a compositor that is still serving ----------
+#
+# THE ONE CASE THE WHOLE CHANGE IS ABOUT. Above, the engine dies before it has
+# created the broker socket, so the desktop never came up and there is nothing
+# to keep. Here it creates the socket, the compositor is started and publishes
+# its session document, and only then does the engine go -- which is a desktop
+# with clients on it losing the process that draws, rather than losing itself.
+#
+# THE COMPOSITOR'S START COUNT IS THE ASSERTION. "starting the engine again"
+# is a sentence the supervisor prints about its own intentions; one compositor
+# for five engines is the claim that only one thing was replaced. A run that
+# restarted the pair would print the same sentence and count five.
+
+echo "== an engine that dies after the desktop is up takes only itself =="
+ALONE="$WORK/engine-alone.log"
+ENGINES="$WORK/engine-restarts"
+COMPOSITORS="$WORK/compositor-restarts"
+: >"$ENGINES"
+: >"$COMPOSITORS"
+# Twelve seconds is past the two backoffs two deaths earn (1s, 2s) and past the
+# second the third engine needs to prove it stayed, and the timeout is what
+# ends a run that is STILL UP -- which is the outcome here, so 124 is the pass.
+run_domicile 12 "$ALONE" \
+  DOMICILE_FAKE_ENGINE_DIES_AFTER_UP=2 \
+  DOMICILE_FAKE_STARTS="$ENGINES" \
+  DOMICILE_FAKE_COMPOSITOR_STARTS="$COMPOSITORS"
+ENGINE_STARTS="$(wc -c <"$ENGINES" | tr -d ' ')"
+COMPOSITOR_STARTS="$(wc -c <"$COMPOSITORS" | tr -d ' ')"
+CAME_UP="$(grep -c "domicile is up" "$ALONE")"
+
+if [ "$ENGINE_STARTS" = 3 ] && [ "$COMPOSITOR_STARTS" = 1 ] && [ "$CAME_UP" = 1 ]; then
+  echo "PASS: $ENGINE_STARTS engines under the one compositor that came up once"
+else
+  echo "FAIL: $ENGINE_STARTS engines, $COMPOSITOR_STARTS compositors and"
+  echo "      $CAME_UP desktops — the compositor went with the engine. What it said:"
+  sed 's/^/    /' "$ALONE"
+  FAILED=1
+fi
+
+if grep -q "the engine exited (exit status: 5)" "$ALONE" &&
+   grep -q "starting the engine again in 1s" "$ALONE" &&
+   grep -q "starting the engine again in 2s" "$ALONE" &&
+   ! grep -q "starting the desktop again" "$ALONE"; then
+  echo "PASS: $(grep -m1 'starting the engine again' "$ALONE")"
+else
+  echo "FAIL: the run did not say it was starting the engine again, or said it"
+  echo "      was starting the desktop again. What it said:"
+  sed 's/^/    /' "$ALONE"
+  FAILED=1
+fi
+
+# 124 here is the assertion rather than the harness of last resort it is
+# everywhere else in this script: this run is meant to still be serving when
+# the timeout ends it, and anything else is a desktop that stopped.
+if [ "$STATUS" = 124 ]; then
+  echo "PASS: the desktop was still up on its third engine when the run was ended"
+else
+  echo "FAIL: it exited $STATUS, so the desktop did not survive its engines."
+  echo "      What it said:"
+  sed 's/^/    /' "$ALONE"
   FAILED=1
 fi
 

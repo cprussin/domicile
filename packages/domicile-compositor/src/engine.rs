@@ -367,33 +367,7 @@ impl Engine {
         })?;
 
         let events = Box::new(RefCell::new(Vec::new()));
-        let callbacks = Callbacks {
-            user_data: (&*events as *const RefCell<Vec<Event>>) as *mut c_void,
-            configure: Some(on_configure),
-            frame: Some(on_frame),
-            released: Some(on_released),
-            displays: Some(on_displays),
-        };
-
-        let socket_path = socket.as_ref().to_path_buf();
-        let socket_c = CString::new(socket_path.as_os_str().as_encoded_bytes())?;
-
-        let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> =
-            symbol(
-                &library,
-                &path,
-                b"domicile_engine_connect\0",
-                "domicile_engine_connect",
-            )?;
-        // SAFETY: the signature matches domicile_engine.h, the string is
-        // nul-terminated by CString, and `events` outlives the handle because
-        // both are owned by the value being built here.
-        let handle = unsafe { connect(socket_c.as_ptr(), callbacks) };
-        if handle.is_null() {
-            return Err(EngineError::Connect {
-                socket: socket_path,
-            });
-        }
+        let handle = join(&library, &path, &events, socket.as_ref())?;
 
         Ok(Self {
             handle,
@@ -401,6 +375,65 @@ impl Engine {
             library,
             path,
         })
+    }
+
+    /// Join the browser that replaced the one this was joined to, over a
+    /// socket the new one bound.
+    ///
+    /// **THE LIBRARY IS NOT LOADED AGAIN AND MUST NOT BE.**
+    /// `domicile_engine.cc` initializes mojo core and an `AtExitManager` once
+    /// per process on purpose — "Both are process-global and neither can be
+    /// torn down and re-created, which is why they outlive every engine rather
+    /// than belonging to one" — and guards it with a function-local static, so
+    /// a second `domicile_engine_connect` on the same loaded library is the
+    /// case that library was written for. Everything that is per-connection is
+    /// per-`DomicileEngine`: its own mojo thread, its own `ScopedIPCSupport`,
+    /// its own event queue and its own surfaces. A second `dlopen` would hand
+    /// back the same handle and the same statics anyway.
+    ///
+    /// **THE OLD ONE GOES FIRST**, because `domicile_engine_destroy` is what
+    /// stops the thread that fires callbacks, and two engines in one process
+    /// would be two `ScopedIPCSupport`s over one mojo core.
+    ///
+    /// The queue is the same allocation — the engine calls back through the
+    /// pointer handed to `domicile_engine_connect`, and a `Box` does not move
+    /// what it points at — but it is DRAINED first: whatever is in it names
+    /// surfaces and buffers of a mojo graph that no longer exists.
+    ///
+    /// **A failure leaves this inert rather than gone.** The handle is null,
+    /// which every entry point in `domicile_engine.h` answers by doing nothing
+    /// and which [`Engine::fd`] answers with -1, so the compositor can keep
+    /// the session and try again when the next page reaches it. Nothing about
+    /// that is quiet: the caller gets the error and says so.
+    ///
+    /// **NOTHING HERE IS EXERCISED BY ANY CHECK IN THIS REPOSITORY.** It needs
+    /// a built `libdomicile_engine.so` and a browser to dial, and no runner
+    /// has either. See ROADMAP.md, *Needs a machine with a screen*.
+    pub fn reconnect(&mut self, socket: &Path) -> Result<(), EngineError> {
+        self.let_the_old_one_go();
+        self.events.borrow_mut().clear();
+        self.handle = join(&self.library, &self.path, &self.events, socket)?;
+        Ok(())
+    }
+
+    /// End the connection this holds, if it still holds one.
+    ///
+    /// Asked twice over on the way out of a reconnect that is then dropped,
+    /// which is why the null is checked rather than assumed away: a handle
+    /// this has already given up is the ordinary state of an engine whose
+    /// re-dial failed.
+    fn let_the_old_one_go(&mut self) {
+        let handle = std::mem::replace(&mut self.handle, std::ptr::null_mut());
+        if !handle.is_null() {
+            if let Ok(f) = self.symbol::<unsafe extern "C" fn(*mut Handle)>(
+                b"domicile_engine_destroy\0",
+                "domicile_engine_destroy",
+            ) {
+                // SAFETY: the handle is live until exactly here, and nothing
+                // uses it afterward — it has been replaced with null above.
+                unsafe { f(handle) };
+            }
+        }
     }
 
     /// The fd to poll. Readable exactly when [`Engine::dispatch`] has something
@@ -617,14 +650,45 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        if let Ok(f) = self.symbol::<unsafe extern "C" fn(*mut Handle)>(
-            b"domicile_engine_destroy\0",
-            "domicile_engine_destroy",
-        ) {
-            // SAFETY: the handle is live until exactly here, and nothing uses
-            // it afterward.
-            unsafe { f(self.handle) };
-        }
+        self.let_the_old_one_go();
+    }
+}
+
+/// Join the browser listening at `socket`, with `events` the queue its
+/// callbacks push into.
+///
+/// A free function rather than a method because it is what builds an
+/// [`Engine`] as well as what re-dials one, and the first of those has no
+/// `self` to be a method on.
+fn join(
+    library: &Library,
+    path: &Path,
+    events: &RefCell<Vec<Event>>,
+    socket: &Path,
+) -> Result<*mut Handle, EngineError> {
+    let callbacks = Callbacks {
+        user_data: (events as *const RefCell<Vec<Event>>) as *mut c_void,
+        configure: Some(on_configure),
+        frame: Some(on_frame),
+        released: Some(on_released),
+        displays: Some(on_displays),
+    };
+    let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
+    let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
+        library,
+        path,
+        b"domicile_engine_connect\0",
+        "domicile_engine_connect",
+    )?;
+    // SAFETY: the signature matches domicile_engine.h, the string is
+    // nul-terminated by CString, and `events` outlives the handle because both
+    // are owned by the Engine this is building or re-dialing.
+    let handle = unsafe { connect(socket_c.as_ptr(), callbacks) };
+    match handle.is_null() {
+        true => Err(EngineError::Connect {
+            socket: socket.to_path_buf(),
+        }),
+        false => Ok(handle),
     }
 }
 

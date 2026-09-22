@@ -84,8 +84,8 @@ refuses the whole file, so the desk comes up on its defaults.
 | `session` | yes | what the compositor publishes once it is up, and the shell's wait for it |
 | `milestones` | yes | what a run has to reach before it is a desktop, and the sentence it prints when it does not |
 | `handshake` | yes | whether a page ever reached the compositor, and what to say when none did |
-| `restart` | yes | whether a desktop that died gets another one, how long it waits, and when it stops getting them |
-| `supervise` | no | temp dirs, two children in order, the broker socket, teardown |
+| `restart` | yes | whether a component that died gets another one, which component that is, how long it waits, and when it stops getting them |
+| `supervise` | no | temp dirs, two children in order, the broker socket, letting go of one of them, teardown |
 | `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
 | `command_socket` | no | where the engine answers, and carrying one line each way to it |
 
@@ -140,27 +140,56 @@ thin enough to read.
   watch script or from a person's own hands, and the desktop it reaches did
   not have to be started in a dev mode to take it.
 
-- **A component that dies restarts the desktop, not the component.** Neither
-  can be replaced under the other: the compositor dials the engine's broker
-  socket once (`Engine::load`, `packages/domicile-compositor/src/engine.rs:350`)
-  and nothing in that crate reconnects, and the page's control channel "deletes
-  itself when either end goes away"
+- **An engine that dies is replaced under the compositor; a compositor that
+  dies takes the desktop.** The asymmetry is the engine's, not the launcher's.
+
+  ```
+  the engine exited (signal: 9 (SIGKILL))
+  starting the engine again in 1s — that is failure 1 of 5 in a row.
+  ```
+
+  The broker socket is re-dialable: the launcher takes the dead engine's away
+  and the next engine creates its own at the same path, and
+  `EngineSession::reconnect` joins it and states this desktop to it again — a
+  frame sink per window, every client buffer imported again, and the frame each
+  window had on screen submitted again. **The clients never hear about it.**
+  They hold a `wl_display` the compositor still has, so their windows and their
+  state survive; a whole-desktop restart could not do that however quick it
+  was.
+
+  The page's side has no such seam. Its control channel "deletes itself when
+  either end goes away"
   (`components/domicile/browser/control_channel.h:49`), whose only retry is a
-  bounded reach at startup. So the death of either takes the other down —
-  `Running` is dropped, which signals each process group — and a whole desktop
-  is started in its place, with everything the last one bound or published
-  taken away first.
+  bounded reach at startup, so a shell that outlived its compositor holds a
+  closed channel nothing here can reopen — a C++ change in the fork, not made.
+  So a compositor that dies takes the engine with it, `Running` is dropped,
+  and a whole desktop is started in its place with everything the last one
+  bound or published taken away first. Apps do not survive *that*.
 
-  ```
-  the compositor exited (signal: 6 (SIGABRT))
-  starting the desktop again in 1s — that is failure 1 of 5 in a row.
-  ```
+  | | what is started again | what survives |
+  |---|---|---|
+  | the engine exits | the engine | every window, with its last frame |
+  | the compositor exits | the whole desktop | nothing |
 
-  **The backoff doubles and the run gives up**: 1s, 2s, 4s, 8s, then five
-  failures in a row is a desktop that is not coming up and the tty is handed
-  back. A desktop that lived a minute is an incident rather than a crash loop
-  and starts the count over. Apps do not survive it — they were clients of a
-  Wayland display that is gone — and nothing pretends they do.
+  **The backoff doubles and the run gives up**: 1s, 2s, 4s, 8s, then five in a
+  row. One policy, a row per component — five engines under a compositor that
+  is still serving count as one failure of the desktop's row, and a whole new
+  desktop is what follows, a different thing to try rather than the same thing
+  again. Anything that lived a minute starts its count over.
+
+  **Which engine is at the other end is read off the page, because the C ABI
+  has no disconnect.** `domicile_engine.h` carries four callbacks and none of
+  them says the browser went. The control channel is dialed from the browser
+  process, so `SO_PEERCRED` on it names which browser this desktop is talking
+  to, and a `hello` from another pid is another engine
+  (`packages/domicile-compositor/src/which_engine.rs`). `domicile load-shell`
+  is the case that must not fire it: the same browser binds a new channel, and
+  the pid is the one it was.
+
+  **On a tty there is no screen between two engines**, because the engine holds
+  DRM master. Not fixed, and not a defect: the new engine modesets from the
+  same `DisplaySnapshot`s and the compositor states its connectors to it again
+  once it has joined.
 
 - **The two components ship beside the binary and are found there.** Not
   passed, and not wrapped in: `domicile` resolves them from its own location,

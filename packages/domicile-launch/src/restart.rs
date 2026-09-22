@@ -1,34 +1,55 @@
-//! A desktop that died gets another one, up to a point.
+//! A component that died gets another one, up to a point — and which
+//! component that is decides how much of the desktop goes with it.
 //!
-//! WHAT IS RESTARTED IS THE DESKTOP, NOT THE COMPONENT THAT DIED, and that is
-//! a decision rather than a first cut. Neither component can be replaced under
-//! the other:
+//! THE ENGINE IS REPLACED UNDER THE COMPOSITOR. THE COMPOSITOR TAKES THE
+//! DESKTOP WITH IT. The two directions are not symmetrical, and the asymmetry
+//! is in the engine rather than here:
 //!
-//! - **The engine cannot be restarted under a running compositor.** The engine
-//!   creates the broker socket and the compositor dials it once, at startup —
-//!   `Engine::load` in `packages/domicile-compositor/src/engine.rs:350`, which
-//!   is the only call to `domicile_engine_connect` there is. Nothing in that
-//!   crate reconnects, so a compositor whose engine went away holds a handle to
-//!   a mojo graph that no longer exists, and every buffer it submits goes
-//!   nowhere. It would also be a compositor with no window: on a tty the
-//!   engine is what holds DRM master.
+//! - **An engine can be started under a running compositor**, which is what
+//!   [`keep_the_engine_up`] does. The compositor dials the broker socket the
+//!   dead engine bound — `clear_the_last_engine` takes that socket away and
+//!   the new engine creates its own at the same path — and re-states to it
+//!   everything the old one knew: a frame sink per window, every client buffer
+//!   imported again, and the frame each window had on screen submitted again
+//!   so it is still the frame on screen. `EngineSession::reconnect` in
+//!   `packages/domicile-compositor/src/engine_session.rs` is that half, and
+//!   `which_engine` beside it is how a compositor with no disconnect callback
+//!   finds out at all: the page a new engine serves says hello from a process
+//!   that is not the one before it.
+//!
+//!   **The clients never hear about any of it.** They are connected to a
+//!   `wl_display` the compositor still holds, so their windows, their
+//!   surfaces and their state survive — which is the whole point, and the
+//!   thing a whole-desktop restart could not do however quick it was.
+//!
+//!   ON A TTY THE ENGINE HOLDS DRM MASTER, so for the second or two between
+//!   two engines there is no screen: the console is dark and the compositor is
+//!   serving into nothing. That is a real consequence and it is not fixed
+//!   here. What it is not is a lost desktop — the new engine modesets from the
+//!   same `DisplaySnapshot`s, and the compositor states its connectors to it
+//!   again as soon as it has joined.
+//!
 //! - **The compositor cannot be restarted under a running engine.** The page
 //!   dials the compositor's control socket, and that channel "deletes itself
 //!   when either end goes away"
 //!   (`packages/domicile-engine/src/components/domicile/browser/control_channel.h:49`).
 //!   Its retry is a bounded reach at startup (`kReachFor`), not a reconnect. A
 //!   shell that outlived its compositor is a page holding a closed channel, and
-//!   nothing this side of the engine can reopen it.
+//!   nothing this side of the engine can reopen it. Making that direction work
+//!   is a C++ change in the fork, and until it is made, a compositor that dies
+//!   takes the engine down with it — by dropping the
+//!   [`crate::supervise::Running`] that holds them both, which signals each
+//!   process group and waits, exactly as an ordinary exit does — and a whole
+//!   new desktop is started in its place. The apps do not survive that: they
+//!   were clients of a Wayland display that is gone, and their
+//!   `WAYLAND_DISPLAY` names a socket the next compositor will not be called.
+//!   Nothing here pretends otherwise.
 //!
-//! So the death of either takes the other down deliberately, by dropping the
-//! [`crate::supervise::Running`] that holds them both — which signals each
-//! process group and waits, exactly as an ordinary exit does — and a whole new
-//! desktop is started in its place. Within one desktop nothing is stale,
-//! because nothing survives: a fresh engine, a fresh compositor, a fresh page
-//! dialing a socket that was bound after it. What does not survive either is
-//! the apps: they were clients of a Wayland display that is gone, and their
-//! `WAYLAND_DISPLAY` names a socket the next compositor will not be called.
-//! Nothing here pretends otherwise.
+//! AN ENGINE THAT WILL NOT STAY UP IS EVENTUALLY A DESKTOP THAT IS NOT COMING
+//! UP. [`keep_the_engine_up`] gives up on the same terms as
+//! [`keep_a_desktop_up`], and what follows a give-up there is one failure of
+//! the desktop's own row — a whole new desktop, which is a different thing to
+//! try rather than the same thing again.
 //!
 //! WHAT IS NOT RESTARTED IS ANYTHING DECIDED BEFORE THE FIRST PROCESS. A
 //! missing engine, a refused ozone platform, a control socket that could not be
@@ -46,6 +67,12 @@
 //! for a thing that takes seconds to start. A desktop that lived
 //! [`Policy::long_enough`] is not part of a crash loop and starts the count
 //! over.
+//!
+//! ONE POLICY, TWO ROWS. An engine started again earns the same doubling wait
+//! and the same give-up that a desktop does, because it is the same crash
+//! loop — but it is counted on its own, because the compositor under it has
+//! not failed at anything and a count shared between them would end a desk
+//! that was working.
 
 use std::path::Path;
 use std::time::Duration;
@@ -89,13 +116,34 @@ impl Default for Policy {
     }
 }
 
-/// What a desktop that has just failed earns.
+/// What is being started again, which is the only thing the two loops below
+/// differ by — and the difference a person reading a tty needs, because an
+/// engine that came back under the compositor it left running is not the same
+/// event as a desktop that was stood up from nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Started {
+    Desktop,
+    Engine,
+}
+
+impl std::fmt::Display for Started {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str(match self {
+            Started::Desktop => "desktop",
+            Started::Engine => "engine",
+        })
+    }
+}
+
+/// What a desktop — or an engine under a compositor that outlived it — that
+/// has just failed earns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Next {
     #[error(
-        "starting the desktop again in {after:?} — that is failure {failures} of {of} in a row."
+        "starting the {started} again in {after:?} — that is failure {failures} of {of} in a row."
     )]
     Again {
+        started: Started,
         after: Duration,
         failures: u32,
         of: u32,
@@ -107,10 +155,10 @@ pub enum Next {
     // compositor's own words under this instead, because it is the half that
     // has them; see `crate::heard`.
     #[error(
-        "{failures} desktops in a row have failed, so this one is not being \
+        "{failures} {started}s in a row have failed, so this one is not being \
          started again."
     )]
-    GiveUp { failures: u32 },
+    GiveUp { started: Started, failures: u32 },
 }
 
 /// One desktop, from its first process to its last.
@@ -174,6 +222,46 @@ pub fn keep_a_desktop_up(
     wait: &mut dyn FnMut(Duration),
     say: &mut dyn FnMut(&Next),
 ) -> Ending {
+    keep_it_up(policy, Started::Desktop, attempt, stopped, wait, say)
+}
+
+/// Start an engine, and start another whenever one dies under a compositor
+/// that is still serving.
+///
+/// THE SAME POLICY, COUNTED ON ITS OWN. An engine that dies every few seconds
+/// is the same crash loop a desktop that does is, and it earns the same
+/// doubling wait and the same give-up — but it earns them out of its own row,
+/// because the compositor under it has not failed at anything and a count
+/// shared between them would end a desk that was working.
+///
+/// `attempt` is one engine, from the process starting to whatever ends the
+/// wait. [`Attempt::Ended`] here is the COMPOSITOR going rather than the
+/// engine: there is nothing left to put an engine under, so the run is over
+/// and the caller reads why off the exit it kept. [`Ending::GaveUp`] is an
+/// engine that will not stay up, which is not this loop's to fix — the caller
+/// takes the desktop down and the one in `keep_a_desktop_up` stands a whole
+/// new one up, which is a different thing to try rather than the same thing
+/// again.
+pub fn keep_the_engine_up(
+    policy: &Policy,
+    attempt: &mut dyn FnMut() -> Attempt,
+    stopped: &dyn Fn() -> bool,
+    wait: &mut dyn FnMut(Duration),
+    say: &mut dyn FnMut(&Next),
+) -> Ending {
+    keep_it_up(policy, Started::Engine, attempt, stopped, wait, say)
+}
+
+/// The loop both of the above are, with `started` the one thing they differ
+/// by: which row of failures is being counted, and what the sentence names.
+fn keep_it_up(
+    policy: &Policy,
+    started: Started,
+    attempt: &mut dyn FnMut() -> Attempt,
+    stopped: &dyn Fn() -> bool,
+    wait: &mut dyn FnMut(Duration),
+    say: &mut dyn FnMut(&Next),
+) -> Ending {
     let mut failures = 0;
     loop {
         match attempt() {
@@ -182,10 +270,10 @@ pub fn keep_a_desktop_up(
                 if stopped() {
                     return Ending::Stopped;
                 }
-                let next = next(policy, failures, lived);
+                let next = next(policy, started, failures, lived);
                 say(&next);
                 match next {
-                    Next::GiveUp { failures } => return Ending::GaveUp { failures },
+                    Next::GiveUp { failures, .. } => return Ending::GaveUp { failures },
                     Next::Again {
                         after,
                         failures: again,
@@ -208,17 +296,18 @@ pub fn keep_a_desktop_up(
 ///
 /// `failures` is how many in a row had already failed, so the first failure of
 /// a run asks with `0`.
-fn next(policy: &Policy, failures: u32, lived: Duration) -> Next {
+fn next(policy: &Policy, started: Started, failures: u32, lived: Duration) -> Next {
     let failures = match lived >= policy.long_enough {
         true => 1,
         false => failures + 1,
     };
     match failures >= policy.give_up_after {
-        true => Next::GiveUp { failures },
+        true => Next::GiveUp { failures, started },
         false => Next::Again {
             after: doubling(policy, failures),
             failures,
             of: policy.give_up_after,
+            started,
         },
     }
 }
@@ -250,14 +339,34 @@ fn next(policy: &Policy, failures: u32, lived: Duration) -> Next {
 /// failure. Anything else is returned: a leftover this process cannot take
 /// away is not something to start a desktop on top of and hope.
 pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
-    for path in [
-        &runtime.broker,
+    gone(
         &runtime.chrome_socket,
-        &runtime.command,
-        &runtime.session,
-    ] {
-        gone(path, std::fs::remove_file(path))?;
-    }
+        std::fs::remove_file(&runtime.chrome_socket),
+    )?;
+    gone(&runtime.session, std::fs::remove_file(&runtime.session))?;
+    clear_the_last_engine(runtime)
+}
+
+/// Take away what the last ENGINE bound, and nothing else, so that another can
+/// be started under the compositor that is still serving.
+///
+/// THE THREE THAT ARE THE ENGINE'S. The broker socket is the one the next
+/// engine creates and the compositor re-dials; the command socket is the
+/// loudest leftover there is, because `StartCommandSocket` `CHECK`s its bind
+/// and a path already there is a browser process ending on a line about a
+/// file; and the profile is this run's own temporary directory, whose
+/// singleton lock and session-to-restore belong to a Chromium that was killed
+/// rather than to the one being started.
+///
+/// THE TWO THAT ARE NOT GO NOWHERE NEAR THIS. The chrome socket is bound by a
+/// compositor that is still listening on it, and the session document is that
+/// same compositor's published statement that it is serving — which is still
+/// true. Removing either would be this process deleting a live desktop's own
+/// answer, and the session document in particular is what the launcher treats
+/// as "the compositor is up".
+pub fn clear_the_last_engine(runtime: &Runtime) -> Result<(), Leftover> {
+    gone(&runtime.broker, std::fs::remove_file(&runtime.broker))?;
+    gone(&runtime.command, std::fs::remove_file(&runtime.command))?;
     gone(&runtime.profile, std::fs::remove_dir_all(&runtime.profile))
 }
 

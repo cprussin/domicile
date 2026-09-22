@@ -71,6 +71,34 @@ fn the_component_that_exited_is_named_however_late_it_was_started() {
 }
 
 #[test]
+fn one_component_is_let_go_of_without_the_run_letting_go_of_the_other() {
+    // An engine started again under a compositor that is still serving. The
+    // dead one has to leave this list — a `wait` on it answers forever, so a
+    // run that kept it would report the same corpse on every poll and never
+    // notice the engine that replaced it — and the compositor has to be
+    // exactly where it was, because the whole point is that its clients never
+    // knew.
+    let mut running = Running::new();
+    running.start("engine", &sh("exit 4")).expect("it starts");
+    running
+        .start("compositor", &sh("sleep 30"))
+        .expect("it starts");
+    assert_eq!(running.until_one_exits().what, "engine");
+
+    running.let_go_of("engine");
+
+    assert_eq!(
+        running.exited(),
+        None,
+        "the compositor is still running and the engine is no longer this run's to report"
+    );
+    running.start("engine", &sh("exit 7")).expect("it starts");
+    let exit = running.until_one_exits();
+    assert_eq!(exit.what, "engine");
+    assert!(exit.how.contains('7'), "{}", exit.how);
+}
+
+#[test]
 fn the_component_that_exited_is_named_however_early_it_was_started() {
     let mut running = Running::new();
     running.start("engine", &sh("sleep 30")).expect("it starts");
