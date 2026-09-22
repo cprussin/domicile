@@ -11,6 +11,9 @@ import { NO_WINDOWS, reduceWindows, WindowAction } from "./window-state";
 
 const GEOMETRY: Geometry = {
   desktop: { height: 1080, width: 3200, x: 0, y: 0 },
+  // The screen a desk that nobody has described yet is on -- which is where
+  // `NO_WINDOWS` puts every window these place.
+  name: "",
   screen: { height: 1080, width: 1920, x: 0, y: 0 },
   workspace: { height: 1048, width: 1920, x: 0, y: 32 },
 };

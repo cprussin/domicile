@@ -6180,7 +6180,10 @@ mod tests {
         let own = desk_from_the_window(&two_screens(), Some("drm-2")).expect("it is moved");
 
         assert!(own.contains(r#""name":"drm-2","position":[0,0]"#), "{own}");
-        assert!(own.contains(r#""name":"drm-1","position":[-1800,0]"#), "{own}");
+        assert!(
+            own.contains(r#""name":"drm-1","position":[-1800,0]"#),
+            "{own}"
+        );
     }
 
     #[test]

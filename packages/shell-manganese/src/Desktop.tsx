@@ -1,7 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
-import type { Display } from "@domicile/component-library/display-source";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
@@ -10,40 +9,39 @@ import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
 import { useFiles } from "./launcher/useFiles";
-import { FirstScreen } from "./screens/FirstScreen";
-import { IdleScreen } from "./screens/IdleScreen";
+import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
-import { OtherScreens } from "./screens/OtherScreens";
-import { TOP_BAR, TopBar } from "./top-bar/TopBar";
 import { Wallpaper } from "./wallpaper/Wallpaper";
-import type { Geometry, Screenful } from "./window-management/placement";
-import { placementsOf } from "./window-management/placement";
-import type { Focus } from "./window-management/pointer-warp";
-import { pageBoxOf } from "./window-management/pointer-warp";
-import type { Rect } from "./window-management/rect";
-import { Stage } from "./window-management/Stage";
-import { usePointerWarp } from "./window-management/usePointerWarp";
+import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
-import { siteOf } from "./window-management/window";
-import { WindowAction, workspaceOn } from "./window-management/window-state";
+import { WindowAction } from "./window-management/window-state";
 
 type Props = {
+  /** The other pages of this desk — see `desk-channel.ts`. */
+  desk: DeskChannel;
   domicile: DomicileClient;
 };
 
 /**
- * The desktop: a bar across the top of the screen the config names first, the
- * windows of the workspace being looked at under it, and a clock on every
- * other screen.
+ * The desktop: a bar across the top of every monitor, the windows of the
+ * workspace each one is showing under it, and the panels over all of it.
  *
- * One page, so one copy of this state across every display: moving a window
- * between workspaces is moving where its `<app>` is laid out, not handing it
- * to another shell. The state lives here rather than in the chrome because the
- * chrome is not mounted until a desktop has been described, and the windows
- * the host announces before then are already the shell's.
+ * **ONE DESKTOP, DRAWN A MONITOR AT A TIME.** A desk of several monitors is
+ * several browser windows — one cannot span two CRTCs — each loading this same
+ * shell, so this component runs once per screen and renders a {@link Monitor}
+ * for every screen of the desk. `<Screen>` draws the one whose display this
+ * page's window covers and leaves the others to the pages that cover them.
+ *
+ * So the state above the monitors is the desk's and not a screen's: the
+ * workspaces span every monitor the way sway's do, a workspace is shown on one
+ * screen at a time, and asking for one that is already in view moves the
+ * keyboard to the screen showing it rather than taking the work off it. That
+ * state has to be the same state on every page, which is `useWindows`'s other
+ * half.
  */
-export const Desktop = ({ domicile }: Props) => {
-  const windows = useWindows(domicile);
+export const Desktop = ({ desk, domicile }: Props) => {
+  const displays = useDisplays();
+  const windows = useWindows(domicile, displays, desk);
   const { act } = windows;
 
   // Super is what hands the pointer back to the page, and Shift is what makes
@@ -51,6 +49,13 @@ export const Desktop = ({ domicile }: Props) => {
   // the only place either can be read: the desktop is the chrome's window, so
   // the compositor's own answer is these keystrokes handed back short.
   const { modifiers, spendShift } = useModifiers();
+
+  // A key ran the last command, which is what takes the pointer with the
+  // keyboard — see `usePointerWarp`, which spends it. Here rather than in a
+  // monitor because the desk is one keyboard and several screens: the press
+  // happens once and the monitor the focus lands on is the one that answers
+  // it.
+  const keyed = useRef(false);
 
   // Asked for each time the panel goes up — nothing watches a home directory,
   // so a list fetched once would be yesterday's by the afternoon.
@@ -60,40 +65,6 @@ export const Desktop = ({ domicile }: Props) => {
   // the compositor already hears, so the history is here before the panel is
   // opened rather than fetched when it is.
   const clipboard = useClipboard(domicile);
-
-  // The screen the chrome is on, which is what the windows are laid out in.
-  // Nothing is placed until the host has described a desktop — `FirstScreen`
-  // renders nothing either — so an undescribed desktop has no geometry and
-  // no windows on screen.
-  const displays = useDisplays();
-  const geometry = useMemo(() => geometryOf(displays), [displays]);
-  const screenful = useMemo(
-    () =>
-      geometry === undefined
-        ? { placements: [], selection: undefined, tabs: [] }
-        : placementsOf(windows, geometry),
-    [geometry, windows],
-  );
-
-  // And the pointer goes where the keyboard goes, because the pointer is what
-  // moves the keyboard here: focus follows the cursor, so a focus change the
-  // pointer did not make — a key, or a window opening — would be undone by the
-  // next pointer event. `pointer-warp.ts` has the whole of it.
-  const focus = useMemo(
-    () => focusOn(screenful, windows.activeId, displays?.[0]),
-    [displays, screenful, windows.activeId],
-  );
-  // The ids alone: what the warp reads them for is whether the window holding
-  // the keyboard is one that was not there a render ago.
-  const open = useMemo(
-    () => windows.windows.map(({ id }) => id),
-    [windows.windows],
-  );
-  const { keyed, pointing } = usePointerWarp({
-    domicile,
-    focus,
-    windows: open,
-  });
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
@@ -106,99 +77,59 @@ export const Desktop = ({ domicile }: Props) => {
       // Before the action, though either would do: what the press is
       // remembered for is the render that follows it, and no render happens
       // in the middle of an event handler.
-      keyed();
+      keyed.current = true;
       spendShift();
       act(action);
     },
-    [act, keyed, spendShift],
+    [act, spendShift],
   );
 
-  useShortcuts({ domicile, mode: windows.mode, onAction: onAction });
+  useShortcuts({ domicile, mode: windows.mode, onAction });
+
+  // And the press is spent here rather than in the monitor that answered it.
+  // A parent's effect runs after its children's, so by the time this one does
+  // every monitor has had its look — where clearing it in the hook would let
+  // the first monitor to run spend a press the second was meant to answer.
+  useEffect(() => {
+    keyed.current = false;
+  });
 
   return (
     <>
       {/*
-        First, and outside every screen: the viewport is the desktop, so one
-        fixed sheet is the wallpaper of every screen on it, and a positioned
-        sibling that comes first in the document is painted under all of them.
-        It waits for no desktop either — there is no region for it to be moved
-        into — so the handshake happens over a photograph.
+        First, and outside every screen: the viewport is this monitor, so one
+        fixed sheet is its wallpaper, and a positioned sibling that comes first
+        in the document is painted under all of it. It waits for no desktop
+        either — there is no region for it to be moved into — so the handshake
+        happens over a photograph.
       */}
       <Wallpaper />
-      <FirstScreen>
-        {(display) => (
-          <>
-            <TopBar
-              current={windows.current}
-              domicile={domicile}
-              mode={windows.mode}
-              occupied={windows.occupied}
-              onSelectWorkspace={(name) => {
-                act(WindowAction.WorkspaceSelected(name));
-              }}
-            />
-            <Stage
-              activeId={windows.activeId}
-              // A panel of the desktop's own is a thing to type into that no
-              // window knows about, so for as long as one is up the keyboard
-              // is the page's — see `AppWindow`.
-              behindPanel={windows.launcherOpen || windows.clipboardOpen}
-              current={windows.current}
-              display={display}
-              domicile={domicile}
-              draggingId={windows.draggingId}
-              floats={workspaceOn(windows).floats}
-              focusedId={windows.focusedId}
-              fullscreenId={workspaceOn(windows).fullscreen?.id}
-              modifiers={modifiers}
-              onClose={(id) => {
-                act(WindowAction.WindowClosed(id));
-              }}
-              onDrop={() => {
-                act(WindowAction.WindowDropped());
-              }}
-              onFullscreen={(id) => {
-                act(WindowAction.WindowFullscreened(id));
-              }}
-              onGrab={(id) => {
-                act(WindowAction.WindowGrabbed(id));
-              }}
-              // Only where the pointer is what did the crossing. A window
-              // that arrives under a hand nobody moved says `pointerover`
-              // just as loudly, and answering that one hands the keyboard —
-              // and whatever `focus parent` had selected — to whichever
-              // window the layout happened to slide past. See
-              // `usePointerWarp`.
-              onHover={(id, at) => {
-                if (pointing(at)) {
-                  act(WindowAction.WindowHovered(id));
-                }
-              }}
-              onMove={(id, x, y) => {
-                act(WindowAction.WindowMoved(id, x, y));
-              }}
-              onOpenWindow={(url) => {
-                act(WindowAction.BrowserOpened(url));
-              }}
-              onRename={(id, url) => {
-                act(WindowAction.WindowRenamed(id, siteOf(url)));
-              }}
-              onResize={(id, width, height) => {
-                act(WindowAction.WindowResized(id, width, height));
-              }}
-              onSelect={(id) => {
-                act(WindowAction.WindowSelected(id));
-              }}
-              screenful={screenful}
-              windows={windows.windows}
-            />
-          </>
-        )}
-      </FirstScreen>
+      {/*
+        Every display the desktop has taken up, which is every display the
+        host described one render later: the desk reaches the state through a
+        reduction, and a monitor drawn before that reduction lands would be a
+        screen with no workspace on it. One frame of a monitor that has just
+        been plugged in, which is a monitor that was dark a moment ago anyway.
+      */}
+      {(displays ?? [])
+        .filter(({ name }) =>
+          windows.screens.some((screen) => screen.name === name),
+        )
+        .map((display) => (
+          <Monitor
+            act={act}
+            desk={displays ?? []}
+            display={display}
+            domicile={domicile}
+            key={display.name}
+            keyed={keyed}
+            modifiers={modifiers}
+            windows={windows}
+          />
+        ))}
       {/*
         Outside every screen, like the wallpaper and for the same reason: the
-        viewport is the desktop, and the panel is over the whole of it rather
-        than over one monitor of it.
+        viewport is this monitor, and the panel is over the whole of it.
       */}
       <Launcher
         files={files}
@@ -230,97 +161,7 @@ export const Desktop = ({ domicile }: Props) => {
         }}
         open={windows.clipboardOpen}
       />
-      <OtherScreens>
-        <IdleScreen />
-      </OtherScreens>
       <NoScreens />
     </>
   );
-};
-
-/**
- * The window the keyboard is in and the box a pointer over it would be in, or
- * `undefined` for a workspace with nothing on it.
- *
- * Its contents rather than its whole frame, and that is the box the question
- * is about: what a `pointerover` moves the focus to is the `<app>` element —
- * see `Stage` — so the region the pointer has to be in to hold the focus is
- * the one the window draws in, not the bar above it. A window a tab is hiding
- * has only that bar, which is where the window is.
- *
- * **In the page's coordinates and not the layout's**, which is `pageBoxOf`'s
- * whole reason: a pointer exists in what the page draws, and where a page is
- * one monitor those are not the same numbers. `display` is the screen the
- * chrome is on — the first one, which is where `FirstScreen` puts it and what
- * `geometryOf` lays out against — and nothing is placed at all before there is
- * one.
- */
-const focusOn = (
-  screenful: Screenful,
-  activeId: string | undefined,
-  display: Display | undefined,
-): Focus | undefined => {
-  const placement = screenful.placements.find(({ id }) => id === activeId);
-  return placement === undefined || display === undefined
-    ? undefined
-    : {
-        box: pageBoxOf(placement.surface ?? placement.bar, display),
-        id: placement.id,
-      };
-};
-
-/**
- * The rectangles the layout needs, or `undefined` before the host has
- * described a desktop.
- *
- * Three of them, because a window can be asked to fill any of the three: the
- * workspace is the screen the chrome is on with the bar taken off the top,
- * `fullscreen` is that whole screen, and `fullscreen global` is every screen
- * there is.
- */
-const geometryOf = (
-  displays: readonly Display[] | undefined,
-): Geometry | undefined => {
-  const first = displays?.[0];
-  if (displays === undefined || first === undefined) {
-    return undefined;
-  } else {
-    const screen = rectOf(first);
-    return {
-      desktop: boundingBox(displays),
-      screen,
-      workspace: {
-        ...screen,
-        height: screen.height - TOP_BAR,
-        y: screen.y + TOP_BAR,
-      },
-    };
-  }
-};
-
-const rectOf = (display: Display): Rect => ({
-  height: display.size[1],
-  width: display.size[0],
-  x: display.position[0],
-  y: display.position[1],
-});
-
-/**
- * Every screen at once, which is what `fullscreen global` fills.
- *
- * The desktop's coordinates start at the top-left of this box, so its own
- * corner is the origin for a desktop the host has described sensibly — and it
- * is worked out rather than assumed, because a config may put a screen
- * anywhere and the compositor normalizes nothing.
- */
-const boundingBox = (displays: readonly Display[]): Rect => {
-  const rects = displays.map((display) => rectOf(display));
-  const x = Math.min(...rects.map((rect) => rect.x));
-  const y = Math.min(...rects.map((rect) => rect.y));
-  return {
-    height: Math.max(...rects.map((rect) => rect.y + rect.height)) - y,
-    width: Math.max(...rects.map((rect) => rect.x + rect.width)) - x,
-    x,
-    y,
-  };
 };

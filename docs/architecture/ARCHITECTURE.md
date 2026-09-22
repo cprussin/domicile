@@ -54,27 +54,33 @@ supplies the protocol machinery; the interesting half — scene, input routing,
 portal geometry, config — is pure logic that unit-tests without a GPU, an engine
 or a display, which is what makes test-first work here.
 
-### One chrome page spanning every display, not one window per display
+### A page per display where the engine scans out, one page everywhere else
 
-The desktop is a list of displays in the config, one `wl_output` each, and one
-page across all of them. A display is a *region* of that page, which a shell
-addresses with `<Screen name="left">`.
+The desktop is a list of displays — the config's, or the monitors DRM
+reports — one `wl_output` each. A display is a *region* of a page, which a
+shell addresses with `<Screen name="left">`, and how many pages there are is
+the platform's answer rather than the shell's.
 
-The rejected alternative is worth stating, because it looks like the obvious
-one. Nothing correlates a chrome's toplevels with the displays they are on: the
-`xdg_toplevel` title is set by the page and identical for every window, and
-arrives after the output is entered anyway; `app_id` is process-wide; a chrome
-socket per display works at the price of one engine process per monitor. Beyond
-naming, N pages means N copies of the shell's state, each with a window list
-disagreeing with the others, plus portal ownership per app, unicast frames,
-display identity on every request, and shortcuts delivered once rather than
-fired N times.
+**Nested, one page spans every display.** A region is a part of it, and a shell
+lays out the whole desk in one window.
 
-What one page costs is mixed density: it rasterizes at a single
-`devicePixelRatio`, the maximum of the outputs its toplevel entered, so on a
-desktop of unequal scales one screen is drawn for the other's. `<Screen>` is the
-seam — a shell written against it compiles unchanged if this is revisited — so
-the decision is reversible without touching shell code.
+**On a tty, a page IS one display**, because `ScreenManager::FindWindowAt`
+binds a window to a display controller only on an exact rectangle match and one
+window cannot be two rectangles. The engine opens a browser window per CRTC and
+each loads the same shell; each is told the whole desk with its own display
+marked — `as_seen_from` in `domicile-host` — so a `<Screen>` renders in the
+window on the monitor it names and nowhere else. `<Screen>` is the seam either
+way: a shell written against it compiles unchanged, which is what made this
+reversal cost no shell code.
+
+What one page across a desk costs is mixed density: it rasterizes at a single
+`devicePixelRatio`, so on a desktop of unequal scales one screen is drawn for
+the other's. A page per display does not have that problem and has another: N
+pages are N copies of a shell's state, and keeping them one desktop is the
+shell's to arrange — `shell-manganese` reduces on the page covering the first
+screen and the others ask it to. The compositor is unaffected either way; the
+`Host` is one brain with a window each, and `set_screen` is the only message
+whose answer differs per connection.
 
 ### Dev environment: Nix flake
 

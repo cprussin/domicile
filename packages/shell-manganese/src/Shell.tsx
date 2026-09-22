@@ -4,8 +4,17 @@ import type { DisplaySource } from "@domicile/component-library/display-source";
 import { Provider } from "@domicile/component-library/Provider";
 
 import { Desktop } from "./Desktop";
+import type { DeskChannel } from "./window-management/desk-channel";
 
 type Props = {
+  /**
+   * The other pages of this desk.
+   *
+   * Passed in for `displays`'s reason: it is a connection, and a desk of
+   * several monitors is several pages of this shell with one desktop between
+   * them — `window-management/desk-channel.ts` says how.
+   */
+  desk: DeskChannel;
   /**
    * Where the desktop comes from — the host over the control channel, or the
    * window itself where there is no host. Passed in rather than built here
@@ -26,10 +35,10 @@ type Props = {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ domicile, displays }: Props) => (
+export const Shell = ({ desk, displays, domicile }: Props) => (
   <Provider>
     <DisplayProvider source={displays}>
-      <Desktop domicile={domicile} />
+      <Desktop desk={desk} domicile={domicile} />
     </DisplayProvider>
   </Provider>
 );
