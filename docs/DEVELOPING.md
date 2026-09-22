@@ -29,8 +29,15 @@ Nothing in the suite needs a display.
 # A desktop, on a machine that has a screen.
 nix run 'github:cprussin/domicile#manganese'    # the reference shell
 nix run 'github:cprussin/domicile' -- ./dist/shell.js   # a shell of your own
-./scripts/dev-shell.sh manganese               # …and rebuilt as you edit
+./scripts/dev-shell.sh manganese               # …rebuilt and reloaded as you edit
 ```
+
+`dev-shell.sh` hands each finished build to the desktop it started —
+`domicile load-shell`, over the socket that desktop printed — so an edit costs
+a build and the windows stay where they are. A shell the engine will not take,
+which is what the syntax error you just saved looks like, prints the engine's
+own complaint and leaves the desk on the shell it had; the next build gets
+another go.
 
 The engine job on `crux` is the only thing that builds the fork and drives the
 pixel guards. It shares a checkout with whoever else is working there, so it

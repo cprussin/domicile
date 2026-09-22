@@ -117,6 +117,20 @@ thin enough to read.
   `manganese` without stopping the desktop, and the windows survive either way
   because the compositor never hears about it.
 
+  **That watch script is `scripts/dev-shell.sh`**, and what it needed was two
+  facts rather than anything in the runtime. *Where the desktop answers*: it
+  starts the supervisor rather than being started by it, so it inherits no
+  `DOMICILE_SOCK` and reads the `DOMICILE_SOCK=<path>` line the supervisor
+  prints — kept until the same supervisor says it is up, because the socket is
+  bound before the engine exists and a shell loaded onto a desktop with no
+  engine is a refusal nobody caused. *When a build has finished*:
+  `scripts/dev-shell-reload.sh` waits for the bundle to stop moving —
+  `coalesce.rs`'s two bounds, a quiet run and a cap, in bash — because
+  `vite build --watch` writes one build many times and a reload at a
+  half-written file shows a shell nobody wrote. A shell the engine refuses
+  prints the engine's own `why` and the loop waits for the next build; the
+  desktop is still serving the shell it had.
+
   **It is strictly less machinery than the dev reload it replaces**, which was
   a token endpoint on the bridge plus a poller written into every served
   document, asking twice a second, for the life of the desktop, whether the
