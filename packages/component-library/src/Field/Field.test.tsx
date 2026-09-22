@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Input } from "../Input/Input";
@@ -148,10 +153,6 @@ describe(Field, () => {
       expect(await screen.findByText("Custom error")).toBeInTheDocument();
     });
 
-    // The default 5000ms per-test budget is tight for two sequential
-    // `waitFor` polls plus popover enter/exit animation work under a busy
-    // test runner (the full 20-file suite runs these concurrently); the
-    // 15000ms below raises that ceiling rather than the assertions.
     it("toggles the error popover when the error prop changes", async () => {
       const { rerender } = render(
         <Field label="Username">
@@ -172,10 +173,22 @@ describe(Field, () => {
           <Input defaultValue="x" type="text" />
         </Field>,
       );
-      await waitFor(() => {
-        expect(screen.queryByText("Too short")).not.toBeInTheDocument();
-      });
-    }, 15_000);
+      // `waitForElementToBeRemoved` rather than a `waitFor` around
+      // `expect(...).not.toBeInTheDocument()`. The popover leaves the DOM
+      // about fifteen milliseconds after the rerender, but a poll is
+      // evaluated once synchronously before that, and the jest-dom matcher
+      // pays for its own failure: its message is
+      // `stringify(element.cloneNode(true))`, and stringifying a happy-dom
+      // node walks the property graph out through `ownerDocument` into the
+      // whole rendered tree. That one failed poll measured five to nine
+      // seconds here and grows with the size of the document, which is what
+      // pushed this case past its budget when turbo runs the workspace
+      // suites at once. `waitForElementToBeRemoved` polls on the query's
+      // result instead and throws a pre-built error, so no failing poll
+      // serializes anything. The condition asserted is the same one, plus
+      // the element having been there to be removed.
+      await waitForElementToBeRemoved(() => screen.queryByText("Too short"));
+    });
 
     it.skipIf(runtimeSupportsValidationMessage() === false)(
       "surfaces the browser validationMessage by reading the control's validity",
