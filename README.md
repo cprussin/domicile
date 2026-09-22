@@ -1,6 +1,8 @@
 # Domicile
 
-**Wayland windows are DOM elements. Chromium is the compositor. May God have mercy on our souls.**
+**Write a real Wayland compositor using web technologies. Wayland windows are DOM elements. Chromium *is* the compositor. May God have mercy on our souls.**
+
+> "Your scientists were so preoccupied with whether they could, they didn't stop to think if they should."
 
 ```tsx
 const Shell = () => (
@@ -45,20 +47,12 @@ A shell is a JavaScript module. You arrange the elements; Domicile handles the r
 nix run github:cprussin/domicile -- ./dist/shell.js
 ```
 
-Want to put Firefox inside Chromium?
-
-Unfortunately:
-
-```tsx
-<app app-id="firefox" />
-```
-
 **[WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)** has the details.
 **[examples/minimal-shell](examples/minimal-shell)** is a complete shell built against the published SDK.
 
 ## Manganese
 
-Manganese proves the abomination can actually be lived in.
+Ever thought Sway was great, but needed more `<div>`s? We got you.
 
 ```sh
 nix run github:cprussin/domicile#manganese
