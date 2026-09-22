@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# How long `guard-client-window.sh` watches for a drawn frame before it calls
-# the seam broken, asserted.
+# How long `guard-client-window.sh` watches before it calls the seam broken --
+# and, since engine run 35678250589, WHICH drawn frame it is watching for.
+#
+# THE SECOND HALF IS WHAT MADE THE FIRST REACHABLE. The poll used to stop on any
+# draw at all while the assertion under it is about the CLIENT'S color, so on a
+# run where `spike-page.html` painted its own indigo first the loop exited one
+# second in and none of the patience below was ever spent. The cases under
+# "whose color it is waiting for" are that, and they are the reason this file's
+# other cases mean anything.
 #
 # WHAT THIS IS ABOUT. `crux` runs two jobs at once now, and both of them draw
 # on the one render node: `engine.yml` on the `crux` slot and
@@ -94,44 +101,104 @@ trap 'rm -rf "$WORK"' EXIT
 # window. BUILT from the format string at domicile-compositor's main.rs:2295
 # rather than copied: reword that log site and this test keeps passing while
 # the guard stops seeing the line.
-DREW='2026-09-22T00:03:29.112233Z  INFO domicile::engine::spike: engine drew #FF3366CC at the center of the browser'"'"'s window'
+drew_line() { # $1 what viz handed back, in ARGB
+  printf "2026-09-22T00:03:29.112233Z  INFO domicile::engine::spike: engine drew #%s at the center of the browser's window\n" "$1"
+}
 
-# The poll, against a log that gains the line `$2` seconds in. Prints what it
-# read and how long it waited, so a case can assert on either.
-poll() { # $1 how patient, $2 when the line lands
+# The client's own color, which is the whole of what the guard is looking for.
+DREW="$(drew_line FF3366CC)"
+# AND THE TWO THAT ARE NOT IT. `spike-page.html` paints its own indigo, and the
+# window is white before it has painted at all -- so a log that has drawn
+# SOMETHING is not a log that has drawn the CLIENT, and both of these land
+# before the client's buffer reaches the page. They are the two lines the
+# losing run of engine run 35678250589 had.
+PAGE="$(drew_line FF3F51B5)"
+BLANK="$(drew_line FFFFFFFF)"
+
+# The poll, against a log that already holds `$3...` and gains the CLIENT's
+# line `$2` seconds in. Prints what it read, how long it waited, and what it
+# wrote down for the control -- `none` when it wrote nothing -- so a case can
+# assert on any of the three.
+poll() { # $1 how patient, $2 when the client's line lands, $3... what the log holds
   local dir; dir="$(mktemp -d "$WORK/XXXXXX")"
   : >"$dir/comp"
+  local held
+  for held in "${@:3}"; do printf '%s\n' "$held" >>"$dir/comp"; done
   (
     LOOKS="$1"
     NEGATIVE=0
+    # The color the guard drives its client with, which the poll is about.
+    COLOR=3366CC
     COMP_LOG="$dir/comp"
     # Somewhere of its own, so a case cannot read another case's note and the
     # runner's /tmp is left alone.
     DOMICILE_CONTROL_BUDGET_DIR="$dir/budgets"
     ( sleep "$2"; printf '%s\n' "$DREW" >>"$dir/comp" ) &
     eval "$BLOCK" 2>/dev/null
-    printf '%s %s\n' "${DRAWN:-nothing}" "$WAITED"
+    # `none` is a reading in its own right rather than a missing one: whether
+    # the guard wrote a note at all is what two of the cases below are about.
+    local noted="none"
+    if [ -f "$dir/budgets/client-window" ]; then
+      noted="$(sed -n '1p' "$dir/budgets/client-window")"
+    fi
+    printf '%s %s %s\n' "${DRAWN:-nothing}" "$WAITED" "$noted"
   )
 }
 
-r="$(poll 240 2)"
-expect "a color that turns up is read" "FF3366CC" "${r% *}"
-# THE FLOOR IS FREE BECAUSE OF THIS. The poll breaks on the first sighting, so
-# how patient it is willing to be costs a healthy run nothing at all. Four
-# rather than two, because the loop sleeps a second between looks and the line
-# lands between two of them.
-if [ "${r#* }" -le 4 ]; then
+read -r saw waited noted <<<"$(poll 240 2)"
+expect "the client's color turning up is read" "FF3366CC" "$saw"
+# THE FLOOR IS FREE BECAUSE OF THIS. The poll breaks on the sighting it is
+# waiting for, so how patient it is willing to be costs a healthy run nothing
+# at all. Four rather than two, because the loop sleeps a second between looks
+# and the line lands between two of them.
+if [ "$waited" -le 4 ]; then
   printf '  ok    %s\n' "and the poll stops there rather than spending its budget"
 else
   printf '  FAIL  %s\n    waited: %ss\n' \
-    "and the poll stops there rather than spending its budget" "${r#* }"
+    "and the poll stops there rather than spending its budget" "$waited"
   FAILED=$((FAILED + 1))
 fi
+# And it hands that reading to the negative control, which is the number that
+# sizes the wait the control spends in full. See lib-control-budget.sh.
+expect "and hands the control what it measured" "$waited" "$noted"
 
 # And the other end of it: a guard that never gives up is a job GitHub kills,
 # which says nothing about the seam. The patience is a bound, not a promise.
-r="$(poll 2 30)"
-expect "a color that never turns up ends the poll" "nothing" "${r% *}"
+read -r saw waited noted <<<"$(poll 2 30)"
+expect "a color that never turns up ends the poll" "nothing" "$saw"
+
+# --- whose color it is waiting for -------------------------------------------
+
+# THE RACE THAT REDDENED PR #479'S ENGINE CHECK, on engine run 35678250589. The
+# poll used to break on ANY draw while the assertion under it is about the
+# CLIENT'S, and `spike-page.html` paints itself before the client's buffer
+# reaches it -- so the compositor's log read
+#
+#   02:08:13.925  engine drew #FFFFFFFF
+#   02:08:14.205  engine drew #FF3F51B5      <- the page's own indigo
+#
+# the poll broke one second in on a color that was never the client's, and the
+# guard reported "the page is showing #FF3F51B5, which is not the client's
+# #3366CC" against a diff that does not touch this seam. Whether it passed came
+# down to whether the client's frame landed before the poll's FIRST look, and
+# the 240 above bought nothing at all because the loop had already exited.
+read -r saw waited noted <<<"$(poll 240 3 "$BLANK" "$PAGE")"
+expect "a draw that is not the client's does not end the poll" "FF3366CC" "$saw"
+at_least "and the guard spends its patience waiting for one that is" 3 "$waited"
+
+# THE FAILURE ARM THAT MUST SURVIVE IT. A poll that outwaits the page's own
+# draws still has to say what it actually saw when the client's color never
+# comes: that sentence is what tells "the canvas showed the wrong thing" apart
+# from "nothing drew at all", and the two have different causes.
+read -r saw waited noted <<<"$(poll 3 30 "$BLANK" "$PAGE")"
+expect "and a run that only ever saw the page's own color reports it" \
+  "FF3F51B5" "$saw"
+# A run that spent its whole patience measured that patience rather than the
+# system, and every way lib-control-budget.sh can be wrong is a control that
+# stops watching too early. So the note is for the path that SAW the client,
+# which this one did not.
+expect "and writes down nothing, having measured only its own patience" \
+  "none" "$noted"
 
 # --- what the bound is -------------------------------------------------------
 

@@ -254,10 +254,12 @@ fi
 # The compositor logs what viz drew each time it submits.
 #
 # HOW LONG TO WATCH IS NOT THE SAME QUESTION FOR THE TWO RUNS. The guard stops
-# the moment a color appears and almost never spends its budget; measured on
-# engine run 35496858205, the poll took ~5s of a 1m05 step. The control cannot
-# stop early -- with no client there is nothing to appear -- so it spends the
-# whole thing every time, which is why it was measured at 2m04.
+# the moment the client's color appears and almost never spends its budget;
+# measured on engine run 35496858205, the poll took ~5s of a 1m05 step. The
+# control cannot stop early -- with no client, nothing ever commits a frame and
+# the probe below runs on the submit path, so not one `engine drew` line is
+# written at all -- so it spends the whole thing every time, which is why it was
+# measured at 2m04.
 #
 # So the control waits a multiple of what the guard just measured instead. The
 # two are consecutive steps of one job against one build, so that number is a
@@ -279,26 +281,46 @@ fi
 # passed on the slot that was not the one giving up.
 #
 # 240 is ~48x the quiet-machine measurement and four times what a busy card ate
-# through. It is free on a healthy run for the reason above: the loop breaks on
-# the first sighting. What bounds it is `CLIENT_LIVES_FOR` -- the probe runs on
-# the submit path, so the poll has to end while there is still a client
-# committing frames for it to read.
+# through. It is free on a healthy run for the reason above: the loop breaks the
+# moment the client's color is there. What bounds it is `CLIENT_LIVES_FOR` --
+# the probe runs on the submit path, so the poll has to end while there is still
+# a client committing frames for it to read.
 LOOKS="${LOOKS:-240}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
 
+# WHAT IT WAITS FOR IS WHAT IT ASSERTS, and for a while it was not. This loop
+# used to stop on ANY draw while the assertion below it is about the CLIENT'S,
+# and `spike-page.html` paints its own indigo before the client's buffer
+# reaches the page -- so the compositor's log of a losing run read
+#
+#   02:08:13.925  engine drew #FFFFFFFF
+#   02:08:14.205  engine drew #FF3F51B5      <- the page's own indigo
+#
+# the loop stopped one second in on a color that was never going to be the
+# client's, and the guard reported "the page is showing #FF3F51B5, which is not
+# the client's #3366CC" against a diff that does not touch this seam. That is
+# engine run 35678250589, and it reddened PR #479. Whether the guard passed came
+# down to whether the client's frame landed before the FIRST look, and all the
+# patience above was unreachable because the loop had already exited.
+#
+# `DRAWN` still carries the LAST draw whatever it was, because the sentence
+# after a timeout is "the page is showing X" and X is the whole diagnostic.
 DRAWN=""
 WAITED=0
 for _ in $(seq 1 "$LOOKS"); do
   DRAWN=$(grep -oE "engine drew #[0-9A-F]{8}" "$COMP_LOG" | tail -1 | grep -oE "[0-9A-F]{8}$")
-  [ -n "$DRAWN" ] && break
+  [ "${DRAWN#FF}" = "$COLOR" ] && break
   sleep 1
   WAITED=$((WAITED + 1))
 done
 
-# Only what the GUARD measured, and only when it actually saw something: a run
-# that timed out measured its own patience rather than the system's, and the
-# control must not inherit that as though it were a reading.
-if [ "$NEGATIVE" != "1" ] && [ -n "$DRAWN" ]; then
+# Only what the GUARD measured, and only when it saw THE THING IT WAS WAITING
+# FOR: a run that timed out measured its own patience rather than the system's,
+# and the control must not inherit that as though it were a reading. It is the
+# client's color rather than `-n` for the same reason the loop is -- a run that
+# spent 240s watching the page's own indigo is a timeout, and noting its 240
+# would hand the control the largest number it can hold.
+if [ "$NEGATIVE" != "1" ] && [ "${DRAWN#FF}" = "$COLOR" ]; then
   budget_note client-window "$WAITED"
 fi
 
