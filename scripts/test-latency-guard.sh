@@ -52,7 +52,7 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer, $8 answered too late
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer, $8 answered too late, $9 answered too soon
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
     # The compositor says this first, and the guard divides by it. Defaulted to
@@ -71,6 +71,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
     say "latency: $3 round(s) abandoned by the client"
     say "latency: ${7:-0} round(s) whose pixel moved before the client answered"
     say "latency: ${8:-0} round(s) whose commit came too late to be the key's answer"
+    say "latency: ${9:-0} round(s) whose commit came too soon to be the key's answer"
     say "latency: ${5:-0} round(s) whose key was never delivered"
     case "$4" in
       completed) say "latency: the run completed" ;;
@@ -227,6 +228,18 @@ expect "and says the wait is what is wrong with it" \
   "::error::guard-latency: 2 round(s) had the client commit too long after the key for the key to have caused it, so what would have been timed is a redraw of the client's own and the run measured fewer rounds than it set out to" \
   "$(verdict "$LATE" 0)"
 
+# The near end of that same wait, which is its own failure and its own
+# sentence. A commit 0.82 ms after a key is a frame the client already had in
+# flight, and the round is given up exactly as the four above are — but an
+# annotation calling it a slow answer would send whoever read it to the wrong
+# end of the run.
+SOON="$(run_log 16.67 16.68 0 completed 0 16.67 0 0 2)"
+expect "a round whose commit came too soon fails" \
+  "1" "$(verdict_code "$SOON" 0)"
+expect "and says the commit arrived with the key rather than after it" \
+  "::error::guard-latency: 2 round(s) had the client commit too soon after the key for the key to have caused it, so what would have been timed is a frame the client already had in flight and the run measured fewer rounds than it set out to" \
+  "$(verdict "$SOON" 0)"
+
 # A run that never reported at all. Distinct from every case above, which all
 # have an ending: a round only advances on a commit, so a client that answers a
 # key with no redraw leaves the run waiting rather than abandoning rounds. A
@@ -293,6 +306,8 @@ expect "a control whose rounds all moved before an answer is still a correct con
   "0" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 2)" 1)"
 expect "a control whose rounds all came too late is still a correct control" \
   "0" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 0 3)" 1)"
+expect "a control whose rounds all came too soon is still a correct control" \
+  "0" "$(verdict_code "$(run_log 16.67 '' 0 completed 0 16.67 0 0 3)" 1)"
 
 # And one is enough. What the control proves is that the guard *notices* a
 # client answering nothing, so the check is "at least one", not "how many" —

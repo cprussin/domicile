@@ -54,6 +54,7 @@ COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.65Z  INFO domicile::engine::spike: latency: 2 round(s) where the client drew again while polling
 2026-09-07T14:00:00.68Z  INFO domicile::engine::spike: latency: 1 round(s) whose pixel moved before the client answered
 2026-09-07T14:00:00.69Z  INFO domicile::engine::spike: latency: 3 round(s) whose commit came too late to be the key's answer
+2026-09-07T14:00:00.695Z  INFO domicile::engine::spike: latency: 4 round(s) whose commit came too soon to be the key's answer
 2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed
 RUN
 )"
@@ -112,6 +113,17 @@ expect "a run whose commit came too late says how often" \
 expect "and is none of the other three" \
   "0 2 1" "$(latency_abandoned "$RUN_LOG") $(latency_redrew "$RUN_LOG") $(latency_moved "$RUN_LOG")"
 
+# And the near end of that same wait, which is a fifth line rather than more of
+# the fourth: a commit 0.82 ms after a key is the same stray arriving with the
+# key instead of long after it, and a report that called it "too late" would
+# send whoever read it looking for a slow client. Both lines end in the same
+# seven words, so this is also what decides whether the two readers anchor on
+# enough of theirs to tell them apart.
+expect "a run whose commit came too soon says how often" \
+  "4" "$(latency_soon "$RUN_LOG")"
+expect "and is not the count of the ones that came too late" \
+  "3" "$(latency_late "$RUN_LOG")"
+
 # "Nothing measured" is the compositor's own line for a spread with no samples.
 # It must not read as a number, and it must not read as the previous line's.
 NOTHING="$(log_of "2026-09-07T14:00:00.2Z  INFO domicile::engine::spike: latency floor: min 16.60, median 16.67, max 17.90 ms over 60 (median 1.0 frames)
@@ -149,6 +161,8 @@ expect "and none of rounds given up before an answer" \
   "" "$(latency_moved "$EMPTY")"
 expect "and none of rounds whose commit came too late" \
   "" "$(latency_late "$EMPTY")"
+expect "and none of rounds whose commit came too soon" \
+  "" "$(latency_soon "$EMPTY")"
 
 # A control's run, where the client answers no keys.
 CONTROL="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 3 round(s) abandoned by the client
