@@ -130,6 +130,18 @@ The evidence for each of those is in the doc that made the claim —
    stays: a desktop should render a PDF in a window. The viewer UI is a separate
    question.
 
+6. **Nothing measures the shortcuts inhibitor.** Patch `0038` asks the host
+   compositor to stop matching its own bindings while the desktop's window has
+   the keyboard — which is what makes a shell's Meta chords reach it nested at
+   all — and no guard script observes it. Nothing here can: `under-wayland.sh`
+   runs sway's headless backend with `WLR_LIBINPUT_NO_DEVICES=1`, so there is
+   no keyboard to press and no way to see which side of the protocol took a
+   key. The cheap version is `WAYLAND_DEBUG=1` on the engine and a grep for
+   `inhibit_shortcuts` on the wire, which proves the request was made rather
+   than that a key arrived; the real one needs a virtual keyboard against the
+   nested compositor. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
+   *Keystroke to pixel*, is the nearest thing that reads a real key.
+
 ## Needs a machine with a screen
 
 No agent and no CI runner here can see one — `crux` has a card but no panel it

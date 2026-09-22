@@ -634,6 +634,19 @@ known and it is a build-system cost, not a language one.
   with `app-id` reflection and default styling, rather than a canvas with a
   method on it. The method is still there, in patch `0002`, because the spike's
   measurement pages go through it.
+- **Nested, the engine inhibits the host's shortcuts itself — it does not ask
+  the shell to.** Patch `0038` creates a
+  `zwp_keyboard_shortcuts_inhibitor_v1` for the toplevel through upstream's own
+  `WaylandKeyboard::CreateShortcutsInhibitor`. Upstream reaches that call from
+  exactly one place — `OzonePlatformWayland::CreateKeyboardHook`, the Keyboard
+  Lock API — which means a page calling `navigator.keyboard.lock()` on a window
+  it asked to make fullscreen. A nested desktop is not fullscreen, and a shell
+  that had to lock keys to own its own Meta chords would be a shell responsible
+  for a property of a window it does not own. Driven by
+  `--domicile-inhibit-host-shortcuts`, which `domicile-launch` passes on the
+  wayland platform and nowhere else: a guard script running `chrome
+  --ozone-platform=wayland` under `under-wayland.sh` is not a desktop and must
+  not swallow the session's keymap.
 - **Minimize edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. Counted over patches `0001`–`0007`, which are
   this design and nothing else, it is **21 files, 15 of them Blink's** — and

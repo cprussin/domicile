@@ -152,6 +152,50 @@ fn a_nested_desktop_does_not_take_over_the_screen() {
 }
 
 #[test]
+fn a_nested_desktop_asks_the_host_compositor_to_stop_reading_the_keyboard() {
+    // WITHOUT THIS A NESTED DESKTOP HAS NO META KEY. The shell's bindings are
+    // all Meta chords, and a host compositor takes those for its own bindings
+    // before the engine's window is ever told a key was pressed -- sway's
+    // default is `shortcuts_inhibitor enable`, which means it honors a client
+    // that asks it to stop, and nothing in the fork was asking. So every
+    // binding the shell claims through `grabShortcut` was untestable in the
+    // one configuration a developer actually runs.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--domicile-inhibit-host-shortcuts".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn a_desktop_with_no_host_compositor_has_nothing_to_inhibit() {
+    // The other half, and the reason this is a switch rather than something
+    // the engine decides for itself. On `drm` there is no host compositor --
+    // the desktop IS the compositor -- and on `headless` there is no session
+    // to be a window inside of. Asking either to stop reading the keyboard is
+    // asking nobody.
+    for platform in ["drm", "headless"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        assert!(
+            !args.contains(&"--domicile-inhibit-host-shortcuts".to_string()),
+            "{platform}: {args:?}"
+        );
+    }
+}
+
+#[test]
 fn the_engine_is_told_where_the_shell_is_and_where_the_compositor_is() {
     // THE THREE THAT REPLACED THE BRIDGE. The page was served over a loopback
     // HTTP port and reached the compositor through a WebSocket on it; now the
