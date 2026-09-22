@@ -52,6 +52,8 @@ COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.5Z  INFO domicile::engine::spike: latency key to pixel: min 17.51, median 18.08, max 43.20 ms over 60 (median 1.1 frames)
 2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 0 round(s) abandoned by the client
 2026-09-07T14:00:00.65Z  INFO domicile::engine::spike: latency: 2 round(s) where the client drew again while polling
+2026-09-07T14:00:00.68Z  INFO domicile::engine::spike: latency: 1 round(s) whose pixel moved before the client answered
+2026-09-07T14:00:00.69Z  INFO domicile::engine::spike: latency: 3 round(s) whose commit came too late to be the key's answer
 2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed
 RUN
 )"
@@ -91,6 +93,25 @@ expect "a run the client redrew during says how often" \
 expect "and the abandoned count is not it" \
   "0" "$(latency_abandoned "$RUN_LOG")"
 
+# A round given up because the probe point changed before the client answered
+# is a third thing again: the client was asked, and what reached the screen was
+# a frame from before the key. Its own line and its own reader for the reason
+# the two above have theirs — all three match `latency: <n> round(s)`, and a
+# reader that took the first of them would report one as another.
+expect "a run whose pixel moved before an answer says how often" \
+  "1" "$(latency_moved "$RUN_LOG")"
+expect "and is neither the abandoned count nor the redrawn one" \
+  "0 2" "$(latency_abandoned "$RUN_LOG") $(latency_redrew "$RUN_LOG")"
+
+# And the fourth, which reads as a measurement until you look at the size of
+# it: the client committed in the right order and the pixel followed, too long
+# after the key for the key to have caused either. Its own line and its own
+# reader for the reason the three above have theirs.
+expect "a run whose commit came too late says how often" \
+  "3" "$(latency_late "$RUN_LOG")"
+expect "and is none of the other three" \
+  "0 2 1" "$(latency_abandoned "$RUN_LOG") $(latency_redrew "$RUN_LOG") $(latency_moved "$RUN_LOG")"
+
 # "Nothing measured" is the compositor's own line for a spread with no samples.
 # It must not read as a number, and it must not read as the previous line's.
 NOTHING="$(log_of "2026-09-07T14:00:00.2Z  INFO domicile::engine::spike: latency floor: min 16.60, median 16.67, max 17.90 ms over 60 (median 1.0 frames)
@@ -124,6 +145,10 @@ expect "and no display frame to divide by" \
   "" "$(latency_display_frame "$EMPTY")"
 expect "and has no abandoned count to report" \
   "" "$(latency_abandoned "$EMPTY")"
+expect "and none of rounds given up before an answer" \
+  "" "$(latency_moved "$EMPTY")"
+expect "and none of rounds whose commit came too late" \
+  "" "$(latency_late "$EMPTY")"
 
 # A control's run, where the client answers no keys.
 CONTROL="$(log_of "2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 3 round(s) abandoned by the client

@@ -214,17 +214,36 @@ fi
 # The compositor logs what viz drew each time it submits.
 #
 # HOW LONG TO WATCH IS NOT THE SAME QUESTION FOR THE TWO RUNS. The guard stops
-# the moment a color appears; 60 is how patient it is willing to be on a slow
-# machine, and it almost never spends it. The control cannot stop early -- with
-# no client there is nothing to appear -- so it spends all 60 every time, which
-# is why it was measured at 2m04 against the guard's 1m05.
+# the moment a color appears and almost never spends its budget; measured on
+# engine run 35496858205, the poll took ~5s of a 1m05 step. The control cannot
+# stop early -- with no client there is nothing to appear -- so it spends the
+# whole thing every time, which is why it was measured at 2m04.
 #
 # So the control waits a multiple of what the guard just measured instead. The
 # two are consecutive steps of one job against one build, so that number is a
 # better statement of "long enough for it to have shown up" than a constant
 # chosen for the worst machine. With no measurement to hand -- a control run on
-# its own -- it is the full 60, exactly as before. See lib-control-budget.sh.
-LOOKS="${LOOKS:-60}"
+# its own -- it is the full budget. See lib-control-budget.sh.
+#
+# THE BUDGET WAS 60 AND THAT IS WHAT WENT RED ON `main`. `crux` runs two jobs
+# at once and both draw on the one render node; the card is locked only around
+# the steps that time something, because a pixel guard beside another client
+# "asks whether a color landed, and a second client on the card makes that
+# slower rather than wrong" (engine.yml). That holds exactly as long as this
+# number outlasts the slowdown. The Chromium tree pool (#485) took an engine
+# run from ~4h of compiling to ~11m that is mostly guards, so the two jobs'
+# pixel phases now overlap almost every time both fire on one commit -- and
+# `Pinned engine` runs 183 and 185 each gave up here at 60s beside a fully
+# overlapping engine run. Run 183's was `Engine` run 504 on the same commit,
+# which was green: the same guard, against the same series, on the same card,
+# passed on the slot that was not the one giving up.
+#
+# 240 is ~48x the quiet-machine measurement and four times what a busy card ate
+# through. It is free on a healthy run for the reason above: the loop breaks on
+# the first sighting. What bounds it is `CLIENT_LIVES_FOR` -- the probe runs on
+# the submit path, so the poll has to end while there is still a client
+# committing frames for it to read.
+LOOKS="${LOOKS:-240}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
 
 DRAWN=""

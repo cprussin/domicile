@@ -90,6 +90,35 @@ latency_redrew() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds were given up because the probe point changed color before
+# the client answered. Empty when the run never said.
+#
+# Its own reader, and its own accusation again: the client was asked and the
+# screen moved anyway, which means a frame from before the key reached it. The
+# round is not a measurement and is not counted as one — so a guard that read
+# only `abandoned` would report a run as whole while it measured fewer rounds
+# than it set out to.
+latency_moved() {
+  local log="$1"
+  grep -a "round(s) whose pixel moved before the client answered" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
+# How many rounds were given up because the client's commit came too long after
+# the key to be its answer. Empty when the run never said.
+#
+# Its own reader, and the accusation that reads least like one: the client
+# committed, in order, and the pixel followed. What is wrong with the round is
+# the size of the wait — a client redrawing on its own committed whatever it
+# was doing, and the round still waiting took it for an answer.
+latency_late() {
+  local log="$1"
+  grep -a "round(s) whose commit came too late to be the key's answer" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # How many rounds this compositor failed to deliver a key for. Empty when the
 # run never said.
 #
