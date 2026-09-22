@@ -115,8 +115,27 @@ APP_ID="${APP_ID:-app-1}"
 # order and far too late. The control's next failure was a dot committing
 # 914.87 ms after the key — 55 display frames — with its pixels one frame
 # behind it, which is `key -> commit -> pixel` with every number positive. The
-# run bounds how long after the key a commit may arrive and still count, in
-# display frames, and gives the round up outside it: `MAX_WAIT_FRAMES`.
+# run brackets how long after the key a commit may arrive and still count, in
+# display frames, and gives the round up outside it: `MAX_WAIT_FRAMES` and
+# `MIN_WAIT_FRAME_SHARE`.
+#
+# AND THEN IT EARNED IT A THIRD TIME, BY SHOWING THAT THE BRACKET IS NOT A
+# SEPARATOR. The control's next failure was a dot committing 121.95 ms after
+# the key — 7.3 frames, inside a bound of eight — which looked like a number
+# that needed tightening. It is not. Every commit either run has ever accepted
+# as a key's answer, in frames:
+#
+#   a client that answers keys, 180 rounds   0.96 .. 2.69
+#   the control's, which answers none        0.05, 0.92, 0.97, 2.48, 7.31
+#
+# Three of the control's five sit inside the range real answers occupy, so no
+# bound on the wait tells one population from the other. What the bracket does
+# is trim the implausible ends, which makes this control a statistical one: it
+# asserts that no round produced a figure, and how often that holds is a matter
+# of where a stray redraw happens to land. Making it deterministic needs a
+# different discriminator — the client's answer identified by the color it was
+# asked to draw, the way `guard-client-window.sh` now waits for its client's
+# own color rather than for any change — and that is not this bracket's job.
 NEGATIVE="${NEGATIVE:-0}"
 
 # How many display frames `commit to pixel` may take. One means "no stage of
@@ -310,13 +329,15 @@ WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
 MOVED="$(latency_moved "$COMP_LOG")"
 LATE="$(latency_late "$COMP_LOG")"
+SOON="$(latency_soon "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
 echo "commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; moved before the answer ${MOVED:-none};"
-echo "answered too late ${LATE:-none}; undelivered ${UNDELIVERED:-none};"
+echo "answered too late ${LATE:-none}; answered too soon ${SOON:-none};"
+echo "undelivered ${UNDELIVERED:-none};"
 echo "drew again while polling ${REDREW:-none}"
 
 if [ "$NEGATIVE" = "1" ]; then
@@ -339,14 +360,14 @@ if [ "$NEGATIVE" = "1" ]; then
          "measuring something other than its own keystrokes"
     exit 1
   fi
-  # Any of the three, because what the control asserts is that the guard gave
+  # Any of the four, because what the control asserts is that the guard gave
   # rounds up rather than which bucket they landed in. The client answers no
   # keys, so whether a round ends as abandoned, as a pixel that moved before
-  # the answer, or as a commit too late to be one is decided by where the
-  # client's own redraw happened to fall — and a control reading only the
-  # bucket that happened to be empty would fail as a flake rather than a
+  # the answer, or as a commit too late or too soon to be one is decided by
+  # where the client's own redraw happened to fall — and a control reading only
+  # the bucket that happened to be empty would fail as a flake rather than a
   # finding. The assertion is unchanged: no figure, and the guard noticed.
-  GAVE_UP=$(( ${ABANDONED:-0} + ${MOVED:-0} + ${LATE:-0} ))
+  GAVE_UP=$(( ${ABANDONED:-0} + ${MOVED:-0} + ${LATE:-0} + ${SOON:-0} ))
   if [ "$GAVE_UP" -lt 1 ]; then
     annotate "guard-latency negative control: no round was given up, so the" \
          "guard would not have noticed a client that answers nothing"
@@ -403,6 +424,19 @@ if [ "${LATE:-0}" -gt 0 ]; then
        "the key for the key to have caused it, so what would have been timed" \
        "is a redraw of the client's own and the run measured fewer rounds than" \
        "it set out to"
+  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# The near end of that same wait, and its own sentence rather than more of the
+# one above. A commit 0.82 ms after the key is not a slow answer, it is a frame
+# the client already had in flight when the key landed — the same stray, caught
+# arriving with the key instead of long after it. See `MIN_WAIT_FRAME_SHARE`.
+if [ "${SOON:-0}" -gt 0 ]; then
+  annotate "guard-latency: $SOON round(s) had the client commit too soon after" \
+       "the key for the key to have caused it, so what would have been timed" \
+       "is a frame the client already had in flight and the run measured fewer" \
+       "rounds than it set out to"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi

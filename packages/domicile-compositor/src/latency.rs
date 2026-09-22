@@ -48,14 +48,22 @@
 //! purely the client's. A number that is a keystroke's and slightly generous
 //! beats one that is neither.
 //!
-//! AND THE WAIT IS BOUNDED, WHICH IS WHAT MAKES THE COMMIT THE KEY'S. Watching
+//! AND THE WAIT IS BRACKETED, WHICH NARROWS WHAT THE COMMIT CAN BE. Watching
 //! the wait catches a pixel that moved before the commit; it says nothing
-//! about a commit that arrives in the right order but far too late to have
-//! been caused by the key. A client that redraws on its own eventually commits
+//! about a commit that arrives in the right order and at an implausible
+//! distance from the key. A client that redraws on its own eventually commits
 //! whatever it is doing, and that commit lands on a round that is still
 //! waiting. So a round gives up on any commit later than
 //! [`MAX_WAIT_FRAMES`] display frames after the press — see
-//! [`Report::answered_too_late`].
+//! [`Report::answered_too_late`] — and on any commit sooner after it than one
+//! display frame over [`MIN_WAIT_FRAME_SHARE`], which is the same stray
+//! arriving with the key instead of long after it — see
+//! [`Report::answered_too_soon`].
+//!
+//! **This brackets the wait; it does not separate the populations.** Commits
+//! that no key caused have been accepted at 0.9, 1.0 and 2.5 frames, which is
+//! where real answers live. [`MAX_WAIT_FRAMES`] carries the readings. What
+//! rests on this is therefore a matter of how often, not of whether.
 //!
 //! Frames rather than milliseconds, because that is the unit everything else
 //! here is read in and a desktop at another refresh moves the bound with it.
@@ -229,12 +237,18 @@ pub struct Report {
     /// happened is that a client redrawing on its own committed whatever it
     /// was doing, and the round that was still waiting took it for an answer.
     ///
-    /// The bound is [`MAX_WAIT_FRAMES`] display frames, and the two
-    /// populations it separates are nowhere near each other: over sixty rounds
-    /// against a client that does answer, the worst press-to-commit measured
-    /// was 2.6 frames, and the round that produced a commit-to-pixel figure
-    /// out of a client answering nothing waited 55.
+    /// The bound is [`MAX_WAIT_FRAMES`] display frames, and it does **not**
+    /// separate the two populations — the readings that say so are there.
     pub answered_too_late: usize,
+    /// Rounds given up because the client's commit arrived too soon after the
+    /// key to be an answer to it.
+    ///
+    /// **Its own count, and not `answered_too_late`.** The same thing happened
+    /// — a client redrawing on its own committed whatever it was doing, and
+    /// the round waiting took it for an answer — but a report that called a
+    /// commit 0.82 ms after the key "too late" would send whoever read it to
+    /// look for a slow client. The bound is [`MIN_WAIT_FRAME_SHARE`].
+    pub answered_too_soon: usize,
     /// Rounds whose key was never delivered, because there was no surface to
     /// deliver it to.
     ///
@@ -389,13 +403,54 @@ const MAX_REFUSALS_RUNNING: usize = 8;
 /// is right and every number is positive, which is why nothing else here
 /// catches it.
 ///
-/// Eight, from the measurement rather than from taste. Against a client that
-/// answers keys, the worst press-to-commit over sixty rounds was 44.11 ms —
-/// 2.6 frames — so this leaves three times the worst real round; against the
-/// control's client, which answers none, the commit that was being taken for
-/// an answer arrived 914.87 ms after the key, 55 frames. Nothing measured
-/// lands between the two.
-const MAX_WAIT_FRAMES: u32 = 8;
+/// **IT IS NOT A DISCRIMINATOR, AND WAS WRITTEN AS ONE.** Eight was chosen
+/// from two readings that were nowhere near each other — a worst real round of
+/// 2.6 frames and a stray at 55 — on the assumption that nothing lands
+/// between. Six `Engine` runs say otherwise. Every figure below is a commit
+/// this bound *accepted* as a key's answer, in display frames:
+///
+/// ```text
+///   a client that answers keys, 180 rounds over three jobs
+///     0.96 .. 2.69      (15.93 .. 44.76 ms, medians 1.98 .. 2.00)
+///   the control's client, which answers none
+///     0.05, 0.92, 0.97, 2.48, 7.31   (0.82, 15.38, 16.16, 41.38, 121.95 ms)
+/// ```
+///
+/// The two overlap: 0.92, 0.97 and 2.48 frames are strays sitting inside the
+/// range real answers occupy. No value of this separates them, so it does not
+/// decide whether a round is a measurement — it only trims the part of the
+/// stray population that is implausible as a keystroke's answer, which
+/// narrows the window a stray has to land in from two thirds of the control
+/// client's 200 ms redraw period to a half. What the negative control asserts
+/// is therefore still statistical, and what would make it deterministic is
+/// somewhere else: see `guard-latency.sh`.
+///
+/// Six, then, rather than eight, and the trade is stated rather than implied.
+/// It is 100.00 ms against a worst real round of 44.76 ms over 180 — 2.2
+/// times, down from the 3 times eight left — and it catches the 7.31-frame
+/// stray above with 22% to spare. Both margins are thinner than the numbers
+/// they replaced, and the offender they are fitted to is one sample.
+const MAX_WAIT_FRAMES: u32 = 6;
+
+/// The share of one display frame a commit must be at least this long after
+/// the key to be read as the answer to it: a commit sooner than
+/// `frame / MIN_WAIT_FRAME_SHARE` arrived with the key rather than because of
+/// it.
+///
+/// The near end of [`MAX_WAIT_FRAMES`]' wait, and the same accusation from the
+/// other side. The clock starts before the key is delivered, so a round has to
+/// contain this compositor's dispatch, the client waking, a repaint and a
+/// commit; the same control that produced the 7.31-frame stray also produced
+/// one at 0.82 ms, which is none of that happening. A stray landing this close
+/// to the key is the more dangerous end, because the figure it produces reads
+/// as fast rather than as absurd.
+///
+/// An eighth, which on a 16.67 ms frame is 2.08 ms. In frames because every
+/// bound here is — a millisecond threshold would be one on whatever else the
+/// runner was doing — and generous because the cost of being wrong is a
+/// flaky positive guard: the fastest press-to-commit ever measured against a
+/// client that answers keys is 15.93 ms, 7.6 times this.
+const MIN_WAIT_FRAME_SHARE: u32 = 8;
 
 /// How many probe answers a round waits through before giving up on it.
 ///
@@ -531,6 +586,7 @@ pub struct Latency {
     abandoned: usize,
     moved_before_commit: usize,
     answered_too_late: usize,
+    answered_too_soon: usize,
     redrew_while_polling: usize,
     undelivered: usize,
 }
@@ -566,6 +622,7 @@ impl Latency {
             abandoned: 0,
             moved_before_commit: 0,
             answered_too_late: 0,
+            answered_too_soon: 0,
             redrew_while_polling: 0,
             undelivered: 0,
         }
@@ -743,6 +800,9 @@ impl Latency {
                 if waited > self.frame * MAX_WAIT_FRAMES {
                     self.answered_too_late += 1;
                     self.end_round();
+                } else if waited < self.frame / MIN_WAIT_FRAME_SHARE {
+                    self.answered_too_soon += 1;
+                    self.end_round();
                 } else {
                     self.key_to_commit.push(waited);
                     self.phase = Phase::Polling {
@@ -855,6 +915,7 @@ impl Latency {
             abandoned: self.abandoned,
             moved_before_commit: self.moved_before_commit,
             answered_too_late: self.answered_too_late,
+            answered_too_soon: self.answered_too_soon,
             redrew_while_polling: self.redrew_while_polling,
             undelivered: self.undelivered,
             ended,
@@ -1297,21 +1358,119 @@ mod tests {
     }
 
     /// The other side of the bound, and what stops it being a tighter guard
-    /// than the thing it guards. The positive run's worst press-to-commit over
-    /// sixty rounds was 44.11 ms against a 16.67 ms frame — 2.6 of them — so a
-    /// round that slow is a real client thinking and must still be measured.
+    /// than the thing it guards. The worst press-to-commit measured against a
+    /// client that answers keys is 44.76 ms over 180 rounds — 2.69 frames
+    /// against a 16.67 ms frame — so a round that slow is a real client
+    /// thinking and must still be measured. This is the whole of the headroom
+    /// [`MAX_WAIT_FRAMES`] leaves, and the reason it cannot be tightened
+    /// further to chase the strays that sit under it.
     #[test]
     fn a_commit_a_few_frames_after_the_key_is_still_its_answer() {
+        let worst = Duration::from_micros(44_760);
         let mut driver = Driver::new(1, 3, 10);
         driver.reach_first_press(ms(17));
-        driver.round(ms(44), ms(16));
+        driver.round(worst, ms(16));
 
         let report = driver.latency.report().unwrap();
-        assert_eq!(report.key_to_commit.unwrap().median, ms(44));
+        assert_eq!(report.key_to_commit.unwrap().median, worst);
         assert_eq!(report.commit_to_pixel.unwrap().median, ms(16));
         assert_eq!(
             report.answered_too_late, 0,
-            "three times the worst real round is the headroom the bound leaves"
+            "2.2 times the worst real round is the headroom the bound leaves"
+        );
+    }
+
+    /// Engine run 35681982140, on `main` at `a00aa00`, and the reason the
+    /// bound above is not the separator it was written as. The control's
+    /// client answers no keys and redraws on its own; one of those redraws
+    /// committed 121.95 ms after a key — 7.3 display frames, inside a bound of
+    /// eight — and its pixels followed 38.02 ms later:
+    ///
+    /// ```text
+    ///   key to commit    min 0.82, median 121.95, max 121.95 ms over 2
+    ///   commit to pixel      38.02 ms over 1
+    ///   key to pixel        159.97 ms over 1  (9.6 frames)
+    ///   0 answered too late
+    /// ```
+    ///
+    /// Every number is positive and in the right order, so nothing else here
+    /// catches it, and the control was handed a commit-to-pixel figure out of
+    /// a client that answered nothing.
+    #[test]
+    fn a_commit_seven_frames_after_the_key_is_not_its_answer() {
+        let mut driver = Driver::new(1, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        let keyed = driver.now;
+
+        // The probe point holds still through the wait, as it did there: the
+        // control's dots go to the top-left and the probe watches the center.
+        for _ in 0..6 {
+            assert_eq!(driver.tick(ms(0)), Step::Sample);
+            driver.answer(ms(17));
+        }
+
+        driver.now = keyed + Duration::from_micros(121_950);
+        driver.latency.committed(driver.now);
+        driver.tick(ms(0));
+        driver.color = 0xFF44_4444;
+        driver.answer(Duration::from_micros(38_020));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(
+            report.commit_to_pixel, None,
+            "a redraw the key did not cause cannot be timed to the key's pixel"
+        );
+        assert_eq!(
+            report.key_to_commit, None,
+            "nor is 7.3 frames what this client's toolkit costs to think"
+        );
+        assert_eq!(
+            report.answered_too_late, 1,
+            "a round given up is counted, not quietly missing from the run"
+        );
+    }
+
+    /// The near end of the same wait, from the same run's report: a commit
+    /// 0.82 ms after the key. The clock starts before the key is delivered, so
+    /// a round this fast is the compositor's own dispatch, the client waking,
+    /// a repaint and a commit inside one millisecond — which no toolkit does.
+    /// The fastest press-to-commit ever measured against a client that *does*
+    /// answer is 15.93 ms.
+    ///
+    /// It is the same accusation as the round above, from the other side: a
+    /// client redrawing on its own committed whatever it was doing, and a
+    /// round took it for an answer. A stray landing this close to the key is
+    /// the more dangerous of the two, because the figure it produces looks
+    /// fast rather than absurd.
+    #[test]
+    fn a_commit_that_arrives_with_the_key_is_not_its_answer() {
+        let mut driver = Driver::new(1, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+
+        driver.now += Duration::from_micros(820);
+        driver.latency.committed(driver.now);
+        driver.tick(ms(0));
+        driver.color = 0xFF44_4444;
+        driver.answer(Duration::from_micros(38_020));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(
+            report.commit_to_pixel, None,
+            "a frame already in flight cannot be timed to the key's pixel"
+        );
+        assert_eq!(
+            report.key_to_commit, None,
+            "nor is 0.82 ms a client reading a key and redrawing"
+        );
+        assert_eq!(
+            report.answered_too_late, 0,
+            "and what was wrong with it was not that it came late"
+        );
+        assert_eq!(
+            report.answered_too_soon, 1,
+            "a round given up is counted, not quietly missing from the run"
         );
     }
 
