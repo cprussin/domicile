@@ -1,10 +1,13 @@
 name: Cargo test
+
+# The cargo workspace: `fmt`, `clippy -D warnings` and `test`, which is what
+# /docs/guidelines/RUST.md names as the required checks and what
+# `./scripts/check.sh rust` runs.
 on:
   pull_request:
   push:
     branches: [main]
 
-# Superseded pushes shouldn't keep a full build running.
 concurrency:
   group: cargo-test-${{ github.ref }}
   cancel-in-progress: true
@@ -12,93 +15,35 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  # Nothing in this group may skip: the toolchain is installed below and the
+  # libraries the compositor links are installed with it, so a skip here is a
+  # check that stopped running rather than a fact about the runner.
+  DOMICILE_CHECK_STRICT: "1"
 
 jobs:
-  # The pure-logic crates: everything in the cargo workspace's `default-members`.
-  # No graphics or Wayland stack needed, so this stays fast.
-  core:
+  # ONE JOB, WHERE THIS WAS TWO. The split was `core` over the workspace's
+  # `default-members` and `compositor` over the one crate left out of them,
+  # because only that crate needs `libxkbcommon` and `libwayland` and installing
+  # them for the rest was a minute nobody needed. What it cost was a third
+  # definition of "the Rust checks" — `check.sh rust` runs `--workspace`, these
+  # two ran `default-members` and then `-p domicile-compositor`, and whether the
+  # three agreed was something a person had to work out by reading all of them.
+  #
+  # `--workspace` needs the libraries, so the libraries are installed once here
+  # and the parallelism goes. That is wall-clock on a runner nobody is waiting
+  # for, against one list instead of three.
+  workspace:
     runs-on: ubuntu-latest
-    # A job with no ceiling sits on a wedged runner until GitHub's six-hour
-    # default, which reads as "still running" rather than as a failure.
-    # Neither of these takes two minutes when the network is well.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # Formatting is checked once, here, for the whole workspace — including
-      # the crates the compositor job builds.
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
-
-  # domicile-compositor is excluded from `default-members` because it pulls
-  # Smithay; it gets its own job so a failure here is distinguishable from a
-  # core-logic failure. Only libxkbcommon and libwayland are needed to link —
-  # Domicile does not build Smithay's GL/DRM/winit backends, since the web
-  # engine is the renderer. That was written before it was true: the crate
-  # carried `backend_winit` for the presented path until that path was deleted.
-  compositor:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      # libxkbcommon links the seat and libwayland is the frontend. The X11
-      # client libraries went with Smithay's winit backend, which was only ever
-      # there for `--present` — the compositor has no window of its own now.
-      # No GL stack here on purpose — the tests needing one are `#[ignore]`d
-      # and run from the `e2e` job, which has a graphics stack.
-      #
-      # Retried, with a deadline on each attempt. A stalled apt mirror is the
-      # commonest way this job fails and it fails by *hanging*, so a plain
-      # `apt-get` can burn the whole job budget getting nowhere.
-      #
-      # Five minutes an attempt, not one or two: this step is usually 11-13s
-      # but its tail is heavy, and runs taking 1m45s, 2m41s and 7m36s have all
-      # *succeeded*. A deadline inside that distribution trades a rare hang for
-      # a regular red build, and retrying does not help a merely-slow mirror —
-      # each attempt starts `apt-get update` again from nothing.
-      #
-      # `--kill-after` because `timeout` alone does not guarantee its own
-      # deadline: it sends TERM and then waits for the process to go, forever
-      # if the process does not. Real apt honors TERM, but a wedged one on
-      # dead network storage is the case this exists for.
-      #
-      # Three attempts at five minutes plus backoff is 15m15s, or 15m45s if
-      # every attempt has to be killed — the grace is added to the deadline,
-      # not taken out of it. Both sit inside the 20-minute job cap, which is
-      # the real backstop.
       - name: Install the libraries the compositor links
-        run: |
-          install() {
-            sudo apt-get update \
-              && sudo apt-get install -y \
-                libxkbcommon-dev libwayland-dev
-          }
-          for attempt in 1 2 3; do
-            if timeout --kill-after=10 300 bash -c "$(declare -f install); install"; then
-              exit 0
-            fi
-            echo "::warning::apt attempt $attempt failed or timed out" >&2
-            # Not after the last one: a total outage should say so rather than
-            # sit idle for fifteen seconds first.
-            if [ "$attempt" -lt 3 ]; then
-              sleep $((attempt * 5))
-            fi
-          done
-          echo "::error::apt did not succeed in three attempts" >&2
-          exit 1
-      - run: cargo clippy -p domicile-compositor --all-targets -- -D warnings
-      # No separate build of the Wayland client these tests start: the
-      # `domicile-test-client` binary is a target of `domicile-compositor`
-      # (its code is still `domicile-test-client`'s), so cargo builds it with
-      # the tests that spawn it. It used to be asked for on a line of its own,
-      # which meant `cargo test -p domicile-compositor` failed for anyone who
-      # ran only that.
-      - run: cargo test -p domicile-compositor
+        run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev
+
+      # `check.sh` installs no node_modules for this group, because nothing in
+      # it reads one — which is why there is no bun set up above.
+      - run: ./scripts/check.sh rust

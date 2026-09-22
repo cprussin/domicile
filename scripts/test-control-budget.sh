@@ -173,10 +173,14 @@ expect "and a stale one is still rejected without find" 90 "$(budget shell 90)"
 
 # --- the two steps of one job ------------------------------------------------
 
-# WHERE THE NOTE GOES IS THE WHOLE POINT, and it is what this got wrong. A
-# guard and its control are two steps of one job, and on the runner each step
-# is its own `nix develop .#full --command`. The rc script `nix develop` writes
-# ends in
+# WHERE THE NOTE GOES IS THE WHOLE POINT, and it is what this got wrong. A guard
+# and its control run inside `nix develop .#full --command`, and there are
+# callers where each of them is its own invocation of it -- `pinned-engine.yml`,
+# `engine-release.yml`, and a person running one guard by hand. (`engine.yml` is
+# no longer one of them: its checks are a single `check.sh engine` inside one
+# shell now. The case below is still the one that decides, because it is the
+# arrangement the other callers have.) The rc script `nix develop` writes ends
+# in
 #
 #   export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"
 #   export TMPDIR="$NIX_BUILD_TOP"      # and TMP, TEMP, TEMPDIR

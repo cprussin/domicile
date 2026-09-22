@@ -205,14 +205,30 @@ jobs:
       - name: Take the render node
         run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
 
+      # The same check `check.sh engine` runs against the tree engine.yml
+      # builds, pointed at the store path instead — which IS an out directory
+      # rather than a tree with one inside it, so `DOMICILE_ENGINE_OUT` is `.`.
+      # `scripts/lib/engine-guard.sh` is where those two variables are read.
+      #
+      # One check rather than the whole group, and deliberately: what this job
+      # asks is whether the engine the checkout PINS still meets the compositor
+      # the checkout carries, and a client's window on the page is the whole of
+      # that. It runs its own control, which is why there is one step here and
+      # not two.
+      #
+      # AND NO NEGATIVE CONTROL, which is why `DOMICILE_GUARD_CONTROL=0` is
+      # here: the check runs its guard and its control by default, because that
+      # is what makes it a check, and this caller is one of the two that said in
+      # prose it did not want the second run. `engine.yml` already runs this
+      # guard with `NEGATIVE=1`, the property belongs to the guard rather than to
+      # either caller, and a second copy here would buy nothing and spend ~65s
+      # of every pull request twice.
       - name: The pinned engine draws a client's window on the page
-        env:
-          OUT: .
         run: |
           set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$ENGINE" \
-            packages/domicile-engine/scripts/guard-client-window.sh "$ENGINE"
+          DOMICILE_CHROMIUM="$ENGINE" DOMICILE_ENGINE_OUT=. \
+            DOMICILE_GUARD_CONTROL=0 \
+            nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       # Even when the guard failed, and even when this run is being canceled --
       # which this job's concurrency group now does -- because a lock left

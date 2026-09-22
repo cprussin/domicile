@@ -46,6 +46,16 @@ on:
     # find out would be a release. Written out twice rather than anchored:
     # GitHub's workflow parser does not resolve YAML anchors.
     #
+    # AND `scripts/` FOR THE SAME REASON ONE LEVEL ALONG, since this job's
+    # assertions no longer live in this file: `scripts/engine-*.sh` are the
+    # checks, `scripts/lib/engine-guard.sh` is which engine they are pointed at
+    # and whether each runs its control, and `scripts/check.sh` is the order
+    # they run in and the group that holds them. A change to any of those
+    # changes what this job asserts, so it has to be a change this job runs on
+    # — the alternative is the pixel suite being edited and proved by nothing.
+    # Named exactly rather than as `scripts/**`: the rest of that directory is
+    # checks for `ubuntu-latest`, and they must never take the `crux` slot.
+    #
     # AND MARKDOWN UNDER THAT PACKAGE IS EXCLUDED, because prose cannot affect
     # a build and this job is the most expensive thing in the repository: it
     # takes the tree on `crux`, waits behind whatever else holds it, and can
@@ -82,6 +92,9 @@ on:
       - "!packages/domicile-engine/engine-release.nix"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
+      - scripts/check.sh
+      - scripts/engine-*.sh
+      - scripts/lib/engine-guard.sh
   pull_request:
     paths:
       - packages/domicile-engine/**
@@ -89,6 +102,9 @@ on:
       - "!packages/domicile-engine/engine-release.nix"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
+      - scripts/check.sh
+      - scripts/engine-*.sh
+      - scripts/lib/engine-guard.sh
   workflow_dispatch:
 
 # Per ref, and never canceled mid-flight.
@@ -241,23 +257,6 @@ jobs:
 
       # TWO SHELLS, AND WHICH ONE A STEP NEEDS IS NOT A DETAIL.
       #
-      # Chromium's own toolchain shell (`$CHROMIUM/tools/nix`) supplies the
-      # host tools `gn` probes for, and applying and building need it.
-      #
-      # Domicile's full shell (`.#full`) is what the pixel guard needs, and it
-      # is not a superset: `engineRuntimeLibs` in flake.nix puts Chromium's
-      # runtime libraries beside the GL stack, and the guard needs both. The GL
-      # stack, or no client can hand the compositor a dmabuf at all; Chromium's,
-      # or libdomicile_engine.so will not load. `guard-client-window.sh` says
-      # so in its own header.
-      #
-      # `--command` does not work with Chromium's shell: upstream's is a
-      # buildFHSEnv whose shellHook execs bwrap before nix's appended `exec` is
-      # reached, so you land in an interactive bash having run nothing.
-      # `NIX_SHELL_RUN` is upstream's own escape hatch for scripting it.
-      # Domicile's shell is an ordinary mkShell, so `--command` is fine there.
-      # See cprussin/dotfiles chromium-build.nix, which measured all of this.
-
       # ONE WRITER AT A TIME IN THAT CHECKOUT, and the reason is not the
       # obvious one. A reset that clobbers somebody's uncommitted work is loud,
       # and the reset step's diagnostic explains it. A reset that lands *during
@@ -383,31 +382,12 @@ jobs:
       - name: Sync the checkout's DEPS to the pin
         run: .github/scripts/engine-sync.sh "$CHROMIUM"
 
-      # NOT through Chromium's shell, and that was a mistake worth naming.
-      #
-      # This step used to enter it with NIX_SHELL_RUN, copied from the build
-      # step below without asking whether it needed to. `apply.sh` is `git`,
-      # `grep`, `cp` and `find` — every one of them already on this unit's
-      # PATH, and not one of them a Chromium host tool. What the wrapper bought
-      # was a sandbox that swallowed the script's exit status AND its output:
-      # five runs failed here saying nothing, and three more were spent
-      # building instruments to find out what.
-      #
-      # Run directly, the exit status is this step's and the error is in this
-      # log. The HEAD check stays anyway: `git am` commits each patch, so a
-      # HEAD still at the pin means the series did not go on, and that is worth
-      # asserting rather than inferring from an exit code.
+      # In a script, which is where the reason it does NOT enter Chromium's
+      # shell is written down, along with the HEAD check that says the series
+      # actually went on. See .github/scripts/engine-apply.sh.
       - name: Apply the series
         if: ${{ steps.series.outputs.carries != 'true' }}
-        run: |
-          set -euo pipefail
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
-          [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
-            echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
-            exit 1
-          }
-          echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) patches"
+        run: .github/scripts/engine-apply.sh "$CHROMIUM"
 
       # AFTER THE APPLY AND BEFORE THE BUILD, so that a run which dies in the
       # build leaves a stamp describing a tree that is genuinely carrying the
@@ -423,678 +403,72 @@ jobs:
         if: ${{ steps.series.outputs.carries != 'true' }}
         run: .github/scripts/engine-series-stamp.sh record "$CHROMIUM"
 
-      # `build.sh` builds `chrome` and the spike's submitter. The guard also
-      # needs `libdomicile_engine.so` — the compositor dlopens it by name — and
-      # the step below needs `components_unittests`, so both are named here
-      # rather than in `build.sh`, which is what a person runs by hand and
-      # should stay the small thing.
+
+      # `build.sh` builds `chrome` and the spike's submitter. The guards also
+      # need `libdomicile_engine.so` — the compositor dlopens it by name — and
+      # the checks need `components_unittests` and `ozone_unittests`, so all of
+      # them are named in `.github/scripts/engine-build.sh` rather than in
+      # `build.sh`, which is what a person runs by hand and should stay the
+      # small thing.
       #
-      # `components_unittests` is a large link. Domicile's tests are a
-      # `source_set` that patch 0001 registers into it, which is Chromium's own
-      # convention for a component's tests; the alternative is a `test()` target
-      # of our own, and that is worth doing only if this link turns out to
-      # dominate the run.
-      # THE SHELL HAS TO PROVE IT RAN THE COMMAND.
-      #
-      # `NIX_SHELL_RUN` is upstream's documented escape hatch for scripting
-      # this shell, and it was measured working — by a person, at a terminal.
-      # In CI this step returned success in one second, which is not a Chromium
-      # build of any kind, and the artifact check below is what noticed. A
-      # shell that silently runs nothing is the same failure as the apply step
-      # above, one layer along.
-      #
-      # So the command writes a sentinel and the step checks for it. If the
-      # documented mechanism did not run, the commands are piped in on stdin
-      # instead — which is what reaches a `runScript` that turned out to be
-      # a plain bash — and the sentinel is checked again. Whichever worked,
-      # the artifact check after this is still the thing that decides.
+      # Unconditional, where the three steps above are not. A series that has
+      # not moved leaves nothing for the compiler to do and this is ~65s of
+      # siso deciding so; a series that HAS moved was just applied. What the
+      # skip above saves is the reset and the apply rewriting every patched
+      # file, which is what makes this expensive.
       - name: Build
-        run: |
-          set -euo pipefail
-          done=/tmp/domicile-build-ran
-          rm -f "$done"
+        run: .github/scripts/engine-build-in-shell.sh "$CHROMIUM"
 
-          # `<nixpkgs>` has to resolve or the shell builds nothing:
-          # tools/nix/shell.nix imports it, and a systemd service has no
-          # NIX_PATH — that is something NixOS arranges for an interactive
-          # user, and this unit is not one. Without it nix-shell says "uses
-          # bash from your environment" and hands the script an ambient shell
-          # with no toolchain in it.
-          #
-          # From the flake registry rather than written down, because the
-          # registry is what pins nixpkgs on this machine and a second copy of
-          # that pin here would be a second thing to keep true.
-          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
-          echo "nixpkgs is $nixpkgs"
-          export NIX_PATH="nixpkgs=$nixpkgs"
-
-          # `nix-shell` with the shell.nix, which is the form under-wayland.sh
-          # and guard-client-window.sh use and the only one that has ever run
-          # on this machine. `nix develop path:` wants a flake.nix and this
-          # directory ships a shell.nix; it entered nothing and exited 0, which
-          # was indistinguishable from success until the sentinel existed.
-          #
-          # A path, not a command: everything in NIX_SHELL_RUN is re-quoted
-          # twice on its way in.
-          if NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-build.sh $CHROMIUM $done" \
-               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
-            echo "the shell exited 0"
-          else
-            echo "the shell exited $?"
-          fi
-          # A compiler error is *above* siso's summary, never in it: the
-          # summary says how many steps failed and not which line of which
-          # file. Twenty-five lines caught the tail of the progress spinner and
-          # the resource table, so a build failure cost a whole cycle on the
-          # shared tree to learn nothing — which is what it just did.
-          #
-          # The diagnostics first, so they are at the top of the group whatever
-          # the tail holds, then the tail for context. `|| true` because grep
-          # finding nothing is not this step's failure; the build already
-          # failed and `set -e` would swallow the tail below.
-          grep -aE 'error:|FAILED:|ninja: build stopped|Error:' /tmp/domicile-shell.log |
-            tail -40 | sed 's/^/  E /' || true
-          tail -120 /tmp/domicile-shell.log | sed 's/^/  | /'
-
-          [ -e "$done" ] || {
-            echo "::error::Chromium's shell did not run the build; its last words are above" >&2
-            exit 1
-          }
-
-      # WHETHER THE BUILD ABOVE ACTUALLY BUILT, asked out here rather than
-      # trusted from in there.
+      # EVERY ASSERTION THIS JOB MAKES, IN ONE COMMAND, and none of them
+      # defined here. `scripts/check.sh engine` runs the artifact check, the two
+      # gtest suites and the thirteen guard checks with their eleven controls,
+      # in that order and stopping at the first failure — which is what the
+      # thirty steps this replaced achieved by aborting the job, and is worth
+      # keeping because `crux` has one tree slot and the guards are most of the
+      # eleven minutes an engine run takes when the pin has not moved.
       #
-      # `nix develop` is entered with NIX_SHELL_RUN because upstream's shell is
-      # a buildFHSEnv whose shellHook execs bwrap — and a command run that way
-      # does not reliably carry its exit status back out. A failed `autoninja`
-      # can therefore leave this step green, and what runs next is then the
-      # previous build: the guards load a `libdomicile_engine.so` that is
-      # older than the source they were changed to test.
+      # THE POINT OF THE CHANGE IS THAT THIS IS RUNNABLE. A person on `crux`
+      # with the tree warm types the same command and gets the same suite;
+      # before, the only definition of it was this file, and
+      # `guard-css-and-resize.sh` had never been run by anything but a person
+      # retyping forty lines of YAML by hand. The floors for the DRM suites
+      # were written out twice, here and in engine-drm-probe.yml, and the two
+      # copies had parted — `DrmScreenTest:26` against `:18` — which is what
+      # that costs.
       #
-      # That is not a hypothetical. It is what happened: the two-window guard
-      # spent five runs reporting that nothing drew, because the library it
-      # loaded had been built before the probe grew a coordinate, and the
-      # compositor's `dlsym` for the new entry point returned nothing.
+      # `.#full` once, around the group, rather than once per check: it is the
+      # shell every one of them needs, and thirty entries into it were thirty
+      # shell startups. The one check that needs Chromium's
+      # toolchain shell instead enters it itself, and says why in its own
+      # header.
       #
-      # The symbols are matched as bytes rather than with `nm`, which is not on
-      # this unit's PATH out here. A name absent from the file is certainly not
-      # exported from it, which is the direction that matters.
-      - name: The build produced what the guards load
-        run: |
-          set -euo pipefail
-          out="$CHROMIUM/out/Domicile"
-          for artifact in chrome libdomicile_engine.so components_unittests \
-                          ozone_unittests \
-                          domicile_css_parity domicile_color_probe; do
-            [ -e "$out/$artifact" ] || {
-              echo "::error::the build produced no $artifact" >&2
-              exit 1
-            }
-          done
-          ls -l "$out/chrome" "$out/libdomicile_engine.so"
-
-          missing=""
-          for symbol in domicile_engine_connect \
-                        domicile_engine_spike_sample_window_center \
-                        domicile_engine_spike_sample_pixel \
-                        domicile_engine_spike_find_color; do
-            grep -qa "$symbol" "$out/libdomicile_engine.so" || missing="$missing $symbol"
-          done
-          [ -z "$missing" ] || {
-            echo "::error::libdomicile_engine.so is missing:$missing — it is older than the source. The build did not fail loudly enough." >&2
-            exit 1
-          }
-          echo "libdomicile_engine.so exports what the compositor looks up"
-
-      # The browser's own unit tests. These are the cheapest thing that can
-      # fail and the only ones that exercise the broker's bookkeeping directly
-      # — a surface brokered per app, an embed held for the app it names — so
-      # they run before the pixel assertion, which takes longer and says less
-      # about why.
+      # THE RENDER NODE IS TAKEN INSIDE THE LATENCY CHECK, not around this
+      # step. Holding the card for the whole group would be most of ten minutes
+      # of guards that do not need it, which is the one-queue arrangement the
+      # second job slot exists to leave — see
+      # .github/scripts/engine-render-node-lock.sh. `scripts/engine-guard-latency.sh`
+      # takes it around its own measurement and its control and drops it from a
+      # trap, which is this job's `if: always()` expressed where the lock now
+      # lives.
       #
-      # Filtered rather than run whole: `components_unittests` is every
-      # component's tests, and the rest of them are upstream's business.
-      #
-      # From the full shell and from inside the out directory, for the same two
-      # reasons: this is a component build, so the binary loads its own .so
-      # files from beside it, and the shell is where Chromium's runtime
-      # libraries are. `#full` is spelled against $GITHUB_WORKSPACE rather than
-      # `.` because this step is not in the workspace.
-      - name: The engine's unit tests
-        working-directory: /build/chromium/src/out/Domicile
-        run: |
-          set -euo pipefail
-          # `ShellURLLoaderFactoryTest` and `ShellDocumentTest` were in the
-          # build and not in this list, so they were compiled on every run and
-          # executed on none — which is the same silent pass the count check
-          # below exists to catch, arriving by the other door. Between them
-          # they are what refuses a path traversal out of the shell root and
-          # what pins the one document every desktop is.
-          filter='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*'
-          # `--gtest_filter` matching nothing exits 0, so a suite that was
-          # renamed or never linked would be a silent pass. Test names are the
-          # indented lines of --gtest_list_tests; suite names are not.
-          count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
-            ./components_unittests --gtest_filter="$filter" --gtest_list_tests |
-            grep -cE '^  ' || true)
-          echo "$count tests match $filter"
-          # Every suite in the filter, counted rather than estimated:
-          # FrameSinkBroker 17, WindowDiff 7, EngineEventQueue 6,
-          # ShortcutRegistry 7, ShellURLLoaderFactory 11, ShellDocument 11,
-          # ShellSource 3, CursorShape 3, CommandProtocol 8,
-          # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8.
-          #
-          # 90, and it was 82 — which displays want a shell window is eight
-          # ShellWindows cases, a suite of its own and so in the filter as well
-          # as in the sum. Before that it was 79 — the layout a producer states
-          # back is three more FrameSinkBroker cases. Before that it was 77 — the name a display list now carries, which is
-          # what an output profile matches a monitor on, is two more
-          # DomicileDisplayList cases. Before that it was 74 — the keymap the compositor sends is three
-          # DomicileKeyboardLayout cases, a suite of its own and so in the
-          # filter as well as in the sum. Before that it was 70, which the
-          # panel a display list now carries moved, and 66 before that, which
-          # the display list itself did, and 46 before THAT, which was not
-          # drift: WindowDiffTest and EngineEventQueueTest had always been in
-          # the filter and were never in the sum, so the floor sat 12 below the
-          # truth and a whole suite could have stopped linking with room to
-          # spare. That is the failure this check exists to catch, so the
-          # number is the real one.
-          [ "$count" -ge 90 ] || {
-            echo "::error::only $count tests matched; the suites were renamed or did not link" >&2
-            exit 1
-          }
-          nix develop "$GITHUB_WORKSPACE#full" --command \
-            ./components_unittests --gtest_filter="$filter"
-
-      # The DRM platform's own tests, which until now ran nowhere a pull
-      # request could see. They were executed by engine-drm-probe.yml, which is
-      # workflow_dispatch only, and that was not an oversight: this build named
-      # only wayland and headless, so DrmScreenTest and DrmModesetTest were not
-      # in any binary it produced and could not be. `ozone_platform_drm = true`
-      # changed that, and a test that runs on demand is a test that runs after
-      # the change that broke it has already landed.
-      #
-      # Filtered to the suites this fork wrote, for the reason the step above
-      # is filtered: the rest of ozone_unittests is upstream's business. The
-      # probe still runs the whole suite, which is where a regression we caused
-      # in upstream's own cases would show up -- the two jobs ask different
-      # questions and this is the cheap one.
-      #
-      # ONE FLOOR PER SUITE. A floor over the total would let one suite's cases
-      # pay for another's disappearance, and `--gtest_filter` matching nothing
-      # exits 0, so a suite that stopped linking is otherwise a silent pass.
-      - name: The DRM platform's unit tests
-        working-directory: /build/chromium/src/out/Domicile
-        run: |
-          set -euo pipefail
-          for suite_and_floor in 'DrmScreenTest:26' 'DrmModesetTest:22' 'DrmVtSwitcherTest:18' 'DrmSleepTest:2' 'DrmFullscreenTest:4' 'DrmMasterTest:7' 'DrmInputDevicesTest:25' 'DrmCursorFactoryTest:4' 'DrmEdidSerialTest:18'; do
-            suite="${suite_and_floor%%:*}"
-            floor="${suite_and_floor##*:}"
-            count=$(nix develop "$GITHUB_WORKSPACE#full" --command \
-              ./ozone_unittests --gtest_filter="$suite.*" --gtest_list_tests |
-              grep -cE '^  ' || true)
-            echo "$count $suite cases (floor $floor)"
-            [ "$count" -ge "$floor" ] || {
-              echo "::error::only $count $suite cases; the suite was renamed or did not link" >&2
-              exit 1
-            }
-          done
-          nix develop "$GITHUB_WORKSPACE#full" --command \
-            ./ozone_unittests --gtest_filter='DrmScreenTest.*:DrmModesetTest.*:DrmVtSwitcherTest.*:DrmSleepTest.*:DrmFullscreenTest.*:DrmMasterTest.*:DrmInputDevicesTest.*:DrmCursorFactoryTest.*:DrmEdidSerialTest.*'
-
-      # The guard's producer. Built here rather than by the script, which only
-      # checks for it — and the runner deletes its work directory when the
-      # unit starts, so the first job after every restart or deploy finds no
-      # `target/` at all. Later jobs in the same session do reuse it.
-      - name: Build the compositor
-        run: nix develop .#full --command cargo build -p domicile-compositor
-
-      # The guard. A real Wayland client draws a color, the compositor submits
-      # its buffer to the engine, and the page's canvas is read back — the one
-      # check that says a client's own pixels reach the page.
-      #
-      # `under-wayland.sh` starts a headless wlroots compositor for the engine
-      # to be a client of, because `--ozone-platform=headless` cannot import a
-      # dmabuf at all.
-      - name: A client's window on the page
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
-
-      # A guard that cannot fail is not a guard. The same run with no client
-      # must report that nothing drew.
-      - name: The guard can still fail
+      # `DOMICILE_CHECK_STRICT=1` because on this machine there is nothing a
+      # check here may legitimately skip: the tree is warm, the GPU is real and
+      # the render node is there. A skip is a check that stopped running, and
+      # this is the one runner where that can be said without exceptions.
+      - name: The engine's checks
         env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
-
-      # Two clients, two windows, one page — the claim the broker's unit tests
-      # cannot make for themselves. They assert that two apps get two sinks;
-      # whether viz then resolves two SurfaceDrawQuads in one aggregation is a
-      # different question, and a shell is a desktop of windows.
-      - name: Two clients' windows on one page
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-two-windows.sh "$CHROMIUM"
-
-      # Its control is sharper than the one above, and it is the one that would
-      # have caught the heuristic this replaced: with a single client running,
-      # the second canvas must show its own fallback rather than the first
-      # client's window. A broker that dispatched on nothing would pass the
-      # two-client run and fail this.
-      - name: The second window is not the first
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-two-windows.sh "$CHROMIUM"
-
-      # And the thing all of the above is for. Every guard before it drives a
-      # page written for the guard; this one drives shell-simple, built by its
-      # own vite config, joined to the compositor by the SDK's own
-      # `connectToHost` over a WebSocket to the bridge serving it, and
-      # mounting an `<app>` for a window it learned about from the
-      # host. Three things that have each failed on their own, and none of
-      # which any other guard touches.
-      #
-      # It asserts that the client's color is somewhere in the browser's
-      # window rather than at a point, because the shell decides where its
-      # windows go and a coordinate here would be asserting shell-simple's CSS.
-      - name: A shell on the fork, showing a real client's window
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM"
-
-      # Its control: the same run with the client drawing a different color.
-      # Not "no client", because the probe only runs when a client commits, so
-      # a run with nothing to submit would pass while measuring nothing.
-      - name: The shell guard is looking at the client's pixels
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM"
-
-      # The other shell, and the reason it is here rather than assumed: nothing
-      # about `simple` passing says `manganese` does. It is the desktop this
-      # project is actually for, and it is built from a different page — a
-      # component library consumed as source, with its own panda codegen — so
-      # `build:vite`'s `^prepare` edge is load-bearing for it in a way it is
-      # not for `simple`. A shell that fails to build is a shell that shows
-      # nothing.
-      #
-      - name: The desktop this is for, on the fork
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM" manganese
-
-      # AND ITS OWN CONTROL, which the first version of this argued was not
-      # needed because a control is a property of the guard and `simple`'s
-      # establishes it for both. That is wrong, and it is wrong in the
-      # direction that matters. `engine found` is satisfied by a single pixel
-      # of the color anywhere in the browser's window, so what a control
-      # actually establishes is a joint fact about the guard AND the page under
-      # it: that this page does not paint the search color by itself.
-      # `simple`'s page is a bare desktop and cannot; manganese's is a whole
-      # component library with tokens derived by `color-mix`, and a run where
-      # the client's window never lands but one chrome pixel matches is green
-      # with nothing measured. This is the step that says otherwise, and it is
-      # not interchangeable with the other one.
-      - name: The manganese guard is looking at the client's pixels
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-shell.sh "$CHROMIUM" manganese
-
-      # A <webview> showing a site that refuses to be framed, which is the one
-      # thing patch 0007 said it could not do. No nested compositor and no
-      # client: the colors this looks for are a page's own, so headless and
-      # software-composited is the whole environment it needs.
-      - name: A site that refuses framing, in a <webview>
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
-
-      # Its control, and it is two runs rather than one: an <iframe> on an
-      # ordinary http page framing a copy of the site that permits framing,
-      # which MUST show it, and then the same frame on the same page framing
-      # the copy that refuses, which must show NOTHING. The two copies differ
-      # only in X-Frame-Options and frame-ancestors, so the difference between
-      # the runs is a reading of those headers — where a run that only ever
-      # measured an absence cannot tell "the site is refused" from "this
-      # harness cannot draw a framed page at all". The positive run cannot tell
-      # those apart from the inside either, which is why the control exists.
-      - name: The framing guard is looking at a guest
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-framing.sh "$CHROMIUM"
-
-      # A desktop chord pressed while a browser window holds the keyboard —
-      # the other half of what a guest is for, which the framing guard above
-      # does not touch. Same headless, software-composited configuration and
-      # for the same reason: nothing here is measured in pixels, so no GPU and no
-      # nested compositor are needed. The keystroke goes in over the debugging
-      # port, which is the only keyboard this machine has;
-      # guard-webview-keyboard-key.py sets out why that is the same path a real
-      # key takes rather than a way around it.
-      - name: A desktop chord, over a browser window that has the keyboard
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-keyboard.sh "$CHROMIUM"
-
-      # Its control, and it is the same sharp kind the framing guard has: an
-      # <iframe> in the element's place, pointed at the same page. It takes the
-      # keyboard just as thoroughly — that is the defect this fixes, not the
-      # guest — and there is no guest delegate behind it, so NOTHING may fire.
-      # A run where the chord arrives here is a run where the press did not
-      # come from the hook under test.
-      - name: The keyboard guard is looking at the guest's hook
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-keyboard.sh "$CHROMIUM"
-
-      # A browser window's back, forward, stop and reload, driven at the guest
-      # rather than at the placeholder frame they used to reach. Same headless,
-      # software-composited configuration as the two above and for the same
-      # reason: what this reads is the ORDER of the pages a guest showed, out
-      # of the browser's own log, so there are no pixels and no client.
-      #
-      # It is slower than either — the schedule is a minute and a half, because
-      # every step of it is a timer and the element fires no navigation event
-      # to wait on instead.
-      - name: A browser window's history controls, driven at its guest
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-history.sh "$CHROMIUM"
-
-      # Its control, and it is not the <iframe> the other two use: an <iframe>
-      # has no goBack() at all, so that run would end on a TypeError rather
-      # than on a reading. This one runs the same element, the same guest and
-      # the same navigations and CALLS NONE OF THE FOUR. Then a third page
-      # appearing means a guest moves back on its own — and the positive run's
-      # third page need not have been goBack() — and the slow page arriving is
-      # what makes the positive run's not showing it a measurement of stop().
-      - name: The history guard is looking at the calls
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-history.sh "$CHROMIUM"
-
-      # And the pointer's half of the same boundary: a click inside a browser
-      # window, which a shell has to hear about because clicking a window is
-      # what raises it. Upstream dispatches no focus event across a remote
-      # frame's process boundary, and focusing the element across it dispatches
-      # none either — patch 0011 says why, and has the element speak for itself
-      # instead. Same headless, software-composited configuration as the guards
-      # above, and the press goes in over the debugging port, which is the only
-      # pointer this machine has.
-      - name: A click inside a browser window, and the shell hearing it
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-click.sh "$CHROMIUM"
-
-      # Its control, which is neither of the other two's: an <iframe> in the
-      # element's place would be same-process and about:blank, and a
-      # same-process frame's focus DOES reach its owner — so a control built
-      # that way would fire every time and decide nothing. This one clicks the
-      # shell's own chrome instead of the window below it. A run where the
-      # element is reached anyway is a run where the positive reading was the
-      # attach, the load, or the configuration, and not the click.
-      - name: The click guard is looking at the press in the guest
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-click.sh "$CHROMIUM"
-
-      # And what a link with target="_blank" in one of those windows does,
-      # which until now was nothing at all: the browser refuses the window a
-      # guest asks for -- it has no SiteInstance of its own, and content CHECKs
-      # that pair -- so the address is reported instead and the shell opens a
-      # browser window of its own. The guard clicks the link and reads the page
-      # that arrives in the SECOND <webview>, because an event is not a window.
-      - name: A target=_blank link in a browser window, and the window it opens
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
-
-      # Its control: the other half of the same page, which is an ordinary link
-      # in the same guest clicked the same way. It must navigate the window it
-      # is in and ask for no second one -- a run where it asks anyway is a run
-      # where the element announces a window for any click or any navigation,
-      # which would pass the claim while measuring nothing about the target.
-      - name: The new-window guard is looking at the link's target
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-new-window.sh "$CHROMIUM"
-
-      # And the other half of what a link can ask for: a MIDDLE CLICK, which
-      # asks for the link in a second window and which a page cannot perform
-      # itself. It reaches the guest's OpenURLFromTab, where content's default
-      # delegate answers by doing nothing at all -- a click with no effect and
-      # no error. The guard reads the engine's own line as well as the element's
-      # event, because ReportNewWindow is shared with the target=_blank path
-      # above and a run reading only the event would pass without this override.
-      - name: A middle click in a browser window, and the window it asks for
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
-
-      # Its control: the SAME POINT ON THE SAME LINK, pressed with the left
-      # button. It must follow the link in the guest and ask the browser for
-      # nothing -- a run where it asks says the claim's run was measuring this
-      # guest sending every press to its delegate rather than the button.
-      - name: The routed-link guard is looking at the button
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-webview-routed-link.sh "$CHROMIUM"
-
-      # REQUIREMENT 2, WHICH NOTHING HAS RUN SINCE IT WAS WRITTEN. An <app> has
-      # to behave like any other replaced element, and `guard-css-and-resize.sh` is what
-      # measures that: six CSS properties applied to an <app> and to an
-      # ordinary <div> laid out identically beside it, and then a resize, which
-      # gets a page of its own because it moves the LocalSurfaceId every
-      # element in a document shares. It has only ever been run by hand.
-      #
-      # Inside Chromium's own toolchain shell, not `nix develop .#full`, and
-      # that is what `spike.sh` documents: a component build links against that
-      # shell's glibc. The sentinel is the Build step's, for the reason the
-      # Build step has one — this shell has swallowed an exit status before,
-      # and a step that believed it would report a measurement nobody took.
-      #
-      # Headless and software-composited, which is `spike.sh`'s default and
-      # needs no nested compositor: what it compares is what the display
-      # compositor drew for two elements on one page, and neither needs a GPU
-      # to be laid out. ENGINE-FORK.md's `--disable-gpu` table is the one this
-      # step reproduces — six cells bit-exact, `transform` differing on 285
-      # edge pixels and 0 interior ones, which is two software raster passes
-      # disagreeing in the last bit. The verdict is on interior pixels for
-      # exactly that reason, so those 285 are a pass here and every cell is 0
-      # on the GPU. Which is what makes a failure the seam rather than the
-      # hardware, and the only reading that makes the step worth having.
-      - name: An <app> is a replaced element, and a resize reaches the producer
-        run: |
-          set -euo pipefail
-          done=/tmp/domicile-step4-ran
-          rm -f "$done"
-          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
-          export NIX_PATH="nixpkgs=$nixpkgs"
-
-          cat > /tmp/domicile-step4 <<EOF
-          #!/usr/bin/env bash
-          set -euo pipefail
-          "$GITHUB_WORKSPACE/packages/domicile-engine/scripts/guard-css-and-resize.sh" "$CHROMIUM"
-          touch "$done"
-          EOF
-          chmod +x /tmp/domicile-step4
-
-          if NIX_SHELL_RUN=/tmp/domicile-step4 \
-               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-step4-shell.log 2>&1; then
-            echo "the shell exited 0"
-          else
-            echo "the shell exited $?"
-          fi
-          # Not 60. A clean run is about that long on its own — a header, one
-          # `embedded` line per canvas, the per-property table, the latency
-          # block, then the whole resize run again — so any chatter from the
-          # shell pushes the table, which is the only place the verdict lives,
-          # off the top of what gets printed.
-          tail -200 /tmp/domicile-step4-shell.log | sed 's/^/  | /'
-
-          [ -e "$done" ] || {
-            # `guard-css-and-resize.sh` says which half failed and why, because it
-            # is the thing that knows: it holds the two exit statuses and each
-            # half's own log. Three versions of this step tried to work that
-            # out here instead, from one grep over the pair, and review found
-            # each of them naming the wrong end — including `grep -v … |
-            # grep -q …` losing to SIGPIPE under `pipefail` past about 128 KB
-            # of log and routing a real cell failure to the catch-all. So this
-            # quotes rather than classifies, and the only sentence it owns is
-            # the one for a run that never got as far as saying anything.
-            #
-            # `|| :` because this step runs under `set -euo pipefail` and a
-            # grep that matches nothing exits 1 — which killed the shell here,
-            # on the assignment, before the `if` below could print the one
-            # sentence this step owns. That is the same class of mistake as the
-            # SIGPIPE one above, one line lower down, and it made the fallback
-            # unreachable: a run that said nothing got no annotation at all.
-            said="$( { grep -a '^step 4 failed:' /tmp/domicile-step4-shell.log ||
-                         :; } | tail -1)"
-            if [ -n "$said" ]; then
-              echo "::error::$said" >&2
-            else
-              echo "::error::step 4 never reached its own verdict — the producer did not finish, or the shell around it did not start. Its last words are above" >&2
-            fi
-            exit 1
-          }
-
-      # The hop from the compositor's socket into a page, priced by the page.
-      #
-      # Cheap, and deliberately: no Wayland, no client, no GPU and no window --
-      # a socket with a stand-in on the far end and a document that listens.
-      # What it measures is the stage `ENGINE-FORK.md` phase 2 asked for a
-      # stamp for, and it reads the stamp's SHAPE as well as its value, because
-      # an attribute that is never filled in reports a plausible hop and the
-      # instrument this replaces was deleted for exactly that.
-      #
-      # NO NEGATIVE STEP, because its control is inside the run. The stand-in
-      # sends a cursor the engine knows, one it does not, and another it does,
-      # in that order: the middle one must not reach the page and the third one
-      # must, which is what tells a refusal apart from a channel that died. A
-      # separate run could not establish the pair.
-      - name: The hop into a page, and the cursor set that crosses it
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/guard-control-arrival.sh "$CHROMIUM"
-
-      # The one requirement nothing measured until now. Last of the guards
-      # because it is the longest: sixty rounds, each a keystroke and a wait
-      # for the browser to draw.
-      # THE CARD, TAKEN FOR THE TWO STEPS THAT TIME SOMETHING AND NO OTHERS.
-      #
-      # `crux` runs two jobs at once now (cprussin/dotfiles:
-      # config/machines/crux/domicile-ci.nix). That is what stopped
-      # `pinned-engine.yml` -- 1m51s of work, no Chromium tree, every pull
-      # request -- from queueing three hours behind this build. The machine's
-      # single job slot was what made that queue, and it was also, by accident,
-      # a lock over the render node.
-      #
-      # Every other guard in this job survives losing it: they ask whether a
-      # color landed, and a second client on the card makes that slower rather
-      # than wrong. THAT IS TRUE ONLY WHILE EACH OF THEM IS PATIENT ENOUGH TO
-      # BE SLOWED, which `guard-client-window.sh` stopped being once #485 made
-      # an engine run eleven minutes of mostly guards rather than four hours of
-      # mostly compiling: it gave up after 60s and `pinned-engine.yml` went red
-      # on `main` beside a green run of this job. Its poll waits four minutes
-      # now, and `scripts/test-the-client-window-guard-outwaits-a-busy-card.sh`
-      # is what keeps it there. The answer was patience rather than this lock,
-      # because a pixel guard beside another client is slow and not wrong.
-      #
-      # These two are the ones that are wrong. `guard-latency.sh` reports what a
-      # keystroke costs to reach a pixel over sixty rounds, and another job
-      # drawing on the same node during those rounds is indistinguishable from
-      # the regression it exists to catch -- a red check nobody caused, which
-      # is the failure mode that teaches people to re-run until green.
-      #
-      # Held across the control as well as the measurement, because the control
-      # is a second run of the same script and a number taken beside somebody
-      # else's client is not a control for one that was not.
-      #
-      # NOT AROUND THE WHOLE JOB. That would hold the card for ~15 minutes of
-      # guards that do not need it, which is the one-queue arrangement this
-      # change exists to leave.
-      - name: Take the render node
-        run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
-
-      - name: What a keystroke costs to reach a pixel
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
-
-      # Its control: a client that ignores the keyboard. Without it the guard
-      # would pass on any client that merely draws, and the number it reported
-      # would be a number about something else. Short, because what it proves
-      # needs three rounds rather than sixty.
-      - name: The latency guard is timing the client's own answer
-        env:
-          NEGATIVE: "1"
-        run: |
-          set -euo pipefail
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-latency.sh "$CHROMIUM"
-
-      # Before the diagnostics and before the tree, because the card is the
-      # thing another job is waiting on and none of what follows needs it.
-      # `drop` is a no-op unless the lock is still ours, so a run that failed
-      # before taking it reaches here harmlessly -- the tree lock's rule, for
-      # the tree lock's reason.
-      - name: Drop the render node
-        if: ${{ always() }}
-        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"
+          # `$CHROMIUM` rather than the path written again: it is a symlink
+          # into the tree pool now, and two copies of which symlink is two
+          # things to keep true.
+          DOMICILE_CHROMIUM: ${{ env.CHROMIUM }}
+          DOMICILE_CHECK_STRICT: "1"
+          # Where a failing check's whole log is kept, named because $TMPDIR in
+          # there is nix's and nothing else in this job has it — the same reason
+          # the cleanup step above stopped using $TMPDIR. /tmp is what the steps
+          # of one job share, which is where `engine-diagnostics.sh` already
+          # reads the guards' own logs from.
+          DOMICILE_CHECK_LOG_DIR: /tmp
+        run: nix develop .#full --command ./scripts/check.sh engine
 
       # ===================================================================
       # THE RELEASE, WHICH IS WHY AN ENGINE CHANGE IS ONE PULL REQUEST NOW
@@ -1193,12 +567,28 @@ jobs:
       # held around `guard-latency.sh` alone, because timing is the one thing
       # a second client on the node makes WRONG rather than merely slower.
       # This is a did-the-color-land guard, which is the kind that survives
-      # sharing — see the note on `Take the render node` above, and
-      # engine-release.yml, which runs this same guard holding nothing.
+      # sharing — see `scripts/engine-guard-latency.sh`, which is where that
+      # lock is taken now, and engine-release.yml, which runs this same guard
+      # holding nothing.
+      #
+      # THROUGH THE CHECK RATHER THAN THE GUARD, like every other caller.
+      # `DOMICILE_ENGINE_OUT` is how a caller says which build to read, and is
+      # the whole reason `scripts/lib/engine-guard.sh` takes it: the tarball
+      # unpacked here is a third engine beside the dev build and the pinned one.
+      #
+      # AND WITH ITS CONTROL, unlike `engine-release.yml` and
+      # `pinned-engine.yml`, which each say in prose that a second run would buy
+      # nothing and spend the slot twice. Two reasons this one keeps it. The
+      # cheap one: this step is reached only by a run that is already spending
+      # four hours on a release build, so twenty-five seconds is not a cost
+      # anybody can measure. The one that matters: no step of THIS workflow may
+      # set `DOMICILE_GUARD_CONTROL`, because this is the job whose controls are
+      # the point, and `scripts/test-the-workflows-delegate-their-checks.sh`
+      # reads the file rather than the step. A per-step exception would be a
+      # door into the file that owns the rule, for a saving of twenty-five
+      # seconds.
       - name: The packaged release passes the guard
         if: ${{ steps.release.outputs.build == 'true' }}
-        env:
-          OUT: out/Release-staged
         run: |
           set -euo pipefail
           rm -rf "$CHROMIUM/out/Release-staged"
@@ -1206,9 +596,8 @@ jobs:
           tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
             -C "$CHROMIUM/out/Release-staged" --strip-components=1
           nix develop .#full --command cargo build -p domicile-compositor
-          nix develop .#full --command \
-            packages/domicile-engine/scripts/under-wayland.sh "$CHROMIUM" \
-            packages/domicile-engine/scripts/guard-client-window.sh "$CHROMIUM"
+          DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
+            nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       - name: Publish the release
         if: ${{ steps.release.outputs.build == 'true' }}
@@ -1256,7 +645,7 @@ jobs:
       # log before running it, so forty lines of dump here is forty lines
       # between a failure and the end of the log — which is exactly where a
       # failure gets read from, and it cost four fetches to notice.
-      # Everything the guard writes down, because none of it is on stdout.
+      # Everything the guards write down, because none of it is on stdout.
       #
       # `under-wayland.sh` sends sway's output to a file and then says only "no
       # compositor came up"; `guard-client-window.sh` keeps the compositor's
@@ -1265,7 +654,7 @@ jobs:
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
       # are unreachable once the job ends — they have to be printed here or
       # they are lost.
-      - name: What the guard wrote down
+      - name: What the guards wrote down
         if: ${{ failure() }}
         run: .github/scripts/engine-diagnostics.sh
 

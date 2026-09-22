@@ -20,8 +20,9 @@
 # recorded in #413, and the repin that ended the incident (#415) says the fix
 # is this job.
 #
-# WHAT THIS FILE ASSERTS IS THAT THE JOB IS STILL THE CHEAP ONE. The guard it
-# runs is the same `guard-client-window.sh` engine.yml runs, and the difference
+# WHAT THIS FILE ASSERTS IS THAT THE JOB IS STILL THE CHEAP ONE. The check it
+# runs is `scripts/engine-guard-client-window.sh`, which is one of the seventeen
+# `check.sh engine` runs against the tree engine.yml builds, and the difference
 # — the only difference that makes this affordable — is where the engine comes
 # from: `nix build .#engine` is a fetch of the pinned tarball and an
 # `autoPatchelfHook` over it, not a Chromium build. A job that reached for
@@ -50,14 +51,22 @@ fail() {
 # "something builds the pinned engine and guards it", and a rename should move
 # this file's attention rather than turn it into a green no-op.
 #
-# `^[^#]*` because `engine.yml` and `engine-release.yml` both mention `nix
-# build .#engine` in prose — they are the two jobs that explain why they do NOT
-# do this — and a comment is not a step. Nothing in the character class can
-# cross the `#` that starts one.
+# Comments are skipped, because `engine.yml` and `engine-release.yml` both
+# mention `nix build .#engine` in prose — they are the two jobs that explain why
+# they do NOT do this — and a comment is not a step.
+#
+# By WHOLE-LINE comment, not by "nothing before a `#`", which is what this used
+# to say. That became too strict the moment the guard moved into a script: the
+# step now reads `nix develop .#full --command
+# ./scripts/engine-guard-client-window.sh`, and `[^#]*` cannot cross the `#` in
+# `.#full`, so the one workflow that does this stopped matching and the rule
+# reported that nothing checked the pin at all. A green no-op in the other
+# direction, and the reason the count below is asserted to be exactly one.
 GUARDS=""
 for workflow in "$WORKFLOWS"/*.yml; do
-  grep -qE '^[^#]*nix build[^|&;]*\.#engine' "$workflow" || continue
-  grep -qE '^[^#]*guard-client-window\.sh' "$workflow" || continue
+  code="$(grep -v '^[[:space:]]*#' "$workflow")"
+  printf '%s\n' "$code" | grep -qE 'nix build[^|&;]*\.#engine' || continue
+  printf '%s\n' "$code" | grep -qE 'engine-guard-client-window\.sh' || continue
   GUARDS="$GUARDS $(basename "$workflow")"
 done
 
@@ -97,22 +106,22 @@ engine_var="$(grep -oE '[A-Za-z_][A-Za-z0-9_]*="\$\(nix build[^)]*\.#engine[^)]*
 if [ -z "$engine_var" ]; then
   fail "the guard is pointed at the engine that build produced" \
     "no shell variable in $NAME is assigned the output path of 'nix build .#engine'"
-elif grep -q "guard-client-window\.sh \"\$$engine_var\"" "$WORKFLOW"; then
+elif grep -q "DOMICILE_CHROMIUM=\"\$$engine_var\"" "$WORKFLOW"; then
   ok "the guard is pointed at the engine that build produced"
 else
   fail "the guard is pointed at the engine that build produced" \
-    "\$$engine_var holds the store path, and guard-client-window.sh is not given it"
+    "\$$engine_var holds the store path, and DOMICILE_CHROMIUM is not set to it — see scripts/lib/engine-guard.sh for the two variables that decide which build a check reads"
 fi
 
 # The store path is a Chromium `out` directory with nothing above it, so the
 # guard has to be told that its OUT is the directory itself. Unset, it looks
 # for `out/Domicile/chrome` under the store path and reports a missing engine —
 # which is a red job for the wrong reason, on the slot.
-if grep -qE '^[[:space:]]*OUT:[[:space:]]*\.[[:space:]]*$' "$WORKFLOW"; then
+if grep -qE 'DOMICILE_ENGINE_OUT=\.( |$)' "$WORKFLOW"; then
   ok "the guard is told the store path is the out directory"
 else
   fail "the guard is told the store path is the out directory" \
-    "no 'OUT: .' in $NAME, so the guard looks for out/Domicile inside the store path"
+    "no 'DOMICILE_ENGINE_OUT=.' in $NAME, so the guard looks for out/Domicile inside the store path"
 fi
 
 # Not a nicety: `--ozone-platform=headless` cannot import a dmabuf at all
@@ -120,11 +129,20 @@ fi
 # runs the engine under a nested wlroots compositor built on a render node.
 # See under-wayland.sh's own header and AGENTS.md's "Three things this cannot
 # reach".
-if grep -q 'under-wayland\.sh' "$WORKFLOW"; then
+#
+# Asked of the check rather than of the workflow, because that is where it is
+# decided now: `scripts/engine-guard-client-window.sh` reaches
+# `engine_guard_and_control_under_wayland`, and the wrapper is in
+# `scripts/lib/engine-guard.sh`. Both halves are asserted, since a check naming
+# a helper the library does not define would pass a grep for either one alone.
+CHECK="$ROOT/scripts/engine-guard-client-window.sh"
+LIB="$ROOT/scripts/lib/engine-guard.sh"
+if grep -q 'engine_guard_and_control_under_wayland' "$CHECK" 2>/dev/null &&
+   grep -q 'under-wayland\.sh' "$LIB" 2>/dev/null; then
   ok "the guard runs under a compositor that can pass a dmabuf"
 else
   fail "the guard runs under a compositor that can pass a dmabuf" \
-    "$NAME does not run the guard under under-wayland.sh"
+    "scripts/engine-guard-client-window.sh does not reach under-wayland.sh through scripts/lib/engine-guard.sh"
 fi
 
 # And a render node is hardware. `crux` is the only runner that has one;

@@ -2,7 +2,14 @@
 # Everything that can be checked here, in one command.
 #
 #   nix develop .#full -c ./scripts/check.sh
-#   ./scripts/check.sh e2e            # one group: shell, rust, typescript, e2e
+#   ./scripts/check.sh e2e            # one group
+#
+# The groups are `shell`, `rust`, `typescript`, `e2e`, `engine` and `nix`.
+# Every one of them is what a workflow runs — `.github/workflows/` names
+# groups and nothing else, which is what
+# `scripts/test-the-workflows-delegate-their-checks.sh` is there to keep true.
+# The last two need something most machines do not have and say so rather than
+# failing: `engine` a warm Chromium tree, `nix` a `nix` on PATH.
 #
 # `DOMICILE_CHECK_STRICT=1` turns a skip into a failure. Locally a missing
 # tool is a fact about the machine; in CI it is a check that silently stopped
@@ -35,7 +42,7 @@ PASSED=(); FAILED=(); SKIPPED=()
 # Not `GROUPS`: bash owns that name (it is the caller's group ids) and assigning
 # to it does nothing, silently, so every group read as unwanted and the script
 # cheerfully checked nothing at all.
-KNOWN=(shell rust typescript e2e)
+KNOWN=(shell rust typescript e2e engine nix)
 SELECTED=("$@")
 [ "${#SELECTED[@]}" -eq 0 ] && SELECTED=("${KNOWN[@]}")
 # Named but unknown is a typo, and a typo that silently selects nothing is the
@@ -138,7 +145,15 @@ FAILURES="$(mktemp)"
 # Where a failing check's whole log is kept. Deliberately not cleaned up: it is
 # the thing a reader needs after the run ends, and its whole point is to
 # outlive the trap that removes everything else.
-KEEP_LOGS="${TMPDIR:-/tmp}/domicile-check-logs"
+# `DOMICILE_CHECK_LOG_DIR` because $TMPDIR is not always somewhere a reader can
+# get back to. `engine.yml` runs this as `nix develop .#full --command
+# ./scripts/check.sh engine`, and nix gives every `--command` a $TMPDIR of its
+# own -- `export NIX_BUILD_TOP="$(mktemp -d ...)"` in makeRcScript -- so the one
+# path printed below would name a directory nothing else in that job has. That
+# is the mistake lib-control-budget.sh made with the control budgets and paid
+# for over two engine runs: a file written where nothing reads it, silently.
+# The default is unchanged for every other caller.
+KEEP_LOGS="${DOMICILE_CHECK_LOG_DIR:-${TMPDIR:-/tmp}}/domicile-check-logs"
 rm -rf "$KEEP_LOGS"; mkdir -p "$KEEP_LOGS"
 cleanup() {
   [ -n "${XVFB:-}" ] && kill "$XVFB" 2>/dev/null
@@ -158,9 +173,22 @@ echo "== environment =="
 # from another branch is present and wrong, which is the same staleness the e2e
 # scripts rebuild the compositor every run to avoid — and `--frozen-lockfile`
 # against an already-satisfied tree is a few hundred milliseconds.
-label "bun install"
-if bun install --frozen-lockfile >/dev/null 2>&1; then echo "ok"; else
-  echo "FAILED"; echo "dependencies would not install" >&2; exit 1
+#
+# Only for the groups that read `node_modules`, and that is not fastidiousness:
+# `cargo-test.yml` and `nix-build.yml` run on `ubuntu-latest` with no bun set
+# up, because nothing they check needs one. An unconditional install there is
+# an `exit 1` before a single check has run, and the words it exits with —
+# "dependencies would not install" — describe a broken lockfile rather than a
+# runner that was never going to have bun on it.
+needs_node_modules() {
+  for group in typescript e2e engine shell; do wanted "$group" && return 0; done
+  return 1
+}
+if needs_node_modules; then
+  label "bun install"
+  if bun install --frozen-lockfile >/dev/null 2>&1; then echo "ok"; else
+    echo "FAILED"; echo "dependencies would not install" >&2; exit 1
+  fi
 fi
 
 # ---- the checks -----------------------------------------------------------
@@ -195,6 +223,70 @@ if wanted typescript; then
   echo "== typescript =="
   run "biome" bunx biome check .
   run "turbo test" bun run turbo test
+fi
+
+# Every `nix-*.sh`, for the reason the other globs take everything they match.
+# A group of its own rather than more `test-*.sh` because these need `nix` and
+# the `shell` group must not: `e2e.yml` runs that group on `ubuntu-latest`
+# under `DOMICILE_CHECK_STRICT=1`, where a skip is fatal, so one check in there
+# that cannot run without nix would make six expected skips the price of
+# keeping the job green — and a long allow-list is how a real skip stops being
+# noticed.
+if wanted nix; then
+  echo
+  echo "== nix =="
+  for script in scripts/nix-*.sh; do
+    run "$(basename "$script" .sh)" "$script"
+  done
+fi
+
+# THE ONE GROUP WITH AN ORDER AND A FAIL-FAST, and both are about the same
+# thing: every check in it wants the Chromium tree on `crux`, which is one
+# machine with one job slot and a build measured in hours. The cheap checks go
+# first — a stat, then two gtest runs — because a run that has already found
+# the symbol missing should not then spend the ten minutes of guards that
+# follow photographing pixels to say so again, which is what the workflow steps
+# this replaced did by aborting the job.
+#
+# Written out rather than globbed, which every other group here refuses to do.
+# The reason a glob is right elsewhere is that a check added and not run is the
+# same as one never written — and that is still true, so
+# `scripts/test-the-workflows-delegate-their-checks.sh` asserts this list holds
+# every `scripts/engine-*.sh` there is. The order is the thing a glob cannot
+# carry; completeness is the thing a list cannot, so each is kept where it
+# works.
+if wanted engine; then
+  echo
+  echo "== engine =="
+  for script in \
+    scripts/engine-build-produced-what-the-guards-load.sh \
+    scripts/engine-unit-tests.sh \
+    scripts/engine-drm-unit-tests.sh \
+    scripts/engine-build-the-compositor.sh \
+    scripts/engine-guard-client-window.sh \
+    scripts/engine-guard-two-windows.sh \
+    scripts/engine-guard-shell.sh \
+    scripts/engine-guard-shell-manganese.sh \
+    scripts/engine-guard-webview-framing.sh \
+    scripts/engine-guard-webview-keyboard.sh \
+    scripts/engine-guard-webview-history.sh \
+    scripts/engine-guard-webview-click.sh \
+    scripts/engine-guard-webview-new-window.sh \
+    scripts/engine-guard-webview-routed-link.sh \
+    scripts/engine-guard-css-and-resize.sh \
+    scripts/engine-guard-control-arrival.sh \
+    scripts/engine-guard-latency.sh \
+  ; do
+    run "$(basename "$script" .sh)" "$script"
+    # A skip is not a stop: on a machine with no tree every one of these skips,
+    # and bailing on the first would report one skip where there are seventeen —
+    # which under STRICT is one failure naming one check instead of the list of
+    # what is not running.
+    [ "${#FAILED[@]}" -eq 0 ] || {
+      echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
+      break
+    }
+  done
 fi
 
 if wanted e2e; then
