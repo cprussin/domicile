@@ -142,6 +142,16 @@ describe("Launcher", () => {
     ]);
   });
 
+  it("counts how much of the home is still answering", async () => {
+    // The one number that says whether another letter is worth typing, in the
+    // field doing the narrowing.
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "notes");
+
+    expect(screen.getByText("2 of 4")).toBeInTheDocument();
+  });
+
   it("says what Enter would do with a query no file matches", async () => {
     // The one thing a panel with an empty list cannot otherwise show: the
     // box still does something on Enter, and what that is is the whole

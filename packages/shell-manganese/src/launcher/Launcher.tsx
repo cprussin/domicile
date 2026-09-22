@@ -1,20 +1,23 @@
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
+import { ArrowElbowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowElbowDownLeft";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import type { ReactNode } from "react";
-import { useId, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { flex, hstack, vstack } from "../../styled-system/patterns";
+import { center, flex, hstack, vstack } from "../../styled-system/patterns";
 import { directoriesIn, fileRow } from "./file-row";
 import type { Hint } from "./hint";
 import { HintKind, hintFor } from "./hint";
 import type { Launch } from "./launch";
 import { launchFor } from "./launch";
+import type { Mark } from "./marked";
+import { marked } from "./marked";
 import { matching } from "./matching";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
@@ -22,6 +25,9 @@ const PROMPT = "Open a file, a URL, or search";
 
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
+
+/** And the smaller one at the end of the row Enter would take. */
+const ENTER_ICON_SIZE = 13;
 
 type Props = {
   /** What there is to open, in the order the host answered. */
@@ -63,6 +69,11 @@ export const Launcher = ({ files, onDismiss, onLaunch, open }: Props) => (
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
+    // A pane rather than a card, because there is a desktop behind it worth
+    // keeping: a launcher is a thing held up over your work for a second and
+    // a half, and one that blanked what it was over would read as a page the
+    // desktop had navigated to.
+    surface="glass"
     title="Open"
   >
     {/*
@@ -166,6 +177,16 @@ const Query = ({ files, onLaunch }: QueryProps) => {
         // A home full of file names is not prose, and a list of them underlined
         // in red reads as a panel full of mistakes.
         spellCheck={false}
+        // How much of the home is still answering, in the field doing the
+        // narrowing — a find bar's counter, and the one number that says
+        // whether one more letter is worth typing.
+        suffixIcon={
+          files.length === 0 ? undefined : (
+            <span aria-hidden="true" className={countStyles}>
+              {`${shown.length.toString()} of ${files.length.toString()}`}
+            </span>
+          )
+        }
         value={query}
       />
       {/*
@@ -213,17 +234,47 @@ const Query = ({ files, onLaunch }: QueryProps) => {
                 // gesture rather than two.
                 tabIndex={-1}
               >
-                <span className={rowIconStyles} data-row-icon="">
-                  {row.isDirectory ? (
-                    <FolderIcon size={ICON_SIZE} />
-                  ) : (
-                    <FileIcon size={ICON_SIZE} />
-                  )}
+                {/*
+                  Drawn twice and one of them shown, because a weight is a
+                  different set of paths rather than a color: an outline
+                  Phosphor glyph is filled shapes with holes in them, so
+                  nothing in CSS can thicken one. The pair is what the
+                  component library does for its own icon swap — see
+                  `_control/PrefixIconStack` — and it costs the row a second
+                  `<svg>` that is never laid out on its own.
+                */}
+                <span className={rowTileStyles} data-row-tile="">
+                  <span className={rowGlyphStyles} data-row-glyph="resting">
+                    {row.isDirectory ? (
+                      <FolderIcon size={ICON_SIZE} />
+                    ) : (
+                      <FileIcon size={ICON_SIZE} />
+                    )}
+                  </span>
+                  <span className={rowGlyphStyles} data-row-glyph="reached">
+                    {row.isDirectory ? (
+                      <FolderIcon size={ICON_SIZE} weight="fill" />
+                    ) : (
+                      <FileIcon size={ICON_SIZE} weight="fill" />
+                    )}
+                  </span>
                 </span>
-                <span className={rowNameStyles}>{row.name}</span>
+                <span className={rowNameStyles}>
+                  <Marked marks={marked(row.name, query)} />
+                </span>
                 {row.directory !== undefined && (
-                  <span className={rowDirectoryStyles}>{row.directory}</span>
+                  <span className={rowDirectoryStyles}>
+                    <Marked marks={marked(row.directory, query)} />
+                  </span>
                 )}
+                {/*
+                  On every row and lit on one: the glyph says what Enter does
+                  to the row under it, and one that appeared and vanished
+                  would move the three columns beside it on every arrow key.
+                */}
+                <span className={rowEnterStyles} data-row-enter="">
+                  <ArrowElbowDownLeftIcon size={ENTER_ICON_SIZE} />
+                </span>
               </div>
             );
           })}
@@ -240,6 +291,31 @@ const Query = ({ files, onLaunch }: QueryProps) => {
     </div>
   );
 };
+
+/**
+ * A row's text with the letters the query is responsible for lit.
+ *
+ * `mark` rather than a styled span, because that is what the element is for
+ * and because it is the one piece of this the browser's own find-in-page and
+ * a screen reader already understand. It leaves the text alone — the run it
+ * wraps is the run it was given — so what a row *says* is what it said
+ * before anybody typed.
+ */
+const Marked = ({ marks }: { marks: readonly Mark[] }) => (
+  <>
+    {marks.map((mark, at) =>
+      mark.matched ? (
+        // Index as the key because that is what a run is: the third piece of
+        // this name, which is a different piece the moment the query changes.
+        <mark className={markStyles} key={at}>
+          {mark.text}
+        </mark>
+      ) : (
+        <Fragment key={at}>{mark.text}</Fragment>
+      ),
+    )}
+  </>
+);
 
 /** What Enter would do, for a box no row has been chosen in. */
 const HintLine = ({ hint }: { hint: Hint }) => {
@@ -403,42 +479,104 @@ const listStyles = flex({
 
 const rowStyles = css({
   _hover: {
-    backgroundColor: "color-mix(in oklab, {colors.foreground} 8%, transparent)",
+    backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
   },
-  // The walked-to row, in the desktop's own accent. Stronger than the hover
-  // above it on purpose: hover is where the pointer happens to be and this is
-  // what Enter would take.
+  // The pointer's row, which is not the keyboard's: a tile a shade brighter
+  // and its glyph at full strength, where the walked-to row below takes the
+  // accent. Two signals that have to be told apart, because both can be on
+  // screen at once and only one of them is what Enter would take.
+  "&:hover:not([data-highlighted]) [data-row-tile]": {
+    borderColor: "color-mix(in oklab, {colors.foreground} 16%, transparent)",
+    color: "foreground",
+  },
+  // A SOLID GLYPH FOR THE ROW BEING ATTENDED TO, by the pointer or by the
+  // keyboard. An outline glyph is mostly the ground it is drawn on, so a row
+  // that lightens its ground takes the glyph's contrast with it and the thing
+  // meant to be read best is read worst.
+  "&:is(:hover, [data-highlighted]) [data-row-glyph=reached]": { opacity: 1 },
+  "&:is(:hover, [data-highlighted]) [data-row-glyph=resting]": { opacity: 0 },
+  // The walked-to row, in the desktop's own accent: a wash that fades across
+  // the row rather than a band of flat color, stronger than the hover above it
+  // on purpose — hover is where the pointer happens to be, and this is what
+  // Enter would take.
   "&[data-highlighted]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 22%, transparent)",
+    backgroundImage:
+      "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
   },
-  "&[data-highlighted] [data-row-icon]": {
+  "&[data-highlighted] [data-row-enter]": {
+    opacity: 1,
+    transform: "translateX(0)",
+  },
+  "&[data-highlighted] [data-row-tile]": {
+    backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
+    borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
     color: "accent",
   },
   alignItems: "center",
-  borderRadius: "sm",
+  borderRadius: "md",
   color: "foreground",
-  columnGap: 2,
+  columnGap: 2.5,
   cursor: "pointer",
   display: "grid",
   fontSize: "sm",
-  // The glyph takes what it needs, the name takes what it needs after that,
-  // and the directory takes the rest — so a path too long for the panel loses
-  // the part that only disambiguates rather than the part being looked for.
-  gridTemplateColumns: "auto minmax(0, auto) minmax(0, 1fr)",
+  // The tile takes what it needs, the name takes what it needs after that,
+  // the directory takes the rest, and the glyph at the end takes its own —
+  // so a path too long for the panel loses the part that only disambiguates
+  // rather than the part being looked for.
+  gridTemplateColumns: "auto minmax(0, auto) minmax(0, 1fr) auto",
   paddingBlock: 1.5,
   paddingInline: 2,
   transition: "background-color {durations.fast} {easings.out}",
 });
 
-const rowIconStyles = css({
-  alignItems: "center",
+// The glyph sits in a tile of its own rather than loose beside the name: it
+// gives every row the same shoulder to start at whatever the name's length,
+// and it is the thing the highlight can light up without touching the text.
+const rowTileStyles = css({
+  blockSize: 7,
+  border: "1px solid color-mix(in oklab, {colors.foreground} 8%, transparent)",
+  borderRadius: "sm",
   color: "muted",
+  display: "grid",
+  flexShrink: 0,
+  inlineSize: 7,
+  placeItems: "center",
+  transition:
+    "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+});
+
+// Both weights in the one cell the tile has, so the swap moves nothing and
+// the tile's size is the glyph's whichever of them is showing.
+const rowGlyphStyles = css({
+  // The outline one is what a row is drawn with, so it is the one that needs
+  // no rule; the row above is what shows the other.
+  "&[data-row-glyph=reached]": { opacity: 0 },
   display: "inline-flex",
-  transition: "color {durations.fast} {easings.out}",
+  gridArea: "1 / 1",
+  transition: "opacity {durations.fast} {easings.out}",
+});
+
+// Out at the end of the row, arriving from further out: the glyph is what
+// Enter would do, so it comes in from the direction the key is.
+const rowEnterStyles = center({
+  color: "accent",
+  flexShrink: 0,
+  opacity: 0,
+  transform: "translateX({spacing.1})",
+  transition:
+    "opacity {durations.fast} {easings.out}, transform {durations.fast} {easings.outBack}",
+});
+
+// The letters the query is responsible for. `mark`'s own yellow is a
+// highlighter pen on a page; what this is marking is why a row is on screen,
+// so it is said in the color the desktop says "this one" in.
+const markStyles = css({
+  backgroundColor: "transparent",
+  color: "accent",
+  fontWeight: "semibold",
 });
 
 const rowNameStyles = css({
-  fontFamily: "mono",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -446,7 +584,6 @@ const rowNameStyles = css({
 
 const rowDirectoryStyles = css({
   color: "muted",
-  fontFamily: "mono",
   fontSize: "xs",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -472,9 +609,17 @@ const hintIconStyles = css({
 
 const hintSubjectStyles = css({
   color: "foreground",
-  fontFamily: "mono",
   overflow: "hidden",
   textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
+
+// Figures that keep their width as they change, so the counter does not
+// shuffle sideways under the typing.
+const countStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });
 
