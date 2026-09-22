@@ -228,6 +228,17 @@ pub enum Event {
         surface: SurfaceId,
         buffer: BufferId,
     },
+    /// A copy made in the browser, on its way to the seat.
+    ///
+    /// **The engine is not a Wayland client of this compositor**, so a copy
+    /// made in a page or a browser window reaches no seat on its own: the
+    /// browser is started before the compositor and connects to whatever
+    /// display server it was launched under, which on a tty is none at all.
+    /// This is how it reaches one — and it is why the desktop has a single
+    /// clipboard rather than the browser having one and everything else
+    /// another.
+    Copied { clipboard: Clipboard, text: String },
+
     /// `wl_output`: the whole display list, primary first.
     ///
     /// Sent once when the engine has a screen and again on every hotplug, as
@@ -238,6 +249,45 @@ pub enum Event {
     Displays(Vec<Display>),
 }
 
+/// Which of the desktop's two clipboards a copy is on.
+///
+/// The pair every desktop has and neither of which is the other: one is what
+/// Ctrl-C puts somewhere and the other is what selecting a word does. They
+/// cross the ABI as the numbers [`Clipboard::as_raw`] gives, which is what the
+/// C header declares and what the engine reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Clipboard {
+    /// `wl_data_device`, which is Ctrl-C and Ctrl-V.
+    Copy,
+    /// `zwp_primary_selection_device_v1`, which is selecting a word and the
+    /// middle button.
+    Primary,
+}
+
+impl Clipboard {
+    /// The number this crosses as. See `DomicileClipboard` in the C header.
+    fn as_raw(self) -> u32 {
+        match self {
+            Clipboard::Copy => 0,
+            Clipboard::Primary => 1,
+        }
+    }
+}
+
+/// Which clipboard a number off the ABI names.
+///
+/// Anything else is refused rather than folded onto the ordinary clipboard:
+/// the plausible guess is the one a person uses most, and a copy landing there
+/// because the engine learned a third would overwrite what they actually
+/// copied with something they only brushed past.
+fn clipboard_from(raw: u32) -> Clipboard {
+    match raw {
+        0 => Clipboard::Copy,
+        1 => Clipboard::Primary,
+        _ => panic!("the engine named a clipboard this compositor has no name for: {raw}"),
+    }
+}
+
 #[repr(C)]
 struct Callbacks {
     user_data: *mut c_void,
@@ -245,6 +295,7 @@ struct Callbacks {
     frame: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
     released: Option<extern "C" fn(*mut c_void, SurfaceId, BufferId)>,
     displays: Option<extern "C" fn(*mut c_void, *const RawDisplay, u32)>,
+    copied: Option<extern "C" fn(*mut c_void, u32, *const c_char, usize)>,
 }
 
 /// The engine's opaque handle.
@@ -485,6 +536,38 @@ impl Engine {
         (buffer != 0).then_some(buffer)
     }
 
+    /// Tells the browser what is on one of the desktop's two clipboards.
+    ///
+    /// **The browser is told rather than asked**, because the compositor
+    /// already has the bytes: a selection arriving on the seat is read out of
+    /// the client that offered it whether or not anybody pastes, so there is
+    /// nothing left to fetch and a page pasting answers out of memory.
+    ///
+    /// Empty is a clipboard with nothing on it, which is what a desktop that
+    /// has just started has, and is said rather than left unsaid: a browser
+    /// never told would go on offering whatever it was told last.
+    ///
+    /// **The bytes are length-carried**, because what a person copies may hold
+    /// a nul and a C string would cut it there. Borrowed for the call: the
+    /// browser copies before it returns.
+    pub fn set_clipboard(&self, clipboard: Clipboard, text: &str) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *const c_char, usize)> =
+            match self.symbol(b"domicile_clipboard_set\0", "domicile_clipboard_set") {
+                Ok(symbol) => symbol,
+                Err(_) => return,
+            };
+        // SAFETY: as above, and the slice outlives the call because `text`
+        // does.
+        unsafe {
+            f(
+                self.handle,
+                clipboard.as_raw(),
+                text.as_ptr().cast::<c_char>(),
+                text.len(),
+            );
+        };
+    }
+
     /// Submits a frame showing `buffer`. An empty damage rectangle means the
     /// whole surface. This is `wl_surface.commit`.
     pub fn submit(&self, surface: SurfaceId, buffer: BufferId, damage: (i32, i32, i32, i32)) {
@@ -672,6 +755,7 @@ fn join(
         frame: Some(on_frame),
         released: Some(on_released),
         displays: Some(on_displays),
+        copied: Some(on_copied),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -747,6 +831,42 @@ extern "C" fn on_displays(user_data: *mut c_void, displays: *const RawDisplay, c
     // `displays_from` copies, so nothing outlives the callback.
     let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
     push(user_data, Event::Displays(displays_from(records)));
+}
+
+/// A copy made in the browser, as the bytes it was made of.
+///
+/// **Length-carried rather than nul-terminated**, which is the one place this
+/// ABI differs from the rest of itself, and for a reason that is about
+/// clipboards rather than taste: what a person copies is arbitrary bytes and
+/// may hold a nul, which a C string cannot say and would cut short. See
+/// `domicile_clipboard_set`, which crosses the other way on the same terms.
+extern "C" fn on_copied(
+    user_data: *mut c_void,
+    clipboard: u32,
+    text: *const c_char,
+    length: usize,
+) {
+    assert!(
+        !text.is_null(),
+        "the engine sends the bytes that were copied, even if it sends none"
+    );
+    // SAFETY: the ABI says `text` points at `length` bytes, borrowed for the
+    // duration of this call; `String::from_utf8_lossy` copies before it
+    // returns, so nothing outlives the callback.
+    let bytes = unsafe { std::slice::from_raw_parts(text.cast::<u8>(), length) };
+    push(
+        user_data,
+        Event::Copied {
+            clipboard: clipboard_from(clipboard),
+            // Lossy, like a panel's name, and for a reason that makes it
+            // unreachable rather than tolerated: the bytes arrive over a mojom
+            // `string`, which mojo itself validates as UTF-8 before the
+            // browser ever sees them. What lossy buys is that a validator
+            // changing its mind costs a replacement character somebody can see
+            // rather than the desktop.
+            text: String::from_utf8_lossy(bytes).into_owned(),
+        },
+    );
 }
 
 /// The ABI's flat records as the pairs the compositor lays out in.
@@ -838,6 +958,28 @@ mod tests {
     /// mistake that reads the wrong half of a bounding box. It does not catch
     /// a reorder or a signedness change — those keep the size and there is
     /// nothing on this side that could notice them.
+    /// The two clipboards cross as numbers, and which number is which is as
+    /// much part of the ABI as any struct's size. Reversed, they would paste
+    /// what a person selected where they expected what they copied.
+    #[test]
+    fn each_clipboard_crosses_as_the_number_the_c_header_gives_it() {
+        assert_eq!(Clipboard::Copy.as_raw(), 0);
+        assert_eq!(Clipboard::Primary.as_raw(), 1);
+        assert_eq!(clipboard_from(0), Clipboard::Copy);
+        assert_eq!(clipboard_from(1), Clipboard::Primary);
+    }
+
+    /// A number the header does not declare is an engine this compositor does
+    /// not understand. Refused rather than folded onto one of the two: the
+    /// plausible guess is the ordinary clipboard, and a copy landing on it
+    /// because a third one was added is a paste that silently overwrites what
+    /// the user actually copied.
+    #[test]
+    #[should_panic(expected = "clipboard")]
+    fn a_clipboard_the_header_does_not_declare_is_refused() {
+        clipboard_from(2);
+    }
+
     #[test]
     fn a_capture_is_the_six_int32_the_c_header_declares() {
         assert_eq!(

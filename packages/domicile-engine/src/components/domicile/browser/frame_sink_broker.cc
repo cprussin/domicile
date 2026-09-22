@@ -40,11 +40,13 @@ FrameSinkBroker::FrameSinkBroker(
     viz::HostFrameSinkManager* host_frame_sink_manager,
     FrameSinkIdAllocator allocate_frame_sink_id,
     SharedImageInterfaceGetter get_shared_image_interface,
-    DisplayLayoutSetter set_display_layout)
+    DisplayLayoutSetter set_display_layout,
+    ClipboardSetter set_clipboard)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
-      set_display_layout_(std::move(set_display_layout)) {
+      set_display_layout_(std::move(set_display_layout)),
+      set_clipboard_(std::move(set_clipboard)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -190,6 +192,30 @@ void FrameSinkBroker::ConfigureDisplays(
     return;
   }
   set_display_layout_.Run(std::move(layout));
+}
+
+void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,
+                                  const std::string& text) {
+  if (!set_clipboard_) {
+    // An embedder with no clipboard of the desktop's, which is every one that
+    // is a window inside somebody else's session. Not an error and not worth a
+    // line: a producer states its clipboard whatever the browser is running
+    // on, because whose clipboard the browser reads is not a fact it has.
+    return;
+  }
+  set_clipboard_.Run(clipboard, text);
+}
+
+void FrameSinkBroker::ObserveClipboard(
+    mojo::PendingRemote<mojom::ClipboardObserver> observer) {
+  clipboard_observers_.Add(std::move(observer));
+}
+
+void FrameSinkBroker::OnCopied(mojom::Clipboard clipboard,
+                               const std::string& text) {
+  for (auto& observer : clipboard_observers_) {
+    observer->OnCopied(clipboard, text);
+  }
 }
 
 void FrameSinkBroker::ObserveDisplays(

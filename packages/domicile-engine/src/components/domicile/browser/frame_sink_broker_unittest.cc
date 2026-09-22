@@ -5,7 +5,9 @@
 #include "components/domicile/browser/frame_sink_broker.h"
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
@@ -99,6 +101,28 @@ class FakeDisplayListObserver : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
+// Stands in for the producer's other half again: the compositor being told
+// what was copied in the browser.
+class FakeClipboardObserver : public mojom::ClipboardObserver {
+ public:
+  mojo::PendingRemote<mojom::ClipboardObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // mojom::ClipboardObserver implementation.
+  void OnCopied(mojom::Clipboard clipboard, const std::string& text) override {
+    copies_.emplace_back(clipboard, text);
+  }
+
+  // Every copy this observer was told about, in order. A list for the reason
+  // FakeDisplayListObserver keeps one: copying the same thing twice is a
+  // different fact from copying it once.
+  std::vector<std::pair<mojom::Clipboard, std::string>> copies_;
+
+ private:
+  mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
+};
+
 // A display list of one: a named 597x336mm panel at the origin, at a hair
 // under 60Hz.
 //
@@ -184,6 +208,8 @@ class FrameSinkBrokerTest : public testing::Test {
             &allocator_),
         FrameSinkBroker::SharedImageInterfaceGetter(),
         base::BindRepeating(&FrameSinkBrokerTest::RecordLayout,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
                             base::Unretained(this)));
   }
 
@@ -191,6 +217,12 @@ class FrameSinkBrokerTest : public testing::Test {
   // embedder injects and which this target deliberately cannot reach.
   void RecordLayout(std::vector<mojom::DisplayLayoutPtr> layout) {
     layouts_.push_back(std::move(layout));
+  }
+
+  // Stands in for the ozone platform that owns the clipboard, injected for the
+  // same reason.
+  void RecordClipboard(mojom::Clipboard clipboard, const std::string& text) {
+    clipboards_.emplace_back(clipboard, text);
   }
 
   void TearDown() override {
@@ -207,6 +239,9 @@ class FrameSinkBrokerTest : public testing::Test {
   // because "stated once" and "stated twice the same way" are different facts
   // about a desktop whose config can be reloaded.
   std::vector<std::vector<mojom::DisplayLayoutPtr>> layouts_;
+
+  // Every clipboard the producer stated, in order.
+  std::vector<std::pair<mojom::Clipboard, std::string>> clipboards_;
 
   // Stands in for the browser's own allocator, which is what a real embedder
   // injects.
@@ -588,6 +623,97 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
   RunUntilIdle();
 
   EXPECT_TRUE(layouts_.empty()) << "the fixture's own broker heard nothing";
+}
+
+TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {
+  // The direction that makes a copy made in a terminal pasteable in a page.
+  // Both clipboards, because the desktop has two and confusing them would
+  // paste what the pointer brushed past wherever Ctrl-V was pressed.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetClipboard(mojom::Clipboard::kCopy, "an explicit copy");
+  remote->SetClipboard(mojom::Clipboard::kPrimary, "brushed past");
+  RunUntilIdle();
+
+  ASSERT_EQ(clipboards_.size(), 2u);
+  EXPECT_EQ(clipboards_[0].first, mojom::Clipboard::kCopy);
+  EXPECT_EQ(clipboards_[0].second, "an explicit copy");
+  EXPECT_EQ(clipboards_[1].first, mojom::Clipboard::kPrimary);
+  EXPECT_EQ(clipboards_[1].second, "brushed past");
+}
+
+TEST_F(FrameSinkBrokerTest, AnEmptyClipboardIsSaidRatherThanSwallowed) {
+  // A clipboard with nothing on it is an answer, not a message to drop: a
+  // browser never told would go on offering whatever it was told last, which
+  // is a paste producing something a person has already cleared.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetClipboard(mojom::Clipboard::kCopy, "");
+  RunUntilIdle();
+
+  ASSERT_EQ(clipboards_.size(), 1u);
+  EXPECT_EQ(clipboards_[0].second, "");
+}
+
+TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoClipboardDropsWhatWasSaid) {
+  // Every embedder that is a window inside somebody else's session, which
+  // reads that session's clipboard. A producer states its clipboard whatever
+  // it is running on, because whose clipboard the browser reads is not a fact
+  // it has.
+  FrameSinkBroker unwired(host_frame_sink_manager_.get(),
+                          base::BindRepeating(
+                              [](viz::FrameSinkIdAllocator* allocator) {
+                                return allocator->NextFrameSinkId();
+                              },
+                              &allocator_));
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  unwired.Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetClipboard(mojom::Clipboard::kCopy, "an explicit copy");
+  RunUntilIdle();
+
+  EXPECT_TRUE(clipboards_.empty()) << "the fixture's own broker heard nothing";
+}
+
+TEST_F(FrameSinkBrokerTest, ACopyMadeInTheBrowserReachesEveryObserver) {
+  // The other direction, and the one nothing else can do: a copy made in a
+  // page reaches no seat on its own, because the browser is not a Wayland
+  // client of the producer.
+  mojo::Remote<mojom::FrameSinkBroker> first_remote;
+  mojo::Remote<mojom::FrameSinkBroker> second_remote;
+  broker()->Bind(first_remote.BindNewPipeAndPassReceiver());
+  broker()->Bind(second_remote.BindNewPipeAndPassReceiver());
+  FakeClipboardObserver first;
+  FakeClipboardObserver second;
+  first_remote->ObserveClipboard(first.BindRemote());
+  second_remote->ObserveClipboard(second.BindRemote());
+  RunUntilIdle();
+
+  broker()->OnCopied(mojom::Clipboard::kPrimary, "copied in a page");
+  RunUntilIdle();
+
+  ASSERT_EQ(first.copies_.size(), 1u);
+  EXPECT_EQ(first.copies_[0].first, mojom::Clipboard::kPrimary);
+  EXPECT_EQ(first.copies_[0].second, "copied in a page");
+  EXPECT_EQ(second.copies_, first.copies_);
+}
+
+TEST_F(FrameSinkBrokerTest, AnObserverIsNotCaughtUpOnCopiesItMissed) {
+  // The opposite of ObserveDisplays, deliberately: what a producer connecting
+  // afterward would be caught up on is a copy it made itself, and the
+  // clipboard a browser that has just started should hold is the producer's to
+  // state with SetClipboard.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  broker()->OnCopied(mojom::Clipboard::kCopy, "copied before it connected");
+
+  FakeClipboardObserver observer;
+  remote->ObserveClipboard(observer.BindRemote());
+  RunUntilIdle();
+
+  EXPECT_TRUE(observer.copies_.empty());
 }
 
 TEST_F(FrameSinkBrokerTest, AnObserverHearsNothingUntilTheDisplaysAreRead) {

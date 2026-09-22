@@ -131,6 +131,21 @@ impl History {
             .collect()
     }
 
+    /// The row a copy just made, by the id it is named under.
+    ///
+    /// **The answer [`History::record`] cannot give**, and the reason this
+    /// exists: `record` says whether the list moved, which is what a chrome
+    /// has to be told about and not what a compositor putting a copy on the
+    /// seat needs. That caller has to name a row, and the row it means is
+    /// always this one — including when `record` said `false`, which is a copy
+    /// of what was already newest.
+    ///
+    /// `None` is a desktop nothing has been copied on, which is every one that
+    /// has just started.
+    pub fn newest(&self) -> Option<u32> {
+        self.entries.first().map(|copy| copy.id)
+    }
+
     /// The whole of what a row holds, for putting back on the clipboard.
     ///
     /// `None` for an id no row has, which is an id whose row fell off the end
