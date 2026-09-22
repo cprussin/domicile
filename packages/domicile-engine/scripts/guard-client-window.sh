@@ -254,7 +254,8 @@ fi
 # The compositor logs what viz drew each time it submits.
 #
 # HOW LONG TO WATCH IS NOT THE SAME QUESTION FOR THE TWO RUNS. The guard stops
-# the moment a color appears and almost never spends its budget; measured on
+# the moment the client's color appears and almost never spends its budget;
+# measured on
 # engine run 35496858205, the poll took ~5s of a 1m05 step. The control cannot
 # stop early -- with no client there is nothing to appear -- so it spends the
 # whole thing every time, which is why it was measured at 2m04.
@@ -286,19 +287,42 @@ fi
 LOOKS="${LOOKS:-240}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
 
+# WHAT IT WAITS FOR IS THE CLIENT'S COLOR, NOT THE FIRST FRAME TO TURN UP. The
+# probe is in `publish_frame`, on the submit path, so it fires as the client
+# commits -- but what it samples is the browser's window, and the engine has
+# not necessarily composited the surface it was handed a moment earlier. The
+# first samples are therefore of the page itself: white while it is still
+# painting, then spike-page.html's own #3f51b5 background. This used to break
+# on the first `engine drew` of ANY color and only then compare it with the
+# client's, so whichever frame the poll happened to catch decided the verdict.
+# `Engine` run 35678677098 caught both of the page's within 300ms of kitty
+# starting and called the seam broken on a job whose own summary read
+# `appeared=1 brokered=1 configured=1 drew=2 stuck=0`.
+#
+# Nothing that made the old loop safe moves: it still stops the moment it sees
+# what it is looking for, it still gives up when the bound is spent, and what
+# it read last is still what the verdict below is about -- so a page that
+# really is showing the wrong color spends the bound and is then reported with
+# both colors named, which is the sentence that was worth keeping.
+# scripts/test-the-client-window-guard-waits-for-the-clients-color.sh is what
+# holds this together.
 DRAWN=""
 WAITED=0
 for _ in $(seq 1 "$LOOKS"); do
   DRAWN=$(grep -oE "engine drew #[0-9A-F]{8}" "$COMP_LOG" | tail -1 | grep -oE "[0-9A-F]{8}$")
-  [ -n "$DRAWN" ] && break
+  [ "${DRAWN#FF}" = "$COLOR" ] && break
   sleep 1
   WAITED=$((WAITED + 1))
 done
 
-# Only what the GUARD measured, and only when it actually saw something: a run
-# that timed out measured its own patience rather than the system's, and the
-# control must not inherit that as though it were a reading.
-if [ "$NEGATIVE" != "1" ] && [ -n "$DRAWN" ]; then
+# Only what the GUARD measured, and only when it actually saw the client's
+# color: a run that timed out measured its own patience rather than the
+# system's, and the control must not inherit that as though it were a reading.
+# That reading is larger than it was, because it now spans the client's frame
+# reaching the page rather than ending at whatever the page drew first -- and
+# the larger number is the one the control needs, since what it is buying with
+# it is the right to call an absence meaningful.
+if [ "$NEGATIVE" != "1" ] && [ "${DRAWN#FF}" = "$COLOR" ]; then
   budget_note client-window "$WAITED"
 fi
 

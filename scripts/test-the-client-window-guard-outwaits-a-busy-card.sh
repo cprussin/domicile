@@ -28,8 +28,8 @@
 # the failure mode that teaches people to re-run until green.
 #
 # SO THE PATIENCE IS THE THING WITH A FLOOR UNDER IT, and it is free because
-# the poll stops the moment it sees a color: a healthy run costs what it always
-# cost however high this goes. That is the first case below, and it is what
+# the poll stops the moment it sees the client's color: a healthy run costs
+# what it always cost however high this goes. That is the first case below, and it is what
 # makes the floor affordable rather than a tax.
 #
 # IT IS STILL BOUNDED, and the second case is why that matters. A poll with no
@@ -104,6 +104,14 @@ poll() { # $1 how patient, $2 when the line lands
   (
     LOOKS="$1"
     NEGATIVE=0
+    # What the client drew, which is what the poll now waits for rather than
+    # for the first frame of any color -- the page paints its own background
+    # before the client's surface is composited in, and the guard used to read
+    # whichever of the two it caught. `$DREW` below is this color, so every
+    # case here means what it did.
+    # scripts/test-the-client-window-guard-waits-for-the-clients-color.sh is
+    # where that behavior is asserted; this file is still about the bound.
+    COLOR=3366CC
     COMP_LOG="$dir/comp"
     # Somewhere of its own, so a case cannot read another case's note and the
     # runner's /tmp is left alone.
