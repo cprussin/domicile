@@ -16,6 +16,7 @@ use crate::engine::{
     BufferId, Capture, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
+use crate::engine_surfaces::Surfaces;
 
 /// A buffer going back to the client, and why. Every one of these is a
 /// `wl_buffer.release` the caller owes.
@@ -65,8 +66,9 @@ pub struct EngineSession {
     /// too: the launcher takes the dead one's socket away and starts another
     /// under the same path.
     socket: std::path::PathBuf,
-    /// One surface per app, brokered the first time that app commits.
-    surfaces: HashMap<String, SurfaceId>,
+    /// One surface per app, brokered the first time that app commits, and
+    /// which of them a page has embedded.
+    surfaces: Surfaces,
     /// Which imported buffer each `wl_buffer` is. A client commits the same
     /// buffer over and over; importing per commit would hand the browser
     /// another set of fds every frame for the same pixmap.
@@ -83,7 +85,7 @@ impl EngineSession {
         Ok(Self {
             engine: Engine::load(LIBRARY, socket)?,
             socket: socket.to_path_buf(),
-            surfaces: HashMap::new(),
+            surfaces: Surfaces::default(),
             imports: HashMap::new(),
             held: HeldBuffers::default(),
         })
@@ -242,6 +244,13 @@ impl EngineSession {
         let Some(surface) = self.surface_for(app_id) else {
             return false;
         };
+        // A frame the engine would drop is not a frame it is holding. Its
+        // buffer goes back to the client the ordinary way, because the one
+        // release that would ever have come for it is viz's, and viz was never
+        // given it -- see `engine_surfaces`.
+        if !self.surfaces.takes_frames(surface) {
+            return false;
+        }
         let Some(id) = self.import(surface, buffer, descriptor) else {
             return false;
         };
@@ -273,7 +282,15 @@ impl EngineSession {
                         why: Returned::Released,
                     })
                 }
-                Event::Configure { .. } | Event::Frame { .. } | Event::Displays(_) => None,
+                // A page embedded this surface, which is the moment the
+                // engine gains somewhere to put a frame for it. Recorded here
+                // rather than left to the caller because what it decides is
+                // whether `submit` may hold a buffer -- see `engine_surfaces`.
+                Event::Configure { surface, .. } => {
+                    self.surfaces.embedded(*surface);
+                    None
+                }
+                Event::Frame { .. } | Event::Displays(_) => None,
             })
             .collect();
         (events, releases)
@@ -291,7 +308,7 @@ impl EngineSession {
     /// gone, and waiting out the deadline for each would stall a client that
     /// is still running for no reason.
     pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {
-        let Some(surface) = self.surfaces.remove(app_id) else {
+        let Some(surface) = self.surfaces.forget(app_id) else {
             return Vec::new();
         };
         self.imports.retain(|_, (held, _)| *held != surface);
@@ -327,25 +344,21 @@ impl EngineSession {
     }
 
     /// Which app a surface belongs to, for an event that names only the
-    /// surface. One engine holds a handful of windows, so a scan beats keeping
-    /// a second map honest.
+    /// surface.
     pub fn app_for(&self, surface: SurfaceId) -> Option<&str> {
-        self.surfaces
-            .iter()
-            .find(|(_, held)| **held == surface)
-            .map(|(app_id, _)| app_id.as_str())
+        self.surfaces.app_for(surface)
     }
 
     /// The one surface for `app_id`, brokered on first use. `None` if the
     /// browser refused, which is logged once rather than every frame.
     fn surface_for(&mut self, app_id: &str) -> Option<SurfaceId> {
         if let Some(surface) = self.surfaces.get(app_id) {
-            return Some(*surface);
+            return Some(surface);
         }
         match self.engine.create_surface(app_id) {
             Ok(surface) => {
                 tracing::info!(%app_id, surface, "the browser brokered a frame sink");
-                self.surfaces.insert(app_id.to_owned(), surface);
+                self.surfaces.brokered(app_id, surface);
                 Some(surface)
             }
             Err(err) => {
