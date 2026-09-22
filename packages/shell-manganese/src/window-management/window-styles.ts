@@ -195,7 +195,7 @@ export const movingStyles = cva({
 /**
  * How a window gets from one look to the next rather than snapping to it.
  *
- * Two things move, and only one of them is always allowed to ease.
+ * Three things move, and only the first of them is ever held back.
  *
  * **The box.** Every rectangle on this desktop is arithmetic — see
  * `tree/frames.ts` — so a window whose neighbor opened, closed, split or grew
@@ -213,6 +213,25 @@ export const movingStyles = cva({
  * pointer move, and a window easing towards each of them is one that trails
  * the pointer instead of following it.
  *
+ * **The depth**, which is a window's `z-index` and so an integer, and an
+ * integer is something CSS interpolates. That is what makes it move *with* the
+ * box instead of before it: a window on its way up is over what it is growing
+ * across from the first frame of the movement, and one on its way down is
+ * still over what it is shrinking back into until the last. Over the same
+ * duration and the same curve as the box, because it is the same movement.
+ *
+ * Which is what giving the screen back needs. A window that dropped from the
+ * depth a fullscreen window is given — see `placement.ts` — to its tiled one
+ * the moment the state changed would spend the whole of its shrink *under* the
+ * windows it is still covering: they tie at that depth, and a tie is decided
+ * by the order the windows come in the document, which is the order they were
+ * opened. A raise that moves nothing else — clicking a float to the front — is
+ * a step of one rather than of two thousand, which this curve spends in a
+ * frame.
+ *
+ * It eases while the window is dragged as well, unlike the box: taking hold
+ * of a float raises it, and that is a step of one too.
+ *
  * **The colors**, which are what a window says about the keyboard — the wash
  * over its bar, the rule across the top of it, the line around its frame, the
  * text on it. Those ease whichever of the two states the window is in, dragged
@@ -221,21 +240,21 @@ export const movingStyles = cva({
  * on the way to anywhere. A drag is when the pointer crosses the most windows
  * of all.
  *
- * **One declaration for both**, which is why the box and the colors are one
- * recipe rather than a class each: two rules setting `transition` on one
- * element are decided by the order Panda happens to emit them in, and the
- * loser is simply not applied.
+ * **One declaration for all three**, which is why the box, the depth and the
+ * colors are one recipe rather than a class each: two rules setting
+ * `transition` on one element are decided by the order Panda happens to emit
+ * them in, and the loser is simply not applied.
  */
 export const settlingStyles = cva({
   variants: {
     dragging: {
       false: {
         transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
       },
       true: {
         transition:
-          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
       },
     },
   },

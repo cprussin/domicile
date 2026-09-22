@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { Axis } from "./direction";
 import type { Geometry } from "./placement";
-import { placementsOf } from "./placement";
+import { LEAVING, placementsOf } from "./placement";
 import { TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
@@ -99,7 +100,7 @@ describe("placementsOf", () => {
     expect(front).toBeGreaterThan(behind);
   });
 
-  it("fills the screen with a fullscreen window and hides the rest", () => {
+  it("fills the screen with a fullscreen window", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.FullscreenToggled(false),
@@ -111,7 +112,54 @@ describe("placementsOf", () => {
       x: 0,
       y: TITLE_BAR,
     });
-    expect(placementFor(state, "kitty")).toBeUndefined();
+  });
+
+  // AND LEAVES WHAT IT COVERS WHERE IT WAS. Taking the screen is one window
+  // growing over its neighbors, not the workspace emptying: a fullscreen that
+  // placed nothing else would blink every other window out in the frame before
+  // the growing one had moved at all, and put them back the frame after it had
+  // finished shrinking. What is under it is also what the screen goes back to,
+  // so it is the same arithmetic either way.
+  it("leaves the rest of the workspace laid out under it", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FullscreenToggled(false),
+    );
+
+    expect(placementFor(state, "kitty")).toEqual(
+      placementFor(desktop("kitty", "editor"), "kitty"),
+    );
+  });
+
+  it("goes on reporting the tabs it covers", () => {
+    const tabbed = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.ParentFocused(),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+    const state = reduce(tabbed, WindowAction.FullscreenToggled(false));
+
+    expect(placementsOf(state, GEOMETRY).tabs).toEqual(
+      placementsOf(tabbed, GEOMETRY).tabs,
+    );
+  });
+
+  // OVER EVERY WINDOW ON THE SCREEN, INCLUDING ONE ON ITS WAY OUT. `LEAVING`
+  // is the top of everything else the page draws — a window that has closed is
+  // raised there so the neighbors easing into the box it had cannot cover it —
+  // and a fullscreen window is over that too: it covers the space that window
+  // was in, so a departure drawn over it would be a window shrinking away
+  // across a screen that is no longer showing it.
+  it("stacks a fullscreen window over everything it covers", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FullscreenToggled(false),
+    );
+
+    expect(placementFor(state, "editor")?.depth).toBeGreaterThan(LEAVING);
   });
 
   it("fills every screen when the fullscreen is global", () => {
