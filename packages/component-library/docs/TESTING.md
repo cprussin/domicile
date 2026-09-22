@@ -52,9 +52,9 @@ inspector used to answer that by walking a happy-dom node's property graph out
 through `ownerDocument` into the whole rendered tree: 190MB and five to nine
 seconds for one failed poll on the Field error popover, growing with the size
 of the document. `@domicile/test-support`'s preload now answers the inspection
-with the element's own markup instead
-([`element-inspection.ts`](/packages/test-support/src/element-inspection.ts)),
-so that charge is gone — a failed poll there measures 1ms. The reasons above
+with the node's own markup instead
+([`node-inspection.ts`](/packages/test-support/src/node-inspection.ts)), so
+that charge is gone — a failed poll there measures 1ms. The reasons above
 stand without it.
 
 The matcher is fine as a one-shot assertion that passes; a retry loop is what
