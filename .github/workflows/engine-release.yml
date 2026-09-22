@@ -64,20 +64,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Room to build in
-        run: |
-          set -euo pipefail
-          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
-          echo "/build has ${free_gb}G free"
-          # A non-component Chromium is ~40G of objects. Under 60 there is no
-          # point starting: the failure four hours in is a full dataset, and
-          # /build is also where this machine's interactive builds live.
-          [ "$free_gb" -ge 60 ] || {
-            echo "::error::only ${free_gb}G free on /build; a release build needs ~40G and this will not fit" >&2
-            echo "Reclaim it by removing $CHROMIUM/$OUT, which is a cache and nothing else." >&2
-            exit 1
-          }
-
       # ONE WRITER AT A TIME IN THAT CHECKOUT. `crux`'s single job slot keeps
       # this workflow and engine.yml apart from each other; it says nothing
       # about the person or the agent building in the same tree by hand, and a
@@ -94,13 +80,38 @@ jobs:
       # `out/Release` is a second output directory in whichever tree it lands
       # in, and it is ~40G. Pointing every release at the tree that carries
       # main's pin keeps it to one of them rather than one per slot, and the
-      # `Room to build in` check above is what says so if that stops being
-      # true. See .github/scripts/engine-tree-pool.sh.
+      # `Room to build in` check below is what says so if that stops being
+      # true -- below rather than above now, because reclaiming has to know
+      # which tree the path names. See .github/scripts/engine-tree-pool.sh.
       - name: Which tree this pin builds in
         run: |
           set -euo pipefail
           .github/scripts/engine-tree-pool.sh use \
             "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
+      # AFTER THE LOCK AND AFTER THE TREE IS CHOSEN, AND BOTH HALVES OF THAT
+      # ORDER ARE LOAD-BEARING. This used to be the job's first step, because
+      # measuring free space needs nothing and could therefore refuse a doomed
+      # run before anything else happened.
+      #
+      # Measuring still needs nothing. RECLAIMING needs the lock, because two
+      # of the three things it removes are inside the checkout and a delete
+      # landing in somebody else's build is the silent corruption the lock is
+      # for. And it needs the tree to have been picked, because `$CHROMIUM` is
+      # a path through a symlink the pool swaps: run before that step, the
+      # reclaim empties `out/Release` out of whichever tree the LAST run left
+      # the path pointing at, which is by construction not the one this run is
+      # about to build in. So the check moved behind both rather than the
+      # reclaim moving in front of them.
+      #
+      # It stopped run 35552629257 in two seconds with 54G free, printed the
+      # remedy — remove $CHROMIUM/$OUT, a cache and nothing else — and then did
+      # not apply it. Nobody can log into `crux` from CI, so that sentence was
+      # the end of the release. The floor is unchanged and still refuses a
+      # build that cannot finish; what is new is that it first drops what this
+      # workflow owns and measures again.
+      - name: Room to build in
+        run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT" "$STAGE"
 
       # The same scripts engine.yml resets and syncs with, because it is the
       # same tree, the same reset and the same pin. The reset used to be a
