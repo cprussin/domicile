@@ -1882,7 +1882,11 @@ impl DomicileCompositor {
         }
         // Taken out and put back, because a run dropped here starts over from
         // an empty floor on the next commit.
-        let mut run = self.latency.take().unwrap_or_else(|| Latency::new(budget));
+        let frame = self.display_interval();
+        let mut run = self
+            .latency
+            .take()
+            .unwrap_or_else(|| Latency::new(budget, frame));
         // The caller's stamp, from before `publish_frame` ran. The import and
         // the submit are this design's cost and belong in `commit_to_pixel`;
         // stamping here would have put them in the client's half instead.
@@ -2046,6 +2050,15 @@ impl DomicileCompositor {
             target: "domicile::engine::spike",
             "latency: {} round(s) whose pixel moved before the client answered",
             report.moved_before_commit
+        );
+        // The fourth, and the one that reads as a measurement right up until
+        // you look at the size of it: the client committed, in order, and the
+        // pixel followed — just far too long after the key for the key to have
+        // caused it. Said always, for the reason the one above is.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) whose commit came too late to be the key's answer",
+            report.answered_too_late
         );
         // What the client did with the key, as opposed to whether it answered
         // at all. A round counted here answered with more than one frame, and

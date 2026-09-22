@@ -494,6 +494,18 @@ failing: a client that answers no keys still reported 25.93 ms commit to pixel
 over one round. The cost is up to one probe round trip inside `key to commit`,
 which is the bucket already declared impure.
 
+**And the wait is bounded, or the commit is not the key's.** Watching the wait
+catches a pixel that moved before the commit; a commit that arrives in the
+right order and far too late is not caught by anything in that rule. The
+control found this too, on the run after: a dot committing 914.87 ms after the
+key — 55 display frames — with its pixels a frame behind it, timed as a
+keystroke's 16.23 ms. The two populations do not overlap, and the measurement
+says where the line goes rather than taste: over sixty rounds against a client
+that does answer, the worst `key to commit` was 44.11 ms, 2.6 frames. A round
+gives up on any commit more than eight display frames after the press and
+counts it (`round(s) whose commit came too late to be the key's answer`), which
+leaves three times the worst real round.
+
 **Two instruments agree on the frame.** In the same CI job as run 4,
 `css_parity.cc` — which runs inside the browser and can ask viz — reported a
 `BeginFrameArgs` interval of 16.67 ms and a probe round trip with a median of

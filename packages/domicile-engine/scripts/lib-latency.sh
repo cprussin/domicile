@@ -105,6 +105,20 @@ latency_moved() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
+# How many rounds were given up because the client's commit came too long after
+# the key to be its answer. Empty when the run never said.
+#
+# Its own reader, and the accusation that reads least like one: the client
+# committed, in order, and the pixel followed. What is wrong with the round is
+# the size of the wait — a client redrawing on its own committed whatever it
+# was doing, and the round still waiting took it for an answer.
+latency_late() {
+  local log="$1"
+  grep -a "round(s) whose commit came too late to be the key's answer" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # How many rounds this compositor failed to deliver a key for. Empty when the
 # run never said.
 #
