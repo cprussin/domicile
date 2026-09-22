@@ -290,7 +290,13 @@ export const domicilePreset = definePreset({
         // derived token recomputes automatically.
         colors: {
           accent: {
-            value: { _light: "{colors.cyan.600}", base: "{colors.cyan.500}" },
+            // 700 on the light ground and 500 on the dark one, which is not a
+            // matched pair and is not meant to be: what is matched is how far
+            // each sits from the ground it is drawn on. The same step in both
+            // themes would be legible in one of them — `pandacss-preset.test.ts`
+            // is what says which, and it is the rule the other three colors
+            // below were already written to.
+            value: { _light: "{colors.cyan.700}", base: "{colors.cyan.500}" },
           },
           backdrop: {
             // Black scrim works for both modes: in dark mode it creates
