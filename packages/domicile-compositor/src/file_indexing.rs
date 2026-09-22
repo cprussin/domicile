@@ -56,6 +56,16 @@ const WHILE_BUILDING: Duration = Duration::from_millis(500);
 /// the index lands in the same place either way.
 const SETTLE: Duration = Duration::from_millis(250);
 
+/// How long the index on disk may be behind the one in memory.
+///
+/// The cache is written when the boot walk ends and again when the home has
+/// moved on, but not on every change: the file is the whole list, so a home
+/// that gains one file a minute would rewrite megabytes a minute for a cache
+/// only the *next* session reads. Five minutes of drift costs that session the
+/// few seconds its own walk takes to notice, which is what the cache is for in
+/// the first place.
+const KEPT_FRESH: Duration = Duration::from_secs(300);
+
 /// What a launcher is offered, as the last announcement left it.
 ///
 /// The whole list rather than what changed, for the reason the clipboard sends
@@ -87,6 +97,9 @@ pub struct Offered {
 /// a full home is the worse answer. The panel still opens and still takes a
 /// path, a URL or a query.
 pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Offered)) {
+    if kept_at.is_none() {
+        info!("nowhere to keep a file index, so every start walks the home");
+    }
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
     loop {
@@ -113,7 +126,7 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
             }
         };
 
-        if !hold_it_current(&watcher, &home, &mut index, &tell) {
+        if !hold_it_current(&watcher, &home, kept_at.as_deref(), &mut index, &tell) {
             return;
         }
         info!("the kernel dropped filesystem events, so the home is being walked again");
@@ -213,7 +226,6 @@ fn remembered(kept_at: Option<&Path>) -> Vec<String> {
 /// Write the index down for the next run to start from.
 fn write_it_down(kept_at: Option<&Path>, index: &FileIndex) {
     let Some(path) = kept_at else {
-        info!("nowhere to keep a file index, so every start walks the home");
         return;
     };
     if let Err(err) = write(path, &index.files()) {
@@ -234,9 +246,11 @@ fn write_it_down(kept_at: Option<&Path>, index: &FileIndex) {
 fn hold_it_current(
     watcher: &HomeWatcher,
     home: &Path,
+    kept_at: Option<&Path>,
     index: &mut FileIndex,
     tell: &impl Fn(Offered),
 ) -> bool {
+    let mut written = Instant::now();
     while let Ok(first) = watcher.rx.recv() {
         // A `git checkout` is thousands of events over a second or two. Taken
         // one at a time they would be one announcement of the whole home per
@@ -264,6 +278,14 @@ fn hold_it_current(
         }
 
         announce(index, tell);
+        // And the copy the next session starts from, which would otherwise be
+        // whatever the home held at this session's startup — a day or a week
+        // ago on a desk that stays up. On a clock, because the file is the
+        // whole list: see `KEPT_FRESH`.
+        if written.elapsed() >= KEPT_FRESH {
+            write_it_down(kept_at, index);
+            written = Instant::now();
+        }
         if rescan {
             return true;
         }
