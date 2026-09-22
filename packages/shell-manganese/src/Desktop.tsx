@@ -17,6 +17,7 @@ import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { Geometry, Screenful } from "./window-management/placement";
 import { placementsOf } from "./window-management/placement";
 import type { Focus } from "./window-management/pointer-warp";
+import { pageBoxOf } from "./window-management/pointer-warp";
 import type { Rect } from "./window-management/rect";
 import { Stage } from "./window-management/Stage";
 import { usePointerWarp } from "./window-management/usePointerWarp";
@@ -72,8 +73,8 @@ export const Desktop = ({ domicile }: Props) => {
   // pointer did not make — a key, or a window opening — would be undone by the
   // next pointer event. `pointer-warp.ts` has the whole of it.
   const focus = useMemo(
-    () => focusOn(screenful, windows.activeId),
-    [screenful, windows.activeId],
+    () => focusOn(screenful, windows.activeId, displays?.[0]),
+    [displays, screenful, windows.activeId],
   );
   // The ids alone: what the warp reads them for is whether the window holding
   // the keyboard is one that was not there a render ago.
@@ -207,15 +208,26 @@ export const Desktop = ({ domicile }: Props) => {
  * see `Stage` — so the region the pointer has to be in to hold the focus is
  * the one the window draws in, not the bar above it. A window a tab is hiding
  * has only that bar, which is where the window is.
+ *
+ * **In the page's coordinates and not the layout's**, which is `pageBoxOf`'s
+ * whole reason: a pointer exists in what the page draws, and where a page is
+ * one monitor those are not the same numbers. `display` is the screen the
+ * chrome is on — the first one, which is where `FirstScreen` puts it and what
+ * `geometryOf` lays out against — and nothing is placed at all before there is
+ * one.
  */
 const focusOn = (
   screenful: Screenful,
   activeId: string | undefined,
+  display: Display | undefined,
 ): Focus | undefined => {
   const placement = screenful.placements.find(({ id }) => id === activeId);
-  return placement === undefined
+  return placement === undefined || display === undefined
     ? undefined
-    : { box: placement.surface ?? placement.bar, id: placement.id };
+    : {
+        box: pageBoxOf(placement.surface ?? placement.bar, display),
+        id: placement.id,
+      };
 };
 
 /**

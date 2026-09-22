@@ -52,6 +52,10 @@ export const coverTheWindow = (
 /**
  * How many of the window's pixels one of the region's is worth.
  *
+ * Exported for `on-the-page.ts`, which maps a place through the same density
+ * this scales a region by: the two have to agree, and they agree by being one
+ * function.
+ *
  * **Measured across the turn.** A quarter turn trades the monitor's width for
  * its height, so a box 1800 wide covers the mode's 2160 rather than its 3840.
  * Taking it along the turn instead gives 2.13 for this desk — a desktop drawn
@@ -68,7 +72,7 @@ export const coverTheWindow = (
  * fields and this is the seam between them, so it refuses rather than
  * producing a region scaled to nothing.
  */
-const densityOf = (
+export const densityOf = (
   [width, height]: readonly [number, number],
   { size: [modeWidth, modeHeight], transform }: Scanout,
 ): number | undefined => {
@@ -98,6 +102,10 @@ const densityOf = (
  * **IF A DESK COMES UP UPSIDE DOWN, THIS FUNCTION IS THE FIX.** The two
  * quarter turns are the one thing in the whole path that a screen can settle
  * and reading cannot; swapping their two arms is the whole of it.
+ *
+ * **AND `turnOf` IN `on-the-page.ts` SAYS THE SAME THING AS ARITHMETIC**, for
+ * the places a shell has to point at rather than draw. Change either and
+ * change both, or a desk comes up drawn one way and pointed at another.
  *
  * Empty for `normal`, which would otherwise be a rotation by nothing and a
  * stacking context for free.

@@ -37,6 +37,7 @@
     "./Input": "./src/Input/Input.tsx",
     "./Kbd": "./src/Kbd/Kbd.tsx",
     "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
+    "./on-the-page": "./src/Screen/on-the-page.ts",
     "./Popover": "./src/Popover/Popover.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",

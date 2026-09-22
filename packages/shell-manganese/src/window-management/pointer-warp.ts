@@ -10,6 +10,9 @@
 // The decision only. What a page can do about it is `usePointerWarp`, which is
 // the one caller.
 
+import type { Display } from "@domicile/component-library/display-source";
+import { onThePage } from "@domicile/component-library/on-the-page";
+
 import type { Rect } from "./rect";
 
 /** A place on the desktop, in the page's own pixels. */
@@ -28,6 +31,36 @@ type Move = {
   pointer: Spot | undefined;
   /** Where it is now. */
   to: Focus | undefined;
+};
+
+/**
+ * `box`, in the page's own coordinates rather than the desktop's.
+ *
+ * **THE TWO ARE NOT THE SAME NUMBERS WHERE A PAGE IS ONE MONITOR.** A window
+ * is laid out in the desktop's logical pixels and drawn through the transform
+ * that covers its screen's window — see `coverTheWindow` — so a window placed
+ * at 960 on a 1920-pixel panel is drawn at 1920 of the page's own. Everything
+ * in this file is about the pointer, and a pointer is only ever spoken about
+ * in the page's: `clientX` is what a `PointerEvent` carries and page
+ * coordinates are what `warpPointer` takes. Handing it a layout number put the
+ * cursor a fraction of the way to the window, which read as an offset from
+ * wherever it had been.
+ *
+ * A box stays a box through all four turns — they swap the axes or they do
+ * not — so the corners are mapped and read back the right way round.
+ */
+export const pageBoxOf = (box: Rect, display: Display): Rect => {
+  const [left, top] = onThePage(display, [box.x, box.y]);
+  const [right, bottom] = onThePage(display, [
+    box.x + box.width,
+    box.y + box.height,
+  ]);
+  return {
+    height: Math.abs(bottom - top),
+    width: Math.abs(right - left),
+    x: Math.min(left, right),
+    y: Math.min(top, bottom),
+  };
 };
 
 /**
