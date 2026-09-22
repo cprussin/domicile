@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Input } from "../Input/Input";
@@ -148,10 +153,6 @@ describe(Field, () => {
       expect(await screen.findByText("Custom error")).toBeInTheDocument();
     });
 
-    // The default 5000ms per-test budget is tight for two sequential
-    // `waitFor` polls plus popover enter/exit animation work under a busy
-    // test runner (the full 20-file suite runs these concurrently); the
-    // 15000ms below raises that ceiling rather than the assertions.
     it("toggles the error popover when the error prop changes", async () => {
       const { rerender } = render(
         <Field label="Username">
@@ -164,18 +165,25 @@ describe(Field, () => {
           <Input defaultValue="x" type="text" />
         </Field>,
       );
-      await waitFor(() => {
-        expect(screen.getByText("Too short")).toBeInTheDocument();
-      });
+      const popup = await screen.findByText("Too short");
+      expect(popup).toBeInTheDocument();
       rerender(
         <Field label="Username">
           <Input defaultValue="x" type="text" />
         </Field>,
       );
-      await waitFor(() => {
-        expect(screen.queryByText("Too short")).not.toBeInTheDocument();
-      });
-    }, 15_000);
+      // `waitForElementToBeRemoved` rather than the symmetric
+      // `waitFor(() => expect(...).not.toBeInTheDocument())`. The popup
+      // survives the rerender by a tick either way, so the first poll
+      // always sees it — but the jest-dom form then has to *build* that
+      // first failure's message, and bun's `expect.extend` utils carry no
+      // DOM serializer, so `stringify(element)` walks happy-dom's object
+      // graph into a ~190MB string. That one discarded message burns
+      // seconds of CPU and stretches with machine load; the popup's own
+      // close takes ~25ms. `waitForElementToBeRemoved` reuses a single
+      // pre-built Error between polls, so nothing is serialized.
+      await waitForElementToBeRemoved(popup);
+    });
 
     it.skipIf(runtimeSupportsValidationMessage() === false)(
       "surfaces the browser validationMessage by reading the control's validity",
