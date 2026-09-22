@@ -35,6 +35,18 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.ask_for_focus,
         "a client takes the keyboard it is given rather than asking for one",
     );
+    assert_eq!(
+        asked.copy, None,
+        "a client copies nothing unless a check gives it something to copy",
+    );
+    assert_eq!(
+        asked.copy_primary, None,
+        "and the middle-click selection is its own flag, left alone by the other",
+    );
+    assert!(
+        !asked.paste,
+        "a client reads neither selection unless a check asks it to",
+    );
 }
 
 #[test]
@@ -169,6 +181,43 @@ fn asking_for_the_keyboard_twice_is_refused_like_any_other_repeat() {
             flag: "--ask-for-focus".to_string()
         })
     );
+}
+
+#[test]
+fn a_client_can_be_given_something_to_copy() {
+    // The half of a clipboard check that a compositor cannot play: a
+    // selection has to be *offered* by a client, and the bytes served when
+    // somebody pastes come from that client rather than from the compositor.
+    let asked = given(&["--copy", "hello"]).expect("a client with something to copy");
+
+    assert_eq!(asked.copy, Some("hello".to_string()));
+    assert_eq!(
+        asked.copy_primary, None,
+        "the clipboard is not the middle-click selection, here or anywhere",
+    );
+}
+
+#[test]
+fn the_middle_click_selection_is_a_separate_thing_to_copy_to() {
+    // Two clipboards, as on every other Wayland desktop: `--copy` is what
+    // Ctrl-C puts somewhere and this is what selecting a word does. A client
+    // that could only reach one of them could not show that they are separate.
+    let asked = given(&["--copy-primary", "brushed past"]).expect("a client selecting a word");
+
+    assert_eq!(asked.copy_primary, Some("brushed past".to_string()));
+    assert_eq!(asked.copy, None);
+}
+
+#[test]
+fn a_client_can_be_asked_to_read_what_is_offered() {
+    // Both selections rather than one: what a paste check needs to be able to
+    // fail on is a compositor that offers the clipboard's bytes on the
+    // primary selection, and a client that only read the one it was asked
+    // about would pass that.
+    let asked = given(&["--paste"]).expect("a client that pastes");
+
+    assert!(asked.paste);
+    assert_eq!(asked.copy, None, "and nothing else came on with it");
 }
 
 #[test]
