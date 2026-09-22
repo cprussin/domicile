@@ -467,13 +467,22 @@
         # it is on the loader path without saying so. `/run/opengl-driver/lib`
         # first because on NixOS that is the EGL vendor matching the running
         # kernel driver; the nixpkgs copies behind it cover other hosts.
+        #
+        # `DOMICILE_PNP_IDS` is the other thing the wrapper hands over: the
+        # table that turns the three letters an EDID names its maker with into
+        # the vendor's own name. It is hwdata's file, read at run time, and
+        # NOT vendored — `pnp.ids` is GPL-2+ data and this tree is MIT OR
+        # Apache-2.0. `--set-default` rather than `--set` so somebody pointing
+        # the variable at their own copy still wins; a compositor that finds no
+        # table names monitors the way their firmware does and says so once.
         postFixup = ''
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
             libx11 libxcursor libxrandr libxi
           ])}" "$out/bin/domicile-compositor"
           wrapProgram "$out/bin/domicile-compositor" \
-            --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib"
+            --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
+            --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids"
         '';
       };
 
@@ -855,6 +864,10 @@
           RUST_BACKTRACE = "1";
           FORCE_COLOR = 1;
           BIOME_BINARY = pkgs.lib.getExe pkgs.biome;
+          # The same table the installed compositor's wrapper sets, so that a
+          # `cargo run` out of a checkout names a monitor's maker the way an
+          # installed desktop does rather than in three letters.
+          DOMICILE_PNP_IDS = "${pkgs.hwdata}/share/hwdata/pnp.ids";
           # The compositor `dlopen`s libEGL to import client dmabufs, and
           # `mkShell` only wires build-time linkage — a package in `packages`
           # is not on the runtime loader path. `/run/opengl-driver/lib` comes

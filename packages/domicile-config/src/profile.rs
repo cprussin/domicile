@@ -169,21 +169,24 @@ impl DisplayPlacement {
     /// The connected display this entry places, or `None` where it is not
     /// plugged in.
     ///
-    /// Either name, which is kanshi's rule and for kanshi's reason: the output
-    /// name is always there and is no use to a person, and the panel's name is
-    /// what a person can write down and is not always there. Matching both
-    /// means a desk can be named a monitor at a time, as each one's name is
-    /// read off a running desktop.
+    /// Any name it answers to, which is kanshi's rule and for kanshi's reason:
+    /// the output name is always there and is no use to a person, and the
+    /// panel's name is what a person can write down and is not always there.
+    /// Matching every one of them means a desk can be named a monitor at a
+    /// time, as each one's name is read off a running desktop — and that the
+    /// vendor may be written the way an EDID spells it or the way hwdata
+    /// does, which is [`Connected::spelled_out`].
     ///
-    /// An empty description matches nothing, and that is load-bearing rather
-    /// than incidental: every monitor whose EDID names it nothing shares the
-    /// same empty description, so treating that as identity would let one
-    /// entry match any of them. `validate` refuses an empty `display` from the
-    /// other side.
+    /// An empty name matches nothing, and that is load-bearing rather than
+    /// incidental: every monitor whose EDID names it nothing shares the same
+    /// empty description, so treating that as identity would let one entry
+    /// match any of them. `validate` refuses an empty `display` from the other
+    /// side.
     fn connected_in<'a>(&self, connected: &'a [Connected]) -> Option<&'a Connected> {
         connected.iter().find(|display| {
-            display.name == self.display
-                || (!display.description.is_empty() && display.description == self.display)
+            [&display.name, &display.description, &display.spelled_out]
+                .into_iter()
+                .any(|name| !name.is_empty() && name == &self.display)
         })
     }
 
@@ -280,6 +283,17 @@ pub struct Connected {
     /// The other name a profile may match, and the one a person can actually
     /// write: see [`DisplayPlacement::connected_in`].
     pub description: String,
+    /// The same name with the three-letter maker spelled out the way hwdata's
+    /// `pnp.ids` spells it — `Dell Inc. DELL U3219Q 2ZLS413` for the
+    /// `DEL DELL U3219Q 2ZLS413` above — or empty on a machine with no such
+    /// table, and for a monitor whose id is not in the one it has.
+    ///
+    /// The third name a profile may match, and the one sway and kanshi print,
+    /// because they read that table and an EDID does not carry it. Both
+    /// spellings match rather than the fuller one replacing the other: every
+    /// config that names a monitor today names it in three letters, and one
+    /// that came up right yesterday comes up right today.
+    pub spelled_out: String,
     /// The mode the connector is scanning out, in physical pixels.
     pub mode: (u32, u32),
 }

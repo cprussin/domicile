@@ -27,12 +27,19 @@ fn connected(name: &str, mode: (u32, u32)) -> Connected {
     described(name, "", mode)
 }
 
-/// One monitor with both the names it answers to: the output's, and the
-/// panel's own off its EDID.
+/// One monitor named by its output and by its panel, on a machine with no
+/// `pnp.ids` to spell the vendor out of the panel's three-letter id.
 fn described(name: &str, description: &str, mode: (u32, u32)) -> Connected {
+    spelled_out(name, description, "", mode)
+}
+
+/// One monitor with every name it answers to: the output's, the panel's own
+/// off its EDID, and that one again with the vendor spelled out.
+fn spelled_out(name: &str, description: &str, spelled_out: &str, mode: (u32, u32)) -> Connected {
     Connected {
         name: name.to_owned(),
         description: description.to_owned(),
+        spelled_out: spelled_out.to_owned(),
         mode,
     }
 }
@@ -128,6 +135,51 @@ transform = "rotate-270"
         "the output keeps the name its clients are on; the panel's name is how it was found"
     );
     assert_eq!(placed.logical, (1800, 3200));
+}
+
+#[test]
+fn a_profile_may_name_a_monitor_by_the_vendor_spelled_out() {
+    // What sway and kanshi print, because they read hwdata's `pnp.ids` and an
+    // EDID does not carry it: `Dell Inc.` where the firmware says `DEL`. A
+    // desk written down off a running sway is written down in these words.
+    assert!(
+        the_desk_profile_matches("Dell Inc. DELL U3219Q G3MS413"),
+        "a profile naming the vendor the way hwdata spells it should match"
+    );
+}
+
+#[test]
+fn a_profile_written_before_the_vendor_was_spelled_out_goes_on_matching() {
+    // The reason both spellings match rather than the better one replacing
+    // the other. Every config naming a monitor was written against the three
+    // letters, and a desk that came up right yesterday comes up right today.
+    assert!(
+        the_desk_profile_matches("DEL DELL U3219Q G3MS413"),
+        "the three letters an EDID states are still one of the names it answers to"
+    );
+}
+
+/// Whether the desk profile matches a monitor answering to both spellings of
+/// its panel's name when the profile writes it `display`.
+fn the_desk_profile_matches(display: &str) -> bool {
+    Config::parse(&format!(
+        r#"
+[[output.profiles]]
+name = "desk"
+[[output.profiles.displays]]
+display = "{display}"
+"#
+    ))
+    .expect("the config should parse")
+    .output
+    .layout(&[spelled_out(
+        CENTER,
+        "DEL DELL U3219Q G3MS413",
+        "Dell Inc. DELL U3219Q G3MS413",
+        DESK_MODE,
+    )])
+    .expect("the layout should be representable")
+    .is_some()
 }
 
 #[test]

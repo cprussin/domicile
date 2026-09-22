@@ -150,10 +150,12 @@ costs nothing.
 - **A client that pre-rotates its own buffer is still wrong.** `wl_output.transform`
   invites it and nothing reads `wl_surface.set_buffer_transform`; the fix is in
   the dmabuf submit path.
-- **A monitor's name is the three-letter PNP id, not the vendor** — `DEL DELL
-  U3219Q 2ZLS413` rather than `Dell Inc. DELL U3219Q 2ZLS413`. The table behind
-  the id is hwdata's `pnp.ids`, which libdisplay-info carries and Chromium does
-  not. A profile may name the output `drm-<id>` instead.
+- **A monitor that states no name at all can only be called `drm-<id>`.** The
+  three-letter maker an EDID holds is spelled out now — the compositor reads
+  hwdata's `pnp.ids` at run time, the `wl_output` states
+  `Dell Inc. DELL U3219Q 2ZLS413`, and a profile matches that or the `DEL …`
+  an EDID spells. What is left is the monitor that states neither make, model
+  nor serial: its description is empty, so the int64 is the only name it has.
 - **A perspective over a window is reported, not corrected.** A projection is
   not an affine and no `Matrix` can hold one, so `defaultMeasure` composes the
   flattened 2D part — what CSS itself draws with no perspective in the chain —

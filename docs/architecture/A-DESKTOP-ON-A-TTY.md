@@ -1035,9 +1035,10 @@ the page is one screen now.
 **A profile names a monitor the way it is labeled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every
 display now carries a *description* beside it: `"<MAKE> <MODEL> <SERIAL>"`, the
-string kanshi and sway match on, and an entry's `display` matches either. So a
-desk can be written down without first reading an int64 off a log, and it can
-be written down a monitor at a time.
+string kanshi and sway match on, and an entry's `display` matches any name a
+monitor answers to — the output's, that description, and that description with
+the maker spelled out. So a desk can be written down without first reading an
+int64 off a log, and it can be written down a monitor at a time.
 
 It travels the route the millimeters already take (*[The physical size is in
 the snapshot](#the-physical-size-is-in-the-snapshot-and-it-leaves-as-a-dpi)*):
@@ -1055,11 +1056,27 @@ hardware, shown to the user, and goes nowhere else.
 deliberately free of Chromium types so that the one piece of this with an
 off-by-one in it compiles and runs outside a Chromium tree.
 
-Two things it is not. The make is the three-letter PNP id — `DEL`, not
-`Dell Inc.` — because that is what an EDID holds; the full vendor name is
-hwdata's `pnp.ids`, which libdisplay-info carries and Chromium does not, so a
-name here is one word off what sway prints. And a monitor that states none of
-the three has an empty description and can still only be named `drm-<id>`.
+**The make an EDID holds is three letters, and the compositor spells it out.**
+`DEL` is what the firmware states and what crosses the ABI; the vendor's own
+name is hwdata's `pnp.ids`, which libdisplay-info carries and Chromium does
+not. So the compositor reads that table itself —
+`packages/domicile-compositor/src/pnp_ids.rs`, once at startup, out of
+`DOMICILE_PNP_IDS` (the flake's wrapper sets it to hwdata's store path) or out
+of where a distribution installs one. Read at run time rather than vendored or
+generated from: the table is GPL-2+ and this tree is MIT OR Apache-2.0.
+
+| | |
+|---|---|
+| the `wl_output` states | `Dell Inc. DELL U3219Q 2ZLS413` — what sway prints |
+| an `output.profiles` entry matches | that, or `DEL DELL U3219Q 2ZLS413`, or `drm-<id>` |
+| no table on this machine | the three letters, and one line at startup saying why |
+
+Both panel spellings match because the shorter one is what every config that
+names a monitor was written against; a desk that came up right yesterday comes
+up right today.
+
+One thing it is still not: a monitor that states none of the three has an empty
+description and can only be named `drm-<id>`.
 
 The event carries the panel too: `physical_width_mm`, `physical_height_mm` and
 `refresh_mhz` on `DomicileDisplay`, off the same snapshot, by the route
