@@ -16,7 +16,12 @@ use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod battery;
 pub mod clipboard;
-pub mod files;
+pub mod file_changes;
+pub mod file_index;
+pub mod home_walk;
+pub mod home_watch;
+pub mod index_file;
+pub mod index_location;
 pub mod ipc;
 use domicile_scene::{KeyboardTarget, Scene};
 
