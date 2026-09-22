@@ -216,9 +216,12 @@ const arriving = (playing: Playing, id: string): WindowMotion => {
  * on, or simply not drawn.
  *
  * Not drawn covers every other way a window leaves the screen — behind a tab,
- * under a fullscreen window, sent to the scratchpad — and none of those is a
- * movement. The window is hidden rather than unmounted, which is what keeps
- * its client's surface and its page alive.
+ * sent to the scratchpad, left on a workspace nobody is looking at — and none
+ * of those is a movement. A window under a fullscreen one is not among them:
+ * it keeps the box the layout gives it and is covered rather than taken off
+ * the screen, which is what lets the window over it grow and shrink across it.
+ * The window is hidden rather than unmounted, which is what keeps its client's
+ * surface and its page alive.
  */
 const leavingWindow = (
   switching: WorkspaceSwitch | undefined,

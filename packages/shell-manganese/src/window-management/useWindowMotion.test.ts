@@ -71,11 +71,10 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, EDITOR.id)).toBe("resting");
     });
 
-    // REVEALING A WINDOW IS NOT OPENING ONE. A window behind a tab, or under a
-    // fullscreen one, or on a workspace nobody is looking at, has been on the
-    // desktop the whole time — and a desktop that played an arrival every time
-    // one came back into view would announce ten openings on every workspace
-    // switch.
+    // REVEALING A WINDOW IS NOT OPENING ONE. A window behind a tab, or on a
+    // workspace nobody is looking at, has been on the desktop the whole time —
+    // and a desktop that played an arrival every time one came back into view
+    // would announce ten openings on every workspace switch.
     it("is not what a window merely coming back into view does", () => {
       const { rerender, result } = showing(
         desktop("1", [TERMINAL, EDITOR], [TERMINAL]),

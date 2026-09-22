@@ -78,60 +78,82 @@ const TILED = 0;
 const FLOATING = 1;
 
 /**
- * Over every float, because a window filling the screen is filling it: sway's
- * fullscreen covers whatever else the workspace had on it.
- */
-const FULLSCREEN = 1000;
-
-/**
- * And over everything, a window that has closed and is still shrinking away.
+ * Over every window that is still open, a window that has closed and is still
+ * shrinking away.
  *
  * Because its neighbors are easing into the space it had while it does. At
  * the depth it used to have they would cover it before it had finished going:
  * two elements at one `z-index` are decided by the order they come in the
  * document, and a closing window goes on being drawn where it always was —
  * see `closing.ts` for why it cannot simply be moved to the end.
- *
- * Above `FULLSCREEN` as well, which costs nothing: a workspace showing a
- * fullscreen window places no other window at all, so the only window that can
- * be closing over one is the fullscreen window itself.
  */
-export const LEAVING = 2000;
+export const LEAVING = 1000;
 
+/**
+ * And over all of that, a window filling the screen: sway's fullscreen covers
+ * whatever else the workspace has on it, and here that is everything the page
+ * draws — the floats, and a window on its way out among them.
+ *
+ * Above `LEAVING` rather than under it, because a fullscreen window covers the
+ * space a closing one is shrinking away inside: a departure drawn over it
+ * would be a window playing out across a screen that is no longer showing it.
+ * It costs the window that *is* closing nothing, because a fullscreen window
+ * that closes takes its workspace's fullscreen with it — see
+ * `workspace.ts` — so there is never one left over it to hide it.
+ */
+const FULLSCREEN = 2000;
+
+/**
+ * Everything the screen shows, fullscreen included.
+ *
+ * **A fullscreen window is one window over the workspace rather than the
+ * workspace replaced by one window.** The tiling and the floats are laid out
+ * the way they always are and the window filling the screen is put over them
+ * at {@link FULLSCREEN}; the only thing that is different about the screenful
+ * is that one window's rectangle.
+ *
+ * Which is what makes taking the screen and giving it back a movement. The
+ * boxes ease — see `settlingStyles` — so the window grows out of the place it
+ * had and shrinks back into it, and the windows it covers are drawn the whole
+ * way, disappearing behind it as it arrives rather than a frame before it
+ * starts. A screenful holding the fullscreen window alone blinked every other
+ * window out at the first frame and put them all back at the last, which is
+ * the desktop showing a state that is neither where it came from nor where it
+ * is going.
+ *
+ * It is the same arithmetic on both sides of the change for the same reason:
+ * what is under a fullscreen window *is* what the screen goes back to.
+ */
 export const placementsOf = (
   state: WindowState,
   geometry: Geometry,
 ): Screenful => {
   const workspace = workspaceOn(state);
+  // `gaps.smartGaps`: a workspace showing one window gets the whole screen.
+  const gap = windowsOf(workspace.tiling).length > 1 ? INNER_GAP : 0;
+  const { frames, tabs } = framesOf(workspace.tiling, geometry.workspace, gap);
+  const laidOut = [
+    ...frames.map((frame) => placed(frame, TILED)),
+    // Over them, in the order the workspace stacks them.
+    ...workspace.floats.map((float, at) =>
+      placed(
+        {
+          bar: barOf(rectOf(float)),
+          id: float.id,
+          surface: surfaceOf(rectOf(float)),
+        },
+        FLOATING + at,
+      ),
+    ),
+  ];
   const full = fullscreen(workspace, geometry);
-  if (full === undefined) {
-    // `gaps.smartGaps`: a workspace showing one window gets the whole screen.
-    const gap = windowsOf(workspace.tiling).length > 1 ? INNER_GAP : 0;
-    const { frames, tabs } = framesOf(
-      workspace.tiling,
-      geometry.workspace,
-      gap,
-    );
-    return {
-      placements: [
-        ...frames.map((frame) => placed(frame, TILED)),
-        // Over them, in the order the workspace stacks them.
-        ...workspace.floats.map((float, at) =>
-          placed(
-            {
-              bar: barOf(rectOf(float)),
-              id: float.id,
-              surface: surfaceOf(rectOf(float)),
-            },
-            FLOATING + at,
-          ),
-        ),
-      ],
-      tabs,
-    };
-  } else {
-    return { placements: [full], tabs: [] };
-  }
+  // The fullscreen window replaces the rectangle it already had rather than
+  // being given a second one.
+  const placements =
+    full === undefined
+      ? laidOut
+      : [...laidOut.filter(({ id }) => id !== full.id), full];
+  return { placements, tabs };
 };
 
 // The one window a fullscreen workspace shows, or `undefined` when none is
