@@ -14,8 +14,12 @@
 # So dev mode is the desktop now. The engine, the compositor and the shell,
 # exactly as `nix run .#manganese` assembles them — with one difference, and it
 # is there to make an edit cheap: the page is rebuilt on save, by the shell's
-# own vite in watch mode. Nothing reloads it. A rebuilt shell needs the desktop
-# restarted, for the reason the `DOMICILE_PAGE` paragraph below gives.
+# own vite in watch mode. THIS SCRIPT DOES NOT RELOAD IT, and it no longer has
+# to be a restart either: `domicile load-shell <path>` puts the rebuilt module
+# on the running desktop, from another terminal inside it, and the windows stay
+# where they are. Teaching this script to run that after each build is a
+# separate change -- it needs the desktop's DOMICILE_SOCK and a way to know a
+# build finished, and neither is in hand here.
 #
 # Where each piece comes from is the point. The engine is the published one the
 # flake pins, because building Chromium is four hours and a shell author is not
@@ -107,8 +111,9 @@ cargo build -p domicile-launch --bin domicile \
 # `DOMICILE_DEV_RELOAD` used to: the bridge read it, served a reload token and
 # wrote a poller into the page. The bridge is gone and the C++ that writes the
 # document has nothing in their place, so the variable switches nothing on and
-# is not set here. A rebuilt shell needs the desktop restarted until `domicile
-# load-shell` lands — see docs/architecture/THE-DOMICILE-BINARY.md.
+# is not set here. What replaced it is a command every desktop takes rather
+# than a mode this one is started in: `domicile load-shell ./path/to/shell.js`
+# — see docs/architecture/THE-DOMICILE-BINARY.md.
 echo "starting $SHELL_NAME"
 DOMICILE_ENGINE="$ENGINE" \
 DOMICILE_COMPOSITOR="$ROOT/target/debug/domicile-compositor" \

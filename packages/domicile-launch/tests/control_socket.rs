@@ -156,7 +156,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
     let serving = std::thread::spawn(move || {
         let (stream, _) = listener.accept().expect("the client connected");
         answer_one(stream, BRIEFLY, &|line| {
-            domicile_launch::control::answer(line, Path::new("/desktops/mine/shell.js"))
+            domicile_launch::control::answer(line, Path::new("/desktops/mine/shell.js"), &|_, _| {
+                panic!("a question about this desktop reaches no engine")
+            })
         })
         .expect("the client asked and read the answer");
     });

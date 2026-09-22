@@ -109,9 +109,11 @@ missing, and a desktop's interesting behavior is all on the other side of the
 channel. Point `domicile` at your shell's module and let your own bundler watch
 it — `vite build --watch` beside `domicile ./dist/shell.js` is the whole dev
 loop, and it is a real desktop rather than a page pretending to be one.
-**Nothing reloads it**: a desktop runs under `--app`, where there is no reload
-to press, so a rebuilt bundle needs the desktop restarted until
-`domicile load-shell` lands
+**Nothing reloads it by itself**: a desktop runs under `--app`, where there is
+no reload to press. What puts a rebuilt bundle on a desktop that is already
+running is `domicile load-shell ./dist/shell.js`, typed in a terminal inside
+that desktop — any shell, not only a new build of the one it is on, and the
+windows stay where they are
 ([why](/docs/architecture/THE-DOMICILE-BINARY.md)).
 
 ## There is nothing to await

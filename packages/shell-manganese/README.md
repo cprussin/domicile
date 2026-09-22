@@ -670,9 +670,10 @@ runs it — the engine on that page, and the compositor as a producer to it.
 
 `bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
 desktop and rebuilds it as you edit: the engine the flake pins and the
-compositor built out of this checkout. A rebuilt shell needs the desktop
-restarted — nothing reloads the page for you until `domicile load-shell` lands,
-see `scripts/dev-shell.sh`.
+compositor built out of this checkout. Nothing reloads the page for you;
+`domicile load-shell .vite/renderer/main_window/shell.js`, typed in a terminal
+inside that desktop, puts the rebuilt shell on it without stopping it. See
+`scripts/dev-shell.sh`.
 
 `styled-system/` is Panda's generated output, produced by `bun run prepare`
 (run automatically as a turbo dependency of the build, type check, and tests)

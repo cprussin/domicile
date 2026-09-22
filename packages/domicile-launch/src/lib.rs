@@ -14,6 +14,12 @@
 //! what a desktop can be asked and what it answers ([`control`]), and where it
 //! answers ([`control_socket`]).
 //!
+//! `domicile load-shell <path>` is the command a desktop does not answer on
+//! its own account: the page belongs to the engine, so the supervisor routes
+//! it on. What that says is [`command`] — the one contract here with a version
+//! in it, because the engine is published separately from this — and where it
+//! says it is [`command_socket`].
+//!
 //! What a run that gave up says at the end is [`heard`]: the compositor's own
 //! words, kept as they go past so that the last line of a failed run is the
 //! reason rather than a pointer to it.
@@ -32,6 +38,8 @@
 
 pub mod arguments;
 pub mod cli;
+pub mod command;
+pub mod command_socket;
 pub mod components;
 pub mod config_path;
 pub mod control;

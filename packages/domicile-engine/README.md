@@ -245,8 +245,9 @@ supervisor dials. One line of JSON in, one out, and the connection is over:
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
 ```
 
-An engine given no such switch binds nothing and listens on nothing, which is
-every engine until `domicile load-shell` starts one.
+An engine given no such switch binds nothing and listens on nothing. Every
+desktop `domicile` starts is given one — a path under the run's own directory,
+which the supervisor then dials when somebody types `domicile load-shell`.
 
 **It is not the control channel, and that is the layering rather than a second
 transport for its own sake.** Which shell to serve is supervisor-to-engine
@@ -269,19 +270,18 @@ carries no number because both of its ends are one binary.
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. In `//chrome` because reloading the shell needs `GlobalBrowserCollection`, which belongs to `//chrome/browser/ui` |
 | `components/domicile/browser/shell_source.{h,cc}` | which shell this process is serving. Seeded from the two switches, replaced by a `load_shell` |
 
-### There is no dev reload, and this is where one goes
+### The dev reload is this socket, and nothing in the document
 
 A desktop runs under `--app`, which drops the browser's own keyboard
-shortcuts, so there is no reload in it: a one-character change to a shell
-means killing the desktop and starting it again. `scripts/dev-shell.sh` says
-so, and `scripts/test-dev-shell.sh` asserts that it hands the engine no
-`DOMICILE_DEV_RELOAD` — the variable switches nothing on anywhere.
+shortcuts, so there is no reload in it to press. `scripts/test-dev-shell.sh`
+asserts that dev mode hands the engine no `DOMICILE_DEV_RELOAD` — the variable
+switches nothing on anywhere, and nothing is meant to switch it on again.
 
-**The command socket above is what replaces it**, once the supervisor dials
-it: a watch script running `domicile load-shell` after each build is the whole
-of dev reload, and it lives outside the runtime rather than inside every
-served document. Nothing in the document the fork writes should grow a poller
-again.
+**The command socket above is what replaced it**, and the supervisor dials it
+now: `domicile load-shell <path>` is a rebuilt shell on a running desktop, and
+a watch script running that after each build is the whole of dev reload. It
+lives outside the runtime rather than inside every served document, and
+nothing in the document the fork writes should grow a poller again.
 
 ## Working on it
 

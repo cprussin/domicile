@@ -804,6 +804,9 @@
           saw "${desktops.simple}/shell.js"
           # A verb, handed over untouched.
           saw "which-shell" which-shell
+          # And the verb that takes a shell: the word after it is that verb's
+          # argument, not a shell to run, so nothing is appended to it either.
+          saw "load-shell ./other.js" load-shell ./other.js
           # A shell typed out: what was said beats what was configured.
           saw "./other.js" ./other.js
           # And a config flag is not a shell -- the path after it is skipped,

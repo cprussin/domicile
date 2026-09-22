@@ -204,7 +204,12 @@ fn a_stop_asked_for_while_the_next_one_is_waited_for_is_not_started_again() {
 fn nothing_the_last_desktop_bound_or_published_outlives_it() {
     let directory = tempfile::tempdir().expect("a temp directory");
     let runtime = runtime(directory.path());
-    for path in [&runtime.broker, &runtime.chrome_socket, &runtime.session] {
+    for path in [
+        &runtime.broker,
+        &runtime.chrome_socket,
+        &runtime.command,
+        &runtime.session,
+    ] {
         std::fs::write(path, "the last desktop's").expect("it is written");
     }
     std::fs::create_dir(&runtime.profile).expect("it is created");
@@ -217,6 +222,14 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
     assert!(
         !runtime.chrome_socket.exists(),
         "the chrome socket is still there"
+    );
+    // The engine binds this one, and binds it loudly: a path that is already
+    // there is a `CHECK` in the browser process rather than a desktop that
+    // comes up without a command socket. The engine the last desktop died with
+    // left this file exactly where the next one is told to bind.
+    assert!(
+        !runtime.command.exists(),
+        "the engine's command socket is still there"
     );
     // THE ONE THAT MATTERS MOST: the launcher waits for this file to appear,
     // so one left behind is a desktop reported up before its compositor has
@@ -259,6 +272,7 @@ fn runtime(directory: &std::path::Path) -> Runtime {
     Runtime {
         broker: directory.join("broker"),
         chrome_socket: directory.join("chrome.sock"),
+        command: directory.join("command.sock"),
         control: directory.join("domicile-ipc.1.sock"),
         profile: directory.join("profile"),
         session: directory.join("session.json"),

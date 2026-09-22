@@ -126,9 +126,10 @@
   # already said what to run. Three invocations have to keep working and only
   # one of them wants a shell added:
   #
-  #   domicile              -- the configured shell, which is the whole point
-  #   domicile which-shell  -- the verb, handed over untouched
-  #   domicile ./other.js   -- what was typed beats what was configured
+  #   domicile                       -- the configured shell, the whole point
+  #   domicile which-shell           -- the verb, handed over untouched
+  #   domicile load-shell ./other.js -- and the verb that takes one
+  #   domicile ./other.js            -- what was typed beats what was configured
   #
   # `--config PATH` is the one flag that eats the word after it, so the scan
   # steps over that word rather than reading a path as a shell.
@@ -144,10 +145,11 @@
       esac
     done
 
-    # A verb is only a verb as the first word and it takes nothing else, so
-    # this counts as the line having said what it wants.
+    # A verb is only a verb as the first word, and a line that starts with one
+    # has said what it wants whatever follows -- `load-shell` takes a shell of
+    # its own, which is not the configured shell being asked for.
     case "''${1-}" in
-      which-shell) named_one=1 ;;
+      which-shell|load-shell) named_one=1 ;;
     esac
 
     if [ -n "''${named_one-}" ]; then
@@ -316,11 +318,11 @@ in {
           # this is a script rather than `wrapProgram --add-flags`.
           #
           # `domicile` reads a verb only as the first word -- `which-shell` is
-          # a question put to a desktop that is already running, and it takes
-          # nothing else. A flag added in front makes the shell path the first
-          # word, so `domicile which-shell` comes back
-          # `too many arguments: which-shell` and the one command this module
-          # cannot break is broken by installing it.
+          # a question put to a desktop that is already running, and
+          # `load-shell` tells one which shell to serve from now on. A flag
+          # added in front makes the shell path the first word, so `domicile
+          # which-shell` comes back `too many arguments: which-shell` and the
+          # commands this module cannot break are broken by installing it.
           #
           # So the shell goes on the end, and only when the command line has
           # not already named one.
