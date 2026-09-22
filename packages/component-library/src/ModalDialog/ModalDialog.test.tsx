@@ -59,6 +59,18 @@ describe(ModalDialog, () => {
       );
     });
 
+    it("says what it is drawn on, so the stylesheet can dress it", () => {
+      render(
+        <ModalDialog open surface="glass" title="Settings">
+          Body
+        </ModalDialog>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute(
+        "data-surface",
+        "glass",
+      );
+    });
+
     it("renders the footer when provided", () => {
       render(
         <ModalDialog footer={<Button variant="solid">Save</Button>} open>
