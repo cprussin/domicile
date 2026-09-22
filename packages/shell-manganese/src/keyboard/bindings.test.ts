@@ -82,6 +82,13 @@ describe("the default bindings", () => {
     expect(pressing("z")).toBeUndefined();
   });
 
+  it("opens the clipboard on the key a clipboard manager is reached by", () => {
+    // Shift+v, which is where every sway config that has one puts it: `mod+v`
+    // is already the vertical split, and the paste key with Shift is what a
+    // person reaches for when the thing they want is one copy back.
+    expect(pressing("v", true)).toEqual(WindowAction.ClipboardToggled());
+  });
+
   it("has a key for every workspace the desktop has", () => {
     // The two lists are written out separately — one is the keyboard's order
     // and the other the numbers' — so this is what says they still agree.

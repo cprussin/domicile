@@ -124,6 +124,9 @@ class FakeDomicile {
   listFiles(): void {
     this.calls.push(["listFiles"]);
   }
+  copyClipboardEntry(entry: number): void {
+    this.calls.push(["copyClipboardEntry", entry]);
+  }
   grabShortcut(shortcut: unknown): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
@@ -358,6 +361,11 @@ const machineSays = (reading: { charge: number; charging: boolean }): void => {
   domicile.emit("battery", reading);
 };
 
+/** The compositor saying what has been copied on this desktop, newest first. */
+const copied = (entries: readonly { id: number; preview: string }[]): void => {
+  domicile.emit("clipboard", { entries });
+};
+
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
@@ -584,6 +592,38 @@ describe("Shell", () => {
       expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
       expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
       expect(screen.queryByLabelText(/theme/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("the clipboard", () => {
+    it("shows what has been copied, newest first", () => {
+      // Pushed: the history is here because the compositor said so, not
+      // because the panel asked on the way up.
+      renderShell();
+      copied([
+        { id: 2, preview: "the newest" },
+        { id: 1, preview: "the oldest" },
+      ]);
+
+      press("v", true);
+
+      expect(
+        screen.getAllByRole("option").map((row) => row.textContent),
+      ).toStrictEqual(["the newest", "the oldest"]);
+    });
+
+    it("puts the row that was picked back on the clipboard", () => {
+      // By the id the compositor gave it and never by its text: what the page
+      // may do to the seat's clipboard is choose among what is already on it.
+      renderShell();
+      copied([{ id: 7, preview: "ssh-rsa AAAA" }]);
+      press("v", true);
+
+      act(() => {
+        screen.getByRole("option", { name: "ssh-rsa AAAA" }).click();
+      });
+
+      expect(domicile.calls).toContainEqual(["copyClipboardEntry", 7]);
     });
   });
 

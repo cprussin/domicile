@@ -7,8 +7,8 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, CursorShape, DisplayInfo, DisplayTransform, HostMessage,
-    PROTOCOL_VERSION,
+    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
+    HostMessage, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -39,6 +39,7 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Spawn {
         command: vec!["kitty".into(), "--hold".into()],
     });
+    chrome_round_trip(&ChromeMessage::CopyClipboardEntry { entry: 7 });
     chrome_round_trip(&ChromeMessage::PointerMotion {
         app_id: "term".into(),
         x: 12.5,
@@ -134,6 +135,12 @@ fn host_messages_round_trip() {
     host_round_trip(&HostMessage::Files {
         files: vec!["Notes/today.org".into(), "src".into()],
     });
+    host_round_trip(&HostMessage::Clipboard {
+        entries: vec![ClipboardEntry {
+            id: 3,
+            preview: "ssh-rsa AAAA".into(),
+        }],
+    });
 }
 
 /// The answer is paths relative to the home directory, in the order they go
@@ -159,6 +166,71 @@ fn a_home_with_nothing_to_open_is_an_answer() {
     let v = serde_json::to_value(HostMessage::Files { files: vec![] }).unwrap();
     assert_eq!(v["type"], "files");
     assert_eq!(v["files"], serde_json::json!([]));
+}
+
+/// What was copied, in the shape a shell draws a row of it.
+///
+/// An id and a preview rather than the text, and the split is the whole shape
+/// of this message: the compositor keeps the bytes and the page is told enough
+/// to recognize them. A history of a hundred kilobytes broadcast on every
+/// copy would be the desktop moving its clipboard through the shell, and the
+/// shell has no use for it — what it does with a row is draw it and hand the
+/// id back.
+///
+/// Newest first, which is the order a manager is read in: the last thing
+/// copied is the one about to be wanted again.
+#[test]
+fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
+    let v = serde_json::to_value(HostMessage::Clipboard {
+        entries: vec![
+            ClipboardEntry {
+                id: 3,
+                preview: "the newest".into(),
+            },
+            ClipboardEntry {
+                id: 1,
+                preview: "the oldest".into(),
+            },
+        ],
+    })
+    .unwrap();
+    assert_eq!(v["type"], "clipboard");
+    assert_eq!(
+        v["entries"],
+        serde_json::json!([
+            {"id": 3, "preview": "the newest"},
+            {"id": 1, "preview": "the oldest"},
+        ])
+    );
+}
+
+/// A desktop nothing has been copied on yet says so, rather than saying
+/// nothing.
+///
+/// The same distinction [`HostMessage::Files`] draws, and it matters more
+/// here: the history empties when the desktop restarts, so an empty list is
+/// the ordinary state of a fresh session rather than an edge case. A shell
+/// told nothing would wait forever for a first copy it has already been told
+/// about.
+#[test]
+fn a_desktop_nothing_was_copied_on_has_an_empty_clipboard() {
+    let v = serde_json::to_value(HostMessage::Clipboard { entries: vec![] }).unwrap();
+    assert_eq!(v["type"], "clipboard");
+    assert_eq!(v["entries"], serde_json::json!([]));
+}
+
+/// Handing an entry back names it by id and carries no text at all.
+///
+/// The asymmetry with every other chrome message is the point: a page that
+/// could put arbitrary bytes on the seat's clipboard would be a page writing
+/// the desktop's clipboard, and what a manager needs is to pick one of the
+/// things already on it. An id that names nothing is a shell bug and the
+/// compositor says so — see `domicile_host::clipboard::History::text`.
+#[test]
+fn an_entry_is_handed_back_by_id_rather_than_by_its_text() {
+    let v = serde_json::to_value(ChromeMessage::CopyClipboardEntry { entry: 7 }).unwrap();
+    assert_eq!(v["type"], "copy_clipboard_entry");
+    assert_eq!(v["entry"], 7);
 }
 
 /// The charge, in the shape the bar draws it.

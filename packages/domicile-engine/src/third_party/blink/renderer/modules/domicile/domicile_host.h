@@ -58,6 +58,7 @@ class MODULES_EXPORT DomicileHost final
   // no path -- see the IDL, where that is written down as a property rather
   // than a convenience.
   void listFiles(ScriptState*, ExceptionState&);
+  void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);
@@ -105,6 +106,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -153,6 +155,8 @@ class MODULES_EXPORT DomicileHost final
   void Battery(double charge,
                bool charging,
                base::TimeTicks arrival) override;
+  void Clipboard(Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
+                 base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

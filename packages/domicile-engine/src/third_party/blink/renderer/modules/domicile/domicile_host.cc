@@ -24,6 +24,8 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
@@ -128,6 +130,20 @@ void DomicileHost::focusApp(ScriptState*, const String& app_id,
 void DomicileHost::listFiles(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->ListFiles();
+  }
+}
+
+// The whole of what a page may do to the seat's clipboard, and it names a row
+// rather than carrying text: a call that took bytes would let this document
+// write the desktop's clipboard, where this one only chooses among what has
+// already been copied on it. An id the compositor no longer holds sets
+// nothing, and it says so in its own log -- there is no answer to this for it
+// to say so in.
+void DomicileHost::copyClipboardEntry(ScriptState*,
+                                      uint32_t entry,
+                                      ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->CopyClipboardEntry(entry);
   }
 }
 
@@ -359,6 +375,22 @@ void DomicileHost::Battery(double charge,
                            base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileBatteryEvent>(
       event_type_names::kBattery, charge, charging, Arrival(arrival)));
+}
+
+// Pushed, like Battery and unlike Files: the compositor hears a copy without
+// anybody asking. The rows are built here rather than carried as two arrays
+// because what a panel draws is a row -- see `domicile_clipboard_entry.h`.
+void DomicileHost::Clipboard(
+    Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
+    base::TimeTicks arrival) {
+  HeapVector<Member<DomicileClipboardEntry>> history;
+  history.reserve(entries.size());
+  for (const auto& entry : entries) {
+    history.push_back(MakeGarbageCollected<DomicileClipboardEntry>(
+        entry->id, entry->preview));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileClipboardEvent>(
+      event_type_names::kClipboard, std::move(history), Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

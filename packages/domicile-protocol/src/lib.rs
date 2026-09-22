@@ -147,6 +147,26 @@ pub enum ChromeMessage {
         pressed: bool,
     },
 
+    /// Put a thing that was copied earlier back on the clipboard.
+    ///
+    /// **The one message a clipboard manager needs, and it carries an id
+    /// rather than the text.** The compositor keeps what was copied — see
+    /// `domicile_host::clipboard` — so a shell picking a row hands back the
+    /// `id` it was told in [`HostMessage::Clipboard`] and the bytes never make
+    /// the round trip. A page that could send text here would be a page
+    /// writing the desktop's clipboard, which is a larger capability than
+    /// choosing among the things already on it.
+    ///
+    /// The selection it sets is the compositor's own, so the entry outlives
+    /// the client that first copied it: a terminal closed an hour ago is still
+    /// something this can paste.
+    ///
+    /// An id nothing matches is a shell bug rather than a race — the history
+    /// only ever grows toward the newest, and an entry that has fallen off the
+    /// end fell off a list the shell was told about. The compositor says so
+    /// and sets nothing.
+    CopyClipboardEntry { entry: u32 },
+
     /// What is there to open? Answered with [`HostMessage::Files`].
     ///
     /// A shell's launcher is a page, and a page has no filesystem: there is no
@@ -393,6 +413,70 @@ pub enum HostMessage {
     /// protocol inventing a reading, which is the failure the whole message
     /// exists to undo.
     Battery { charge: f64, charging: bool },
+
+    /// What has been copied on this desktop, newest first.
+    ///
+    /// **The compositor is the only thing that sees a copy.** A selection is
+    /// `wl_data_device.set_selection` from the focused client, which nothing
+    /// above the compositor is told about — and it lives only as long as the
+    /// client that offered it, so closing the terminal you copied out of
+    /// empties the clipboard. That is what a manager is for, and it has to be
+    /// here because this is the process the offer arrives at.
+    ///
+    /// **Pushed, like [`HostMessage::Battery`] and unlike
+    /// [`HostMessage::Files`].** A copy is an event the compositor already
+    /// hears; a shell that had to ask would be asking on a timer or on a
+    /// keystroke, and either one draws a panel that is a moment out of date.
+    /// Sent whenever the history changes, and again to a chrome that has just
+    /// connected — a page that reloaded would otherwise have an empty panel
+    /// until the next copy.
+    ///
+    /// **Previews, not the text.** Each entry is an id and enough of what was
+    /// copied to recognize it by; the bytes stay in the compositor and go back
+    /// on the clipboard through [`ChromeMessage::CopyClipboardEntry`]. A
+    /// password manager's copy is a row in this list, so the less of it that
+    /// crosses into a page the better — and a history of long copies
+    /// broadcast on every copy would be the desktop moving its clipboard
+    /// through the shell for nothing.
+    ///
+    /// **Text only.** An entry exists for a selection that offered text; an
+    /// image or a file drag is not recorded, because a list of previews is not
+    /// a store and pretending otherwise would mean a manager that offers rows
+    /// it cannot hand back.
+    ///
+    /// Empty is a desktop nothing has been copied on yet, which is an answer
+    /// rather than a silence — and the ordinary state of a desktop that has
+    /// just started, because the history is in memory and never on disk.
+    Clipboard { entries: Vec<ClipboardEntry> },
+}
+
+/// One thing that was copied, as the shell is told about it.
+///
+/// Newest first in [`HostMessage::Clipboard`], which is the order a manager is
+/// read in: the last thing copied is the one most likely to be wanted again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClipboardEntry {
+    /// What [`ChromeMessage::CopyClipboardEntry`] names this entry by.
+    ///
+    /// Assigned by the compositor and never reused, so an id a shell is
+    /// holding either names the entry it was told about or names nothing at
+    /// all. It is not a position: the list a copy re-orders keeps every id it
+    /// had.
+    ///
+    /// Counted in 32 bits rather than 64 because the browser process carries
+    /// this through a `base::Value`, whose whole numbers are a signed 32-bit
+    /// `int`. The ceiling is two billion copies in one session of one desktop,
+    /// which is a century of copying something every second.
+    pub id: u32,
+
+    /// Enough of what was copied to recognize it by, and not necessarily all
+    /// of it.
+    ///
+    /// The whole entry where it is short, which is what nearly every copy is.
+    /// A long one is cut — see `domicile_host::clipboard::PREVIEW_CHARACTERS`
+    /// — because this is drawn as a row and the rest of a copied file is not a
+    /// row. What goes back on the clipboard is always the whole thing.
+    pub preview: String,
 }
 
 /// One display of the desktop, as the chrome is told about it.

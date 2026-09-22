@@ -112,6 +112,15 @@ export type WindowState = {
    * close it.
    */
   launcherOpen: boolean;
+  /**
+   * Whether the clipboard's history is up.
+   *
+   * Desktop state for {@link WindowState.launcherOpen}'s reason: the key that
+   * opens it is a line in the same bindings table as every other key, and a
+   * panel that owned its own `useState` would need the bindings to reach into
+   * it.
+   */
+  clipboardOpen: boolean;
   mode: BindingMode;
   /**
    * The workspace the current one was reached from, which the same key goes
@@ -127,6 +136,7 @@ export type WindowState = {
 /** A desktop with nothing open: what the chrome starts from. */
 export const NO_WINDOWS: WindowState = {
   browsersOpened: 0,
+  clipboardOpen: false,
   current: "1",
   draggingId: undefined,
   focusedId: undefined,
@@ -176,6 +186,8 @@ export enum WindowActionKind {
   AppTitled,
   BrowserOpened,
   ChildFocused,
+  ClipboardDismissed,
+  ClipboardToggled,
   ContainerSplit,
   EditorLaunched,
   FloatToggled,
@@ -252,6 +264,28 @@ export const WindowAction = {
 
   /** `focus child`. */
   ChildFocused: () => ({ kind: WindowActionKind.ChildFocused as const }),
+
+  /**
+   * The clipboard's history was closed without anything being chosen —
+   * Escape, a click on the backdrop, or the row that was chosen closing it.
+   *
+   * Separate from {@link WindowAction.ClipboardToggled} for
+   * {@link WindowAction.LauncherDismissed}'s reason: it comes from the panel
+   * rather than from a key, and a toggle here would re-open it on the way out.
+   */
+  ClipboardDismissed: () => ({
+    kind: WindowActionKind.ClipboardDismissed as const,
+  }),
+
+  /**
+   * `mod+shift+v`, which is the clipboard's key in both directions.
+   *
+   * One binding for the launcher's reason: the press that reaches the panel is
+   * the press that gives up on it.
+   */
+  ClipboardToggled: () => ({
+    kind: WindowActionKind.ClipboardToggled as const,
+  }),
 
   /** `splith` / `splitv`. */
   ContainerSplit: (axis: Axis) => ({
@@ -521,6 +555,12 @@ export const reduceWindows = (
     }
     case WindowActionKind.ChildFocused: {
       return onCurrent(state, childFocused);
+    }
+    case WindowActionKind.ClipboardDismissed: {
+      return { ...state, clipboardOpen: false };
+    }
+    case WindowActionKind.ClipboardToggled: {
+      return { ...state, clipboardOpen: !state.clipboardOpen };
     }
     case WindowActionKind.ContainerSplit: {
       return onCurrent(state, (workspace) =>

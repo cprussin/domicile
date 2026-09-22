@@ -1,0 +1,30 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// One thing that was copied, as a row of the clipboard's history.
+//
+// An interface rather than a dictionary because WebIDL will not have a
+// dictionary as the element type of an attribute's array, which is how these
+// are read -- off a DomicileClipboardEvent rather than handed over in a call.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileClipboardEntry {
+  // What DomicileHost.copyClipboardEntry() names this row by.
+  //
+  // Assigned by the compositor and never reused, so an id a shell is holding
+  // either names the row it was told about or names nothing at all. NOT a
+  // position: the list a copy re-orders keeps every id it had.
+  readonly attribute unsigned long id;
+
+  // Enough of what was copied to recognize it by, and not necessarily all of
+  // it: a long copy is cut down to a row, because this is what a panel draws
+  // and the rest of a copied file is not a row.
+  //
+  // What goes back on the clipboard is always the whole thing, which is the
+  // reason a row is an id and a preview rather than the text: the bytes stay
+  // in the compositor, and a password manager's copy is a row in this list.
+  readonly attribute DOMString preview;
+};

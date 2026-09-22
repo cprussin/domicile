@@ -126,6 +126,11 @@ export const BINDINGS: readonly Binding[] = [
     bound(keysym, true, Action.WindowStepped(way)),
   ),
 
+  // The clipboard's history, on the paste key with Shift — which is where
+  // every sway config that has a clipboard manager puts it, `mod+v` being the
+  // vertical split. A toggle, like the launcher's key and for the same reason.
+  bound("v", true, Action.ClipboardToggled()),
+
   bound("b", false, Action.ContainerSplit(Axis.Horizontal)),
   bound("v", false, Action.ContainerSplit(Axis.Vertical)),
   bound("s", false, Action.LayoutSet(Layout.Stacking)),
