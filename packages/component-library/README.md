@@ -32,6 +32,7 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 | `@domicile/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |
 | `@domicile/component-library/DisplayProvider` | The desktop the host described, for the `<Screen>`s below it. |
 | `@domicile/component-library/display-source` | The `Display` / `DisplaySource` types a `DisplayProvider` is fed. |
+| `@domicile/component-library/on-the-page` | `onThePage(display, spot)` — a place in the desktop's logical coordinates, in the page's own. The inverse-facing half of what `<Screen>` draws: where a page IS one monitor the region is transformed to cover its window, so the numbers a shell lays out at are not the numbers a pointer is in. |
 | `@domicile/component-library/Provider` | base-ui `DirectionProvider` wrapper every app roots its tree in. |
 | `@domicile/component-library/ThemeProvider` | Theme state (`light` / `dark` / `system`) and the `<html data-theme>` side effect. |
 | `@domicile/component-library/ThemeSwitch` | The toggle that cycles the theme preference. |

@@ -34,6 +34,27 @@ const LEFT: DomicileDisplay = {
   y: 0,
 };
 
+/**
+ * The panel a desktop on a tty draws on: one monitor, one browser window, and
+ * a page laid out in half the pixels the monitor scans out.
+ *
+ * `fillsTheWindow` is what makes `<Screen>` cover its window with a transform,
+ * so everything the chrome lays out at 960 across is drawn at 1920 — which is
+ * the difference the pointer has to be spoken about in.
+ */
+const SCANOUT: DomicileDisplay = {
+  fillsTheWindow: true,
+  height: 540,
+  modeHeight: 1080,
+  modeWidth: 1920,
+  name: "panel",
+  scale: 2,
+  transform: "normal",
+  width: 960,
+  x: 0,
+  y: 0,
+};
+
 const RIGHT: DomicileDisplay = {
   fillsTheWindow: false,
   height: 1024,
@@ -1124,6 +1145,27 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
+    it("speaks in the page's pixels and not the layout's", () => {
+      // THE REGRESSION. Where a page is one monitor, `<Screen>` draws its
+      // region over the whole window through a transform, so a window laid
+      // out at 960 across is drawn at 1920 — and the pointer only ever exists
+      // in what the page draws. Asking for the layout's own number put the
+      // cursor a fraction of the way to the window.
+      const { container } = renderShell([SCANOUT]);
+      clientAppears("one");
+
+      // Its logical box is the screen less the bar, so its middle is 480
+      // across and 286 down of the region — twice that on the window it
+      // covers.
+      expect(boxOf(appElement(container, "one"))).toMatchObject({
+        height: "478px",
+        width: "960px",
+        x: "0px",
+        y: "62px",
+      });
+      expect(domicile.calls).toContainEqual(["warpPointer", [960, 602]]);
+    });
+
     it("takes the pointer to a window that has just opened", () => {
       // Nobody pressed a key for this one: the client finished starting and
       // its window took the keyboard. The pointer is wherever it was — over

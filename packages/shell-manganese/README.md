@@ -88,6 +88,15 @@ says a window is new is that it was not there a render ago; a window that
 opens WITHOUT the keyboard moves nothing, because the pointer has no quarrel
 with it.
 
+**Both ask in the page's pixels, which on a tty are not the layout's.** Where
+a page is one monitor, `<Screen>` draws its region over the whole window
+through a transform — a 4K panel at density 1.2 is laid out as a 3200-wide box
+and drawn across 3840 — and a pointer only ever exists in what the page draws.
+So a window's box goes through `onThePage` before either question is asked of
+it. Laying that step out wrongly is a cursor that lands a fraction of the way
+to the window, right at the screen's corner and further out the further from
+it, which is what it looked like before this existed.
+
 ### The keys are physical, and the layout is written down
 
 sway binds *keysyms* and resolves them through the active keymap. Nothing here
@@ -559,7 +568,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
-| `src/window-management/pointer-warp.ts` | Where the pointer goes when the desktop moves the focus, and the two questions that decide whether it goes anywhere at all. |
+| `src/window-management/pointer-warp.ts` | Where the pointer goes when the desktop moves the focus, the two questions that decide whether it goes anywhere at all, and a window's box in the page's own coordinates rather than the layout's. |
 | `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which focus changes were the desktop's own — a keyed press, and a window that has only just opened — where the pointer is, and the render that is late enough to know the window's new box. |
 | `src/window-management/AppWindow.tsx` | A Wayland client's window: one `<app>` element. |
 | `src/window-management/BrowserWindow.tsx` | A browser window: an address bar over a `<webview>`, and everywhere the shell has sent it. |
