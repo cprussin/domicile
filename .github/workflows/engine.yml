@@ -1042,7 +1042,16 @@ jobs:
       #
       # Every other guard in this job survives losing it: they ask whether a
       # color landed, and a second client on the card makes that slower rather
-      # than wrong. These two do not. `guard-latency.sh` reports what a
+      # than wrong. THAT IS TRUE ONLY WHILE EACH OF THEM IS PATIENT ENOUGH TO
+      # BE SLOWED, which `guard-client-window.sh` stopped being once #485 made
+      # an engine run eleven minutes of mostly guards rather than four hours of
+      # mostly compiling: it gave up after 60s and `pinned-engine.yml` went red
+      # on `main` beside a green run of this job. Its poll waits four minutes
+      # now, and `scripts/test-the-client-window-guard-outwaits-a-busy-card.sh`
+      # is what keeps it there. The answer was patience rather than this lock,
+      # because a pixel guard beside another client is slow and not wrong.
+      #
+      # These two are the ones that are wrong. `guard-latency.sh` reports what a
       # keystroke costs to reach a pixel over sixty rounds, and another job
       # drawing on the same node during those rounds is indistinguishable from
       # the regression it exists to catch -- a red check nobody caused, which
