@@ -85,6 +85,9 @@ class FakeHost implements DomicileHost {
   listFiles(): void {
     this.calls.push(["listFiles"]);
   }
+  copyClipboardEntry(entry: number): void {
+    this.calls.push(["copyClipboardEntry", entry]);
+  }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -294,6 +297,28 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ charge: 0.42, charging: true }]);
     });
 
+    it("delivers the clipboard's history nobody asked for", () => {
+      // Pushed like the charge, and like it the whole state every time: a
+      // copy re-orders the history as often as it adds to it, so there is no
+      // delta a page could apply.
+      const seen: unknown[] = [];
+      domicile.on("clipboard", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "clipboard",
+        Object.assign(new Event("clipboard"), {
+          arrival: 0,
+          entries: [{ id: 3, preview: "ssh-rsa AAAA" }],
+        }),
+      );
+
+      expect(seen).toStrictEqual([
+        { entries: [{ id: 3, preview: "ssh-rsa AAAA" }] },
+      ]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
@@ -398,6 +423,9 @@ describe("DomicileClient", () => {
 
       domicile.listFiles();
       expect(host.lastCall()).toStrictEqual(["listFiles"]);
+
+      domicile.copyClipboardEntry(3);
+      expect(host.lastCall()).toStrictEqual(["copyClipboardEntry", 3]);
 
       domicile.setDevicePixelRatio(2);
       expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);

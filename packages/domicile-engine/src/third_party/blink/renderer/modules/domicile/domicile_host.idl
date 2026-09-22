@@ -39,6 +39,21 @@
   // watching. A launcher asks each time it opens.
   [CallWith=ScriptState, RaisesException] undefined listFiles();
 
+  // Put a row of the clipboard's history back on the clipboard.
+  //
+  // IT NAMES A ROW AND CARRIES NO TEXT, which is listFiles()'s property for
+  // listFiles()'s reason: a shell is served over domicile:// so that it has an
+  // origin, not so that it gets the machine, and a call that took bytes would
+  // let this document write the desktop's clipboard rather than choose among
+  // what has already been copied on it. `entry` is an id a clipboard event
+  // carried.
+  //
+  // No answer, and none to want: what follows is that the next paste in any
+  // window is that row, served by the compositor rather than by whichever
+  // client first copied it -- which is the whole of what a clipboard manager
+  // is for. An id the history has since dropped sets nothing.
+  [CallWith=ScriptState, RaisesException] undefined copyClipboardEntry(unsigned long entry);
+
   // Which window has the keyboard. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
@@ -123,6 +138,14 @@
   // nothing for a page to ask. It arrives when the reading moves far enough to
   // draw, and once more to a page that has only just connected.
   attribute EventHandler onbattery;
+
+  // What has been copied on this desktop, as a DomicileClipboardEvent.
+  //
+  // Pushed like onbattery: the compositor is the process a
+  // wl_data_device.set_selection arrives at, so it hears a copy without
+  // anybody asking. It arrives whenever the history changes, and once more to
+  // a page that has only just connected.
+  attribute EventHandler onclipboard;
 
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;

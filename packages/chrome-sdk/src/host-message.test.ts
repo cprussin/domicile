@@ -5,6 +5,7 @@ import type {
   DomicileAppEvent,
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
+  DomicileClipboardEvent,
   DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
@@ -15,6 +16,7 @@ import {
   appResized,
   appTitled,
   battery,
+  clipboard,
   files,
   focusChanged,
   modifiers,
@@ -276,3 +278,41 @@ const titledEvent = (
   fields: Omit<DomicileAppTitledEvent, keyof Event | "arrival">,
 ): DomicileAppTitledEvent =>
   Object.assign(new Event("apptitled"), { arrival: 0, ...fields });
+
+describe("the clipboard", () => {
+  it("arrives as the rows a manager draws, without the hop", () => {
+    // The entries and nothing else: `arrival` is the SDK's own bookkeeping,
+    // and the engine's rows are objects with an id and a preview on them
+    // rather than anything a shell would rather have.
+    const history = clipboard(
+      Object.assign(new Event("clipboard"), {
+        arrival: 0,
+        entries: [
+          { id: 3, preview: "the newest" },
+          { id: 1, preview: "the oldest" },
+        ],
+      }) as DomicileClipboardEvent,
+    );
+
+    expect(history).toStrictEqual({
+      entries: [
+        { id: 3, preview: "the newest" },
+        { id: 1, preview: "the oldest" },
+      ],
+    });
+  });
+
+  it("carries a desktop nothing was copied on as an empty history", () => {
+    // Not a silence, for the same reason a home with no files is not one: a
+    // shell told nothing would wait for a message it has already been sent,
+    // and this is the ordinary state of a desktop that has just started.
+    const history = clipboard(
+      Object.assign(new Event("clipboard"), {
+        arrival: 0,
+        entries: [],
+      }) as DomicileClipboardEvent,
+    );
+
+    expect(history).toStrictEqual({ entries: [] });
+  });
+});

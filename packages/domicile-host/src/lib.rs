@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
 
 pub mod battery;
+pub mod clipboard;
 pub mod files;
 pub mod ipc;
 use domicile_scene::{KeyboardTarget, Scene};
@@ -331,6 +332,7 @@ impl Host {
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::ListFiles
+            | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }

@@ -142,6 +142,21 @@ struct DisplayInfo {
   bool fills_the_window;
 };
 
+// One thing that was copied, as a row of the clipboard's history.
+//
+// A preview and an id rather than the text. The compositor keeps the bytes and
+// a page hands the id back with CopyClipboardEntry, so what crosses into a
+// renderer is enough to draw a row and no more -- which matters because a
+// password manager's copy is a row in this list.
+//
+// The id is 32 bits because the compositor's JSON reaches this process through
+// a base::Value, whose whole numbers are a signed int. Two billion copies in
+// one session is a century of copying something every second.
+struct ClipboardEntry {
+  uint32 id;
+  string preview;
+};
+
 // Page -> browser -> compositor.
 interface ControlChannel {
   // Hand the browser the page's end of the other direction.
@@ -168,6 +183,15 @@ interface ControlChannel {
   // directory at a time. What is read is decided in the compositor, which is
   // also where the walk lives, so the whole of this message is the asking.
   ListFiles();
+
+  // Put a row of the clipboard's history back on the clipboard.
+  //
+  // IT NAMES A ROW AND CARRIES NO TEXT, which is the same property ListFiles
+  // has for the same reason: what makes this channel safe is which renderers
+  // can reach it, and a member that took bytes would let a compromised shell
+  // renderer write the desktop's clipboard rather than choose among what is
+  // already on it. The id is one a Clipboard message carried.
+  CopyClipboardEntry(uint32 entry);
 
   // Which window has the keyboard. FocusChrome takes it back to the page.
   FocusApp(string app_id);
@@ -309,6 +333,21 @@ interface ControlChannelClient {
   // page can distinguish from a real full battery. A machine with no battery
   // sends nothing rather than a zero, for the same reason.
   Battery(double charge, bool charging, mojo_base.mojom.TimeTicks arrival);
+
+  // What has been copied on this desktop, newest first.
+  //
+  // Pushed like Battery: the compositor is the process a
+  // wl_data_device.set_selection arrives at, so a copy is an event it already
+  // hears. Sent whenever the history changes and once more to a chrome that
+  // has just connected. An empty array is a desktop nothing has been copied on
+  // yet, which is an answer -- and the ordinary state of one that has just
+  // started, because the history is in memory and never on disk.
+  //
+  // A page cannot read this for itself, and navigator.clipboard is the trap
+  // that looks like it can: that API answers out of this browser's own
+  // clipboard, which on the platform this engine scans out on is connected to
+  // no Wayland client at all.
+  Clipboard(array<ClipboardEntry> entries, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);

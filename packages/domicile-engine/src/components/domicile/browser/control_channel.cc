@@ -243,6 +243,15 @@ void ControlChannel::ListFiles() {
   SendMessage(Typed("list_files"));
 }
 
+// The one member that names a row of the clipboard, and the whole of what a
+// page may do to the seat's selection: it says which of the things already
+// copied to put back, and cannot say what was copied.
+void ControlChannel::CopyClipboardEntry(uint32_t entry) {
+  base::DictValue message = Typed("copy_clipboard_entry");
+  message.Set("entry", static_cast<int>(entry));
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
 }
@@ -714,6 +723,37 @@ void ControlChannel::DispatchLine(const std::string& line,
       return;
     }
     client_->Battery(*charge, *charging, arrival);
+    return;
+  }
+
+  if (*type == "clipboard") {
+    const base::ListValue* history = message.FindList("entries");
+    if (!history) {
+      return;
+    }
+    std::vector<mojom::ClipboardEntryPtr> entries;
+    entries.reserve(history->size());
+    for (const base::Value& row : *history) {
+      const base::DictValue* entry = row.GetIfDict();
+      if (!entry) {
+        continue;
+      }
+      // A row with no id is one nothing could ask for again, and a row with no
+      // preview is one nothing could draw -- so a malformed one is dropped
+      // rather than carried with a zero in it, which would be a row that
+      // pastes whatever the compositor happens to hold as entry 0.
+      std::optional<int> id = entry->FindInt("id");
+      const std::string* preview = entry->FindString("preview");
+      if (!id || !preview) {
+        continue;
+      }
+      entries.push_back(
+          mojom::ClipboardEntry::New(static_cast<uint32_t>(*id), *preview));
+    }
+    // Sent even when it is empty, for the reason `displays` and `files` are: a
+    // desktop nothing has been copied on is an answer, and a panel that never
+    // heard one would wait for a message that has already been sent.
+    client_->Clipboard(std::move(entries), arrival);
     return;
   }
 

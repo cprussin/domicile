@@ -139,7 +139,16 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
         | ClientRequest::CloseApp { .. }
-        | ClientRequest::ChromeHello => false,
+        | ClientRequest::ChromeHello
+        // NEITHER HALF OF THE CLIPBOARD IS A HAND. A client sets the
+        // selection whenever it likes — a program copying on a timer is a
+        // client, and the Ctrl+C that a person did press has already arrived
+        // as a `Key` and been counted. And picking a row out of the history
+        // is the chrome asking for something on a person's behalf, which is
+        // what `CloseApp` above is: the click that chose it landed on the
+        // shell's own page and never came through here at all.
+        | ClientRequest::ClipboardCopied { .. }
+        | ClientRequest::CopyClipboardEntry { .. } => false,
     }
 }
 
@@ -377,6 +386,16 @@ mod tests {
                 },
             ),
             ("a page saying hello", ClientRequest::ChromeHello),
+            (
+                "a client putting something on the clipboard",
+                ClientRequest::ClipboardCopied {
+                    text: "what was copied".into(),
+                },
+            ),
+            (
+                "the shell putting a copy back on the clipboard",
+                ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
         ] {
             assert!(
                 !somebody_is_here(&request),

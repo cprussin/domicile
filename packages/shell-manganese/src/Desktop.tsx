@@ -3,6 +3,8 @@ import { useDisplays } from "@domicile/component-library/DisplayProvider";
 import type { Display } from "@domicile/component-library/display-source";
 import { useCallback, useMemo } from "react";
 
+import { Clipboard } from "./clipboard/Clipboard";
+import { useClipboard } from "./clipboard/useClipboard";
 import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
@@ -53,6 +55,11 @@ export const Desktop = ({ domicile }: Props) => {
   // Asked for each time the panel goes up — nothing watches a home directory,
   // so a list fetched once would be yesterday's by the afternoon.
   const files = useFiles(domicile, windows.launcherOpen);
+
+  // Pushed rather than asked for, which is the other shape: a copy is an event
+  // the compositor already hears, so the history is here before the panel is
+  // opened rather than fetched when it is.
+  const clipboard = useClipboard(domicile);
 
   // The screen the chrome is on, which is what the windows are laid out in.
   // Nothing is placed until the host has described a desktop — `FirstScreen`
@@ -195,6 +202,17 @@ export const Desktop = ({ domicile }: Props) => {
           }
         }}
         open={windows.launcherOpen}
+      />
+      {/* Over the whole desktop, like the launcher and for its reason. */}
+      <Clipboard
+        entries={clipboard}
+        onCopy={(entry) => {
+          domicile.copyClipboardEntry(entry);
+        }}
+        onDismiss={() => {
+          act(WindowAction.ClipboardDismissed());
+        }}
+        open={windows.clipboardOpen}
       />
       <OtherScreens>
         <IdleScreen />

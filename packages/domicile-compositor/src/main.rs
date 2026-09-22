@@ -19,6 +19,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
+use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -64,9 +65,10 @@ use smithay::wayland::{
     },
     output::{OutputHandler, OutputManagerState},
     selection::data_device::{
+        request_data_device_client_selection, set_data_device_focus, set_data_device_selection,
         ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
     },
-    selection::SelectionHandler,
+    selection::{SelectionHandler, SelectionSource, SelectionTarget},
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
         XdgToplevelSurfaceData,
@@ -87,6 +89,7 @@ use smithay::{
 };
 use tracing::{debug, error, info, warn};
 
+mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
 mod dmabuf_import;
@@ -126,6 +129,7 @@ use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
+use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::files::{listing, RealDirectory, DEEP_ROOTS};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
@@ -299,6 +303,24 @@ enum ClientRequest {
     },
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
     ChromeHello,
+    /// A client handed over what it had copied, read off the pipe it was given.
+    ///
+    /// Comes from the thread that did the reading rather than from a chrome —
+    /// the one variant here that does — because a client's write is a
+    /// stranger's work on a deadline and nothing on the Wayland thread may
+    /// wait for it. See [`DomicileCompositor::read_what_was_copied`].
+    ClipboardCopied {
+        text: String,
+    },
+    /// The shell picked something out of the clipboard's history; put it back
+    /// on the seat's clipboard.
+    ///
+    /// The selection this sets is the compositor's own, which is what makes a
+    /// manager a manager: the entry outlives the client that first copied it,
+    /// so a terminal closed an hour ago is still something this can paste.
+    CopyClipboardEntry {
+        entry: u32,
+    },
 }
 
 /// One connected chrome: where to write to it, and which display its window
@@ -992,6 +1014,15 @@ fn read_chrome_messages(
                 spawn_client(&command, &hub.wayland_display);
                 Vec::new()
             }
+            // Compositor-level, like the spawn above: the clipboard is the
+            // seat's and the history is the compositor's, so the brain has
+            // nothing to say about either. Answered with nothing — what a
+            // shell sees of this is the `clipboard` broadcast that the next
+            // copy produces, and the paste it can now make.
+            Ok(ChromeMessage::CopyClipboardEntry { entry }) => {
+                hub.send_request(ClientRequest::CopyClipboardEntry { entry });
+                Vec::new()
+            }
             // The one message here the compositor answers rather than acts on.
             // A shell's launcher is a page and a page has no filesystem, so the
             // walk is the compositor's -- and it can be, safely, because
@@ -1308,6 +1339,35 @@ struct DomicileCompositor {
     /// reads as the compositor having crashed, and does not look like a missing
     /// global at all.
     data_device_state: DataDeviceState,
+    /// What has been copied on this desktop, newest first.
+    ///
+    /// **A Wayland clipboard is the client that offered it**, so closing the
+    /// terminal you copied out of empties it. This is the desktop's own hold
+    /// on what crossed the clipboard, and the compositor is where it has to
+    /// live because `set_selection` arrives here and nowhere else.
+    /// `domicile_host::clipboard` is the whole of the policy.
+    clipboard: History,
+    /// The mime type to ask the new selection for, on the turn after a client
+    /// set one.
+    ///
+    /// **A turn late, and it has to be.** Smithay calls `new_selection` before
+    /// it stores the selection on the seat, so a read taken there would be a
+    /// read of the copy *before* this one. What is kept is the spelling to ask
+    /// for — `None` for a selection with no text in it, which is not recorded
+    /// at all — and [`DomicileCompositor::read_what_was_copied`] spends it at
+    /// the end of the dispatch, before the flush that carries the request to
+    /// the client.
+    copying: Option<String>,
+    /// The display, for the two paths that have to reach clients from
+    /// somewhere other than a request of their own: handing the clipboard's
+    /// focus to whoever has the keyboard, and putting an entry from the
+    /// history back on the seat.
+    ///
+    /// Every other path is handed a `&DisplayHandle` by its caller, because
+    /// every other path starts at the event loop, which has the `Display`
+    /// itself. These two start at a `SeatHandler` callback and at a message
+    /// from a chrome thread, and neither carries one.
+    display_handle: DisplayHandle,
     /// Kept alive so the wp_cursor_shape_v1 global persists.
     #[allow(dead_code)]
     cursor_shape_state: CursorShapeManagerState,
@@ -3071,6 +3131,72 @@ impl DomicileCompositor {
         }
     }
 
+    /// Tell every chrome what is on the clipboard.
+    ///
+    /// The whole list every time rather than the row that changed: a copy
+    /// re-orders the history as often as it adds to it, and a page
+    /// reconciling deltas could be wrong about the order forever after
+    /// missing one. Thirty-two previews is a small message.
+    ///
+    /// The same call catches a chrome up on connecting, unlike the battery's
+    /// pair — an empty clipboard is a real answer here, so there is no reading
+    /// that has to exist before this can be said.
+    fn tell_the_chromes_the_clipboard(&self) {
+        self.hub.broadcast(HostMessage::Clipboard {
+            entries: self.clipboard.entries(),
+        });
+    }
+
+    /// Read what a client copied, now that the seat is holding its selection.
+    ///
+    /// **At the end of the dispatch, and both halves of that matter.** After,
+    /// because Smithay calls `new_selection` before it stores the selection —
+    /// so this is the first moment the seat can be asked. Before the flush,
+    /// because asking is a `wl_data_source.send` event, and the client cannot
+    /// write into the pipe until that event reaches it.
+    ///
+    /// The reading itself is a thread's: what it waits for is a stranger's
+    /// `write`, and nothing the desktop's every window is behind may wait for
+    /// that. It comes back as [`ClientRequest::ClipboardCopied`].
+    fn read_what_was_copied(&mut self) {
+        let Some(mime) = self.copying.take() else {
+            return;
+        };
+        let (ours, theirs) = match clipboard::pipe() {
+            Ok(ends) => ends,
+            Err(err) => {
+                warn!(%err, "no pipe to read a copy over, so it is not in the history");
+                return;
+            }
+        };
+        // The compositor's own selection answers this with
+        // `ServerSideSelection`, which is the right answer and not a failure:
+        // it is what a client copying is not, and what is on the clipboard
+        // then is already a row.
+        if let Err(err) = request_data_device_client_selection(&self.seat, mime.clone(), theirs) {
+            debug!(%err, %mime, "nothing to read this copy from");
+        } else {
+            let hub = self.hub.clone();
+            thread::spawn(move || {
+                match clipboard::read_copy(ours, LONGEST_COPY, clipboard::PATIENCE) {
+                    Ok(copied) => match String::from_utf8(copied) {
+                        Ok(text) => hub.send_request(ClientRequest::ClipboardCopied { text }),
+                        // A client that offered `text/plain;charset=utf-8` and
+                        // wrote something else. Said rather than repaired:
+                        // what a repair would put in the history is not what
+                        // was copied, and pasting it back would corrupt it.
+                        Err(err) => {
+                            warn!(%err, "a client offered text that is not UTF-8, so it is not a row")
+                        }
+                    },
+                    Err(err) => {
+                        warn!(%err, "a client offered the clipboard and did not hand it over")
+                    }
+                }
+            });
+        }
+    }
+
     /// Inject a forwarded input event into the appropriate client via the seat.
     fn handle_client_request(&mut self, event: ClientRequest) {
         // First, and for every request: this is the whole of what the
@@ -3196,6 +3322,32 @@ impl DomicileCompositor {
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
             }
+            ClientRequest::ClipboardCopied { text } => {
+                if self.clipboard.record(text) {
+                    self.tell_the_chromes_the_clipboard();
+                }
+            }
+            // The one thing a shell can do to the clipboard, and it names a
+            // row rather than carrying text: a page that could put arbitrary
+            // bytes on the seat would be writing the desktop's clipboard
+            // rather than choosing among what is already on it.
+            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
+                Some(_) => set_data_device_selection(
+                    &self.display_handle,
+                    &self.seat,
+                    TEXT_MIMES.iter().map(|mime| (*mime).to_string()).collect(),
+                    entry,
+                ),
+                // An id the shell was told about and the history has since
+                // dropped, which is the one way one goes stale. Nothing is
+                // set: putting the newest entry on the clipboard instead
+                // would be this desktop deciding a person meant something
+                // else by what they clicked.
+                None => warn!(
+                    entry,
+                    "the shell asked for a clipboard entry this desktop no longer holds"
+                ),
+            },
             ClientRequest::ChromeHello => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
@@ -3216,6 +3368,10 @@ impl DomicileCompositor {
                 // when it moves, and a page that connected between two moves
                 // has never been told one.
                 self.tell_a_new_chrome_the_charge();
+                // The clipboard for the same reason, and with no second
+                // method for it: a history of nothing is a message this one
+                // can send, where a battery that has not been read is not.
+                self.tell_the_chromes_the_clipboard();
             }
             ClientRequest::SetOutputScale { ratio, scale } => {
                 // Kept whether or not the scale below is taken up. A described
@@ -3831,7 +3987,26 @@ impl SeatHandler for DomicileCompositor {
         }
     }
 
-    fn focus_changed(&mut self, _seat: &Seat<Self>, _focused: Option<&WlSurface>) {}
+    /// The clipboard goes where the keyboard goes.
+    ///
+    /// **Without this nothing can paste.** A selection is offered to the
+    /// client holding the data device's focus and to no other, so a
+    /// compositor that never sets one has a clipboard every client can write
+    /// and none can read. It is set from the keyboard's own focus because
+    /// that is the rule `wl_data_device` is written around — a client may set
+    /// the selection only while it is being typed into, and it is offered the
+    /// selection on the same terms.
+    ///
+    /// `None` is the seat between windows rather than the chrome: the chrome
+    /// is a client with a surface of its own and holds the keyboard as one,
+    /// so it is offered the clipboard through this like anything else.
+    fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        set_data_device_focus(
+            &self.display_handle,
+            seat,
+            focused.and_then(|on| on.client()),
+        );
+    }
 }
 
 impl TabletSeatHandler for DomicileCompositor {}
@@ -4236,7 +4411,77 @@ delegate_xdg_activation!(DomicileCompositor);
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
 impl SelectionHandler for DomicileCompositor {
-    type SelectionUserData = ();
+    /// Which entry of the history the compositor is offering.
+    ///
+    /// Carried by Smithay from the moment the selection is set to the moment a
+    /// client asks to read it, which is exactly the hand-over
+    /// [`SelectionHandler::send_selection`] needs and saves the compositor
+    /// holding a second copy of "what is on the clipboard" that could disagree
+    /// with the seat.
+    type SelectionUserData = u32;
+
+    /// A client copied something. Nothing is read here — see
+    /// [`DomicileCompositor::copying`] for why this can only write down what
+    /// to ask for.
+    ///
+    /// The primary selection is not a clipboard and is not managed: it is the
+    /// middle-click one, it changes on every drag over a word, and a history
+    /// of it would be a history of what the pointer brushed past.
+    fn new_selection(
+        &mut self,
+        target: SelectionTarget,
+        source: Option<SelectionSource>,
+        _seat: Seat<Self>,
+    ) {
+        match target {
+            // `None` is a selection being cleared, and a selection whose mime
+            // types hold no text is an image or a file drag. Neither is a row,
+            // and both leave whatever was copied before where it is.
+            SelectionTarget::Clipboard => {
+                self.copying = source
+                    .as_ref()
+                    .and_then(|offered| text_mime(&offered.mime_types()));
+            }
+            SelectionTarget::Primary => {}
+        }
+    }
+
+    /// A client is pasting something this compositor put on the clipboard.
+    ///
+    /// **On a thread, because the client sets the pace.** A paste is this
+    /// process writing into a pipe the client reads, and a client that asks
+    /// for the selection and then stops reading would otherwise park the
+    /// Wayland thread — which is every window on the desktop — for as long as
+    /// it liked. The deadline in `crate::clipboard` bounds the thread instead.
+    ///
+    /// An entry that is gone is a client pasting a selection the compositor
+    /// took back, which the history's bound makes possible: the fd is dropped,
+    /// the client reads end-of-file and pastes nothing.
+    fn send_selection(
+        &mut self,
+        _target: SelectionTarget,
+        _mime_type: String,
+        fd: OwnedFd,
+        _seat: Seat<Self>,
+        entry: &u32,
+    ) {
+        match self.clipboard.text(*entry) {
+            Some(text) => {
+                let copy = text.to_owned();
+                thread::spawn(move || {
+                    if let Err(err) =
+                        clipboard::write_copy(fd, copy.as_bytes(), clipboard::PATIENCE)
+                    {
+                        warn!(%err, "a client asked for the clipboard and did not take it");
+                    }
+                });
+            }
+            None => warn!(
+                entry,
+                "a client is pasting an entry this desktop no longer holds, so it gets nothing"
+            ),
+        }
+    }
 }
 
 impl ClientDndGrabHandler for DomicileCompositor {}
@@ -4707,6 +4952,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
         data_device_state,
+        clipboard: History::default(),
+        copying: None,
+        display_handle: dh.clone(),
         seat,
         output_manager_state,
         outputs,
@@ -5068,6 +5316,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let stop = data.state.stop.clone();
     let signal = event_loop.get_signal();
     event_loop.run(None, &mut data, move |data| {
+        // Before the flush, because asking a client for what it copied is an
+        // event that has to reach it — see `read_what_was_copied`, which is
+        // also why this is here rather than in the handler that hears about
+        // the copy.
+        data.state.read_what_was_copied();
         let _ = data.display.flush_clients();
         if stop.load(Ordering::SeqCst) {
             signal.stop();

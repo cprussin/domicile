@@ -282,6 +282,28 @@ const batterySchema = z.looseObject({
   type: z.literal("battery"),
 });
 
+// What has been copied on this desktop, newest first.
+//
+// Pushed, like the battery: a copy is an event the compositor already hears,
+// so there is no `list_clipboard` beside `list_files`. Sent whenever the
+// history changes and again to a chrome that has just connected — an empty
+// list is a desktop nothing has been copied on yet, which is an answer and the
+// ordinary state of one that has just started.
+//
+// A preview and an id rather than the text. The compositor keeps the bytes and
+// a shell hands the id back with `copy_clipboard_entry`; what crosses here is
+// enough to draw a row and no more, which matters because a password
+// manager's copy is a row in this list.
+const clipboardEntrySchema = z.looseObject({
+  id: z.number(),
+  preview: z.string(),
+});
+
+const clipboardSchema = z.looseObject({
+  entries: z.array(clipboardEntrySchema),
+  type: z.literal("clipboard"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -302,6 +324,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   modifiersSchema,
   filesSchema,
   batterySchema,
+  clipboardSchema,
 ]);
 
 /** A decoded host message. */
@@ -329,6 +352,10 @@ export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FilesMessage = z.infer<typeof filesSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
+export type ClipboardMessage = z.infer<typeof clipboardSchema>;
+
+/** One thing that was copied, as a row of the clipboard's history. */
+export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;
 
 /** One display of the desktop, in the coordinates the shell lays out in. */
 export type DisplayInfo = z.infer<typeof displayInfoSchema>;
