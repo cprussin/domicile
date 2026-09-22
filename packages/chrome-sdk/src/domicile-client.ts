@@ -407,9 +407,11 @@ export class DomicileClient {
    * path, so what gets read is the compositor's decision and not something a
    * document served over `domicile://` can steer. See `DomicileHost.listFiles`.
    *
-   * Asked rather than subscribed to, so a launcher asks each time it opens —
-   * and the hold in {@link #held} is what makes that safe from an effect,
-   * where the answer can be back before the handler for it is registered.
+   * Asked *and* subscribed to: a launcher asks each time it opens, and the
+   * compositor also sends a `files` message on its own whenever its index of
+   * the home changes. The hold in {@link #held} is what makes the asking safe
+   * from an effect, where the answer can be back before the handler for it is
+   * registered.
    */
   listFiles(): void {
     this.#host.listFiles();

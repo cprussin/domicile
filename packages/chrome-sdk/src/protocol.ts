@@ -248,15 +248,25 @@ const keymapSchema = z.looseObject({
   type: z.literal("keymap"),
 });
 
-// What there is to open, answering `list_files`. Paths relative to the home
-// directory, sorted — the order is the answer, worked out by
-// `domicile_host::files` rather than by whatever a `read_dir` handed back.
+// What there is to open, answering `list_files` and also arriving unasked.
+// Paths relative to the home directory, sorted — the order is the answer,
+// worked out by `domicile_host::file_index` rather than by whatever a
+// `read_dir` handed back.
 //
 // An empty list is a home with nothing to offer. A home that could not be read
 // is not this message at all: the compositor logs that and says nothing, so a
 // launcher shows no list rather than an empty one it would have to explain.
+//
+// `indexing` is whether the compositor has finished walking the home this came
+// out of, and it defaults to false — which is "this is the whole home", the
+// state a list is in for all but the first seconds of a session and the right
+// reading of a line written before the index existed. The same default the
+// Rust half carries as `#[serde(default)]`, for the same reason: nothing that
+// completes a handshake with this build omits it, and a captured session or a
+// hand-written fixture can.
 const filesSchema = z.looseObject({
   files: z.array(z.string()),
+  indexing: z.boolean().default(false),
   type: z.literal("files"),
 });
 

@@ -7,12 +7,13 @@ import { Launch } from "./launch";
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src", "todo.txt"];
 
 /** The panel open over a home with those files in it, recording what it launched. */
-const launcher = (files: readonly string[] = FILES) => {
+const launcher = (files: readonly string[] = FILES, indexing = false) => {
   const launched: Launch[] = [];
   const dismissed: true[] = [];
   render(
     <Launcher
       files={files}
+      indexing={indexing}
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -45,6 +46,7 @@ describe("Launcher", () => {
     render(
       <Launcher
         files={FILES}
+        indexing={false}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
@@ -180,6 +182,68 @@ describe("Launcher", () => {
     scrollIntoView.mockRestore();
 
     expect(scrolled.at(-1)).toBe("today.orgNotes");
+  });
+
+  it("says so while the desktop is still working out what there is", () => {
+    // WITHOUT THIS THE PANEL LIES BY OMISSION. A list that is a third of a
+    // home looks exactly like a home with a third as much in it, so a person
+    // who types the name of a file the walk has not reached is told they do
+    // not have it — and the evidence that they are wrong is nowhere on screen.
+    launcher(["src"], true);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Still finding your files",
+    );
+  });
+
+  it("says nothing about an index that is not being built", () => {
+    // Which is every launcher after the first seconds of a session. A notice
+    // that stayed up would be a panel that never stops apologizing.
+    launcher();
+
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("opens a path that is typed whole, index or no index", async () => {
+    // The escape hatch that makes a half-built index usable rather than
+    // merely honest: a leading `~/` or `/` cannot be a hostname or a search
+    // anybody meant, so it needs no list to be confident about — and a person
+    // who knows where their file is should never have to wait for a walk to
+    // agree with them.
+    const panel = launcher([], true);
+
+    await panel.user.type(panel.box(), "~/Scratch{Enter}");
+
+    expect(panel.launched).toStrictEqual([Launch.Edited("Scratch")]);
+  });
+
+  it("draws a bounded number of rows however big the home is", () => {
+    // A HOME IS A HUNDRED THOUSAND PATHS NOW. The list used to be a few
+    // hundred because the walk stopped a level down; an index of the whole
+    // home, drawn a row per path, is a panel that hangs the shell on the
+    // keystroke that opens it. The rows past the cap are not rows anybody
+    // scrolls to — what narrows the list is typing — and the counter beside
+    // the box still says how many there really are, so the cap is never
+    // mistaken for the answer.
+    const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
+
+    launcher(home);
+
+    expect(screen.getAllByRole("option")).toHaveLength(200);
+    expect(screen.getByText("500 of 500")).toBeInTheDocument();
+  });
+
+  it("keeps the arrow keys inside the rows it drew", async () => {
+    // The walk is over what is on screen rather than over what matched, which
+    // is what makes the cap above safe: an Up press onto the bottom of the
+    // list has to land on the last row that exists, not on the five hundredth
+    // match that was never drawn.
+    const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
+    const panel = launcher(home);
+
+    await panel.user.keyboard("{ArrowUp}{Enter}");
+
+    expect(panel.launched).toStrictEqual([Launch.Edited("file-199")]);
   });
 
   it("says it was dismissed when Escape closes it", async () => {

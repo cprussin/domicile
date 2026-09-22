@@ -255,10 +255,11 @@ describe("DomicileClient", () => {
     });
 
     it("delivers what there is to open to a launcher that asked", () => {
-      // The one event that answers a question rather than announcing
-      // something. It goes through the same hold as every other, which is what
-      // a launcher needs: `listFiles` is called from an effect and the answer
-      // can be back before the handler for it is.
+      // The one event that answers a question as well as announcing something.
+      // It goes through the same hold as every other, which is what a launcher
+      // needs twice over: `listFiles` is called from an effect and the answer
+      // can be back before the handler for it is, and the compositor sends
+      // more of these on its own as the index behind them fills in.
       const seen: unknown[] = [];
       domicile.on("files", (message) => {
         seen.push(message);
@@ -269,10 +270,13 @@ describe("DomicileClient", () => {
         Object.assign(new Event("files"), {
           arrival: 0,
           files: ["Notes/today.org", "src"],
+          indexing: false,
         }),
       );
 
-      expect(seen).toStrictEqual([{ files: ["Notes/today.org", "src"] }]);
+      expect(seen).toStrictEqual([
+        { files: ["Notes/today.org", "src"], indexing: false },
+      ]);
     });
 
     it("delivers the charge nobody asked for", () => {

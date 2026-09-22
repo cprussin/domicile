@@ -8,8 +8,8 @@
 //
 // WHAT IS A DIRECTORY IS INFERRED, and from the only evidence a page has: the
 // host answers with a flat list of paths and says nothing about their kind —
-// see `domicile_host::files` — but a path that another offered path is inside
-// of cannot be anything else.
+// see `domicile_host::file_index` — but a path that another offered path is
+// inside of cannot be anything else.
 
 /** A path as the list draws it. */
 export type FileRow = {

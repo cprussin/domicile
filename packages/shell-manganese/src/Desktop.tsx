@@ -52,9 +52,10 @@ export const Desktop = ({ domicile }: Props) => {
   // the compositor's own answer is these keystrokes handed back short.
   const { modifiers, spendShift } = useModifiers();
 
-  // Asked for each time the panel goes up — nothing watches a home directory,
-  // so a list fetched once would be yesterday's by the afternoon.
-  const files = useFiles(domicile, windows.launcherOpen);
+  // Asked for each time the panel goes up, and pushed in between: the
+  // compositor keeps an index of the home and broadcasts it as it changes, but
+  // a page that has just reloaded has heard none of that.
+  const offered = useFiles(domicile, windows.launcherOpen);
 
   // Pushed rather than asked for, which is the other shape: a copy is an event
   // the compositor already hears, so the history is here before the panel is
@@ -201,7 +202,8 @@ export const Desktop = ({ domicile }: Props) => {
         than over one monitor of it.
       */}
       <Launcher
-        files={files}
+        files={offered.files}
+        indexing={offered.indexing}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}

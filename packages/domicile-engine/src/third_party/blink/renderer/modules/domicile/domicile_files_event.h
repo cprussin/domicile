@@ -16,17 +16,20 @@ namespace blink {
 
 class DomicileFilesEventInit;
 
-// What there is to open, answering DomicileHost::listFiles().
+// What there is to open, answering DomicileHost::listFiles() and also arriving
+// unasked.
 //
-// The one event on this channel that answers a question rather than reporting
-// something a client did. It is an event and not a promise because everything
-// else here is: a shell registers one listener per message type through
-// `DomicileClient`, whose hold covers the gap between the call and the
-// handler, and a promise would be a second delivery mechanism for one message.
+// The one event on this channel that answers a question at all. It is an event
+// and not a promise because everything else here is: a shell registers one
+// listener per message type through `DomicileClient`, whose hold covers the
+// gap between the call and the handler, and a promise would be a second
+// delivery mechanism for one message. That shape is also what lets the
+// compositor send this on its own, which it does whenever the index behind the
+// list changes -- a promise would have had nowhere to put those.
 //
 // The paths are relative to the home directory and already sorted -- see the
-// IDL, and `domicile_host::files` in the compositor, which is where the walk
-// and the order are decided.
+// IDL, and `domicile_host::file_index` in the compositor, which is where the
+// list is kept and the order is decided.
 class MODULES_EXPORT DomicileFilesEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -38,10 +41,15 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
                      const DomicileFilesEventInit* initializer);
   DomicileFilesEvent(const AtomicString& type,
                      Vector<String> files,
+                     bool indexing,
                      DOMHighResTimeStamp arrival);
   ~DomicileFilesEvent() override;
 
   const FrozenArray<IDLString>& files() const { return *files_; }
+
+  // Whether the index this list came out of is still being built. See the IDL:
+  // an incomplete answer that did not say so would read as a complete one.
+  bool indexing() const { return indexing_; }
 
   // When the browser process had this, on `performance.now()`'s clock. See
   // DomicileAppEvent::arrival.
@@ -56,6 +64,10 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
   // answer here -- a home with nothing to offer -- because the compositor does
   // not send this message at all when it has nothing to say.
   Member<FrozenArray<IDLString>> files_;
+  // False by default, which is "this is the whole home": the state a list is
+  // in for all but the first seconds of a session, and the reading an event
+  // built without the field should get.
+  bool indexing_ = false;
   DOMHighResTimeStamp arrival_ = 0;
 };
 

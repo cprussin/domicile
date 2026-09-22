@@ -180,12 +180,24 @@ export type DisplaysMessage = {
  * a launcher draws the list rather than sorting it a second time under a rule
  * of its own.
  *
+ * Answers `listFiles` and also arrives on its own, whenever the compositor's
+ * index of the home changes.
+ *
  * An empty list is a home with nothing to offer, and is an answer: a shell
  * that read it as "not told yet" would wait for a message that is not coming.
  * A home that could not be read produces no message at all.
  */
 export type FilesMessage = {
   files: readonly string[];
+  /**
+   * Whether the index behind the list is still being built.
+   *
+   * **The difference between an incomplete answer and a wrong one**, and a
+   * thing a shell cannot work out for itself: a short list from an index still
+   * being walked and a short list from a small home look identical. Say so on
+   * screen — another message follows when the walk ends.
+   */
+  indexing: boolean;
 };
 
 /**
@@ -325,10 +337,13 @@ export const shortcut = (event: DomicileShortcutEvent): ShortcutMessage => ({
  * A `FrozenArray<DOMString>` is already an array of strings to a page, and the
  * order it arrives in is the answer — so this is the one translator with no
  * decision in it, and it exists so that `domicile-client.ts` has the same one
- * call per listener that every other event gets.
+ * call per listener that every other event gets. `arrival` is left behind, as
+ * everywhere else here; `indexing` is not, because it is what says whether the
+ * list is all of it.
  */
 export const files = (event: DomicileFilesEvent): FilesMessage => ({
   files: event.files,
+  indexing: event.indexing,
 });
 
 /** The charge, with the SDK's own `arrival` left behind: no shell draws it. */
