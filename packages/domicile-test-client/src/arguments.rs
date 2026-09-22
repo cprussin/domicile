@@ -57,6 +57,33 @@ pub struct Arguments {
     /// surface — the request a Domicile shell is free to refuse, and the only
     /// way to produce one from a real client.
     pub ask_for_focus: bool,
+
+    /// What to put on the clipboard, or nothing to leave it alone.
+    ///
+    /// **A clipboard check needs a client to hold the bytes.** A Wayland
+    /// selection is an offer rather than a copy: the compositor is told which
+    /// mime types are on offer and every paste is served by the client that
+    /// offered them. So nothing but a real client can put something on a
+    /// clipboard, which is what this is for.
+    pub copy: Option<String>,
+
+    /// What to put on the middle-click selection, or nothing to leave it
+    /// alone.
+    ///
+    /// Separate from [`copy`](Self::copy) because the two selections are
+    /// separate — `zwp_primary_selection_device_manager_v1` is its own global
+    /// with its own device — and a client that wrote both from one flag could
+    /// not show a desktop that confuses them.
+    pub copy_primary: Option<String>,
+
+    /// Whether to read out whatever is offered on either selection.
+    ///
+    /// Off by default: a selection is only offered to the client that holds
+    /// the keyboard, so a client that read one would make every check about
+    /// who was focused. On, each offer is read to the end and traced — which
+    /// is a real paste, pipe and all, rather than a report that one was
+    /// possible.
+    pub paste: bool,
 }
 
 /// A command line the client will not run.
@@ -82,6 +109,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut translucent = None;
     let mut follow_configure = None;
     let mut ask_for_focus = None;
+    let mut copy = None;
+    let mut copy_primary = None;
+    let mut paste = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -102,6 +132,15 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--ask-for-focus" => {
                 take(&mut ask_for_focus, &flag, true)?;
             }
+            "--copy" => {
+                take(&mut copy, &flag, value(&mut args, &flag)?)?;
+            }
+            "--copy-primary" => {
+                take(&mut copy_primary, &flag, value(&mut args, &flag)?)?;
+            }
+            "--paste" => {
+                take(&mut paste, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -112,6 +151,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
         ask_for_focus: ask_for_focus.unwrap_or(false),
+        copy,
+        copy_primary,
+        paste: paste.unwrap_or(false),
     })
 }
 

@@ -68,6 +68,9 @@ use smithay::wayland::{
         request_data_device_client_selection, set_data_device_focus, set_data_device_selection,
         ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
     },
+    selection::primary_selection::{
+        set_primary_focus, PrimarySelectionHandler, PrimarySelectionState,
+    },
     selection::{SelectionHandler, SelectionSource, SelectionTarget},
     shell::xdg::{
         PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
@@ -84,8 +87,8 @@ use smithay::wayland::{
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
-    delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
+    delegate_dmabuf, delegate_output, delegate_primary_selection, delegate_seat, delegate_shm,
+    delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -1339,6 +1342,17 @@ struct DomicileCompositor {
     /// reads as the compositor having crashed, and does not look like a missing
     /// global at all.
     data_device_state: DataDeviceState,
+    /// The middle-click clipboard.
+    ///
+    /// **A second clipboard, not a second name for the first.** Selecting a
+    /// word fills this one and the middle button pastes out of it, while
+    /// Ctrl-C and Ctrl-V go through `wl_data_device` above — which is why
+    /// `zwp_primary_selection_device_manager_v1` is its own global with its
+    /// own device, and why a desktop can carry one of the two and not the
+    /// other. This one is passed between clients and never read here: it
+    /// changes on every drag over a word, so a history of it would be a
+    /// history of what the pointer brushed past.
+    primary_selection_state: PrimarySelectionState,
     /// What has been copied on this desktop, newest first.
     ///
     /// **A Wayland clipboard is the client that offered it**, so closing the
@@ -3987,7 +4001,7 @@ impl SeatHandler for DomicileCompositor {
         }
     }
 
-    /// The clipboard goes where the keyboard goes.
+    /// Both clipboards go where the keyboard goes.
     ///
     /// **Without this nothing can paste.** A selection is offered to the
     /// client holding the data device's focus and to no other, so a
@@ -4001,11 +4015,14 @@ impl SeatHandler for DomicileCompositor {
     /// is a client with a surface of its own and holds the keyboard as one,
     /// so it is offered the clipboard through this like anything else.
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
-        set_data_device_focus(
-            &self.display_handle,
-            seat,
-            focused.and_then(|on| on.client()),
-        );
+        let client = focused.and_then(|on| on.client());
+        set_data_device_focus(&self.display_handle, seat, client.clone());
+        // Both, and on the same terms. The middle-click selection is offered
+        // to whoever holds the keyboard exactly as the clipboard is — a client
+        // that was given one and not the other would be one where half of
+        // paste does nothing, which is what this desktop had before it had a
+        // primary selection at all.
+        set_primary_focus(&self.display_handle, seat, client);
     }
 }
 
@@ -4424,9 +4441,11 @@ impl SelectionHandler for DomicileCompositor {
     /// [`DomicileCompositor::copying`] for why this can only write down what
     /// to ask for.
     ///
-    /// The primary selection is not a clipboard and is not managed: it is the
-    /// middle-click one, it changes on every drag over a word, and a history
-    /// of it would be a history of what the pointer brushed past.
+    /// The middle-click clipboard is passed between clients and is not kept:
+    /// it changes on every drag over a word, so a history of it would be a
+    /// history of what the pointer brushed past. Nothing is written down for
+    /// it here, which is what leaves it where Smithay already carries it —
+    /// from the client that selected to the client that pastes.
     fn new_selection(
         &mut self,
         target: SelectionTarget,
@@ -4483,6 +4502,14 @@ impl SelectionHandler for DomicileCompositor {
         }
     }
 }
+
+impl PrimarySelectionHandler for DomicileCompositor {
+    fn primary_selection_state(&self) -> &PrimarySelectionState {
+        &self.primary_selection_state
+    }
+}
+
+delegate_primary_selection!(DomicileCompositor);
 
 impl ClientDndGrabHandler for DomicileCompositor {}
 impl ServerDndGrabHandler for DomicileCompositor {}
@@ -4760,6 +4787,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
+    let primary_selection_state = PrimarySelectionState::new::<DomicileCompositor>(&dh);
     // Advertise a keyboard and pointer; a real compositor would track hotplug.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
     // The keymap the seat compiles is what every Wayland client is handed, so
@@ -4952,6 +4980,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
         data_device_state,
+        primary_selection_state,
         clipboard: History::default(),
         copying: None,
         display_handle: dh.clone(),

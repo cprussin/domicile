@@ -7,20 +7,32 @@
 //! never commits is not mapped, and a window that draws once cannot be the
 //! subject of a check about a compositor that is behind.
 
-use std::os::fd::AsFd as _;
+use std::io::{Read as _, Write as _};
+use std::os::fd::{AsFd as _, BorrowedFd, OwnedFd};
 use std::os::unix::fs::FileExt as _;
+use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
 use wayland_client::backend::ObjectId;
 use wayland_client::protocol::{
-    wl_buffer, wl_callback, wl_compositor, wl_keyboard, wl_output, wl_pointer, wl_registry,
-    wl_seat, wl_shm, wl_shm_pool, wl_surface,
+    wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer,
+    wl_data_source, wl_keyboard, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
+    wl_surface,
 };
-use wayland_client::{delegate_noop, Connection, Dispatch, Proxy as _, QueueHandle, WEnum};
+use wayland_client::{
+    delegate_noop, event_created_child, Connection, Dispatch, Proxy as _, QueueHandle, WEnum,
+};
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
 };
+use wayland_protocols::wp::primary_selection::zv1::client::{
+    zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
+    zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
+};
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
+
+use crate::arguments::Arguments;
 
 /// What can go wrong being a client.
 #[derive(Debug, thiserror::Error)]
@@ -102,6 +114,23 @@ const fn translucent(color: u32) -> u32 {
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
+/// The mime type a copy is offered under and asked for by.
+///
+/// One rather than the four a toolkit offers, because a check is not about
+/// negotiation: the compositor's own `TEXT_MIMES` lists what it will take, and
+/// this is the one every party to a paste on this desktop already agrees on.
+const TEXT_MIME: &str = "text/plain;charset=utf-8";
+
+/// How long a paste waits for the client that offered the selection.
+///
+/// **A bound on somebody else's work, for the compositor's reason.** A paste
+/// is this process reading a socket the *offering* client writes, and a client
+/// that offers a selection and never writes would otherwise stop this one for
+/// good — which a check would meet as a window that stopped drawing, with
+/// nothing said about why. Long enough that a paste that is going to happen
+/// has happened, and short enough to be a sentence rather than a hang.
+const PASTE_PATIENCE: Duration = Duration::from_secs(5);
+
 /// The `wl_shm` format a window of each kind is drawn in.
 ///
 /// `Xrgb8888` has no alpha channel at all, which is what makes an ordinary
@@ -121,12 +150,7 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
 /// Returns only on a failure: a client whose job is to be a window for the
 /// length of a check has nothing to return early *for*, and every caller in
 /// `scripts/` ends it with a signal.
-pub fn run(
-    title: &str,
-    translucent: bool,
-    follow_configure: bool,
-    ask_for_focus: bool,
-) -> Result<std::convert::Infallible, ClientError> {
+pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
     let connection =
         Connection::connect_to_env().map_err(|err| ClientError::NoDisplay(err.to_string()))?;
     let mut queue = connection.new_event_queue();
@@ -140,12 +164,7 @@ pub fn run(
     // Two roundtrips: the first brings the globals, the second brings what
     // binding them produced — the `wl_shm.format` list, and the seat's
     // capabilities, which is what says whether there is a keyboard to bind.
-    let mut client = Client::new(
-        title.to_string(),
-        translucent,
-        follow_configure,
-        ask_for_focus,
-    );
+    let mut client = Client::new(asked);
     queue
         .roundtrip(&mut client)
         .map_err(|err| ClientError::Lost(err.to_string()))?;
@@ -176,6 +195,17 @@ struct Client {
     /// Whether this client asks for the keyboard once its window is up — see
     /// [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: bool,
+    /// What to put on the clipboard — see [`Arguments::copy`].
+    copy: Option<String>,
+    /// What to put on the middle-click selection — see
+    /// [`Arguments::copy_primary`].
+    copy_primary: Option<String>,
+    /// Whether to read out whatever is offered on either — see
+    /// [`Arguments::paste`].
+    paste: bool,
+    /// The two devices this client reaches the two clipboards through, once it
+    /// has taken them. `None` where it was told to do nothing with either.
+    selections: Option<Selections>,
     /// Whether it has asked already. Once per window: the request is answered
     /// by a shell rather than by the compositor, and a client that repeated it
     /// every configure would be asking a question nobody had finished
@@ -237,6 +267,22 @@ struct Client {
     outputs: Vec<(u32, ObjectId)>,
 }
 
+/// A device on each clipboard, which is what a client reaches either through.
+///
+/// Taken when the window opens rather than when there is something to copy,
+/// because a device is also the only thing a `selection` event is delivered
+/// to: a client that pastes needs one as much as a client that copies.
+struct Selections {
+    clipboard: wl_data_device::WlDataDevice,
+    primary: zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1,
+    /// Whether what this client was told to copy is on the clipboards.
+    ///
+    /// Once per window, like the activation request: the keyboard can arrive
+    /// and leave any number of times, and a client that re-copied on each
+    /// arrival would be overwriting whatever the user had copied since.
+    copied: bool,
+}
+
 /// The surface and the pixels behind it, which exist together or not at all.
 struct Window {
     surface: wl_surface::WlSurface,
@@ -294,21 +340,29 @@ struct Globals {
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
+    /// Kept rather than dropped like the rest of what the seat is for, because
+    /// a data device is made *from* a seat: both selections belong to one, and
+    /// `get_data_device` is the request that says which.
+    seat: Option<wl_seat::WlSeat>,
+    clipboard: Option<wl_data_device_manager::WlDataDeviceManager>,
+    /// The middle-click selection's manager, which is a different global with
+    /// a different name — which is the whole of why a desktop can have one of
+    /// the two clipboards and not the other.
+    primary: Option<zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1>,
     named: Vec<(u32, String, u32)>,
 }
 
 impl Client {
-    fn new(
-        title: String,
-        translucent: bool,
-        follow_configure: bool,
-        ask_for_focus: bool,
-    ) -> Client {
+    fn new(asked: &Arguments) -> Client {
         Client {
-            title,
-            translucent,
-            follow_configure,
-            ask_for_focus,
+            title: asked.title.clone(),
+            translucent: asked.translucent,
+            follow_configure: asked.follow_configure,
+            ask_for_focus: asked.ask_for_focus,
+            copy: asked.copy.clone(),
+            copy_primary: asked.copy_primary.clone(),
+            paste: asked.paste,
+            selections: None,
             asked: false,
             configured_size: None,
             globals: Globals::default(),
@@ -347,13 +401,19 @@ impl Client {
                 "xdg_activation_v1" => {
                     self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
                 }
-                // Bound and dropped on purpose: a seat is what carries the
-                // keyboard and the pointer, and a compositor only sends input
-                // to a client that asked for them. The handler below gets the
-                // seat back as its own argument, and dropping a proxy sends no
-                // destructor, so there is nothing here worth keeping.
+                // A seat is what carries the keyboard and the pointer, and a
+                // compositor only sends input to a client that asked for them.
+                // The handler below gets the seat back as its own argument;
+                // what it is kept for is the two selections, which are made
+                // from it rather than delivered to it.
                 "wl_seat" => {
-                    let _: wl_seat::WlSeat = registry.bind(name, version.min(5), handle, ());
+                    self.globals.seat = Some(registry.bind(name, version.min(5), handle, ()));
+                }
+                "wl_data_device_manager" => {
+                    self.globals.clipboard = Some(registry.bind(name, version.min(3), handle, ()));
+                }
+                "zwp_primary_selection_device_manager_v1" => {
+                    self.globals.primary = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 _ => {}
             }
@@ -362,6 +422,10 @@ impl Client {
 
     /// Make the surface, the pixels, and ask for a window.
     fn open(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        // First, and not only because the borrow checker says so: a device
+        // taken before the surface exists is one the compositor can offer a
+        // selection on the moment this window is given the keyboard.
+        self.take_selection_devices(handle)?;
         let compositor = self
             .globals
             .compositor
@@ -419,6 +483,91 @@ impl Client {
             scale: 1,
         });
         Ok(())
+    }
+
+    /// Take a device on each clipboard, if this client has anything to do
+    /// with either.
+    ///
+    /// A missing manager is a failure rather than a silent `None`, for the
+    /// reason [`Client::open`] gives about the cursor: a client that shrugged
+    /// at a compositor advertising no `zwp_primary_selection_device_manager_v1`
+    /// would convict the compositor of a gap by way of a check that never ran.
+    fn take_selection_devices(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        if self.copy.is_none() && self.copy_primary.is_none() && !self.paste {
+            return Ok(());
+        }
+        let seat = self
+            .globals
+            .seat
+            .as_ref()
+            .ok_or(ClientError::Missing { global: "wl_seat" })?;
+        let clipboard = self
+            .globals
+            .clipboard
+            .as_ref()
+            .ok_or(ClientError::Missing {
+                global: "wl_data_device_manager",
+            })?;
+        let primary = self.globals.primary.as_ref().ok_or(ClientError::Missing {
+            global: "zwp_primary_selection_device_manager_v1",
+        })?;
+        self.selections = Some(Selections {
+            clipboard: clipboard.get_data_device(seat, handle, ()),
+            primary: primary.get_device(seat, handle, ()),
+            copied: false,
+        });
+        Ok(())
+    }
+
+    /// Put what this client was told to copy on each clipboard.
+    ///
+    /// **Called when the keyboard arrives, because a copy is something a
+    /// focused window does.** That is the protocol's rule rather than this
+    /// client's taste: `wl_data_device.set_selection` from a client that does
+    /// not hold the keyboard is denied, which is what stops a background
+    /// process from taking the clipboard out from under whatever you were
+    /// doing. A client that copied at startup would be denied in silence, and
+    /// what a check would see is an empty clipboard with nothing said about
+    /// why.
+    ///
+    /// A SERIAL NOBODY CHECKS, STATED RATHER THAN HIDDEN. The protocol wants
+    /// the input event the copy came from, which a client that has never been
+    /// typed into has not had. Smithay's `set_selection` reads the focus and
+    /// not the field, and a check that needed a real serial would be a check
+    /// about synthesizing input rather than about the clipboard.
+    fn copy_what_was_asked_for(&mut self, handle: &QueueHandle<Client>) {
+        // No devices is a client told to do nothing with either clipboard,
+        // which is most of them: the keyboard arrives at every window a check
+        // focuses, and this is what it means for those.
+        let Some(selections) = &mut self.selections else {
+            return;
+        };
+        if selections.copied {
+            return;
+        }
+        selections.copied = true;
+        if self.copy.is_some() {
+            let manager = self
+                .globals
+                .clipboard
+                .as_ref()
+                .expect("a device was taken, so there was a manager to take it from");
+            let source = manager.create_data_source(handle, ());
+            source.offer(TEXT_MIME.to_string());
+            selections.clipboard.set_selection(Some(&source), 0);
+            crate::say!(selections.clipboard.id(), "set_selection({})", source.id());
+        }
+        if self.copy_primary.is_some() {
+            let manager = self
+                .globals
+                .primary
+                .as_ref()
+                .expect("a device was taken, so there was a manager to take it from");
+            let source = manager.create_source(handle, ());
+            source.offer(TEXT_MIME.to_string());
+            selections.primary.set_selection(Some(&source), 0);
+            crate::say!(selections.primary.id(), "set_selection({})", source.id());
+        }
     }
 
     /// Mint an activation token for this window's surface.
@@ -1050,7 +1199,168 @@ impl Dispatch<xdg_activation_token_v1::XdgActivationTokenV1, wl_surface::WlSurfa
     }
 }
 
+/// The clipboard arriving, and a paste of it.
+///
+/// A `selection` event is the compositor saying "the client with the keyboard
+/// may now read this" — it goes to one client at a time and to nobody when the
+/// seat is nowhere. `None` is that selection being cleared, and leaves nothing
+/// to say.
+impl Dispatch<wl_data_device::WlDataDevice, ()> for Client {
+    fn event(
+        client: &mut Client,
+        _: &wl_data_device::WlDataDevice,
+        event: wl_data_device::Event,
+        (): &(),
+        connection: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            wl_data_device::Event::Selection { id: Some(offer) } if client.paste => {
+                paste("clipboard", connection, |fd| {
+                    offer.receive(TEXT_MIME.to_string(), fd);
+                });
+            }
+            // Drag-and-drop arrives here too, and this client does none.
+            _ => {}
+        }
+    }
+
+    event_created_child!(Client, wl_data_device::WlDataDevice, [
+        wl_data_device::EVT_DATA_OFFER_OPCODE => (wl_data_offer::WlDataOffer, ()),
+    ]);
+}
+
+/// The same, on the other clipboard.
+///
+/// A separate interface with a separate device and a separate offer, which is
+/// what makes the two contents separate: a client reading this one cannot
+/// reach what `wl_data_device` is carrying, and that is the claim
+/// `tests/selection.rs` makes.
+impl Dispatch<zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1, ()> for Client {
+    fn event(
+        client: &mut Client,
+        _: &zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1,
+        event: zwp_primary_selection_device_v1::Event,
+        (): &(),
+        connection: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_primary_selection_device_v1::Event::Selection { id: Some(offer) }
+                if client.paste =>
+            {
+                paste("primary", connection, |fd| {
+                    offer.receive(TEXT_MIME.to_string(), fd);
+                });
+            }
+            _ => {}
+        }
+    }
+
+    event_created_child!(Client, zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1, [
+        zwp_primary_selection_device_v1::EVT_DATA_OFFER_OPCODE
+            => (zwp_primary_selection_offer_v1::ZwpPrimarySelectionOfferV1, ()),
+    ]);
+}
+
+/// Somebody is pasting what this client copied.
+impl Dispatch<wl_data_source::WlDataSource, ()> for Client {
+    fn event(
+        client: &mut Client,
+        _: &wl_data_source::WlDataSource,
+        event: wl_data_source::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        // Nothing else a source is sent is anything to write: `target` and the
+        // three drag-and-drop events are about a drag this client is not in,
+        // and the fifth is the word that another client has taken over the
+        // clipboard.
+        if let wl_data_source::Event::Send { mime_type, fd } = event {
+            let copy = client
+                .copy
+                .as_ref()
+                .expect("nothing makes a source without something to copy");
+            serve(&mime_type, fd, copy);
+        }
+    }
+}
+
+/// The same, on the other clipboard.
+impl Dispatch<zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1, ()> for Client {
+    fn event(
+        client: &mut Client,
+        _: &zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1,
+        event: zwp_primary_selection_source_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        // The other event, as above, is another client taking this clipboard.
+        if let zwp_primary_selection_source_v1::Event::Send { mime_type, fd } = event {
+            let copy = client
+                .copy_primary
+                .as_ref()
+                .expect("nothing makes a source without something to copy");
+            serve(&mime_type, fd, copy);
+        }
+    }
+}
+
+/// Read a selection somebody is offering, and say what it said.
+///
+/// **A paste is a socket and two processes.** This one hands the offering
+/// client a descriptor and waits; that client writes what it has and closes,
+/// which is how a selection says it has written all of it. So a paste is two
+/// processes taking turns, and none of it can be checked without both of them
+/// being real.
+///
+/// A socket pair rather than a pipe, and no third-party crate to make one:
+/// both are a descriptor to write and a descriptor to read, the offering
+/// client cannot tell them apart, and `std` makes exactly one of the two.
+///
+/// The flush is load-bearing and the drop that follows it is too. `receive` is
+/// a request queued on the connection, so nothing has been sent when it
+/// returns; and the read below ends at end-of-file, which needs *every*
+/// descriptor that can write to be closed — this client's copy of the far end
+/// included.
+fn paste(what: &str, connection: &Connection, receive: impl FnOnce(BorrowedFd<'_>)) {
+    let (mut ours, theirs) =
+        UnixStream::pair().expect("a socket pair is two descriptors and no policy");
+    receive(theirs.as_fd());
+    connection
+        .flush()
+        .expect("the compositor is still there; this client is talking to it");
+    drop(theirs);
+    ours.set_read_timeout(Some(PASTE_PATIENCE))
+        .expect("a deadline a socket accepts");
+    let mut said = String::new();
+    ours.read_to_string(&mut said)
+        .expect("the client that offered the selection wrote it within the deadline");
+    crate::trace::say(format_args!("{what}: {said}"));
+}
+
+/// Write what this client copied into the descriptor a paste handed over.
+///
+/// Closed by the drop at the end, which is what tells the reader there is no
+/// more: a source that held the descriptor open would be a paste that hangs
+/// rather than one that is short.
+fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
+    assert_eq!(
+        mime_type, TEXT_MIME,
+        "nothing else was offered, so nothing else can be asked for",
+    );
+    std::fs::File::from(fd)
+        .write_all(copy.as_bytes())
+        .expect("the descriptor a paste handed over takes what was copied");
+}
+
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore wl_data_device_manager::WlDataDeviceManager);
+delegate_noop!(Client: ignore wl_data_offer::WlDataOffer);
+delegate_noop!(Client: ignore zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1);
+delegate_noop!(Client: ignore zwp_primary_selection_offer_v1::ZwpPrimarySelectionOfferV1);
 delegate_noop!(Client: ignore wl_compositor::WlCompositor);
 delegate_noop!(Client: ignore wl_shm::WlShm);
 delegate_noop!(Client: ignore wl_shm_pool::WlShmPool);
@@ -1184,14 +1494,20 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
 /// edited config from one that merely said it had.
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     fn event(
-        _: &mut Client,
+        client: &mut Client,
         keyboard: &wl_keyboard::WlKeyboard,
         event: wl_keyboard::Event,
         (): &(),
         _: &Connection,
-        _: &QueueHandle<Client>,
+        handle: &QueueHandle<Client>,
     ) {
         match event {
+            // The one moment this client may copy — see
+            // `Client::copy_what_was_asked_for`, which says why the protocol
+            // makes that the rule.
+            wl_keyboard::Event::Enter { .. } => {
+                client.copy_what_was_asked_for(handle);
+            }
             wl_keyboard::Event::Key {
                 serial,
                 time,

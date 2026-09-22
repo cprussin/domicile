@@ -220,6 +220,16 @@ impl Compositor {
         self.client_on_with(&self.session.wayland_display, title, &["--ask-for-focus"])
     }
 
+    /// A client given the flags a check needs and nothing else.
+    ///
+    /// The named helpers above each stand for one claim a check makes about a
+    /// client. This one is for the claims that need two flags at once — a
+    /// client that copies to both selections is what shows they are two — and
+    /// naming a helper per combination would be naming the cross product.
+    pub fn client_with(&self, title: &str, extra: &[&str]) -> Client {
+        self.client_on_with(&self.session.wayland_display, title, extra)
+    }
+
     fn client_on(&self, display: &str, title: &str) -> Client {
         self.client_on_with(display, title, &[])
     }
