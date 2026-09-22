@@ -30,39 +30,38 @@
   const APP_ID =
     new URLSearchParams(location.search).get('app') ?? 'app-1';
 
-  // A wrong app id does not fail — the browser holds an embed until that app
-  // has a producer, so it waits, and a page that waits forever looks exactly
-  // like a seam that is broken. This is the difference.
-  const EMBED_DEADLINE_MS = 20_000;
-  // *Settled*, not embedded: a refusal is an answer and so is the runtime flag
-  // being off, and explaining either as "nothing embedded it" would give the
-  // wrong reason for a failure that already gave its own.
-  let settled = false;
-  setTimeout(() => {
-    if (!settled) {
-      console.log('domicile: nothing embedded "' + APP_ID + '" within ' +
-                  EMBED_DEADLINE_MS + 'ms. The browser holds an embed until ' +
-                  'that app has a producer, so either no producer connected ' +
-                  'or it registered a different app id.');
-    }
-  }, EMBED_DEADLINE_MS);
-
   const canvas = document.getElementById('app');
   if (canvas.embedExternalSurface) {
+    // A wrong app id does not fail — the browser holds an embed until that app
+    // has a producer, so it waits, and a page that waits forever looks exactly
+    // like a seam that is broken. This line is the difference, and a clock is
+    // not: WHEN A PRODUCER IS DUE IS A FACT ABOUT THE HARNESS. This page used
+    // to count down 20 seconds from load and say nothing had embedded, and a
+    // producer cannot exist by then — the guard starts its client after the
+    // compositor is up, which on the run this was written against was 60s
+    // later. So every passing run printed a line that reads as the reason it
+    // failed.
+    //
+    // Said when the embed is asked for rather than after it: what tells the
+    // two cases apart is whether an answer lands UNDER this line, which needs
+    // no deadline to read and is true the moment the page has run.
+    console.log('domicile: waiting to embed "' + APP_ID + '". The browser ' +
+                'holds an embed until that app has a producer, so no answer ' +
+                'under this line is either no producer or a different app id.');
     // Resolves only once a producer has been brokered a frame sink, which may
     // be well after load: the browser holds the reply until then, because an
     // <app> element exists before the window behind it does.
     canvas.embedExternalSurface(APP_ID).then(
       () => {
-        settled = true;
         console.log('domicile: embedded');
       },
       (error) => {
-        settled = true;
         console.log('domicile: refused: ' + error.message);
       });
   } else {
-    settled = true;
+    // Not "nothing embedded it": the flag being off is an answer, and giving
+    // the wrong reason for a failure that already gave its own is what the
+    // deadline above did.
     console.log('domicile: embedExternalSurface is not exposed; the runtime ' +
                 'flag is off');
   }

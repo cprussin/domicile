@@ -34,6 +34,32 @@ use std::time::Duration;
 /// would leave the two ends failing at different times for the same reason.
 pub const WAIT_FOR_A_PAGE: Duration = Duration::from_secs(30);
 
+/// Whether a page was ever going to dial this socket.
+///
+/// THE WATCHDOG ABOVE IS ONLY A WATCHDOG WHERE A PAGE IS DUE. A compositor
+/// started by `domicile` is loading a shell, so a control socket nothing dials
+/// is the failure this module exists to name. The engine spike's harnesses are
+/// the other shape: `guard-client-window.sh` starts chrome with
+/// `--domicile-broker-socket` and no `--domicile-control-socket`, because what
+/// it measures is a client's window reaching a `file://` page through the
+/// broker. `ControlChannel` is bound for the shell's origin, so no page in
+/// that harness can dial the socket whatever it is told — and the compositor
+/// printed the sentence below on every one of those runs, green ones included.
+/// An error that is unconditional in a passing run is noise, and noise on a
+/// green run is read as the reason for the next red one.
+///
+/// The compositor cannot work this out: from here "no page yet" and "no page
+/// ever" are the same silence. So it is told, by
+/// [`crate::arguments`]' `--expect-a-page`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Expected {
+    /// A shell is being loaded, so a page will dial this socket and its
+    /// silence is worth a sentence.
+    APage,
+    /// Nothing will, and the run is correct without one.
+    NoPage,
+}
+
 /// What the control socket had heard when its patience ran out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Heard {
@@ -91,13 +117,19 @@ impl Handshake {
 /// What to tell the user about a control socket that has heard only this much.
 ///
 /// `None` when there is nothing to say, which is the case a running desktop is
-/// in.
-pub fn silence(heard: Heard, socket: &Path, patience: Duration) -> Option<String> {
+/// in — and the case a harness that was never going to have a page is in, for
+/// the reason [`Expected`] gives.
+pub fn silence(
+    expected: Expected,
+    heard: Heard,
+    socket: &Path,
+    patience: Duration,
+) -> Option<String> {
     let socket = socket.display();
     let seconds = patience.as_secs();
-    match heard {
-        Heard::APage => None,
-        Heard::Nothing => Some(format!(
+    match (expected, heard) {
+        (Expected::NoPage, _) | (Expected::APage, Heard::APage) => None,
+        (Expected::APage, Heard::Nothing) => Some(format!(
             "nothing has connected to the control socket at {socket} after \
              {seconds}s. The desktop is drawn by a page in the engine, and no \
              page has reached this compositor: either the engine never loaded \
@@ -105,7 +137,7 @@ pub fn silence(heard: Heard, socket: &Path, patience: Duration) -> Option<String
              own output says which; check that it was started with \
              --domicile-control-socket={socket}."
         )),
-        Heard::AConnection => Some(format!(
+        (Expected::APage, Heard::AConnection) => Some(format!(
             "something connected to the control socket at {socket} but no page \
              has agreed the protocol after {seconds}s. A page says `hello` \
              naming a protocol version as soon as it starts; a version this \

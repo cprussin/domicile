@@ -167,12 +167,41 @@ RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
-    --engine-socket "$BROKER" >"$COMP_LOG" 2>&1 &
+    --engine-socket "$BROKER" \
+    --expect-a-page no >"$COMP_LOG" 2>&1 &
 COMP=$!
 STARTED+=("$COMP")
 
-for _ in $(seq 1 120); do
-  grep -q "brokered a frame sink" "$COMP_LOG" 2>/dev/null && break
+# WAIT FOR THE COMPOSITOR, AND ONLY FOR THE COMPOSITOR. This used to wait for
+# `brokered a frame sink`, which `surface_for` in engine_session.rs logs when a
+# WAYLAND CLIENT COMMITS A FRAME -- and the client is started below, after this.
+# So the grep could not match however long it ran: every run of this guard,
+# green ones included, spent the whole 120 half-second looks here. It is in the
+# measurements, once anyone read them for this rather than for the poll --
+# lib-control-budget.sh has the whole step at ~1m05 of which the draw poll was
+# ~5s. And the minute was not the worst of it: a client that starts a minute
+# late is what put spike-page.html's embed deadline out of reach by
+# construction, so a passing run also printed a console line that reads as the
+# reason it failed.
+#
+# guard-two-windows.sh has the right shape: start_client, then await_broker. A
+# frame sink is a fact about a client, so it can only be waited for once there
+# is one.
+#
+# `chrome protocol socket up` is a fact about the COMPOSITOR: main.rs logs it
+# from `bind_chrome_socket`, on the main thread, where a failed bind ends the
+# run -- and the wayland socket a client dials was opened above it. So it is
+# reachable with nothing else running, which is the whole of what was wrong.
+#
+# 120 looks at half a second, which is what the unsatisfiable wait cost and is
+# kept: patience is free now that it can end early, and a slow machine still
+# gets its minute. scripts/test-the-client-window-guard-waits-for-the-compositor.sh
+# is what holds this together.
+COMPOSITOR_LOOKS="${COMPOSITOR_LOOKS:-120}"
+
+UP=0
+for _ in $(seq 1 "$COMPOSITOR_LOOKS"); do
+  grep -q "chrome protocol socket up" "$COMP_LOG" 2>/dev/null && { UP=1; break; }
   kill -0 $COMP 2>/dev/null || break
   sleep 0.5
 done
@@ -182,6 +211,17 @@ if ! kill -0 $COMP 2>/dev/null; then
   tail -20 "$COMP_LOG" >&2
   exit 1
 fi
+# A running compositor that never got that far is a third thing, and it has to
+# be said rather than fallen through: starting a client against a compositor
+# whose sockets are not up measures the harness, and the guard would report
+# that the seam is broken.
+if [ "$UP" != "1" ]; then
+  annotate_from "guard-client-window: the compositor is running and never bound its chrome socket" "$COMP_LOG"
+  echo "the compositor is running and never bound its chrome socket. It said:" >&2
+  tail -20 "$COMP_LOG" >&2
+  exit 1
+fi
+echo "the compositor is up, and nothing has asked it for a window yet"
 
 # Which wayland socket it opened for apps.
 CLIENT_DISPLAY=$(grep -oE "wayland-[0-9]+" "$COMP_LOG" | head -1)

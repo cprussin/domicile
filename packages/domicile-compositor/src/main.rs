@@ -4236,13 +4236,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // failed. This end is the only one that can tell the difference between a
     // page that has not arrived yet and one that is never coming, so it is the
     // end that says it. See `domicile_launch::handshake`.
+    //
+    // AND IT IS ONLY A WATCHDOG WHERE A PAGE IS DUE, which is what
+    // `--expect-a-page` says. The engine spike's harnesses run this compositor
+    // as a producer for a browser that has its own file:// page, so nothing
+    // can dial this socket and the sentence below was printed on every one of
+    // their runs, green ones included. See `domicile_launch::handshake`'s
+    // `Expected`.
     let handshake = Arc::new(Handshake::new());
     {
         let handshake = handshake.clone();
         let socket = arguments.chrome_socket.clone();
+        let expected = arguments.expect_a_page;
         thread::spawn(move || {
             thread::sleep(WAIT_FOR_A_PAGE);
-            if let Some(said) = silence(handshake.heard(), &socket, WAIT_FOR_A_PAGE) {
+            if let Some(said) = silence(expected, handshake.heard(), &socket, WAIT_FOR_A_PAGE) {
                 tracing::error!("{said}");
             }
         });

@@ -10,6 +10,8 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::PathBuf;
 
+use crate::handshake::Expected;
+
 /// What the compositor was told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arguments {
@@ -30,6 +32,14 @@ pub struct Arguments {
     /// is the defect this flag would otherwise introduce. See
     /// `docs/architecture/ENGINE-FORK.md`.
     pub engine_socket: Option<PathBuf>,
+    /// Whether a page is going to dial [`chrome_socket`](Self::chrome_socket).
+    ///
+    /// [`Expected::APage`] unless `--expect-a-page no` says otherwise, because
+    /// a compositor is nearly always started to draw a desktop and a control
+    /// socket nothing reaches is the failure
+    /// [`crate::handshake`] exists to name. The engine spike's harnesses are
+    /// the exception and say so; [`Expected`] is where the reason is.
+    pub expect_a_page: Expected,
 }
 
 /// A command line the compositor will not run.
@@ -49,6 +59,9 @@ pub enum ArgumentError {
 
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
+
+    #[error("{flag} takes yes or no, and was given {value}")]
+    NotYesOrNo { flag: &'static str, value: String },
 }
 
 /// Read a compositor command line, or say why it cannot be run.
@@ -57,6 +70,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut session = None;
     let mut config = None;
     let mut engine_socket = None;
+    let mut expect_a_page = None;
 
     let mut args = args.into_iter();
     let mut seen = Vec::new();
@@ -74,11 +88,16 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         // it went with the window it opened — so there is no longer a way to
         // write a flag that must *not* be given one, and no `UnwantedValue` to
         // refuse it with.
+        //
+        // `OsString` rather than `PathBuf`, because not every value is a path
+        // any more: `--expect-a-page` takes a word. Which flags become paths
+        // is decided once, below, where the whole command line is read back.
         let slot = match flag.as_str() {
             CHROME_SOCKET => &mut chrome_socket,
             SESSION => &mut session,
             CONFIG => &mut config,
             ENGINE_SOCKET => &mut engine_socket,
+            EXPECT_A_PAGE => &mut expect_a_page,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         };
         let value = match joined {
@@ -90,16 +109,24 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         if value.is_empty() {
             return Err(ArgumentError::EmptyValue { flag });
         }
-        *slot = Some(PathBuf::from(value));
+        *slot = Some(value);
     }
 
     Ok(Arguments {
-        chrome_socket: chrome_socket.ok_or(ArgumentError::Missing {
-            flag: CHROME_SOCKET,
-        })?,
-        session: session.ok_or(ArgumentError::Missing { flag: SESSION })?,
-        config,
-        engine_socket,
+        chrome_socket: chrome_socket
+            .map(PathBuf::from)
+            .ok_or(ArgumentError::Missing {
+                flag: CHROME_SOCKET,
+            })?,
+        session: session
+            .map(PathBuf::from)
+            .ok_or(ArgumentError::Missing { flag: SESSION })?,
+        config: config.map(PathBuf::from),
+        engine_socket: engine_socket.map(PathBuf::from),
+        expect_a_page: match expect_a_page {
+            Some(value) => expected(&value)?,
+            None => Expected::APage,
+        },
     })
 }
 
@@ -107,6 +134,24 @@ const CHROME_SOCKET: &str = "--chrome-socket";
 const SESSION: &str = "--session";
 const CONFIG: &str = "--config";
 const ENGINE_SOCKET: &str = "--engine-socket";
+const EXPECT_A_PAGE: &str = "--expect-a-page";
+
+/// Which of the two words `--expect-a-page` was given.
+///
+/// Not "anything that is not `no` means yes". The thing this flag can do is
+/// turn a watchdog off, so a value nobody here understands is refused for the
+/// reason an unknown flag is: a request that silently did not happen is worse
+/// than one that failed.
+fn expected(value: &OsStr) -> Result<Expected, ArgumentError> {
+    match value.as_bytes() {
+        b"yes" => Ok(Expected::APage),
+        b"no" => Ok(Expected::NoPage),
+        _ => Err(ArgumentError::NotYesOrNo {
+            flag: EXPECT_A_PAGE,
+            value: value.to_string_lossy().into_owned(),
+        }),
+    }
+}
 
 /// One argument, split at the first `=` if it has one.
 ///
