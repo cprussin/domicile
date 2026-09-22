@@ -3,17 +3,23 @@ import { useMemo } from "react";
 import { hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 
-import { createHandle, ModalDialog } from "./ModalDialog";
+import { createHandle, ModalDialog, PLACEMENTS } from "./ModalDialog";
 
 const meta = {
   args: {
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     modal: true,
+    placement: "center",
   },
   argTypes: {
     children: {
       control: "text",
+      table: { category: "Contents" },
+    },
+    closeButton: {
+      control: "boolean",
       table: { category: "Contents" },
     },
     defaultOpen: {
@@ -38,6 +44,11 @@ const meta = {
       control: "boolean",
       table: { category: "State" },
     },
+    placement: {
+      control: "inline-radio",
+      options: PLACEMENTS,
+      table: { category: "Appearance" },
+    },
     title: {
       control: "text",
       table: { category: "Contents" },
@@ -51,7 +62,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A modal dialog with an optional title, footer, and trigger. Wraps the @base-ui/react Dialog primitive and always renders a portal, backdrop, popup, body, and a header with a close button.",
+          "A modal dialog with an optional title, footer, and trigger. Wraps the @base-ui/react Dialog primitive and always renders a portal, backdrop, popup and body; the corner close button and the placement in the viewport are the caller's to choose.",
       },
     },
   },
@@ -63,6 +74,7 @@ export default meta;
 export const Settings: StoryObj<typeof ModalDialog> = {
   args: {
     children: "Configure your preferences here.",
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     footer: (
@@ -74,6 +86,7 @@ export const Settings: StoryObj<typeof ModalDialog> = {
       </>
     ),
     modal: true,
+    placement: "center",
     title: "Settings",
     trigger: <Button size="xl">Click Me</Button>,
   },
@@ -82,6 +95,7 @@ export const Settings: StoryObj<typeof ModalDialog> = {
 export const NoTitle: StoryObj<typeof ModalDialog> = {
   args: {
     children: "This dialog has no title, but still shows a close button.",
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     footer: (
@@ -93,6 +107,7 @@ export const NoTitle: StoryObj<typeof ModalDialog> = {
       </>
     ),
     modal: true,
+    placement: "center",
     trigger: <Button size="xl">Open</Button>,
   },
 };
@@ -101,9 +116,11 @@ export const NoTitleOrFooter: StoryObj<typeof ModalDialog> = {
   args: {
     children:
       "This dialog has no title and no footer — just body content and a close button.",
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     modal: true,
+    placement: "center",
     trigger: <Button size="xl">Open</Button>,
   },
 };
@@ -111,9 +128,11 @@ export const NoTitleOrFooter: StoryObj<typeof ModalDialog> = {
 export const NoFooter: StoryObj<typeof ModalDialog> = {
   args: {
     children: "This dialog has a title but no footer actions.",
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     modal: true,
+    placement: "center",
     title: "About",
     trigger: <Button size="xl">Open</Button>,
   },
@@ -123,12 +142,14 @@ export const Imperative: StoryObj<typeof ModalDialog> = {
   args: {
     children:
       "This dialog has no trigger prop. It is opened and closed via a handle returned by createHandle().",
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     footer: (
       <ModalDialog.CloseButton variant="solid">Got it</ModalDialog.CloseButton>
     ),
     modal: true,
+    placement: "center",
     title: "Imperatively Controlled",
   },
   render: (args) => {
@@ -156,6 +177,20 @@ export const Imperative: StoryObj<typeof ModalDialog> = {
   },
 };
 
+export const Palette: StoryObj<typeof ModalDialog> = {
+  args: {
+    children:
+      "A panel that is typed into rather than read: at the top of the screen, and with no corner button because what closes it is Escape.",
+    closeButton: false,
+    defaultOpen: false,
+    disablePointerDismissal: false,
+    modal: true,
+    placement: "top",
+    title: "Open",
+    trigger: <Button size="xl">Open</Button>,
+  },
+};
+
 export const Scrolling: StoryObj<typeof ModalDialog> = {
   args: {
     children: (
@@ -170,6 +205,7 @@ export const Scrolling: StoryObj<typeof ModalDialog> = {
         ))}
       </>
     ),
+    closeButton: true,
     defaultOpen: false,
     disablePointerDismissal: false,
     footer: (
@@ -181,6 +217,7 @@ export const Scrolling: StoryObj<typeof ModalDialog> = {
       </>
     ),
     modal: true,
+    placement: "center",
     title: "Terms of Service",
     trigger: <Button size="xl">Open</Button>,
   },
