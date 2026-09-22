@@ -61,6 +61,38 @@ export const installPointerInput = (context: ElementContext): void => {
     });
   });
 
+  // The menu the secondary button would open, which is the browser answering a
+  // press this page has already given away. The right button over a window is
+  // the client's — a terminal's paste menu, an editor's — and it is drawn inside
+  // the client's own surface, so Chromium's menu opens on top of the menu the
+  // user actually asked for. Nothing else in this repository is in a position to
+  // stop it: a shell can only suppress the menu on chrome it drew itself, and
+  // the contents of a window are not that.
+  //
+  // The event rather than the press, because only the *default action* is
+  // wrong. The press is forwarded above and stays forwarded; `preventDefault`
+  // here takes away the browser's menu and nothing else, so a shell that draws
+  // a desktop menu of its own on `contextmenu` still gets the event, still
+  // uncanceled, everywhere the pointer is not over a window.
+  //
+  // AND `<webview>` IS DELIBERATELY LEFT ALONE, which costs nothing to arrange:
+  // the page in one is a guest with a browsing context of its own, so no press
+  // inside it reaches this document — see `webview-element.ts`, where that is
+  // also why a guest taking focus has to be reported in an event of its own. A
+  // right-click on a web page is answered in the guest and gets the browser's
+  // menu, which is what a right-click on a web page should get; a browser window
+  // on this desktop is a browser window. The `closest` below would not reach
+  // one, and it should not try.
+  //
+  // `forApp` rather than a narrower test, for the reason every handler here uses
+  // it: the menu goes exactly where the press went. An `<app>` naming no client
+  // is sent no press, so there is nothing over it for a menu to be answering.
+  document.addEventListener("contextmenu", (event) => {
+    forApp(event, () => {
+      event.preventDefault();
+    });
+  });
+
   // `pointerout` rather than `pointerleave`, which does not bubble and so
   // cannot be delegated at all. The two differ only for a pointer moving into a
   // descendant of the element, and an `<app>` is a replaced element: it has no

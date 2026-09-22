@@ -190,6 +190,33 @@ describe("registerElements", () => {
       expect(domicile.calls).toStrictEqual([]);
     });
 
+    it("swallows the menu the secondary button would have opened over a window", () => {
+      // The press itself is forwarded, so without this the browser answers a
+      // click the client has already been sent: its own context menu opens over
+      // the window the user right-clicked in, and the menu the client drew —
+      // which is what a right-click in a terminal or an editor is for — is
+      // behind it.
+      const element = mountApp("term");
+
+      const menu = pointer("contextmenu", { cancelable: true });
+      element.dispatchEvent(menu);
+
+      expect(menu.defaultPrevented).toBe(true);
+    });
+
+    it("leaves the menu alone for a press that is over no window at all", () => {
+      // The desktop behind the windows is the page's own, and so is the menu
+      // over it: a shell that wants none says so in its own stylesheet, and one
+      // that draws its own on `contextmenu` needs the event still cancelable
+      // when it arrives.
+      mountApp("term");
+
+      const menu = pointer("contextmenu", { cancelable: true });
+      document.body.dispatchEvent(menu);
+
+      expect(menu.defaultPrevented).toBe(false);
+    });
+
     it("announces a click as a focus request the shell can answer for itself", () => {
       const element = mountApp("term");
       const requests: (string | undefined)[] = [];
