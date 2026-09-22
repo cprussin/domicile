@@ -87,9 +87,46 @@ used_file() { printf '%s\n' "$1/.domicile-last-used"; }
 
 slots() { find "$TREES" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; }
 
+# The slots there is anything to build in, which is not all of them. A slot the
+# unit made and has not filled is an empty directory: the swap onto it succeeds
+# and `engine-reset.sh` dies a second later on `cannot change to
+# '/build/chromium/src'`, having built nothing. That happened on run
+# 35703990131 and it was not one run's problem — the pick repeats for the same
+# reason on the next one, so every branch fails the same way until the slot is
+# filled.
+#
+# And filling one is not a job's to do. It is a `.gclient` and a from-scratch
+# `gclient sync`: 97G and hours, on a dataset the machine's own builds live on.
+# `setup-chromium-trees.service` (cprussin/dotfiles:
+# config/machines/crux/chromium-build.nix) owns that, here as everywhere else
+# in this script — so an unfilled slot is one this script passes over, and a
+# pool of nothing but those is one it refuses.
+#
+# THIS IS NOT LOOKING INSIDE A TREE, which is the line the rest of the script
+# holds. It asks whether there is a checkout at the path everything else says;
+# which pin that checkout is on, which series is over it and whether either was
+# compiled is still `engine-series-stamp.sh`'s question, asked afterward and
+# against the tree the path names by then.
+usable() {
+  local slot
+  for slot in $(slots); do
+    if [ -d "$slot/src" ]; then
+      printf '%s\n' "$slot"
+    fi
+  done
+}
+
 # The slot to give this pin, printed as a path. In order: the one that already
 # carries it, then any that carries nothing, then the one no run has asked for
 # in longest.
+#
+# "CARRIES NOTHING" IS ABOUT THE PIN AND NOT ABOUT THE TREE, and the two were
+# one thing until run 35703990131 showed what that costs. A slot whose sync
+# died between clearing the stamp and writing it again deliberately reports no
+# pin, and it is both usable and the cheapest thing in the pool to take. A slot
+# with no checkout in it reports no pin for a different reason and cannot be
+# built in at all. Only the first is free; the second is not in `usable` and so
+# is not in any of the three rules below.
 #
 # EMPTY BEFORE LEAST-RECENTLY-USED, and the order is the point rather than a
 # tie-break. Taking a populated slot costs the pin it held — the next run that
@@ -99,19 +136,19 @@ slots() { find "$TREES" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; }
 # given the disk.
 choose() { # pin
   local slot oldest oldest_at at
-  for slot in $(slots); do
+  for slot in $(usable); do
     [ "$(slot_pin "$slot")" = "$1" ] || continue
     printf '%s\n' "$slot"
     return 0
   done
-  for slot in $(slots); do
+  for slot in $(usable); do
     [ -z "$(slot_pin "$slot")" ] || continue
     printf '%s\n' "$slot"
     return 0
   done
   oldest=""
   oldest_at=""
-  for slot in $(slots); do
+  for slot in $(usable); do
     # A slot that has never been handed out sorts oldest, which it is.
     at="$(stat -c %Y "$(used_file "$slot")" 2>/dev/null || echo 0)"
     if [ -z "$oldest_at" ] || [ "$at" -lt "$oldest_at" ]; then
@@ -162,6 +199,23 @@ case "$action" in
         echo "tree into a slot is setup-chromium-trees.service's job"
         echo "(cprussin/dotfiles: config/machines/crux/chromium-build.nix), and"
         echo "it is a move of the only Chromium checkout on this machine."
+      } >&2
+      exit 1
+    fi
+
+    if [ -z "$(usable)" ]; then
+      # Slots, and nothing in any of them — the same deploy half-done as the
+      # case above, one step further along. Said separately because the fix is
+      # different: there the unit has not made the directories, here it has
+      # made them and not filled them, and a reader who has just been told the
+      # pool is empty while `ls` shows three trees in it is being told the
+      # wrong thing.
+      {
+        echo "::error::no tree under $TREES holds a Chromium checkout, so there is nothing to build in"
+        echo "Each slot is an empty directory: there is no src/ under any of them."
+        echo "Filling one is a .gclient and a from-scratch gclient sync — 97G and"
+        echo "hours — which setup-chromium-trees.service (cprussin/dotfiles:"
+        echo "config/machines/crux/chromium-build.nix) does and a job does not."
       } >&2
       exit 1
     fi

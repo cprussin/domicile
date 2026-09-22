@@ -61,6 +61,12 @@ build_root() { # slots
   printf '%s\n' "$root"
 }
 
+# A slot the unit made and never filled: the directory is there and there is no
+# Chromium in it. This is what `tree-1` on `crux` was.
+empty_slot() { # root, slot
+  rm -rf "$1/trees/tree-$2/src"
+}
+
 # What `engine-sync.sh` writes beside a checkout when its DEPS reach a pin.
 # The pool reads that file and nothing else, so this is how a test says "this
 # slot was last built at that pin".
@@ -143,6 +149,21 @@ used_at "$root" 0 99999
 use "$root" eeeeeee >/dev/null
 expect "a slot that records no pin is free to take" tree-1 "$(chose "$root")"
 
+# AND THE TWO KINDS OF EMPTY ARE NOT ONE KIND, which is what run 35703990131
+# cost. The slot above records no pin because a sync is part-way through it,
+# and it is the cheapest thing in the pool to take. A slot the unit made and
+# has not filled records no pin either — and there is no checkout in it to
+# build, so the swap succeeds, nothing looks, and `engine-reset.sh` dies a
+# second later on `cannot change to '/build/chromium/src'`. The pick repeats
+# for the same reason every run after it, so it is every branch and not one.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+used_at "$root" 0 99999
+empty_slot "$root" 1
+use "$root" eeeeeee >/dev/null
+expect "a slot with no checkout in it is not taken, however cheap it looks" \
+  tree-0 "$(chose "$root")"
+
 echo
 echo "== the swap has to be real, and it has to be seen =="
 
@@ -209,6 +230,20 @@ mkdir -p "$root/trees"
 out="$(use "$root" aaaaaaa)"
 expect "a pool directory with no slots in it is refused" refused "$(status "$out")"
 contains "and the refusal names the directory that is empty" "$root/trees" "$out"
+
+# SLOTS WITH NOTHING IN THEM ARE THE SAME DEPLOY HALF-DONE, and filling one is
+# 97G and hours of `gclient` that this script is not the place for — it uses
+# what it finds and creates nothing. So there is nothing here to hand out, and
+# saying so is the only answer that does not end in a symlink onto a tree no
+# job can build in.
+root="$(build_root 2)"
+empty_slot "$root" 0
+empty_slot "$root" 1
+out="$(use "$root" aaaaaaa)"
+expect "a pool whose slots hold no checkout is refused" refused "$(status "$out")"
+contains "and the refusal says which unit fills them" "setup-chromium-trees" "$out"
+expect "and the path is not pointed at one of them" ok \
+  "$([ ! -e "$root/chromium" ] && echo ok || echo "it points at $(chose "$root")")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

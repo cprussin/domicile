@@ -82,10 +82,10 @@ lay_the_series_down() {
   git -C "$TREE" -c commit.gpgsign=false commit -qm "0001 a patch"
 }
 
-reset() { "$FAKE/.github/scripts/engine-reset.sh" "$TREE" 2>&1; }
-run_reset() { # status on the first line, output after
+reset() { "$FAKE/.github/scripts/engine-reset.sh" "${1:-$TREE}" 2>&1; }
+run_reset() { # [checkout] — status on the first line, output after
   local out
-  if out="$(reset)"; then printf 'ok\n%s\n' "$out"; else printf 'refused\n%s\n' "$out"; fi
+  if out="$(reset "$@")"; then printf 'ok\n%s\n' "$out"; else printf 'refused\n%s\n' "$out"; fi
 }
 status() { printf '%s\n' "$1" | head -1; }
 
@@ -121,6 +121,34 @@ expect "a tree left mid-\`git am\` is reset rather than refused" ok \
 expect "the checkout is given an identity to commit with" \
   "domicile CI ci@domicile.invalid" \
   "$(git -C "$TREE" config user.name) $(git -C "$TREE" config user.email)"
+
+# ---- a path with no checkout behind it -----------------------------------
+
+# WHAT AN EMPTY TREE SLOT LOOKED LIKE FROM HERE, on run 35703990131.
+# `engine-tree-pool.sh` pointed /build/chromium at a slot with no Chromium in
+# it, so every `git -C` below ran against a directory that was not there and
+# failed identically — and the fetch reported the first of those as "origin
+# would not serve that one revision", which is a sentence about Gitiles'
+# `uploadpack.allowReachableSHA1InWant` and had nothing to do with what was
+# wrong. The job then died on `fatal: cannot change to '.../src'`, four lines
+# after the message that was supposed to explain it.
+#
+# The pool is fixed not to hand out such a slot. This is what must be said if
+# a path ever arrives here with nothing behind it anyway: name the checkout,
+# not a server's capabilities.
+missing="$(run_reset "$WORK/no-such-tree/src")"
+expect "a checkout that is not there is refused" refused "$(status "$missing")"
+contains "and the path is named" "$WORK/no-such-tree/src" "$missing"
+expect "and it is not diagnosed as a server refusing a revision" "0" \
+  "$(printf '%s\n' "$missing" | grep -c 'would not serve' || true)"
+
+# The same class with the other cause: a directory that is there and holds no
+# repository. `git -C` answers a third way for it — `not a git repository`
+# rather than `cannot change to` — and a reader needs neither.
+mkdir -p "$WORK/not-a-checkout/src"
+not_git="$(run_reset "$WORK/not-a-checkout/src")"
+expect "a path that is not a git checkout is refused" refused "$(status "$not_git")"
+contains "and says that is what is wrong with it" "not a git checkout" "$not_git"
 
 # ---- the previous run's series, from a branch this one is not ------------
 
