@@ -327,16 +327,33 @@ export type DomicileModifiersEvent = Event & {
 };
 
 /**
- * What there is to open, answering {@link DomicileHost.listFiles}.
+ * What there is to open, answering {@link DomicileHost.listFiles} and also
+ * arriving unasked.
  *
  * Paths relative to the home directory the desktop is running as — sorted,
  * and the order is the answer rather than whatever a `read_dir` handed back.
  * An empty list is a home with nothing to offer; a home that could not be read
  * is no event at all, because "you have no files" is not something a broken
  * desktop should be able to say.
+ *
+ * The compositor keeps an index of the home, so this also arrives whenever
+ * that index changes — when the startup walk finishes, and when a watch on the
+ * home reports something that moved.
  */
 export type DomicileFilesEvent = Event & {
   readonly files: readonly string[];
+
+  /**
+   * Whether the compositor is still building the index this list came out of.
+   *
+   * **The difference between an incomplete answer and a wrong one.** The list
+   * is a launcher's whole evidence that a file exists, so one taken from an
+   * index still being walked has to arrive saying so — otherwise a person who
+   * typed the name of a file the walk has not reached yet is told, in the only
+   * language a launcher has, that they do not have it. Draw it; another event
+   * follows when the walk ends.
+   */
+  readonly indexing: boolean;
 
   /**
    * When the browser process had this message, in `performance.now()`'s
@@ -447,7 +464,10 @@ export type DomicileHostEventMap = {
   apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
   modifiers: DomicileModifiersEvent;
-  /** The answer to a {@link DomicileHost.listFiles}, and only ever to one. */
+  /**
+   * What there is to open: the answer to a {@link DomicileHost.listFiles},
+   * and also whatever the compositor's index of the home has become since.
+   */
   files: DomicileFilesEvent;
   /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
   battery: DomicileBatteryEvent;
@@ -505,11 +525,13 @@ export type DomicileHost = {
    * an origin without a port, not so that it gets a filesystem; a call that
    * named a directory would be one, and every document the engine serves would
    * have it. What is read is the compositor's to decide — see
-   * `domicile_host::files` — and this asks only that it decide.
+   * `domicile_host::file_index` — and this asks only that it decide.
    *
-   * A question rather than a subscription: nothing pushes a `files` event on
-   * its own, because a home directory changes for reasons no desktop is
-   * watching. A launcher asks each time it opens.
+   * **A question that also arrives unasked.** The compositor keeps an index of
+   * the home and pushes a `files` event when it changes, so a panel that is
+   * already open fills in under the person typing into it. This call is still
+   * how a page that has just loaded gets a list at all — a push only reaches
+   * the pages that were connected for it.
    */
   listFiles(): void;
 

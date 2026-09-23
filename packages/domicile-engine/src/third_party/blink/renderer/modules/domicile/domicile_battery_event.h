@@ -16,9 +16,10 @@ class DomicileBatteryEventInit;
 
 // The machine's battery: how full, and whether a lead is in.
 //
-// Pushed rather than asked for, which makes it the opposite of
-// DomicileFilesEvent: a charge changes on its own, so there is no member on
-// DomicileHost to answer. The compositor polls the kernel's own files and
+// Pushed and never asked for, where DomicileFilesEvent is both: a charge is
+// one reading rather than a list, so a page that has just loaded is caught up
+// by the next push and there is no member on DomicileHost to answer. The
+// compositor polls the kernel's own files and
 // sends this when the reading moves far enough to draw -- see
 // `domicile_host::battery` on that side.
 //

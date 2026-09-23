@@ -31,12 +31,15 @@
   // is served over domicile:// so that it has an origin without a TCP port,
   // not so that it gets a filesystem. A call that named a directory would be
   // one, and every document this engine serves would have it. What gets read
-  // is the compositor's decision -- see `domicile_host::files` -- and this
-  // asks only that it decide.
+  // is the compositor's decision -- see `domicile_host::file_index` -- and
+  // this asks only that it decide.
   //
-  // A question rather than a subscription: nothing pushes a `files` event on
-  // its own, because a home directory changes for reasons no desktop is
-  // watching. A launcher asks each time it opens.
+  // A QUESTION THAT ALSO ARRIVES UNASKED. The compositor keeps an index of the
+  // home and pushes a `files` event when it changes: when the startup walk
+  // finishes, and when a watch on the home reports something that moved. This
+  // call is still here because a push only reaches the pages that were
+  // connected for it, and a page that has just loaded has no list at all -- so
+  // a launcher asks when it opens and is kept current after that.
   [CallWith=ScriptState, RaisesException] undefined listFiles();
 
   // Put a row of the clipboard's history back on the clipboard.
@@ -127,16 +130,21 @@
   // outliving every window.
   attribute EventHandler onmodifiers;
 
-  // What there is to open, as a DomicileFilesEvent, answering listFiles().
+  // What there is to open, as a DomicileFilesEvent.
+  //
+  // Answers listFiles(), and also arrives unasked whenever the compositor's
+  // index of the home changes. Its `indexing` says whether the list is all of
+  // it yet.
   attribute EventHandler onfiles;
 
   // The machine's battery, as a DomicileBatteryEvent.
   //
   // NO listBattery() TO GO WITH IT, and the asymmetry with onfiles is the
-  // point: a charge changes on its own, where a home directory changes for
-  // reasons nothing is watching. The compositor polls and pushes, so there is
-  // nothing for a page to ask. It arrives when the reading moves far enough to
-  // draw, and once more to a page that has only just connected.
+  // point: a charge is one reading rather than a list, so a page that has just
+  // loaded is caught up by the next push without having to ask, where one with
+  // no file list would wait however long the home stayed still. It arrives
+  // when the reading moves far enough to draw, and once more to a page that
+  // has only just connected.
   attribute EventHandler onbattery;
 
   // What has been copied on this desktop, as a DomicileClipboardEvent.

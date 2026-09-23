@@ -639,6 +639,7 @@ shell that wants its own pictures owns its own list.
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
+| `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its list is the compositor's index of the home — every path at every depth, pushed as it is built — so the panel also says when that index is not finished, and draws a bounded number of rows however big a home is. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |

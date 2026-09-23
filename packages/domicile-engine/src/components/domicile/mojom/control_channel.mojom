@@ -317,7 +317,22 @@ interface ControlChannelClient {
   // An empty array is a home with nothing to offer. A home that could not be
   // read sends nothing at all -- the compositor logs it -- because a launcher
   // drawing an empty list is how that failure would otherwise look.
-  Files(array<string> files, mojo_base.mojom.TimeTicks arrival);
+  //
+  // PUSHED AS WELL AS ANSWERED. The compositor keeps an index of the home
+  // rather than walking it when asked, so it also sends this when the index
+  // changes: when the startup walk finishes, and when a watch on the home
+  // reports something that moved. ListFiles stays because a broadcast only
+  // reaches the pages that were connected for it, and a page that reloads has
+  // no list at all.
+  //
+  // `indexing` is whether that walk is still running, which is the difference
+  // between an incomplete answer and a wrong one: the list is a launcher's
+  // whole evidence that a file exists, so one taken from an index still being
+  // built has to arrive saying so. A shell draws it as a line saying the index
+  // is being built.
+  Files(array<string> files,
+        bool indexing,
+        mojo_base.mojom.TimeTicks arrival);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
   // is whether a lead is in.
