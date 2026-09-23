@@ -43,4 +43,25 @@ autoninja -C "$CHROMIUM/out/Domicile" domicile_engine components_unittests \
 # more than once in this workflow's short life, so the step that called this
 # checks for the file rather than believing the code.
 touch "$SENTINEL"
+
+# WHETHER THE CACHE WAS CONSULTED, in the log rather than inferred from how
+# long the step took. The unset case matters most: any layer between the
+# systemd unit and the compiler can drop the variable without saying so, and a
+# run that lost it builds uncached and would otherwise say nothing.
+#
+# Plain prose, not `::warning::`: engine-build-in-shell.sh echoes this log
+# through `sed 's/^/  | /'`, so the runner never parses a workflow command.
+# A failed report is caught rather than thrown, because the step's verdict is
+# the sentinel -- throwing would only drop the lines after it.
+if [ -n "${DOMICILE_CC_WRAPPER:-}" ]; then
+  "$DOMICILE_CC_WRAPPER" --show-stats | sed 's/^/  ccache /' || {
+    echo "  ccache $DOMICILE_CC_WRAPPER built, then would not report its" \
+      "statistics. Whether the cache was consulted is unknown for this run."
+  }
+else
+  echo "  ccache DOMICILE_CC_WRAPPER is unset, so this build used no compiler" \
+    "cache. Either this machine's configuration does not set it, or the" \
+    "variable did not survive the unit, nix-shell or the FHS sandbox."
+fi
+
 echo "engine-build.sh finished"
