@@ -98,6 +98,11 @@ pub struct Runtime {
 /// one behavior that depends on it belongs.
 const SCANOUT_PLATFORM: &str = "drm";
 
+/// The ozone platform that is somebody else's client, and the other half of
+/// the same rule: the one behavior that depends on being nested is decided
+/// here, where the platform name is.
+const NESTED_PLATFORM: &str = "wayland";
+
 pub fn engine(
     engine: &Path,
     shell: &Shell,
@@ -205,6 +210,34 @@ pub fn engine(
     // a developer has to fight back out of.
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
+    }
+    // NESTED, THE SHELL HAS NO META KEY UNTIL THE HOST IS ASKED TO GIVE IT UP.
+    // Every binding `shell-manganese` claims is a Meta chord, and a host
+    // compositor matches its own bindings before it sends a key to the focused
+    // client at all -- so Meta+Enter opened sway's terminal and the shell was
+    // never told anything happened. `zwp_keyboard_shortcuts_inhibit_unstable_v1`
+    // is the protocol for saying "not while this surface has the keyboard", and
+    // patch 0038 is the engine asking for it.
+    //
+    // A SWITCH RATHER THAN SOMETHING THE ENGINE WORKS OUT FROM ITS PLATFORM.
+    // The ozone/wayland code that creates the inhibitor is reached by every
+    // nested run of this engine, and most of those are not desktops: every
+    // `packages/domicile-engine/scripts/guard-*.sh` that runs under
+    // `under-wayland.sh` starts `chrome --ozone-platform=wayland` by hand, and
+    // a guard that silently swallows the whole keymap of the session it is
+    // running in is a guard nobody can debug next to. Taking a person's
+    // shortcuts away is a decision about the run, not a property of the
+    // platform, so it is made where the rest of them are -- beside
+    // `--start-fullscreen`, for the same reason.
+    //
+    // NO ESCAPE HATCH IS SPELLED HERE because the compositor already has one
+    // and it is the one that works: sway honors an inhibitor per seat, and
+    // `bindsym --inhibited` keeps a binding alive through it.
+    // `docs/RUNNING-A-DESKTOP.md` says so, because a user whose keymap goes
+    // dead the moment the desktop takes focus needs that sentence and not this
+    // comment.
+    if platform == NESTED_PLATFORM {
+        args.push("--domicile-inhibit-host-shortcuts".into());
     }
     // Word-split, which is what an argument list in an environment variable is
     // for; empty runs of spaces are not arguments.
