@@ -44,7 +44,7 @@ the pin's file with these six lines in it.
  1 file changed, 6 insertions(+)
 
 diff --git a/content/browser/browser_plugin/browser_plugin_embedder.cc b/content/browser/browser_plugin/browser_plugin_embedder.cc
-index dba1fc6..bb5a5d2 100644
+index dba1fc61ae..bb5a5d208d 100644
 --- a/content/browser/browser_plugin/browser_plugin_embedder.cc
 +++ b/content/browser/browser_plugin/browser_plugin_embedder.cc
 @@ -50,6 +50,9 @@ bool BrowserPluginEmbedder::HandleKeyboardEvent(

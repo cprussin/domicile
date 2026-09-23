@@ -32,7 +32,7 @@ whole desktop, which is what a nested run is.
  1 file changed, 10 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 0de5171403..a3d5250c07 100644
+index ec672a5d5f..b00851ab8b 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -43,7 +43,7 @@ index 0de5171403..a3d5250c07 100644
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -511,7 +512,15 @@ void PopulateChromeFrameBinders(
+@@ -507,7 +508,15 @@ void PopulateChromeFrameBinders(
                  &domicile::BindControlChannel, std::move(receiver),
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),

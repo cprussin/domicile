@@ -42,10 +42,10 @@ DrmGpuDisplayManagerTest cases cover the call sites.
  4 files changed, 29 insertions(+), 17 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index fd6df24808..f7053a20e8 100644
+index e3d61d2b27..f52391d2be 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
-@@ -669,10 +669,10 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
+@@ -672,10 +672,10 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
    std::vector<drmModeConnector*> available_connectors;
    const size_t count_connectors = resources->count_connectors;
    for (size_t i = 0; i < count_connectors; ++i) {

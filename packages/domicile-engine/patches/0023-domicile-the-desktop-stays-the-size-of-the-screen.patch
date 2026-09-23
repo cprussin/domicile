@@ -65,7 +65,7 @@ Either alone compiles and does nothing.
  4 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/ui/views/exclusive_access/BUILD.gn b/chrome/browser/ui/views/exclusive_access/BUILD.gn
-index 55010cf136..9307806117 100644
+index b03ae97f28..35f0b535de 100644
 --- a/chrome/browser/ui/views/exclusive_access/BUILD.gn
 +++ b/chrome/browser/ui/views/exclusive_access/BUILD.gn
 @@ -40,6 +40,12 @@ source_set("impl") {
@@ -82,7 +82,7 @@ index 55010cf136..9307806117 100644
    # which is still compiled in //chrome/browser/ui:ui. Reach it via
    # browser_public_dependencies; the reverse edge is the
 diff --git a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
-index f4f21de7d0..8990a5d761 100644
+index 3df24594f6..e4d6b3fe2e 100644
 --- a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
 +++ b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
 @@ -44,11 +44,35 @@
@@ -121,7 +121,7 @@ index f4f21de7d0..8990a5d761 100644
  // Returns whether `type` indicates a tab-initiated fullscreen mode.
  bool IsTabFullscreenType(ExclusiveAccessBubbleType type) {
    return type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION ||
-@@ -465,7 +489,18 @@ void ExclusiveAccessBubbleViews::Show() {
+@@ -470,7 +494,18 @@ void ExclusiveAccessBubbleViews::Show() {
    // relying on visible exit instructions. Arming the watchdog would make it
    // always fire and spuriously exit fullscreen (e.g. reverting the
    // --start-fullscreen switch shortly after startup).
