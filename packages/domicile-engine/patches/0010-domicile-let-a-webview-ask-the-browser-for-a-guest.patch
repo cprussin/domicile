@@ -52,7 +52,7 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 717ebc28a3..0670a8aacb 100644
+index 944111328f..ec8baa3dc2 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -2389,6 +2389,7 @@ source_set("browser") {
@@ -64,7 +64,7 @@ index 717ebc28a3..0670a8aacb 100644
      "//components/download/content/factory",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 5afd97d2c9..a45fafa1da 100644
+index 00a24775a6..99aa96e5ca 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -75,7 +75,7 @@ index 5afd97d2c9..a45fafa1da 100644
  #include "content/public/browser/browser_thread.h"
  #include "mojo/public/cpp/bindings/message.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -496,6 +497,30 @@ void PopulateChromeFrameBinders(
+@@ -492,6 +493,30 @@ void PopulateChromeFrameBinders(
                                        std::move(receiver)));
        }));
  

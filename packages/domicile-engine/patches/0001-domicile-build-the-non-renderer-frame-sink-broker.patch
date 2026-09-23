@@ -16,10 +16,10 @@ edit in files Chromium already owns.
  2 files changed, 4 insertions(+)
 
 diff --git a/components/BUILD.gn b/components/BUILD.gn
-index b5c8e75d74..6ef771c6f2 100644
+index d0b3d9f899..e29f6a3d7f 100644
 --- a/components/BUILD.gn
 +++ b/components/BUILD.gn
-@@ -234,6 +234,7 @@ test("components_unittests") {
+@@ -233,6 +233,7 @@ test("components_unittests") {
      "//components/device_reauth:unit_tests",
      "//components/device_signals/core:unit_tests",
      "//components/dom_distiller/core:unit_tests",
@@ -28,7 +28,7 @@ index b5c8e75d74..6ef771c6f2 100644
      "//components/encrypted_messages:unit_tests",
      "//components/enterprise/device_trust/core/attestation:unit_tests",
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 866351b8e2..e7493bad76 100644
+index 7321af9e7c..29ff2d8a82 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -151,6 +151,7 @@ source_set("browser") {

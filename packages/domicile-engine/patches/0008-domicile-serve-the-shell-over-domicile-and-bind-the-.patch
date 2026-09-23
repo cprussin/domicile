@@ -88,7 +88,7 @@ protocol members, and shellDocument still lives in TypeScript.
  15 files changed, 211 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 8f6060d286..717ebc28a3 100644
+index 25a8547a34..944111328f 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -2382,6 +2382,14 @@ source_set("browser") {
@@ -107,7 +107,7 @@ index 8f6060d286..717ebc28a3 100644
      "//components/embedder_support:user_agent",
      "//components/facilitated_payments/core/features",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 2a4a67927d..5afd97d2c9 100644
+index 81a92b1925..00a24775a6 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -4,6 +4,11 @@
@@ -122,9 +122,9 @@ index 2a4a67927d..5afd97d2c9 100644
  #include <utility>
  
  #include "base/feature_list.h"
-@@ -456,6 +461,41 @@ void PopulateChromeFrameBinders(
+@@ -452,6 +457,41 @@ void PopulateChromeFrameBinders(
+   if (render_frame_host->GetProcess()->IsPrivileged()) {
      map->Add<pwc::mojom::PrivilegedBridge>(&pwc::BindPrivilegedBridge);
-     map->Add<geic::mojom::GeicApi>(&geic::BindGeicApi);
    }
 +  // Domicile's engine fork: the shell's control channel to the compositor.
 +  //
@@ -195,7 +195,7 @@ index b2619baa8f..7c1796ae73 100644
      chrome_extra_part->PostBrowserStart();
    }
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 7e52b8525b..f393223ee5 100644
+index 7dad4155af..0f7e122b59 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,10 @@
@@ -209,7 +209,7 @@ index 7e52b8525b..f393223ee5 100644
  #include <algorithm>
  #include <iterator>
  #include <map>
-@@ -2571,6 +2575,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+@@ -2579,6 +2583,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
  
    const GURL& site_url =
        site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
@@ -235,7 +235,7 @@ index 7e52b8525b..f393223ee5 100644
    if (search::IsNTPURL(site_url)) {
      site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
                                               std::make_unique<NTPUserData>());
-@@ -6190,10 +6213,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+@@ -6217,10 +6240,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
    return result;
  }
  
@@ -275,7 +275,7 @@ index 7e52b8525b..f393223ee5 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6609,6 +6661,18 @@ void ChromeContentBrowserClient::
+@@ -6636,6 +6688,18 @@ void ChromeContentBrowserClient::
          int render_frame_id,
          const std::optional<url::Origin>& request_initiator_origin,
          NonNetworkURLLoaderFactoryMap* factories) {
@@ -502,7 +502,7 @@ index 99d5b1a60a..00469ecc52 100644
      "audioprocess",
      "audiostart",
 diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
-index 7eb1aa00fe..3959eb30c9 100644
+index 5ad3c764ea..2817d32f4a 100644
 --- a/third_party/blink/renderer/modules/BUILD.gn
 +++ b/third_party/blink/renderer/modules/BUILD.gn
 @@ -88,6 +88,7 @@ component("modules") {
@@ -514,10 +514,10 @@ index 7eb1aa00fe..3959eb30c9 100644
      "//third_party/blink/renderer/modules/document_metadata",
      "//third_party/blink/renderer/modules/document_picture_in_picture",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index b22ccc04dd..0fecef75c8 100644
+index fd74f34cbf..b70537c327 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2575,6 +2575,24 @@
+@@ -2576,6 +2576,24 @@
        name: "DomicileExternalSurface",
        status: "stable",
      },

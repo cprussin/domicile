@@ -128,10 +128,10 @@ index 98850d6d0a..303195bef4 100644
      "//ui/gfx/linux:drm",
      "//ui/gfx/linux:gbm",
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 9aa71a170b..2f8462b898 100644
+index 72eeffafcc..13fdfa4187 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -714,9 +714,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+@@ -715,9 +715,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
    // arriving by the other door.
    //
    // A DROP THAT FAILS MAKES THE WHOLE RELINQUISH FAIL, even though the GPU

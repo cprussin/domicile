@@ -43,7 +43,7 @@ Edits seven files Chromium owns, five of them Blink's. The design doc's
  7 files changed, 128 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index e7493bad76..d2cf1994c9 100644
+index 29ff2d8a82..6cd09d437b 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -150,8 +150,9 @@ source_set("browser") {
@@ -94,7 +94,7 @@ index eab79a9dd6..18abeac9f1 100644
        registry.get(),
        base::BindRepeating(&RenderProcessHostImpl::BindCompositingModeReporter,
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index b78b5aedb1..d8da748d97 100644
+index b1eb2fd87e..19ee8374b7 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 @@ -27,6 +27,8 @@
@@ -106,7 +106,7 @@ index b78b5aedb1..d8da748d97 100644
  #include <math.h>
  
  #include <limits>
-@@ -2132,6 +2134,68 @@ bool HTMLCanvasElement::CreateLayer() {
+@@ -2131,6 +2133,68 @@ bool HTMLCanvasElement::CreateLayer() {
    return true;
  }
  
@@ -264,7 +264,7 @@ index 14667ddbac..394eaae534 100644
  
  // https://html.spec.whatwg.org/C/#blobcallback
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 22dc190803..ace7fa4f6c 100644
+index 6101076273..e7e70897c9 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
 @@ -233,6 +233,7 @@ group("blink_platform_public_deps") {
@@ -275,7 +275,7 @@ index 22dc190803..ace7fa4f6c 100644
      "//services/device/public/mojom:generic_sensor_blink",
      "//services/device/public/mojom:mojom_blink",
      "//services/network/public/cpp",
-@@ -978,6 +979,8 @@ component("platform") {
+@@ -979,6 +980,8 @@ component("platform") {
      "graphics/draw_looper_builder.h",
      "graphics/exported_canvas_resource.cc",
      "graphics/exported_canvas_resource.h",
@@ -285,10 +285,10 @@ index 22dc190803..ace7fa4f6c 100644
      "graphics/filters/distant_light_source.h",
      "graphics/filters/fe_blend.cc",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 54cec3aa0f..df1246095d 100644
+index 2efe04d824..3273f91cfa 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2558,6 +2558,16 @@
+@@ -2559,6 +2559,16 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },
