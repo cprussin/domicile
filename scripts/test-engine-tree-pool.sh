@@ -241,7 +241,9 @@ empty_slot "$root" 0
 empty_slot "$root" 1
 out="$(use "$root" aaaaaaa)"
 expect "a pool whose slots hold no checkout is refused" refused "$(status "$out")"
-contains "and the refusal says which unit fills them" "setup-chromium-trees" "$out"
+# Filling a slot is bootstrap-chromium-tree.service's, not the unit that makes
+# the slots -- a reader sent to the wrong one finds a unit that ran fine.
+contains "and the refusal says which unit fills them" "bootstrap-chromium-tree" "$out"
 expect "and the path is not pointed at one of them" ok \
   "$([ ! -e "$root/chromium" ] && echo ok || echo "it points at $(chose "$root")")"
 

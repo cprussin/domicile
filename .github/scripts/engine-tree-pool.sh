@@ -97,10 +97,15 @@ slots() { find "$TREES" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; }
 #
 # And filling one is not a job's to do. It is a `.gclient` and a from-scratch
 # `gclient sync`: 97G and hours, on a dataset the machine's own builds live on.
-# `setup-chromium-trees.service` (cprussin/dotfiles:
-# config/machines/crux/chromium-build.nix) owns that, here as everywhere else
-# in this script — so an unfilled slot is one this script passes over, and a
-# pool of nothing but those is one it refuses.
+# `bootstrap-chromium-tree.service` (cprussin/dotfiles:
+# config/machines/crux/chromium-build.nix) owns that on a timer, here as
+# everywhere else in this script — so an unfilled slot is one this script
+# passes over, and a pool of nothing but those is one it refuses.
+#
+# TWO UNITS, AND THE SPLIT IS WHAT EACH MESSAGE BELOW HAS TO GET RIGHT:
+# `setup-chromium-trees.service` makes the slots and adopts the one checkout
+# the machine already had; `bootstrap-chromium-tree.service` puts a checkout
+# into a slot that has none.
 #
 # THIS IS NOT LOOKING INSIDE A TREE, which is the line the rest of the script
 # holds. It asks whether there is a checkout at the path everything else says;
@@ -180,8 +185,10 @@ case "$action" in
       # did not finish. Reading that as "no pool" would leave the path wherever
       # the last run left it and build against a pin nobody chose.
       {
-        echo "::error::$TREES exists but holds no tree, so there is nothing to build in"
-        echo "setup-chromium-trees.service (cprussin/dotfiles) is what fills it."
+        echo "::error::$TREES exists but holds no slot, so there is nothing to build in"
+        echo "setup-chromium-trees.service (cprussin/dotfiles) is what makes them."
+        echo "Filling one is bootstrap-chromium-tree.service's, and it has nothing"
+        echo "to fill yet."
       } >&2
       exit 1
     fi
@@ -214,8 +221,10 @@ case "$action" in
         echo "::error::no tree under $TREES holds a Chromium checkout, so there is nothing to build in"
         echo "Each slot is an empty directory: there is no src/ under any of them."
         echo "Filling one is a .gclient and a from-scratch gclient sync — 97G and"
-        echo "hours — which setup-chromium-trees.service (cprussin/dotfiles:"
-        echo "config/machines/crux/chromium-build.nix) does and a job does not."
+        echo "hours — which bootstrap-chromium-tree.service (cprussin/dotfiles:"
+        echo "config/machines/crux/chromium-build.nix) does on a timer, and a job"
+        echo "does not.  It fires 30 minutes after a boot or a deploy and then"
+        echo "daily; journalctl -u bootstrap-chromium-tree says what it last did."
       } >&2
       exit 1
     fi
