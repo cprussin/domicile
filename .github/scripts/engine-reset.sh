@@ -50,8 +50,8 @@ CHROMIUM="${1:-}"
 # A CHECKOUT THAT IS NOT THERE IS NOT A SERVER REFUSING A REVISION. Every
 # `git -C` below fails identically against a path that does not exist, and the
 # first of them is inside the fetch — so on run 35703990131, where
-# `engine-tree-pool.sh` had pointed /build/chromium at a slot with no Chromium
-# in it, this script announced "origin would not serve that one revision". That
+# `engine-tree-pool.sh` had handed out a slot with no Chromium in it, this
+# script announced "origin would not serve that one revision". That
 # is a sentence about Gitiles' `uploadpack.allowReachableSHA1InWant` and it had
 # nothing to do with what was wrong; the job then died on `fatal: cannot change
 # to '/build/chromium/src'` with that sentence as the only explanation offered.
@@ -59,9 +59,9 @@ CHROMIUM="${1:-}"
 # so the next time a path arrives here empty by some other route.
 [ -d "$CHROMIUM" ] || {
   echo "::error::$CHROMIUM does not exist, so there is no checkout to reset" >&2
-  echo "This is the path engine-tree-pool.sh pointed /build/chromium at, plus" >&2
-  echo "/src. A pool slot the unit made and never filled is how it has been" >&2
-  echo "empty before." >&2
+  echo "This is the tree engine-tree-pool.sh handed this run, plus /src. A" >&2
+  echo "pool slot the unit made and never filled is how it has been empty" >&2
+  echo "before." >&2
   exit 1
 }
 git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1 || {

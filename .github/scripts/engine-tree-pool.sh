@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Which of `crux`'s Chromium trees this run builds in.
 #
+#   .github/scripts/engine-tree-pool.sh pick <pin> <owner>
 #   .github/scripts/engine-tree-pool.sh use  <pin>
 #   .github/scripts/engine-tree-pool.sh list
 #
@@ -19,28 +20,36 @@
 # has one slot for it, so those four hours are also the queue in front of
 # everything else that wants `crux`.
 #
-# So: N trees behind one path. A pin that some tree already carries is a
-# symlink swap and `engine-series-stamp.sh` then answers `carries=true`, which
-# skips the reset, the apply and the compile — the ~1m case, for a pin that
-# would otherwise have cost four hours. A pin nothing carries costs exactly
-# what it costs today, in whichever tree was least recently asked for.
+# So: N trees, and a run gets one of them. A pin that some tree already carries
+# makes `engine-series-stamp.sh` answer `carries=true`, which skips the reset,
+# the apply and the compile — the ~1m case, for a pin that would otherwise have
+# cost four hours. A pin nothing carries costs exactly what it costs today, in
+# whichever tree was least recently asked for.
 #
-# THE PATH IS A SYMLINK AND EVERYTHING KEEPS SAYING /build/chromium/src. That
-# is not tidiness. `gn gen` bakes absolute paths into `out/Domicile` — the
-# ninja files, the command lines, the depfiles — so a tree that is reached at a
-# different path is a tree whose every compile command changed, which is a
-# clean build with extra steps. Behind one symlink every tree is built, read
-# and cached at the same path, and the swap costs nothing. It is also why
-# nothing here ever moves a tree that has been built in.
+# EVERY TREE IS NOW BUILT AT ITS OWN REAL PATH, AND THAT IS THE CHANGE THAT
+# LETS TWO RUNS BUILD AT ONCE. This used to hand every run `/build/chromium`, a
+# symlink swapped onto whichever tree the run wanted, so that `out/Domicile`
+# was compiled, read and cached under one path no matter which tree held it —
+# `gn gen` puts absolute paths into that directory, so a tree reached at a new
+# path is a tree whose every compile command changed.
+#
+# One path is one run. Two jobs cannot both be `/build/chromium/src`, and two
+# jobs is the whole point of a pool: without them a repin still blocks every
+# other engine branch, it just blocks them from a different directory.
+#
+# So each slot is reached where it actually is, forever. That cost one rebuild
+# per tree the day it landed, and nothing after: `/build/trees/tree-0` is a
+# path nothing swaps. `/build/chromium` stays as a person's bookmark, which
+# `use` below still points — nothing in CI reads it.
 #
 # WHAT THIS SCRIPT DOES NOT DO IS LOOK INSIDE A TREE. It picks a directory and
-# points the path at it. Whether that directory really holds this pin's tree,
-# this series, and a build of them is `engine-series-stamp.sh`'s question,
-# asked afterward and against the tree the path now names. The division
-# matters: a wrong pick here costs one run what every run cost before the pool
-# existed, and a wrong *claim* about a tree's contents is a green check over
-# code nothing compiled. This script is not in a position to make the second
-# kind of mistake, and that is deliberate.
+# names it. Whether that directory really holds this pin's tree, this series,
+# and a build of them is `engine-series-stamp.sh`'s question, asked afterward
+# and against the tree this named. The division matters: a wrong pick here
+# costs one run what every run cost before the pool existed, and a wrong
+# *claim* about a tree's contents is a green check over code nothing compiled.
+# This script is not in a position to make the second kind of mistake, and that
+# is deliberate.
 #
 # THE POOL IS THE MACHINE'S, NOT THIS REPOSITORY'S. How many trees fit is a
 # question about a ZFS quota on one machine in a house, so the slots are
@@ -52,7 +61,7 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <use|list> [pin]" >&2
+  echo "usage: $(basename "$0") <pick|use|list> [pin] [owner]" >&2
   exit 2
 }
 
@@ -88,9 +97,9 @@ used_file() { printf '%s\n' "$1/.domicile-last-used"; }
 slots() { find "$TREES" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; }
 
 # The slots there is anything to build in, which is not all of them. A slot the
-# unit made and has not filled is an empty directory: the swap onto it succeeds
+# unit made and has not filled is an empty directory: handing it out succeeds
 # and `engine-reset.sh` dies a second later on `cannot change to
-# '/build/chromium/src'`, having built nothing. That happened on run
+# '<slot>/src'`, having built nothing. That happened on run
 # 35703990131 and it was not one run's problem — the pick repeats for the same
 # reason on the next one, so every branch fails the same way until the slot is
 # filled.
@@ -139,32 +148,98 @@ usable() {
 # rule that only sorted by age would evict a live pin while a whole tree sat
 # unused, on a machine where the unused tree is the entire reason the pool was
 # given the disk.
-choose() { # pin
-  local slot oldest oldest_at at
+# EVERY usable slot, best first, rather than only the best one. `use` wants
+# the first line and `pick` wants the whole list: when the best tree is already
+# held by another run, the next-best is the answer, and a function that
+# returned one slot could not say what it was.
+candidates() { # pin
+  local slot at
   for slot in $(usable); do
     [ "$(slot_pin "$slot")" = "$1" ] || continue
     printf '%s\n' "$slot"
-    return 0
   done
   for slot in $(usable); do
+    [ "$(slot_pin "$slot")" = "$1" ] && continue
     [ -z "$(slot_pin "$slot")" ] || continue
     printf '%s\n' "$slot"
-    return 0
   done
-  oldest=""
-  oldest_at=""
+  # The rest, least recently used first. A slot never handed out has no
+  # timestamp and sorts oldest, which it is.
   for slot in $(usable); do
-    # A slot that has never been handed out sorts oldest, which it is.
+    [ "$(slot_pin "$slot")" = "$1" ] && continue
+    [ -z "$(slot_pin "$slot")" ] && continue
     at="$(stat -c %Y "$(used_file "$slot")" 2>/dev/null || echo 0)"
-    if [ -z "$oldest_at" ] || [ "$at" -lt "$oldest_at" ]; then
-      oldest="$slot"
-      oldest_at="$at"
-    fi
-  done
-  printf '%s\n' "$oldest"
+    printf '%s %s\n' "$at" "$slot"
+  done | LC_ALL=C sort -n | cut -d' ' -f2-
+}
+
+choose() { # pin
+  candidates "$1" | head -1
+}
+
+# THE LOCK IS engine-tree-lock.sh's, NOT A SECOND ONE. That script already
+# names, takes and drops a per-tree lock, and it is what a person and the
+# `if: always()` drop step use. A copy of the mechanism here would be a second
+# thing to keep true about the same directory, and the failure of the two
+# disagreeing is two runs in one tree -- the exact corruption both exist for.
+#
+# Its stderr is discarded while walking candidates: a held tree is the ordinary
+# case here, not an error, and its refusal block is written for a run that has
+# nowhere left to go. This one says that itself, once, at the end.
+LOCK_SH="$(cd "$(dirname "$0")" && pwd)/engine-tree-lock.sh"
+
+take_slot() { # slot owner
+  "$LOCK_SH" take "$1/src" "$2" >/dev/null 2>&1
+}
+
+holder_of() { # slot
+  cat "$("$LOCK_SH" path "$1/src")/owner" 2>/dev/null ||
+    echo "someone who did not write their name in it"
 }
 
 case "$action" in
+  pick)
+    pin="${2:-}"
+    owner="${3:-}"
+    [ -n "$pin" ] && [ -n "$owner" ] || usage
+
+    if [ ! -d "$TREES" ] || [ -z "$(slots)" ] || [ -z "$(usable)" ]; then
+      # The same three half-deployed machines `use` answers for, with the same
+      # answers. Kept as one branch because `pick` has nothing to point at and
+      # so cannot fall back to "build in whatever is there" the way `use` can.
+      {
+        echo "::error::no usable Chromium tree to pick from under $TREES"
+        echo "setup-chromium-trees.service (cprussin/dotfiles) makes the slots"
+        echo "and bootstrap-chromium-tree.service fills them."
+      } >&2
+      exit 1
+    fi
+
+    for slot in $(candidates "$pin"); do
+      if take_slot "$slot" "$owner"; then
+        touch "$(used_file "$slot")"
+        printf '%s\n' "$slot/src"
+        exit 0
+      fi
+    done
+
+    # EVERY TREE IS HELD, which is a queue rather than a fault: the machine has
+    # as many trees as it has, and a run that cannot have one waits for the
+    # next. Naming the holders is what turns "try again" into a decision.
+    {
+      echo "::error::every Chromium tree under $TREES is held, so this run has nowhere to build"
+      for slot in $(usable); do
+        echo "  $(basename "$slot"): $(holder_of "$slot")"
+      done
+      echo
+      echo "Wait and re-run -- a Chromium build is up to four hours. If a"
+      echo "holder is a run that died, its lock is stale and this clears it:"
+      echo
+      echo "  rm -rf $("$LOCK_SH" path "$(usable | head -1)/src")"
+    } >&2
+    exit 1
+    ;;
+
   use)
     pin="${2:-}"
     [ -n "$pin" ] || usage
