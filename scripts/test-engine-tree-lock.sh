@@ -113,41 +113,46 @@ expect "an unnamed lock is not droppable by an empty owner" ok \
   "$(status "$(lock who)")"
 contains "so it is still there to be cleared by hand" "is locked by" "$(lock who)"
 
-# THE LOCK BELONGS TO THE POOL, NOT TO A TREE, AND THAT CHANGED UNDER IT.
+# ONE LOCK PER TREE, AND THE PATH IS RESOLVED TO FIND IT.
 #
-# This used to put the lock beside the checkout — `dirname` of
-# `/build/chromium/src`, so `/build/chromium/.domicile-tree-lock`. That path is
-# now a symlink into one of `engine-tree-pool.sh`'s trees, and `dirname` does
-# not resolve it, so the lock would be written INSIDE whichever tree the
-# symlink named at the time. A job takes the lock, the pool points the path at
-# a different tree, and the `if: always()` drop then looks in the new tree,
-# finds nothing, and says so — leaving a lock nobody can find holding a tree
-# nobody is in, until a person reads this file to work out where it went.
+# This used to put the lock beside the checkout -- `dirname` of
+# `/build/chromium/src` -- and then at the build root for the whole pool, when
+# that path became a symlink `engine-tree-pool.sh` swapped between trees. CI no
+# longer swaps it: the pool hands each run its own tree's path, so two runs in
+# two different trees are the ordinary case and one lock for the pool would
+# serialize them for no reason.
 #
-# And the lock that has to exist is the other one anyway. Two writers in two
-# different trees do not corrupt each other; what they collide over is the
-# path, which is shared. A person building through `/build/chromium/src` while
-# a job swaps that symlink is compiling half of one tree and half of another,
-# which is the silent failure at the top of this file arriving by the new door.
-#
-# So the lock hangs off the build root, which no swap moves.
+# What has to hold instead is that the name is derived from the TREE and not
+# from the path typed, so a person building through `/build/chromium/src` and a
+# job building through `/build/trees/tree-0/src` collide when they should.
 unset DOMICILE_TREE_LOCK
 POOL="$WORK/pool"
 mkdir -p "$POOL/trees/tree-0/src" "$POOL/trees/tree-1/src"
 ln -s "$POOL/trees/tree-0" "$POOL/chromium"
 export DOMICILE_BUILD_ROOT="$POOL"
+
 DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/chromium/src" frank >/dev/null 2>&1
 expect "the lock is at the build root, not inside the tree it names" ok \
-  "$([ -d "$POOL/.domicile-tree-lock" ] && echo ok || echo "it is not there")"
-expect "so a swap of the path cannot strand it" ok \
+  "$([ -d "$POOL/.domicile-tree-lock-tree-0" ] && echo ok || echo "it is not there")"
+expect "so nothing that moves the tree can strand it" ok \
   "$([ ! -e "$POOL/trees/tree-0/.domicile-tree-lock" ] && echo ok || echo "it went into the tree")"
 
-# The case that costs a person an afternoon: take, swap, drop. The drop has to
-# find the same lock the take made, whatever the path points at now.
-rm -f "$POOL/chromium" && ln -s "$POOL/trees/tree-1" "$POOL/chromium"
-DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" drop "$POOL/chromium/src" frank >/dev/null 2>&1
-expect "and the drop after a swap releases it" ok \
-  "$([ ! -e "$POOL/.domicile-tree-lock" ] && echo ok || echo "still held")"
+# THE CASE THE PER-TREE NAME EXISTS FOR. The convenience path and the real path
+# are the same tree, so the second take must be refused -- otherwise a person
+# and a job compile in one tree at once and siso links a binary from both.
+out="$(DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/trees/tree-0/src" gail 2>&1 || true)"
+expect "the real path and the convenience path are one tree" refused \
+  "$(case "$out" in (*locked*) echo refused ;; (*) echo "$out" ;; esac)"
+
+# And the tree nobody is in is free, which is the whole point of per-tree.
+expect "a different tree is free while that one is held" ok \
+  "$(DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/trees/tree-1/src" gail >/dev/null 2>&1 && echo ok || echo "refused")"
+
+DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" drop "$POOL/trees/tree-0/src" frank >/dev/null 2>&1
+expect "and a drop through the real path releases what the link took" ok \
+  "$([ ! -e "$POOL/.domicile-tree-lock-tree-0" ] && echo ok || echo "still held")"
+expect "without releasing the other tree" ok \
+  "$([ -d "$POOL/.domicile-tree-lock-tree-1" ] && echo ok || echo "it released both")"
 unset DOMICILE_BUILD_ROOT
 
 if [ "$FAILED" -gt 0 ]; then
