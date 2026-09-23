@@ -205,35 +205,95 @@ fi
 # So the pair is asserted as a pair, in both directions. A `take` with no `drop`
 # holds the tree until a person clears it by hand; a `drop` with no `take`
 # protects nothing at all.
+#
+# THE TAKE IS SPELLED TWO WAYS NOW. A workflow gets its tree from
+# `engine-tree-pool.sh pick`, which chooses and locks in one call -- they
+# cannot be two steps, because a tree chosen and then locked is a tree another
+# run can take in between. A person still runs `engine-tree-lock.sh take` by
+# hand, so both spellings count as taking.
 echo "the tree lock is taken and dropped in pairs"
+
+commands_of() { grep -v '^[[:space:]]*#' "$1"; }
 
 tree_users=0
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
-  commands_of() { grep -v '^[[:space:]]*#' "$1"; }
   commands_of "$workflow" | grep -q 'engine-tree-lock\.sh' || continue
   tree_users=$((tree_users + 1))
 
   takes=0; drops=0
-  commands_of "$workflow" | grep -qE 'engine-tree-lock\.sh take' && takes=1
+  commands_of "$workflow" |
+    grep -qE 'engine-tree-lock\.sh take|engine-tree-pool\.sh pick' && takes=1
   commands_of "$workflow" | grep -qE 'engine-tree-lock\.sh drop' && drops=1
 
   if [ "$takes" -eq 1 ] && [ "$drops" -eq 1 ]; then
-    ok "$name takes the tree and drops it"
+    ok "$name takes a tree and drops it"
   elif [ "$drops" -eq 1 ]; then
-    fail "$name takes the tree and drops it" \
-      "it drops the tree lock and never takes it, so the reset runs unguarded and a build in that checkout can be clobbered mid-link"
+    fail "$name takes a tree and drops it" \
+      "it drops the tree lock and never takes one, so the reset runs unguarded and a build in that checkout can be clobbered mid-link"
   else
-    fail "$name takes the tree and drops it" \
-      "it takes the tree lock and never drops it, so the next run finds the tree held by a job that has ended"
+    fail "$name takes a tree and drops it" \
+      "it takes a tree and never drops it, so the next run finds it held by a job that has ended"
   fi
 done
 
 if [ "$tree_users" -ge 1 ]; then
-  ok "something takes the tree at all ($tree_users)"
+  ok "something takes a tree at all ($tree_users)"
 else
-  fail "something takes the tree at all" \
+  fail "something takes a tree at all" \
     "no workflow names engine-tree-lock.sh, so the rules above asserted nothing"
+fi
+
+# --- the compile slot -------------------------------------------------------
+
+# WHAT THE TREE POOL TOOK AWAY, the same shape as the render node below. Two
+# trees is two runs compiling, and `crux` has 62G and no swap: two cold
+# Chromium builds in it is an OOM kill. `engine-compile-slot.sh` is what keeps
+# them to one, and it is only worth anything if every workflow that compiles
+# takes it -- and drops it, or the next cold build is refused by a job that
+# has ended.
+echo "the compile slot is taken and dropped in pairs"
+
+slot_users=0
+for workflow in "$WORKFLOWS"/*.yml; do
+  name="$(basename "$workflow")"
+  commands_of "$workflow" | grep -q 'engine-compile-slot\.sh' || continue
+  slot_users=$((slot_users + 1))
+
+  takes=0; drops=0
+  commands_of "$workflow" | grep -qE 'engine-compile-slot\.sh take' && takes=1
+  commands_of "$workflow" | grep -qE 'engine-compile-slot\.sh drop' && drops=1
+
+  if [ "$takes" -eq 1 ] && [ "$drops" -eq 1 ]; then
+    ok "$name takes the compile slot and drops it"
+  elif [ "$drops" -eq 1 ]; then
+    fail "$name takes the compile slot and drops it" \
+      "it drops the compile slot and never takes it, so it can compile beside another cold build"
+  else
+    fail "$name takes the compile slot and drops it" \
+      "it takes the compile slot and never drops it, so the next cold build is refused by a job that has ended"
+  fi
+done
+
+# EVERY WORKFLOW THAT TAKES A TREE COMPILES IN IT, so every one of them is a
+# subject here. A fifth that picks a tree and never takes the slot is the OOM
+# this rule exists to make impossible to add quietly.
+for workflow in "$WORKFLOWS"/*.yml; do
+  name="$(basename "$workflow")"
+  commands_of "$workflow" | grep -q 'engine-tree-pool\.sh pick' || continue
+  if commands_of "$workflow" | grep -qE 'engine-compile-slot\.sh take'; then
+    ok "$name takes a tree and takes the compile slot with it"
+  else
+    fail "$name takes a tree and takes the compile slot with it" \
+      "it builds in a tree of the pool's choosing and never takes the compile slot, so it can compile beside another cold build on a machine with no swap"
+  fi
+done
+
+if [ "$slot_users" -ge 1 ]; then
+  ok "something takes the compile slot at all ($slot_users)"
+else
+  fail "something takes the compile slot at all" \
+    "no workflow names engine-compile-slot.sh, so the rules above asserted nothing"
 fi
 
 # --- the render node --------------------------------------------------------
