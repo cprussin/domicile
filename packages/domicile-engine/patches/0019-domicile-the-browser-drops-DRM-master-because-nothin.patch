@@ -313,10 +313,10 @@ index 5e8719e53f..51af3eaf5c 100644
  
    // There is a circular reference between DrmDevice and
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 584c639a06..9aa71a170b 100644
+index b0fefd25bc..72eeffafcc 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -198,6 +198,15 @@ void OpenDeviceAsync(const base::FilePath& device_path,
+@@ -200,6 +200,15 @@ void OpenDeviceAsync(const base::FilePath& device_path,
                                  std::move(drm)));
  }
  
@@ -332,7 +332,7 @@ index 584c639a06..9aa71a170b 100644
  struct DisplayCard {
    base::FilePath path;
    std::optional<std::string> driver;
-@@ -392,6 +401,18 @@ void DrmDisplayHostManager::TakeDisplayControl(
+@@ -394,6 +403,18 @@ void DrmDisplayHostManager::TakeDisplayControl(
    take_display_control_callback_ = std::move(callback);
    display_control_change_pending_ = true;
  
@@ -351,7 +351,7 @@ index 584c639a06..9aa71a170b 100644
    if (!proxy_->GpuTakeDisplayControl())
      GpuTookDisplayControl(false);
  }
-@@ -508,8 +529,9 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
+@@ -509,8 +530,9 @@ void DrmDisplayHostManager::OnAddGraphicsDevice(
      std::unique_ptr<DrmWrapper> drm) {
    if (drm) {
      drm_devices_[dev_path] = sys_path;
@@ -363,7 +363,7 @@ index 584c639a06..9aa71a170b 100644
      NotifyDisplayDelegate();
    }
  
-@@ -524,6 +546,7 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
+@@ -525,6 +547,7 @@ void DrmDisplayHostManager::OnUpdateGraphicsDevice(
  
  void DrmDisplayHostManager::OnRemoveGraphicsDevice(
      const base::FilePath& sys_path) {
@@ -371,7 +371,7 @@ index 584c639a06..9aa71a170b 100644
    proxy_->GpuRemoveGraphicsDevice(sys_path);
    NotifyDisplayDelegate();
    task_pending_ = false;
-@@ -553,9 +576,11 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
+@@ -554,9 +577,11 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
  
    // Send the primary device first since this is used to initialize graphics
    // state.
@@ -386,7 +386,7 @@ index 584c639a06..9aa71a170b 100644
  }
  
  void DrmDisplayHostManager::OnGpuThreadReady() {
-@@ -680,14 +705,29 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
+@@ -681,14 +706,29 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {
    DCHECK(!display_externally_controlled_);
    DCHECK(display_control_change_pending_);
  

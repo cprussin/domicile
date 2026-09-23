@@ -242,7 +242,7 @@ index bf07dc3607..b70f88a48b 100644
      ":gbm",
      "//base/test:test_support",
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index fa6e9524e1..fd6df24808 100644
+index ff41454120..e3d61d2b27 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -25,7 +25,9 @@
@@ -550,10 +550,10 @@ index 3204aebb3a..88d5688a01 100644
    SendCursorMoveLocked();
  }
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 19d5dc1df1..584c639a06 100644
+index 27eea5ab9d..b0fefd25bc 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-@@ -15,6 +15,7 @@
+@@ -17,6 +17,7 @@
  #include "base/files/file_path.h"
  #include "base/files/file_util.h"
  #include "base/functional/bind.h"

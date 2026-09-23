@@ -103,10 +103,10 @@ index 03bf8bb216..246ee9b0ae 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-index b14f67e39d..0ede0b35a3 100644
+index bbfe9cc70e..2e08a24c36 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-@@ -1610,11 +1610,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
+@@ -1611,11 +1611,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
      case ElementType::kHTMLIFrameElement:
      case ElementType::kHTMLFencedFrameElement:
      case ElementType::kHTMLPersistentWidgetElement:
@@ -210,7 +210,7 @@ index 7baba8715a..aee1a7366a 100644
        name: "xmp",
        interfaceName: "HTMLPreElement",
 diff --git a/third_party/blink/renderer/core/html/resources/html.css b/third_party/blink/renderer/core/html/resources/html.css
-index 590b44c0c6..d40f08b206 100644
+index 13c48c8214..2626ee4316 100644
 --- a/third_party/blink/renderer/core/html/resources/html.css
 +++ b/third_party/blink/renderer/core/html/resources/html.css
 @@ -177,7 +177,7 @@ video, canvas, img {
