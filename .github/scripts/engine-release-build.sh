@@ -47,6 +47,31 @@ export PATH="$TOOLS:$PATH"
 
 cd "$CHROMIUM" || exit 1
 
+# A COMPILER CACHE WHEN THE MACHINE HAS ONE. `gn` bakes `cc_wrapper` into
+# every compile command, so adding or dropping this line is a full rebuild --
+# which is why a named wrapper that cannot be run is refused here rather than
+# skipped, and refused before `gn gen` rewrites out/Domicile.
+#
+# The value is a stable path and not a store path, so bumping ccache does not
+# rewrite every command. See cprussin/dotfiles chromium-build.nix.
+CACHE_ARG=""
+WRAPPER="${DOMICILE_CC_WRAPPER:-}"
+if [ -n "$WRAPPER" ]; then
+  # `command -v` rather than `[ -x ]`, so `cc_wrapper = "ccache"` -- the form
+  # Chromium's cc_wrapper.gni documents -- is not refused for looking like a
+  # relative path. It answers for a shell builtin too; the worst of that is `:`,
+  # which compiles nothing and exits 0, so the build dies at the first link
+  # rather than the first compile. Still loud, still not a silent rebuild.
+  if ! command -v "$WRAPPER" >/dev/null 2>&1; then
+    echo "DOMICILE_CC_WRAPPER names $WRAPPER, which nothing here can run." >&2
+    echo "Carrying on without it would be a silent rebuild of the whole of" >&2
+    echo "Chromium, so this stops. Unset it to build with no cache." >&2
+    exit 1
+  fi
+  CACHE_ARG="  cc_wrapper = \"$WRAPPER\"
+"
+fi
+
 # Regenerated whenever the arguments here change, which `gn gen` decides for
 # itself by comparing them: passing --args every time is what makes editing
 # this file take effect without anybody remembering to delete the directory.
@@ -70,7 +95,7 @@ cd "$CHROMIUM" || exit 1
 # nothing can move, reported by nothing. libinput's headers and library are
 # already in Chromium's own bullseye sysroot, so this costs a line. Patch 0027
 # is what makes the descriptor logind opened reach it.
-gn gen "$OUT" --args='
+gn gen "$OUT" --args="
   is_debug = false
   is_component_build = false
   is_official_build = false
@@ -83,7 +108,7 @@ gn gen "$OUT" --args='
   ozone_platform_headless = true
   ozone_platform_drm = true
   use_libinput = true
-' || exit 1
+$CACHE_ARG" || exit 1
 
 # `chrome` is the browser; `domicile_engine` is the library the compositor
 # dlopens and nothing in chrome depends on, so it has to be named.
