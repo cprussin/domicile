@@ -150,7 +150,22 @@ permissions:
   contents: write
 
 jobs:
+  # A tree that already passed is not run again: the write-back push, and main
+  # after a merge nothing else landed behind. Off crux, so it costs no slot.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.proof.outputs.key }}
+      proved: ${{ steps.proof.outputs.proved }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: proof
+        run: .github/scripts/engine-proof.sh gate
+
   engine:
+    needs: gate
+    # `!cancelled()`, so a gate that errors runs the engine rather than skipping it.
+    if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
     # `crux` is a label, not the runner's name. Both are set in
     # cprussin/dotfiles: config/machines/crux/domicile-ci.nix.
     #
@@ -681,6 +696,14 @@ jobs:
           DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: .github/scripts/engine-release-repin.sh "$HEAD_REF"
+
+      # Last, so a proof means the write-back landed too. The run it triggers
+      # waits on this one's concurrency group, so it sees the tag.
+      - name: Record the proof
+        if: ${{ needs.gate.outputs.key != '' }}
+        env:
+          KEY: ${{ needs.gate.outputs.key }}
+        run: .github/scripts/engine-proof.sh record "$KEY"
 
       # In a script, not inline. GitHub echoes every step's script into the
       # log before running it, so forty lines of dump here is forty lines
