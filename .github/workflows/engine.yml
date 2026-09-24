@@ -524,6 +524,8 @@ jobs:
           # thing to keep true.
           DOMICILE_CHROMIUM: ${{ env.CHROMIUM }}
           DOMICILE_ENGINE_OUT: ${{ env.OUT_RELEASE }}
+          # Per runner: kept across runs, and never rebuilt under another run.
+          DOMICILE_CARGO_TARGET: /build/cargo-target/${{ runner.name }}
           DOMICILE_CHECK_STRICT: "1"
           # Where a failing check's whole log is kept, named because $TMPDIR in
           # there is nix's and nothing else in this job has it — the same reason
@@ -654,6 +656,8 @@ jobs:
           # necessarily this series.
           DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # Optional; without it the write-back's CI waits for an approval.
+          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
         run: .github/scripts/engine-release-repin.sh "$HEAD_REF"
 
       # Last, so a proof means the write-back landed too. The run it triggers
