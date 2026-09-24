@@ -80,7 +80,10 @@ CACHE="$WORK/bin/ccache"
 cat >"$CACHE" <<'CCACHE'
 #!/bin/sh
 case "${1:-}" in
-  --show-stats) echo "Hits: 41 / 43"; exit 0 ;;
+  --zero-stats) echo "ccache zeroed" >>"${NINJA_ARGS_FILE:-/dev/null}"; exit 0 ;;
+  --show-stats)
+    [ "${2:-}" = -v ] && echo "Could not use modules: 7 / 7"
+    echo "Hits: 41 / 43"; exit 0 ;;
   *) exec "$@" ;;
 esac
 CCACHE
@@ -93,7 +96,7 @@ MUTE="$WORK/bin/mute-ccache"
 cat >"$MUTE" <<'MUTE'
 #!/bin/sh
 case "${1:-}" in
-  --show-stats) exit 3 ;;
+  --zero-stats | --show-stats) exit 3 ;;
   *) exec "$@" ;;
 esac
 MUTE
@@ -260,6 +263,20 @@ if run_job; then
   else
     fail "the job reports the cache's statistics" \
       "no ccache line among: $(cat "$WORK/out")"
+  fi
+  # Per build, and why a call went uncached: the cache is shared, so its
+  # running totals mix every build that ever ran.
+  if [ "$(head -1 "$WORK/ninja-args")" = "ccache zeroed" ]; then
+    ok "the job zeroes the statistics before it builds"
+  else
+    fail "the job zeroes the statistics before it builds" \
+      "ccache and autoninja ran: $(cat "$WORK/ninja-args")"
+  fi
+  if grep -q '  ccache Could not use modules' "$WORK/out"; then
+    ok "the job reports why calls went uncached"
+  else
+    fail "the job reports why calls went uncached" \
+      "no verbose statistics among: $(cat "$WORK/out")"
   fi
 else
   fail "the job reports the cache's statistics" \
