@@ -31,7 +31,8 @@ case "${1:-}" in
     ;;
   record)
     [ -n "${2:-}" ] || usage
-    git push -q origin "HEAD:refs/tags/$(tag "$2")"
+    # Already proved (a dispatch, or the same tree from another commit) is done.
+    git push -q origin "HEAD:refs/tags/$(tag "$2")" || "$0" has "$2"
     ;;
   gate)
     : "${GITHUB_OUTPUT:?}"

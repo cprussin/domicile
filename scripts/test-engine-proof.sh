@@ -51,6 +51,11 @@ expect "an unproved tree is not proved" 1 "$?"
 
 "$PROOF" record "$changed" >/dev/null 2>&1
 expect "recording succeeds" 0 "$?"
+# The same tree again, from another commit: a PR's merge commit proved it and
+# main's squash, or a dispatch, is proving it again.
+git commit -q --allow-empty -m "same tree"
+"$PROOF" record "$changed" >/dev/null 2>&1
+expect "recording a tree already proved succeeds" 0 "$?"
 
 "$PROOF" has "$changed"
 expect "a recorded tree is proved" 0 "$?"
