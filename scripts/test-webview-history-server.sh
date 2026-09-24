@@ -128,6 +128,23 @@ expect "the slow page says which page it is" "yes" \
   "$(case "$(curl -sS "http://127.0.0.1:$PORT/slow")" in
      *"guest-shown path=/slow"*) echo yes ;; *) echo no ;; esac)"
 
+# A browser that hangs up is recorded at once, which is how the guard knows the
+# positive run's slow page can no longer arrive without sitting out the wait.
+BEFORE="$(date +%s%N)"
+curl -sS -o /dev/null --max-time 0.5 "http://127.0.0.1:$PORT/slow" 2>/dev/null
+for _ in $(seq 1 30); do
+  grep -q "abandoned /slow" "$LOG" && break
+  sleep 0.05
+done
+ELAPSED_MS=$((($(date +%s%N) - BEFORE) / 1000000))
+expect "a slow page the browser gave up on is recorded before its wait is over" \
+  "yes" "$(if grep -q "abandoned /slow" "$LOG" &&
+    [ "$ELAPSED_MS" -lt "$((SLOW_SECONDS * 1000))" ]; then
+    echo yes
+  else
+    echo no
+  fi)"
+
 # Three pages and no more: a server that answered everything would answer a
 # mistyped path too, and the guard would never learn it had mistyped one.
 expect "anything else is a 404" "yes" \

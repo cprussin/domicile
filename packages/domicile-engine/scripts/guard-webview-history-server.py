@@ -10,7 +10,7 @@ fails for reasons nobody chose. So the guard brings its own.
   /one    where the window starts
   /two    where it goes next, so there is a history to move in
   /slow   answered only after --slow-seconds, which is what gives stop()
-          something to cancel
+          something to cancel -- or never, if the browser hangs up first
 
 Each page says one line to the console, which the engine writes to its own log
 and the guard reads as its whole measurement:
@@ -35,9 +35,9 @@ past.
 """
 
 import argparse
+import select
 import sys
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # The three paths this serves, which are also the names
@@ -94,7 +94,16 @@ class HasAHistory(BaseHTTPRequestHandler):
             # Before a single header, which is the whole point: a navigation
             # with no response yet is a navigation `stop()` can cancel, and one
             # that has committed is not.
-            time.sleep(self.slow_seconds)
+            #
+            # Readable early means the browser hung up (a GET sends nothing
+            # more), so the page can never arrive. Said at once, so the guard
+            # need not sit out the wait to know it.
+            hung_up, _, _ = select.select(
+                [self.connection], [], [], self.slow_seconds
+            )
+            if hung_up:
+                sys.stderr.write("abandoned %s\n" % self.path)
+                return
         elif self.path not in FAST_PATHS:
             self.send_error(404, "this server has three pages: /one /two /slow")
             return
