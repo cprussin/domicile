@@ -16,6 +16,7 @@
   "files": [
     "src/**/*"
   ],
+  "license": "MIT",
   "name": "@domicile/e2e-harness",
   "private": true,
   "scripts": {

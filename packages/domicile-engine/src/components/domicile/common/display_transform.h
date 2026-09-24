@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 #ifndef COMPONENTS_DOMICILE_COMMON_DISPLAY_TRANSFORM_H_
 #define COMPONENTS_DOMICILE_COMMON_DISPLAY_TRANSFORM_H_
