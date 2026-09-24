@@ -241,8 +241,13 @@
           }
         '';
 
-        meta.description =
-          "The patched Chromium domicile-compositor uses as its engine";
+        meta = {
+          description =
+            "The patched Chromium domicile-compositor uses as its engine";
+          # Chromium's, as nixpkgs' own chromium says; see
+          # packages/domicile-engine/LICENSE.
+          license = pkgs.lib.licenses.bsd3;
+        };
       };
 
       # ── The three things a desktop is made of ───────────────────────────
@@ -320,6 +325,7 @@
         {
           meta = {
             description = "Run a Domicile desktop from a shell you built yourself";
+            license = pkgs.lib.licenses.mit;
             mainProgram = "domicile";
             platforms = [ system ];
           };
@@ -364,6 +370,7 @@
             nativeBuildInputs = [ pkgs.makeWrapper ];
             meta = {
               inherit description;
+              license = pkgs.lib.licenses.mit;
               mainProgram = name;
               platforms = [ system ];
             };
