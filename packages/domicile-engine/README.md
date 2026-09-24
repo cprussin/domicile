@@ -674,14 +674,15 @@ what the largest groups are for. The number has grown with the DRM work —
 patches 0012 onward are mostly `ui/ozone/platform/drm` and `ui/events/ozone/evdev`,
 which are files Chromium owns and which no additive design could have avoided.
 
-The series' unit tests live in two targets. `components_unittests` holds
-everything under `components/domicile/`, and `ozone_unittests` holds the DRM
-platform's, which had nowhere else to run:
+The series' unit tests live in two targets. `domicile_unittests` holds
+everything under `components/domicile/` (also registered with
+`components_unittests`, which CI no longer builds), and `ozone_unittests` holds
+the DRM platform's, which had nowhere else to run:
 
 ```sh
-autoninja -C out/Domicile components_unittests ozone_unittests
-./out/Domicile/components_unittests --gtest_filter='FrameSinkBrokerTest.*:…'
-./out/Domicile/ozone_unittests --gtest_filter='DrmScreenTest.*:…'
+autoninja -C out/Release domicile_unittests ozone_unittests
+./out/Release/domicile_unittests
+./out/Release/ozone_unittests --gtest_filter='DrmScreenTest.*:…'
 ```
 
 **`.github/workflows/engine.yml` carries the two filters in full, and it is the

@@ -257,7 +257,7 @@ jobs:
           echo "ozone_platform_drm = true configures and //ui/ozone compiles at this pin"
 
       # THE ONLY RUN OF THIS SUITE ANYWHERE. engine.yml builds wayland and
-      # headless, so `DrmScreenTest` is not in its `components_unittests` and
+      # headless, so `DrmScreenTest` is not in its `ozone_unittests` and
       # cannot be; adding `ozone_platform_drm` to the shipped build is ordered
       # after the modeset driver. Until this step, the tests covering the one
       # class step 2 has delivered ran on the build host and nowhere a PR could

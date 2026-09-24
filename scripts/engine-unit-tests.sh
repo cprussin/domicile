@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# The fork's own gtest cases in components_unittests.
+# The fork's own gtest cases, in domicile_unittests.
 #
 # The cheapest thing that can fail and the only thing that exercises the
 # broker's bookkeeping directly — a surface brokered per app, an embed held for
 # the app it names — so this runs before the guards, which take longer and say
 # less about why.
-#
-# Filtered rather than run whole: `components_unittests` is every component's
-# tests, and the rest of them are upstream's business.
 #
 # AND COUNTED BEFORE IT IS RUN, because `--gtest_filter` matching nothing exits
 # 0. A suite that was renamed or never linked is otherwise a silent pass, which
@@ -48,7 +45,7 @@ FLOOR=90
 cd "$ENGINE_OUT"
 
 # Test names are the indented lines of --gtest_list_tests; suite names are not.
-count=$(./components_unittests --gtest_filter="$FILTER" --gtest_list_tests |
+count=$(./domicile_unittests --gtest_filter="$FILTER" --gtest_list_tests |
   grep -cE '^  ' || true)
 echo "$count tests match the fork's filter (floor $FLOOR)"
 [ "$count" -ge "$FLOOR" ] || {
@@ -56,4 +53,4 @@ echo "$count tests match the fork's filter (floor $FLOOR)"
   exit 1
 }
 
-./components_unittests --gtest_filter="$FILTER"
+./domicile_unittests --gtest_filter="$FILTER"

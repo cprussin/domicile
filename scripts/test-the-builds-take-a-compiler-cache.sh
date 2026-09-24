@@ -242,7 +242,11 @@ case "$ninja" in
   (*out/Domicile*) fail "the job does not build out/Domicile" "autoninja ran: $ninja" ;;
   (*) ok "the job does not build out/Domicile" ;;
 esac
-for target in chrome domicile_engine components_unittests ozone_unittests \
+case "$ninja" in
+  (*components_unittests*) fail "the job does not build all of components_unittests" "autoninja ran: $ninja" ;;
+  (*) ok "the job does not build all of components_unittests" ;;
+esac
+for target in chrome domicile_engine domicile_unittests ozone_unittests \
     domicile_css_parity domicile_color_probe domicile_solid_color_submitter; do
   if printf '%s\n' "$ninja" | grep -qE "out/Release( .*)? $target( |$)"; then
     ok "out/Release builds $target"
