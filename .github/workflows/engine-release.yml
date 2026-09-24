@@ -37,8 +37,6 @@ jobs:
     timeout-minutes: 600
 
     env:
-      CHROMIUM: /build/chromium/src
-
       # Who holds the tree lock, in words a person reading a held-lock message
       # can act on. See engine.yml.
       LOCK_OWNER: engine-release.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
@@ -57,37 +55,38 @@ jobs:
       # check below — an overrun should fail this job with a sentence, not fill
       # the dataset the machine's other work lives on.
       OUT: out/Release
-      # Where the tarball is assembled and where the packaged tree is put back
-      # to be tested. Both under /build for the same reason everything else is.
-      STAGE: /build/engine-release
 
     steps:
       - uses: actions/checkout@v7
 
-      # ONE WRITER AT A TIME IN THAT CHECKOUT. `crux`'s single job slot keeps
-      # this workflow and engine.yml apart from each other; it says nothing
-      # about the person or the agent building in the same tree by hand, and a
-      # reset landing inside their build links a binary compiled from two trees
-      # without failing. That is this lock's case, and it is why the lock
-      # refuses instead of waiting: the only queue that can safely make a run
-      # wait here is the one in front of the slot, because a run that waits is
-      # a run already holding it. Held until the last step that reads the tree.
-      # See .github/scripts/engine-tree-lock.sh.
-      - name: Take the tree
-        run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
-
-      # Which tree, for engine.yml's reason and with one of this job's own:
-      # `out/Release` is a second output directory in whichever tree it lands
-      # in, and it is ~40G. Pointing every release at the tree that carries
-      # main's pin keeps it to one of them rather than one per slot, and the
-      # `Room to build in` check below is what says so if that stops being
-      # true -- below rather than above now, because reclaiming has to know
-      # which tree the path names. See .github/scripts/engine-tree-pool.sh.
-      - name: Which tree this pin builds in
+      # WHICH TREE THIS RUN OWNS, taken and locked in one step. See engine.yml,
+      # which explains the pool; the difference here is that this job always
+      # resets and always compiles, so it always takes the compile slot too.
+      #
+      # `$CHROMIUM` and `$STAGE` come from the pool rather than from this
+      # file's env, because there is no one tree any more.
+      #
+      # WHICH MEANS `out/Release` IS PER TREE, ~40G OF IT, where it used to be
+      # one directory in whichever tree carried main's pin. That is in the
+      # quota chromium-build.nix refuses a deploy under, and the `Room to build
+      # in` check below is the runtime half: a release that will not fit
+      # reclaims what it owns and then refuses, rather than filling the dataset
+      # the machine's own work lives on.
+      - name: Take a tree
         run: |
           set -euo pipefail
-          .github/scripts/engine-tree-pool.sh use \
-            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          tree="$(.github/scripts/engine-tree-pool.sh pick \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')" \
+            "$LOCK_OWNER")"
+          echo "this release is built in $tree"
+          echo "CHROMIUM=$tree" >>"$GITHUB_ENV"
+          echo "STAGE=$(dirname "$tree")/engine-release" >>"$GITHUB_ENV"
+
+      # 62G and no swap: one cold Chromium build at a time on this machine,
+      # whichever workflow is running it.
+      # See .github/scripts/engine-compile-slot.sh.
+      - name: Take the compile slot
+        run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
 
       # AFTER THE LOCK AND AFTER THE TREE IS CHOSEN, AND BOTH HALVES OF THAT
       # ORDER ARE LOAD-BEARING. This used to be the job's first step, because
@@ -231,7 +230,12 @@ jobs:
           done
           df -h /build || true
 
-      # Only if it is still ours — see engine.yml.
+      # Only if it is still ours, and only if the pool got us one — see
+      # engine.yml.
       - name: Drop the tree
-        if: ${{ always() }}
+        if: ${{ always() && env.CHROMIUM != '' }}
         run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
+
+      - name: Drop the compile slot
+        if: ${{ always() }}
+        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"

@@ -247,6 +247,56 @@ contains "and the refusal says which unit fills them" "bootstrap-chromium-tree" 
 expect "and the path is not pointed at one of them" ok \
   "$([ ! -e "$root/chromium" ] && echo ok || echo "it points at $(chose "$root")")"
 
+# ===================================================================
+# PICK, WHICH IS CHOOSE AND LOCK IN ONE OPERATION
+# ===================================================================
+#
+# `use` points one path at a tree, so two runs cannot be in the pool at once:
+# the second repoints the path under the first. `pick` is what replaces it --
+# it names a tree on stdout and takes that tree's lock before printing it, so
+# two runs get two trees or the second is told there are none free.
+#
+# CHOOSING AND LOCKING HAVE TO BE ONE STEP. Choosing first and locking after
+# is a race with exactly the shape the tree lock exists to prevent: two runs
+# read the same preference order, both pick tree-0, and the loser either
+# overwrites the winner's lock or builds in a tree it does not hold.
+pick() { # root pin owner
+  DOMICILE_BUILD_ROOT="$1" "$POOL_SH" pick "$2" "$3" 2>&1
+}
+lock_of() { # root slot
+  printf '%s\n' "$1/.domicile-tree-lock-$2"
+}
+
+root="$(build_root 2)"
+out="$(pick "$root" aaaaaaa 'run one')"
+expect "pick names a tree's src" ok \
+  "$([ "$out" = "$root/trees/tree-0/src" ] && echo ok || echo "said $out")"
+expect "and takes that tree's lock" ok \
+  "$([ -d "$(lock_of "$root" tree-0)" ] && echo ok || echo "no lock")"
+
+# The second run must not be handed the tree the first is in, and the lock is
+# the only thing that can tell it so -- the preference order alone would send
+# both to the same slot.
+out="$(pick "$root" aaaaaaa 'run two')"
+expect "a second run gets a different tree" ok \
+  "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
+
+# And when every tree is held, saying so is the only safe answer: building in
+# a locked tree is the reset-inside-someone-else's-build this all exists for.
+out="$(pick "$root" aaaaaaa 'run three')"
+expect "a third run is refused rather than given a held tree" refused \
+  "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
+contains "and the refusal says who holds them" "run one" "$out"
+
+# A tree carrying the pin is still preferred -- the lock decides between
+# candidates, it does not replace the ordering that makes a warm tree worth
+# having.
+root="$(build_root 2)"
+printf 'bbbbbbb\n' >"$root/trees/tree-1/src/../.domicile-synced-pin"
+out="$(pick "$root" bbbbbbb 'warm run')"
+expect "the tree carrying the pin wins even though it is not first" ok \
+  "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   echo "engine-tree-pool: all cases passed"

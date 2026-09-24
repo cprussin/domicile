@@ -315,14 +315,15 @@ are, and both of these have already happened rather than been imagined:
   the lock around builds:
   `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
   drop it with the same owner string when you are done. **The lock is at
-  `/build/.domicile-tree-lock`, not inside the tree** — see the pool below for
-  why it had to move out.
-- **`/build/chromium` is a symlink, and CI moves it.** There is more than one
-  tree on that machine now; which one that path names is chosen per run, under
-  the lock, from the pin the run carries. So the lock is not optional even if
-  you never reset anything: a swap under a build you are running compiles half
-  of one tree and half of another, which is the same silent binary as a reset
-  landing mid-build.
+  `/build/.domicile-tree-lock-<tree>`, not inside the tree** — one per tree,
+  named after whatever the path you gave it resolves to, so locking through
+  `/build/chromium/src` and through `/build/trees/tree-0/src` is locking the
+  same thing.
+- **`/build/chromium` is your bookmark, not CI's.** There is more than one tree
+  on that machine. CI takes whichever it can lock and builds through that
+  tree's real path; this symlink is only where `./scripts/*.sh` above go by
+  default. Point it where you want with `engine-tree-pool.sh use <pin>` — and
+  take the lock anyway, because a CI run may be in the tree it names.
 - **A file in the checkout with no counterpart in `src/` wedges the next run.**
   The reset removes the series' own files by walking `src/`, so anything not
   mirrored there survives, and `apply.sh` then refuses the dirty tree. The
@@ -381,17 +382,30 @@ took turns in it, and every turn was the full build: 4h05m, measured on run
 35576710600. A pull-request run and a merge run each makes that four of them,
 on the one job slot everything else queues behind.
 
-So `/build/chromium` is a symlink into `/build/trees`, and
-`.github/scripts/engine-tree-pool.sh use <pin>` points it at a tree before
-anything reads it:
+So `/build/trees` holds N of them and
+`.github/scripts/engine-tree-pool.sh pick <pin> <who>` gives a run one,
+choosing and locking in the same call — choosing and then locking is a tree
+another run can take in between:
 
-- a tree already carrying that pin is a **swap**, which makes
-  `engine-series-stamp.sh` answer `carries=true` and skips the reset, the sync,
-  the apply and the compile — the ~1m case, for a pin that used to cost four
-  hours;
+- a tree already carrying that pin makes `engine-series-stamp.sh` answer
+  `carries=true`, which skips the reset, the sync, the apply and the compile —
+  the ~1m case, for a pin that used to cost four hours;
 - a pin nothing carries costs what it always cost, in whichever tree no run has
   asked for in longest. An unused tree goes before a used one, so the first pins
-  fill the pool rather than evicting each other.
+  fill the pool rather than evicting each other;
+- a tree another run holds is passed over, which is what lets two engine jobs
+  run at once. `crux` has two heavy runners for that.
+
+**What two runs cannot share is the machine's memory.** 62G, no swap, and a
+cold Chromium link is most of it, so `.github/scripts/engine-compile-slot.sh`
+holds the cold builds to one at a time. A run whose tree already carries the
+series never takes it — that pair is the point: warm branches keep shipping
+while a repin builds beside them.
+
+`engine-tree-pool.sh use <pin>` is the other half, and it is a person's: it
+points `/build/chromium` at a tree so the scripts above find one. CI stopped
+using it, because a job that reached its tree through one shared path could not
+have another job in another tree beside it.
 
 It never looks inside a tree: it picks a directory, and whether that directory
 holds this series is still the stamp's question, asked afterward and against
