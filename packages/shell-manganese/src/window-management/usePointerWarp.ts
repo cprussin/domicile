@@ -1,4 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
@@ -32,6 +33,21 @@ type Options = {
   /** The window the keyboard is in and the box it is drawn in, or none. */
   focus: Focus | undefined;
   /**
+   * Whether a key ran the command this render is the answer to, which is the
+   * press this spends. Nothing but the keyboard path may set it: a focus the
+   * pointer itself moved is one the warp must leave alone, or the desktop
+   * chases its own cursor.
+   *
+   * A ref handed in rather than a callback handed back, because the desk is
+   * one keyboard and several monitors. The keys are read once per page and
+   * the windows are laid out once per screen, so the press happens above
+   * every copy of this hook and is spent by whichever of them the focus
+   * landed on. Cleared by the desk once every monitor has had its look —
+   * `Desktop` — rather than here, which is what stops the first monitor to
+   * run its effect from spending a press meant for the second.
+   */
+  keyed: RefObject<boolean>;
+  /**
    * Every window the desktop has, by id.
    *
    * Read for one thing: whether the window the keyboard is on is one that was
@@ -40,14 +56,8 @@ type Options = {
   windows: readonly string[];
 };
 
-/** What the desktop asks of the pointer, and what it asks about it. */
+/** What the desktop asks about the pointer. */
 export type Pointer = {
-  /**
-   * What the keyboard path calls before it acts. Nothing else may: a focus
-   * the pointer itself moved is one the warp must leave alone, or the desktop
-   * chases its own cursor.
-   */
-  keyed: () => void;
   /**
    * Whether a pointer event at `at` is the pointer having gone there.
    *
@@ -143,6 +153,7 @@ export type Pointer = {
 export const usePointerWarp = ({
   domicile,
   focus,
+  keyed,
   windows,
 }: Options): Pointer => {
   // Refs rather than state, every one of them: none is drawn, and a pointer
@@ -155,7 +166,6 @@ export const usePointerWarp = ({
   // both answers are the desktop's own move.
   const pointer = useRef<Spot | undefined>(undefined);
   const sent = useRef<readonly Spot[]>([]);
-  const pressed = useRef(false);
   const held = useRef<Focus | undefined>(undefined);
   const open = useRef<readonly string[]>([]);
 
@@ -218,7 +228,7 @@ export const usePointerWarp = ({
     const was = held.current;
     const gone = was !== undefined && !windows.includes(was.id);
     const to =
-      pressed.current || opened || gone
+      keyed.current || opened || gone
         ? warpTo({
             from: held.current,
             // Where the cursor is as far as this page can tell, which is
@@ -229,7 +239,6 @@ export const usePointerWarp = ({
             to: focus,
           })
         : undefined;
-    pressed.current = false;
     held.current = focus;
     open.current = windows;
     if (to !== undefined) {
@@ -248,10 +257,7 @@ export const usePointerWarp = ({
     }
   });
 
-  const keyed = useCallback(() => {
-    pressed.current = true;
-  }, []);
-  return useMemo(() => ({ keyed, pointing: arrivedAt }), [arrivedAt, keyed]);
+  return useMemo(() => ({ pointing: arrivedAt }), [arrivedAt]);
 };
 
 /** Whether two places on the page are the same place. */

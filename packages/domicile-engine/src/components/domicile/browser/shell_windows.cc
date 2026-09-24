@@ -5,6 +5,7 @@
 #include "components/domicile/browser/shell_windows.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace domicile {
 namespace {
@@ -47,6 +48,39 @@ ShellWindowPlan ShellWindowsFor(const std::vector<display::Display>& displays,
     plan.close.erase(plan.close.begin());
   }
   return plan;
+}
+
+ShellWindowPlaces::ShellWindowPlaces() = default;
+
+ShellWindowPlaces::~ShellWindowPlaces() = default;
+
+void ShellWindowPlaces::Place(uintptr_t window, int64_t display) {
+  placed_.insert_or_assign(window, display);
+}
+
+std::vector<int64_t> ShellWindowPlaces::Update(
+    const std::vector<SightedShellWindow>& live) {
+  base::flat_map<uintptr_t, int64_t> still_here;
+  std::vector<int64_t> windowed;
+  windowed.reserve(live.size());
+  for (const SightedShellWindow& one : live) {
+    // The record wins where there is one, which is the whole point: a window
+    // that has been seen is on the display it was seen on, whatever its
+    // rectangle reads as in the middle of a hotplug.
+    const auto known = placed_.find(one.window);
+    const int64_t on = known == placed_.end() ? one.nearest : known->second;
+    still_here.insert_or_assign(one.window, on);
+    windowed.push_back(on);
+  }
+  // Assigned rather than merged, so a window the browser no longer has is
+  // gone from here too.
+  placed_ = std::move(still_here);
+  return windowed;
+}
+
+int64_t ShellWindowPlaces::Of(uintptr_t window) const {
+  const auto known = placed_.find(window);
+  return known == placed_.end() ? display::kInvalidDisplayId : known->second;
 }
 
 }  // namespace domicile

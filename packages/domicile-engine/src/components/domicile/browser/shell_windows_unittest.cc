@@ -10,6 +10,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace domicile {
@@ -116,6 +117,76 @@ TEST(ShellWindowsTest, NothingWindowedAndNothingPluggedInIsNotACrash) {
 
   EXPECT_TRUE(plan.open.empty());
   EXPECT_TRUE(plan.close.empty());
+}
+
+// A shell window the browser has right now, and the display its rectangle
+// currently reads as. The number stands for a window the way the browser's
+// pointer to it does; nothing here dereferences one.
+SightedShellWindow Seen(uintptr_t window, int64_t nearest) {
+  return SightedShellWindow{.window = window, .nearest = nearest};
+}
+
+TEST(ShellWindowPlacesTest, AWindowNobodyHasSeenIsWhereItsRectangleIs) {
+  // The window startup opened, which this did not: there is no record of it,
+  // and the desk is not moving when it is first read, so its own geometry is
+  // the only answer there is and it is the right one.
+  ShellWindowPlaces places;
+
+  EXPECT_EQ(places.Update({Seen(1, 100), Seen(2, 200)}),
+            std::vector<int64_t>({100, 200}));
+}
+
+TEST(ShellWindowPlacesTest, AWindowStaysOnTheDisplayItWasFirstSeenOn) {
+  // THE BUG THIS CLASS EXISTS FOR. A hotplug moves the origins of the
+  // displays before the windows on them are resized to follow, so a window
+  // still at its old rectangle reads as being on the monitor that has just
+  // taken that corner of the desk. Read fresh, the desk then looks like one
+  // display with two windows and one with none: a duplicate window opens on
+  // the first, the second stays dark because no window matches its rectangle
+  // exactly, and the pages that result each claim a monitor that is not
+  // theirs.
+  ShellWindowPlaces places;
+  places.Update({Seen(1, 100)});
+
+  EXPECT_EQ(places.Update({Seen(1, 200), Seen(2, 200)}),
+            std::vector<int64_t>({100, 200}));
+}
+
+TEST(ShellWindowPlacesTest, AWindowThatIsGoneIsForgotten) {
+  // A renderer that died, a shell that navigated away, a monitor whose window
+  // was closed. The browser hands out addresses again, so a record kept past
+  // its window would place the next window at the last one's display -- which
+  // is a monitor this believes is covered and leaves dark.
+  ShellWindowPlaces places;
+  places.Update({Seen(1, 100)});
+
+  places.Update({});
+
+  EXPECT_EQ(places.Update({Seen(1, 200)}), std::vector<int64_t>({200}));
+}
+
+TEST(ShellWindowPlacesTest, AWindowOpenedForADisplayIsOnItBeforeItIsSeen) {
+  // A window is asked for and arrives later, and a second monitor can be
+  // plugged in during that gap -- which is where reading the rectangle is
+  // least reliable and where the window's display is least in doubt, because
+  // this is the side that asked for it. Told outright, it never has to be
+  // guessed at all.
+  ShellWindowPlaces places;
+
+  places.Place(1, 100);
+
+  EXPECT_EQ(places.Update({Seen(1, 200)}), std::vector<int64_t>({100}));
+}
+
+TEST(ShellWindowPlacesTest, TheDisplayAWindowIsOnCanBeAskedForOnItsOwn) {
+  // What names a page's screen. It is the same answer the reconciliation
+  // works from, and it has to be: a page told one monitor and a window opened
+  // for another is a monitor showing another monitor's desktop.
+  ShellWindowPlaces places;
+  places.Update({Seen(1, 100)});
+
+  EXPECT_EQ(places.Of(1), 100);
+  EXPECT_EQ(places.Of(2), display::kInvalidDisplayId);
 }
 
 }  // namespace

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { act, fireEvent, renderHook } from "@testing-library/react";
+import { useEffect } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
 import { usePointerWarp } from "./usePointerWarp";
@@ -48,18 +49,34 @@ const NOTHING: Desktop = { focus: undefined, windows: [] };
  * openings moved is cleared before the case begins.
  */
 const warping = (desktop: Desktop) => {
+  // The press, which the desk reads once and every monitor spends: one
+  // keyboard serves several screens, so it is handed in rather than handed
+  // back. Cleared here for the same reason `Desktop` clears it — after the
+  // render that had its look at it, and exactly once.
+  const keyed = { current: false };
   const view = renderHook(
-    (current: Desktop) =>
-      usePointerWarp({
+    (current: Desktop) => {
+      const pointer = usePointerWarp({
         domicile: recordingDomicile,
         focus: current.focus,
+        keyed,
         windows: current.windows,
-      }),
+      });
+      useEffect(() => {
+        keyed.current = false;
+      });
+      return pointer;
+    },
     { initialProps: NOTHING },
   );
   view.rerender(desktop);
   warps = [];
-  return view;
+  return {
+    ...view,
+    press: () => {
+      keyed.current = true;
+    },
+  };
 };
 
 /** A desktop of `windows`, with the keyboard on `focus`. */
@@ -98,11 +115,11 @@ beforeEach(() => {
 
 describe("usePointerWarp", () => {
   it("takes the pointer to the window a keyed press moved the focus to", () => {
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
 
@@ -121,11 +138,11 @@ describe("usePointerWarp", () => {
   });
 
   it("keeps up with the pointer, so a window it is already over moves nothing", () => {
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(600, 350);
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
 
@@ -136,11 +153,11 @@ describe("usePointerWarp", () => {
     // The press is spent on the render that answered it. A later render — a
     // clock ticking, a window renaming itself — is not a press, and a desktop
     // that took the pointer on one would move it while nobody was typing.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
     rerender(desktopOf(LEFT, BOTH));
@@ -208,10 +225,10 @@ describe("usePointerWarp", () => {
     // about it having happened, so between the ask and the arrival there are
     // two places the cursor may be — and a window arriving at either of them
     // is a window that came to the pointer.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
 
@@ -223,10 +240,10 @@ describe("usePointerWarp", () => {
     // is not one the user pointed at — and the window it lands on first may
     // not even be the one it was aimed at, because the boxes are still
     // easing towards where the press put them.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
 
@@ -248,15 +265,15 @@ describe("usePointerWarp", () => {
     // twice and answers twice, and both answers are the desktop's own move
     // rather than a hand. One slot for the place asked for would forget the
     // first, and the window it came down on would be read as pointed at.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(LEFT, BOTH));
 
@@ -277,14 +294,14 @@ describe("usePointerWarp", () => {
     // press is measured against somewhere it has not been: the window the
     // keyboard moves to looks like the one the pointer is already in, and
     // the pointer is left behind.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(LEFT, BOTH));
     warps = [];
@@ -292,7 +309,7 @@ describe("usePointerWarp", () => {
     // Only the second of the two lands anywhere this page hears about.
     pointerAt(200, 350);
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
 
@@ -305,11 +322,11 @@ describe("usePointerWarp", () => {
     // engine carries all three out and says so three times. Every one of
     // them is the desktop's own move, including the middle one it passed
     // through on the way back.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     for (const to of [RIGHT, LEFT, RIGHT]) {
       act(() => {
-        result.current.keyed();
+        press();
       });
       rerender(desktopOf(to, BOTH));
     }
@@ -337,11 +354,11 @@ describe("usePointerWarp", () => {
     // desktop reading its own cursor landing as the user, which is a
     // keyboard handed to a window nobody reached for and a `focus parent`
     // selection undone with it.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press, result } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     for (const to of [RIGHT, LEFT, RIGHT]) {
       act(() => {
-        result.current.keyed();
+        press();
       });
       rerender(desktopOf(to, BOTH));
     }
@@ -356,17 +373,17 @@ describe("usePointerWarp", () => {
     // The place a warp is answered at is the place the cursor is now, and
     // the next press is measured against it: a window the cursor is already
     // inside is one there is nothing to move it to.
-    const { rerender, result } = warping(desktopOf(LEFT, BOTH));
+    const { rerender, press } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, BOTH));
     pointerAt(600, 350);
     warps = [];
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(
       desktopOf({ box: RIGHT.box, id: "firefox" }, [...BOTH, "firefox"]),
@@ -385,12 +402,12 @@ describe("usePointerWarp", () => {
     }));
     const all = [...strips.map(({ id }) => id), LEFT.id];
     // Started somewhere else, so that all five of them are moves.
-    const { rerender, result } = warping(desktopOf(LEFT, all));
+    const { rerender, press, result } = warping(desktopOf(LEFT, all));
     pointerAt(1500, 900);
 
     for (const strip of strips) {
       act(() => {
-        result.current.keyed();
+        press();
       });
       rerender(desktopOf(strip, all));
     }
@@ -422,15 +439,15 @@ describe("usePointerWarp", () => {
     // where it last saw it would read the next press against a place the
     // pointer has not been since.
     const all = [...BOTH, "firefox"];
-    const { rerender, result } = warping(desktopOf(LEFT, all));
+    const { rerender, press } = warping(desktopOf(LEFT, all));
     pointerAt(200, 300);
 
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf(RIGHT, all));
     act(() => {
-      result.current.keyed();
+      press();
     });
     rerender(desktopOf({ box: RIGHT.box, id: "firefox" }, all));
 

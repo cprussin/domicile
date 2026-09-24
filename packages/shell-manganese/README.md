@@ -16,17 +16,31 @@ dress, and `className` is private there.
 Styling is Panda CSS from the library's preset — the shell defines no
 stylesheet of its own.
 
-The page is the whole desktop, however many displays that is. The chrome goes
-on the first display the config names — the names are the user's, so the shell
-cannot pick one — and every other display gets a clock, which is what makes a
-screen the config describes visibly there. Nothing is drawn until a desktop has
-been described, which is the handshake's worth of blank window: a chrome laid
-out over the page and then moved onto a screen is a different element in that
-slot, and React would take every open window down with it. Opened in a plain
-browser for styling work there is no host to describe one, so the shell
-describes the window itself. A host that describes a desktop with *no* screens
-is a third thing again — there is nowhere to lay the chrome out — and the page
-says so rather than staying blank.
+Every screen of the desk is a desktop: a bar across the top of it and the
+windows of the workspace it is showing under that. Nothing is drawn until a
+desktop has been described, which is the handshake's worth of blank window.
+Opened in a plain browser for styling work there is no host to describe one, so
+the shell describes the window itself. A host that describes a desktop with
+*no* screens is a third thing again — there is nowhere to lay a window out —
+and the page says so rather than staying blank.
+
+**The workspaces span the desk and the screens divide it**, which is sway's
+arrangement. A workspace is shown on one screen at a time; `mod+2` goes to
+whichever screen is showing workspace 2, rather than taking it off that screen;
+a workspace nobody is showing comes to the screen the keyboard is on; and a
+window opens where the keyboard is. The keyboard follows the pointer across
+monitors, so moving your hand to the other screen is how you get there.
+
+**A desk of several monitors is several pages of this shell**, because one
+browser window cannot span two CRTCs — the engine opens one per display and
+each loads this shell. So `src/screens/Monitor.tsx` is rendered once per screen
+by every page, and `<Screen>` draws the one whose display that page's window
+covers. There is still one desktop: the page covering the first screen reduces
+it and the others ask it to and show what it says, over
+`src/window-management/desk-channel.ts`. Two screens never show one workspace,
+and that is load-bearing rather than tidy — a client's window is a frame sink
+and a frame sink has one parent, so a window laid out on two pages is a window
+whose second embedding takes the first's pixels away.
 
 A window is either a Wayland client the host announced or a browser window the
 shell opened itself. Both are tiled on the workspace being looked at, both have
@@ -44,8 +58,9 @@ sets. Every `Mod+` below is Meta.
 
 A workspace holds a tree. A window is a leaf; every layout is a container of
 them; opening a window puts it beside the one being worked in, and closing one
-gives its space back to what is left. Ten workspaces, the scratchpad, floating
-windows over the tiling, and one window at a time filling the screen.
+gives its space back to what is left. Ten workspaces across the whole desk, the
+scratchpad, floating windows over the tiling, and one window at a time filling
+the screen it is on.
 
 | Keys | What |
 |---|---|
@@ -391,8 +406,9 @@ and `focus_changed` comes back afterward to say where the keyboard actually is.
 
 That is also what `focus_requested` is for: a client asking for the keyboard
 over `xdg-activation`, which the compositor forwards without granting.
-Manganese grants it, and goes to the workspace the window is on to do it — one
-arm of `reduceWindows`, because it is a policy rather than a mechanism. A shell
+Manganese grants it, and goes to the workspace the window is on to do it —
+which is the screen showing that workspace, if one already is. One arm of
+`reduceWindows`, because it is a policy rather than a mechanism. A shell
 that would rather refuse a window the user has not touched changes that arm and
 nothing else.
 
@@ -453,9 +469,11 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of the screen the chrome is on: the workspaces at one end, the
-clock in the middle, and at the other end the charge, behind the name of the
-binding mode whenever it is not the usual one.
+Across the top of every screen: the workspaces at one end, the clock in the
+middle, and at the other end the charge, behind the name of the binding mode
+whenever it is not the usual one. Each screen's bar marks the workspace that
+screen is showing, and they all show the ones with windows on them, because
+that is a fact about the desk.
 
 **It launches nothing.** Everything this desktop does is on a key, and the two
 buttons that were here — a terminal and a window of the shell's own — were a
@@ -492,10 +510,13 @@ the top of the stage is still the stage, and it ends where a window's top edge
 is: what you see is a band that stops at the window rather than a line drawn
 across open wallpaper.
 
-The workspaces on it are the ones with windows on them, plus the one being
-looked at — sway's own rule. The desktop keeps all ten all the time, which is
-the one place that difference from sway could show, and it does not: an empty
-workspace nobody is looking at is not on the bar either.
+The workspaces on it are the ones with windows on them, plus the one this
+screen is showing — sway's own rule. The desktop keeps all ten all the time,
+which is the one place that difference from sway could show, and it does not:
+an empty workspace nobody is looking at is not on the bar either. On a desk of
+several monitors every bar lists the same workspaces and each marks its own,
+because which workspaces have work on them is the desk's answer and which one
+you are looking at is the screen's.
 
 **Each one is a number in a ring**, which is the shape the author's waybar
 draws and the one thing on the bar that is not plain writing: a circle the
@@ -634,8 +655,8 @@ shell that wants its own pictures owns its own list.
 |---|---|
 | `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
-| `src/Desktop.tsx` | What is on the desktop: the window state, the keys, the bar over the windows, and the rectangles each screen offers them. |
-| `src/clock/` | The live clock, and what it says: in the middle of the bar, and alone on every display the bar is not on. |
+| `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
+| `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
@@ -643,8 +664,8 @@ shell that wants its own pictures owns its own list.
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/screens/FirstScreen.tsx`, `OtherScreens.tsx`, `NoScreens.tsx` | The screen the chrome goes on — handed to the chrome, because what a pointer's pixels are worth is that screen's to say — the screens it is not on, and what the page says for a desktop with no screens at all. |
-| `src/screens/IdleScreen.tsx` | What a screen with no chrome on it shows: the clock. |
+| `src/screens/Monitor.tsx` | Everything one screen of the desk shows: its bar, its windows, and the rectangles they are laid out in. Rendered once per screen by every page; drawn by the page whose window covers it. |
+| `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
 | `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
 | `src/keyboard/programmers-dvorak.ts` | Which physical key each keysym is on, which is what the table above is resolved through. |
 | `src/keyboard/useShortcuts.ts` | The two paths a press can arrive by, and the claim that decides which one answers. |
@@ -656,7 +677,9 @@ shell that wants its own pictures owns its own list.
 | `src/address/connection-safety.ts` | The browser's own verdict on a connection, parsed at the boundary — and the one state that must never look like the others, which is the browser not having said. |
 | `src/window-management/` | The windows: what one is, everything that changes them, and where they are drawn. |
 | `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
-| `src/window-management/window-state.ts` | Every change the desktop can undergo, as one pure reduction — and sway's commands as the actions it takes. |
+| `src/window-management/window-state.ts` | Every change the desktop can undergo, as one pure reduction — and sway's commands as the actions it takes. The screens of the desk are in it, because which workspace is where is a fact about the desk rather than about a screen. |
+| `src/window-management/desk-channel.ts` | How the pages of one desk stay one desktop: who reduces it, and what crosses between them. |
+| `src/window-management/useWindows.ts` | The reduction wired to the host and to the other pages — which of the two this page is, and what it does with what it hears. |
 | `src/window-management/workspace.ts` | One workspace: the tiling, the floats over it, and which of the two the keyboard is in. |
 | `src/window-management/tree/` | The layout tree: sway's own model, one module per thing that can happen to it. |
 | `src/window-management/tree/node.ts` | What a node is: a window, or a container in one of the four layouts. |

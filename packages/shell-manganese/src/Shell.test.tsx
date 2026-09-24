@@ -11,6 +11,7 @@ import { css } from "../styled-system/css";
 import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
+import type { DeskChannel } from "./window-management/desk-channel";
 import { TITLE_BAR } from "./window-management/rect";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
@@ -158,6 +159,19 @@ class FakeDomicile {
 let domicile: FakeDomicile;
 
 /**
+ * The other pages of the desk, of which there are none here.
+ *
+ * A page alone is the whole desk — one monitor, or a shell open in a plain
+ * browser — so nothing it says goes anywhere and nothing comes back. What the
+ * pages of a desk of several agree on is `desk-channel.ts`'s own test; this
+ * file is about what one page draws.
+ */
+const alone = (): DeskChannel => ({
+  listen: () => () => undefined,
+  post: () => undefined,
+});
+
+/**
  * Renders the chrome on a desktop of `desktop`.
  *
  * Described *before* the first render by default, the way a shell that has
@@ -170,7 +184,9 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
   registerElements(client);
-  return render(<Shell displays={hostDisplays(client)} domicile={client} />);
+  return render(
+    <Shell desk={alone()} displays={hostDisplays(client)} domicile={client} />,
+  );
 };
 
 /** The chrome on a desktop the host has already described. */
@@ -426,23 +442,34 @@ beforeEach(() => {
 
 describe("Shell", () => {
   describe("across the displays", () => {
-    it("puts the chrome on the first display the host named", () => {
-      // Not on a name of the shell's choosing: the names are the user's, out
-      // of the config, and the shell has never seen it.
+    it("gives every display a bar and windows of its own", () => {
+      // A DESK OF SEVERAL MONITORS IS A DESKTOP ON EACH OF THEM, which is what
+      // a second monitor is for. Where the engine scans out each of these
+      // regions is a page of its own covering one monitor, and this is that
+      // same tree with both of them in one window.
       const { container } = renderShell([LEFT, RIGHT]);
 
       expect(
         screenNamed(container, "left")?.querySelector("main"),
       ).toBeInTheDocument();
-      expect(screenNamed(container, "right")?.querySelector("main")).toBeNull();
+      expect(
+        screenNamed(container, "right")?.querySelector("main"),
+      ).toBeInTheDocument();
     });
 
-    it("puts a clock on every other display", () => {
-      // An empty region and a region that is not there look identical, so the
-      // screens without the chrome on them have to show something.
+    it("shows a different workspace on each of them", () => {
+      // Two screens on one workspace would be one workspace drawn twice, which
+      // is one window embedded twice — and the second embedding takes the
+      // first's pixels, leaving a window that answers the keyboard and draws
+      // nothing. So the desk hands each screen one nobody else is on.
       const { container } = renderShell([LEFT, RIGHT]);
 
-      expect(screenNamed(container, "right")).toHaveTextContent(/\d/);
+      const marked = (name: string) =>
+        screenNamed(container, name)?.querySelector("[aria-current]")
+          ?.textContent;
+
+      expect(marked("left")).toBe("1");
+      expect(marked("right")).toBe("2");
     });
 
     it("says so when the host describes a desktop with no screens", () => {
@@ -486,16 +513,14 @@ describe("Shell", () => {
     it("follows the desktop when it changes", () => {
       const { container } = renderShell([LEFT, RIGHT]);
 
-      const stage = screenNamed(container, "left")?.querySelector("main");
+      const stage = screenNamed(container, "right")?.querySelector("main");
       domicile.describes([RIGHT]);
 
-      expect(
-        screenNamed(container, "right")?.querySelector("main"),
-      ).toBeInTheDocument();
       expect(screenNamed(container, "left")).toBeNull();
-      // The same stage, moved, and not a new one: a chrome rebuilt on a
-      // re-description reloads every embedded page to where it started and
-      // re-creates every portal blank, with nothing on screen to show for it.
+      // The same stage as before the unplug, and not a new one: a chrome
+      // rebuilt on a re-description reloads every embedded page to where it
+      // started and re-creates every portal blank, with nothing on screen to
+      // show for it. A monitor going is the commonest re-description there is.
       expect(screenNamed(container, "right")?.querySelector("main")).toBe(
         stage ?? null,
       );

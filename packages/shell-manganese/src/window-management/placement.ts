@@ -47,11 +47,13 @@ export type Placement = {
   surface: Rect | undefined;
 };
 
-/** The rectangles the screen the chrome is on has to offer. */
+/** The rectangles one screen of the desk has to offer. */
 export type Geometry = {
   /** Every display's bounding box — what `fullscreen global` fills. */
   desktop: Rect;
-  /** The screen the chrome is on, which is what `fullscreen` fills. */
+  /** Which screen this is, which is what says whose windows go on it. */
+  name: string;
+  /** The screen itself, which is what `fullscreen` fills. */
   screen: Rect;
   /** What is left of that screen under the top bar: where the windows go. */
   workspace: Rect;
@@ -133,7 +135,7 @@ export const placementsOf = (
   state: WindowState,
   geometry: Geometry,
 ): Screenful => {
-  const workspace = workspaceOn(state);
+  const workspace = workspaceOn(state, geometry.name);
   // `gaps.smartGaps`: a workspace showing one window gets the whole screen.
   const gap = windowsOf(workspace.tiling).length > 1 ? INNER_GAP : 0;
   const { frames, selection, tabs } = framesOf(

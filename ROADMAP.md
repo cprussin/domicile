@@ -206,6 +206,18 @@ these is one run, and each has a line to look for.
   `scripts/engine-guard-latency.sh`: that one wraps the run in
   `under-wayland.sh` and takes `crux`'s render-node lock, and neither belongs
   on a laptop with a panel.
+- **A desk of several monitors.** Plug one in and then a second, with
+  `--vmodule=drm*=1`. Expect `configuring N display(s)` for each, a bar and a
+  wallpaper on every panel, and `told the chrome about N display(s), from the
+  window it named` once per monitor with N distinct names. Then: `mod+2` puts
+  the keyboard on the monitor showing workspace 2 and leaves that workspace
+  where it is; `mod+Return` opens the terminal on the monitor the keyboard is
+  on; moving the pointer to another monitor moves the keys with it; and a
+  window keeps drawing while every one of those happens. Nothing here can see
+  any of it — no runner has a `/dev/dri`, and the shell half is arithmetic over
+  an injected desk. The failure this replaces was three monitors with two pages
+  on one of them, a third with none, and a terminal that answered the keyboard
+  and drew nothing.
 - **The first real `./scripts/dev-shell.sh <name>`.** Its reload is asserted
   against a `domicile` the test writes — `scripts/test-dev-shell.sh` drives the
   watch loop, the coalescing and a refusal — so what is left is a real engine

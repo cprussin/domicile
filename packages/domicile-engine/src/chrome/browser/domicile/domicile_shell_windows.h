@@ -42,10 +42,20 @@ void StartShellWindows();
 // it out would be guessing from its own geometry, and a guess is how this area
 // produces a monitor showing another monitor's desktop.
 //
-// Empty where there is no screen to name -- no `display::Screen` at all, which
-// is a unit test, and a frame with no view, which is one that never made it to
-// a window. The control channel sends nothing in that case and the compositor
-// goes on describing the whole desktop, which is what a nested run wants.
+// THE DISPLAY THE WINDOW WAS OPENED FOR, not the one its rectangle reads as
+// now, and the difference is the whole of a bug this used to have. A monitor
+// plugged in is a window made and a page loading in it, which is exactly when
+// the desk's origins have moved and the windows on them have not followed --
+// so a window read off its geometry named the monitor that had just taken its
+// corner of the desk. Two pages claimed one monitor, and a third monitor's
+// page named somebody else's. `ShellWindowPlaces` in //components/domicile is
+// what remembers it instead.
+//
+// Empty where there is no screen to name -- no `display::Screen` and no shell
+// windows, which is a unit test and a nested run, and a frame in no window of
+// this browser's, which is one that never made it to a window. The control
+// channel sends nothing in that case and the compositor goes on describing the
+// whole desktop, which is what a nested run wants.
 //
 // `drm-<id>` IS AN AGREEMENT WITH THE COMPOSITOR, not a private spelling:
 // `screens.rs` builds a `wl_output` name from the id this engine sent it, and

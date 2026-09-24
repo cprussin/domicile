@@ -1026,8 +1026,19 @@ they close, because a dock swapped at once would otherwise pass through zero.
 Every one of those windows would otherwise draw the *same* thing — they all
 load the same shell, and a shell lays its `<Screen>` regions out in the
 desktop's own coordinates. So each window says which display it is, and the
-compositor answers that connection alone with the desktop narrowed to that
-display and moved to the origin.
+compositor answers that connection alone with the desk read from there: the
+whole of it, moved so that window's own display is at the origin, and that
+display alone marked `fills_the_window`.
+
+**The whole desk and not just that display**, which cost a release to learn.
+Narrowed to one screen, every page read itself as the first screen of a desk of
+one — so every monitor drew the whole chrome, and every page embedded every
+window. A client's frame sink takes one parent, so the last page to embed took
+the window off all the others, and a terminal that answered the keyboard drew
+nothing. What a shell decides about the desk (which screen the chrome is on,
+where a box across every screen is) it cannot decide from one monitor; what it
+may DRAW on is still one monitor, and `fills_the_window` is what says which.
+`<Screen>` is where that is enforced, once, for every shell.
 
 That gate is the same one `DomicileDisplayWatcher` is behind and is there for
 the same reason: **a nested run's screen is the host's monitors.** Windowing
@@ -1055,10 +1066,17 @@ chrome on the way out. Everything else is encoded once for everybody, which is
 why the narrowing is a `Some`/`None` rather than a branch every message pays
 for.
 
-A shell does nothing about any of this. `<Screen name="left">` renders in the
-window on the left monitor and nowhere else, which is what it always meant,
-and `position` is still where the region goes on the page — it is just that
-the page is one screen now.
+A shell does almost nothing about any of this. `<Screen name="left">` renders
+in the window on the left monitor and nowhere else, which is what it always
+meant, and `position` is still where the region goes on the page — it is just
+that the page is one screen now.
+
+What is left to a shell is the one thing N pages really cost: they are N copies
+of its state. A desktop whose workspaces span the desk has to be one desktop,
+so `shell-manganese` reduces it on the page covering the first screen and the
+others ask that page and show what it says — `window-management/desk-channel.ts`
+there. A shell that wants nothing of the kind writes nothing: a page draws its
+own screen and is told the desk, and those two facts are the whole contract.
 
 **A profile names a monitor the way it is labeled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every

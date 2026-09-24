@@ -16,6 +16,7 @@ import { mountPoint } from "./mount-point";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { viewportDisplays } from "./screens/viewport-displays";
+import { deskChannel } from "./window-management/desk-channel";
 
 import "./global.css";
 
@@ -43,8 +44,15 @@ const displays = hasHost(window)
   : viewportDisplays(window);
 registerElements(domicile);
 
+// And the other pages of this desk. A desk of several monitors is several
+// windows of this same shell — one browser window cannot span two CRTCs — with
+// one desktop between them: `window-management/desk-channel.ts` is how they
+// stay one. Built here for the same reason the display source is: it is a
+// connection, and this is where a connection is made.
+const desk = deskChannel();
+
 createRoot(mountPoint(document)).render(
-  <Shell displays={displays} domicile={domicile} />,
+  <Shell desk={desk} displays={displays} domicile={domicile} />,
 );
 
 // Both halves of the desktop's mode, sent as soon as the shell is mounted.

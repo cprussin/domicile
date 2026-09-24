@@ -4,6 +4,7 @@
 
 #include "chrome/browser/domicile/domicile_shell_windows.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <string>
@@ -61,19 +62,33 @@ bool ScansOut() {
              kOzonePlatformSwitch) == kScanoutPlatform;
 }
 
-// A window showing a shell, and the display it is on.
+// A window showing a shell, and the display its rectangle currently reads as.
+//
+// `nearest` is a SIGHTING AND NOT AN ANSWER. Mid-hotplug a window still at its
+// old rectangle reads as being on the monitor that has just taken that corner
+// of the desk -- see `ShellWindowPlaces`, which is what turns these into the
+// display each window is actually on.
 struct ShellWindow {
-  int64_t display = display::kInvalidDisplayId;
+  int64_t nearest = display::kInvalidDisplayId;
   raw_ptr<BrowserWindowInterface> window = nullptr;
 };
 
-// Every shell window the browser has, with the display each one is on.
+// What stands for a window in `ShellWindowPlaces`, which keeps identities
+// rather than windows: the browser's own pointer, as a number, never
+// dereferenced.
+uintptr_t Identity(BrowserWindowInterface* window) {
+  return reinterpret_cast<uintptr_t>(window);
+}
+
+// Every shell window the browser has, with the display each one's rectangle
+// reads as.
 //
-// READ FRESH EVERY TIME RATHER THAN TRACKED. A map from display to window
-// would have to be told about every window that closed on its own -- a
-// renderer that died, a shell that navigated away -- and a stale entry is a
-// display this believes is covered and leaves dark. The browser already keeps
-// this list; asking it is cheaper than shadowing it correctly.
+// THE LIST IS READ FRESH EVERY TIME and what it reads is not. A window can
+// close on its own -- a renderer that died, a shell that navigated away -- so
+// which windows exist is the browser's to answer and shadowing it would leave
+// entries for windows that are gone. Which DISPLAY each one is on is the
+// opposite: its rectangle is the wrong answer for as long as a hotplug is in
+// flight, so that is remembered per window and re-derived from this list.
 //
 // In creation order, so the answer does not depend on which window was touched
 // last -- the same reason `FindShellContents` next door asks for that order.
@@ -101,6 +116,18 @@ std::vector<ShellWindow> ShellWindowsNow() {
   return found;
 }
 
+// The sightings above, in the shape `ShellWindowPlaces` reads.
+std::vector<SightedShellWindow> SightingsOf(
+    const std::vector<ShellWindow>& held) {
+  std::vector<SightedShellWindow> sighted;
+  sighted.reserve(held.size());
+  for (const ShellWindow& one : held) {
+    sighted.push_back(SightedShellWindow{.window = Identity(one.window),
+                                         .nearest = one.nearest});
+  }
+  return sighted;
+}
+
 // Keeps one shell window per display, through startup and every hotplug.
 class ShellWindows : public display::DisplayObserver {
  public:
@@ -113,6 +140,29 @@ class ShellWindows : public display::DisplayObserver {
   ShellWindows& operator=(const ShellWindows&) = delete;
 
   ~ShellWindows() override = default;
+
+  // A shell page has loaded in `window`: the display that window is on, by
+  // the time this answers.
+  //
+  // THE DESK IS RECONCILED FIRST, and that is two things at once.
+  //
+  // It places the window startup opened, which is nobody's to open -- `--app=`
+  // made it before this class existed -- so nothing has recorded it and the
+  // page in it asks this as it loads. Placing it here pins it where its
+  // rectangle is, once, which at that moment is right; from then on it is
+  // remembered, so the reconciliation and the page's own name for its screen
+  // are one answer.
+  //
+  // AND IT IS WHAT LIGHTS A COLD DESK. The first reconciliation runs at
+  // `PostBrowserStart`, where the shell's own window has not committed its URL
+  // yet -- so there is no window to copy, every other monitor is passed over
+  // with a line saying so, and nothing asks again until a hotplug. A desk
+  // booted with three monitors plugged in came up with one lit. A shell page
+  // loading is exactly the thing that was missing, so it is what asks again.
+  int64_t DisplayOfPageIn(BrowserWindowInterface* window) {
+    Reconcile();
+    return places_.Of(Identity(window));
+  }
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display&) override { Reconcile(); }
@@ -130,9 +180,14 @@ class ShellWindows : public display::DisplayObserver {
     if ((changed_metrics & DISPLAY_METRIC_BOUNDS) == 0) {
       return;
     }
-    for (const ShellWindow& one : ShellWindowsNow()) {
-      if (one.display == display.id()) {
-        one.window->GetWindow()->SetBounds(display.bounds());
+    const std::vector<ShellWindow> held = ShellWindowsNow();
+    // Through the places rather than off the sighting, because the sighting is
+    // exactly what a bounds change has just invalidated: the display moved,
+    // and the window that belongs on it is still where it was.
+    const std::vector<int64_t> windowed = places_.Update(SightingsOf(held));
+    for (size_t index = 0; index < held.size(); ++index) {
+      if (windowed[index] == display.id()) {
+        held[index].window->GetWindow()->SetBounds(display.bounds());
       }
     }
   }
@@ -144,11 +199,14 @@ class ShellWindows : public display::DisplayObserver {
       return;
     }
     const std::vector<ShellWindow> held = ShellWindowsNow();
-    std::vector<int64_t> windowed;
+    // THE DISPLAY EACH WINDOW IS ON, WHICH IS NOT THE DISPLAY ITS RECTANGLE
+    // READS AS. A hotplug moves the desk's origins before the windows follow
+    // them; reading the rectangles here is what used to open a second window
+    // on one monitor and leave another dark. `ShellWindowPlaces` says why at
+    // length.
+    const std::vector<int64_t> placed = places_.Update(SightingsOf(held));
+    std::vector<int64_t> windowed = placed;
     windowed.reserve(held.size() + opening_.size());
-    for (const ShellWindow& one : held) {
-      windowed.push_back(one.display);
-    }
     // A WINDOW BEING MADE COUNTS AS A WINDOW. `CreateBrowserWindow` is
     // asynchronous here -- the synchronous form does not promise an
     // initialized window, and `OpenGURL` on one of those is documented to
@@ -172,7 +230,7 @@ class ShellWindows : public display::DisplayObserver {
       Open(id, displays, held);
     }
     for (int64_t id : plan.close) {
-      Close(id, held);
+      Close(id, held, placed);
     }
   }
 
@@ -190,8 +248,13 @@ class ShellWindows : public display::DisplayObserver {
     // this area keeps producing is a screen with nothing on it and nothing in
     // the log about why.
     if (held.empty()) {
-      LOG(WARNING) << "domicile: display " << id
-                   << " wants a shell window and there is no shell to copy";
+      // ORDINARY AT STARTUP and fatal nowhere: the first reconciliation runs
+      // before the shell's own window has committed its URL. `ScreenOf` asks
+      // again the moment a shell page loads, which is the soonest there is
+      // anything to copy -- so a monitor named here is lit a beat later
+      // rather than left dark.
+      VLOG(1) << "domicile: display " << id
+              << " wants a shell window and there is no shell to copy yet";
       return;
     }
     const display::Display* wanted = nullptr;
@@ -257,15 +320,23 @@ class ShellWindows : public display::DisplayObserver {
                    << "; it stays dark until something asks again";
       return;
     }
+    // BEFORE THE PAGE IS LOADED, because the page's own channel asks which
+    // display it is on as it connects -- `ScreenOf` -- and this is the side
+    // that knows. Recorded outright rather than left to the first sighting:
+    // the window is placed on `id` by its bounds, and a hotplug between now
+    // and the next reading would make that rectangle say something else.
+    places_.Place(Identity(window), id);
     window->OpenGURL(url, WindowOpenDisposition::CURRENT_TAB);
   }
 
-  void Close(int64_t id, const std::vector<ShellWindow>& held) {
-    for (const ShellWindow& one : held) {
-      if (one.display == id) {
+  void Close(int64_t id,
+             const std::vector<ShellWindow>& held,
+             const std::vector<int64_t>& placed) {
+    for (size_t index = 0; index < held.size(); ++index) {
+      if (placed[index] == id) {
         VLOG(1) << "domicile: closing the shell window on display " << id
                 << ", which is no longer there";
-        one.window->GetWindow()->Close();
+        held[index].window->GetWindow()->Close();
         return;
       }
     }
@@ -273,23 +344,65 @@ class ShellWindows : public display::DisplayObserver {
 
   // Displays whose window has been asked for and has not arrived yet.
   std::vector<int64_t> opening_;
+  // Which display each window is on. Read by `ScreenOf` as well, through
+  // `TheShellWindows` below: a page told one monitor and a window opened for
+  // another is a monitor showing another monitor's desktop.
+  ShellWindowPlaces places_;
 };
+
+// The one instance, or null until `StartShellWindows` has made it.
+//
+// `ScreenOf` reads the displays it keeps and must not be what brings it into
+// being: constructing it reconciles the desk, and a page asking which monitor
+// it is on is no reason to open windows.
+ShellWindows*& TheShellWindows() {
+  static ShellWindows* one = nullptr;
+  return one;
+}
+
+// The shell window `frame` is the page of, or null for a frame that is in no
+// window of this browser's -- a unit test, a guest, a view on its way out.
+BrowserWindowInterface* WindowOf(content::RenderFrameHost* frame) {
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(frame);
+  if (contents == nullptr) {
+    return nullptr;
+  }
+  BrowserWindowInterface* found = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [contents, &found](BrowserWindowInterface* browser) {
+        tabs::TabInterface* tab = browser->GetActiveTabInterface();
+        if (tab != nullptr && tab->GetContents() == contents) {
+          found = browser;
+          return false;
+        }
+        return true;
+      },
+      BrowserCollection::Order::kCreation);
+  return found;
+}
 
 }  // namespace
 
 std::string ScreenOf(content::RenderFrameHost* frame) {
-  if (!ScansOut() || frame == nullptr || !display::Screen::HasScreen()) {
+  if (!ScansOut() || frame == nullptr || TheShellWindows() == nullptr) {
     return std::string();
   }
-  gfx::NativeView view = frame->GetNativeView();
-  if (view == gfx::NativeView()) {
+  BrowserWindowInterface* window = WindowOf(frame);
+  if (window == nullptr) {
     return std::string();
   }
-  const display::Display on = display::Screen::Get()->GetDisplayNearestView(view);
-  if (on.id() == display::kInvalidDisplayId) {
+  // THE DISPLAY THIS WINDOW WAS OPENED FOR, not the one its rectangle reads
+  // as. The two disagree for as long as a hotplug is in flight, and this is
+  // read exactly then: a monitor plugged in is a window made, and the page in
+  // it connects while the rest of the desk is still being laid out. Read off
+  // the geometry, two pages claimed one monitor and a third monitor had a
+  // page that named somebody else's.
+  const int64_t on = TheShellWindows()->DisplayOfPageIn(window);
+  if (on == display::kInvalidDisplayId) {
     return std::string();
   }
-  return base::StrCat({"drm-", base::NumberToString(on.id())});
+  return base::StrCat({"drm-", base::NumberToString(on)});
 }
 
 void StartShellWindows() {
@@ -303,6 +416,7 @@ void StartShellWindows() {
   // for the life of the browser, and the browser outliving its own teardown
   // order is what a NoDestructor is for.
   static base::NoDestructor<ShellWindows> windows;
+  TheShellWindows() = windows.get();
 }
 
 }  // namespace domicile

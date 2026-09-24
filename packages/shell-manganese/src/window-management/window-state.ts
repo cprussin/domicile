@@ -78,11 +78,48 @@ export const WORKSPACES: readonly string[] = [
   "10",
 ];
 
+/**
+ * What a screen of the desk is called before the host has described one.
+ *
+ * No display is named the empty string — the compositor's are `drm-<id>` and
+ * a config's are the user's own words — so a `<Screen name="">` draws
+ * nowhere, which is exactly right: this is where the desktop is while nobody
+ * can see it. A window can open in the handshake's worth of time before the
+ * first description, and it has to be somewhere.
+ */
+export const UNDESCRIBED_SCREEN = "";
+
+/** One screen of the desk, and the workspace it is showing. */
+export type DeskScreen = {
+  /** The display's name, which is what a `<Screen name>` matches. */
+  name: string;
+  /** The workspace drawn on it. No two screens show the same one. */
+  current: string;
+};
+
 export type WindowState = {
   /** How many browser windows have been opened, ever — the id counter. */
   browsersOpened: number;
-  /** The workspace on screen. */
-  current: string;
+  /**
+   * The screens of the desk, in the desk's own order, and what each shows.
+   *
+   * **THE WORKSPACES SPAN THE DESK AND THE SCREENS DIVIDE IT**, which is
+   * sway's arrangement: a workspace is somewhere the user's work lives, a
+   * screen is a view onto one of them, and asking for a workspace that is
+   * already in view moves the keyboard rather than the work. Never empty —
+   * see {@link UNDESCRIBED_SCREEN}.
+   *
+   * No two screens show the same workspace, and that is not a detail. A desk
+   * of several monitors is several pages of this shell, each drawing the
+   * screen its own window covers; one workspace on two screens is one window
+   * embedded twice, and the second embedding takes the first's pixels away.
+   */
+  screens: readonly DeskScreen[];
+  /**
+   * The screen the keyboard is on: where a window opens, and what the keyed
+   * commands act on.
+   */
+  focused: string;
   /**
    * The floating window the user has hold of, or `undefined` when none is.
    *
@@ -137,20 +174,51 @@ export type WindowState = {
 export const NO_WINDOWS: WindowState = {
   browsersOpened: 0,
   clipboardOpen: false,
-  current: "1",
   draggingId: undefined,
+  focused: UNDESCRIBED_SCREEN,
   focusedId: undefined,
   launcherOpen: false,
   mode: BindingMode.Default,
   previous: undefined,
   scratchpad: [],
+  screens: [{ current: "1", name: UNDESCRIBED_SCREEN }],
   windows: [],
   workspaces: WORKSPACES.map((name) => emptyWorkspace(name)),
 };
 
-/** The workspace on screen. */
-export const workspaceOn = (state: WindowState): Workspace =>
-  workspaceNamed(state, state.current);
+/**
+ * The workspace `screen` is showing. Throws for a screen the desk does not
+ * have — every caller has one from {@link WindowState.screens} or from the
+ * desk the host described, and a screen that is not there is a wiring bug
+ * rather than an empty region.
+ */
+export const workspaceOn = (state: WindowState, screen: string): Workspace =>
+  workspaceNamed(state, currentOn(state, screen));
+
+/** The workspace the keyboard is in, which the keyed commands act on. */
+export const workspaceHere = (state: WindowState): Workspace =>
+  workspaceOn(state, state.focused);
+
+/** The workspace `screen` is showing. */
+export const currentOn = (state: WindowState, screen: string): string => {
+  const found = state.screens.find(({ name }) => name === screen);
+  if (found === undefined) {
+    throw new Error(`shell: no screen ${screen}`);
+  } else {
+    return found.current;
+  }
+};
+
+/** The workspace on the screen the keyboard is on. */
+export const currentHere = (state: WindowState): string =>
+  currentOn(state, state.focused);
+
+/** The screen showing `workspace`, or `undefined` while none is. */
+export const screenShowing = (
+  state: WindowState,
+  workspace: string,
+): string | undefined =>
+  state.screens.find(({ current }) => current === workspace)?.name;
 
 /** The workspace of this name. Throws for a name the desktop does not have. */
 export const workspaceNamed = (state: WindowState, name: string): Workspace => {
@@ -171,7 +239,7 @@ export const workspaceHolding = (
 
 /** The window the user is working in, or `undefined` on an empty workspace. */
 export const activeIdOf = (state: WindowState): string | undefined =>
-  focusedOn(workspaceOn(state));
+  focusedOn(workspaceHere(state));
 
 /** The window `id`, or `undefined` for one that has closed. */
 export const windowOf = (
@@ -189,6 +257,7 @@ export enum WindowActionKind {
   ClipboardDismissed,
   ClipboardToggled,
   ContainerSplit,
+  DeskAdopted,
   EditorLaunched,
   FloatToggled,
   FocusChanged,
@@ -202,6 +271,7 @@ export enum WindowActionKind {
   ModeSwapped,
   ParentFocused,
   ScratchpadShown,
+  ScreensDescribed,
   SplitToggled,
   TerminalLaunched,
   WindowClosed,
@@ -291,6 +361,24 @@ export const WindowAction = {
   ContainerSplit: (axis: Axis) => ({
     axis,
     kind: WindowActionKind.ContainerSplit as const,
+  }),
+
+  /**
+   * Another page of this desk reduced the desktop, and this is what it is.
+   *
+   * **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES AND ONE DESKTOP.** One of
+   * them reduces and the others show what it says, because the workspaces span
+   * the monitors: `workspace 2` goes to whichever screen is showing it, and a
+   * window opens on the screen the keyboard is on. `desk-channel.ts` is how it
+   * crosses; this is the arm that takes it.
+   *
+   * Whole rather than as what changed, so that a page which came up late and a
+   * page which has been listening all along take the same thing: there is no
+   * catching up to get wrong.
+   */
+  DeskAdopted: (desk: WindowState) => ({
+    desk,
+    kind: WindowActionKind.DeskAdopted as const,
   }),
 
   /**
@@ -389,6 +477,20 @@ export const WindowAction = {
 
   /** `scratchpad show`. */
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
+
+  /**
+   * The host described the desk: these screens, in this order.
+   *
+   * The desk is hardware and the workspaces are the user's work, so this only
+   * ever says where the work can be seen. A screen that was already there
+   * keeps what it was showing, a monitor that replaced one takes over what it
+   * was showing, and a monitor that is new to the desk gets a workspace
+   * nobody else is on.
+   */
+  ScreensDescribed: (names: readonly string[]) => ({
+    kind: WindowActionKind.ScreensDescribed as const,
+    names,
+  }),
 
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
@@ -567,6 +669,9 @@ export const reduceWindows = (
         containerSplit(workspace, action.axis),
       );
     }
+    case WindowActionKind.DeskAdopted: {
+      return action.desk;
+    }
     case WindowActionKind.EditorLaunched: {
       // The compositor spawns it and the host announces the window it opens,
       // the same way a terminal's arrives. The panel goes, because the panel
@@ -691,6 +796,9 @@ export const reduceWindows = (
         windowMoved(workspace, action.direction),
       );
     }
+    case WindowActionKind.ScreensDescribed: {
+      return describeScreens(state, action.names);
+    }
     case WindowActionKind.WorkspaceSelected: {
       return selectWorkspace(state, action.name);
     }
@@ -702,7 +810,7 @@ export const reduceWindows = (
 const onCurrent = (
   state: WindowState,
   into: (workspace: Workspace) => Workspace,
-): WindowState => onWorkspace(state, state.current, into);
+): WindowState => onWorkspace(state, currentHere(state), into);
 
 const onWorkspace = (
   state: WindowState,
@@ -818,7 +926,8 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
     return state;
   } else {
     const found = reached(workspace, id);
-    if (found === workspace && workspace.name === state.current) {
+    const shown = showWorkspace(state, workspace.name);
+    if (found === workspace && shown === state) {
       // A reach that moved nothing gives back the state it was given, object
       // and all — which is what `AppWindow` says it relies on for the press
       // it reports in the window the user is already in. Rebuilt anyway, the
@@ -826,17 +935,45 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
       //
       // Only a tiled window comes back the same, because only the tiling has
       // a focus that can already be where it is being put: a float is raised
-      // as well as focused, and a raise is a new order of the stack.
+      // as well as focused, and a raise is a new order of the stack. And only
+      // a window on the screen the keyboard is already on — reaching one on
+      // another monitor takes the keyboard there, which is a desktop that
+      // changed.
       return state;
     } else {
-      return onWorkspace(
-        workspace.name === state.current
-          ? state
-          : { ...state, current: workspace.name, previous: state.current },
-        workspace.name,
-        () => found,
-      );
+      return onWorkspace(shown, workspace.name, () => found);
     }
+  }
+};
+
+/**
+ * The workspace `name` in view with the keyboard in it.
+ *
+ * **TWO ANSWERS, AND WHICH ONE IT IS, IS WHETHER A SCREEN ALREADY HAS IT.**
+ * Work the user can already see is reached by moving the keyboard to the
+ * screen showing it, which is sway's answer and the only one that keeps a
+ * workspace in one place: taking it here would leave the monitor it came from
+ * showing nothing and put two screens on one workspace. Work nobody is
+ * showing comes to the screen the keyboard is on.
+ */
+const showWorkspace = (state: WindowState, name: string): WindowState => {
+  const shown = screenShowing(state, name);
+  if (shown === state.focused) {
+    // Already in view with the keyboard in it, which is every reach into the
+    // window the user is already working in. The state it was given, object
+    // and all: `reachWindow` hands that straight back, and `AppWindow` says
+    // in as many words that it relies on it.
+    return state;
+  } else if (shown === undefined) {
+    return {
+      ...state,
+      previous: currentHere(state),
+      screens: state.screens.map((screen) =>
+        screen.name === state.focused ? { ...screen, current: name } : screen,
+      ),
+    };
+  } else {
+    return { ...state, focused: shown };
   }
 };
 
@@ -846,16 +983,27 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
 // heading for, and the pointer would have rearranged the desktop on the way
 // there.
 const pointAtWindow = (state: WindowState, id: string): WindowState => {
-  const workspace = workspaceOn(state);
-  if (!holds(workspace, id)) {
+  // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A desk of
+  // several monitors is several pages, each drawing its own screen's windows,
+  // so a pointer that crossed onto another monitor is that page saying so --
+  // and the keys go where the hand went, which is the whole of how a desk of
+  // several is worked. A window on a workspace no screen is showing is not
+  // one a pointer can be over: it has no box to point at, and reaching it
+  // would be a focus on something the user cannot see.
+  const workspace = workspaceHolding(state, id);
+  const screen =
+    workspace === undefined ? undefined : screenShowing(state, workspace.name);
+  if (workspace === undefined || screen === undefined) {
     return state;
-  } else if (focusedOn(workspace) === id) {
+  } else if (focusedOn(workspace) === id && state.focused === screen) {
     // The same object for a pointer that never left: a window says this again
     // for every part of it that is an element of its own — a browser window's
     // address bar, its page — and none of those is the user reaching anywhere.
     return state;
   } else {
-    return onCurrent(state, (found) => pointedAt(found, id));
+    return onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
+      pointedAt(found, id),
+    );
   }
 };
 
@@ -889,13 +1037,100 @@ const renameWindow = (
 
 // `workspace <name>`, with the config's `workspaceAutoBackAndForth`: naming
 // the workspace already on screen goes back to the one before it.
+/**
+ * The desk the host described: one screen per display, in its order.
+ *
+ * **THE WORK STAYS WHERE IT WAS, WHICH IS WHAT MAKES A HOTPLUG SURVIVABLE.**
+ * Every plug and unplug re-describes the whole desk, so this runs constantly
+ * and almost always has nothing to change: a screen that was already there
+ * goes on showing what it was showing. A display that is new takes over from
+ * a screen that has just gone — a dock swapped for another names every
+ * monitor differently, and the user's work is not the dock's to move — and
+ * failing that shows the lowest-numbered workspace nobody else is on. Two
+ * screens never show one workspace: a workspace drawn twice is a window
+ * embedded twice, and the second embedding takes the first's pixels.
+ *
+ * A desk of no screens keeps one screen nobody has named, for the reason
+ * {@link UNDESCRIBED_SCREEN} gives: the windows are still open and there is
+ * nowhere to draw them, which is a different thing from there being no
+ * windows.
+ */
+const describeScreens = (
+  state: WindowState,
+  names: readonly string[],
+): WindowState => {
+  const kept = names.length === 0 ? [UNDESCRIBED_SCREEN] : names;
+  // The screens that are not in the new desk, in order: what a display new to
+  // the desk takes over from. Read before anything is placed, because a name
+  // that is in both is not a screen anybody replaces.
+  const replaced = state.screens
+    .filter((screen) => !kept.includes(screen.name))
+    .map(({ current }) => current);
+  const screens = kept.reduce<readonly DeskScreen[]>(
+    (placed, name) => [
+      ...placed,
+      { current: showing(state, placed, replaced, name), name },
+    ],
+    [],
+  );
+  return {
+    ...state,
+    focused: focusedAmong(screens, state.focused),
+    screens,
+  };
+};
+
+/** What one screen of a freshly described desk shows. */
+const showing = (
+  state: WindowState,
+  placed: readonly DeskScreen[],
+  replaced: readonly string[],
+  name: string,
+): string => {
+  const before = state.screens.find((screen) => screen.name === name);
+  const taken = placed.map(({ current }) => current);
+  const inherited = replaced.find((workspace) => !taken.includes(workspace));
+  const free = WORKSPACES.find(
+    (workspace) =>
+      !taken.includes(workspace) &&
+      !state.screens.some((screen) => screen.current === workspace),
+  );
+  if (before !== undefined) {
+    return before.current;
+  } else if (inherited !== undefined) {
+    return inherited;
+  } else if (free === undefined) {
+    // More monitors than workspaces, which is ten of them. Nothing is a
+    // better answer than a screen showing what another screen shows, and a
+    // shell that threw here would take the desk down for owning a monitor
+    // too many -- so the desk is the ten it can draw and this screen shows
+    // the last of them.
+    throw new Error(`shell: no workspace left for screen ${name}`);
+  } else {
+    return free;
+  }
+};
+
+/** The screen the keyboard is on, once the desk is these screens. */
+const focusedAmong = (
+  screens: readonly DeskScreen[],
+  focused: string,
+): string => {
+  const first = screens[0];
+  if (first === undefined) {
+    throw new Error("shell: a desk is never no screens at all");
+  } else {
+    return screens.some(({ name }) => name === focused) ? focused : first.name;
+  }
+};
+
 const selectWorkspace = (state: WindowState, name: string): WindowState => {
-  if (name !== state.current) {
-    return { ...state, current: name, previous: state.current };
+  if (name !== currentHere(state)) {
+    return showWorkspace(state, name);
   } else if (state.previous === undefined) {
     return state;
   } else {
-    return { ...state, current: state.previous, previous: state.current };
+    return showWorkspace(state, state.previous);
   }
 };
 
@@ -903,7 +1138,7 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
 // which is sway's default. It lands tiled there however it was laid out here.
 const sendToWorkspace = (state: WindowState, name: string): WindowState => {
   const id = activeIdOf(state);
-  if (id === undefined || name === state.current) {
+  if (id === undefined || name === currentHere(state)) {
     return state;
   } else {
     return onWorkspace(
@@ -937,7 +1172,7 @@ const hideInScratchpad = (state: WindowState): WindowState => {
  * window being worked in is the one it acts on.
  */
 const showScratchpad = (state: WindowState): WindowState => {
-  const workspace = workspaceOn(state);
+  const workspace = workspaceHere(state);
   const id = focusedOn(workspace);
   const up = id === undefined ? undefined : floatOn(workspace, id);
   const hidden = state.scratchpad.at(-1);
