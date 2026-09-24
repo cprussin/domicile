@@ -81,10 +81,32 @@ readonly SKIPPED_STATUS=77
 # the thing that broke.
 run() {
   local name="$1"; shift
-  local log status; log="$(mktemp)"
+  local log; log="$(mktemp)"
   label "$name"
   "$@" >"$log" 2>&1
-  status=$?
+  verdict "$name" "$?" "$log"
+}
+
+# Scripts at once, then their verdicts in order. Waits on its own PIDs only: a
+# bare `wait` would also wait on the e2e group's Xvfb.
+run_together() {
+  local dir script pids=(); dir="$(mktemp -d)"
+  for script in "$@"; do
+    ( "$script" >"$dir/$(basename "$script")" 2>&1
+      echo $? >"$dir/$(basename "$script").status" ) &
+    pids+=($!)
+  done
+  wait "${pids[@]}"
+  for script in "$@"; do
+    label "$(basename "$script" .sh)"
+    verdict "$(basename "$script" .sh)" "$(cat "$dir/$(basename "$script").status")" \
+      "$dir/$(basename "$script")"
+  done
+  rm -rf "$dir"
+}
+
+verdict() {
+  local name="$1" status="$2" log="$3"
   if [ "$status" -eq 0 ]; then
     echo "ok"
     PASSED+=("$name")
@@ -270,7 +292,26 @@ fi
 if wanted engine; then
   echo
   echo "== engine =="
-  for script in \
+  # A skip is not a stop: on a machine with no tree every one of these skips,
+  # and bailing on the first would report one skip where there are eighteen —
+  # which under STRICT is one failure naming one check instead of the list of
+  # what is not running.
+  engine_stop() {
+    [ "${#FAILED[@]}" -eq 0 ] && return 1
+    echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
+  }
+  engine_serial() {
+    local script
+    for script in "$@"; do
+      run "$(basename "$script" .sh)" "$script"
+      engine_stop && return 1
+    done
+    return 0
+  }
+  # TOGETHER: headless, no card, and no port, broker, profile or log in
+  # common, so they overlap; serially they were most of this group's time.
+  # Latency stays after them because it times things.
+  engine_serial \
     scripts/engine-build-produced-what-the-guards-load.sh \
     scripts/engine-unit-tests.sh \
     scripts/engine-drm-unit-tests.sh \
@@ -278,28 +319,20 @@ if wanted engine; then
     scripts/engine-guard-client-window.sh \
     scripts/engine-guard-two-windows.sh \
     scripts/engine-guard-shell.sh \
-    scripts/engine-guard-shell-manganese.sh \
-    scripts/engine-guard-webview-framing.sh \
-    scripts/engine-guard-webview-keyboard.sh \
-    scripts/engine-guard-webview-escape.sh \
-    scripts/engine-guard-webview-history.sh \
-    scripts/engine-guard-webview-click.sh \
-    scripts/engine-guard-webview-new-window.sh \
-    scripts/engine-guard-webview-routed-link.sh \
+    scripts/engine-guard-shell-manganese.sh &&
+  { run_together \
+      scripts/engine-guard-webview-framing.sh \
+      scripts/engine-guard-webview-keyboard.sh \
+      scripts/engine-guard-webview-escape.sh \
+      scripts/engine-guard-webview-history.sh \
+      scripts/engine-guard-webview-click.sh \
+      scripts/engine-guard-webview-new-window.sh \
+      scripts/engine-guard-webview-routed-link.sh \
+      scripts/engine-guard-control-arrival.sh
+    ! engine_stop; } &&
+  engine_serial \
     scripts/engine-guard-css-and-resize.sh \
-    scripts/engine-guard-control-arrival.sh \
-    scripts/engine-guard-latency.sh \
-  ; do
-    run "$(basename "$script" .sh)" "$script"
-    # A skip is not a stop: on a machine with no tree every one of these skips,
-    # and bailing on the first would report one skip where there are eighteen —
-    # which under STRICT is one failure naming one check instead of the list of
-    # what is not running.
-    [ "${#FAILED[@]}" -eq 0 ] || {
-      echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
-      break
-    }
-  done
+    scripts/engine-guard-latency.sh
 fi
 
 if wanted e2e; then
