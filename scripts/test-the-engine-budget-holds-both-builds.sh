@@ -57,7 +57,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKFLOWS="$ROOT/.github/workflows"
 [ -d "$WORKFLOWS" ] || { echo "no $WORKFLOWS" >&2; exit 1; }
 
-# The measured cold repin, in minutes. See the arithmetic above.
+# The measured cold repin, in minutes. See the arithmetic above -- two builds,
+# from before engine.yml built only out/Release, so now a generous floor.
 FLOOR=549
 
 FAILED=0
@@ -123,25 +124,21 @@ else
     "only $crux matched 'self-hosted, crux'; the rule above asserted nothing"
 fi
 
-# --- two builds cost more than one -------------------------------------------
+# --- building and checking costs more than building ---------------------------
 
-# ASKED OF THE STEPS, NOT OF THE FILENAME. `engine-build-in-shell.sh` is the
-# proof build and `engine-release-build.sh` is the shippable one; a workflow
-# that runs both is a workflow that compiles Chromium from scratch twice on a
-# repin, and it cannot be given less time than one that compiles it once.
-# engine.yml and engine-release.yml are the two today, and they had it the
-# wrong way round: 360 against 600, with the larger job on the smaller number.
-echo "the job that builds both configurations has the larger budget"
+# ASKED OF THE STEPS, NOT OF THE FILENAME. `engine-build-in-shell.sh` builds the
+# release configuration plus everything the checks load, and the job then runs
+# them; a workflow that only runs `engine-release-build.sh` does strictly less,
+# and cannot be given more time.
+echo "the job that builds and checks has the larger budget"
 
 both=""
 release_only=""
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
-  commands "$workflow" | grep -q 'engine-release-build\.sh' || continue
-
   if commands "$workflow" | grep -q 'engine-build-in-shell\.sh'; then
     both="$both $name"
-  else
+  elif commands "$workflow" | grep -q 'engine-release-build\.sh'; then
     release_only="$release_only $name"
   fi
 done
@@ -154,7 +151,7 @@ for name in $both; do
       ok "$name (${mine}m) has at least $other's budget (${theirs}m)"
     else
       fail "$name (${mine}m) has at least $other's budget (${theirs}m)" \
-        "$name builds out/Domicile AND out/Release and $other builds only out/Release, so the strictly larger job is the one that gets killed first"
+        "$name builds out/Release AND runs the checks and $other only builds, so the strictly larger job is the one that gets killed first"
     fi
   done
 
@@ -170,10 +167,10 @@ done
 # nothing on that side: with no both-builder the whole section above is a loop
 # that never runs, and with no release-only workflow the comparison is.
 if [ -n "$both" ]; then
-  ok "something builds both configurations (${both# })"
+  ok "something builds and checks (${both# })"
 else
-  fail "something builds both configurations" \
-    "no workflow runs engine-build-in-shell.sh and engine-release-build.sh, so the rules above asserted nothing"
+  fail "something builds and checks" \
+    "no workflow runs engine-build-in-shell.sh, so the rules above asserted nothing"
 fi
 if [ -n "$release_only" ]; then
   ok "something builds only the release configuration (${release_only# })"
