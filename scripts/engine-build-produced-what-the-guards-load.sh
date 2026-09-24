@@ -19,7 +19,7 @@ require_engine_out
 ARTIFACTS=(
   chrome
   libdomicile_engine.so
-  components_unittests
+  domicile_unittests
   ozone_unittests
   domicile_css_parity
   domicile_color_probe

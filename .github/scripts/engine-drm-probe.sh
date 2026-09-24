@@ -119,7 +119,7 @@ echo "drm probe: ui/ozone built with ozone_platform_drm = true"
 # BUILT HERE, RUN IN THE WORKFLOW. A component build's test binary loads its
 # .so files from beside it and needs Chromium's runtime libraries, and those
 # come from the domicile dev shell rather than from this one -- `nix develop
-# .#full`. engine.yml runs `components_unittests` that way for the same reason,
+# .#full`. engine.yml runs `domicile_unittests` that way for the same reason,
 # and a bare shell fails it on `libglib-2.0.so.0` in a way that reads like a
 # broken test rather than a missing library.
 echo "drm probe: building ozone_unittests"
