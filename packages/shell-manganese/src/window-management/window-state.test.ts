@@ -8,9 +8,12 @@ import type { WindowState } from "./window-state";
 import {
   activeIdOf,
   BindingMode,
+  currentHere,
+  currentOn,
   NO_WINDOWS,
   reduceWindows,
   WindowAction,
+  workspaceHere,
   workspaceNamed,
   workspaceOn,
 } from "./window-state";
@@ -34,7 +37,7 @@ describe("the windows a host announces", () => {
   it("opens a window for each client, tiled on the workspace on screen", () => {
     const state = desktop("kitty", "editor");
 
-    expect(windowsOn(workspaceOn(state))).toEqual([
+    expect(windowsOn(workspaceHere(state))).toEqual([
       APP("kitty"),
       APP("editor"),
     ]);
@@ -78,7 +81,7 @@ describe("the windows a host announces", () => {
       WindowAction.FocusRequested("kitty"),
     );
 
-    expect(state.current).toBe("1");
+    expect(currentHere(state)).toBe("1");
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 });
@@ -113,15 +116,128 @@ describe("the browser windows the shell opens itself", () => {
   });
 });
 
+describe("the screens", () => {
+  it("is one screen nobody has named until the host describes a desk", () => {
+    // A window can open before the handshake is answered, so there is always
+    // somewhere for one to be. No display is called "", so nothing is drawn
+    // on this screen -- it is where the desktop is while nobody can see it.
+    expect(NO_WINDOWS.screens).toEqual([{ current: "1", name: "" }]);
+    expect(NO_WINDOWS.focused).toBe("");
+  });
+
+  it("gives the first named screen what the unnamed one was showing", () => {
+    // The handshake's worth of desktop. A window that opened before the desk
+    // was described is on a workspace, and that workspace is what the screen
+    // it is finally drawn on shows -- otherwise the first frame of a desk is
+    // a window that has already been lost.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+    );
+
+    expect(currentOn(state, "left")).toBe("1");
+    expect(state.focused).toBe("left");
+    expect(windowsOn(workspaceOn(state, "left"))).toEqual([APP("kitty")]);
+  });
+
+  it("shows a workspace nobody else is on when a monitor is plugged in", () => {
+    // A SCREEN IS A WORKSPACE THE USER CAN SEE, and two screens showing one
+    // workspace would be one workspace drawn twice -- which is one window
+    // embedded twice, and the second embedding takes the first's pixels.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left"]),
+      WindowAction.ScreensDescribed(["left", "right"]),
+    );
+
+    expect(currentOn(state, "left")).toBe("1");
+    expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("leaves a screen that was already there showing what it was", () => {
+    // Every hotplug re-describes the whole desk, and a monitor that had
+    // nothing to do with it must not have its workspace taken away.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("5"),
+      WindowAction.ScreensDescribed(["left", "right", "third"]),
+    );
+
+    expect(currentOn(state, "left")).toBe("5");
+    expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("hands a swapped monitor what the one it replaced was showing", () => {
+    // A dock changed and every name is new. The workspaces are the user's
+    // work and the screens are hardware, so the work stays where it was
+    // rather than every monitor coming back on workspace 1.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      // To the right-hand monitor, and then to some workspace on it.
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.WorkspaceSelected("7"),
+      WindowAction.ScreensDescribed(["left", "docked"]),
+    );
+
+    expect(currentOn(state, "docked")).toBe("7");
+    expect(currentOn(state, "left")).toBe("1");
+  });
+
+  it("moves the keyboard to the first screen when the one it was on goes", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.ScreensDescribed(["left"]),
+    );
+
+    expect(state.focused).toBe("left");
+  });
+
+  it("keeps the desktop on one unnamed screen when the last monitor goes", () => {
+    // A lid shut on a laptop with nothing plugged in. The windows are still
+    // open and still on their workspaces; there is nowhere to draw them, which
+    // is a different thing and is what the empty name says.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left"]),
+      WindowAction.ScreensDescribed([]),
+    );
+
+    expect(state.screens).toEqual([{ current: "1", name: "" }]);
+    expect(windowsOn(workspaceOn(state, ""))).toEqual([APP("kitty")]);
+  });
+});
+
+describe("the desktop another page of the desk reduced", () => {
+  it("is taken whole, because that page is the one that has it", () => {
+    // A desk of several monitors is several pages and one desktop: the page
+    // covering the first screen reduces it and the others show what it says.
+    // Whole rather than as what changed, so a page that came up late and a
+    // page that has been listening all along take the same thing.
+    const reduced = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("2"),
+    );
+
+    const shown = reduce(NO_WINDOWS, WindowAction.DeskAdopted(reduced));
+
+    expect(shown).toEqual(reduced);
+  });
+});
+
 describe("the workspaces", () => {
   it("starts on the first one", () => {
-    expect(NO_WINDOWS.current).toBe("1");
+    expect(currentHere(NO_WINDOWS)).toBe("1");
   });
 
   it("switches to the one the key names", () => {
     const state = reduce(desktop("kitty"), WindowAction.WorkspaceSelected("3"));
 
-    expect(state.current).toBe("3");
+    expect(currentHere(state)).toBe("3");
     expect(activeIdOf(state)).toBeUndefined();
   });
 
@@ -133,7 +249,51 @@ describe("the workspaces", () => {
       WindowAction.WorkspaceSelected("3"),
     );
 
-    expect(state.current).toBe("1");
+    expect(currentHere(state)).toBe("1");
+  });
+
+  it("moves the keyboard to the screen already showing the one named", () => {
+    // sway's own answer, and the only one that keeps a workspace in one
+    // place: the user asked for work they can already see, so what moves is
+    // the keyboard rather than the workspace. Taking it here instead would
+    // leave the monitor it came from showing nothing and put two screens on
+    // one workspace.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("2"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(currentOn(state, "left")).toBe("1");
+    expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("shows a workspace nobody is showing on the screen the keyboard is on", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("9"),
+    );
+
+    expect(state.focused).toBe("left");
+    expect(currentOn(state, "left")).toBe("9");
+    expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("opens a window on the screen the keyboard is on", () => {
+    // Windows per screen is the whole point of the desk having several. A
+    // window that opened on the first screen whatever the user was looking at
+    // is a desk of one monitor with two dark ones beside it.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("kitty", "kitty"),
+    );
+
+    expect(windowsOn(workspaceOn(state, "right"))).toEqual([APP("kitty")]);
+    expect(windowsOn(workspaceOn(state, "left"))).toEqual([]);
   });
 
   it("sends the window being worked in to another workspace, and stays", () => {
@@ -142,8 +302,8 @@ describe("the workspaces", () => {
       WindowAction.WindowSentToWorkspace("2"),
     );
 
-    expect(state.current).toBe("1");
-    expect(windowsOn(workspaceOn(state))).toEqual([APP("kitty")]);
+    expect(currentHere(state)).toBe("1");
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
     expect(windowsOn(workspaceNamed(state, "2"))).toEqual([APP("editor")]);
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
@@ -167,7 +327,7 @@ describe("the scratchpad", () => {
       WindowAction.WindowSentToScratchpad(),
     );
 
-    expect(windowsOn(workspaceOn(state))).toEqual([APP("kitty")]);
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
     expect(state.scratchpad).toEqual([APP("editor")]);
     expect(state.windows).toHaveLength(2);
   });
@@ -181,7 +341,7 @@ describe("the scratchpad", () => {
     );
 
     expect(state.scratchpad).toEqual([]);
-    expect(workspaceOn(state).floats.map(({ id }) => id)).toEqual([
+    expect(workspaceHere(state).floats.map(({ id }) => id)).toEqual([
       APP("editor"),
     ]);
     expect(activeIdOf(state)).toBe(APP("editor"));
@@ -196,7 +356,7 @@ describe("the scratchpad", () => {
     );
 
     expect(state.scratchpad).toEqual([APP("editor")]);
-    expect(workspaceOn(state).floats).toEqual([]);
+    expect(workspaceHere(state).floats).toEqual([]);
   });
 
   it("has nothing to show on an empty scratchpad", () => {
@@ -233,7 +393,7 @@ describe("the keyed commands", () => {
       WindowAction.WindowStepped(Direction.Left),
     );
 
-    expect(windowsOf(workspaceOn(state).tiling)).toEqual([
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([
       APP("editor"),
       APP("kitty"),
     ]);
@@ -244,7 +404,7 @@ describe("the keyed commands", () => {
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.Tabbed),
     );
-    expect(workspaceOn(tabbed).tiling.root).toMatchObject({
+    expect(workspaceHere(tabbed).tiling.root).toMatchObject({
       layout: Layout.Tabbed,
     });
 
@@ -252,7 +412,7 @@ describe("the keyed commands", () => {
       desktop("kitty"),
       WindowAction.ContainerSplit(Axis.Vertical),
     );
-    expect(workspaceOn(split).tiling.root).toMatchObject({
+    expect(workspaceHere(split).tiling.root).toMatchObject({
       layout: Layout.SplitV,
     });
   });
@@ -262,12 +422,12 @@ describe("the keyed commands", () => {
       desktop("kitty", "editor"),
       WindowAction.FloatToggled(),
     );
-    expect(workspaceOn(floated).floats.map(({ id }) => id)).toEqual([
+    expect(workspaceHere(floated).floats.map(({ id }) => id)).toEqual([
       APP("editor"),
     ]);
 
     const tiled = reduce(floated, WindowAction.FloatToggled());
-    expect(workspaceOn(tiled).floats).toEqual([]);
+    expect(workspaceHere(tiled).floats).toEqual([]);
   });
 
   it("fills the screen with the window being worked in", () => {
@@ -276,7 +436,7 @@ describe("the keyed commands", () => {
       WindowAction.FullscreenToggled(false),
     );
 
-    expect(workspaceOn(state).fullscreen).toEqual({
+    expect(workspaceHere(state).fullscreen).toEqual({
       global: false,
       id: APP("kitty"),
     });
@@ -380,8 +540,26 @@ describe("the pointer", () => {
     );
 
     expect(
-      reduceWindows(state, WindowAction.FocusRequested("editor")).current,
+      currentHere(reduceWindows(state, WindowAction.FocusRequested("editor"))),
     ).toBe("2");
+  });
+
+  it("moves the keyboard to the screen the window it crossed is on", () => {
+    // FOCUS FOLLOWS THE POINTER ACROSS MONITORS, which is the whole of how a
+    // desk of several is worked: the hand moves to the other screen and the
+    // keys follow it. Each screen is a page of its own drawing its own
+    // windows, so the page that saw the pointer is the one that says this.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.AppAppeared("kitty", "kitty"),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.WindowHovered(APP("kitty")),
+    );
+
+    expect(state.focused).toBe("left");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
   it("raises and holds the window a drag takes hold of", () => {
@@ -405,7 +583,7 @@ describe("the pointer", () => {
       WindowAction.WindowResized(APP("kitty"), 800, 600),
     );
 
-    expect(workspaceOn(state).floats[0]).toMatchObject({
+    expect(workspaceHere(state).floats[0]).toMatchObject({
       height: 600,
       width: 800,
       x: 300,
@@ -424,7 +602,7 @@ describe("the buttons on a window's own title bar", () => {
       WindowAction.WindowFullscreened(APP("kitty")),
     );
 
-    expect(workspaceOn(state).fullscreen).toEqual({
+    expect(workspaceHere(state).fullscreen).toEqual({
       global: false,
       id: APP("kitty"),
     });
@@ -439,7 +617,7 @@ describe("the buttons on a window's own title bar", () => {
       WindowAction.WindowFullscreened(APP("kitty")),
     );
 
-    expect(workspaceOn(state).fullscreen).toBeUndefined();
+    expect(workspaceHere(state).fullscreen).toBeUndefined();
   });
 });
 

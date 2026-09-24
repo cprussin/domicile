@@ -430,7 +430,7 @@ fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> Dis
 /// window it is: three 4K monitors on their sides, side by side, in the
 /// desktop's own coordinates.
 ///
-/// Turned rather than lying down because this is the desk `as_one_screen`
+/// Turned rather than lying down because this is the desk `as_seen_from`
 /// exists for, and a turned monitor is where its two jobs come apart: the
 /// corner it moves, and the mode and transform it hands on unchanged for the
 /// page to draw itself over.
@@ -452,24 +452,44 @@ fn desk() -> Vec<DisplayInfo> {
 }
 
 #[test]
-fn a_window_is_told_its_own_display_and_no_other() {
-    // Every window loads the same shell. Told the whole desk, each would lay
-    // its `<Screen>` regions out in the desktop's coordinates and draw the
-    // desktop's top-left corner on every monitor.
-    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+fn a_window_is_told_the_whole_desk_it_is_part_of() {
+    // A shell decides things about the desk that it cannot decide about one
+    // monitor -- which screen the chrome goes on, what a box spanning every
+    // screen is -- and told only its own it decides them all about itself.
+    // Every page then believes it is the first screen, draws the whole chrome,
+    // and embeds every window: a client's frame sink takes ONE parent, so the
+    // last page to embed takes the window off all the others, which is a
+    // terminal that answers the keyboard and draws nothing.
+    let desk = domicile_host::as_seen_from(&desk(), "drm-2");
 
-    assert_eq!(one.len(), 1, "{one:?}");
-    assert_eq!(one[0].name, "drm-2");
+    let named: Vec<_> = desk.iter().map(|display| display.name.as_str()).collect();
+    assert_eq!(
+        named,
+        vec!["drm-1", "drm-2", "drm-3"],
+        "in the desk's own order, which is the order a shell reads as first"
+    );
 }
 
 #[test]
 fn the_display_a_window_covers_starts_at_the_origin() {
-    // The point of the whole exercise: a window IS its display, so within it
-    // that display begins at zero and a page places a region against the
-    // initial containing block exactly as it always has.
-    let one = domicile_host::as_one_screen(&desk(), "drm-3");
+    // A window IS its display, so within it that display begins at zero and a
+    // page places a region against the initial containing block exactly as it
+    // always has.
+    let desk = domicile_host::as_seen_from(&desk(), "drm-3");
 
-    assert_eq!(one[0].position, [0, 0]);
+    assert_eq!(desk[2].position, [0, 0]);
+}
+
+#[test]
+fn every_other_display_keeps_its_place_relative_to_that_one() {
+    // The desk is one space and moving its origin moves all of it. A shell
+    // reads these to lay out against the desk -- a box spanning every screen,
+    // which monitor is left of which -- and a list whose own screen had been
+    // moved and whose others had not is a desk that overlaps itself.
+    let desk = domicile_host::as_seen_from(&desk(), "drm-2");
+
+    assert_eq!(desk[0].position, [-1800, 0], "the one to its left");
+    assert_eq!(desk[2].position, [1800, 0], "and the one to its right");
 }
 
 #[test]
@@ -478,27 +498,27 @@ fn nothing_but_the_corner_moves() {
     // to touch -- a window that was told a smaller screen than it covers would
     // draw a margin it cannot fill. The mode and the turn likewise: they are
     // the panel's, read off the hardware, and this only forwards them.
-    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+    let desk = domicile_host::as_seen_from(&desk(), "drm-2");
 
-    assert_eq!(one[0].size, [1800, 3200]);
-    assert_eq!(one[0].scale, 2);
-    assert_eq!(one[0].mode, [3840, 2160]);
-    assert_eq!(one[0].transform, DisplayTransform::Rotate270);
+    assert_eq!(desk[1].size, [1800, 3200]);
+    assert_eq!(desk[1].scale, 2);
+    assert_eq!(desk[1].mode, [3840, 2160]);
+    assert_eq!(desk[1].transform, DisplayTransform::Rotate270);
 }
 
 #[test]
-fn a_window_is_told_that_its_display_is_the_whole_of_it() {
+fn only_the_display_a_window_covers_is_the_whole_of_it() {
     // The mode and the transform are on every display as description. This is
-    // what turns them into instructions: the page's viewport IS this mode, so
-    // the logical box it lays out in has to be turned and scaled to cover it.
-    // A desktop described to nobody in particular carries the same two facts
-    // and no such claim.
-    let one = domicile_host::as_one_screen(&desk(), "drm-2");
+    // what turns them into instructions for ONE of them: the page's viewport
+    // IS that mode, so the logical box it lays out in has to be turned and
+    // scaled to cover it. The others are monitors this page can see and draw
+    // nothing on, so a region for one of them is a claim nobody can honor.
+    let desk = domicile_host::as_seen_from(&desk(), "drm-2");
 
-    assert!(one[0].fills_the_window);
+    assert!(desk[1].fills_the_window);
     assert!(
-        desk().iter().all(|display| !display.fills_the_window),
-        "a desktop is not anybody's viewport"
+        !desk[0].fills_the_window && !desk[2].fills_the_window,
+        "a page is one window, and one window is one monitor: {desk:?}"
     );
 }
 
@@ -507,9 +527,9 @@ fn a_window_on_a_display_the_desk_no_longer_has_is_told_nothing() {
     // The monitor went between the engine naming it and the desktop being
     // described. The two readings are a blank screen and the WRONG screen:
     // this one is blank until the reconciliation closes the window, where
-    // falling back to the whole desk would put another monitor's desktop on
-    // it with nothing to say so.
-    let gone = domicile_host::as_one_screen(&desk(), "drm-9");
+    // handing over the desk with no window in it would leave the page laying
+    // out in a desktop it has no corner of.
+    let gone = domicile_host::as_seen_from(&desk(), "drm-9");
 
     assert!(gone.is_empty(), "{gone:?}");
 }
