@@ -39,6 +39,38 @@ client. Each desktop also launches a terminal on a key of its own, and
 everything started from that terminal lands here too:
 [the long answer](/packages/shell-simple/README.md#launch-an-app-into-it).
 
+## Your session's keys, in a window
+
+A desktop in a window needs the Meta key, and in your session that key is
+already your compositor's. Every binding a shell claims is a Meta chord, and a
+compositor matches its own bindings *before* it hands a key to the focused
+client — so `Meta+Enter` opened sway's terminal and the desktop was never told
+anything had been pressed.
+
+So the desktop asks for them: while its window holds the keyboard, it requests
+`zwp_keyboard_shortcuts_inhibit_unstable_v1` and your compositor stops matching
+its bindings. **This is scoped to focus.** Click anything else and your keys
+are yours again — the request is per seat, and the compositor drops it the
+moment the window loses the keyboard.
+
+**On sway, `bindsym --inhibited` is the way to keep one anyway.** The desktop's
+window is focused for as long as you are using it, so a binding you need
+*through* it — a volume key, a switch back to another workspace — has to say
+so:
+
+```
+bindsym --inhibited XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_SINK@ 5%+
+bindsym --inhibited Mod4+Shift+q kill
+```
+
+`seat * shortcuts_inhibitor disable` turns the whole thing off from sway's
+side, and then a nested desktop has no Meta key again. Compositors that do not
+implement the protocol never had one to give: the engine logs that and carries
+on.
+
+**On a bare tty none of this happens** — there is no host compositor, the
+desktop *is* the compositor, and the request is not made.
+
 ## The screen going dark
 
 A desktop left alone turns its screens off — if you ask it to. Nothing blanks
