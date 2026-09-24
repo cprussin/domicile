@@ -27,8 +27,9 @@
 # The first half is fixed by naming releases after the SERIES instead — the
 # pin, `patches/` and `src/` hashed by content, which is computable from the
 # branch and identical to what the merge would produce. The second half is not
-# fixable and does not need to be: the build happens in the pull request, and
-# the hash is written back to the branch. See engine-release-publish.sh.
+# fixable and does not need to be: the build happens in the merge queue, and
+# engine-repin.yml writes the hash onto main after the merge. See
+# engine-release-publish.sh.
 #
 # THE TWO WAYS TO BE WRONG HERE ARE NOT THE SAME SIZE. Saying `build=true`
 # when nothing needed building is four hours of `crux` on a pull request that

@@ -7,8 +7,8 @@
 #   engine-proof.sh gate           key= and proved= to $GITHUB_OUTPUT
 #
 # The key is the whole tree, not just the engine: the checks also build the
-# compositor and the shells. `engine-release.nix` is left out because the run
-# itself writes it back, and markdown because nothing reads it.
+# compositor and the shells. `engine-release.nix` is left out because it is
+# written after the build, onto main, and markdown because nothing reads it.
 set -u
 
 usage() { echo "usage: $(basename "$0") <key|has|record|gate> [key]" >&2; exit 2; }
@@ -39,7 +39,7 @@ case "${1:-}" in
     key="$("$0" key)"
     echo "key=$key" >>"$GITHUB_OUTPUT"
     # Proved AND engine-release.nix names the series: the key leaves that file
-    # out, so a proof alone would skip a branch whose write-back never landed.
+    # out, so a proof alone would skip a tree whose repin never landed.
     proved=false
     if [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ]; then
       "$0" has "$key"

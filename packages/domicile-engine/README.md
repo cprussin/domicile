@@ -102,24 +102,32 @@ rebuilding, and computable from a branch without merging anything. Two commits
 that do not move the fork are the same engine, publish under the same tag, and
 need no repin between them.
 
-The second half is not fixable, so the build moved instead. On a pull request
-that moves the fork, `engine.yml` builds the release configuration, publishes
-it, and pushes the regenerated `engine-release.nix` back onto the branch. So:
+The second half is not fixable, so the build moved instead. `engine.yml` runs
+in the merge queue, and on a merge group that moves the fork it builds the
+release configuration and publishes it; once the queue merges it,
+`engine-repin.yml` pushes the regenerated `engine-release.nix` onto main. The
+queue's branch is deleted when it merges, so main is the only place left to
+write it. So:
 
 | | |
 |---|---|
 | `.github/scripts/engine-release-needed.sh` | whether this run owes a release at all — most do not, and saying "build" wrongly is four hours of `crux` |
-| `.github/scripts/engine-release-repin.sh` | the commit that replaces the second pull request, put on the **branch tip** rather than on the merge ref this job is standing on |
+| `.github/scripts/engine-release-repin.sh` | the commit that replaces the second pull request, put on **main's tip** rather than on the commit the job checked out |
 | `/scripts/test-the-pinned-engine-is-this-series.sh` | whether the engine this repository pins is the engine this repository describes — a string comparison, on `ubuntu-latest`, in seconds |
 
-**Red on that last one means "not yet", not "wrong".** A change that moves the
-fork is red there until the engine job publishes and writes back, in the same
-pull request. Red that survives that is the real signal, and is what nothing
-said before.
+**Red on that last one means "not yet", not "wrong".** A pull request that
+moves the fork is red there for as long as it is open, and main is red between
+its merge and the repin. That is why it runs in no workflow the merge queue
+waits on. Red on main that survives the repin is the real signal, and is what
+nothing said before.
 
-A force-push over the written-back commit costs nothing: the series is
-unchanged, so the next run finds the release already published, skips the
-build, and rewrites the identical file.
+A re-run of the repin costs nothing: the release is already published, so it
+rewrites the identical file and pushes nothing.
+
+A pin roll is a cold build, longer than the queue's 360-minute check timeout.
+Dispatch `Engine` on the branch before queueing it: that run publishes the
+series' release and leaves a tree warm at the new pin, so the queue's run is
+the short one.
 
 `engine-release.yml` still exists and is still what an `engine-v*` tag
 publishes through. It is no longer how an ordinary engine change reaches a
@@ -306,11 +314,12 @@ are, and both of these have already happened rather than been imagined:
 
 - **CI resets that tree.** `engine.yml` and `engine-release.yml` reset
   `/build/chromium/src` to the pin and lay the series over it. `engine.yml`
-  fires on any push or pull request touching `packages/domicile-engine/**`
-  *except* Markdown under it and `engine-release.nix` — prose cannot change
-  what the build produces and the job never reads the repin, and the exclusions
-  are asserted by `/scripts/test-engine-path-filter.sh`. `engine-release.yml`
-  fires on an `engine-v*` tag or a dispatch. So most pushes to the fork take
+  builds in the merge queue, for any queued change touching
+  `packages/domicile-engine/**` *except* Markdown under it and
+  `engine-release.nix` — prose cannot change what the build produces and the
+  job never reads the repin. `.github/scripts/engine-inputs.sh` holds that
+  list and `/scripts/test-engine-path-filter.sh` asserts it. `engine-release.yml`
+  fires on an `engine-v*` tag or a dispatch. So most merges of the fork take
   the tree, and uncommitted work in the checkout is taken without warning. Take
   the lock around builds:
   `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and

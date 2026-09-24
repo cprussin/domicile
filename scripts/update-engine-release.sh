@@ -9,11 +9,12 @@
 # a commit rather than a silent change of behavior under an unchanged
 # revision. This regenerates that file; the diff is the review.
 #
-# IN CI THIS RUNS INSIDE THE PULL REQUEST THAT MOVED THE FORK, and the commit
-# it produces is pushed back onto that branch — which is what makes an engine
-# change one pull request rather than two. `engine.yml` publishes the engine
-# from the branch head under a tag naming the SERIES rather than the commit,
-# so the url is knowable before anything is merged; the hash is not, because
+# IN CI THIS RUNS ON MAIN RIGHT AFTER THE MERGE THAT MOVED THE FORK, from
+# engine-repin.yml, and the commit it produces is pushed onto main — which is
+# what makes an engine change one pull request rather than two. `engine.yml`
+# publishes the engine from the merge queue under a tag naming the SERIES
+# rather than the commit, so the url is knowable before anything is merged;
+# the hash is not, because
 # Chromium does not build byte-for-byte twice, and that is the whole reason
 # this step has to come after a build rather than before one.
 #

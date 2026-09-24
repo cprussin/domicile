@@ -44,11 +44,20 @@ name: Pinned engine
 # keyed on `engine-release.nix`, which is the one anybody would reach for,
 # would have skipped exactly the change that broke main.
 #
-# IT RUNS ON THE MERGE AS WELL AS THE PULL REQUEST, for engine.yml's reason
-# and one of its own. A `pull_request` run builds the head merged into main as
-# main was when the event fired, and main moving does not fire it again — so a
-# repin and an ABI change open at the same time are each green alone and broken
-# together, which is this failure's exact shape.
+# IT RUNS ON THE MERGE AS WELL AS THE PULL REQUEST. A `pull_request` run
+# builds the head merged into main as main was when the event fired, and main
+# moving does not fire it again — so a repin and an ABI change open at the same
+# time are each green alone and broken together, which is this failure's exact
+# shape, and the push to main is the first run that sees them together.
+#
+# AND NOT IN THE MERGE QUEUE, which is where engine.yml went for the same
+# reason. On a change that moves the fork, the pin this job fetches is the OLD
+# engine until engine-repin.yml writes `engine-release.nix` onto main after the
+# merge — so a `merge_group` run would be red on exactly the changes the queue
+# exists to build, and a required check that can only pass after the merge
+# holds every one of them out of it. So it is not a required check either, and
+# the push that repins main is the run that turns it green.
+# scripts/test-engine-runs-in-the-merge-queue.sh asserts it stays out.
 on:
   pull_request:
   push:

@@ -1,0 +1,101 @@
+name: Engine repin
+
+# Writes `engine-release.nix` onto main after the merge queue lands a change
+# that moved the fork.
+#
+# THIS WAS A STEP IN engine.yml, AND THE MERGE QUEUE IS WHY IT IS NOT. The
+# engine job used to publish a release from the pull request and push the
+# regenerated pin back onto the pull request's branch, so the pull request
+# that moved the fork was also the one that repinned it. It builds in the merge
+# queue now, and a merge group's branch is temporary: GitHub deletes it once it
+# merges, and the pull request's own branch is merged by then too. So the
+# queue's run publishes the release, and this writes the pin onto main on the
+# push that follows. The release is already there when this runs, because
+# the queue would not have merged the change without it.
+#
+# ON EVERY PUSH TO MAIN, WITH NO `paths:`. It is one hosted job that asks one
+# question -- `engine-release-needed.sh`, the same script the engine job asks
+# -- and the answer on almost every push is "engine-release.nix already names
+# this series" in a few seconds. A filter would be a second copy of the list
+# engine-inputs.sh holds, and the change that most needs this, a pin roll,
+# is the one it would be written to catch.
+#
+# THREE ANSWERS:
+#
+#   - `write=false`: the pin names this series. Nothing to do. This includes
+#     the push this workflow's own commit makes.
+#   - `write=true`, `build=false`: the series is published and the pin is
+#     not on it. Regenerate the file and push it onto main.
+#   - `build=true`: main carries a series nothing published, which the queue
+#     makes impossible and a push that bypassed it does not. Red, and says what
+#     to do: dispatch `Engine` on main, which builds and publishes, then re-run
+#     this.
+#
+# THE PUSH HAS TO BE ALLOWED. With the merge queue required, a direct push to
+# main is refused unless whoever pushes may bypass the ruleset. That is
+# DOMICILE_WRITEBACK_TOKEN's owner when the secret exists and GitHub Actions
+# when it does not, and the ruleset's bypass list has to name it. The token is
+# also what makes the push start CI: a push made with the workflow's own token
+# starts no workflows, so without it the repinned commit on main shows no
+# checks until the next push.
+on:
+  push:
+    branches: [main]
+
+# Per ref and never canceled, so two quick merges repin one after the other
+# rather than racing each other's push. `cancel-in-progress: false` keeps a
+# push already under way from being killed halfway; the pending run is the
+# newer push, which is the one that should decide.
+concurrency:
+  group: engine-repin-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # The push onto main, when there is no write-back token to push with.
+  contents: write
+
+jobs:
+  repin:
+    # Hosted, and deliberately: this builds nothing, and a three-line commit
+    # must never wait behind a Chromium build on `crux`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Does main still owe its series a pin?
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/engine-release-needed.sh
+
+      - name: Main carries a series nothing published
+        if: ${{ steps.release.outputs.build == 'true' }}
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          echo "::error::main moved the fork to $TAG and no release for it is published, so a change reached main without the merge queue's engine build. Dispatch the Engine workflow on main, which builds and publishes it, then re-run this." >&2
+          exit 1
+
+      # `update-engine-release.sh` hashes the tarball with
+      # `nix store prefetch-file`, so the rare run that writes
+      # anything needs nix. Installed only for that run.
+      - uses: cachix/install-nix-action@v31
+        if: ${{ steps.release.outputs.write == 'true' }}
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Write engine-release.nix onto main
+        if: ${{ steps.release.outputs.write == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The series' own tag rather than the rolling one: `engine-nightly`
+          # is whatever was published last, and on a busy day that is not
+          # necessarily this series.
+          DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
+          # Optional; see the header for what it buys and what the ruleset
+          # needs either way.
+          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
+        run: .github/scripts/engine-release-repin.sh main

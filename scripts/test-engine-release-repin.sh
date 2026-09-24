@@ -4,17 +4,16 @@
 # An engine change used to be two pull requests: one that moved the fork, and
 # one that moved `engine-release.nix` onto the tarball a manually dispatched
 # release produced. The second is the one that got skipped, so changes needing
-# a release shipped without one. `engine.yml` publishes the release from the
-# branch head now and pushes the regenerated file back onto that branch, so
-# merging the first pull request is sufficient.
+# a release shipped without one. The merge queue's engine build publishes the
+# release now, and `engine-repin.yml` pushes the regenerated file onto main
+# after the merge, so merging the first pull request is sufficient.
 #
-# WHAT THIS IS ABOUT IS WHICH COMMIT THAT PUSH IS BUILT ON. A `pull_request`
-# run is checked out at `refs/pull/N/merge` — the head merged into main as main
-# was when the event fired. Pushing THAT to the branch quietly merges main into
-# somebody else's branch, which is not a thing CI may do to a person's work and
-# is invisible in the pull request's own diff. So the branch tip is fetched and
-# the generated file put on it, and that is the case with the most cost and the
-# least chance of anybody noticing it went wrong.
+# WHAT THIS IS ABOUT IS WHICH COMMIT THAT PUSH IS BUILT ON. The run is checked
+# out at the commit whose push started it, and main can have moved since --
+# the queue merges the next change while this one is still hashing a tarball.
+# A commit built on the checkout would then be a push that either fails or,
+# forced, throws away somebody's merge. So main's tip is fetched and the
+# generated file put on it, alone.
 #
 # `git` and the generator are both faked. What is under test is the decision
 # about where the commit goes and whether one is made at all — not `nix store
@@ -49,8 +48,8 @@ contains() {
   esac
 }
 
-# A repository shaped like this one, with a remote to push to and a branch that
-# has moved on since the merge ref was computed.
+# A repository shaped like this one, with a remote to push to and a main that
+# has moved on since the commit the run checked out.
 setup() {
   rm -rf "$WORK/remote" "$WORK/repo"
   git init -q --bare "$WORK/remote"
@@ -68,30 +67,23 @@ setup() {
            "$WORK/repo/packages/domicile-engine"
   cp "$REPIN" "$WORK/repo/.github/scripts/"
   echo "pinned = 0" >"$WORK/repo/packages/domicile-engine/engine-release.nix"
-  echo "main" >"$WORK/repo/marker"
+  echo "the merge that moved the fork" >"$WORK/repo/marker"
   git -C "$WORK/repo" add -A
-  git -C "$WORK/repo" commit -qm "main"
+  git -C "$WORK/repo" commit -qm "the merge that moved the fork"
   git -C "$WORK/repo" remote add origin "$WORK/remote"
   git -C "$WORK/repo" push -q origin main
+  PUSHED="$(git -C "$WORK/repo" rev-parse main)"
 
-  # The branch, with a commit main does not have. This is what the push must
-  # land on top of.
-  git -C "$WORK/repo" checkout -qb feature
-  echo "the branch's own work" >"$WORK/repo/branch-only"
-  git -C "$WORK/repo" add -A
-  git -C "$WORK/repo" commit -qm "branch work"
-  git -C "$WORK/repo" push -q origin feature
-  BRANCH_TIP="$(git -C "$WORK/repo" rev-parse feature)"
-
-  # And the merge ref the job is actually standing on: the branch merged into
-  # main. Detached, as `actions/checkout` leaves it.
-  git -C "$WORK/repo" checkout -q main
-  echo "main moved" >"$WORK/repo/marker"
-  git -C "$WORK/repo" commit -qam "main moved"
+  # The queue's next merge, landed while this run was working. This is what
+  # the push must land on top of.
+  echo "the next merge" >"$WORK/repo/marker"
+  git -C "$WORK/repo" commit -qam "the next merge"
   git -C "$WORK/repo" push -q origin main
-  git -C "$WORK/repo" checkout -q --detach
-  git -C "$WORK/repo" merge -q --no-edit feature
-  MERGE_REF="$(git -C "$WORK/repo" rev-parse HEAD)"
+  MAIN_TIP="$(git -C "$WORK/repo" rev-parse main)"
+
+  # And the checkout the job is actually standing on: the commit whose push
+  # started it, as `actions/checkout` leaves it.
+  git -C "$WORK/repo" reset -q --hard "$PUSHED"
 
   # The generator, faked: the real one downloads a tarball and hashes it, and
   # what this file is about is what happens to the file afterward.
@@ -109,7 +101,7 @@ GEN
 repin() { # extra env assignments
   local out
   if out="$(cd "$WORK/repo" && env DOMICILE_ENGINE_TAG=engine-sabc123456789 \
-              "$@" bash .github/scripts/engine-release-repin.sh feature 2>&1)"; then
+              "$@" bash .github/scripts/engine-release-repin.sh main 2>&1)"; then
     printf 'ok\n%s\n' "$out"
   else
     printf 'refused\n%s\n' "$out"
@@ -118,30 +110,30 @@ repin() { # extra env assignments
 status() { printf '%s\n' "$1" | head -1; }
 pushed() { git -C "$WORK/remote" rev-parse "$1" 2>/dev/null || echo missing; }
 
-echo "== the commit lands on the branch tip, not on the merge ref =="
+echo "== the commit lands on main's tip, not on the checkout =="
 
 setup
 out="$(repin)"
 expect "the repin succeeds" ok "$(status "$out")"
 
-# THE ASSERTION THIS FILE EXISTS FOR. `feature` on the remote must be one
-# commit on top of where it was — not the merge, and not anything containing
-# main's later work.
-tip="$(pushed feature)"
-expect "the branch moved by exactly one commit" "$BRANCH_TIP" \
-  "$(git -C "$WORK/repo" rev-parse "$tip^" 2>/dev/null || echo "not a child of the tip")"
-expect "and it is not the merge ref" ok \
-  "$([ "$tip" != "$MERGE_REF" ] && echo ok || echo "it pushed the merge")"
-expect "so main's later work did not arrive on the branch" ok \
-  "$(git -C "$WORK/repo" show "$tip:marker" 2>/dev/null | grep -qx main && echo ok || echo "main moved into the branch")"
+# THE ASSERTION THIS FILE EXISTS FOR. `main` on the remote must be one commit
+# on top of where it is now -- not on the checkout, and not without the merge
+# that landed after it.
+tip="$(pushed main)"
+expect "main moved by exactly one commit" "$MAIN_TIP" \
+  "$(git -C "$WORK/repo" rev-parse "$tip^" 2>/dev/null || echo "not a child of main's tip")"
+expect "so the next merge is still on main" ok \
+  "$(git -C "$WORK/repo" show "$tip:marker" 2>/dev/null | grep -qx "the next merge" && echo ok || echo "the next merge was lost")"
 
 # And it carries only the generated file, because anything else in that commit
-# is CI editing somebody's branch.
+# is CI editing main.
 expect "the commit touches one file" \
   "packages/domicile-engine/engine-release.nix" \
   "$(git -C "$WORK/repo" diff --name-only "$tip^" "$tip")"
 
 contains "the message says what it is" "engine-sabc123456789" \
+  "$(git -C "$WORK/repo" log -1 --format=%B "$tip")"
+contains "and what wrote it" "engine-repin.yml" \
   "$(git -C "$WORK/repo" log -1 --format=%B "$tip")"
 
 echo
@@ -149,14 +141,14 @@ echo "== it does nothing when there is nothing to do =="
 
 # THE IDEMPOTENT CASE, AND IT IS NOT RARE. A re-run of a green job, or a job
 # whose generator produces the file that is already there. An empty commit
-# pushed to somebody's branch on every re-run would be noise at best, and at
-# worst it re-triggers every check on the pull request for no change.
+# pushed to main on every re-run would be noise at best, and at worst it
+# re-triggers every check on main for no change.
 setup
 repin >/dev/null
-first="$(pushed feature)"
+first="$(pushed main)"
 out="$(repin)"
 expect "a second run succeeds" ok "$(status "$out")"
-expect "and pushes nothing" "$first" "$(pushed feature)"
+expect "and pushes nothing" "$first" "$(pushed main)"
 contains "and says why" "already" "$out"
 
 echo
@@ -165,11 +157,11 @@ echo "== what it refuses to do =="
 # A generator that cannot find the release must not produce an empty commit or
 # a half-written file. This runs after the publish step, so a failure here
 # means the release and the repin disagree — which is worth the job going red
-# rather than a branch that looks repinned and is not.
+# rather than a main that looks repinned and is not.
 setup
 out="$(repin GENERATOR_FAILS=1)"
 expect "a generator that fails fails the step" refused "$(status "$out")"
-expect "and nothing is pushed" "$BRANCH_TIP" "$(pushed feature)"
+expect "and nothing is pushed" "$MAIN_TIP" "$(pushed main)"
 
 echo
 echo "== the push that makes CI run =="

@@ -9,6 +9,13 @@ name: Cancel a closed pull request's queued engine runs
 # behind them in the queue. Neither result could change anything: both branches
 # were already in main, and main's own push runs were queued separately.
 #
+# LESS OF IT SINCE THE MERGE QUEUE, AND NOT NONE. engine.yml no longer builds
+# on a pull request, so what a closed pull request leaves on `crux` now is a
+# dispatch on its branch -- the pre-warm of a pin roll, say. The queue's own
+# runs are not this workflow's to cancel and it cannot see them: they run on a
+# `gh-readonly-queue/...` branch, not the pull request's head, and GitHub
+# sends no event Actions can take when a group leaves the queue.
+#
 # IT CANCELS ONLY RUNS THAT NEVER STARTED, and that restriction is the whole
 # design rather than a detail. A killed `autoninja` leaves a half-linked
 # out/Domicile that the next run inherits, and the failure reads as a code

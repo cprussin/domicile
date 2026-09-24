@@ -24,10 +24,12 @@
 # would not be worth having.
 #
 # WHAT RED MEANS ON A PULL REQUEST IS "NOT YET", NOT "WRONG". A change that
-# moves the fork is red here until the engine job publishes the engine and
-# writes `engine-release.nix` back to the branch — which it does, in the same
-# pull request, so a merge is sufficient and there is no second one to forget.
-# Red that stays red past that is the real signal: the release never happened.
+# moves the fork is red here until the merge queue's engine build publishes
+# the engine and engine-repin.yml writes `engine-release.nix` onto main after
+# the merge — so a merge is sufficient and there is no second pull request to
+# forget. That is also why no workflow the queue waits on runs this. Red on
+# main that stays red past the repin is the real signal: the release never
+# happened.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -70,10 +72,10 @@ if [ "$got" != "$want" ]; then
     echo "        Either packages/domicile-engine changed without a release, or"
     echo "        engine-release.nix was not moved onto the one that was"
     echo "        published. On a pull request that moves the fork this is"
-    echo "        expected until the engine job on crux publishes the engine"
-    echo "        and writes this file back to the branch; that push is what"
-    echo "        turns it green, and it is why the repin is not a second pull"
-    echo "        request."
+    echo "        expected until it merges: the merge queue's engine build on"
+    echo "        crux publishes the engine, and engine-repin.yml then writes"
+    echo "        this file onto main. That push is what turns it green, and it"
+    echo "        is why the repin is not a second pull request."
     echo
     echo "        By hand, once a release for this series exists:"
     echo "          ./scripts/update-engine-release.sh"

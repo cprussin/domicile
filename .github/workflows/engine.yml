@@ -9,102 +9,55 @@ name: Engine
 # job runs on `crux`, which has the tree, the GPU and the render node.
 #
 # Everything else in this repository still runs on `ubuntu-latest`. This job is
-# the exception, and it is scoped to the paths that can affect the engine so
-# that an ordinary change never waits on it.
+# the exception, and it builds only when a change touches what the engine build
+# reads, so that an ordinary change never waits on it.
 #
-# IT RUNS ON THE MERGE AS WELL AS THE PULL REQUEST, AND THAT WAS WEIGHED AND
-# KEPT. It looks like the obvious saving — a green pull request merges and the
-# identical build starts over on a tree that just passed — and it is not, for
-# one reason specific to what this job builds. A `pull_request` run builds
-# `refs/pull/N/merge`: the head merged into main AS MAIN WAS WHEN THE EVENT
-# FIRED. Main moving does not fire it again. And what this job builds is
-# `patches/` applied with `git am` over a fixed `CHROMIUM_PIN` — so two
-# patch-series branches that are each green alone can refuse to apply together,
-# or apply and not compile, and the merge is the first tree in which both
-# exist. On the night this comment was written #379, #380 and #381 were open at
-# once and landed within three hours; each one's green run had never seen the
-# other two. `scripts/test-patch-series-chain.sh` checks the chain's shape on
-# `ubuntu-latest`; it does not build it.
+# IT RUNS IN THE MERGE QUEUE, AND ONLY THERE. It used to run on the pull
+# request and again on the push to main, and the pull request run was the one
+# that could not be trusted. A `pull_request` run builds `refs/pull/N/merge`:
+# the head merged into main AS MAIN WAS WHEN THE EVENT FIRED, and main moving
+# does not fire it again. This build queues for hours on one machine, so by
+# the time it started main had usually moved, and what this job builds is
+# `patches/` applied with `git am` over a fixed `CHROMIUM_PIN` -- two
+# patch-series branches that are each green alone can refuse to apply
+# together, or apply and not compile. On the night the old version of this
+# comment was written #379, #380 and #381 were open at once and landed within
+# three hours; each one's green run had never seen the other two.
 #
-# Nothing else would catch it either. `engine-release.yml` fires on an
-# `engine-v*` tag or a dispatch and `engine-drm-probe.yml` on a dispatch only;
-# neither reads this job's result, so neither would notice main having stopped
-# building. A direct push, an admin merge, or a merge of a pull request where
-# this check was ABSENT rather than red — which is what a path filter makes it,
-# and why it cannot be a hard required check — all reach main the same way.
-# Dropping this trigger would leave the last word on main a run against a tree
-# that never existed.
+# THE QUEUE BUILDS WHAT IT IS ABOUT TO MERGE. A `merge_group` run is the base
+# with every change queued ahead of this one and this one on top, and the
+# ruleset lets one group build at a time, so the tree this job proves is the
+# tree main becomes. That makes the other two runs redundant rather than
+# merely expensive:
 #
-# What was actually costing the slot was the filter below, not this: a repin is
-# two more full builds and neither of them can read the file that changed.
+#   - the PULL REQUEST gets the `ubuntu-latest` checks and no Chromium build.
+#     The trigger stays, unfiltered, because `engine` is a required check and
+#     a pull request cannot enter the queue until it reports. The job skips
+#     itself there, and GitHub reports a job skipped by its `if:` as a
+#     success. A `paths:` filter would not do: a workflow a filter skips
+#     reports NOTHING, and a required check that never reports holds the pull
+#     request out of the queue forever.
+#   - MAIN is not built again. With the queue required, main only receives
+#     commits the queue already built, so a `push` run is the same tree twice.
+#     The old reason to keep it -- a direct push, an admin merge, a merge where
+#     this check was absent rather than red -- is what the ruleset forbids
+#     now; anybody who bypasses it can dispatch this workflow on main, which is
+#     what `workflow_dispatch` is kept for.
+#
+# `merge_group` TAKES NO `paths:`. GitHub does not filter that event, so which
+# changes build is decided by the `gate` job below, on `ubuntu-latest`, with
+# the same list the filter used -- see .github/scripts/engine-inputs.sh. A
+# merge group that touches none of it skips this job, and that skip reports
+# as a success to the required check the same way the pull request's does.
+#
+# The ruleset carries the rest and is not in this repository: `engine`
+# required, one group building at a time, and a 360-minute check timeout. See
+# `timeout-minutes` below for what that timeout means for a pin roll, and
+# scripts/test-engine-runs-in-the-merge-queue.sh, which asserts this shape.
 on:
-  push:
-    branches: [main]
-    # `.github/scripts/engine-*.sh` because the steps below are those scripts.
-    # Without them a change to the reset, the lock or the diagnostics is a
-    # change to this job that this job does not run on, and the first thing to
-    # find out would be a release. Written out twice rather than anchored:
-    # GitHub's workflow parser does not resolve YAML anchors.
-    #
-    # AND `scripts/` FOR THE SAME REASON ONE LEVEL ALONG, since this job's
-    # assertions no longer live in this file: `scripts/engine-*.sh` are the
-    # checks, `scripts/lib/engine-guard.sh` is which engine they are pointed at
-    # and whether each runs its control, and `scripts/check.sh` is the order
-    # they run in and the group that holds them. A change to any of those
-    # changes what this job asserts, so it has to be a change this job runs on
-    # — the alternative is the pixel suite being edited and proved by nothing.
-    # Named exactly rather than as `scripts/**`: the rest of that directory is
-    # checks for `ubuntu-latest`, and they must never take the `crux` slot.
-    #
-    # AND MARKDOWN UNDER THAT PACKAGE IS EXCLUDED, because prose cannot affect
-    # a build and this job is the most expensive thing in the repository: it
-    # takes the tree on `crux`, waits behind whatever else holds it, and can
-    # queue for hours. A README fix should never be in that queue. The
-    # exclusion is written after the include it narrows — a later pattern wins
-    # for a file both match — so a change touching a patch *and* a README still
-    # runs.
-    #
-    # AND SO IS `engine-release.nix`, FOR A STRONGER REASON THAN PROSE: this
-    # job cannot read it. It is generated by scripts/update-engine-release.sh
-    # and holds a commit, a url and a hash — which published tarball `nix build
-    # .#engine` fetches. The steps below reset /build/chromium/src to
-    # `CHROMIUM_PIN` and apply `patches/` over it; nothing in them ever looks at
-    # a published tarball, so a repin cannot change what this build produces.
-    # It was costing two full builds all the same, one here and one on the pull
-    # request: runs 348 and 349 were 27 minutes each on the one `crux` slot for
-    # a three-line hash change, and the second of them queued in front of the
-    # `Engine release` dispatch that change existed to produce.
-    #
-    # WHAT DOES PROVE A REPIN IS nix-build.yml, and it must keep doing so. It
-    # carries no `paths:` at all, and `nix build .#manganese .#simple` reaches
-    # `domicileEngine`, which is `fetchurl` of exactly that url and hash — so a
-    # tag that was deleted or a hash off by a byte fails there, in three
-    # minutes, on a runner nobody is waiting for. That is the whole of what a
-    # repin needs asserting, and scripts/test-engine-path-filter.sh fails if
-    # nix-build.yml ever stops running on everything.
-    #
-    # The exact path, not `**/*.nix`: this is one generated file, and a second
-    # .nix appearing under this package would be an input to the build rather
-    # than a note about a finished one. The guard asserts that shape too.
-    paths:
-      - packages/domicile-engine/**
-      - "!packages/domicile-engine/**/*.md"
-      - "!packages/domicile-engine/engine-release.nix"
-      - .github/workflows/engine.yml
-      - .github/scripts/engine-*.sh
-      - scripts/check.sh
-      - scripts/engine-*.sh
-      - scripts/lib/engine-guard.sh
+  merge_group:
+    types: [checks_requested]
   pull_request:
-    paths:
-      - packages/domicile-engine/**
-      - "!packages/domicile-engine/**/*.md"
-      - "!packages/domicile-engine/engine-release.nix"
-      - .github/workflows/engine.yml
-      - .github/scripts/engine-*.sh
-      - scripts/check.sh
-      - scripts/engine-*.sh
-      - scripts/lib/engine-guard.sh
   workflow_dispatch:
 
 # Per ref, and never canceled mid-flight.
@@ -125,6 +78,11 @@ on:
 # before it got a result. Keyed by ref, the only run a push can evict is the
 # pending run for the same ref, which is the one it supersedes.
 #
+# IN THE QUEUE EVERY RUN IS ITS OWN REF. A merge group is built from a
+# `gh-readonly-queue/main/pr-N-<sha>` branch of its own, so no group can evict
+# another's pending run; what keeps them to one build at a time is the
+# ruleset's build concurrency, not this.
+#
 # `cancel-in-progress: false` stays, and is the half that group name never
 # provided: a canceled `autoninja` leaves a half-linked `out/Release` that
 # the next run inherits, and the failure it produces looks like a code error
@@ -144,52 +102,97 @@ concurrency:
 # dispatched release produced. The second one is what got forgotten, so
 # changes that needed a release shipped without one.
 #
-# The release is built and published here now, and `engine-release.nix` is
-# written back onto the branch — a commit this job pushes, which is what the
-# token needs `contents: write` for. See `.github/scripts/engine-release-needed.sh`.
+# The release is built and published here now -- a tag and a release, which
+# is what the token needs `contents: write` for, along with the proof tag the
+# last step pushes. `engine-release.nix` is NOT written here any more: the
+# queue's branch is deleted once it merges, so a commit on it would go with
+# it. engine-repin.yml writes it onto main after the merge instead. See
+# `.github/scripts/engine-release-needed.sh`.
 permissions:
   contents: write
 
 jobs:
-  # A tree that already passed is not run again: the write-back push, and main
-  # after a merge nothing else landed behind. Off crux, so it costs no slot.
+  # WHETHER THIS RUN BUILDS AT ALL, decided off crux so it costs no slot.
+  #
+  # Two questions. Does the merge group touch anything the engine build reads
+  # -- the `paths:` filter this workflow used to carry, which `merge_group`
+  # does not support -- and has this exact tree already passed, which a group
+  # re-queued with nothing new under it has.
+  #
+  # Not on a pull request, where the build never runs: the engine job skips
+  # itself there without asking.
   gate:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     outputs:
       key: ${{ steps.proof.outputs.key }}
       proved: ${{ steps.proof.outputs.proved }}
+      touched: ${{ steps.inputs.outputs.touched }}
     steps:
       - uses: actions/checkout@v7
+
+      # Against the merge group's BASE, not the pull request's: the head
+      # carries every change queued ahead of this one, and if any of them
+      # touches the engine this tree is one the engine has not built.
+      #
+      # The base is fetched by id because the checkout is one commit deep, and
+      # a diff needs both trees. A dispatch has no merge group and always
+      # builds, so it never gets here.
+      - id: inputs
+        if: ${{ github.event_name == 'merge_group' }}
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch -q --depth=1 origin "$BASE_SHA"
+          .github/scripts/engine-inputs.sh gate "$BASE_SHA" "$HEAD_SHA"
+
       - id: proof
         run: .github/scripts/engine-proof.sh gate
 
+  # `engine` IS THE REQUIRED CHECK, BY THIS KEY. A job's check is named by
+  # its `name:` when it has one and by its id when it does not, and the
+  # ruleset names `engine` -- so no `name:` here.
   engine:
     needs: gate
-    # `!cancelled()`, so a gate that errors runs the engine rather than skipping it.
-    if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
+    # WHEN IT BUILDS, and each condition fails toward building.
+    #
+    # Never on a pull request: that is the queue's job now, and a job skipped
+    # here reports as a success, which is what lets the pull request enter the
+    # queue at all. A merge group that touches no engine input, or a tree that
+    # already passed, skips the same way, and the queue reads that as green.
+    #
+    # `!cancelled()` because without a status function GitHub adds an implicit
+    # `success()`, and a gate that FAILED would then skip this job -- and a
+    # skipped required check passes. With it, a gate that failed before it
+    # answered leaves that output empty, the comparison below it is not met,
+    # and the build runs.
+    if: >-
+      ${{ !cancelled()
+          && github.event_name != 'pull_request'
+          && needs.gate.outputs.touched != 'false'
+          && needs.gate.outputs.proved != 'true' }}
     # `crux` is a label, not the runner's name. Both are set in
     # cprussin/dotfiles: config/machines/crux/domicile-ci.nix.
     #
     # SECURITY, and it is not enforceable here: this runner executes as a real
     # user on a machine in a house, and this repository is public and forkable.
-    # It is safe only while fork pull requests cannot run on it — Settings ->
-    # Actions -> "Require approval for all external contributors".
     #
-    # THE TOKEN IS `contents: write` NOW, because this job pushes a commit
-    # back onto the branch -- see the release steps below -- and that does not
-    # widen what the gate has to cover. GitHub hands a FORK's pull request a
-    # read-only token whatever a workflow asks for, and the write-back step
-    # refuses any head repository that is not this one, so those two are belt
-    # and braces over a case the platform already forbids. What it widens is
-    # what a same-repository branch can do, and a same-repository branch
-    # already runs arbitrary code as a real user on this machine -- which is
-    # the exposure the gate is for, and it is unchanged.
+    # THE CONTROL IS WHO CAN QUEUE A CHANGE, NOT WHO CAN OPEN ONE. No pull
+    # request reaches this runner any more; a merge group does, and a merge
+    # group runs in THIS repository's context with THIS workflow's
+    # `contents: write` token whatever branch or fork the change came from.
+    # Only somebody with write access can add a pull request to the queue, so
+    # queueing is the approval -- and it is the whole of it: Settings ->
+    # Actions -> "Require approval for all external contributors" guarded the
+    # `pull_request` run, which no longer builds. A fork's change is reviewed
+    # before it is queued, or it runs as a real user on this machine with a
+    # token that can push tags and releases.
     #
-    # Same-repository branches are the intended case and are what makes an
-    # engine change reviewable before it merges — which is why this is on
-    # `pull_request` and not only `push`, against the more cautious advice in
-    # domicile-ci.nix. A pixel assertion that only runs after a merge is not a
-    # check on the change, and the approval gate is the control either way.
+    # Checked before it merges, still, which is what the advice in
+    # domicile-ci.nix to build only after a merge would have lost: a merge
+    # group is not on main until this check passes.
     runs-on: [self-hosted, crux]
 
     # An incremental build is ~1m and the guards a few minutes more. The budget
@@ -222,13 +225,24 @@ jobs:
     # minutes over the only cold repin anybody has timed, and being an hour
     # short costs the whole nine and publishes nothing.
     #
+    # THE QUEUE WAITS 360 MINUTES, AND THIS JOB MAY TAKE 720. The ruleset's
+    # check timeout is counted from when the merge group asks for checks, queue
+    # time on `crux` included, and it fails the group whatever this job is
+    # doing -- so a cold pin roll, which is most of the budget below, does not
+    # fit in the queue. A pin roll is PRE-WARMED instead: dispatch this
+    # workflow on the pull request's branch before queueing it. That run builds
+    # a tree at the new pin and publishes the series' release, so the queue's
+    # run finds a warm tree (the pool prefers one at this pin) and a published
+    # release, and is the ~11m case. The budget stays for that dispatch, which
+    # no queue is timing.
+    #
     # WHAT THE LARGER NUMBER COSTS is that a WEDGED job holds the one slot for
     # twelve hours rather than six. That is the right trade and not a close
     # one: the failure this repository has actually had is a working job killed
     # at its budget, which wastes the slot for the full budget AND produces
     # nothing, where a wedge wastes the same slot and was never going to
     # produce anything either. A budget is a ceiling, not a spend — the ~11m
-    # run that most pull requests get is unchanged.
+    # run that most merge groups get is unchanged.
     #
     # IT CANNOT DIFFER PER CASE. `timeout-minutes` is fixed before the job
     # starts, and which case a run is in — does the checkout carry this series,
@@ -312,9 +326,9 @@ jobs:
       #
       # WHY THIS EXISTS AT ALL: moving `CHROMIUM_PIN` invalidates out/Release
       # in both directions, so two branches on different pins taking turns in
-      # one tree is that 4h EVERY TURN — and with a pull request run and a
-      # merge run each, two open branches is four of them, on the one slot
-      # everything else queues behind.
+      # one tree is that 4h EVERY TURN — a dispatch pre-warming a pin roll
+      # beside merge groups still on the old pin is exactly that, on the one
+      # slot everything else queues behind.
       #
       # `$STAGE` goes with it. `engine-release-room.sh` does `rm -rf` on that
       # directory, so two runs sharing one would delete each other's tarball
@@ -347,14 +361,14 @@ jobs:
       # WHAT IT BUYS IS THAT A GUARD FAILURE NO LONGER HIDES IT. Every step
       # between here and there can go red, and on a flaky one they have; with
       # the decision down beside the steps it gates, a run that never reached
-      # it left no record of what this branch owed, and the answer `build=false,
+      # it left no record of what this change owed, and the answer `build=false,
       # write=false` — the one almost every run gets — had never once been
-      # printed in CI. It also fails fast: a branch that moves the fork learns
+      # printed in CI. It also fails fast: a change that moves the fork learns
       # in the first minute that it is buying a release build, rather than in
       # the eleventh.
       # AND MOST RUNS DO NONE OF IT. `engine-release-needed.sh` answers
       # `build=false, write=false` whenever `engine-release.nix` already names
-      # this series, which is every pull request that touches this package
+      # this series, which is every merge group that touches this package
       # without moving the fork — a script, a BUILD arg, this workflow.
       - name: Does this series still owe a release?
         id: release
@@ -380,10 +394,10 @@ jobs:
       # compile have nothing to do and are skipped; the guards below still run,
       # against the build that is already there.
       #
-      # WHEN IT SAYS YES. A pull request that touches this package without
+      # WHEN IT SAYS YES. A merge group that touches this package without
       # touching the series — a script, a BUILD arg, this workflow — and the
-      # `push: main` run right after such a pull request merges, which is a
-      # full build of a tree `crux` may have compiled twenty minutes earlier.
+      # queue's run of a pin roll that a dispatch already pre-warmed, which
+      # would otherwise be a full build of a tree `crux` compiled hours earlier.
       # When two branches with different series interleave on the one tree, it
       # says no, and no is what every run costs today.
       #
@@ -540,9 +554,9 @@ jobs:
       # ===================================================================
       #
       # Everything above proves the change. What follows publishes it, and
-      # then writes `engine-release.nix` back onto the branch — so the pull
-      # request that moves the fork is also the pull request that repins it,
-      # and merging it is sufficient.
+      # engine-repin.yml then writes `engine-release.nix` onto main once the
+      # queue has merged it — so the pull request that moves the fork is also
+      # the pull request that repins it, and merging it is sufficient.
       #
       # IT WAS TWO PULL REQUESTS AND A MANUAL STEP. This workflow proved a
       # change on the pull request and again on the merge; a release was
@@ -623,45 +637,23 @@ jobs:
           TARBALL: ${{ steps.package.outputs.tarball }}
         run: .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
 
-      # THE COMMIT THAT REPLACES THE SECOND PULL REQUEST.
+      # NO WRITE-BACK HERE, WHERE THERE USED TO BE ONE. This job pushed the
+      # regenerated `engine-release.nix` onto the pull request's branch. In a
+      # merge group there is no such branch to push to: the group's own
+      # `gh-readonly-queue/...` branch is deleted once it merges, and the pull
+      # request's branch is already merged by then. So the release is published
+      # here, from the tree that merges, and engine-repin.yml writes the pin
+      # onto main on the push that follows -- where the published release is
+      # already waiting for it.
       #
-      # ONLY ON A PULL REQUEST, AND ONLY ONE FROM THIS REPOSITORY. On `main`
-      # there is no branch to write to that is not `main` itself, and a job
-      # committing to `main` is not a thing this repository does; the red
-      # `scripts/test-the-pinned-engine-is-this-series.sh` is what says so
-      # there instead, which is the right place for it — main carrying a
-      # series nothing published means a change reached it without this job.
-      # A fork's branch is not ours to push to and the token cannot anyway.
-      #
-      # THE BRANCH TIP, NOT THE MERGE REF. A `pull_request` run is checked out
-      # at `refs/pull/N/merge`, which is the head merged into main; pushing
-      # that to the branch would quietly merge main into somebody's branch.
-      # So the tip is fetched and the generated file put on it. If main moved
-      # the fork while this ran, the identity written here is the merge's
-      # rather than the tip's — the check goes red, the next run fixes it, and
-      # that is the cheap direction.
-      #
-      # A FORCE-PUSH OVER THIS COSTS NOTHING. The series is unchanged, so the
-      # next run finds the release already published, skips the build, and
-      # rewrites the identical file.
-      - name: Write engine-release.nix back onto this branch
-        if: >-
-          ${{ steps.release.outputs.write == 'true'
-              && github.event_name == 'pull_request'
-              && github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The series' own tag rather than the rolling one: `engine-nightly`
-          # is whatever was published last, and on a busy day that is not
-          # necessarily this series.
-          DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          # Optional; without it the write-back's CI waits for an approval.
-          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
-        run: .github/scripts/engine-release-repin.sh "$HEAD_REF"
+      # WHICH IS WHY THE PIN'S OWN CHECKS STAY OUT OF THE QUEUE.
+      # `scripts/test-the-pinned-engine-is-this-series.sh` and
+      # `pinned-engine.yml` are red on a change that moves the fork until that
+      # push lands, so neither runs on `merge_group`; a required check that
+      # can only pass after the merge would hold every such change out of it.
+      # scripts/test-engine-runs-in-the-merge-queue.sh asserts that.
 
-      # Last, so a proof means the write-back landed too. The run it triggers
-      # waits on this one's concurrency group, so it sees the tag.
+      # Last, so a proof means the release was published too.
       - name: Record the proof
         if: ${{ needs.gate.outputs.key != '' }}
         env:

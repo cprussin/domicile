@@ -28,8 +28,18 @@
 #
 # So both directions are asserted here, and the exclusions are asserted to be
 # EXACTLY as narrow as they claim: `packages/domicile-engine/other.nix` still
-# triggers, which is what distinguishes "this one generated file" from an
+# counts, which is what distinguishes "this one generated file" from an
 # `*.nix` exclusion somebody widened later.
+#
+# THE LIST IS A SCRIPT NOW, NOT A `paths:` BLOCK, and that is the merge queue's
+# doing. `engine.yml` runs on `merge_group`, and GitHub does not apply `paths:`
+# to that event at all -- so the question "does this change touch the engine"
+# is asked by `.github/scripts/engine-inputs.sh` in the cheap job in front of
+# the build, against the merge group's base. The `pull_request` trigger must
+# not carry a filter either: `engine` is a required check, a workflow a filter
+# skips never reports it, and a pull request waiting on a check that never
+# reports cannot enter the queue. So the last two assertions about engine.yml
+# are that it has no filter left, and that the one list lives in one place.
 #
 # AND THE THING THAT MAKES THE EXCLUSION SAFE IS IN ANOTHER FILE, so it is
 # asserted here too. Excluding the pin from the engine build is only correct
@@ -41,22 +51,20 @@
 # hash. It carries no `paths:` at all, and the moment it grows one this
 # exclusion stops being safe. That is the last check below.
 #
-# Read against GitHub's filter rules: patterns are evaluated in order and the
-# LAST one matching a file decides, `!` negates, `*` stops at a `/` and `**`
-# does not. Nothing here depends on the one corner of those rules that is
-# genuinely ambiguous — whether `a/**/b` matches `a/b` with no directory
-# between — so no assertion below is made about a file at the package root
-# whose only match would be the `**/*.md` exclusion. The load-bearing patterns
-# are a literal path, a trailing `/**`, and a single-star basename, and all
-# three read the same way under either reading.
+# Read against the rules GitHub's filter used, which the script keeps: `*`
+# stops at a `/` and `**` does not, and a later exclusion wins over the
+# include it narrows. The load-bearing patterns are a literal path, a trailing
+# `/**`, and a single-star basename.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKFLOWS="$ROOT/.github/workflows"
 ENGINE="$WORKFLOWS/engine.yml"
 NIX_BUILD="$WORKFLOWS/nix-build.yml"
+INPUTS="$ROOT/.github/scripts/engine-inputs.sh"
 [ -f "$ENGINE" ] || { echo "no $ENGINE" >&2; exit 1; }
 [ -f "$NIX_BUILD" ] || { echo "no $NIX_BUILD" >&2; exit 1; }
+[ -x "$INPUTS" ] || { echo "no $INPUTS" >&2; exit 1; }
 
 FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
@@ -65,83 +73,17 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# The `paths:` list of one event out of a workflow's top-level `on:` block, one
-# pattern per line.
-#
-# By indentation, because that is what the YAML means and a `grep` for `- ` in
-# this file would also collect the `branches:` list and every path named in a
-# comment. The block runs from `on:` to the next column-zero key; an event is
-# two spaces in, its `paths:` four, and its entries six. Comment lines are
-# skipped without disturbing the state, since `engine.yml` has more comment
-# than filter.
-paths_for() { # workflow, event
-  awk -v want="$2" '
-    /^on:/ { in_on = 1; next }
-    in_on && /^[^[:space:]]/ { in_on = 0 }
-    !in_on { next }
-    /^[[:space:]]*#/ { next }
-    /^[[:space:]]*$/ { next }
-    # A two-space key: the event. Leaving any paths list we were in.
-    /^  [^[:space:]]/ { event = $0; sub(/^  /, "", event); sub(/:.*/, "", event); in_paths = 0; next }
-    # A four-space key: `paths:` or something beside it.
-    /^    [^[:space:]-]/ { key = $0; sub(/^    /, "", key); sub(/:.*/, "", key)
-                           in_paths = (key == "paths" && event == want); next }
-    in_paths && /^      - / {
-      value = $0
-      sub(/^      - /, "", value)
-      sub(/[[:space:]]*$/, "", value)
-      # Quotes are how a pattern starting with `!` gets past the YAML parser,
-      # and they are not part of the pattern.
-      gsub(/^"|"$/, "", value)
-      gsub(/^'"'"'|'"'"'$/, "", value)
-      print value
-    }
-  ' "$1"
+# A workflow's top-level `on:` block, comments and all, from `on:` to the next
+# column-zero key.
+on_block() { # workflow
+  awk '/^on:/ { in_on = 1; next }
+       in_on && /^[^[:space:]]/ { in_on = 0 }
+       in_on { print }' "$1"
 }
 
-# One GitHub filter pattern as an extended regular expression.
-#
-# The order is the whole trick: every `**` form has to be taken out of the way
-# before `*` is rewritten, or `[^/]*` lands inside what was a globstar. They
-# come back at the end, which is why the placeholders are spelled with `@` —
-# nothing in a path pattern contains one, and nothing in a regex does either.
-glob_to_regex() {
-  printf '%s' "$1" | sed \
-    -e 's/[.^$+(){}|]/\\&/g' \
-    -e 's/\[/\\[/g' \
-    -e 's/\]/\\]/g' \
-    -e 's|\*\*/|@GLOBSTARSLASH@|g' \
-    -e 's|/\*\*|@SLASHGLOBSTAR@|g' \
-    -e 's|\*\*|@GLOBSTAR@|g' \
-    -e 's|\*|[^/]*|g' \
-    -e 's|?|[^/]|g' \
-    -e 's|@GLOBSTARSLASH@|(.*/)?|g' \
-    -e 's|@SLASHGLOBSTAR@|/.*|g' \
-    -e 's|@GLOBSTAR@|.*|g'
-}
-
-# Whether a path would trigger a workflow carrying these patterns.
-#
-# LAST MATCH WINS, which is GitHub's rule and the reason the exclusions in
-# `engine.yml` are written after the include they narrow. A path matching
-# nothing is not included; a path matched by an include and then by a later
-# `!` is excluded; a path matched by a `!` and then by a later include is back
-# in. Anything else here would be a different filter engine than the one that
-# decides, which would make this file a guard against nothing.
-included() { # path, pattern...
-  local path="$1"; shift
-  local verdict=1 pattern negated regex
-  for pattern in "$@"; do
-    negated=0
-    case "$pattern" in
-      (!*) negated=1; pattern="${pattern#!}" ;;
-    esac
-    regex="$(glob_to_regex "$pattern")"
-    if printf '%s\n' "$path" | grep -qE "^${regex}$"; then
-      verdict=$((negated))
-    fi
-  done
-  return "$verdict"
+# Whether one path is an engine input, asked of the script that decides it.
+included() { # path
+  [ "$(printf '%s\n' "$1" | "$INPUTS" inputs)" = "$1" ]
 }
 
 # A file this repository actually has, because a guard whose subjects are
@@ -157,71 +99,32 @@ real() { # path
   return 0
 }
 
-triggers() { # label, path, pattern...
-  local label="$1" path="$2"; shift 2
-  if included "$path" "$@"; then
-    ok "$label"
+triggers() { # label, path
+  if included "$2"; then
+    ok "$1"
   else
-    fail "$label" "$path matches no pattern, so a change to it would not be built"
+    fail "$1" "$2 is not an engine input, so a change to it would not be built"
   fi
 }
 
-does_not_trigger() { # label, path, pattern...
-  local label="$1" path="$2"; shift 2
-  if included "$path" "$@"; then
-    fail "$label" "$path is included, so a change to it takes the crux slot for a build that cannot read it"
+does_not_trigger() { # label, path
+  if included "$2"; then
+    fail "$1" "$2 is an engine input, so a change to it takes the crux slot for a build that cannot read it"
   else
-    ok "$label"
+    ok "$1"
   fi
 }
 
-echo "engine.yml"
-
-push_paths="$(paths_for "$ENGINE" push)"
-pr_paths="$(paths_for "$ENGINE" pull_request)"
-
-if [ -n "$push_paths" ]; then
-  ok "the push filter was read at all"
-else
-  fail "the push filter was read at all" \
-    "on.push.paths in engine.yml is empty or unparsed; nothing below asserted anything"
-  echo "$FAILED failed"
-  exit 1
-fi
-
-# THE TWO LISTS ARE ONE LIST. A file in the pull request's filter and not in
-# the push's is proved before it merges and never again; a file in the push's
-# and not the pull request's is built only after it is too late to be a review.
-# Either way the answer to "is this change built" depends on which event asked,
-# and that is not a thing anybody can hold in their head. They are written out
-# twice because GitHub's parser does not resolve YAML anchors, which is a
-# reason to assert they agree rather than a reason to let them drift.
-if [ "$push_paths" = "$pr_paths" ]; then
-  ok "push and pull_request filter the same paths"
-else
-  fail "push and pull_request filter the same paths" \
-    "the two lists differ, so whether a change is built depends on which event asked"
-fi
-
-# One pattern per element. Read a line at a time rather than split on `IFS`,
-# because a path pattern is free to contain a glob and an unquoted expansion
-# here would let the shell match it against this checkout — which is a
-# different question than the one being asked.
-patterns=()
-while IFS= read -r pattern; do
-  patterns+=("$pattern")
-done <<EOF
-$push_paths
-EOF
+echo "engine-inputs.sh"
 
 # --- too wide ---------------------------------------------------------------
 
 does_not_trigger "a repin does not build the engine" \
-  packages/domicile-engine/engine-release.nix "${patterns[@]}"
+  packages/domicile-engine/engine-release.nix
 
 real packages/domicile-engine/upstream/setoverridechildpaintflags.md &&
   does_not_trigger "prose under the package does not build the engine" \
-    packages/domicile-engine/upstream/setoverridechildpaintflags.md "${patterns[@]}"
+    packages/domicile-engine/upstream/setoverridechildpaintflags.md
 
 # --- too narrow -------------------------------------------------------------
 
@@ -229,35 +132,35 @@ real packages/domicile-engine/upstream/setoverridechildpaintflags.md &&
 # `apply.sh` feeds to `git am` and the only reason this job exists.
 patch="$(cd "$ROOT" && ls packages/domicile-engine/patches/*.patch 2>/dev/null | head -1)"
 if [ -n "$patch" ]; then
-  triggers "a patch builds the engine" "$patch" "${patterns[@]}"
+  triggers "a patch builds the engine" "$patch"
 else
   fail "a patch builds the engine" "no patches under packages/domicile-engine/patches"
 fi
 
 real packages/domicile-engine/CHROMIUM_PIN &&
   triggers "the Chromium pin builds the engine" \
-    packages/domicile-engine/CHROMIUM_PIN "${patterns[@]}"
+    packages/domicile-engine/CHROMIUM_PIN
 
 real packages/domicile-engine/scripts/apply.sh &&
   triggers "the apply script builds the engine" \
-    packages/domicile-engine/scripts/apply.sh "${patterns[@]}"
+    packages/domicile-engine/scripts/apply.sh
 
 source_file="$(cd "$ROOT" && find packages/domicile-engine/src -name '*.cc' | head -1)"
 if [ -n "$source_file" ]; then
-  triggers "a fork source file builds the engine" "$source_file" "${patterns[@]}"
+  triggers "a fork source file builds the engine" "$source_file"
 else
   fail "a fork source file builds the engine" "no .cc under packages/domicile-engine/src"
 fi
 
 real .github/workflows/engine.yml &&
   triggers "the workflow builds the engine" \
-    .github/workflows/engine.yml "${patterns[@]}"
+    .github/workflows/engine.yml
 
 # The steps of this job are these scripts, so a change to one is a change to
 # the job. Without them the first thing to find out would be a release.
 step_script="$(cd "$ROOT" && ls .github/scripts/engine-*.sh 2>/dev/null | head -1)"
 if [ -n "$step_script" ]; then
-  triggers "a step script builds the engine" "$step_script" "${patterns[@]}"
+  triggers "a step script builds the engine" "$step_script"
 else
   fail "a step script builds the engine" "no .github/scripts/engine-*.sh"
 fi
@@ -272,27 +175,27 @@ fi
 # is the "too narrow" failure in its most direct form.
 engine_check="$(cd "$ROOT" && ls scripts/engine-*.sh 2>/dev/null | head -1)"
 if [ -n "$engine_check" ]; then
-  triggers "an engine check builds the engine" "$engine_check" "${patterns[@]}"
+  triggers "an engine check builds the engine" "$engine_check"
 else
   fail "an engine check builds the engine" "no scripts/engine-*.sh"
 fi
 
 real scripts/lib/engine-guard.sh &&
   triggers "the guard library builds the engine" \
-    scripts/lib/engine-guard.sh "${patterns[@]}"
+    scripts/lib/engine-guard.sh
 
 real scripts/check.sh &&
-  triggers "the runner builds the engine" scripts/check.sh "${patterns[@]}"
+  triggers "the runner builds the engine" scripts/check.sh
 
 # And the other direction for the same directory, because `scripts/` is mostly
 # checks for `ubuntu-latest` and they must never take the `crux` slot. This is
 # what distinguishes the three patterns above from a `scripts/**` somebody
 # widens later.
 does_not_trigger "an unrelated check does not build the engine" \
-  scripts/test-american-english.sh "${patterns[@]}"
+  scripts/test-american-english.sh
 
 does_not_trigger "a nix check does not build the engine" \
-  scripts/nix-the-shells-build.sh "${patterns[@]}"
+  scripts/nix-the-shells-build.sh
 
 # --- exactly as narrow as it says -------------------------------------------
 
@@ -302,12 +205,22 @@ does_not_trigger "a nix check does not build the engine" \
 # a second .nix file added under that package would stop being built and
 # nothing would say so. Here, it fails.
 triggers "the exclusion is one generated file and not every .nix" \
-  packages/domicile-engine/other.nix "${patterns[@]}"
+  packages/domicile-engine/other.nix
+
+# Prose at the package root is prose too.
+real packages/domicile-engine/README.md &&
+  does_not_trigger "the package's README does not build the engine" \
+    packages/domicile-engine/README.md
+
+# A step script is a file directly under `.github/scripts`; the single star
+# stops at a slash, as GitHub's did.
+does_not_trigger "the step-script glob does not reach into a directory" \
+  .github/scripts/engine-x/nested.sh
 
 # And the same for prose: a `!packages/domicile-engine/**` that overshot would
 # still pass every exclusion assertion above.
 triggers "the exclusions did not swallow the package" \
-  packages/domicile-engine/scripts/build.sh "${patterns[@]}"
+  packages/domicile-engine/scripts/build.sh
 
 # --- what makes excluding the pin safe --------------------------------------
 
@@ -319,13 +232,82 @@ echo "nix-build.yml"
 # everything: a `paths:` here — however reasonable the day somebody adds one —
 # would leave a repin proved by nothing, since engine.yml no longer looks at
 # it.
-nix_push="$(paths_for "$NIX_BUILD" push)"
-nix_pr="$(paths_for "$NIX_BUILD" pull_request)"
-if [ -z "$nix_push" ] && [ -z "$nix_pr" ]; then
-  ok "nix-build.yml still runs on every change, so a repin is proved by it"
-else
+if on_block "$NIX_BUILD" | grep -qE '^[[:space:]]*paths(-ignore)?:'; then
   fail "nix-build.yml still runs on every change, so a repin is proved by it" \
     "it now has a paths filter, and engine.yml no longer builds on a repin — the pin would be proved by nothing"
+else
+  ok "nix-build.yml still runs on every change, so a repin is proved by it"
+fi
+
+# --- one list, in one place --------------------------------------------------
+
+echo "engine.yml"
+
+# A `paths:` left on `pull_request` is a required check that never reports on
+# the pull requests it filters out, and those can never enter the queue. One
+# on `merge_group` is ignored by GitHub, which is worse: it reads as a filter
+# and filters nothing. Either way the list the script holds would be a second
+# list, and two lists drift.
+if on_block "$ENGINE" | grep -v '^[[:space:]]*#' | grep -qE '^[[:space:]]*paths(-ignore)?:'; then
+  fail "engine.yml filters by the script alone" \
+    "its on: block still carries a paths filter"
+else
+  ok "engine.yml filters by the script alone"
+fi
+
+# --- the gate asks it of the merge group's own change ------------------------
+
+# What a merge group adds over its base, which is what the queue is about to
+# merge -- including whatever is queued ahead of it, since its head carries
+# that too. A real repository, because the question is a diff between two
+# commits and a fake `git` would be a guard against itself.
+echo "engine-inputs.sh gate"
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+git init -q "$WORK/repo"
+mkdir -p "$WORK/repo/packages/domicile-engine/patches" "$WORK/repo/docs"
+echo pin >"$WORK/repo/packages/domicile-engine/CHROMIUM_PIN"
+echo doc >"$WORK/repo/docs/README.md"
+git -C "$WORK/repo" add -A && git -C "$WORK/repo" commit -qm base
+base="$(git -C "$WORK/repo" rev-parse HEAD)"
+
+gate() { # base, head
+  : >"$WORK/out"
+  (cd "$WORK/repo" && GITHUB_OUTPUT="$WORK/out" "$INPUTS" gate "$1" "$2" >/dev/null 2>&1)
+  local rc=$?
+  [ "$rc" -eq 0 ] || { echo "exit $rc"; return; }
+  grep '^touched=' "$WORK/out" | cut -d= -f2
+}
+
+echo more >>"$WORK/repo/docs/README.md"
+git -C "$WORK/repo" commit -qam docs
+docs="$(git -C "$WORK/repo" rev-parse HEAD)"
+if [ "$(gate "$base" "$docs")" = false ]; then
+  ok "a merge group that leaves the engine alone does not build it"
+else
+  fail "a merge group that leaves the engine alone does not build it" \
+    "a docs change answered '$(gate "$base" "$docs")', which puts it in the crux queue"
+fi
+
+echo new >"$WORK/repo/packages/domicile-engine/patches/0001-x.patch"
+git -C "$WORK/repo" add -A && git -C "$WORK/repo" commit -qm patch
+if [ "$(gate "$base" HEAD)" = true ]; then
+  ok "a merge group that touches the series builds it"
+else
+  fail "a merge group that touches the series builds it" \
+    "a new patch answered '$(gate "$base" HEAD)', so the queue would merge it unbuilt"
+fi
+
+# A base the checkout does not have is not "nothing changed". The job in
+# front of the build must fail, and engine.yml then builds rather than skips.
+if [ "$(gate 0000000000000000000000000000000000000000 HEAD)" != false ] &&
+   [ "$(gate 0000000000000000000000000000000000000000 HEAD)" != true ]; then
+  ok "a base it cannot read is an error, not an answer"
+else
+  fail "a base it cannot read is an error, not an answer" \
+    "it answered '$(gate 0000000000000000000000000000000000000000 HEAD)'"
 fi
 
 if [ "$FAILED" -gt 0 ]; then
