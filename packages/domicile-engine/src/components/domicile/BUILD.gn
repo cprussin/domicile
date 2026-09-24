@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/test.gni")
+
 # For `use_xkbcommon`, which decides whether there is an
 # XkbKeyboardLayoutEngine for the keymap's tests to assert against.
 import("//ui/base/ui_features.gni")
@@ -332,6 +334,15 @@ source_set("unit_tests") {
     "//ui/events/keycodes:xkb",
     "//ui/events/ozone/layout",
     "//ui/gfx/geometry",
+  ]
+}
+
+# The fork's tests without the rest of components_unittests, which CI no
+# longer builds: that suite was most of an hour of every cold build.
+test("domicile_unittests") {
+  deps = [
+    ":unit_tests",
+    "//mojo/core/test:run_all_unittests",
   ]
 }
 

@@ -33,7 +33,7 @@ fi
 # load. `domicile_engine` because the compositor dlopens it; the test binaries
 # and probes because the checks run them.
 "$HERE/engine-release-build.sh" "$CHROMIUM" "${OUT_RELEASE:-out/Release}" \
-  components_unittests ozone_unittests domicile_css_parity domicile_color_probe \
+  domicile_unittests ozone_unittests domicile_css_parity domicile_color_probe \
   domicile_solid_color_submitter
 
 # The proof that this ran at all. Chromium's shell has swallowed an exit status
