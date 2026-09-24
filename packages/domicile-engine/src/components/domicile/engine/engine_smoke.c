@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 // THROWAWAY, with the rest of the spike. What phase 1's library has to be able
 // to do, asserted by a process that is not Chromium and does not know it is

@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 #include "components/domicile/browser/external_surface_provider.h"
 
