@@ -65,6 +65,7 @@ printf '%s\n' "$@" >"$GN_ARGS_FILE"
 GN
 cat >"$WORK/bin/autoninja" <<'NINJA'
 #!/bin/sh
+printf '%s\n' "$*" >>"${NINJA_ARGS_FILE:-/dev/null}"
 exit 0
 NINJA
 cp "$WORK/bin/autoninja" "$SRC/third_party/depot_tools/autoninja"
@@ -122,7 +123,9 @@ run_build() {
 run_job() {
   GN_ARGS_FILE="$WORK/gn-args"
   export GN_ARGS_FILE
-  rm -f "$GN_ARGS_FILE" "$WORK/sentinel"
+  NINJA_ARGS_FILE="$WORK/ninja-args"
+  export NINJA_ARGS_FILE
+  rm -f "$GN_ARGS_FILE" "$NINJA_ARGS_FILE" "$WORK/sentinel"
   STATUS=0
   PATH="$WORK/bin:$PATH" "$IN_JOB" "$SRC" "$WORK/sentinel" \
     >"$WORK/out" 2>&1 || STATUS=$?
@@ -224,6 +227,30 @@ if run_job; then
 else
   fail "the job says when no cache reached it" \
     "it exited $STATUS: $(cat "$WORK/out")"
+fi
+
+# ONE CONFIGURATION: the job's build is the one that ships, with every target
+# the checks load, and with DCHECKs on -- out/Domicile had them by default.
+echo "the job builds the shipped configuration, and only that"
+unset DOMICILE_CC_WRAPPER
+run_job
+ninja="$(cat "$WORK/ninja-args" 2>/dev/null)"
+case "$ninja" in
+  (*out/Domicile*) fail "the job does not build out/Domicile" "autoninja ran: $ninja" ;;
+  (*) ok "the job does not build out/Domicile" ;;
+esac
+for target in chrome domicile_engine components_unittests ozone_unittests \
+    domicile_css_parity domicile_color_probe domicile_solid_color_submitter; do
+  if printf '%s\n' "$ninja" | grep -qE "out/Release( .*)? $target( |$)"; then
+    ok "out/Release builds $target"
+  else
+    fail "out/Release builds $target" "autoninja ran: $ninja"
+  fi
+done
+if grep -q 'dcheck_always_on = true' "$WORK/gn-args" 2>/dev/null; then
+  ok "with DCHECKs on"
+else
+  fail "with DCHECKs on" "gn was given: $(cat "$WORK/gn-args" 2>/dev/null)"
 fi
 
 export DOMICILE_CC_WRAPPER="$CACHE"
