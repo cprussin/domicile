@@ -23,6 +23,12 @@ TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 
+# The cache is shared, so its totals would mix every build that ever ran.
+if [ -n "${DOMICILE_CC_WRAPPER:-}" ]; then
+  "$DOMICILE_CC_WRAPPER" --zero-stats >/dev/null || echo "  ccache" \
+    "$DOMICILE_CC_WRAPPER would not zero its statistics, so they span builds."
+fi
+
 # One build, the one that ships: out/Release with DCHECKs, plus what the checks
 # load. `domicile_engine` because the compositor dlopens it; the test binaries
 # and probes because the checks run them.
@@ -45,7 +51,7 @@ touch "$SENTINEL"
 # A failed report is caught rather than thrown, because the step's verdict is
 # the sentinel -- throwing would only drop the lines after it.
 if [ -n "${DOMICILE_CC_WRAPPER:-}" ]; then
-  "$DOMICILE_CC_WRAPPER" --show-stats | sed 's/^/  ccache /' || {
+  "$DOMICILE_CC_WRAPPER" --show-stats -v | sed 's/^/  ccache /' || {
     echo "  ccache $DOMICILE_CC_WRAPPER built, then would not report its" \
       "statistics. Whether the cache was consulted is unknown for this run."
   }
