@@ -163,10 +163,24 @@ jobs:
       - id: proof
         run: .github/scripts/engine-proof.sh gate
 
+  # A pull request whose head is behind its base is refused before it queues
+  # for `crux`: its green would prove a tree that is not the one that merges.
+  # Its own job rather than a step of `gate`, which the engine runs past on
+  # error. See .github/scripts/engine-rebased.sh.
+  rebased:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - if: ${{ github.event_name == 'pull_request' }}
+        run: .github/scripts/engine-rebased.sh "$BASE" "$HEAD"
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+
   engine:
-    needs: gate
+    needs: [gate, rebased]
     # `!cancelled()`, so a gate that errors runs the engine rather than skipping it.
-    if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
+    if: ${{ !cancelled() && needs.rebased.result == 'success' && needs.gate.outputs.proved != 'true' }}
     # `crux` is a label, not the runner's name. Both are set in
     # cprussin/dotfiles: config/machines/crux/domicile-ci.nix.
     #
@@ -411,6 +425,15 @@ jobs:
       - name: Take the compile slot
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
         run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
+
+      # Again, because the runner queue and the slot are both waits of hours
+      # and the base can move during either.
+      - name: Is this still rebased on its base?
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/engine-rebased.sh "$BASE" "$HEAD"
 
       - name: Reset the checkout to the pin
         if: ${{ steps.series.outputs.carries != 'true' }}
