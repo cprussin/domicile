@@ -172,6 +172,35 @@ expect "a generator that fails fails the step" refused "$(status "$out")"
 expect "and nothing is pushed" "$BRANCH_TIP" "$(pushed feature)"
 
 echo
+echo "== the push that makes CI run =="
+
+# A push with the workflow's own token starts runs that wait for a person. Given
+# DOMICILE_WRITEBACK_TOKEN, the push authenticates with it instead, and only the
+# push: a git on PATH records what the push was given.
+REAL_GIT="$(command -v git)"
+mkdir -p "$WORK/bin"
+cat >"$WORK/bin/git" <<WRAP
+#!/bin/sh
+case " \$* " in (*" push "*) printf '%s\n' "\$*" >>"$WORK/push-args" ;; esac
+exec "$REAL_GIT" "\$@"
+WRAP
+chmod +x "$WORK/bin/git"
+
+setup
+rm -f "$WORK/push-args"
+out="$(repin PATH="$WORK/bin:$PATH" DOMICILE_WRITEBACK_TOKEN=s3cret)"
+expect "a repin with a token succeeds" ok "$(status "$out")"
+contains "and the push carries the token" \
+  "AUTHORIZATION: basic $(printf 'x-access-token:s3cret' | base64 | tr -d '\n')" \
+  "$(cat "$WORK/push-args" 2>/dev/null)"
+
+setup
+rm -f "$WORK/push-args"
+out="$(repin PATH="$WORK/bin:$PATH")"
+expect "without one, the push carries no header" no \
+  "$(grep -q extraheader "$WORK/push-args" 2>/dev/null && echo yes || echo no)"
+
+echo
 if [ "$FAILED" -eq 0 ]; then
   echo "engine-release-repin: all cases passed"
 else
