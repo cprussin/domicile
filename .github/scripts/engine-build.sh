@@ -23,21 +23,12 @@ TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
 
-"$HERE/../../packages/domicile-engine/scripts/build.sh" "$CHROMIUM"
-
-# `domicile_engine` because nothing in chrome depends on it and the compositor
-# dlopens it by name; `components_unittests` because patch 0001 registers the
-# broker's tests into it.
-#
-# `ozone_unittests` because the DRM platform's tests had nowhere to run. They
-# were written on the build host and executed by `engine-drm-probe.yml`, which
-# is `workflow_dispatch` only -- so `DrmScreenTest` and `DrmModesetTest` were
-# compiled by nobody's pull request and run by nobody's pull request. That was
-# not an oversight: until `ozone_platform_drm = true` went into build.sh, this
-# build named only wayland and headless and those suites were not in any binary
-# it produced. They are now.
-autoninja -C "$CHROMIUM/out/Domicile" domicile_engine components_unittests \
-  ozone_unittests
+# One build, the one that ships: out/Release with DCHECKs, plus what the checks
+# load. `domicile_engine` because the compositor dlopens it; the test binaries
+# and probes because the checks run them.
+"$HERE/engine-release-build.sh" "$CHROMIUM" "${OUT_RELEASE:-out/Release}" \
+  components_unittests ozone_unittests domicile_css_parity domicile_color_probe \
+  domicile_solid_color_submitter
 
 # The proof that this ran at all. Chromium's shell has swallowed an exit status
 # more than once in this workflow's short life, so the step that called this
