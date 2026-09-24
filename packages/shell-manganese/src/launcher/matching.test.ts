@@ -1,17 +1,26 @@
 import { describe, expect, it } from "bun:test";
 
-import { matching } from "./matching";
+import { folded, matching } from "./matching";
 
-const OFFERED = [
+const PATHS = [
   "Notes/2026/april.org",
   "Notes/today.org",
   "src/domicile",
   "todo.txt",
 ];
 
+/**
+ * The same paths in the form the filter reads them.
+ *
+ * Folded once per list rather than once per keystroke — see the note at the
+ * top of `matching.ts` — which is why every case below goes through this
+ * rather than handing the filter the host's own answer.
+ */
+const OFFERED = folded(PATHS);
+
 describe("matching", () => {
   it("offers everything before anything has been typed", () => {
-    expect(matching(OFFERED, "")).toStrictEqual(OFFERED);
+    expect(matching(OFFERED, "")).toStrictEqual(PATHS);
   });
 
   it("keeps the rows whose path contains what was typed", () => {
@@ -39,7 +48,7 @@ describe("matching", () => {
     // The host sorts, so this does not: a second rule about order is a second
     // chance for the list to jump around under a keystroke that only narrowed
     // it.
-    expect(matching(OFFERED, "o")).toStrictEqual(OFFERED);
+    expect(matching(OFFERED, "o")).toStrictEqual(PATHS);
   });
 
   it("offers nothing when nothing matches", () => {

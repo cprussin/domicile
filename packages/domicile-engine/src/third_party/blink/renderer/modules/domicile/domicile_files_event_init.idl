@@ -4,5 +4,6 @@
 
 dictionary DomicileFilesEventInit : EventInit {
   sequence<DOMString> files = [];
+  boolean indexing = false;
   DOMHighResTimeStamp arrival = 0;
 };

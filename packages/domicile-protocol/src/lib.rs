@@ -177,8 +177,13 @@ pub enum ChromeMessage {
     /// wants one list of what a user might open, not a directory browser, and
     /// this is that list.
     ///
-    /// Asked again whenever the shell wants a fresh answer; nothing is pushed,
-    /// because a home directory changes for reasons no desktop is watching.
+    /// Asked whenever a shell wants the list — a page that has just reloaded
+    /// has none, and a launcher opening is when having one matters. It is no
+    /// longer the *only* way one arrives: the compositor keeps an index of the
+    /// home and broadcasts [`HostMessage::Files`] when that index changes, so
+    /// a panel that is already open fills in under the person typing into it.
+    /// This is still here because a broadcast only reaches the chromes that
+    /// were connected for it.
     ListFiles,
 }
 
@@ -373,19 +378,47 @@ pub enum HostMessage {
     /// shell that opens one hands it straight back to `spawn`, and the
     /// compositor's child inherits the home directory it was named from.
     ///
-    /// Sorted, and the order is the answer: see `domicile_host::files`, which
-    /// is where the walk and the sort live.
+    /// Sorted, and the order is the answer: see `domicile_host::file_index`,
+    /// which is what holds it, and `domicile_host::home_walk`, which is what
+    /// fills it.
+    ///
+    /// **Pushed as well as answered**, which it did not used to be. The
+    /// compositor holds an index of the home rather than walking it as the
+    /// panel opens, so there is something to push: it broadcasts this when the
+    /// boot walk ends and when what the home holds changes under a watch. A
+    /// shell still asks — a page that reloaded has no list — and gets the same
+    /// message back.
+    ///
+    /// `indexing` is whether this is all of it. **It is the difference between
+    /// an incomplete answer and a wrong one**: the list is a launcher's whole
+    /// evidence that a file exists, so one taken from an index still being
+    /// built has to arrive saying so, or a person who typed the name of a file
+    /// the walk has not reached yet is told — in the only language the panel
+    /// has — that they do not have it. A shell draws that as a line saying the
+    /// index is still being built; `packages/shell-manganese`'s launcher is
+    /// the worked example.
     ///
     /// An empty list is a home with nothing to offer, which is a real answer
     /// rather than a failure — the same distinction [`HostMessage::Displays`]
-    /// draws.
-    Files { files: Vec<String> },
+    /// draws. An empty list with `indexing` set is the other thing entirely: a
+    /// desktop that has only just started and has not looked yet.
+    Files {
+        files: Vec<String>,
+        /// `#[serde(default)]` for the reason [`PROTOCOL_VERSION`] gives and
+        /// not as a compatibility floor: nothing can complete a handshake with
+        /// this build and then send a `files` without it. It is here so a line
+        /// that predates the field can still be *read* — by a captured
+        /// session, or by a hand-written fixture.
+        #[serde(default)]
+        indexing: bool,
+    },
 
     /// The machine's battery: how full, and whether a lead is in.
     ///
-    /// **Pushed, not answered.** There is no `ListBattery` beside
-    /// [`ChromeMessage::ListFiles`], because a charge changes on its own while
-    /// a home directory changes for reasons nothing is watching. The
+    /// **Pushed, and only pushed.** There is no `ListBattery` beside
+    /// [`ChromeMessage::ListFiles`]: a charge is one reading rather than a
+    /// list, and a page that has just loaded is caught up by the next one
+    /// without having to ask. The
     /// kernel announces a supply that changed and the compositor re-reads
     /// `/sys/class/power_supply` when it does, sending this if the reading
     /// moved — plus once more to a chrome that has just connected, so a page
@@ -423,10 +456,13 @@ pub enum HostMessage {
     /// empties the clipboard. That is what a manager is for, and it has to be
     /// here because this is the process the offer arrives at.
     ///
-    /// **Pushed, like [`HostMessage::Battery`] and unlike
-    /// [`HostMessage::Files`].** A copy is an event the compositor already
+    /// **Pushed and never asked for, like [`HostMessage::Battery`].** A copy
+    /// is an event the compositor already
     /// hears; a shell that had to ask would be asking on a timer or on a
     /// keystroke, and either one draws a panel that is a moment out of date.
+    /// [`HostMessage::Files`] is pushed too and is still askable, because the
+    /// list is long enough that a chrome which missed a broadcast needs a way
+    /// to get one rather than waiting for the home to change.
     /// Sent whenever the history changes, and again to a chrome that has just
     /// connected — a page that reloaded would otherwise have an empty panel
     /// until the next copy.

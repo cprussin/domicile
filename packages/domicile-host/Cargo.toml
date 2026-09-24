@@ -12,6 +12,10 @@ domicile-protocol = { path = "../domicile-protocol" }
 thiserror.workspace = true
 serde.workspace = true
 serde_json = "1"
+notify.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 # The Smithay Wayland-server backend lives behind this feature so the
 # orchestrator (this crate's default build) stays testable in the core shell

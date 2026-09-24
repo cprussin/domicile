@@ -134,6 +134,7 @@ fn host_messages_round_trip() {
     });
     host_round_trip(&HostMessage::Files {
         files: vec!["Notes/today.org".into(), "src".into()],
+        indexing: false,
     });
     host_round_trip(&HostMessage::Clipboard {
         entries: vec![ClipboardEntry {
@@ -153,17 +154,38 @@ fn host_messages_round_trip() {
 fn the_files_a_launcher_can_offer_are_named_from_home() {
     let v = serde_json::to_value(HostMessage::Files {
         files: vec!["Notes/today.org".into(), "src".into()],
+        indexing: false,
     })
     .unwrap();
     assert_eq!(v["type"], "files");
     assert_eq!(v["files"], serde_json::json!(["Notes/today.org", "src"]));
 }
 
+/// An answer given while the index is still being built says so.
+///
+/// The list is the launcher's whole evidence that a file exists, so one that
+/// is not all of them has to arrive saying which it is — otherwise a person
+/// who typed a name their desktop has not reached yet is told, in the only
+/// language the panel has, that they do not have that file.
+#[test]
+fn a_partial_answer_says_that_it_is_partial() {
+    let v = serde_json::to_value(HostMessage::Files {
+        files: vec!["src".into()],
+        indexing: true,
+    })
+    .unwrap();
+    assert_eq!(v["indexing"], serde_json::json!(true));
+}
+
 /// A home with nothing in it is an answer, and the empty list has to survive
 /// the wire to be one — the same reason a desktop of no displays does.
 #[test]
 fn a_home_with_nothing_to_open_is_an_answer() {
-    let v = serde_json::to_value(HostMessage::Files { files: vec![] }).unwrap();
+    let v = serde_json::to_value(HostMessage::Files {
+        files: vec![],
+        indexing: false,
+    })
+    .unwrap();
     assert_eq!(v["type"], "files");
     assert_eq!(v["files"], serde_json::json!([]));
 }

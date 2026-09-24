@@ -702,10 +702,17 @@ void ControlChannel::DispatchLine(const std::string& line,
         files.push_back(*path);
       }
     }
+    // DEFAULTED RATHER THAN DROPPED, which is what `displays` does above and
+    // the opposite of what `battery` does below. The list is the message and
+    // is already in hand; `indexing` only says whether it is all of it, and a
+    // line without it is one written before the index existed -- from a
+    // captured session or a hand-written fixture -- where "this is the whole
+    // home" is the right reading. Nothing this build talks to omits it.
+    bool indexing = message.FindBool("indexing").value_or(false);
     // Sent even when it is empty, for the reason `displays` above is: a home
     // with nothing to offer is an answer, and a launcher that never heard one
     // would wait for a message the compositor has already sent.
-    client_->Files(std::move(files), arrival);
+    client_->Files(std::move(files), indexing, arrival);
     return;
   }
 
