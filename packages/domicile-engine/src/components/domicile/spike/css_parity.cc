@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 // THROWAWAY. Step 4 of the spike in docs/architecture/ENGINE-FORK.md: the
 // measurement the whole fork exists to justify.

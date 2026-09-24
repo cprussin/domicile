@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 // <app> — a Wayland client's window, laid out by the page.
 // See docs/architecture/ENGINE-FORK.md in the Domicile repository.
