@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -88,12 +87,14 @@ HTMLWebViewElement::HTMLWebViewElement(Document& document)
       // Null in a document with no window -- a template's, say -- and that is
       // what HeapMojoRemote takes it for. Nothing binds until there is a frame
       // to name anyway.
+      host_(document.GetExecutionContext()),
       guest_(document.GetExecutionContext()),
       client_receiver_(this, document.GetExecutionContext()) {}
 
 HTMLWebViewElement::~HTMLWebViewElement() = default;
 
 void HTMLWebViewElement::Trace(Visitor* visitor) const {
+  visitor->Trace(host_);
   visitor->Trace(guest_);
   visitor->Trace(client_receiver_);
   HTMLFrameElementBase::Trace(visitor);
@@ -140,25 +141,22 @@ void HTMLWebViewElement::RequestGuest() {
     return;
   }
 
-  // The factory is a one-shot: it exists to hand over the pipe below, and the
-  // request is written to it before this remote goes out of scope. The pipe
-  // that matters is `guest_`, which lives as long as the element.
-  mojo::Remote<domicile::mojom::blink::WebViewGuestHost> host;
+  // The task runner is named once and passed three times, without a move:
+  // argument evaluation order is unspecified, so a moved-from runner could
+  // reach another pipe.
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      context->GetTaskRunner(TaskType::kInternalDefault);
+  // Kept open rather than dropped once the request is written: the browser may
+  // hold the request on it until it has the placeholder. See `host_`.
   context->GetBrowserInterfaceBroker().GetInterface(
-      host.BindNewPipeAndPassReceiver());
+      host_.BindNewPipeAndPassReceiver(task_runner));
   // BOTH ENDS IN ONE MESSAGE. The browser creates the guest from this call, so
   // a client handed over afterward would leave a window in which the guest
   // could commit a page and have nothing to tell about it -- and the first
   // thing a guest does is commit a page.
-  //
-  // The task runner is named once and passed twice, without a move: argument
-  // evaluation order is unspecified, so a moved-from runner could reach the
-  // other pipe.
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      context->GetTaskRunner(TaskType::kInternalDefault);
-  host->CreateGuest(placeholder->GetLocalFrameToken(),
-                    guest_.BindNewPipeAndPassReceiver(task_runner),
-                    client_receiver_.BindNewPipeAndPassRemote(task_runner));
+  host_->CreateGuest(placeholder->GetLocalFrameToken(),
+                     guest_.BindNewPipeAndPassReceiver(task_runner),
+                     client_receiver_.BindNewPipeAndPassRemote(task_runner));
 }
 
 void HTMLWebViewElement::NavigateGuest() {
