@@ -125,7 +125,7 @@ on:
 # pending run for the same ref, which is the one it supersedes.
 #
 # `cancel-in-progress: false` stays, and is the half that group name never
-# provided: a canceled `autoninja` leaves a half-linked `out/Domicile` that
+# provided: a canceled `autoninja` leaves a half-linked `out/Release` that
 # the next run inherits, and the failure it produces looks like a code error
 # rather than an interrupted build. Waiting is cheaper than that.
 #
@@ -259,12 +259,8 @@ jobs:
       # different spans and released by different steps.
       CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
-      # The RELEASE configuration's output directory, which is not the one
-      # everything above builds. `out/Domicile` is `is_component_build = true`
-      # with no symbols — small, fast, and linked to several hundred .so files
-      # in a tree nobody can move. This is the shape that goes in a tarball,
-      # and it is ~40G of its own. Kept warm between releases for the reason
-      # the other one is: a clean Chromium build is four hours.
+      # The one build: what ships, and what the checks run against. ~40G, kept
+      # warm because a clean Chromium build is four hours.
       OUT_RELEASE: out/Release
 
       # Where the tarball is assembled and where the packaged tree is put back
@@ -335,7 +331,7 @@ jobs:
       # 4h. A pin nothing carries costs what it costs today, in whichever tree
       # was least recently asked for.
       #
-      # WHY THIS EXISTS AT ALL: moving `CHROMIUM_PIN` invalidates out/Domicile
+      # WHY THIS EXISTS AT ALL: moving `CHROMIUM_PIN` invalidates out/Release
       # in both directions, so two branches on different pins taking turns in
       # one tree is that 4h EVERY TURN — and with a pull request run and a
       # merge run each, two open branches is four of them, on the one slot
@@ -460,12 +456,20 @@ jobs:
         run: .github/scripts/engine-series-stamp.sh record "$CHROMIUM"
 
 
-      # `build.sh` builds `chrome` and the spike's submitter. The guards also
-      # need `libdomicile_engine.so` — the compositor dlopens it by name — and
-      # the checks need `components_unittests` and `ozone_unittests`, so all of
-      # them are named in `.github/scripts/engine-build.sh` rather than in
-      # `build.sh`, which is what a person runs by hand and should stay the
-      # small thing.
+      # A cold out/Release is ~40G, and a release owed is when it is likeliest
+      # to be cold.
+      - name: Room to build in
+        if: ${{ steps.release.outputs.build == 'true' }}
+        run: |
+          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
+          echo "/build has ${free_gb}G free"
+          [ "$free_gb" -ge 60 ] || {
+            echo "::error::only ${free_gb}G free on /build; a cold out/Release needs ~40G. Reclaim it by removing $CHROMIUM/$OUT_RELEASE, which is a cache." >&2
+            exit 1
+          }
+
+      # out/Release, the shipped configuration, with everything the checks load
+      # -- see .github/scripts/engine-build.sh.
       #
       # Unconditional, where the three steps above are not. A series that has
       # not moved leaves nothing for the compiler to do and this is ~65s of
@@ -517,6 +521,7 @@ jobs:
           # into the tree pool now, and two copies of which symlink is two
           # things to keep true.
           DOMICILE_CHROMIUM: ${{ env.CHROMIUM }}
+          DOMICILE_ENGINE_OUT: ${{ env.OUT_RELEASE }}
           DOMICILE_CHECK_STRICT: "1"
           # Where a failing check's whole log is kept, named because $TMPDIR in
           # there is nix's and nothing else in this job has it — the same reason
@@ -559,62 +564,14 @@ jobs:
       # WHAT IS LEFT HERE IS THE ACTING. The deciding is step 5, up beside the
       # tree, and `steps.release.outputs` is what every `if:` below reads.
 
-      # `is_component_build = false`, in its own output directory, through
-      # Chromium's shell with the sentinel that proves the shell ran the
-      # command — see the Build step above, where NIX_SHELL_RUN returned
-      # success having built nothing.
-      - name: Build the release configuration
-        if: ${{ steps.release.outputs.build == 'true' }}
-        run: |
-          set -euo pipefail
-          done=/tmp/domicile-release-build-ran
-          rm -f "$done"
-
-          # A non-component Chromium is ~40G of objects, and /build is also
-          # where this machine's interactive builds live. Under 60 free there
-          # is no point starting: the failure four hours in is a full dataset.
-          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
-          echo "/build has ${free_gb}G free"
-          [ "$free_gb" -ge 60 ] || {
-            echo "::error::only ${free_gb}G free on /build; a release build needs ~40G and this will not fit" >&2
-            echo "Reclaim it by removing $CHROMIUM/$OUT_RELEASE, which is a cache and nothing else." >&2
-            exit 1
-          }
-
-          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
-          export NIX_PATH="nixpkgs=$nixpkgs"
-
-          cat > /tmp/domicile-release-build <<EOF
-          #!/usr/bin/env bash
-          set -euo pipefail
-          "$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh" "$CHROMIUM" "$OUT_RELEASE"
-          touch "$done"
-          EOF
-          chmod +x /tmp/domicile-release-build
-
-          if NIX_SHELL_RUN=/tmp/domicile-release-build \
-               nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-release-shell.log 2>&1; then
-            echo "the shell exited 0"
-          else
-            echo "the shell exited $?"
-          fi
-          grep -aE 'error:|FAILED:|ninja: build stopped|Error:' /tmp/domicile-release-shell.log |
-            tail -40 | sed 's/^/  E /' || true
-          tail -120 /tmp/domicile-release-shell.log | sed 's/^/  | /'
-
-          [ -e "$done" ] || {
-            echo "::error::Chromium's shell did not run the release build; its last words are above" >&2
-            exit 1
-          }
-
       - name: Package the release
         id: package
         if: ${{ steps.release.outputs.build == 'true' }}
         run: .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
 
       # THE ARTIFACT IS ASSERTED, NOT ASSUMED. The guards above ran against
-      # `out/Domicile`, which is a different build with a different linkage;
-      # nothing in them would notice a file left out of the release manifest.
+      # out/Release itself; nothing in them would notice a file left out of
+      # the release manifest.
       # So the tarball is unpacked back into the checkout as an output
       # directory of its own and the same pixel guard is pointed at it. An
       # artifact that cannot show a client's window is not a release.

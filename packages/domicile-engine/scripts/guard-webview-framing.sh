@@ -182,11 +182,12 @@ measure() { # $1 which run, $2 the URL to open
   # One process, two colors: there is one producer per socket --
   # OutgoingInvitation::Send consumes the server endpoint -- so asking twice is
   # not available and the witness travels with the subject.
-  "$CHROMIUM/$OUT/domicile_color_probe" \
-    --domicile-broker-socket="$BROKER" \
-    --color="FF$COLOR" \
-    --witness="FF$WITNESS" \
-    --for-seconds="$FOR_SECONDS" 2>&1 | tee "$probe_log"
+  LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+    "$CHROMIUM/$OUT/domicile_color_probe" \
+      --domicile-broker-socket="$BROKER" \
+      --color="FF$COLOR" \
+      --witness="FF$WITNESS" \
+      --for-seconds="$FOR_SECONDS" 2>&1 | tee "$probe_log"
   local status="${PIPESTATUS[0]}"
 
   kill "$engine" 2>/dev/null
