@@ -19,12 +19,11 @@
 // arriving is what makes the positive run's not arriving a measurement of
 // stop() rather than of a fixture nobody asked.
 //
-// EVERY STEP IS ON A TIMER, and there is nothing better available: this
-// element fires no navigation event, the browser tells the renderer nothing
-// about the guest's loads, and the guest's page is cross-origin to this
-// document. So the intervals are generous — the guard owns them and passes
-// them in, so one file decides how long everything gets — and what is asserted
-// is the ORDER of the pages the guest showed rather than when each arrived.
+// EACH STEP WAITS FOR WHAT IT NEEDS — the element's `url` and `loading` —
+// bounded by a timeout the guard passes in. A step that never happens sits out
+// its bound and is read as it stands, which is the fixed schedule this was, so
+// a broken engine gets the readings it always got. What is asserted is still
+// the ORDER of the pages the guest showed rather than when each arrived.
 //
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to
 // its own log:
@@ -49,10 +48,10 @@
 //
 // WHY `loading` IS READ HERE AND NOT IN A GUARD OF ITS OWN. Its claim needs a
 // page that is settled and a page that is still on its way, in one run, on one
-// element — and this guard already builds both: `/two` has been sitting there
-// for a whole STEP, and `/slow` is a navigation the fixture holds open for
-// longer than the step that follows it. A second guard would be a second copy
-// of that fixture and that schedule for one property.
+// element — and this guard already builds both: `/two` has finished
+// arriving, and `/slow` is a navigation the fixture holds open for longer than
+// the step that follows it. A second guard would be a second copy of that
+// fixture and that schedule for one property.
 //
 // AND WHY THE CONTROL SAYS LESS ABOUT IT than about the four calls. `loading`
 // separates inside a single run: an element answering `true` to everything
@@ -122,13 +121,20 @@ const say = (what) => {
 const parameters = new URLSearchParams(location.search);
 const base = required(parameters, "src");
 const drives = drivesControls(required(parameters, "drive"));
-// How long the first page gets, which is also how long the last one gets to
-// NOT arrive: the guest has to be asked for, attached and navigated before
-// anything here means anything, and the slow page has to be given longer than
-// the fixture's own wait before its absence is a measurement.
+// The bound on the first page, which has to be asked for, attached and
+// navigated, and on the last, which the control waits out the fixture for.
 const settle = requiredMilliseconds(parameters, "settle");
-// And how long each step after that gets.
+// The bound on each step in between.
 const step = requiredMilliseconds(parameters, "step");
+// How long the control watches a step it does not drive: an absence has no
+// event to wait for.
+const quiet = requiredMilliseconds(parameters, "quiet");
+// How long `/slow` is pending before stop(), so its request is at the fixture.
+const hold = requiredMilliseconds(parameters, "hold");
+
+// Polled rather than listened for: `two-pages` must be read with no listener on
+// the element at all.
+const POLL_MS = 50;
 
 const view = document.createElement("webview");
 view.style.position = "absolute";
@@ -195,18 +201,24 @@ const readState = (at) => {
 // log wants; the path is what the guard compares, for the reason the page
 // sequence is compared by path — the port is the fixture's and changes per run.
 const readPage = (at) => {
+  say(
+    `page-state at=${at} path=${pathShown()} security=${view.security}` +
+      ` url=${view.url ?? ""}`,
+  );
+};
+
+// An element that has reported nothing has no address to take a path out of,
+// and `new URL("")` throws — which would end the run on a TypeError and turn
+// "the element said nothing" into "the harness broke".
+const pathShown = () => {
   const url = view.url ?? "";
-  // An element that has reported nothing has no address to take a path out of,
-  // and `new URL("")` throws — which would end the run on a TypeError and turn
-  // "the element said nothing" into "the harness broke".
-  const path = url === "" ? "" : new URL(url).pathname;
-  say(`page-state at=${at} path=${path} security=${view.security} url=${url}`);
+  return url === "" ? "" : new URL(url).pathname;
 };
 
 // And whether it says a page is on its way, read the same way and at points
 // chosen for what the guest is doing rather than for what was driven at it:
-// one where a page has been sitting there for a whole step, one where a
-// navigation the fixture is holding open has been pending for one.
+// one where a page has finished arriving, one where a navigation the fixture
+// is holding open has been pending for a HOLD.
 const readLoading = (at) => {
   say(
     `loading-state at=${at} loading=${view.loading}` +
@@ -214,91 +226,108 @@ const readLoading = (at) => {
   );
 };
 
-// The schedule, as what happens rather than as nested timeouts: each step is
-// `after` milliseconds past the one before it, and the order is the experiment.
+// Resolves once `ready()` holds, or once `within` ms have passed regardless.
+const until = (ready, within) =>
+  new Promise((resolve) => {
+    const deadline = Date.now() + within;
+    const poll = () => {
+      if (ready() || Date.now() >= deadline) {
+        resolve();
+      } else {
+        setTimeout(poll, POLL_MS);
+      }
+    };
+    poll();
+  });
+
+const pause = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+// Loads seen starting, polled like everything else here. The address alone
+// cannot say a page arrived: the engine shows a navigation's address before
+// its load starts.
+let loadsSeen = 0;
+let wasLoading = false;
+setInterval(() => {
+  if (view.loading && !wasLoading) {
+    loadsSeen += 1;
+  }
+  wasLoading = view.loading;
+}, POLL_MS / 5);
+
+// The guest has loaded `path` since this was made, so its pageshow has been
+// said. A load too quick to be seen costs the step its bound, not the reading.
+const arrived = (path) => {
+  const since = loadsSeen;
+  return () => loadsSeen > since && pathShown() === path && !view.loading;
+};
+
+// The bound on a step one of the four drives. In the control nothing is driven,
+// so the step is watched for `quiet` and then read as it stands.
+const driven = drives ? step : quiet;
+
+// The schedule, in order: each reading is taken once the step before it has
+// landed, and before the next step drives anything.
 //
 // `/slow` and then stop() is the last pair for a reason — a canceled
 // navigation leaves the guest showing whatever it showed before, so anything
 // driven after it would be read against a page that never changed.
-//
-// EACH READING COMES BEFORE THE STEP IT IS NAMED AFTER DRIVES ANYTHING, so it
-// describes where the guest has been sitting for a whole STEP rather than what
-// it is in the middle of doing.
-const schedule = [
-  {
-    act: () => {
-      readState("start");
-      readPage("start");
-      navigate("/two");
-    },
-    after: settle,
-  },
-  {
-    act: () => {
-      // BEFORE `listen()`, and that order is the measurement: this is the
-      // value an element reports having never had a listener on it.
-      readState("two-pages");
-      readPage("two-pages");
-      listen();
-      call("goBack", (v) => v.goBack());
-    },
-    after: step,
-  },
-  {
-    act: () => {
-      readState("after-back");
-      readPage("after-back");
-      call("goForward", (v) => v.goForward());
-    },
-    after: step,
-  },
-  {
-    act: () => {
-      readState("after-forward");
-      readPage("after-forward");
-      call("reload", (v) => v.reload());
-    },
-    after: step,
-  },
-  {
-    act: () => {
-      // A page that arrived a whole STEP ago, which is what makes this the
-      // settled half of the loading claim rather than a race with `reload()`.
-      readLoading("settled");
-      navigate("/slow");
-    },
-    after: step,
-  },
-  {
-    act: () => {
-      // And the pending half: the fixture holds `/slow` open for longer than
-      // this step, so the element is reading a navigation that is genuinely
-      // still in flight. BEFORE the stop, which is the only order in which
-      // there is a load left to report.
-      readLoading("pending");
-      call("stop", (v) => v.stop());
-    },
-    after: step,
-  },
-  {
-    act: () => {
-      readLoading("after-stop");
-      say("done");
-    },
-    after: settle,
-  },
-];
+const run = async () => {
+  // `src` last: it is what makes a <webview> ask for a guest, and before the
+  // element is in the document there is no frame to attach one to.
+  say(`driving mode=${drives ? "history" : "none"}`);
+  document.body.append(view);
+  const one = arrived("/one");
+  navigate("/one");
+  await until(one, settle);
 
-// Last, and this is the order that matters: `src` is what makes a <webview>
-// ask for a guest, and setting it before the element is in the document would
-// ask before there is a frame to attach one to.
-say(`driving mode=${drives ? "history" : "none"}`);
-document.body.append(view);
-navigate("/one");
+  readState("start");
+  readPage("start");
+  const two = arrived("/two");
+  navigate("/two");
+  await until(two, step);
 
-const total = schedule.reduce((at, { act, after }) => {
-  const when = at + after;
-  setTimeout(act, when);
-  return when;
-}, 0);
-say(`scheduled ${schedule.length} steps over ${total}ms`);
+  // BEFORE `listen()`, and that order is the measurement: this is the value an
+  // element reports having never had a listener on it.
+  readState("two-pages");
+  readPage("two-pages");
+  listen();
+  const back = arrived("/one");
+  call("goBack", (v) => v.goBack());
+  await until(back, driven);
+
+  readState("after-back");
+  readPage("after-back");
+  const forward = arrived("/two");
+  call("goForward", (v) => v.goForward());
+  await until(forward, driven);
+
+  readState("after-forward");
+  readPage("after-forward");
+  // A reload starts and finishes a load on the same address: two changes.
+  const loads = loadingAnnounced;
+  call("reload", (v) => v.reload());
+  await until(() => loadingAnnounced >= loads + 2 && !view.loading, driven);
+
+  // The settled half of the loading claim: the reload has finished.
+  readLoading("settled");
+  navigate("/slow");
+  await until(() => view.loading, step);
+  // Inherently timed: nothing here says when the request reaches the fixture.
+  await pause(hold);
+
+  // And the pending half: the fixture is still holding `/slow`. BEFORE the
+  // stop, which is the only order in which there is a load left to report.
+  readLoading("pending");
+  call("stop", (v) => v.stop());
+  await until(() => !view.loading, settle);
+
+  readLoading("after-stop");
+  say("done");
+};
+
+run().catch((error) => {
+  say(`failed ${error}`);
+});
