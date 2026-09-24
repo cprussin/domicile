@@ -39,7 +39,7 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <take|drop|who> <chromium> [owner]" >&2
+  echo "usage: $(basename "$0") <take|drop|who|path> <chromium> [owner]" >&2
   exit 2
 }
 
@@ -48,27 +48,37 @@ chromium="${2:-}"
 owner="${3:-}"
 [ -n "$action" ] && [ -n "$chromium" ] || usage
 
-# AT THE BUILD ROOT, AND IT USED TO BE BESIDE THE CHECKOUT.
+# ONE LOCK PER TREE, AT THE BUILD ROOT, KEYED BY THE TREE IT RESOLVES TO.
 #
-# `dirname` of `/build/chromium/src` is `/build/chromium`, which is now a
-# symlink into one of `engine-tree-pool.sh`'s trees — and `dirname` is textual,
-# so it does not resolve it. The lock would be created INSIDE whichever tree
-# the path named at the time. A job takes it, the pool points the path at
-# another tree, and the `if: always()` drop then looks in the new tree, finds
-# nothing and says so: a lock left holding a tree nobody is in, discoverable
-# only by reading this file.
+# `dirname` of `/build/chromium/src` is `/build/chromium`, a symlink into one
+# of `engine-tree-pool.sh`'s trees -- and `dirname` is textual, so a lock put
+# there would land INSIDE whichever tree the link named at the time. Resolving
+# it instead means `/build/chromium/src` and `/build/trees/tree-0/src` are the
+# same tree and take the same lock, which is what a person building through the
+# convenience path and a job building through the real one need.
 #
-# THE LOCK THAT HAS TO EXIST IS THIS ONE ANYWAY. Two writers in two different
-# trees do not collide. What they share is the path, and a person building
-# through `/build/chromium/src` while a job swaps that symlink under them is
-# compiling half of one tree and half of another — the silent failure this file
-# is about, arriving by the door the pool opened.
+# PER TREE RATHER THAN ONE FOR THE POOL, because two runs in two different
+# trees do not collide: what made one lock right was that every run reached its
+# tree through one symlink, and CI no longer does. The pool hands each run its
+# own path and this keeps two runs out of the same tree.
 #
 # `$chromium` stays an argument. It is what a person types, it is what every
 # message below names, and it is the thing being locked; where the lock is kept
 # is a different question and it is answered here. Override for tests, which
 # have no /build and should not want one.
-LOCK="${DOMICILE_TREE_LOCK:-${DOMICILE_BUILD_ROOT:-/build}/.domicile-tree-lock}"
+LOCK="${DOMICILE_TREE_LOCK:-}"
+if [ -z "$LOCK" ]; then
+  # `pwd -P` resolves the symlink; a path that does not exist yet has no tree
+  # to key on and falls back to the single lock, which is the pre-pool answer
+  # and the safe one.
+  slot="$(cd "$(dirname "$chromium")" 2>/dev/null && pwd -P)" || slot=""
+  root="${DOMICILE_BUILD_ROOT:-/build}"
+  if [ -n "$slot" ]; then
+    LOCK="$root/.domicile-tree-lock-$(basename "$slot")"
+  else
+    LOCK="$root/.domicile-tree-lock"
+  fi
+fi
 
 # How long, in the units a person reads. The timestamp alone answers "when",
 # which is the question nobody has: the question is whether this has been held
@@ -157,6 +167,10 @@ case "$action" in
       echo "$chromium is not locked"
     fi
     ;;
+
+  # So that engine-tree-pool.sh, which takes these locks while it picks a
+  # tree, never has to recompute the name. One formula, one place.
+  path) printf '%s\n' "$LOCK" ;;
 
   *) usage ;;
 esac
