@@ -65,9 +65,9 @@
 # both halves of and which is therefore read here rather than in a guard of its
 # own:
 #
-#   settled     false   /two arrived a whole STEP ago
+#   settled     false   /two has finished arriving
 #   pending     true    THE POSITIVE: /slow is a navigation the fixture is
-#                        still holding open, driven one STEP ago
+#                        still holding open, driven one HOLD ago
 #   after-stop  false   stop() canceled it, so nothing is arriving any more
 #
 # THAT PAIR SEPARATES INSIDE ONE RUN, which is why the control says less about
@@ -139,26 +139,28 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-history-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# THE THREE NUMBERS THE EXPERIMENT IS MADE OF, and they are one file's to pick
-# because they only work together.
+# THE NUMBERS THE EXPERIMENT IS MADE OF, one file's to pick because they only
+# work together. Each step advances as soon as what it waits for has happened;
+# SETTLE and STEP only bound a step that never does.
 #
-#   SETTLE   the first page's runway and the last page's grace. Long, because
-#            everything before the first page is asynchronous — the element
-#            asks for a guest, the browser prepares the placeholder, attaches
-#            an inner WebContents and only then navigates — and because a page
-#            that must NOT arrive has to be given longer than it would have
-#            taken to arrive
-#   STEP     how long each control gets to land before the next is driven
-#   SLOW     how long the fixture sits on the last navigation. It must outlast
-#            STEP, so that stop() is driven while the load is still pending,
-#            and be outlasted by SETTLE, so that the control run sees the page
-#            it would have shown
+#   SETTLE   bounds the first page (the guest has to be asked for, attached and
+#            navigated) and the last, which must outlast SLOW so that the
+#            control run sees the page it would have shown
+#   STEP     bounds each step in between
+#   QUIET    how long the control watches a step it does not drive, since an
+#            absence has no event to wait for. Longer than a healthy step
+#   HOLD     how long /slow is pending before stop(), so its request is at the
+#            fixture: nothing the page can see says when it arrives
+#   SLOW     how long the fixture sits on /slow. It must outlast HOLD, so that
+#            stop() is driven while the load is still pending
 SETTLE_MS="${SETTLE_MS:-25000}"
 STEP_MS="${STEP_MS:-8000}"
-SLOW_SECONDS="${SLOW_SECONDS:-20}"
+QUIET_MS="${QUIET_MS:-3000}"
+HOLD_MS="${HOLD_MS:-2000}"
+SLOW_SECONDS="${SLOW_SECONDS:-6}"
 
-# The schedule is SETTLE + five STEPs + SETTLE, and the engine has to start
-# before any of it. Generous on top of that, because this machine is shared.
+# Every bound sat out is SETTLE + five STEPs + HOLD + SETTLE, and the engine
+# has to start before any of it. Generous on top: this machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-240}"
 
 # A run and its own control are two measurements, so they get two sets of logs.
@@ -222,7 +224,7 @@ echo "serving a browser window's pages under $SUBJECT"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
-  --app="domicile://shell/?drive=$DRIVE&src=$SUBJECT&settle=$SETTLE_MS&step=$STEP_MS" \
+  --app="domicile://shell/?drive=$DRIVE&src=$SUBJECT&settle=$SETTLE_MS&step=$STEP_MS&quiet=$QUIET_MS&hold=$HOLD_MS" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-history.js" \
   --no-sandbox --password-store=basic --no-first-run \
@@ -246,6 +248,18 @@ echo "the shell is driving mode=$DRIVE"
 #    finishes, and one that died says so by never getting here.
 wait_for_line "$TRIES" "GUARD done" "$ENGINE_LOG" ||
   echo "the schedule never finished; what follows is a run cut short" >&2
+
+# The slow page's absence is a reading only once it can no longer arrive: the
+# fixture saw the browser hang up, or it came. Bounded past the fixture's own
+# wait by SETTLE, for a page answered and still on its way.
+slow_settled() {
+  grep -qF "abandoned /slow" "$HTTP_LOG" 2>/dev/null ||
+    grep -qF "guest-shown path=/slow" "$ENGINE_LOG" 2>/dev/null
+}
+for _ in $(seq 1 $(((SLOW_SECONDS + SETTLE_MS / 1000) * 4))); do
+  slow_settled && break
+  sleep 0.25
+done
 
 # The pages the guest showed, in the order it showed them. That sequence is the
 # entire measurement: every one of the four controls is read as a position in
@@ -423,8 +437,8 @@ that pushes unasked makes that count noise — a navigation the fixture caused, 
 a second send of the same src, or a push that does not check whether anything \
 changed"
   elif [ "$SETTLED_LOADING" != "false" ]; then
-    FAILURE="the element said \"$SETTLED_LOADING\" where a page that arrived \
-a whole step ago is not arriving any more. Nothing was driven at this run, so \
+    FAILURE="the element said \"$SETTLED_LOADING\" where a page given a whole \
+step to arrive is not arriving any more. Nothing was driven at this run, so \
 this is the browser's own answer stuck on — and the positive run's settled \
 reading measures the same thing"
   elif [ "$PENDING_LOADING" != "true" ]; then
@@ -503,8 +517,8 @@ elif [ "$SAW_SLOW_ASKED" != "1" ]; then
 pending load for stop() to cancel and its reading below is about a navigation \
 that never started. This is the harness"
 elif [ "$SETTLED_LOADING" != "false" ]; then
-  FAILURE="the element said \"$SETTLED_LOADING\" where a page that arrived a \
-whole step ago is no longer arriving. This is the half of the loading claim \
+  FAILURE="the element said \"$SETTLED_LOADING\" where a page given a whole \
+step to arrive is no longer arriving. This is the half of the loading claim \
 that catches an element answering yes to everything, so nothing below it is a \
 measurement: it is the browser never reporting the load finishing, or the \
 element never storing that it did"

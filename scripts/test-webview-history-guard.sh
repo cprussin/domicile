@@ -95,8 +95,9 @@ baseline() { # $1 NEGATIVE
   # anything — the guest is on its second page in both.
   TWO_PATH="/two"
   TWO_SECURITY="neutral"
-  # Shared too, and for the same reason: the guest is on a page that arrived a
-  # whole step ago, and then on a navigation the fixture is still holding open.
+  # Shared too, and for the same reason: the guest is on a page that has
+  # finished arriving, and then on a navigation the fixture is still holding
+  # open.
   # Neither run has driven anything by either point.
   SETTLED_LOADING="false"
   PENDING_LOADING="true"
@@ -347,7 +348,7 @@ expect "never saying a page is on its way is a failure" "fail" \
 expect "never saying a page is on its way names the positive it rests on" \
   "yes" "$(blames "THIS IS THE POSITIVE" 0 PENDING_LOADING=false)"
 # And the other end, which an element answering `true` to everything fails: a
-# page that arrived a step ago is not arriving.
+# page that has arrived is not arriving.
 expect "a settled page still called loading is a failure" "fail" \
   "$(verdict 0 SETTLED_LOADING=true)"
 expect "a settled page still called loading names the load finishing" "yes" \
@@ -390,6 +391,33 @@ expect "a slow navigation already landed says the positive read a leftover" \
   "yes" "$(blames "not about a load in flight" 1 PENDING_LOADING=false)"
 expect "a settled page still called loading is a failure in the control too" \
   "fail" "$(verdict 1 SETTLED_LOADING=true)"
+
+echo
+echo "when the guard stops waiting on the slow page"
+# The positive run's "the slow page never arrived" is only a reading once the
+# page can no longer arrive: the fixture saw the browser hang up, or it came.
+SETTLED="$(awk '/^slow_settled\(\) \{$/,/^}$/' "$GUARD")"
+[ -n "$SETTLED" ] || {
+  echo "no slow_settled in $GUARD — its markers moved. Fix this test with it." >&2
+  exit 1
+}
+LOGS="$(mktemp -d)"
+trap 'rm -rf "$LOGS"' EXIT
+settled() { # $1 http log, $2 engine log
+  (
+    HTTP_LOG="$LOGS/http" ENGINE_LOG="$LOGS/engine"
+    printf '%s\n' "$1" >"$HTTP_LOG"
+    printf '%s\n' "$2" >"$ENGINE_LOG"
+    eval "$SETTLED"
+    slow_settled && echo yes || echo no
+  )
+}
+expect "a slow page only asked for is still to come" "no" \
+  "$(settled "asked /slow" "GUARD done")"
+expect "a slow page the browser hung up on can no longer come" "yes" \
+  "$(settled "$(printf 'asked /slow\nabandoned /slow')" "GUARD done")"
+expect "a slow page that arrived has come" "yes" \
+  "$(settled "asked /slow" "GUARD guest-shown path=/slow serial=4")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

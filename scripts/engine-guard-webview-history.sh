@@ -4,9 +4,9 @@
 #
 # Headless and software-composited like the other <webview> guards: what this
 # reads is the ORDER of the pages a guest showed, out of the browser's own log,
-# so there are no pixels and no client. It is slower than either — the schedule
-# is a minute and a half, because every step of it is a timer and the element
-# fires no navigation event to wait on instead.
+# so there are no pixels and no client. Each step waits for the element to say
+# it landed, so a healthy run is seconds; the control is longer, because it has
+# to watch the steps it does not drive and wait out the slow page.
 #
 # Its control is not the <iframe> the other two use: an <iframe> has no
 # goBack() at all, so that run would end on a TypeError rather than on a
