@@ -266,6 +266,13 @@ class CORE_EXPORT HTMLWebViewElement final
   void PageChanged(const KURL& url,
                    domicile::mojom::blink::WebViewSecurity security) override;
 
+  // The pipe the guest was asked for on, kept for as long as this element
+  // lives. Not a one-shot: the request can reach the browser before the
+  // placeholder frame does, and the browser holds it on this pipe until the
+  // frame arrives -- so closing it would drop the request. See
+  // WebViewGuestHost in components/domicile/browser/web_view_guest.cc.
+  HeapMojoRemote<domicile::mojom::blink::WebViewGuestHost> host_;
+
   // The guest, for as long as this element lives. Bound once, and not
   // rebuilt on a later `src`: the placeholder frame is destroyed by the
   // attach, so there would be nothing left to name in a second request.

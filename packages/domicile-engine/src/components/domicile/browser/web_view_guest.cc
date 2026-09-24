@@ -5,14 +5,17 @@
 #include "components/domicile/browser/web_view_guest.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
@@ -23,6 +26,7 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -32,59 +36,154 @@
 namespace domicile {
 namespace {
 
+// Why a CreateGuest is a bad message, whether it waited or not.
+constexpr char kNotItsOwnFrame[] =
+    "domicile: a <webview> may only ask for a guest for its own frame.";
+
 // The interface a <webview> asks for a guest over, for one document.
 //
 // A DocumentService rather than a self-owned receiver, because everything it
 // does is relative to the document that asked: the frame it is handed has to be
 // that document's own child, and a document that navigates away has no claim on
 // the guests the previous one made.
+//
+// AND A WebContentsObserver, because the placeholder can arrive after the
+// request for it. The element sends CreateGuest over the browser interface
+// broker, a pipe of its own, while the frame it names is announced over the
+// frame's channel -- so under load the request wins and the frame is not there
+// yet. That is the order, not a fault in it, and the request waits for the
+// frame rather than being dropped: dropping it was a <webview> that showed
+// nothing, which is how concurrent guards found it.
 class WebViewGuestHost final
-    : public content::DocumentService<mojom::WebViewGuestHost> {
+    : public content::DocumentService<mojom::WebViewGuestHost>,
+      public content::WebContentsObserver {
  public:
   WebViewGuestHost(content::RenderFrameHost& frame,
                    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver)
-      : DocumentService(frame, std::move(receiver)) {}
+      : DocumentService(frame, std::move(receiver)),
+        WebContentsObserver(content::WebContents::FromRenderFrameHost(&frame)) {
+  }
 
  private:
+  // A CreateGuest whose placeholder the browser has not seen yet.
+  //
+  // WITH THE CALLBACK FOR REFUSING IT, which can only be taken while the
+  // message is being dispatched: whether the frame is this document's child is
+  // not known until the frame exists, which is after the dispatch is over.
+  struct WaitingRequest {
+    blink::LocalFrameToken placeholder_frame;
+    mojo::PendingReceiver<mojom::WebViewGuest> guest;
+    mojo::PendingRemote<mojom::WebViewGuestClient> client;
+    mojo::ReportBadMessageCallback report_bad_message;
+  };
+
   // mojom::WebViewGuestHost:
   void CreateGuest(
       const blink::LocalFrameToken& placeholder_frame,
       mojo::PendingReceiver<mojom::WebViewGuest> guest,
       mojo::PendingRemote<mojom::WebViewGuestClient> client) override {
-    // Same process as the asking document, always: the placeholder is the
-    // frame the owner element created and never navigated, so it is still the
-    // local about:blank frame its parent made.
-    content::RenderFrameHost* placeholder =
-        content::RenderFrameHost::FromFrameToken(
-            content::GlobalRenderFrameHostToken(
-                render_frame_host().GetProcess()->GetID(), placeholder_frame));
+    content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
-    // Gone between the element sending this and the browser reading it -- the
-    // <webview> was removed from the document. A race, not a lie, so the pipe
-    // is dropped and the element's remote learns it: killing the shell over
-    // its own timing would be the fork's bug and not the shell's.
     if (placeholder == nullptr) {
-      LOG(WARNING) << "domicile: the frame a <webview> asked a guest for is "
-                      "already gone.";
+      // ONE REQUEST WAITS PER PIPE, which is the cap on what a renderer can
+      // make this hold: the element sends one CreateGuest on a pipe of its own.
+      if (waiting_.has_value()) {
+        ReportBadMessageAndDeleteThis(
+            "domicile: a <webview> may only ask for one guest.");
+        return;
+      }
+      // The line that tells a guest that waited from one that did not, in a
+      // run that shows nothing.
+      LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
+                   "arrived; waiting for it.";
+      waiting_ =
+          WaitingRequest{placeholder_frame, std::move(guest), std::move(client),
+                         mojo::GetBadMessageCallback()};
       return;
     }
 
-    // A lie, though, and the only one available here: a document claiming a
-    // guest for a frame that is not its own child could put a page it does not
-    // own inside somebody else's element.
+    // A lie, and the only one available here: a document claiming a guest for
+    // a frame that is not its own child could put a page it does not own
+    // inside somebody else's element.
     //
     // DocumentService's own version rather than mojo::ReportBadMessage, which
     // its header asks for: it resets the receiver before deleting, so a reply
     // callback does not have to be run with made-up arguments first.
     if (placeholder->GetParent() != &render_frame_host()) {
-      ReportBadMessageAndDeleteThis(
-          "domicile: a <webview> may only ask for a guest for its own frame.");
+      ReportBadMessageAndDeleteThis(kNotItsOwnFrame);
       return;
     }
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
                                   std::move(guest), std::move(client));
   }
+
+  // content::WebContentsObserver:
+  //
+  // POSTED RATHER THAN RUN HERE. This is called from inside
+  // FrameTree::AddFrame, before content has finished adding the frame, and
+  // creating a guest and preparing the frame for it from there is re-entry the
+  // ordinary path never makes. A task later is when a CreateGuest that lost no
+  // race is read.
+  void RenderFrameCreated(content::RenderFrameHost* frame) override {
+    if (!waiting_.has_value() ||
+        frame->GetFrameToken() != waiting_->placeholder_frame) {
+      return;
+    }
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&WebViewGuestHost::CreateWaitingGuest,
+                       weak_factory_.GetWeakPtr(), std::move(*waiting_)));
+    waiting_.reset();
+  }
+
+  // The rest of CreateGuest, for a request that waited.
+  void CreateWaitingGuest(WaitingRequest request) {
+    content::RenderFrameHost* placeholder =
+        FindPlaceholder(request.placeholder_frame);
+
+    // Gone between arriving and this task -- the <webview> was removed from
+    // the document. A race, not a lie, so the pipe is dropped and the
+    // element's remote learns it: killing the shell over its own timing would
+    // be the fork's bug and not the shell's.
+    if (placeholder == nullptr) {
+      LOG(WARNING) << "domicile: the frame a <webview> asked a guest for is "
+                      "already gone.";
+      return;
+    }
+
+    // The same refusal as CreateGuest's, through the callback taken while the
+    // request was dispatched: ReportBadMessageAndDeleteThis can only be called
+    // during one.
+    if (placeholder->GetParent() != &render_frame_host()) {
+      std::move(request.report_bad_message).Run(kNotItsOwnFrame);
+      ResetAndDeleteThis();
+      return;
+    }
+
+    WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
+                                  std::move(request.guest),
+                                  std::move(request.client));
+  }
+
+  // The frame `placeholder_frame` names, or null if the browser has none.
+  //
+  // Same process as the asking document, always: the placeholder is the frame
+  // the owner element created and never navigated, so it is still the local
+  // about:blank frame its parent made.
+  content::RenderFrameHost* FindPlaceholder(
+      const blink::LocalFrameToken& placeholder_frame) {
+    return content::RenderFrameHost::FromFrameToken(
+        content::GlobalRenderFrameHostToken(
+            render_frame_host().GetProcess()->GetID(), placeholder_frame));
+  }
+
+  // Held for as long as the element's pipe is open, which is why it cannot
+  // leak: the element keeps this pipe for its own life. See
+  // HTMLWebViewElement::RequestGuest.
+  std::optional<WaitingRequest> waiting_;
+
+  base::WeakPtrFactory<WebViewGuestHost> weak_factory_{this};
 };
 
 // Chromium's answer for a page, as the one this fork puts on the wire.
