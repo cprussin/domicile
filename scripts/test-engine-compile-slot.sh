@@ -17,6 +17,8 @@ SLOT_SH="$ROOT/.github/scripts/engine-compile-slot.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export DOMICILE_COMPILE_SLOT="$WORK/slot"
+# No waiting unless a case asks for it.
+export DOMICILE_COMPILE_SLOT_WAIT=0 DOMICILE_COMPILE_SLOT_POLL=0.1
 
 FAILED=0
 expect() {
@@ -53,10 +55,7 @@ held="$(slot take bob)"
 contains "the refusal names who holds it" "'alice'" "$held"
 contains "the refusal reports an age" "held for 0m" "$held"
 
-# IT REFUSES RATHER THAN WAITS, and the message has to say why: a run that
-# waited here would sit on the second runner for the four hours the holder
-# needs, which is the queue the tree pool was built to remove.
-contains "the refusal says to re-run rather than to wait" "re-run" "$held"
+contains "the refusal says to re-run" "re-run" "$held"
 contains "the refusal prints the command that clears a stale slot" \
   "rm -rf $WORK/slot" "$held"
 
@@ -100,6 +99,21 @@ contains "a slot with no name in it still refuses a taker" \
   "did not write their name" "$(slot take erin)"
 slot drop "" >/dev/null 2>&1
 contains "and an empty owner cannot claim it" "is being compiled here by" "$(slot who)"
+
+# IT WAITS FOR A HOLDER THAT FINISHES, now that a cached compile is minutes:
+# refusing turned every overlap of two engine PRs into a red job to re-run.
+rm -rf "$WORK/slot"
+slot take frank >/dev/null
+( sleep 0.5; slot drop frank >/dev/null ) &
+expect "a taker waits for a holder that drops" ok \
+  "$(status "$(DOMICILE_COMPILE_SLOT_WAIT=5 slot take grace)")"
+wait
+slot drop grace >/dev/null
+slot take heidi >/dev/null
+waited="$(DOMICILE_COMPILE_SLOT_WAIT=1 slot take ivan)"
+expect "and still refuses one that outlasts the wait" refused "$(status "$waited")"
+contains "saying how long it waited" "waited 1s" "$waited"
+slot drop heidi >/dev/null
 
 # WHETHER A RUN WILL COMPILE. A tree can carry the series while its
 # out/Release is cold -- built under other args, or never -- and a cold build

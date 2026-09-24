@@ -21,11 +21,10 @@
 # nothing and must not queue behind one that does. That pair is the whole
 # design: warm runs keep shipping while a repin builds.
 #
-# IT REFUSES RATHER THAN WAITS. A waiter would hold a runner slot for the four
-# hours the holder needs, which is the queue the pool was built to remove;
-# refusing costs a re-run. This is `engine-render-node-lock.sh`'s reasoning
-# inverted, and for the reason that script gives: what makes waiting safe there
-# is that the longest hold is a guard.
+# IT WAITS, UP TO DOMICILE_COMPILE_SLOT_WAIT SECONDS (30 minutes), then
+# refuses. With the compiler cache a series change compiles in minutes, so
+# refusing outright turned every overlap of two engine PRs into a red job to
+# re-run. A repin's cold build still outlasts the wait and still refuses.
 #
 # AND NOTHING STEALS IT ON AGE. A cold build is up to five hours, and clearing
 # this while its holder is linking is the OOM it exists to prevent.
@@ -78,7 +77,19 @@ holder() {
 case "$action" in
   take)
     [ -n "$owner" ] || usage
-    if mkdir "$LOCK" 2>/dev/null; then
+    wait_for="${DOMICILE_COMPILE_SLOT_WAIT:-1800}"
+    started="$(date +%s)"
+    took=""
+    while :; do
+      mkdir "$LOCK" 2>/dev/null && { took=1; break; }
+      [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
+      [ -n "${announced:-}" ] || {
+        echo "waiting up to ${wait_for}s for '$(holder)' to finish compiling"
+        announced=1
+      }
+      sleep "${DOMICILE_COMPILE_SLOT_POLL:-10}"
+    done
+    if [ -n "$took" ]; then
       echo "$owner" >"$LOCK/owner"
       date +%s >"$LOCK/since"
       date -Is >"$LOCK/since-human"
@@ -86,15 +97,14 @@ case "$action" in
       exit 0
     fi
     {
-      echo "::error::'$(holder)' is already compiling Chromium here ($(age)), so this run will not start a second one"
+      echo "::error::'$(holder)' is still compiling Chromium here ($(age)); waited ${wait_for}s, so this run will not start a second one"
       echo "The slot is at $LOCK, taken $(cat "$LOCK/since-human" 2>/dev/null || echo 'at an unrecorded time')."
       echo
       echo "This machine has 62G and no swap. Two cold Chromium builds in it is"
       echo "an OOM kill, and this machine is also the house's DNS."
       echo
-      echo "Wait for that build and re-run this job -- it is up to four hours."
-      echo "Waiting here instead would hold this runner for all of them, which"
-      echo "is the queue the tree pool exists to remove."
+      echo "Once that build is done, re-run this job -- a repin is up to four"
+      echo "hours, which is longer than this waits."
       echo
       echo "If the holder is a run that died, nothing clears this but a person:"
       echo
