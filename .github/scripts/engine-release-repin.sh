@@ -79,5 +79,15 @@ be a second pull request.
 EOF
 )"
 
-git push -q origin "$BRANCH"
+# A push with the workflow's GITHUB_TOKEN starts runs that wait for a person to
+# approve them. A token of the repository's own, when there is one, does not.
+# The empty value clears the checkout's header before this one is added.
+if [ -n "${DOMICILE_WRITEBACK_TOKEN:-}" ]; then
+  auth="$(printf 'x-access-token:%s' "$DOMICILE_WRITEBACK_TOKEN" | base64 | tr -d '\n')"
+  git -c http.https://github.com/.extraheader= \
+    -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+    push -q origin "$BRANCH"
+else
+  git push -q origin "$BRANCH"
+fi
 echo "pushed $(git rev-parse --short HEAD) to $BRANCH: $FILE now names ${DOMICILE_ENGINE_TAG:-the published engine}"

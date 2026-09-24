@@ -38,4 +38,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 require_engine_out
 
 cd "$ROOT"
+# CI's checkout wipes `target/` every run; a kept one makes this incremental.
+# Per runner, so no run's guards read a binary another run just rebuilt.
+if [ -n "${DOMICILE_CARGO_TARGET:-}" ] && { [ -L target ] || [ ! -e target ]; }; then
+  mkdir -p "$DOMICILE_CARGO_TARGET"
+  ln -sfn "$DOMICILE_CARGO_TARGET" target
+fi
 cargo build -p domicile-compositor
