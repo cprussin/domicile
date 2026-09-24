@@ -169,7 +169,8 @@ fi
 # engine-release.yml, and any of them here would mean this job takes the shared
 # Chromium tree — the thing that makes those two hours long and the reason this
 # one can run on every pull request.
-for expensive in engine-reset.sh apply.sh autoninja /build/chromium engine-tree-lock.sh; do
+for expensive in engine-reset.sh apply.sh autoninja /build/chromium \
+                 engine-tree-lock.sh engine-tree-pool.sh engine-compile-slot.sh; do
   if grep -qF "$expensive" "$WORKFLOW"; then
     fail "it never reaches for the Chromium tree ($expensive)" \
       "$NAME names $expensive, so it is a Chromium build and not a download"

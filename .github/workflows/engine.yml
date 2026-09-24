@@ -109,11 +109,12 @@ on:
 
 # Per ref, and never canceled mid-flight.
 #
-# THE SLOT IS THE QUEUE, NOT THIS. `crux` runs one job at a time, and a job
-# holds that slot from `actions/checkout` to the `if: always()` drop below — so
-# two runs of this workflow cannot be inside /build/chromium/src at once no
-# matter what is written here. The queue in front of that slot is GitHub's
-# runner queue: unbounded, FIFO, and it never throws a run away.
+# THE LOCKS ARE THE QUEUE, NOT THIS. Two runs of this workflow can run at
+# once now — `crux` has two heavy runners and a pool of trees — and what keeps
+# them apart is per-tree: `engine-tree-pool.sh pick` hands each run a tree
+# nothing else holds, and `engine-compile-slot.sh` keeps the cold builds among
+# them down to one. The queue in front of those is GitHub's runner queue:
+# unbounded, FIFO, and it never throws a run away.
 #
 # A CONCURRENCY GROUP IS NOT THAT QUEUE, WHICH IS WHY THIS IS KEYED BY REF. A
 # group holds exactly ONE pending run and evicts it when a newer run arrives.
@@ -239,35 +240,23 @@ jobs:
     timeout-minutes: 720
 
     env:
-      # The warm tree. Outside the workspace on purpose, and for a stronger
-      # reason than "Actions wipes `_work` between runs": the runner unit's own
-      # ExecStartPre deletes the whole work directory on every start, so
-      # nothing that lives under the checkout survives a restart or a deploy.
-      # Re-creating 97G is what this job is built to avoid.
-      CHROMIUM: /build/chromium/src
-
-      # Who holds the tree lock, in words a person reading a held-lock message
-      # can act on: it names the workflow to look at and the run to open. The
+      # Who holds the tree and the compile slot, in words a person reading a
+      # held-lock message can act on: it names the workflow to look at and the
+      # run to open. The
       # attempt is in it because a re-run is a different holder — the first
       # attempt's `drop` and the second's `take` must not be able to agree.
       LOCK_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
       # And who holds the render node, which is a different lock over a
       # different thing and is why it has a name of its own. The tree lock
-      # keeps two writers out of /build/chromium/src; this one keeps two
-      # clients off the card while something is being timed. They are held over
-      # different spans and released by different steps.
+      # keeps two writers out of one checkout; this one keeps two clients off
+      # the card while something is being timed. They are held over different
+      # spans and released by different steps.
       CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
       # The one build: what ships, and what the checks run against. ~40G, kept
       # warm because a clean Chromium build is four hours.
       OUT_RELEASE: out/Release
-
-      # Where the tarball is assembled and where the packaged tree is put back
-      # to be tested, both under /build for the reason everything else is.
-      # Shared with engine-release.yml, which is still what an `engine-v*` tag
-      # publishes through.
-      STAGE: /build/engine-release
 
       # `apply.sh` ends in `git am`, which writes commits, and git refuses to
       # write one without an identity. The runner's HOME is the work directory
@@ -307,29 +296,19 @@ jobs:
           rm -f /tmp/domicile-*.log
           rm -rf /tmp/domicile-control-budgets
 
-      # TWO SHELLS, AND WHICH ONE A STEP NEEDS IS NOT A DETAIL.
+      # WHICH TREE THIS RUN OWNS. Picking and locking are one step because
+      # they cannot be two: a tree chosen and then locked is a tree another run
+      # can take in between.
       #
-      # ONE WRITER AT A TIME IN THAT CHECKOUT, and the reason is not the
-      # obvious one. A reset that clobbers somebody's uncommitted work is loud,
-      # and the reset step's diagnostic explains it. A reset that lands *during
-      # their build* is silent: siso carries on and links a binary compiled
-      # from two different trees. Taken here rather than around the reset,
-      # because the tree stays ours until the last step that reads it.
+      # `crux` keeps N Chromium checkouts. This takes the first one this run
+      # can lock, preferring one already at this pin — which makes the stamp
+      # below answer `carries=true` and skips the reset, the sync, the apply
+      # and the compile, the ~1m case for a pin that would otherwise cost 4h.
       #
-      # Nothing enforces this. It works because both writers take it. See
-      # .github/scripts/engine-tree-lock.sh, which is also what a person on
-      # `crux` runs before building in that tree by hand.
-      - name: Take the tree
-        run: .github/scripts/engine-tree-lock.sh take "$CHROMIUM" "$LOCK_OWNER"
-
-      # WHICH TREE, and it is the reason a repin no longer costs every branch.
-      #
-      # `$CHROMIUM` is a symlink, and this points it at one of the trees
-      # `crux` keeps. A pin some tree already carries is a swap, which makes
-      # the stamp below answer `carries=true` and skips the reset, the sync,
-      # the apply and the compile — the ~1m case, for a pin that used to cost
-      # 4h. A pin nothing carries costs what it costs today, in whichever tree
-      # was least recently asked for.
+      # IT WRITES `$CHROMIUM` RATHER THAN READING IT, and that is the change
+      # that lets two runs build at once. /build/chromium is still a symlink
+      # and it is a person's bookmark now: a job that reached its tree through
+      # one shared path could not have another job in another tree beside it.
       #
       # WHY THIS EXISTS AT ALL: moving `CHROMIUM_PIN` invalidates out/Release
       # in both directions, so two branches on different pins taking turns in
@@ -337,20 +316,24 @@ jobs:
       # merge run each, two open branches is four of them, on the one slot
       # everything else queues behind.
       #
-      # AFTER THE LOCK AND BEFORE EVERY STEP THAT READS THE TREE. The swap is
-      # a write to shared state — the person building through this same path
-      # is who it can land under — so it belongs inside the lock, and
-      # `engine-tree-lock.sh` now keeps the lock at the build root so that
-      # swapping the path cannot strand it.
+      # `$STAGE` goes with it. `engine-release-room.sh` does `rm -rf` on that
+      # directory, so two runs sharing one would delete each other's tarball
+      # mid-package. Per tree rather than per run because the tree is the thing
+      # this run holds exclusively, and because the tarballs are worth keeping
+      # between runs.
       #
-      # It does not look inside a tree. Whether the one it picked really holds
-      # this series is the stamp's question, asked next, against whatever the
-      # path now names. See .github/scripts/engine-tree-pool.sh.
-      - name: Which tree this pin builds in
+      # It does not look inside a tree. Whether the one it took really holds
+      # this series is the stamp's question, asked next.
+      # See .github/scripts/engine-tree-pool.sh.
+      - name: Take a tree
         run: |
           set -euo pipefail
-          .github/scripts/engine-tree-pool.sh use \
-            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+          tree="$(.github/scripts/engine-tree-pool.sh pick \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')" \
+            "$LOCK_OWNER")"
+          echo "this run builds in $tree"
+          echo "CHROMIUM=$tree" >>"$GITHUB_ENV"
+          echo "STAGE=$(dirname "$tree")/engine-release" >>"$GITHUB_ENV"
 
       # ASKED HERE, BEFORE ANYTHING IS BUILT OR PROVED, FOR TWO REASONS.
       #
@@ -412,6 +395,22 @@ jobs:
       - name: Is the checkout already carrying this series?
         id: series
         run: .github/scripts/engine-series-stamp.sh carries "$CHROMIUM"
+
+      # THE MEMORY THE POOL CANNOT SPLIT. Two trees is two runs; 62G with no
+      # swap is one cold Chromium build, and two of them is an OOM kill on the
+      # machine that serves the house its DNS.
+      #
+      # Only a run that is going to compile takes it, which is the half that
+      # makes the pool worth having: a warm run compiles nothing and must not
+      # queue behind a repin. Warm means out/Release too, not just the
+      # checkout: a tree can carry the series with a cold out/Release. See .github/scripts/engine-compile-slot.sh.
+      - name: Is out/Release already built from this?
+        id: warm
+        run: .github/scripts/engine-compile-slot.sh warm "$CHROMIUM"
+
+      - name: Take the compile slot
+        if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
+        run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
 
       - name: Reset the checkout to the pin
         if: ${{ steps.series.outputs.carries != 'true' }}
@@ -479,6 +478,9 @@ jobs:
       - name: Build
         run: .github/scripts/engine-build-in-shell.sh "$CHROMIUM"
 
+      - name: Write down what out/Release was built from
+        run: .github/scripts/engine-compile-slot.sh built "$CHROMIUM"
+
       # EVERY ASSERTION THIS JOB MAKES, IN ONE COMMAND, and none of them
       # defined here. `scripts/check.sh engine` runs the artifact check, the two
       # gtest suites and the fourteen guard checks with their twelve controls,
@@ -517,9 +519,9 @@ jobs:
       # this is the one runner where that can be said without exceptions.
       - name: The engine's checks
         env:
-          # `$CHROMIUM` rather than the path written again: it is a symlink
-          # into the tree pool now, and two copies of which symlink is two
-          # things to keep true.
+          # `$CHROMIUM` rather than a path written again: which tree this run
+          # holds is the pool's answer, and a second copy of it is a second
+          # thing to keep true.
           DOMICILE_CHROMIUM: ${{ env.CHROMIUM }}
           DOMICILE_ENGINE_OUT: ${{ env.OUT_RELEASE }}
           DOMICILE_CHECK_STRICT: "1"
@@ -684,5 +686,12 @@ jobs:
       # too, and an unconditional `rm` there would release their tree in the
       # middle of their build.
       - name: Drop the tree
-        if: ${{ always() }}
+        # `env.CHROMIUM != ''` because the pool writes it: a run that found
+        # every tree held never got one, and `drop` with no path is a usage
+        # error printed over the message that says what actually happened.
+        if: ${{ always() && env.CHROMIUM != '' }}
         run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
+
+      - name: Drop the compile slot
+        if: ${{ always() }}
+        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"

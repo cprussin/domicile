@@ -168,34 +168,21 @@ else
 fi
 
 # AND WHERE IT IS CALLED FROM IS THE WHOLE SAFETY ARGUMENT. `out/Release` and
-# `out/Release-staged` are inside the shared checkout, and deleting anything
-# in there while another writer is in the tree is precisely what the tree lock
-# exists to prevent. So the reclaim runs after the lock is taken, never
-# before.
-TAKE="$(grep -n 'engine-tree-lock.sh take' "$WORKFLOW" | head -1 | cut -d: -f1)"
+# `out/Release-staged` are inside a shared checkout, and deleting anything in
+# there while another writer is in that tree is precisely what the tree lock
+# exists to prevent. And the tree this run reclaims in is whichever one the
+# pool handed it -- `$CHROMIUM` is written by that step, so a reclaim before it
+# would resolve to nothing at all.
+#
+# Both halves are one step now: `engine-tree-pool.sh pick` chooses a tree and
+# locks it in the same call, because choosing and then locking is a tree
+# another run can take in between.
+POOL="$(grep -n 'engine-tree-pool.sh pick' "$WORKFLOW" | head -1 | cut -d: -f1)"
 RECLAIM="$(grep -n 'engine-release-room.sh' "$WORKFLOW" | head -1 | cut -d: -f1)"
-if [ -n "$TAKE" ] && [ -n "$RECLAIM" ] && [ "$TAKE" -lt "$RECLAIM" ]; then
-  printf '  ok    and only once it holds the tree lock\n'
-else
-  printf '  FAIL  and only once it holds the tree lock\n    take: %s reclaim: %s\n' \
-    "${TAKE:-none}" "${RECLAIM:-none}"
-  FAILED=$((FAILED + 1))
-fi
-
-# AND AFTER THE TREE IS CHOSEN, which is the half of the order that #485 added
-# and that no amount of reading this script can reveal. `$CHROMIUM` is a path
-# through a symlink `engine-tree-pool.sh` swaps between N trees, so "which
-# directory is /build/chromium/src" is decided by that step and not by the
-# variable. Reclaim before it and the `rm -rf` lands in whichever tree the
-# LAST run left the path pointing at -- by construction not the one this run
-# builds in, so it would cost some other pin its objects and free nothing that
-# this run's floor is measuring. Nothing in the reclaim script can notice: it
-# is handed a path and the path resolves.
-POOL="$(grep -n 'engine-tree-pool.sh use' "$WORKFLOW" | head -1 | cut -d: -f1)"
 if [ -n "$POOL" ] && [ -n "$RECLAIM" ] && [ "$POOL" -lt "$RECLAIM" ]; then
-  printf '  ok    and only once the pool has said which tree that is\n'
+  printf '  ok    and only once it holds a tree the pool locked for it\n'
 else
-  printf '  FAIL  and only once the pool has said which tree that is\n    pool: %s reclaim: %s\n' \
+  printf '  FAIL  and only once it holds a tree the pool locked for it\n    pick: %s reclaim: %s\n' \
     "${POOL:-none}" "${RECLAIM:-none}"
   FAILED=$((FAILED + 1))
 fi
