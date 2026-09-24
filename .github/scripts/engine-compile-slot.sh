@@ -21,10 +21,11 @@
 # nothing and must not queue behind one that does. That pair is the whole
 # design: warm runs keep shipping while a repin builds.
 #
-# IT WAITS, UP TO DOMICILE_COMPILE_SLOT_WAIT SECONDS (30 minutes), then
-# refuses. With the compiler cache a series change compiles in minutes, so
-# refusing outright turned every overlap of two engine PRs into a red job to
-# re-run. A repin's cold build still outlasts the wait and still refuses.
+# IT WAITS, UP TO DOMICILE_COMPILE_SLOT_WAIT SECONDS, then refuses. Refusing
+# outright turned every overlap of two engine PRs into a red job to re-run.
+# The default is 30 minutes, enough for a cached series change; engine.yml
+# waits out a cold repin, because its budget holds that wait and its own
+# repin both (scripts/test-the-engine-budget-holds-both-builds.sh).
 #
 # AND NOTHING STEALS IT ON AGE. A cold build is up to five hours, and clearing
 # this while its holder is linking is the OOM it exists to prevent.
@@ -83,9 +84,12 @@ case "$action" in
     while :; do
       mkdir "$LOCK" 2>/dev/null && { took=1; break; }
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
-      [ -n "${announced:-}" ] || {
-        echo "waiting up to ${wait_for}s for '$(holder)' to finish compiling"
-        announced=1
+      # Once per holder, not once: a wait can outlast a cold repin, and hours
+      # of one line cannot say whether the slot has changed hands since.
+      now_held="$(holder)"
+      [ "$now_held" = "${announced:-}" ] || {
+        echo "waiting up to ${wait_for}s for '$now_held' to finish compiling"
+        announced="$now_held"
       }
       sleep "${DOMICILE_COMPILE_SLOT_POLL:-10}"
     done
@@ -103,8 +107,7 @@ case "$action" in
       echo "This machine has 62G and no swap. Two cold Chromium builds in it is"
       echo "an OOM kill, and this machine is also the house's DNS."
       echo
-      echo "Once that build is done, re-run this job -- a repin is up to four"
-      echo "hours, which is longer than this waits."
+      echo "Once that build is done, re-run this job."
       echo
       echo "If the holder is a run that died, nothing clears this but a person:"
       echo

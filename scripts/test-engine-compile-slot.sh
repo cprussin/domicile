@@ -115,6 +115,20 @@ expect "and still refuses one that outlasts the wait" refused "$(status "$waited
 contains "saying how long it waited" "waited 1s" "$waited"
 slot drop heidi >/dev/null
 
+# A WAIT THAT CAN OUTLAST A COLD REPIN is hours of one log line, so it says
+# when the slot changes hands: a holder that finished and another run that got
+# there first reads differently from one holder that never moves.
+rm -rf "$WORK/slot"
+slot take judy >/dev/null
+( sleep 0.5; slot drop judy >/dev/null; slot take mallory >/dev/null
+  sleep 0.5; slot drop mallory >/dev/null ) &
+waited="$(DOMICILE_COMPILE_SLOT_WAIT=5 slot take niaj)"
+wait
+expect "a taker outwaits a second holder" ok "$(status "$waited")"
+contains "and says it was waiting on the first" "'judy'" "$waited"
+contains "and on the second" "'mallory'" "$waited"
+slot drop niaj >/dev/null
+
 # WHETHER A RUN WILL COMPILE. A tree can carry the series while its
 # out/Release is cold -- built under other args, or never -- and a cold build
 # without the slot is the OOM. Only a build of exactly these inputs is warm.

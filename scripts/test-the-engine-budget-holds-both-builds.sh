@@ -163,6 +163,58 @@ for name in $both; do
   fi
 done
 
+# --- a run that waits for the compile slot still finishes -------------------
+
+# THE WAIT COMES OUT OF THE SAME BUDGET. A run whose tree is cold waits for
+# `engine-compile-slot.sh` while another run compiles, and what it waits behind
+# can be a cold repin -- run 36064386536 refused after 30 minutes behind one
+# that had held the slot for 2h18m. So the wait has to outlast a cold repin,
+# and whatever it spent, the run still has to fit its own cold repin after it:
+# a job killed mid-compile leaves a half-linked out/Release for the next run.
+#
+# AND THE BUDGET HAS A CEILING OF ITS OWN. The last thing a repin run does is
+# push `engine-release.nix` back with GITHUB_TOKEN, which GitHub expires after
+# 24 hours however long the job may run.
+echo "a run that waits for the compile slot still has a cold repin's budget"
+
+# The take step's `DOMICILE_COMPILE_SLOT_WAIT`, in seconds, or the script's
+# own default when the workflow sets none.
+slot_wait() { # workflow
+  commands "$1" |
+    sed -n 's/^[[:space:]]*DOMICILE_COMPILE_SLOT_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
+    head -1 | grep . ||
+    sed -n 's/.*DOMICILE_COMPILE_SLOT_WAIT:-\([0-9][0-9]*\).*/\1/p' \
+      "$ROOT/.github/scripts/engine-compile-slot.sh" | head -1
+}
+
+TOKEN_LIFETIME=1440
+
+for name in $both; do
+  mine="$(budget "$WORKFLOWS/$name")"
+  waits=$(($(slot_wait "$WORKFLOWS/$name") / 60))
+
+  if [ "$waits" -ge "$FLOOR" ]; then
+    ok "$name waits out a holder's cold repin (${waits}m against ${FLOOR}m)"
+  else
+    fail "$name waits out a holder's cold repin (${waits}m against ${FLOOR}m)" \
+      "a run behind a repin gives up before the repin can finish, and goes red for nothing but the overlap"
+  fi
+
+  if [ $((waits + FLOOR)) -le "$mine" ]; then
+    ok "$name still holds a cold repin after the longest wait (${waits}m + ${FLOOR}m within ${mine}m)"
+  else
+    fail "$name still holds a cold repin after the longest wait (${waits}m + ${FLOOR}m within ${mine}m)" \
+      "a run that waits that long is killed partway through its own compile"
+  fi
+
+  if [ "$mine" -le "$TOKEN_LIFETIME" ]; then
+    ok "$name ends before its token does (${mine}m within ${TOKEN_LIFETIME}m)"
+  else
+    fail "$name ends before its token does (${mine}m within ${TOKEN_LIFETIME}m)" \
+      "GITHUB_TOKEN expires after 24 hours, so a run that long cannot push engine-release.nix back"
+  fi
+done
+
 # THE POSITIVES, because a split that matches nothing on one side asserts
 # nothing on that side: with no both-builder the whole section above is a loop
 # that never runs, and with no release-only workflow the comparison is.

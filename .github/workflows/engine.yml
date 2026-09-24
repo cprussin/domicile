@@ -211,9 +211,9 @@ jobs:
     # absence of what the run was killed before producing. The budget has to
     # hold BOTH compiles, because the steps below are both of them.
     #
-    # 720 AGAINST A MEASURED 9h09m. The second half is `engine-release.yml`'s
-    # own number for the same `engine-release-build.sh` into the same
-    # `out/Release` after a pin moved — 3h46m on run 35559130923, 3h25m on run
+    # IT WAS 720 FIRST, AGAINST A MEASURED 9h09m. The second half is
+    # `engine-release.yml`'s own number for the same `engine-release-build.sh`
+    # into the same `out/Release` after a pin moved — 3h46m on run 35559130923, 3h25m on run
     # 35620485558 — so a finished version of the run above is 1m55s + 5h07m +
     # 9m + 3h46m + ~4m of package, guard, publish and write-back. The headroom
     # over that is deliberate and not round-number padding: the same cold
@@ -223,12 +223,18 @@ jobs:
     # short costs the whole nine and publishes nothing.
     #
     # WHAT THE LARGER NUMBER COSTS is that a WEDGED job holds the one slot for
-    # twelve hours rather than six. That is the right trade and not a close
+    # twenty hours rather than six. That is the right trade and not a close
     # one: the failure this repository has actually had is a working job killed
     # at its budget, which wastes the slot for the full budget AND produces
     # nothing, where a wedge wastes the same slot and was never going to
     # produce anything either. A budget is a ceiling, not a spend — the ~11m
     # run that most pull requests get is unchanged.
+    #
+    # 1200 SINCE THE COMPILE SLOT WAITS. A run with a cold tree waits for
+    # another run's compile, which can be that same cold repin, so the budget
+    # holds the wait below (600m, more than the 9h09m) and its own repin after
+    # it. Run 36064386536 refused after 30 minutes behind a holder at 2h18m.
+    # Under 24h, because GITHUB_TOKEN expires then and the last step pushes.
     #
     # IT CANNOT DIFFER PER CASE. `timeout-minutes` is fixed before the job
     # starts, and which case a run is in — does the checkout carry this series,
@@ -237,7 +243,7 @@ jobs:
     # run's. See scripts/test-the-engine-budget-holds-both-builds.sh, which
     # asserts this against that measurement and against
     # `engine-release.yml`'s budget for the strictly smaller job.
-    timeout-minutes: 720
+    timeout-minutes: 1200
 
     env:
       # Who holds the tree and the compile slot, in words a person reading a
@@ -408,8 +414,17 @@ jobs:
         id: warm
         run: .github/scripts/engine-compile-slot.sh warm "$CHROMIUM"
 
+      # IT WAITS OUT A COLD REPIN rather than going red behind one. What the
+      # wait holds is this runner and this tree. The tree costs nobody: while
+      # `crux` has two heavy runners, a run waiting here and the run it waits
+      # on are both of them, so no third job exists to want it. The runner is
+      # the cost: a warm run queued behind it waits for the holder to finish,
+      # where a refusal freed the runner after 30 minutes. Taken, because a
+      # refused run had to be noticed and re-run by hand.
       - name: Take the compile slot
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
+        env:
+          DOMICILE_COMPILE_SLOT_WAIT: 36000
         run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
 
       - name: Reset the checkout to the pin
