@@ -65,10 +65,10 @@ BRITISH='\b('\
 'foetus|oesophagus|oestrogen|orthopaedic|paediatric|haemoglobin|leukaemia'\
 ')\b'
 
-# `nix-store --realise` is Nix's own flag. Spelling it the American way is not
-# a style choice, it is a command that does not run — so the line is exempt
-# rather than the word, which keeps `realise` caught everywhere else.
-EXEMPT='--realise\b'
+# `nix-store --realise` is Nix's flag and `cancelled()` is GitHub's. Spelled
+# the American way, neither runs -- so the line is exempt rather than the
+# word, which keeps both caught everywhere else.
+EXEMPT='--realise\b|\bcancelled\(\)'
 
 # Binaries and lockfiles have nothing to read and are megabytes of it. This
 # file goes too, and has to: the list above is sixty British words, so a check
