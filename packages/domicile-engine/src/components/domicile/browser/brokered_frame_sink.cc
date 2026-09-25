@@ -114,7 +114,8 @@ void BrokeredFrameSink::CreateCompositorFrameSink(
 
 void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
                               const viz::LocalSurfaceId& local_surface_id,
-                              const gfx::Size& size) {
+                              const gfx::Size& size,
+                              double scale) {
   // A page that navigates or reloads embeds again under a different frame
   // sink, so the old edge has to go before the new one is added.
   if (parent_frame_sink_id_.is_valid()) {
@@ -135,7 +136,7 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   }
 
   if (observer_) {
-    observer_->OnSurfaceEmbedded(local_surface_id, size);
+    observer_->OnSurfaceEmbedded(local_surface_id, size, scale);
   }
 }
 

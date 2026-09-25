@@ -73,6 +73,7 @@ void ExternalSurfaceEmbedder::Embed(
     const String& app_id,
     const viz::FrameSinkId& parent_frame_sink_id,
     const gfx::Size& size,
+    double scale,
     Allocation allocation,
     EmbeddedCallback callback) {
   if (!provider_) {
@@ -101,7 +102,7 @@ void ExternalSurfaceEmbedder::Embed(
             << parent_frame_sink_id.ToString() << ", " << size.ToString();
 
   provider_->Embed(
-      app_id, parent_frame_sink_id, local_surface_id, size,
+      app_id, parent_frame_sink_id, local_surface_id, size, scale,
       base::BindOnce(&ExternalSurfaceEmbedder::OnEmbedded,
                      base::Unretained(this), std::move(callback), app_id,
                      local_surface_id));

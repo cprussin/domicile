@@ -106,8 +106,11 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
 
  private:
   // mojom::SurfaceObserver:
+  // `scale` is not read: the spike renders the box it is given, in the
+  // page's own pixels, and configures no client.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
-                         const gfx::Size& size) override;
+                         const gfx::Size& size,
+                         double scale) override;
   // Never sent to this producer, and could not be acted on if it were: it
   // holds its own CompositorFrameSink, so it is viz's client and hears
   // BeginFrames directly, and it submits solid colors rather than importing

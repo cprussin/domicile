@@ -360,27 +360,24 @@ out, nothing is checked and the monitor's own mode is used, which is what
 every profile did before the field existed. A size and not a rate: the hertz
 changes no arithmetic here, and a monitor that reports none is ordinary.
 
-**A monitor a profile turns is drawn turned.** Not by the scanout, which the
-compositor still does not reach: a rotated panel scans out exactly as it did
-lying down. It is the *page* that turns, and on a tty that is the same thing —
-the engine opens one browser window per CRTC, so a page is one monitor and
-covering it is a CSS `transform` on the region.
+**A monitor a profile turns or scales is drawn that way by the engine, and a
+shell does nothing about it.** On a tty the engine opens one browser window per
+CRTC and turns and scales each the way its monitor is, so the page is that
+monitor's logical box, upright, at its density: `100vw` is the logical width,
+a pointer event is in logical pixels, and a portal, a dialog or anything else
+outside a `<Screen>` comes out the right way up. The pointer's arrow and its
+travel turn with the monitor too.
 
-`<Screen>` does that for you and a shell writes nothing. What a display
-carries for it is `mode`, `transform` and `fills_the_window`: the pixels the
-panel scans out (un-turned — a 4K panel on its side is a 3840×2160 mode and an
-1800×3200 box), which way up it is, and whether this page is that monitor. The
-last is what turns the first two from description into an instruction, and it
-is false for every desktop your window is the whole of.
-
-The same arithmetic is what makes a display of a density your page does not
-render at come out the right size, so a 1.2 monitor no longer draws its
-desktop in the corner of a black screen.
+A display still says how it was drawn, for a shell that wants to show it:
+`mode` is the pixels the panel scans out (un-turned — a 4K panel on its side
+is a 3840×2160 mode and an 1800×3200 box), `transform` which way up it is, and
+`fills_the_window` whether this page is that monitor — false for every desktop
+your window is the whole of. None of them is an instruction.
 
 **`transform` is the `wl_output` value, which counts counterclockwise**, as the
 config file, kanshi and sway do: `rotate-90` turns the content a quarter
 counterclockwise, for an output bolted a quarter turn clockwise, and
-`rotate-270` the other way. CSS counts clockwise, so a shell negates it.
+`rotate-270` the other way.
 
 `@domicile/chrome-sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it

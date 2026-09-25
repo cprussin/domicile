@@ -40,9 +40,13 @@ interface ExternalSurfaceProvider {
   // `app_id` names which window. A page showing several windows has an <app>
   // element for each, and without a name every one of them would embed
   // whichever surface was brokered last — one window drawn several times.
+  //
+  // `scale` is how many of `size`'s pixels the page draws one CSS pixel with,
+  // passed on to the producer so it can configure the client in logical ones.
   Embed(string app_id,
         viz.mojom.FrameSinkId parent_frame_sink_id,
         viz.mojom.LocalSurfaceId local_surface_id,
-        gfx.mojom.Size size)
+        gfx.mojom.Size size,
+        double scale)
       => (viz.mojom.FrameSinkId? frame_sink_id);
 };

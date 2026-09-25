@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 17:01:49 +0000
+Subject: [PATCH] domicile: a canvas says the scale its surface box is in
+
+`ExternalSurfaceEmbedder::Embed` takes the page's layout zoom factor now,
+so the producer can bring an `<app>`'s box in device pixels back to the
+logical pixels a client is configured in. A desk of several monitors is
+several pages, each at its own monitor's scale, and the compositor had
+been dividing every box by whichever page last reported its ratio.
+
+The spike's canvas embeds through the same call and says its own frame's
+factor, which is what it is drawn at.
+---
+ .../blink/renderer/core/html/canvas/html_canvas_element.cc      | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 501590f7ec..47847fe714 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -2174,7 +2174,7 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+   external_surface_embedder_->Embed(
+       app_id,
+       frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
+-      ExternalSurfaceSize(),
++      ExternalSurfaceSize(), frame->LayoutZoomFactor(),
+       reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
+                     : ExternalSurfaceEmbedder::Allocation::kAdopt,
+       BindOnce(&HTMLCanvasElement::OnExternalSurfaceEmbedded,

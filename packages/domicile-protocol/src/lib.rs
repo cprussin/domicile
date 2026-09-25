@@ -634,27 +634,24 @@ pub struct DisplayInfo {
     /// portrait 4K panel is `mode: [3840, 2160]` and `size: [1800, 3200]`.
     ///
     /// Sent about every display, because it is a fact about the panel that a
-    /// shell may want to show. What makes it load-bearing is
-    /// [`fills_the_window`](DisplayInfo::fills_the_window), which says this
-    /// mode is also the page's own viewport.
+    /// shell may want to show. Description only: the engine turns and scales
+    /// each monitor's window itself, so no page lays out in these pixels.
     #[serde(default)]
     pub mode: [u32; 2],
     /// Which way up the monitor is bolted to the desk.
     #[serde(default)]
     pub transform: DisplayTransform,
-    /// This display is the whole page, so the page has to fill it.
+    /// This display is the whole page.
     ///
     /// **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES.** Where the engine scans
-    /// out it opens one browser window per CRTC, each window is its monitor's
-    /// `mode` in CSS pixels, and each loads the same shell — so a page is told
-    /// this one display, at the origin, and has to draw its logical box over
-    /// the whole window. That is `mode` divided by `size`, turned by
-    /// `transform`: the two facts above stop being description and become the
-    /// map from what the shell lays out in to what the monitor shows.
+    /// out it opens one browser window per CRTC, each loading the same shell,
+    /// and turns and scales each window the way its monitor is — so the page
+    /// is this display's logical `size`, upright, at the origin. Nothing for a
+    /// shell to map: this says which display the page is, and `mode` and
+    /// `transform` say how the engine drew it.
     ///
     /// False for every desktop the page's window is the whole of — a nested
-    /// run, a developer window — where the page's CSS pixels already *are* the
-    /// desktop's logical ones and there is nothing to map.
+    /// run, a developer window.
     #[serde(default)]
     pub fills_the_window: bool,
 }

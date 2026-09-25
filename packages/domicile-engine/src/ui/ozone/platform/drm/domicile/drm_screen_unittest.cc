@@ -333,7 +333,15 @@ class RecordingObserver : public display::DisplayObserver {
     added_.push_back(display.id());
   }
 
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics) override {
+    changed_metrics_.push_back(changed_metrics);
+  }
+
   const std::vector<int64_t>& added() const { return added_; }
+
+  // What each metrics change said had changed, in order.
+  std::vector<uint32_t> changed_metrics_;
 
  private:
   std::vector<int64_t> added_;
@@ -451,6 +459,106 @@ TEST(DrmScreenTest, ADisplayTakesTheCornerTheLayoutGivesIt) {
   EXPECT_EQ(BoundsOf(screen, 11), gfx::Rect(3840, 0, 2880, 1920))
       << "the dark panel is placed out of the lit one's way";
   EXPECT_EQ(BoundsOf(screen, 12), gfx::Rect(0, 0, 3840, 2160));
+}
+
+display::Display DisplayOf(const DrmScreen& screen, int64_t id) {
+  for (const display::Display& display : screen.GetAllDisplays()) {
+    if (display.id() == id) {
+      return display;
+    }
+  }
+  ADD_FAILURE() << "no display " << id << " in the list";
+  return display::Display();
+}
+
+// THE BROWSER TURNS AND SCALES A MONITOR'S WINDOW, SO A SHELL NEVER HAS TO.
+// Both reach views off the display: the rotation is what the window's root
+// transform turns by, and the scale is the device scale factor every page on
+// it lays out at -- which is what makes the page's CSS pixels the desktop's
+// logical ones, the right way up, with nothing written in the shell.
+//
+// The layout counts counterclockwise, as `wl_output` does, and
+// display::Display::Rotation clockwise: a panel on its left side is
+// `rotate-270` to the one and ROTATE_90 to the other.
+TEST(DrmScreenTest, ADisplayTakesTheTurnAndScaleTheLayoutGivesIt) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+  snapshots.push_back(
+      SnapshotBuilder().Id(12).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11,
+        .enabled = true,
+        .origin = gfx::Point(0, 0),
+        .transform = DomicileDisplayLayout::Transform::kRotate270,
+        .scale = 1.2},
+       {.id = 12,
+        .enabled = true,
+        .origin = gfx::Point(3840, 0),
+        .transform = DomicileDisplayLayout::Transform::kRotate90,
+        .scale = 2.0}});
+
+  const display::Display left = DisplayOf(screen, 11);
+  EXPECT_EQ(left.rotation(), display::Display::ROTATE_90);
+  EXPECT_FLOAT_EQ(left.device_scale_factor(), 1.2f);
+  EXPECT_EQ(DisplayOf(screen, 12).rotation(), display::Display::ROTATE_270);
+  EXPECT_FLOAT_EQ(DisplayOf(screen, 12).device_scale_factor(), 2.f);
+
+  // THE BOUNDS ARE STILL THE CRTC'S, which is not the usual meaning of a
+  // display's bounds once it has a scale and is load-bearing here: a window
+  // is bound to a CRTC on an exact match with its mode, the fullscreen window
+  // is sized from these, and the compositor places its connectors in these
+  // pixels. What is turned and scaled is what is drawn inside the window.
+  EXPECT_EQ(left.bounds(), gfx::Rect(0, 0, 3840, 2160));
+  EXPECT_EQ(left.GetSizeInPixel(), gfx::Size(3840, 2160))
+      << "the panel's pixels, rather than its bounds multiplied by a scale "
+         "they are not in";
+}
+
+TEST(DrmScreenTest, ADisplayTheLayoutSaysNothingAboutIsUprightAndUnscaled) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
+
+  EXPECT_EQ(DisplayOf(screen, 11).rotation(), display::Display::ROTATE_0);
+  EXPECT_FLOAT_EQ(DisplayOf(screen, 11).device_scale_factor(), 1.f);
+}
+
+// A reloaded profile that stands a monitor on its side is not a hotplug, and
+// has to reach the window already on it: views turns a window when its
+// display's rotation changes, and rescales it when its scale does.
+TEST(DrmScreenTest, AProfileThatTurnsAMonitorTellsItsObservers) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
+
+  RecordingObserver observer;
+  screen.AddObserver(&observer);
+  screen.OnDisplaysChanged(
+      Pointers(snapshots),
+      {{.id = 11,
+        .enabled = true,
+        .origin = gfx::Point(0, 0),
+        .transform = DomicileDisplayLayout::Transform::kRotate270,
+        .scale = 1.2}});
+  screen.RemoveObserver(&observer);
+
+  ASSERT_EQ(observer.changed_metrics_.size(), 1u);
+  EXPECT_TRUE(observer.changed_metrics_[0] &
+              display::DisplayObserver::DISPLAY_METRIC_ROTATION);
+  EXPECT_TRUE(observer.changed_metrics_[0] &
+              display::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR);
 }
 
 // What OzonePlatformDrm::InitScreen does before the modeset driver has run,

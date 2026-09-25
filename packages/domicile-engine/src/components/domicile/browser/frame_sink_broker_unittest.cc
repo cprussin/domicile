@@ -47,6 +47,8 @@ constexpr viz::FrameSinkId kPageFrameSinkId(1u, 1u);
 // CreateFrameSink, and an Embed naming it is what matches.
 constexpr char kTestApp[] = "test-app";
 constexpr gfx::Size kEmbeddedSize(320, 240);
+// The page's device pixels per CSS pixel: a monitor at 1.5.
+constexpr double kEmbeddedScale = 1.5;
 
 // Stands in for the producer's half: the callback that tells it which surface
 // the embedder chose for it.
@@ -58,8 +60,9 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
 
   // mojom::SurfaceObserver implementation.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
-                         const gfx::Size& size) override {
-    embedded_.SetValue(local_surface_id, size);
+                         const gfx::Size& size,
+                         double scale) override {
+    embedded_.SetValue(local_surface_id, size, scale);
   }
 
   // Only sent to a producer whose sink the browser owns, which these tests
@@ -70,7 +73,7 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
     released_.push_back(buffer_id);
   }
 
-  base::test::TestFuture<viz::LocalSurfaceId, gfx::Size> embedded_;
+  base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double> embedded_;
   int frames_ = 0;
   std::vector<uint64_t> released_;
 
@@ -368,8 +371,8 @@ TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
   RunUntilIdle();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
-                  embedded.GetCallback());
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
 }
@@ -382,8 +385,8 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
-                  embedded.GetCallback());
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   RunUntilIdle();
   EXPECT_FALSE(embedded.IsReady());
 
@@ -424,10 +427,10 @@ TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_terminal;
   broker()->Embed("terminal", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, for_terminal.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, for_terminal.GetCallback());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
   broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, for_editor.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
 
   EXPECT_EQ(terminal.Get(), for_terminal.Get());
   EXPECT_EQ(editor.Get(), for_editor.Get());
@@ -449,7 +452,7 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
   broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
-                  kEmbeddedSize, for_editor.GetCallback());
+                  kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
   RunUntilIdle();
 
   // The terminal connects first. The editor's element is still waiting.
@@ -489,11 +492,14 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
 
   const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, local_surface_id, kEmbeddedSize,
-                  embedded.GetCallback());
+  broker()->Embed(kTestApp, kPageFrameSinkId, local_surface_id,
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
   EXPECT_EQ(kEmbeddedSize, observer.embedded_.Get<gfx::Size>());
+  // And the scale that box is in, which is what the producer divides it by:
+  // each monitor's page is at its own.
+  EXPECT_EQ(kEmbeddedScale, observer.embedded_.Get<double>());
 }
 
 // Embedding is also what puts the producer under the page in the frame sink
@@ -511,8 +517,8 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   ASSERT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
-                  embedded.GetCallback());
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
 
@@ -530,8 +536,8 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   const viz::FrameSinkId frame_sink_id =
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(), kEmbeddedSize,
-                  embedded.GetCallback());
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
   ASSERT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
@@ -571,8 +577,10 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
   std::vector<mojom::DisplayLayoutPtr> layout;
-  layout.push_back(mojom::DisplayLayout::New(7, true, gfx::Point(1920, 0)));
-  layout.push_back(mojom::DisplayLayout::New(9, false, gfx::Point()));
+  layout.push_back(mojom::DisplayLayout::New(
+      7, true, gfx::Point(1920, 0), mojom::DisplayTransform::kRotate270, 1.2));
+  layout.push_back(mojom::DisplayLayout::New(
+      9, false, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 
@@ -581,6 +589,10 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   EXPECT_EQ(layouts_[0][0]->id, 7);
   EXPECT_TRUE(layouts_[0][0]->enabled);
   EXPECT_EQ(layouts_[0][0]->origin, gfx::Point(1920, 0));
+  // The turn and the scale the browser draws this connector's window at, so
+  // the page in it lays out upright and logical.
+  EXPECT_EQ(layouts_[0][0]->transform, mojom::DisplayTransform::kRotate270);
+  EXPECT_EQ(layouts_[0][0]->scale, 1.2);
   EXPECT_EQ(layouts_[0][1]->id, 9);
   EXPECT_FALSE(layouts_[0][1]->enabled);
 }
@@ -617,7 +629,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
   unwired.Bind(remote.BindNewPipeAndPassReceiver());
 
   std::vector<mojom::DisplayLayoutPtr> layout;
-  layout.push_back(mojom::DisplayLayout::New(7, true, gfx::Point()));
+  layout.push_back(mojom::DisplayLayout::New(
+      7, true, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 

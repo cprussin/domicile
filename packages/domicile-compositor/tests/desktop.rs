@@ -521,10 +521,9 @@ fn a_size_one_chrome_reports_becomes_the_desktop() {
 /// windows, each loading the same shell, and `set_screen` is the only thing
 /// that differs between them: without the move every window lays its regions
 /// out in the whole desktop's coordinates and draws the desktop's top-left
-/// corner. `fills_the_window` is the other half — it is what tells a page its
-/// logical box has to be turned and scaled over the window, and a page told
-/// `false` draws its desktop at logical size in the corner of the monitor with
-/// the wallpaper filling the rest. It is one display's, because a page may
+/// corner. `fills_the_window` is the other half — it is what tells a page
+/// which display is its own, and a page told `false` draws every display of
+/// the desk on top of its one monitor. It is one display's, because a page may
 /// draw on one monitor.
 ///
 /// It went out `false` for a whole release. `as_seen_from` was right and
@@ -581,8 +580,8 @@ fn a_window_that_says_which_display_it_covers_is_answered_with_that_display() {
     );
     assert!(
         window.fills_the_window,
-        "the page has to draw its logical box over the whole window, and this \
-         is what tells it so: {window:?}"
+        "the page draws on its own display alone, and this is what tells it \
+         which one: {window:?}"
     );
     assert!(
         displays

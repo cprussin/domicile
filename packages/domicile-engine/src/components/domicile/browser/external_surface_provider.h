@@ -39,6 +39,7 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
              const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
+             double scale,
              EmbedCallback callback) override;
 
  private:

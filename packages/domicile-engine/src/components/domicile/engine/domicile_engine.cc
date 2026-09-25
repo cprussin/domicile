@@ -18,12 +18,14 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
+#include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/domicile/spike/mojom/spike_probe.mojom.h"
 #include "base/posix/eintr_wrapper.h"
@@ -194,7 +196,8 @@ class Surface : public mojom::SurfaceObserver,
   // The page allocated this id and picked this size; nothing here chose either.
   // For the compositor this is an xdg_toplevel.configure.
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
-                         const gfx::Size& size) override {
+                         const gfx::Size& size,
+                         double scale) override {
     local_surface_id_ = local_surface_id;
     size_ = size;
     if (!wants_begin_frames_) {
@@ -204,7 +207,8 @@ class Surface : public mojom::SurfaceObserver,
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
-                  .height = static_cast<uint32_t>(size.height())});
+                  .height = static_cast<uint32_t>(size.height()),
+                  .scale = scale});
   }
 
   // Only sent when the browser owns the sink, which this does not ask for.
@@ -376,6 +380,24 @@ gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
   return gfx::GpuMemoryBufferHandle(std::move(pixmap));
 }
 
+// The C ABI's turn, in the mojom's words.
+//
+// A value the header does not define is the compositor breaking the ABI, and a
+// crash naming it beats a monitor drawn at a turn nobody asked for.
+mojom::DisplayTransform TransformOf(DomicileDisplayTransform transform) {
+  switch (transform) {
+    case DOMICILE_DISPLAY_TRANSFORM_NORMAL:
+      return mojom::DisplayTransform::kNormal;
+    case DOMICILE_DISPLAY_TRANSFORM_ROTATE_90:
+      return mojom::DisplayTransform::kRotate90;
+    case DOMICILE_DISPLAY_TRANSFORM_ROTATE_180:
+      return mojom::DisplayTransform::kRotate180;
+    case DOMICILE_DISPLAY_TRANSFORM_ROTATE_270:
+      return mojom::DisplayTransform::kRotate270;
+  }
+  NOTREACHED() << "domicile: no display transform numbered " << transform;
+}
+
 }  // namespace
 }  // namespace domicile
 
@@ -423,7 +445,10 @@ struct DomicileEngine {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
         case domicile::EngineEvent::Type::kConfigure:
-          if (callbacks_.configure) {
+          if (callbacks_.configure_at) {
+            callbacks_.configure_at(callbacks_.user_data, event.surface,
+                                    event.width, event.height, event.scale);
+          } else if (callbacks_.configure) {
             callbacks_.configure(callbacks_.user_data, event.surface,
                                  event.width, event.height);
           }
@@ -572,8 +597,8 @@ struct DomicileEngine {
         UNSAFE_BUFFERS(base::span(layout, static_cast<size_t>(count)));
     for (const DomicileDisplayLayout& display : records) {
       wanted.push_back(domicile::mojom::DisplayLayout::New(
-          display.id, display.enabled != 0,
-          gfx::Point(display.x, display.y)));
+          display.id, display.enabled != 0, gfx::Point(display.x, display.y),
+          domicile::TransformOf(display.transform), display.scale));
     }
     thread_.task_runner()->PostTask(
         FROM_HERE,

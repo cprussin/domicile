@@ -74,9 +74,26 @@ git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1 || {
 SERIES="$ROOT/packages/domicile-engine/src"
 pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
+# A git killed mid-operation (a canceled run) leaves index.lock, and every git
+# below then refuses. This job holds the tree lock, so no other git is in this
+# tree and the lock is stale by construction.
+index_lock="$(git -C "$CHROMIUM" rev-parse --absolute-git-dir)/index.lock"
+if [ -e "$index_lock" ]; then
+  echo "removed a stale $index_lock; this job holds the tree lock"
+  rm -f "$index_lock"
+fi
+
 # In case a previous run died mid-series and left the rebase-apply state
 # behind. It fails when there is nothing to abort, which is the ordinary case.
 git -C "$CHROMIUM" am --abort 2>/dev/null || true
+# The abort does not always clear it — run 36179097048 got past here with it
+# still there — and `git am` refuses a series while it exists. Stale for the
+# same reason the lock above is.
+rebase_apply="$(git -C "$CHROMIUM" rev-parse --absolute-git-dir)/rebase-apply"
+if [ -e "$rebase_apply" ]; then
+  echo "removed a stale $rebase_apply; this job holds the tree lock"
+  rm -rf "$rebase_apply"
+fi
 
 # THE PIN MAY BE NEWER THAN THIS CHECKOUT, which is exactly what a repin is,
 # and getting it is this script's job rather than a person's. All three engine

@@ -112,6 +112,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
+             double scale,
              EmbedCallback callback);
 
   // The browser's displays, as the embedder has just read them. Forwarded to
@@ -165,6 +166,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                  const viz::FrameSinkId& parent_frame_sink_id,
                  const viz::LocalSurfaceId& local_surface_id,
                  const gfx::Size& size,
+                 double scale,
                  EmbedCallback callback);
     PendingEmbed(PendingEmbed&&);
     PendingEmbed& operator=(PendingEmbed&&);
@@ -174,6 +176,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     viz::FrameSinkId parent_frame_sink_id;
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
+    double scale;
     EmbedCallback callback;
   };
 
