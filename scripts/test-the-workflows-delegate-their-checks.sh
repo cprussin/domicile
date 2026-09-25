@@ -222,7 +222,7 @@ fi
 # about a workflow joining it is that somebody decided it should. The ones left
 # out are left out for a reason and each reason is written down:
 #
-#   engine-cancel-closed.yml  cancels stale runs; it asserts nothing.
+#   engine-cancel-stale.yml   cancels stale runs; it asserts nothing.
 #   engine-release.yml        builds and publishes a tarball. The guard it runs
 #                             on the packaged build is a `scripts/` one, which
 #                             the first rule above already forces.

@@ -18,7 +18,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export DOMICILE_COMPILE_SLOT="$WORK/slot"
 # No waiting unless a case asks for it.
-export DOMICILE_COMPILE_SLOT_WAIT=0 DOMICILE_COMPILE_SLOT_POLL=0.1
+export DOMICILE_COMPILE_SLOT_WAIT=0 DOMICILE_COMPILE_SLOT_POLL=0.1 DOMICILE_COMPILE_SLOT_RECHECK=0
 
 FAILED=0
 expect() {
@@ -128,6 +128,35 @@ expect "a taker outwaits a second holder" ok "$(status "$waited")"
 contains "and says it was waiting on the first" "'judy'" "$waited"
 contains "and on the second" "'mallory'" "$waited"
 slot drop niaj >/dev/null
+
+# A WAITER WHOSE COMMIT HAS BEEN REPLACED STOPS WAITING. The wait can outlast a
+# cold repin, and a run for a commit its branch has moved past holds a `crux`
+# runner that whole time for a result nobody will read. The workflow says what
+# "still wanted" means; this only asks it while waiting.
+rm -rf "$WORK/slot"
+slot take oscar >/dev/null
+: >"$WORK/output"
+gone="$(GITHUB_OUTPUT="$WORK/output" DOMICILE_COMPILE_SLOT_WAIT=30 \
+  DOMICILE_COMPILE_SLOT_STILL_WANTED='echo "replaced by abc"; exit 1' slot take peggy)"
+expect "a waiter that is no longer wanted gives up" refused "$(status "$gone")"
+contains "saying why" "replaced by abc" "$gone"
+case "$gone" in (*"waited 30s"*) r=outwaited ;; (*) r=early ;; esac
+expect "before its wait runs out" early "$r"
+expect "and tells the workflow it was superseded" "superseded=true" "$(cat "$WORK/output")"
+contains "without touching the holder's slot" "'oscar'" "$(slot who)"
+
+# A check that cannot answer is not a verdict: a flaky network must not end a
+# wanted run's wait. It keeps waiting and asks again.
+kept="$(DOMICILE_COMPILE_SLOT_WAIT=1 \
+  DOMICILE_COMPILE_SLOT_STILL_WANTED='echo "no route to origin"; exit 3' slot take quentin)"
+contains "a check that errors does not end the wait" "waited 1s" "$kept"
+contains "but says it could not ask" "no route to origin" "$kept"
+
+( sleep 0.5; slot drop oscar >/dev/null ) &
+expect "a waiter that is still wanted takes the slot when it frees" ok \
+  "$(status "$(DOMICILE_COMPILE_SLOT_WAIT=5 DOMICILE_COMPILE_SLOT_STILL_WANTED=true slot take rupert)")"
+wait
+slot drop rupert >/dev/null
 
 # WHETHER A RUN WILL COMPILE. A tree can carry the series while its
 # out/Release is cold -- built under other args, or never -- and a cold build
