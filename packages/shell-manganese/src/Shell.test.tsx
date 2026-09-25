@@ -140,6 +140,12 @@ class FakeDomicile {
     });
   }
 
+  /** The host's preview, which these tests never need answered. */
+  previewFile(path: string): Promise<unknown> {
+    this.calls.push(["previewFile", path]);
+    return new Promise(() => undefined);
+  }
+
   /** The home the host searches, which settles every search still waiting. */
   async holds(files: readonly string[]): Promise<void> {
     this.#home = files;

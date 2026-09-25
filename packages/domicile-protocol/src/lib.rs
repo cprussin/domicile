@@ -213,6 +213,16 @@ pub enum ChromeMessage {
     /// `domicile_host::file_search` — and all a page is ever told is what
     /// matched.
     SearchFiles { query: String },
+
+    /// What is in `path`? Answered with [`HostMessage::FilePreview`].
+    ///
+    /// A launcher's preview of the row it has reached. **This one does name a
+    /// path**, and what keeps that from being a `readdir` on the page is where
+    /// the answer comes from: the compositor answers only for a path its index
+    /// of the home holds, and says [`FilePreview::Unreadable`] for anything
+    /// else. So a page learns nothing about a path a search could not already
+    /// have named — and it can already `spawn`.
+    PreviewFile { path: String },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -423,6 +433,18 @@ pub enum HostMessage {
         files: Vec<String>,
         matched: u32,
         indexing: bool,
+    },
+
+    /// What is in a path, answering [`ChromeMessage::PreviewFile`].
+    ///
+    /// `path` is the one asked about, sent back so a shell can tell the
+    /// preview of the row it is on from the one it has just left. The kind
+    /// sits beside it on the wire rather than nested under it, which is how
+    /// the engine reads every other message.
+    FilePreview {
+        path: String,
+        #[serde(flatten)]
+        preview: FilePreview,
     },
 
     /// The machine's battery: how full, and whether a lead is in.
@@ -685,6 +707,20 @@ pub enum CursorShape {
     AllScroll,
     ZoomIn,
     ZoomOut,
+}
+
+/// What a path holds, as much of it as a preview has room for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FilePreview {
+    /// The front of a file that reads as text.
+    Text { text: String },
+    /// The front of what a directory holds, sorted, a directory ending in `/`.
+    Directory { entries: Vec<String> },
+    /// A file that is not text, and so has nothing a preview can draw.
+    Binary,
+    /// Not in the index, or not readable: nothing to show, and said so.
+    Unreadable,
 }
 
 /// Which way round a desktop is drawn.

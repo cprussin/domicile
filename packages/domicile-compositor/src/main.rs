@@ -23,7 +23,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -144,6 +144,7 @@ use crate::which_engine::another_engine;
 use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig, ThemeMode};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
+use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
@@ -402,6 +403,9 @@ struct ChromeHub {
     /// what it has always done on a broken desktop — a launcher told "you have
     /// no files" would draw that breakage as an ordinary empty home.
     offered: Mutex<Option<Arc<Offered>>>,
+    /// The home `offered` is an index of, which is what a preview reads under.
+    /// Set once, before the indexing thread publishes anything.
+    home: OnceLock<std::path::PathBuf>,
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
@@ -429,6 +433,7 @@ impl ChromeHub {
             max_scale: AtomicU32::new(max_scale),
             wayland_display,
             offered: Mutex::new(None),
+            home: OnceLock::new(),
             appearance,
         });
         (hub, outbound_rx)
@@ -1162,6 +1167,25 @@ fn read_chrome_messages(
                     // explains it. Left unanswered, the panel still opens and
                     // still takes a path, a URL or a query; what it has not
                     // got is a list.
+                    .into_iter()
+                    .collect()
+            }
+            // Answered out of the same index the search is, and only for a
+            // path it holds -- see `domicile_host::file_preview`. A page names
+            // this path, so the index is what keeps the naming from being a
+            // way to read the disk.
+            Ok(ChromeMessage::PreviewFile { path }) => {
+                let offered = hub.offered.lock().unwrap().clone();
+                offered
+                    .map(|offered| {
+                        let home = hub.home.get().expect("a home before an index of it");
+                        HostMessage::FilePreview {
+                            preview: preview(home, &path, &offered.search),
+                            path,
+                        }
+                    })
+                    // Nothing, for the reason a search on a desktop with no
+                    // index is answered with nothing above.
                     .into_iter()
                     .collect()
             }
@@ -5831,6 +5855,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     match home_directory() {
         Some(home) => {
             let hub = data.state.hub.clone();
+            hub.home
+                .set(home.clone())
+                .expect("the home is set once, at startup");
             thread::spawn(move || {
                 keep_the_index(home, kept_at(), |offered| {
                     // Published for `search_files` to answer from, and

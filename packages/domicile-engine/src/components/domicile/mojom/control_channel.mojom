@@ -207,6 +207,18 @@ interface ControlChannel {
   // process's IO thread, and a desktop that took no input while it was.
   SearchFiles(string query);
 
+  // Ask what is in one file a launcher has reached. Answered with
+  // ControlChannelClient::FilePreview, carrying the same path.
+  //
+  // THIS ONE DOES NAME A PATH, which SearchFiles above says it deliberately
+  // does not -- and what keeps that note true is where the path is looked up.
+  // It is relative to the home, as a Files answer named it, and the compositor
+  // answers only for a path in its own index of the home: anything else comes
+  // back `unreadable`. So it reads nothing a search could not already have
+  // named, and a renderer that wanted more of the disk than that already has
+  // `Spawn`.
+  PreviewFile(string path);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
@@ -353,11 +365,12 @@ interface ControlChannelClient {
   // directory, sorted by the compositor, a directory ending in `/` -- and
   // `matched` how many there were in all.
   //
-  // The one method here that IS because the page asked, which is why the note
-  // above says "one method, not a callback on Spawn" rather than "none". It is
-  // still a message and not a reply: the page has one listener per message
-  // type and a callback would be a second shape of delivery for one answer.
-  // The query comes back so the page can tell answers apart.
+  // One of the two methods here that ARE because the page asked -- FilePreview
+  // below is the other -- which is why the note above says "one method, not a
+  // callback on Spawn" rather than "none". It is still a message and not a
+  // reply: the page has one listener per message type and a callback would be
+  // a second shape of delivery for one answer. The query comes back so the
+  // page can tell answers apart.
   //
   // A home that could not be read sends nothing at all -- the compositor logs
   // it -- because a launcher drawing an empty list is how that failure would
@@ -372,6 +385,25 @@ interface ControlChannelClient {
         uint32 matched,
         bool indexing,
         mojo_base.mojom.TimeTicks arrival);
+
+  // What is in the file a PreviewFile named: `path` is the one answered, and
+  // `kind` says which of the rest means anything.
+  //
+  //   "text"        `text` is the front of the file
+  //   "directory"   `entries` is what is in it, a subdirectory ending in `/`
+  //   "binary"      nothing else: it is a file, and not one to print
+  //   "unreadable"  nothing else: not in the index, or not readable
+  //
+  // A string rather than an enum, because nothing on the page's side decides
+  // anything with it but which of those to draw -- and the browser refuses a
+  // word that is not one of the four before it gets here. An answer and not a
+  // push, like Files, so the path comes back for the page to tell answers
+  // apart.
+  FilePreview(string path,
+              string kind,
+              string text,
+              array<string> entries,
+              mojo_base.mojom.TimeTicks arrival);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
   // is whether a lead is in.

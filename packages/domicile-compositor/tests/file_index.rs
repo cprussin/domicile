@@ -14,7 +14,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, FilePreview, HostMessage};
 
 use crate::running::Compositor;
 
@@ -61,6 +61,32 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     assert_eq!(
         found_with(&mut chrome, "plan", "Notes/2026/april/plan.org"),
         vec!["Notes/2026/april/plan.org".to_string()]
+    );
+}
+
+#[test]
+fn a_preview_reads_what_the_index_holds_and_nothing_else() {
+    // The page names the path here, so the index is what decides whether it
+    // is read: a dotfile the walk skipped is as unreadable as one that does
+    // not exist.
+    let home = tempfile::tempdir().expect("a home to lay out");
+    fs::create_dir_all(home.path().join("Notes")).expect("the directory");
+    fs::write(home.path().join("Notes/today.org"), "* today\n").expect("the file");
+    write(home.path(), ".ssh/id_ed25519");
+
+    let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
+    let mut chrome = compositor.chrome();
+    found_with(&mut chrome, "", "Notes/today.org");
+
+    assert_eq!(
+        previewed(&mut chrome, "Notes/today.org"),
+        FilePreview::Text {
+            text: "* today\n".into()
+        }
+    );
+    assert_eq!(
+        previewed(&mut chrome, ".ssh/id_ed25519"),
+        FilePreview::Unreadable
     );
 }
 
@@ -141,6 +167,24 @@ fn found_with(chrome: &mut domicile_test_chrome::Chrome, query: &str, path: &str
             }
             other => panic!("that is not a search's answer: {other:?}"),
         }
+    }
+}
+
+/// What the compositor says is in `path`.
+fn previewed(chrome: &mut domicile_test_chrome::Chrome, path: &str) -> FilePreview {
+    chrome
+        .say(&ChromeMessage::PreviewFile {
+            path: path.to_string(),
+        })
+        .expect("it asks");
+    match chrome
+        .wait_for(|message| {
+            matches!(message, HostMessage::FilePreview { path: answered, .. } if answered == path)
+        })
+        .expect("the compositor answers the preview")
+    {
+        HostMessage::FilePreview { preview, .. } => preview,
+        other => panic!("that is not a preview: {other:?}"),
     }
 }
 
