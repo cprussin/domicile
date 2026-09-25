@@ -38,6 +38,7 @@ import type {
   DomicileDisplay,
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
+  DomicileIdleEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
@@ -266,6 +267,32 @@ export type ThemeMessage = {
   theme: Theme;
 };
 
+/**
+ * Whether anybody is at this desktop.
+ *
+ * `true` is a desk nobody has touched for as long as its config says, `false`
+ * is somebody back at it. A state rather than an edge, and a shell is told it
+ * again when its page connects — so a shell whose page reloaded while the desk
+ * was idle comes back knowing, instead of drawing a desktop somebody is at.
+ *
+ * **It does not lead the blanking.** The screens go dark in the same breath
+ * this arrives, so there is no warning here to fade on or count down with:
+ * what the idle edge is good for is arranging what will be true when the
+ * screens come *back*, because a relight takes tens of milliseconds and a
+ * repaint takes one.
+ *
+ * **Not a lock.** A dark screen is a screen and anybody can type at one. What
+ * stops the keys is the compositor, which holds the seat; nothing a page does
+ * with this message makes it the thing that says no.
+ *
+ * A desktop that never blanks sends none of these, not even a `false` — so a
+ * shell that has had no message has a desk with no opinion about who is at it,
+ * and no idle affordance to draw.
+ */
+export type IdleMessage = {
+  idle: boolean;
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -281,6 +308,7 @@ export type HostMessageMap = {
   battery: BatteryMessage;
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
+  idle: IdleMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -439,6 +467,18 @@ export const clipboard = (event: DomicileClipboardEvent): ClipboardMessage => ({
  */
 export const theme = (event: DomicileThemeEvent): ThemeMessage => ({
   theme: event.theme,
+});
+
+/**
+ * Whether anybody is at the desk, with the SDK's own `arrival` left behind.
+ *
+ * A pass-through like {@link files}: the engine carries one boolean and that
+ * boolean is the message. It exists so `domicile-client.ts` has the same one
+ * call per listener that every other event gets — and so that the one way this
+ * can be wrong, which is backward, has somewhere to be asserted.
+ */
+export const idle = (event: DomicileIdleEvent): IdleMessage => ({
+  idle: event.idle,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

@@ -536,6 +536,45 @@ pub enum HostMessage {
     /// desktop whose preference a page could be deferring to. See
     /// [`domicile_config::ThemeMode`].
     Theme { theme: Theme },
+    /// Whether anybody is at this desktop.
+    ///
+    /// `true` is a desk nobody has touched for `idle.blank_after_seconds`;
+    /// `false` is somebody back at it. The compositor's own seam decides both
+    /// — see `crate::idle` in `domicile-compositor` — and this is the same
+    /// answer the connectors are given, said to the shell as well.
+    ///
+    /// **THE STATE, THOUGH IT IS SENT ON THE EDGE.** The compositor reports
+    /// the turn the answer *changed* on, because lighting a connector is a
+    /// modeset and a dark desk asking for one per tick is a modeset a second
+    /// with nobody in the room. A page has the opposite problem: it reloads,
+    /// and a page that has just loaded has missed every edge there ever was.
+    /// So what crosses here is where the desk stands rather than which way it
+    /// just went, and a chrome that has just said hello is told it — the
+    /// treatment [`HostMessage::Clipboard`] gets, and for
+    /// [`HostMessage::AppAppeared`]'s reason.
+    ///
+    /// **IT DOES NOT LEAD THE BLANKING, AND A SHELL MUST NOT DRAW AS IF IT
+    /// DID.** This goes out on the same turn the screens are told to go dark,
+    /// ahead of the modeset rather than ahead of the timeout, so the glass is
+    /// out within the same breath: there is no warning here to fade on, count
+    /// down or animate with. What is worth doing with the dark edge is what
+    /// will be true when the screens come *back* — a lock over the desktop, a
+    /// panel closed, a secret put away — because the lit edge does lead: a
+    /// modeset takes tens of milliseconds and this is already in the page. A
+    /// desk that warns before it goes dark wants a lead time nothing in the
+    /// config states yet, and `ROADMAP.md` carries that.
+    ///
+    /// **A desktop that never blanks never sends this**, not even a `false`:
+    /// no `idle.blank_after_seconds` is no clock at all, and silence is the
+    /// honest answer from a desk that has no opinion about who is at it. So a
+    /// shell told nothing draws no idle affordance, and one told `false` knows
+    /// both that somebody is here and that this desk does blank.
+    ///
+    /// **Not a lock.** A dark screen is a screen and anybody can type at one:
+    /// the seat is the compositor's, so refusing to deliver what is typed is
+    /// its decision rather than the page's, and no message here makes a page
+    /// the thing that says no. `ROADMAP.md` carries that too.
+    Idle { idle: bool },
 }
 
 /// One thing that was copied, as the shell is told about it.

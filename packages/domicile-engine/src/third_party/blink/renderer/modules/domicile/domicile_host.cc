@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_file_preview_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -463,6 +464,16 @@ void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
       << "', so domicile_theme.idl and theme.h disagree";
   DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
       event_type_names::kTheme, *mode, Arrival(arrival)));
+}
+
+// Pushed like Battery, and a state rather than an edge -- the compositor
+// decides the edge, because lighting a connector is a modeset and a dark desk
+// must not ask for one per tick, and then sends where the desk stands so that
+// a page which has only just loaded is not left drawing a desktop somebody is
+// at. See `crate::idle` in the compositor.
+void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileIdleEvent>(
+      event_type_names::kIdle, idle, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

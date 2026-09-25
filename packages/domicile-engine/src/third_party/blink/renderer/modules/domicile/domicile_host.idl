@@ -193,6 +193,22 @@
   // a page that has only just connected.
   attribute EventHandler onclipboard;
 
+  // Whether anybody is at this desktop, as a DomicileIdleEvent.
+  //
+  // Pushed like onbattery, and for a reason no page can work around: a shell
+  // IS the desktop, so its document stays visible while the glass is off --
+  // the compositor turns the connector off underneath the browser, which is
+  // told nothing about it. document.visibilityState, the Idle Detection API
+  // and every timer a page could run all read "somebody is here" on a desk
+  // nobody has been at for an hour. The hands are counted in the compositor
+  // because that is what every key and every pointer movement goes through.
+  //
+  // It arrives on the turn the answer changes, and once more to a page that
+  // has only just connected -- which is why it carries where the desk stands
+  // rather than which way it just went. A desktop with no idle timeout
+  // configured never fires one.
+  attribute EventHandler onidle;
+
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;
 

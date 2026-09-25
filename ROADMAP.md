@@ -73,20 +73,29 @@ The evidence for each of those is in the doc that made the claim —
 
 3. **No lock.** A desktop you walk away from is one anybody can walk up to.
    The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
-   `crate::idle` in the compositor for the decision and the edge, and the one
-   thing that seam can already drive — the connectors go dark and come back on
-   the next key, click, scroll or pointer movement, and a client playing a film
-   holds them on through all of it
-   ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it)).
+   `crate::idle` in the compositor for the decision and the edge, the
+   connectors going dark and coming back on the next key, click, scroll or
+   pointer movement — with a client playing a film holding them on through all
+   of it
+   ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it))
+   — and an `idle` message on the host↔chrome protocol that tells the shell
+   which of the two a desk is in ([what a shell does with
+   it](docs/WRITING-A-SHELL.md#when-nobody-is-at-the-desk)).
    A blank screen is still a screen: anybody can type at one. What is left is
 
    - **The lock itself**, which needs the shell, the host↔chrome protocol and a
      decision about where input stops — the seat holds the keyboard, so
      refusing to deliver it is this compositor's to do rather than the page's.
-   - **Telling the shell.** Nothing but the connectors hears about idle today,
-     so a shell cannot dim, warn, or show a lock screen a moment before the
-     glass goes out. It is a message on the host↔chrome protocol and the
-     `Idle` seam already names the moment.
+   - **A moment before, rather than at the moment.** The shell is told now,
+     but `HostMessage::Idle` goes out on the turn the screens are told to go
+     dark — ahead of the modeset, not ahead of the timeout — so there is
+     nothing to dim through, count down with or raise a lock during. Only the
+     relight leads, by the tens of milliseconds a modeset costs against a
+     repaint. A desk that warns wants a lead time, and there are two shapes for
+     one: a second timer in `crate::idle` with a config field saying how long
+     before the blank to speak, or telling the shell the timeout and letting it
+     count. Neither is written, and which is right depends on the lock, since
+     the lock is the thing that most wants the warning.
    - **An inhibitor on a surface nobody can see still holds.** The inhibit half
      shipped — `zwp_idle_inhibit_manager_v1` is advertised, a client's
      inhibitor vetoes the answer in `Idle`, and one held by a client that died

@@ -209,6 +209,7 @@ fn host_messages_round_trip() {
             preview: "ssh-rsa AAAA".into(),
         }],
     });
+    host_round_trip(&HostMessage::Idle { idle: true });
 }
 
 /// The answer is the query it answers, paths relative to the home directory
@@ -336,6 +337,29 @@ fn an_empty_battery_is_a_reading_rather_than_a_silence() {
     .unwrap();
     assert_eq!(v["charge"], 0.0);
     assert_eq!(v["charging"], false);
+}
+
+/// Whether anybody is at the desk, in the one field that says it.
+///
+/// A state and not an edge, which is the difference between this and
+/// `crate::idle` in the compositor: that seam reports the turn the answer
+/// changed on, because lighting a connector is a modeset and a dark desk must
+/// not ask for one per tick. A page has the opposite problem — it reloads, and
+/// a page that has just loaded has missed every edge there ever was — so what
+/// crosses the wire is where the desk stands, and a chrome that has just said
+/// hello is told it.
+#[test]
+fn whether_anybody_is_at_the_desk_is_a_state_rather_than_an_edge() {
+    let dark = serde_json::to_value(HostMessage::Idle { idle: true }).unwrap();
+    assert_eq!(dark["type"], "idle");
+    assert_eq!(dark["idle"], true);
+
+    let here = serde_json::to_value(HostMessage::Idle { idle: false }).unwrap();
+    assert_eq!(here["type"], "idle");
+    assert_eq!(
+        here["idle"], false,
+        "somebody coming back is the same message saying the other thing"
+    );
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must

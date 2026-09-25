@@ -914,6 +914,18 @@ obvious answer:
 | **Dark is built from the engine's display list, not from `Screens::scanout`** | A scanout list names the displays a *profile* named. A monitor no profile mentions is absent from it, and absent means untouched, which means still on. `crate::idle::darkened` reads `engine::Event::Displays`' own reading instead — every connector there is, at the origins the engine already put them |
 | **Relighting restates what the desktop wants, which is usually nothing** | Coming back is `Screens::scanout` again: a profile's connectors on a desk that has one, and the empty "hardware decides" list on every desk that does not. The desktop is not stored twice |
 
+The shell is told as well, on both edges and ahead of the modeset:
+`HostMessage::Idle` carries whether anybody is at the desk. Two things about it
+are the opposite of what the connectors get:
+
+| Rule | Why |
+|---|---|
+| **A page is sent the state, where a connector is sent the edge** | Glass holds whatever the last modeset left it; a document reloads, and one that has just loaded has missed every edge there was. So a chrome that says hello is told where the desk stands, the way it is told which windows are open |
+| **The dark edge does not lead the blanking** | It goes out ahead of the *modeset*, not ahead of the timeout, so there is nothing to dim through or count down. The lit edge does lead — a relight is tens of milliseconds against a repaint's one — so what the dark edge is good for is arranging what will be true when the screens come back |
+
+A desk with no timeout sends neither, which is what a shell reads as "this
+desktop has no opinion about who is at it".
+
 The clock and the edge are `crate::idle`, which is pure and unit-tested; the
 compositor holds one `Idle` and states the connectors only when the answer
 *changed*. A desk that is already dark must not re-send a configure on every

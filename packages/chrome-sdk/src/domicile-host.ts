@@ -499,6 +499,37 @@ export type DomicileThemeEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * Whether anybody is at this desktop, pushed when that changes.
+ *
+ * **A page cannot see this for itself, and `document.visibilityState` is the
+ * trap that looks like it can.** A shell is the desktop: its document stays
+ * visible while the glass is off, because the compositor turns the connector
+ * off and tells the browser nothing about it — so every idle signal the web
+ * platform has reads "somebody is here" on a desk nobody has been at for an
+ * hour. The compositor is what counts the hands, and this is that count.
+ *
+ * Pushed, like the battery: it arrives on the turn the answer changes and once
+ * more to a page that has just connected — so a page that reloaded while the
+ * desk was idle is told, rather than left drawing a desktop somebody is at.
+ * A desktop with no idle timeout configured sends none of these at all.
+ *
+ * It does not lead the blanking: the screens go dark in the same breath it
+ * arrives. What it leads is the relight, which takes tens of milliseconds
+ * against a repaint's one.
+ */
+export type DomicileIdleEvent = Event & {
+  /** `true` is a desk nobody is at; `false` is somebody back at it. */
+  readonly idle: boolean;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -528,6 +559,12 @@ export type DomicileHostEventMap = {
    * one of the three a page can cause — see {@link DomicileHost.setTheme}.
    */
   theme: DomicileThemeEvent;
+  /**
+   * Whether anybody is at the desk, whenever that changes — and once to a page
+   * that has just connected, which is the whole reason it carries the state
+   * rather than the edge the compositor decided on.
+   */
+  idle: DomicileIdleEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it

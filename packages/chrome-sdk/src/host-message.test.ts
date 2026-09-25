@@ -8,6 +8,7 @@ import type {
   DomicileClipboardEvent,
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
+  DomicileIdleEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
 } from "./domicile-host";
@@ -22,6 +23,7 @@ import {
   filePreview,
   focusChanged,
   foundFiles,
+  idle,
   modifiers,
   shortcut,
 } from "./host-message";
@@ -350,5 +352,31 @@ describe("the clipboard", () => {
     );
 
     expect(history).toStrictEqual({ entries: [] });
+  });
+});
+
+describe("whether anybody is at the desk", () => {
+  it("arrives as the state, both ways round and without the hop", () => {
+    // THE ONE WAY THIS CAN BE WRONG IS BACKWARD, and backward is the worst
+    // answer there is: a shell that dims when somebody sits down and clears
+    // when they walk away. Both directions, because an inversion reads
+    // perfectly well from either one alone.
+    expect(
+      idle(
+        Object.assign(new Event("idle"), {
+          arrival: 0,
+          idle: true,
+        }) as DomicileIdleEvent,
+      ),
+    ).toStrictEqual({ idle: true });
+
+    expect(
+      idle(
+        Object.assign(new Event("idle"), {
+          arrival: 0,
+          idle: false,
+        }) as DomicileIdleEvent,
+      ),
+    ).toStrictEqual({ idle: false });
   });
 });

@@ -90,6 +90,7 @@ import {
   focusChanged,
   focusRequested,
   foundFiles,
+  idle,
   modifiers,
   shortcut,
   theme,
@@ -256,6 +257,9 @@ export class DomicileClient {
     });
     host.addEventListener("theme", (event) => {
       this.#deliver("theme", theme(event));
+    });
+    host.addEventListener("idle", (event) => {
+      this.#deliver("idle", idle(event));
     });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
