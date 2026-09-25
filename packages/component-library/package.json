@@ -59,6 +59,7 @@
     "src/**/**",
     "styled-system/**/**"
   ],
+  "license": "MIT",
   "name": "@domicile/component-library",
   "peerDependencies": {
     "react": "catalog:"

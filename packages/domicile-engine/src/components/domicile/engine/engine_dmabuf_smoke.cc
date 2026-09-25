@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 // THROWAWAY. Phase 1's last assertion: a real dmabuf, allocated by something
 // that is not Chromium, reaches the screen through a page.
