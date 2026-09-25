@@ -103,6 +103,7 @@ compare DomicileModifiersEvent domicile_modifiers_event.idl
 compare DomicileBatteryEvent domicile_battery_event.idl
 compare DomicileClipboardEvent domicile_clipboard_event.idl
 compare DomicileFilePreviewEvent domicile_file_preview_event.idl
+compare DomicileIdleEvent domicile_idle_event.idl
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

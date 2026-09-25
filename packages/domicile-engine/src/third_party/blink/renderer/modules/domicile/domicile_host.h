@@ -123,6 +123,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(theme, kTheme)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(idle, kIdle)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -184,6 +185,7 @@ class MODULES_EXPORT DomicileHost final
                  base::TimeTicks arrival) override;
   void ThemeChanged(domicile::mojom::blink::Theme theme,
                     base::TimeTicks arrival) override;
+  void Idle(bool idle, base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

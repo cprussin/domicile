@@ -447,6 +447,25 @@ interface ControlChannelClient {
   // one, which is deliberate -- one path sets the theme, rather than a page
   // that believes its own click.
   ThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
+  // Whether anybody is at this desktop: true is a desk nobody has touched for
+  // as long as its config says, false is somebody back at it.
+  //
+  // Pushed like Battery, and a state rather than an edge although the
+  // compositor decides an edge: over there an edge is what a connector can
+  // take, because lighting one is a modeset and a dark desk restating itself
+  // every tick is a modeset a second. A page reloads, so it is sent where the
+  // desk stands -- on the turn that changes, and once more to a chrome that
+  // has just connected.
+  //
+  // A page cannot count hands for itself. A shell is the desktop, so its
+  // document stays visible while the glass is off: every idle signal the web
+  // platform has says somebody is here on a desk nobody has been at for an
+  // hour. A desktop with no idle timeout sends none of these at all.
+  //
+  // NOT A LOCK, and nothing here can be made into one: the seat is the
+  // compositor's, so refusing to deliver what is typed is its decision rather
+  // than the page's.
+  Idle(bool idle, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);

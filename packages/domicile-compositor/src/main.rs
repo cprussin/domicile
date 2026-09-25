@@ -131,7 +131,7 @@ use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
-use crate::idle::{darkened, somebody_is_here, Blanking, Idle, StillThere};
+use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
@@ -3169,6 +3169,44 @@ impl DomicileCompositor {
         self.idle.as_ref().is_some_and(Idle::dark)
     }
 
+    /// Tell every chrome whether anybody is at this desktop.
+    ///
+    /// **BEFORE THE CONNECTORS ARE STATED, wherever both happen.** Neither
+    /// order buys a shell a warning — a modeset is the next thing that occurs
+    /// either way, and [`HostMessage::Idle`] says in as many words that
+    /// nothing here leads the blanking. What this order does buy is the
+    /// *other* edge: relighting a CRTC takes tens of milliseconds and a page
+    /// repaints in one, so a shell told first has its lock up, its panel
+    /// closed and its secret away by the time there is light to read them by.
+    /// The dark edge is ordered the same way for no better reason than that
+    /// two edges written differently are two things to reason about.
+    ///
+    /// Unguarded, unlike
+    /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here):
+    /// every caller is an edge, and a desk that has stopped being dark has to
+    /// say so whether or not it still has a clock. A reload that takes the
+    /// timeout away while the screens are off is exactly that — the state is
+    /// read back off this compositor rather than from the `Idle` that knew it,
+    /// which by then may be gone.
+    fn tell_the_chromes_whether_anybody_is_here(&self) {
+        self.hub.broadcast(announced(self.the_screens_are_dark()));
+    }
+
+    /// Tell a chrome that has just said hello where this desk stands.
+    ///
+    /// Silent on a desktop that never blanks, which is the difference from the
+    /// edges above: no timeout is no clock, and a `false` from a desk with no
+    /// opinion about who is at it would be a shell drawing an idle affordance
+    /// that can never come on. A desk that does blank answers even when nobody
+    /// has walked away from it yet, because `false` from one of those is the
+    /// two facts a shell needs — somebody is here, and this desk is one that
+    /// will say when they are not.
+    fn tell_a_new_chrome_whether_anybody_is_here(&self) {
+        if self.idle.is_some() {
+            self.tell_the_chromes_whether_anybody_is_here();
+        }
+    }
+
     /// Keep a blanked desktop blanked through something that lit it.
     ///
     /// A hotplug is the one event that hands this compositor glass it never
@@ -3202,6 +3240,7 @@ impl DomicileCompositor {
         };
         if idle.stirred(Instant::now()) == Some(Blanking::ComeBack) {
             debug!("somebody is at this desktop again; its screens come back on");
+            self.tell_the_chromes_whether_anybody_is_here();
             self.state_the_connectors();
         }
     }
@@ -3292,6 +3331,7 @@ impl DomicileCompositor {
                 connectors = self.engine_displays.len(),
                 "nobody is at this desktop; its screens go dark"
             );
+            self.tell_the_chromes_whether_anybody_is_here();
             self.state_the_connectors();
         }
         next
@@ -3402,6 +3442,15 @@ impl DomicileCompositor {
         }
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");
+            // AND THE SHELL HEARS IT, which is the one thing a reload could
+            // silently lose: the page was told the desk was idle, the clock
+            // that knew it has just been thrown away, and no hand is coming to
+            // produce the edge that would release it. A shell that locked on
+            // the dark edge would otherwise stay locked over a lit desktop
+            // until somebody typed at it — including where the edit took the
+            // timeout out altogether, which is why this is the unguarded
+            // call and not the one a new chrome gets.
+            self.tell_the_chromes_whether_anybody_is_here();
             self.state_the_connectors();
         }
     }
@@ -3943,6 +3992,13 @@ impl DomicileCompositor {
                 // method for it: a history of nothing is a message this one
                 // can send, where a battery that has not been read is not.
                 self.tell_the_chromes_the_clipboard();
+                // And whether anybody is at the desk, which is the one of
+                // these a page can be told *wrong* by silence rather than
+                // merely late: a shell that reloaded while the screens were
+                // dark would come back drawing a desktop somebody is at, and
+                // the edge that would have said otherwise went out before the
+                // page existed.
+                self.tell_a_new_chrome_whether_anybody_is_here();
             }
             ClientRequest::SetOutputScale { ratio, scale } => {
                 // Kept whether or not the scale below is taken up. A described

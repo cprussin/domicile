@@ -20,12 +20,18 @@
 //! choice is argued, and [`StillThere`] is the half of it that says what an
 //! inhibitor held by a client that *died* is worth.
 //!
+//! The shell is the one thing told the state instead, and [`announced`] is
+//! where that is decided: a page reloads, and one that has just loaded has
+//! missed every edge there ever was.
+//!
 //! One thing this deliberately is not: **it is not a lock.** A dark screen is
 //! a screen, and anybody can still type at this desktop. The lock needs the
 //! shell, the host↔chrome protocol and a decision about where input stops;
 //! `ROADMAP.md` carries it.
 
 use std::time::{Duration, Instant};
+
+use domicile_protocol::HostMessage;
 
 use crate::engine::{Connector, Display};
 use crate::ClientRequest;
@@ -297,13 +303,34 @@ pub fn darkened(displays: &[Display]) -> Vec<Connector> {
         .collect()
 }
 
+/// What a chrome is told about whether anybody is here.
+///
+/// The other end of the same answer [`darkened`] gives the engine, and the
+/// difference between them is what each end can do about a state it was not
+/// told: a connector is glass and holds whatever the last modeset left it, so
+/// the engine is told only on the edge — a page is a document that reloads,
+/// and one that has just loaded has missed every edge there ever was. So this
+/// takes the state rather than the [`Blanking`] that reached it, and the same
+/// call answers both a desk that just went dark and a chrome saying hello on
+/// one that went dark ten minutes ago.
+///
+/// See [`HostMessage::Idle`] for what a shell may and may not do with it —
+/// in particular that it does not lead the blanking.
+pub fn announced(nobody_is_here: bool) -> HostMessage {
+    HostMessage::Idle {
+        idle: nobody_is_here,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
     use std::time::{Duration, Instant};
 
-    use super::{darkened, somebody_is_here, Blanking, Idle, StillThere};
+    use domicile_protocol::HostMessage;
+
+    use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::engine::{Clipboard, Connector, Display};
     use crate::ClientRequest;
 
@@ -629,6 +656,16 @@ mod tests {
         // A nested run, where the screens belong to the host's compositor and
         // this one has never been told about a connector.
         assert!(darkened(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_shell_is_told_where_the_desk_stands_rather_than_which_way_it_went() {
+        // THE ONE WAY THIS CAN BE WRONG IS BACKWARD, and backward is the worst
+        // answer there is: a shell that dims when somebody sits down and
+        // clears when they walk away. Both directions, because an inversion
+        // reads perfectly well from either one alone.
+        assert_eq!(announced(true), HostMessage::Idle { idle: true });
+        assert_eq!(announced(false), HostMessage::Idle { idle: false });
     }
 
     #[test]

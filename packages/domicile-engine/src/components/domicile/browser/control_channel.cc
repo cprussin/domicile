@@ -842,6 +842,20 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "idle") {
+    // DROPPED RATHER THAN DEFAULTED, for the reason `battery` above is and
+    // more sharply: a missing field here has no reading to fall back on that
+    // is not a guess about which way the desk went, and a guess that came out
+    // false would clear a shell's lock screen over a desk nobody is at. A
+    // message this cannot read is one to say nothing about.
+    std::optional<bool> idle = message.FindBool("idle");
+    if (!idle) {
+      return;
+    }
+    client_->Idle(*idle, arrival);
+    return;
+  }
+
   if (*type == "focus_changed") {
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.

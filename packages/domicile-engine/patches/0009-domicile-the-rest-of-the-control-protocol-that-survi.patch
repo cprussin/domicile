@@ -77,16 +77,16 @@ Adding a member costs a near-full Blink rebuild, because a new inbound message
 needs a new event type and that invalidates the generated bindings. These were
 added together for that reason.
 ---
- .../bindings/generated_in_modules.gni         | 36 +++++++++++++++++++
- .../renderer/bindings/idl_in_modules.gni      | 19 ++++++++++
- .../core/events/event_type_names.json5        | 12 +++++++
- 3 files changed, 67 insertions(+)
+ .../bindings/generated_in_modules.gni         | 40 ++++++++++++++++++++++++
+ .../renderer/bindings/idl_in_modules.gni      | 21 +++++++++++++
+ .../core/events/event_type_names.json5        | 13 ++++++++
+ 3 files changed, 74 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
 index 0e992091ba..0acaed86fc 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -312,7 +312,23 @@ generated_dictionary_sources_in_modules = [
+@@ -312,7 +312,25 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_close_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_collected_client_data.h",
@@ -95,6 +95,8 @@ index 0e992091ba..0acaed86fc 100644
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_idle_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_idle_event_init.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event_init.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event_init.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.cc",
@@ -110,7 +112,7 @@ index 0e992091ba..0acaed86fc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -1604,6 +1620,8 @@ generated_enumeration_sources_in_modules = [
+@@ -1604,6 +1622,8 @@ generated_enumeration_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_device_posture_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
@@ -119,7 +121,7 @@ index 0e992091ba..0acaed86fc 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
-@@ -2365,7 +2383,25 @@ generated_interface_sources_in_modules = [
+@@ -2365,7 +2385,27 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_extendable_message_event.h",
@@ -128,6 +130,8 @@ index 0e992091ba..0acaed86fc 100644
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_idle_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_idle_event.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event.cc",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event.h",
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_entry.cc",
@@ -149,7 +153,7 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
 index 10082ed9b8..06ab14b6af 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -278,10 +278,29 @@ static_idl_files_in_modules = [
+@@ -278,10 +278,31 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/encryptedmedia/navigator_request_media_key_system_access.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source.idl",
    "//third_party/blink/renderer/modules/eventsource/event_source_init.idl",
@@ -160,6 +164,8 @@ index 10082ed9b8..06ab14b6af 100644
    "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_app_titled_event_init.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_cursor_shape.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_idle_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_idle_event_init.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_battery_event.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_battery_event_init.idl",
 +  "//third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.idl",
@@ -183,10 +189,11 @@ diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/thi
 index 00469ecc52..a6741f85eb 100644
 --- a/third_party/blink/renderer/core/events/event_type_names.json5
 +++ b/third_party/blink/renderer/core/events/event_type_names.json5
-@@ -25,6 +25,18 @@
+@@ -25,6 +25,19 @@
      "appinstalled",
      // Domicile's engine fork: navigator.domicile.onapptitled.
      "apptitled",
++    "idle",
 +    "appappeared",
 +    "appresized",
 +    "appclosed",

@@ -341,6 +341,35 @@ const themeMessageSchema = z.looseObject({
   type: z.literal("theme"),
 });
 
+// Whether anybody is at this desktop: `true` is a desk nobody has touched for
+// `idle.blank_after_seconds`, `false` is somebody back at it.
+//
+// THE STATE, THOUGH THE COMPOSITOR SENDS IT ON THE EDGE. That seam reports the
+// turn the answer changed on, because lighting a connector is a modeset and a
+// dark desk asking for one per tick is a modeset a second with nobody in the
+// room. A page has the opposite problem — it reloads, and one that has just
+// loaded has missed every edge there was — so what crosses here is where the
+// desk stands, and a chrome that has just connected is told it, like the
+// clipboard and unlike a shortcut.
+//
+// It does not lead the blanking: it goes out on the turn the screens are told
+// to go dark, ahead of the modeset rather than ahead of the timeout. What
+// leads is the other edge — a relight takes tens of milliseconds and a repaint
+// takes one — so what the dark edge is good for is arranging what will be true
+// when the screens come back.
+//
+// A desktop that never blanks sends none of these, not even a `false`: no
+// timeout is no clock, and silence is what a desk with no opinion about who is
+// at it has to say.
+const idleSchema = z.looseObject({
+  // Required, and not defaulted the way `fills_the_window` is: there is no
+  // reading of an absent field here that is not a guess about which way the
+  // desk went, and a guess that came out `false` would clear a shell's lock
+  // screen on a host too old to have sent one.
+  idle: z.boolean(),
+  type: z.literal("idle"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -364,6 +393,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   batterySchema,
   clipboardSchema,
   themeMessageSchema,
+  idleSchema,
 ]);
 
 /** A decoded host message. */
@@ -394,6 +424,7 @@ export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
+export type IdleMessage = z.infer<typeof idleSchema>;
 
 /** One thing that was copied, as a row of the clipboard's history. */
 export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;

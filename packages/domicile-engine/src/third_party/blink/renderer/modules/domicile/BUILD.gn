@@ -23,6 +23,8 @@ blink_modules_sources("domicile") {
     "domicile_file_preview_event.h",
     "domicile_files_event.cc",
     "domicile_files_event.h",
+    "domicile_idle_event.cc",
+    "domicile_idle_event.h",
     "domicile_modifiers_event.cc",
     "domicile_modifiers_event.h",
     "domicile_shortcut_event.cc",

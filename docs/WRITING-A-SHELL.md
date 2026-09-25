@@ -256,15 +256,16 @@ their layout into this file; there is no layer below it that will.
 
 **A desktop that blanks says so, and one that says nothing does not.**
 `idle.blank_after_seconds` is how long a desk goes untouched before its screens
-go dark; they come back on the next key, click, scroll or pointer movement.
-Leaving it out is a desktop that never blanks, which is deliberate — there is
-no lock behind the blank yet and nothing tells the shell a moment before, so a
-screen that went dark on its own would be indistinguishable from a desktop that
-had died. `0` is refused rather than read as either answer. An app playing a
-film holds the screens on through the timeout — `zwp_idle_inhibit_manager_v1`,
-which is between that client and the compositor — so a desk that has not
-blanked is not necessarily one whose timeout is wrong; there is nothing here
-for a shell to write either way.
+go dark; they come back on the next key, click, scroll or pointer movement,
+and your shell hears both — see [When nobody is at the
+desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
+blanks, which is deliberate: there is no lock behind the blank yet, and nothing
+warns a moment *before* it, so a desk that went dark on a timeout its user
+never set is one that looks like it died. `0` is refused rather than read as
+either answer. An app playing a film holds the screens on through the timeout —
+`zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
+— so a desk that has not blanked is not necessarily one whose timeout is wrong,
+and there is nothing there for a shell to write either way.
 
 **The theme is the desktop's, and there are two of them.** `[theme] mode` is
 `"dark"` or `"light"`, and it is where a desk states the one it comes up on.
@@ -641,6 +642,55 @@ another compositor — nothing moves. `shell-manganese` does this on every focus
 change of its own — a keyed one, and a window opening with the keyboard, which
 is the same problem with nobody pressing anything — and only when the pointer
 is not over the window already.
+
+## When nobody is at the desk
+
+A desk that has gone untouched for `idle.blank_after_seconds` turns its screens
+off, and your shell is told:
+
+```ts
+domicile.on("idle", ({ idle }) => {
+  // `true` is a desk nobody is at. `false` is somebody back at it.
+  document.body.classList.toggle("idle", idle);
+});
+```
+
+**You cannot work this out for yourself, and the web platform's own answers are
+worse than nothing here.** Your shell *is* the desktop, so its document stays
+visible while the glass is off — the compositor turns the connector off
+underneath the browser, which is told nothing about it. `visibilityState`, an
+idle detector and a timer of your own all say somebody is here on a desk nobody
+has been at for an hour. The compositor is what every key and every pointer
+movement on this desktop passes through, so counting hands is its job, and this
+message is that count.
+
+**It is the state, not the edge, and you are told it again when your page
+connects.** The compositor decides an edge — a dark desk must not ask for a
+modeset on every tick — but a page reloads, and a page that has just loaded has
+missed every edge there was. So a shell rebuilt while the desk was idle comes
+back knowing it is idle, the same way it comes back knowing which windows are
+open.
+
+**It does not lead the blanking. Do not draw as if it does.** The screens go
+dark in the same breath the message arrives: there is no warning here to fade
+on, count down with, or show a "locking in ten seconds" over. What *is* worth
+doing on the idle edge is arranging what will be true when the screens come
+**back** — because the other edge does lead. Relighting a CRTC takes tens of
+milliseconds and your repaint takes one, so a panel you close or a secret you
+put away on `idle: false` is already closed by the time there is light to read
+it by. A desk that warns before it goes dark wants a lead time nothing in the
+config states yet; [ROADMAP.md](/ROADMAP.md) carries that.
+
+**It is not a lock, and nothing you do with it makes one.** A dark screen is a
+screen, and anybody can still type at this desktop: the seat is the
+compositor's, so refusing to deliver what is typed is its decision rather than
+your page's. A shell that draws a lock screen on this message has drawn a
+picture of one.
+
+**A desktop that never blanks sends nothing at all** — not even `idle: false`.
+Leaving `idle.blank_after_seconds` out is a desk with no opinion about who is at
+it, so a shell that has never had one of these has no idle affordance to draw,
+which is a different thing from having been told somebody is here.
 
 ## A browser window
 

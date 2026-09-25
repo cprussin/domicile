@@ -137,6 +137,22 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({ app_id: undefined, type: "focus_changed" });
   });
 
+  it("decodes whether anybody is at the desk, both ways round", () => {
+    // A state rather than an edge, which is the shape the wire needs and not
+    // the one the compositor's own seam has: that one reports the turn the
+    // answer changed on, because a dark desk restating itself is a modeset a
+    // second. A page reloads, so what it is sent is where the desk stands —
+    // and both answers cross, because a shell told only about going idle would
+    // have no message to come back from.
+    expect(
+      parseHostMessage(JSON.stringify({ idle: true, type: "idle" })),
+    ).toStrictEqual({ idle: true, type: "idle" });
+
+    expect(
+      parseHostMessage(JSON.stringify({ idle: false, type: "idle" })),
+    ).toStrictEqual({ idle: false, type: "idle" });
+  });
+
   it("decodes the desktop's displays", () => {
     // The shell lays out against these: one page spans every display, and a
     // display is a region of it, so the position is what puts a `<Screen>`
