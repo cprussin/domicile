@@ -370,6 +370,15 @@ const idleSchema = z.looseObject({
   type: z.literal("idle"),
 });
 
+// Which way round the desk's windows are drawn now: `theme`'s other half,
+// sent once every chrome has captured the frame its wipe starts from and the
+// windows have repainted, and with the handshake. Refused rather than
+// defaulted, for `theme`'s reason.
+const windowsThemeMessageSchema = z.looseObject({
+  theme: themeSchema,
+  type: z.literal("windows_theme"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -394,6 +403,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   clipboardSchema,
   themeMessageSchema,
   idleSchema,
+  windowsThemeMessageSchema,
 ]);
 
 /** A decoded host message. */
@@ -425,6 +435,7 @@ export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
+export type WindowsThemeMessage = z.infer<typeof windowsThemeMessageSchema>;
 
 /** One thing that was copied, as a row of the clipboard's history. */
 export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;

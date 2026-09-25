@@ -149,6 +149,7 @@ use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowe
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
+use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
@@ -270,6 +271,18 @@ struct CalloopData {
 /// reconfigure its toplevel. Sent over a calloop channel so it is handled on
 /// the Wayland thread (where the seat and surfaces live).
 enum ClientRequest {
+    /// Every chrome has been told a theme: turn the windows once they have
+    /// captured. `chromes` names the ones that were told -- see
+    /// [`chrome_key`].
+    TurnTheWindows {
+        theme: Theme,
+        chromes: Vec<usize>,
+    },
+    /// A chrome's old frame is held for `theme`.
+    ThemeCaptured {
+        chrome: usize,
+        theme: Theme,
+    },
     PointerMotion {
         app_id: String,
         x: f64,
@@ -412,10 +425,10 @@ struct ChromeHub {
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
-    /// Here beside `chromes` because the two go together and a caller must not
-    /// be able to do one without the other: a theme told to the pages and not
-    /// to the windows is a desktop half turned over. See [`crate::appearance`],
-    /// which is also where the answer to "what if there is no bus" is.
+    /// Told by the Wayland thread's theme turnover rather than beside the
+    /// broadcast: the windows turn once every chrome has captured the frame
+    /// its wipe starts from. See [`crate::appearance`], which is also where
+    /// the answer to "what if there is no bus" is.
     appearance: Appearance,
 }
 
@@ -442,16 +455,15 @@ impl ChromeHub {
         (hub, outbound_rx)
     }
 
-    /// Take up a theme: remember it, tell every chrome, and tell the desk's
-    /// clients.
+    /// Take up a theme: remember it, tell every chrome, and start turning the
+    /// desk's windows.
     ///
-    /// **One function because there is one theme.** Three things set it — the
-    /// config read at startup, a reload whose `[theme]` moved, and a click on
-    /// the shell's toggle arriving as [`ChromeMessage::SetTheme`] — and all
-    /// three have to do all three of these. A caller that broadcast without
-    /// announcing would turn the panels over and leave the windows; one that
-    /// announced without remembering would leave the chrome that connects next
-    /// painting in the theme the desk came up on.
+    /// **One function because there is one theme.** Two things change it — a
+    /// reload whose `[theme]` moved, and a click on the shell's toggle
+    /// arriving as [`ChromeMessage::SetTheme`] — and both have to do all of
+    /// this. The windows are not told here: they turn once every chrome told
+    /// has captured the frame its wipe starts from, which is the Wayland
+    /// thread's to wait for — see `domicile_host::theme_turnover`.
     ///
     /// Says nothing where nothing moved, which is the ordinary case rather
     /// than the odd one: a config file is rewritten for all sorts of reasons,
@@ -461,7 +473,18 @@ impl ChromeHub {
         let told = self.host.lock().unwrap().set_theme(theme);
         if let Some(message) = told {
             self.broadcast(message);
-            self.appearance.announce(theme);
+            // Read after the broadcast, so a chrome that joins between the two
+            // is waited on for a theme it was told in its handshake instead of
+            // one it will never capture for -- which costs a deadline, and
+            // nothing worse.
+            let chromes = self
+                .chromes
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|chrome| chrome_key(&chrome.writer))
+                .collect();
+            self.send_request(ClientRequest::TurnTheWindows { theme, chromes });
         }
     }
 
@@ -1126,6 +1149,16 @@ fn read_chrome_messages(
                 hub.take_up_the_theme(theme);
                 Vec::new()
             }
+            // Handed to the Wayland thread, which holds the turnover: that is
+            // where the windows are, and where the timer that stops a chrome
+            // that never captures from holding them runs.
+            Ok(ChromeMessage::ThemeCaptured { theme }) => {
+                hub.send_request(ClientRequest::ThemeCaptured {
+                    chrome: chrome_key(writer),
+                    theme,
+                });
+                Vec::new()
+            }
             // Compositor-level, like the spawn above: the clipboard is the
             // seat's and the history is the compositor's, so the brain has
             // nothing to say about either. Answered with nothing — what a
@@ -1749,6 +1782,10 @@ struct DomicileCompositor {
     /// removed by the registration it was inserted under, and by nothing
     /// else.
     idle_clock: Option<RegistrationToken>,
+    /// The theme change the desk's windows are part way through, if any, and
+    /// the deadline armed for its current phase.
+    turnover: Option<Turnover<usize>>,
+    turnover_deadline: Option<RegistrationToken>,
     /// The loop this compositor is dispatched by, so that it can arm a source
     /// of its own after startup.
     ///
@@ -3455,6 +3492,62 @@ impl DomicileCompositor {
         }
     }
 
+    /// Do what the theme turnover says next.
+    fn follow_the_turnover(&mut self, step: Step) {
+        match (step, &mut self.turnover) {
+            (Step::Wait, _) | (_, None) => {}
+            (Step::Announce, Some(turnover)) => {
+                self.hub.appearance.announce(turnover.theme());
+                let windows = self.toplevels.iter().map(|(app_id, _)| app_id.clone());
+                let step = turnover.announced(windows.collect::<Vec<_>>());
+                self.arm_the_turnover_deadline(REPAINT_WITHIN, Turnover::repaint_deadline);
+                self.follow_the_turnover(step);
+            }
+            (Step::Turned, Some(turnover)) => {
+                let theme = turnover.theme();
+                self.turnover = None;
+                if let Some(armed) = self.turnover_deadline.take() {
+                    self.loop_handle.remove(armed);
+                }
+                let told = self.hub.host.lock().unwrap().set_windows_theme(theme);
+                if let Some(message) = told {
+                    self.hub.broadcast(message);
+                }
+            }
+        }
+    }
+
+    /// Arm the deadline for the turnover's current phase, replacing the last
+    /// phase's. `ends` is the phase's own deadline, which does nothing if the
+    /// turnover has moved on.
+    fn arm_the_turnover_deadline(
+        &mut self,
+        after: Duration,
+        ends: fn(&mut Turnover<usize>) -> Step,
+    ) {
+        if let Some(armed) = self.turnover_deadline.take() {
+            self.loop_handle.remove(armed);
+        }
+        let armed = self
+            .loop_handle
+            .insert_source(
+                Timer::from_duration(after),
+                move |_, _, data: &mut CalloopData| {
+                    let state = &mut data.state;
+                    state.turnover_deadline = None;
+                    if let Some(turnover) = &mut state.turnover {
+                        let step = ends(turnover);
+                        state.follow_the_turnover(step);
+                    }
+                    TimeoutAction::Drop
+                },
+            )
+            // A timer is kept on the loop's own wheel and registers nothing
+            // with the kernel, so there is nothing here that can refuse one.
+            .expect("the compositor's own loop takes a timer");
+        self.turnover_deadline = Some(armed);
+    }
+
     /// Arm the timer that asks the idle clock, replacing whatever was armed.
     ///
     /// `None` is a desktop that never blanks, and it leaves no timer at all —
@@ -3960,6 +4053,20 @@ impl DomicileCompositor {
                     "the shell asked for a clipboard entry this desktop no longer holds"
                 ),
             },
+            ClientRequest::TurnTheWindows { theme, chromes } => {
+                // A turnover already under way is replaced rather than
+                // finished: its windows are about to be told a newer theme.
+                let (turnover, step) = Turnover::begin(theme, chromes);
+                self.turnover = Some(turnover);
+                self.arm_the_turnover_deadline(CAPTURE_WITHIN, Turnover::capture_deadline);
+                self.follow_the_turnover(step);
+            }
+            ClientRequest::ThemeCaptured { chrome, theme } => {
+                if let Some(turnover) = &mut self.turnover {
+                    let step = turnover.captured(&chrome, theme);
+                    self.follow_the_turnover(step);
+                }
+            }
             ClientRequest::ChromeHello { served_by } => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
@@ -4115,6 +4222,13 @@ fn painted_key(committer: &Committer) -> String {
 
 /// See [`painted_key`].
 const CHROME_LAYER: &str = "<the chrome>";
+
+/// What names a connected chrome to a theme turnover: the address of its
+/// socket's writer, which is what `ChromeHub::chromes` already tells chromes
+/// apart by. Only compared, never followed.
+fn chrome_key(writer: &Arc<Mutex<UnixStream>>) -> usize {
+    Arc::as_ptr(writer) as usize
+}
 
 /// Which of the two kinds of client committed a buffer.
 #[derive(Debug)]
@@ -4458,6 +4572,16 @@ impl CompositorHandler for DomicileCompositor {
         let time = self.start.elapsed().as_millis() as u32;
         for callback in callbacks {
             callback.done(time);
+        }
+
+        // A window's new frame, which is what a theme turnover waits for:
+        // once every window has drawn one since it was told, the wipe can
+        // pass across windows already turned.
+        if let (Some(_), Committer::App(app_id), Some(turnover)) =
+            (&attached, &committer, &mut self.turnover)
+        {
+            let step = turnover.repainted(app_id);
+            self.follow_the_turnover(step);
         }
 
         if let Some(buffer) = attached {
@@ -5621,6 +5745,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // one. Set rather than taken up -- `take_up_the_theme` broadcasts, and
         // there is nobody connected to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));
+        host.set_windows_theme(theme_on_the_wire(config.theme.mode));
     }
     // Bound here rather than in the serving thread, so that a socket that
     // cannot be bound ends the run rather than a thread. The shell is waiting
@@ -5809,6 +5934,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Armed below rather than here, through the one path a reload uses
         // too — see `arm_the_idle_clock`.
         idle_clock: None,
+        turnover: None,
+        turnover_deadline: None,
         loop_handle: event_loop.handle(),
     };
 

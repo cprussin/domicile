@@ -74,6 +74,15 @@ git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1 || {
 SERIES="$ROOT/packages/domicile-engine/src"
 pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
+# A git killed mid-operation (a canceled run) leaves index.lock, and every git
+# below then refuses. This job holds the tree lock, so no other git is in this
+# tree and the lock is stale by construction.
+index_lock="$(git -C "$CHROMIUM" rev-parse --absolute-git-dir)/index.lock"
+if [ -e "$index_lock" ]; then
+  echo "removed a stale $index_lock; this job holds the tree lock"
+  rm -f "$index_lock"
+fi
+
 # In case a previous run died mid-series and left the rebase-apply state
 # behind. It fails when there is nothing to abort, which is the ordinary case.
 git -C "$CHROMIUM" am --abort 2>/dev/null || true

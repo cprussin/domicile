@@ -114,6 +114,9 @@ pub fn apply_chrome_message(
                     // theme and then flips, which is the flash the shell's
                     // pre-paint apply exists to end.
                     host.describe_theme(),
+                    // And the windows', which the browser process reading
+                    // this socket draws its own pages in.
+                    host.describe_windows_theme(),
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())
