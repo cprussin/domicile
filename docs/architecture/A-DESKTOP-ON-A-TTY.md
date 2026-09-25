@@ -1000,7 +1000,7 @@ window is turned and scaled on its own.
 |---|---|
 | The compositor's layout | Each `DomicileDisplayLayout` carries the profile's `transform` and `scale` beside the corner, so the browser knows how every connector is bolted and how dense it is |
 | `DrmScreen` | Puts both on the `display::Display` — `rotation` (clockwise, so `rotate-270` is `ROTATE_90`) and `device_scale_factor` — and keeps `bounds` as the CRTC's pixels, which window binding, fullscreen and the compositor's connector row all read |
-| `DesktopWindowTreeHostPlatform` (patch `0043`) | Where the platform sets `turns_windows_with_their_display` — DRM only — its root transform turns DIPs onto the panel, its root window is laid out upright, and the compositor gets the turn as a display transform hint, so viz renders upright and turns the frame on the way out |
+| `DesktopWindowTreeHostPlatform` (patch `0043`) | Where the platform sets `turns_windows_with_their_display` — DRM only — its root transform turns DIPs onto the panel, its root window is laid out upright, and the compositor gets the turn as a display transform hint, so viz renders upright and turns the frame on the way out. Screen rectangles stay in pixels there (patch `0045`): a display's bounds are, and a window read back at its scale lands on the monitor to its left |
 | `CursorController` | Compiled off ChromeOS, so `DrmCursor::MoveCursor` turns a hand's travel with the monitor. `DrmWindowHost` tells it the turn when a window moves or a display turns under it |
 | `wm::CursorLoader` | Turns and scales the arrow off the display it is told about, which it now has |
 
