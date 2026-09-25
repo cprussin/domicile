@@ -647,6 +647,21 @@ known and it is a build-system cost, not a language one.
   wayland platform and nowhere else: a guard script running `chrome
   --ozone-platform=wayland` under `under-wayland.sh` is not a desktop and must
   not swallow the session's keymap.
+
+  **Measured as far as the request.** `guard-shortcuts-inhibitor.sh` runs the
+  engine nested, with `WAYLAND_DEBUG=1`, and reads
+  `zwp_keyboard_shortcuts_inhibit_manager_v1#23.inhibit_shortcuts(…)` off its
+  own wire; the control is the same run with the switch left off, where the
+  request must be absent. So what is guarded is that the engine **asked** —
+  not that a key was pressed, and not that the host honored it. Two things had
+  to be true before it could ask at all, and both are the guard's setup rather
+  than the engine's doing: the host has to advertise
+  `zwp_keyboard_shortcuts_inhibit_manager_v1`, which sway does, and the seat
+  has to announce a keyboard, which a headless wlroots backend does only while
+  an input device backs it — so the guard creates a virtual one on the host's
+  seat first. Pressing a chord through that keyboard and reading which side
+  took it is `ROADMAP.md`'s, and it is the only thing that would measure the
+  inhibitor rather than the request.
 - **Minimize edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. Counted over patches `0001`–`0007`, which are
   this design and nothing else, it is **21 files, 15 of them Blink's** — and
