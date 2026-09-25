@@ -206,18 +206,17 @@ fn settles_on(chrome: &mut domicile_test_chrome::Chrome, query: &str, expected: 
 
 /// The same, for a `path` this writes into `home` itself.
 ///
-/// **AND IT WRITES IT AGAIN ON EVERY TURN, WHICH IS THE POINT.** A file
-/// written after the startup walk is not something waiting longer finds:
-/// `file_indexing::keep_the_index` establishes its inotify watch *after* the
-/// walk ends, and the search that says the walk is over is answered from the
-/// announcement that ends it — so a write that lands between those two is a
-/// change the kernel had nobody to report to, and the index goes on without it
-/// until something else moves. A write per turn closes that, because whichever
-/// one the watch is up for is the one that gets reported.
+/// **AND IT WRITES IT AGAIN ON EVERY TURN, WHICH IS THE POINT.** A write is a
+/// stimulus that can be *lost* rather than merely be late: the index hears
+/// about it once, from the kernel, and an index that was not listening when it
+/// landed is one no amount of waiting corrects. Being up to hear it is what
+/// `file_indexing::keep_the_index` watching the home before it walks it buys,
+/// and this does not take that on trust — a write per turn is the right wait
+/// whether or not the first of them was heard.
 ///
-/// Measured rather than reasoned: a 400ms sleep in front of `watch_home` fails
-/// this check every run while the write is made once, and passes it every run
-/// while it is made per turn.
+/// Measured rather than reasoned: with the watch established after the walk, as
+/// it once was, a 400ms sleep in front of it failed this check every run while
+/// the write was made once, and passed it every run while it was made per turn.
 fn settles_on_once_written(
     chrome: &mut domicile_test_chrome::Chrome,
     home: &Path,

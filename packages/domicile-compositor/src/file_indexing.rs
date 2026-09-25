@@ -32,7 +32,7 @@ use domicile_host::file_changes::{changes, Change};
 use domicile_host::file_index::FileIndex;
 use domicile_host::file_search::FileSearch;
 use domicile_host::home_walk::{walk, walk_within, RealDirectory};
-use domicile_host::home_watch::watch_home;
+use domicile_host::home_watch::{watch_home, HomeWatcher};
 use domicile_host::index_file::{read, write, IndexFileError};
 use domicile_host::index_location::index_file;
 use tracing::{debug, error, info, warn};
@@ -129,35 +129,38 @@ pub fn keep_the_index(
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
     loop {
+        // BEFORE THE WALK, AND THAT IS THE ONLY ORDER THAT LOSES NOTHING. The
+        // kernel reports what moves under a watch it already has, so a walk
+        // with no watch behind it goes stale as it runs: a file written into a
+        // directory the walk had already read was in neither the walk nor any
+        // event, and nothing revisits a home until the next boot — so the
+        // launcher went the whole session without it. A directory that arrived
+        // in that window cost more than itself: a directory is a row of its own
+        // that nothing synthesizes from the names under it, so a file written
+        // into it once the watch was up was offered with no directory to sit
+        // in.
+        //
+        // Watching first costs nothing, because the walk and the watch agree
+        // about what they find. Events that arrive while the walk runs wait on
+        // `heard`, which is unbounded and so never turns a send away, and
+        // `FileIndex::found` and `FileIndex::appeared` are both inserts into a
+        // set — so a path the walk and an event both report lands once. Nothing
+        // in the walk reads the watch.
+        //
+        // Held to the end of this turn of the loop and no further: a walk again
+        // is a watch again, and the next turn's watch is up before its walk for
+        // the same reason this one is.
+        let watched = watch_the_home(&home, told.clone());
         if !walk_the_home(&home, &omit, &mut index, &tell) {
             return;
         }
+        // Where it always was, because the file is a copy of the whole list: it
+        // wants the walk to have ended and has nothing to say to the watch.
         write_it_down(kept_at.as_deref(), &index);
-
-        // A watch that will not start leaves an index that was right at
-        // startup and goes on being what it was — which is no worse than the
-        // launcher had before any of this existed, and is worth a loud line
-        // rather than a thread that spins trying again. The usual cause is
-        // `fs.inotify.max_user_watches`, which the line names.
-        let told = told.clone();
-        // Held to the end of this turn of the loop and no further: a walk
-        // again is a watch again, and the old one's events are the ones the
-        // walk just took the place of.
-        let _watcher = match watch_home(&home, move |event| {
-            // Only refused when this thread has gone, which is the desktop
-            // going away — nothing to report from a watcher's thread.
-            let _ = told.send(Heard::Filesystem(event));
-        }) {
-            Ok(watcher) => watcher,
-            Err(err) => {
-                error!(
-                    %err, home = %home.display(),
-                    "the home directory cannot be watched -- check \
-                     fs.inotify.max_user_watches -- so what a launcher is \
-                     offered is what was there at startup"
-                );
-                return;
-            }
+        // And with no watch there is nothing further to hear — the walk above
+        // is this session's last word on the home. See `watch_the_home`.
+        let Some(_watcher) = watched else {
+            return;
         };
 
         match hold_it_current(&heard, &home, &omit, kept_at.as_deref(), &mut index, &tell) {
@@ -171,6 +174,33 @@ pub fn keep_the_index(
             Held::Ended => return,
         }
         index.rebuilding();
+    }
+}
+
+/// A watch over the home for as long as it is held, and nothing when one
+/// cannot be established.
+///
+/// **Nothing is the launcher this desktop had before any of this existed**: the
+/// caller still walks the home and still publishes what it found, and what is
+/// lost is the index staying true as the home moves. Loud rather than retried,
+/// because the usual cause is `fs.inotify.max_user_watches` — which the line
+/// names — and a thread spinning will not move it.
+fn watch_the_home(home: &Path, told: Sender<Heard>) -> Option<HomeWatcher> {
+    match watch_home(home, move |event| {
+        // Only refused when the index thread has gone, which is the desktop
+        // going away — nothing to report from a watcher's thread.
+        let _ = told.send(Heard::Filesystem(event));
+    }) {
+        Ok(watcher) => Some(watcher),
+        Err(err) => {
+            error!(
+                %err, home = %home.display(),
+                "the home directory cannot be watched -- check \
+                 fs.inotify.max_user_watches -- so what a launcher is offered \
+                 is what was there at startup"
+            );
+            None
+        }
     }
 }
 
@@ -391,4 +421,112 @@ fn announce(index: &mut FileIndex, tell: &impl Fn(Offered)) {
 /// Where this user's index is kept, read off the real environment.
 pub fn kept_at() -> Option<PathBuf> {
     index_file(&|name| std::env::var(name).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::sync::mpsc::channel;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use domicile_config::Omit;
+
+    use super::{keep_the_index, Heard};
+
+    /// How long the index has to announce the list this expects of it.
+    ///
+    /// A real walk of a real directory, a real inotify watch and the quarter
+    /// second [`super::SETTLE`] gathers a burst for, on a machine that may be
+    /// running every other check in this repo at the same time. The home here
+    /// is four paths, so this is orders of magnitude more than the work.
+    const ANNOUNCED_WITHIN: Duration = Duration::from_secs(10);
+
+    /// More rows than any home below has, so nothing is truncated.
+    const EVERY_ROW: usize = 100;
+
+    #[test]
+    fn a_file_written_while_the_home_is_walked_is_still_offered() {
+        // THE WINDOW BETWEEN THE WALK AND THE WATCH, WHICH A SESSION USED TO
+        // LOSE A FILE TO FOREVER. `keep_the_index` established its watch after
+        // the walk had ended, so a file written into a directory the walk had
+        // already read was in neither: the walk was past it, and the kernel had
+        // nobody to report it to. Nothing revisits a home until the next boot,
+        // so that file was missing from the launcher for the whole session.
+        //
+        // The announcement is what makes this a check rather than a race.
+        // `domicile_host::home_walk::walk` reads the home's own top level
+        // before it returns and the first announcement goes out immediately
+        // after, so a path created in the home once that announcement is in
+        // hand is one the walk provably cannot reach: only a watch that was
+        // already up can find it.
+        let home = tempfile::tempdir().expect("a home to lay out");
+        fs::create_dir(home.path().join("Notes")).expect("the directory");
+        fs::write(home.path().join("Notes/today.org"), "").expect("the file");
+
+        let (announced, announcements) = channel();
+        let (go_on, resumed) = channel();
+        let (told, heard) = channel::<Heard>();
+        let walked = home.path().to_path_buf();
+        thread::spawn(move || {
+            keep_the_index(
+                walked,
+                None,
+                Omit::default(),
+                (told, heard),
+                move |offered| {
+                    // The list, and then a wait for the test to have read
+                    // it: the index thread holds here, so what the home
+                    // holds when the walk goes on is this check's to decide
+                    // rather than a clock's.
+                    let _ = announced
+                        .send((offered.search.find("", EVERY_ROW).files, offered.indexing));
+                    // Refused only once the test has ended, which is the test
+                    // having already said whatever went wrong.
+                    let _ = resumed.recv();
+                },
+            );
+        });
+
+        let (seeded, indexing) = announcements
+            .recv_timeout(ANNOUNCED_WITHIN)
+            .expect("the index announces the list it starts a walk from");
+        assert!(indexing, "a walk that has not ended is still indexing");
+        assert!(
+            seeded.is_empty(),
+            "nothing is written down for this home to start from, so the first \
+             announcement is an empty seed: {seeded:?}"
+        );
+
+        // A directory with a file inside it, because the directory is a row of
+        // its own that nothing synthesizes from the file's name — the second
+        // thing the window cost, a file offered with nowhere to sit.
+        fs::create_dir(home.path().join("Late")).expect("the directory");
+        fs::write(home.path().join("Late/plan.org"), "").expect("the file");
+        go_on.send(()).expect("the walk goes on");
+
+        let expected = [
+            "Late/".to_string(),
+            "Late/plan.org".to_string(),
+            "Notes/".to_string(),
+            "Notes/today.org".to_string(),
+        ];
+        let deadline = Instant::now() + ANNOUNCED_WITHIN;
+        let mut last = seeded;
+        loop {
+            let (files, indexing) = announcements
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "no announcement within {ANNOUNCED_WITHIN:?} offered \
+                         {expected:?}; the last of them offered {last:?}"
+                    )
+                });
+            let _ = go_on.send(());
+            if !indexing && files == expected {
+                return;
+            }
+            last = files;
+        }
+    }
 }
