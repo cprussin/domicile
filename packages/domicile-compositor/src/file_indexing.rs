@@ -33,7 +33,7 @@ use domicile_host::home_walk::{walk, RealDirectory};
 use domicile_host::home_watch::{watch_home, HomeWatcher};
 use domicile_host::index_file::{read, write, IndexFileError};
 use domicile_host::index_location::index_file;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 /// How many paths are taken off the walk before the index is told.
 ///
@@ -100,7 +100,7 @@ pub struct Offered {
 /// path, a URL or a query.
 pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Offered)) {
     if kept_at.is_none() {
-        info!("nowhere to keep a file index, so every start walks the home");
+        debug!("nowhere to keep a file index, so every start walks the home");
     }
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
@@ -131,7 +131,7 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
         if !hold_it_current(&watcher, &home, kept_at.as_deref(), &mut index, &tell) {
             return;
         }
-        info!("the kernel dropped filesystem events, so the home is being walked again");
+        debug!("the kernel dropped filesystem events, so the home is being walked again");
         index.rebuilding();
     }
 }
@@ -180,7 +180,7 @@ fn walk_the_home(home: &Path, index: &mut FileIndex, tell: &impl Fn(Offered)) ->
 
     index.built();
     announce(index, tell);
-    info!(
+    debug!(
         files = index.files().len(),
         took_ms = started.elapsed().as_millis(),
         "the home directory is indexed"
@@ -202,14 +202,14 @@ fn remembered(kept_at: Option<&Path>) -> Vec<String> {
     };
     match read(path) {
         Ok(files) => {
-            info!(
+            debug!(
                 files = files.len(),
                 "a launcher has last session's list while the home is walked"
             );
             files
         }
         Err(IndexFileError::Missing) => {
-            info!(
+            debug!(
                 index = %path.display(),
                 "nothing written down yet, so a launcher fills in as the home is walked"
             );

@@ -685,8 +685,8 @@ fn freshened(hub: &ChromeHub, message: HostMessage, screen: Option<&str>) -> Hos
         Some(name) => domicile_host::as_seen_from(&displays, name),
     };
     match screen {
-        None => info!("told the chrome about {} display(s)", displays.len()),
-        Some(name) => info!(
+        None => debug!("told the chrome about {} display(s)", displays.len()),
+        Some(name) => debug!(
             screen = %name,
             "told the chrome about {} display(s), from the window it named",
             displays.len()
@@ -762,7 +762,7 @@ fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
     let Some(report) = window.due(hub) else {
         return;
     };
-    info!(
+    debug!(
         composited = report.composited,
         fps = report.fps,
         commit_ms = report.commit_ms,
@@ -940,7 +940,7 @@ fn bind_chrome_socket(path: &std::path::Path) -> Result<UnixListener, Box<dyn st
             path.display()
         )
     })?;
-    info!(?path, "chrome protocol socket up");
+    debug!(?path, "chrome protocol socket up");
     Ok(listener)
 }
 
@@ -954,7 +954,7 @@ fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<Hand
         // socket next is a `hello` naming a protocol version, and until that
         // is agreed there is no version to write to it in. `read_chrome_messages`
         // adds it once there is.
-        info!("chrome client connected");
+        debug!("chrome client connected");
         handshake.connected();
         let hub = hub.clone();
         let handshake = handshake.clone();
@@ -981,7 +981,7 @@ fn chrome_connection(
         .lock()
         .unwrap()
         .retain(|held| !Arc::ptr_eq(&held.writer, &writer));
-    info!("chrome client disconnected");
+    debug!("chrome client disconnected");
 }
 
 fn read_chrome_messages(
@@ -1062,7 +1062,7 @@ fn read_chrome_messages(
                             writer: writer.clone(),
                         });
                         joined = true;
-                        info!("chrome agreed the protocol; it now gets the desktop");
+                        debug!("chrome agreed the protocol; it now gets the desktop");
                     }
                     // *Then* the announcement, in that order: this is what has
                     // the Wayland thread describe the windows already open,
@@ -1093,7 +1093,9 @@ fn read_chrome_messages(
                         .unwrap()
                         .retain(|held| !Arc::ptr_eq(&held.writer, writer));
                     joined = false;
-                    info!("chrome took its protocol agreement back; it no longer gets the desktop");
+                    debug!(
+                        "chrome took its protocol agreement back; it no longer gets the desktop"
+                    );
                 }
                 responses
             }
@@ -1249,7 +1251,7 @@ fn read_chrome_messages(
                     }
                 };
                 if recorded {
-                    info!(screen = %name, "a chrome says which display its window covers");
+                    debug!(screen = %name, "a chrome says which display its window covers");
                     // NOT MOVED HERE, and the desktop in it is not the one
                     // that goes out: `freshened` re-reads the desktop under
                     // the writer lock and reads it from the screen just
@@ -1305,7 +1307,7 @@ fn read_chrome_messages(
                     (out, host.focus_holder())
                 };
                 if holder.as_deref() != Some(app_id.as_str()) {
-                    info!(app_id = %app_id, "keyboard focus -> a window this compositor does not know; the keyboard stays where it was");
+                    debug!(app_id = %app_id, "keyboard focus -> a window this compositor does not know; the keyboard stays where it was");
                 }
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });
                 out
@@ -1822,7 +1824,7 @@ impl DomicileCompositor {
         if shape != self.chrome_frame_shape {
             self.chrome_frame_shape = shape;
             match shape {
-                Some(((width, height), y_inverted, from_dmabuf)) => info!(
+                Some(((width, height), y_inverted, from_dmabuf)) => debug!(
                     width,
                     height,
                     y_inverted,
@@ -1830,7 +1832,7 @@ impl DomicileCompositor {
                     scale = buffer_scale,
                     "the chrome committed a frame"
                 ),
-                None => info!("the chrome's frame could not be made into a texture"),
+                None => debug!("the chrome's frame could not be made into a texture"),
             }
         }
     }
@@ -2473,7 +2475,7 @@ impl DomicileCompositor {
         // every window to answer a question it has already answered.
         if !self.first_frame_logged.contains(app_id) {
             self.first_frame_logged.insert(app_id.to_string());
-            info!(app_id, "the engine took this app's first frame");
+            debug!(app_id, "the engine took this app's first frame");
         }
         // THROWAWAY. The spike's assertion, and the only place it can be made:
         // the compositor holds the browser's invitation, so nothing else can
@@ -2782,7 +2784,7 @@ impl DomicileCompositor {
         if self.screens.size() == logical && advertised.wl_output_scale() == scale {
             return;
         }
-        info!(
+        debug!(
             width = logical.0,
             height = logical.1,
             scale,
@@ -3166,7 +3168,7 @@ impl DomicileCompositor {
             return;
         };
         if idle.stirred(Instant::now()) == Some(Blanking::ComeBack) {
-            info!("somebody is at this desktop again; its screens come back on");
+            debug!("somebody is at this desktop again; its screens come back on");
             self.state_the_connectors();
         }
     }
@@ -3231,8 +3233,8 @@ impl DomicileCompositor {
             return;
         };
         match edge {
-            Blanking::GoDark => info!("{why}; this desktop's screens go dark"),
-            Blanking::ComeBack => info!("{why}; this desktop's screens come back on"),
+            Blanking::GoDark => debug!("{why}; this desktop's screens go dark"),
+            Blanking::ComeBack => debug!("{why}; this desktop's screens come back on"),
         }
         self.state_the_connectors();
     }
@@ -3253,7 +3255,7 @@ impl DomicileCompositor {
         // of this compositor.
         let next = idle.next_check(now);
         if going_dark == Some(Blanking::GoDark) {
-            info!(
+            debug!(
                 connectors = self.engine_displays.len(),
                 "nobody is at this desktop; its screens go dark"
             );
@@ -3339,7 +3341,7 @@ impl DomicileCompositor {
             );
         }
         if was_dark {
-            info!("the idle timeout changed while the screens were off; they come back on");
+            debug!("the idle timeout changed while the screens were off; they come back on");
             self.state_the_connectors();
         }
     }
@@ -3479,7 +3481,7 @@ impl DomicileCompositor {
         if keyboard.current_focus().as_ref() == Some(&surface) {
             return;
         }
-        info!("the chrome has the window's keyboard");
+        debug!("the chrome has the window's keyboard");
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface), serial);
         // The brain as well as the seat. Every route through *this* function —
@@ -3794,14 +3796,14 @@ impl DomicileCompositor {
                 };
                 if let Some(id) = &app_id {
                     if requested.is_some() {
-                        info!(app_id = %id, "keyboard focus -> client");
+                        debug!(app_id = %id, "keyboard focus -> client");
                     } else {
                         // The chrome asked for a window that has no surface —
                         // one that closed while the message was in flight, or
                         // has not mapped yet. Handing the keyboard to nothing
                         // here is what makes a desktop go permanently deaf,
                         // because nothing afterward takes it back.
-                        info!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
+                        debug!(app_id = %id, "keyboard focus -> a window with no surface; the chrome keeps it");
                     }
                 }
                 // The chrome is the fallback for every case: no window asked
@@ -3894,16 +3896,13 @@ impl DomicileCompositor {
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
-                    info!(%app_id, "close -> client");
+                    debug!(%app_id, "close -> client");
                     toplevel.send_close();
                 }
                 // The window went away while the message was in flight, which
-                // is the outcome that was asked for — said out loud rather
-                // than passed over, because the other way to reach this line
-                // is an id the chrome invented. At `info!` for that reason:
-                // the default subscriber is INFO, so a `debug!` here would be
-                // the passing over it claims not to be.
-                None => info!(%app_id, "close: a window with no toplevel"),
+                // is the outcome that was asked for. Still said, because the
+                // other way to reach this line is an id the chrome invented.
+                None => debug!(%app_id, "close: a window with no toplevel"),
             },
         }
     }
@@ -3933,7 +3932,7 @@ impl DomicileCompositor {
         let keyboard = self.seat.get_keyboard().unwrap();
         let pressed = keyboard.pressed_keys();
         if !pressed.is_empty() {
-            info!(
+            debug!(
                 count = pressed.len(),
                 "releasing the keys the seat had down"
             );
@@ -4711,7 +4710,7 @@ impl XdgShellHandler for DomicileCompositor {
         // the below applies to it: announcing it would have the chrome mount an
         // <app> element for itself, inside itself.
         if is_chrome_surface(surface.wl_surface()) {
-            info!("the chrome mapped its toplevel -> compositing it over the apps");
+            debug!("the chrome mapped its toplevel -> compositing it over the apps");
             for live in &self.outputs {
                 live.output.enter(surface.wl_surface());
             }
@@ -4744,7 +4743,7 @@ impl XdgShellHandler for DomicileCompositor {
         let announce = {
             let mut host = self.hub.host.lock().unwrap();
             let (app_id, announce) = host.app_appeared(None, None);
-            info!(%app_id, "toplevel mapped -> Host::app_appeared");
+            debug!(%app_id, "toplevel mapped -> Host::app_appeared");
             // Tell the client which outputs it is on — every one of them, at
             // this point: the chrome has not placed the window yet, so there
             // is no portal to say where it is. Toolkits that scale their
@@ -4806,7 +4805,7 @@ impl XdgShellHandler for DomicileCompositor {
             .as_ref()
             .is_some_and(|chrome| chrome.wl_surface() == surface.wl_surface())
         {
-            info!("the chrome's toplevel went away");
+            debug!("the chrome's toplevel went away");
             self.chrome_toplevel = None;
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
@@ -4842,7 +4841,7 @@ impl XdgShellHandler for DomicileCompositor {
             if self.pointer_app.as_deref() == Some(app_id.as_str()) {
                 self.pointer_app = None;
             }
-            info!(%app_id, "toplevel destroyed -> Host::app_closed");
+            debug!(%app_id, "toplevel destroyed -> Host::app_closed");
             broadcast_closed(&self.hub, &app_id);
             // The window that had the keyboard has gone, and a keyboard with
             // nowhere to go is a desktop that has stopped listening. The chrome
@@ -5114,7 +5113,7 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
             // says back, and without it a launcher opening three windows
             // produces three spawns and three arrivals that cannot be paired.
             // See `peer_process` for what the pair is for.
-            info!(
+            debug!(
                 pid = child.id(),
                 ?command,
                 ?wayland_display,
@@ -5210,7 +5209,7 @@ fn advertise_dmabuf(
             }
         }
     });
-    info!(
+    debug!(
         count = formats.len(),
         feedback = feedback.is_some(),
         "advertising zwp_linux_dmabuf_v1"
@@ -5703,7 +5702,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // The answer to `spawning client`, and the only line between a spawn
         // and the `toplevel mapped` seconds later that says which of the two
         // the wait was. Before `insert_client`, which takes the stream.
-        info!(pid = ?peer_pid(&stream), "{}", grepped::ARRIVED);
+        debug!(pid = ?peer_pid(&stream), "{}", grepped::ARRIVED);
         data.display
             .handle()
             .insert_client(stream, Arc::new(ClientState::default()))
@@ -5889,7 +5888,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // not a reason to refuse to run a desktop. A run with no config file has
     // nothing to watch at all, and says so rather than reporting a failure.
     match arguments.config.as_ref() {
-        None => info!("no config file, so the desktop is fixed for this run"),
+        None => debug!("no config file, so the desktop is fixed for this run"),
         Some(path) => match domicile_config::watch(path) {
             Ok(watcher) => {
                 let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();

@@ -365,7 +365,7 @@ impl EngineSession {
         }
         match self.engine.create_surface(app_id) {
             Ok(surface) => {
-                tracing::info!(%app_id, surface, "the browser brokered a frame sink");
+                tracing::debug!(%app_id, surface, "the browser brokered a frame sink");
                 self.surfaces.brokered(app_id, surface);
                 Some(surface)
             }

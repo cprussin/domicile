@@ -62,7 +62,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     let devices = EGLDevice::enumerate()?;
     let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
     let main_device = drm_node(&device);
-    tracing::info!(
+    tracing::debug!(
         device = ?device.render_device_path().or_else(|_| device.drm_device_path()),
         main_device,
         "dmabuf import device"

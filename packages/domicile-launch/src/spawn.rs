@@ -307,10 +307,12 @@ pub fn compositor(
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),
-                // The level a desktop is worth watching at. An explicit one
+                // Quiet by default: warnings, and the compositor's few `INFO`
+                // lines (`domicile` is the target the latency spike reports
+                // under). Everything routine is at `DEBUG`. An explicit level
                 // wins: somebody who set it is asking for something else.
                 inherited("RUST_LOG")
-                    .unwrap_or_else(|| "info,domicile_compositor=debug".to_string())
+                    .unwrap_or_else(|| "warn,domicile_compositor=info,domicile=info".to_string())
                     .into(),
             ),
         ],

@@ -59,7 +59,7 @@ TOML
 # NO_COLOR because the fields below are read back out of this log, and
 # tracing writes SGR escapes *between* the field name and its value — a
 # pattern for `display="..."` matches nothing in a colored one.
-NO_COLOR=1 RUST_LOG=info "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
+NO_COLOR=1 RUST_LOG=info,domicile_compositor=debug "$BIN" --session "$SOCK.session" --config "$CONF" --chrome-socket "$SOCK" >"$LOG" 2>&1 &
 COMP=$!
 # `kill`, not `kill -9`: a TERM lets a process go down on its own, and `wait`
 # after reaps it quietly. A SIGKILLed child leaves bash reporting "Killed" on

@@ -46,7 +46,8 @@ person on that machine runs before building by hand.
 
 ## Reading the compositor's frame report
 
-One `INFO` line per window of frames:
+One `DEBUG` line per window of frames (the launcher's default `RUST_LOG`
+hides it; `RUST_LOG=info,domicile_compositor=debug` shows it):
 
 ```
 composited fps commit_ms composite_ms composite_worst_ms
@@ -64,7 +65,7 @@ submit_ms submit_worst_ms idle_ms response_ms response_worst_ms chromes
 
 ## Reading a slow launch
 
-Every app the shell starts leaves three lines, in this order:
+Every app the shell starts leaves three `DEBUG` lines, in this order:
 
 ```
 spawning client pid=1234 command=["kitty"] wayland_display="wayland-2"
