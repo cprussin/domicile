@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a site's color scheme is the desktop's theme
+
+The shell's toggle turned the panels and the desk's clients over and left
+every site in a browser window as it was. A page's `prefers-color-scheme`
+is this process's ui::NativeTheme, and the `theme` message reached only the
+shell's page.
+
+`domicile::SetProcessColorScheme` sets NativeTheme's process-wide override
+from it. Bound here for the keymap's reason: NativeTheme belongs to the UI
+thread and the control channel is read on the IO thread.
+---
+ chrome/browser/BUILD.gn                            | 6 ++++--
+ chrome/browser/chrome_browser_interface_binders.cc | 8 ++++++++
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 620549168a..ab055bd15a 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2384,9 +2384,11 @@ source_set("browser") {
+     "//components/domain_reliability",
+ 
+     # Domicile's engine fork: serving the shell over domicile://, the
+-    # shell's control channel to the compositor, the keymap that channel
+-    # carries, and the socket a running engine is told which shell to serve on.
++    # shell's control channel to the compositor, the keymap and the color
++    # scheme that channel carries, and the socket a running engine is told
++    # which shell to serve on.
+     "//chrome/browser/domicile",
++    "//components/domicile:color_scheme",
+     "//components/domicile:control_channel",
+     "//components/domicile:keyboard_layout",
+     "//components/domicile:shell_scheme",
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 0e90e7074e..255979b041 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -7,6 +7,7 @@
+ #include "base/task/bind_post_task.h"
+ #include "chrome/browser/domicile/domicile_pointer_warp.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
++#include "components/domicile/browser/color_scheme.h"
+ #include "components/domicile/browser/control_channel.h"
+ #include "components/domicile/browser/keyboard_layout.h"
+ #include "components/domicile/browser/web_view_guest.h"
+@@ -520,6 +521,13 @@ void PopulateChromeFrameBinders(
+                     content::GetUIThreadTaskRunner({}),
+                     base::BindRepeating(&domicile::WarpPointerIn,
+                                         frame->GetGlobalId())),
++                // AND WHICH WAY ROUND EVERY PAGE IS DRAWN. The desktop's
++                // theme is the process's color scheme, which is what a site's
++                // `prefers-color-scheme` reads. Bound here for the keymap's
++                // reason above: NativeTheme belongs to the UI thread.
++                base::BindPostTask(
++                    content::GetUIThreadTaskRunner({}),
++                    base::BindRepeating(&domicile::SetProcessColorScheme)),
+                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
+                 // several windows, each loading the same shell, and the only
+                 // thing that differs between them is the display they cover.
