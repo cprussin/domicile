@@ -31,6 +31,12 @@ const PROMPT = "Open a file, a URL, or search";
 const ICON_SIZE = 16;
 
 type Props = {
+  /**
+   * Whether the keyboard is on this page's monitor. A desk of several monitors
+   * is several pages, all told the launcher is up: the panel goes on the one
+   * the keyboard is on, and the rest draw only the backdrop it is up over.
+   */
+  here: boolean;
   /** Escape, or a click on the backdrop. The desktop decides what that means. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
@@ -68,6 +74,7 @@ type Preview = (path: string) => Promise<FilePreviewMessage>;
  * shut.
  */
 export const Launcher = ({
+  here,
   onDismiss,
   onLaunch,
   open,
@@ -89,6 +96,7 @@ export const Launcher = ({
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
+    popup={here}
     // Wide, because a row is a name and the directory it is in, and beside
     // the rows is a preview of the one the highlight is on.
     size="xl"

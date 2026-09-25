@@ -44,6 +44,7 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
   const dismissed: true[] = [];
   render(
     <Launcher
+      here
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -74,6 +75,7 @@ describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
       <Launcher
+        here
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}

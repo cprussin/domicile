@@ -94,6 +94,19 @@ describe(ModalDialog, () => {
       expect(screen.getAllByRole("button")).toHaveLength(1);
     });
 
+    it("draws only the backdrop when the popup is turned off", () => {
+      const { baseElement } = render(
+        <ModalDialog open popup={false} surface="glass" title="Settings">
+          Body
+        </ModalDialog>,
+      );
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText("Body")).not.toBeInTheDocument();
+      expect(
+        baseElement.querySelector("[data-backdrop][data-surface=glass]"),
+      ).toBeInTheDocument();
+    });
+
     it("renders the trigger when provided and keeps the dialog closed", () => {
       render(
         <ModalDialog trigger={<Button>Open me</Button>}>Body</ModalDialog>,
@@ -126,6 +139,29 @@ describe(ModalDialog, () => {
       await user.click(screen.getByRole("button", { name: "Close" }));
       expect(onOpenChange).toHaveBeenCalled();
       expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
+    });
+
+    it("reports a press on a backdrop drawn without its popup", async () => {
+      const user = userEvent.setup();
+      const closed: boolean[] = [];
+      const { baseElement } = render(
+        <ModalDialog
+          onOpenChange={(next) => {
+            closed.push(next);
+          }}
+          open
+          popup={false}
+        >
+          Body
+        </ModalDialog>,
+      );
+      const backdrop = baseElement.querySelector("[data-backdrop]");
+      if (backdrop === null) {
+        throw new Error("test: no backdrop drawn");
+      } else {
+        await user.click(backdrop);
+      }
+      expect(closed).toEqual([false]);
     });
 
     it("closes via ModalDialog.CloseButton in the footer", async () => {
