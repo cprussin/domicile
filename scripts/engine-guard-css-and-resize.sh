@@ -3,10 +3,11 @@
 #
 # Requirement 2, and for a long time nothing ran it: `guard-css-and-resize.sh`
 # measures six CSS properties applied to an <app> and to an ordinary <div> laid
-# out identically beside it, then a resize, which gets a page of its own
-# because it moves the LocalSurfaceId every element in a document shares. Its
-# own header said it had only ever been run by hand — which was true, and was
-# true because the only thing that ran it was forty lines of YAML.
+# out identically beside it, then those same six under a `backdrop-filter`
+# stacked over them, then a resize, which gets a page of its own because it
+# moves the LocalSurfaceId every element in a document shares. Its own header
+# said it had only ever been run by hand — which was true, and was true because
+# the only thing that ran it was forty lines of YAML.
 #
 # INSIDE CHROMIUM'S OWN TOOLCHAIN SHELL, not the `.#full` the rest of the group
 # runs in, and that is what `spike.sh` documents: a component build links
@@ -23,7 +24,9 @@
 # which is two software raster passes disagreeing in the last bit. The verdict
 # is on interior pixels for exactly that reason, so those 285 are a pass here
 # and every cell is 0 on the GPU. Which is what makes a failure the seam rather
-# than the hardware, and the only reading that makes this worth having.
+# than the hardware, and the only reading that makes this worth having — and
+# why the filtered run's filter is a per-pixel one rather than a blur, which
+# would carry those 285 edge pixels into the interior the verdict is read from.
 #
 # NO CONTROL RUN: the comparison is the control. Every cell is measured against
 # an ordinary <div> under the same properties in the same document, so a run
@@ -87,15 +90,16 @@ else
   echo "the shell exited $?"
 fi
 
-# Not 60. A clean run is about that long on its own — a header, one `embedded`
-# line per canvas, the per-property table, the latency block, then the whole
-# resize run again — so any chatter from the shell pushes the table, which is
-# the only place the verdict lives, off the top of what gets printed.
-tail -200 "$LOG" | sed 's/^/  | /'
+# Not 60. One of the three runs is about that long on its own — a header, one
+# `embedded` line per element, the per-property table, the latency block — and
+# the guard runs the CSS page twice and the resize page after it, so any
+# chatter from the shell pushes a table, which is the only place a verdict
+# lives, off the top of what gets printed.
+tail -300 "$LOG" | sed 's/^/  | /'
 
 [ -e "$RAN" ] || {
-  # The guard says which half failed and why, because it is the thing that
-  # knows: it holds the two exit statuses and each half's own log. Three
+  # The guard says which run failed and why, because it is the thing that
+  # knows: it holds the three exit statuses and each run's own log. Three
   # versions of this tried to work that out from one grep over the pair, and
   # review found each of them naming the wrong end — including `grep -v … |
   # grep -q …` losing to SIGPIPE under `pipefail` past about 128 KB of log and
