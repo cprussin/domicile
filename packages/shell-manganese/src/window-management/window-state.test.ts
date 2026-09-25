@@ -16,6 +16,7 @@ import {
   workspaceHere,
   workspaceNamed,
   workspaceOn,
+  workspacesOn,
 } from "./window-state";
 import { windowsOn } from "./workspace";
 
@@ -317,6 +318,63 @@ describe("the workspaces", () => {
 
     expect(windowsOn(workspaceNamed(state, "2"))).toEqual([]);
     expect(state.windows.map(({ id }) => id)).toEqual([APP("kitty")]);
+  });
+});
+
+describe("the workspaces each screen has", () => {
+  /**
+   * Two monitors, with kitty on the left-hand one's workspace 1 and an editor
+   * on workspace 2, which the right-hand one showed and has since left for 3.
+   */
+  const twoScreens = (): WindowState =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.WorkspaceSelected("3"),
+    );
+
+  it("keeps a workspace on the screen it was last shown on", () => {
+    // sway's: a workspace belongs to one output, and only that output's bar
+    // lists it.
+    const state = twoScreens();
+
+    expect(workspacesOn(state, "left")).toEqual(["1"]);
+    expect(workspacesOn(state, "right")).toEqual(["2", "3"]);
+  });
+
+  it("shows a hidden workspace on its own screen, and takes the keyboard there", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WorkspaceSelected("1"),
+      WindowAction.WorkspaceSelected("2"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(currentOn(state, "left")).toBe("1");
+    expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("puts a window sent to an empty workspace on the screen it was sent from", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.WindowSentToWorkspace("5"),
+    );
+
+    expect(workspacesOn(state, "left")).toEqual(["1", "5"]);
+    expect(workspacesOn(state, "right")).toEqual(["2"]);
+  });
+
+  it("hands the workspaces of a monitor that goes to the screen the keyboard is on", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WorkspaceSelected("1"),
+      WindowAction.ScreensDescribed(["left"]),
+    );
+
+    expect(workspacesOn(state, "left")).toEqual(["1", "2"]);
   });
 });
 

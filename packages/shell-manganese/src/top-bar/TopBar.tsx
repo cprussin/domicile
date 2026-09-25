@@ -23,11 +23,13 @@ type Props = {
   current: string;
   /** Where the charge comes from — the bar reads nothing off the machine. */
   domicile: DomicileClient;
+  /** Whether the keyboard is on this screen. */
+  focused: boolean;
   /** Which bindings are live, which the bar says when it is not the usual set. */
   mode: BindingMode;
-  /** The workspaces with something on them, which are the ones shown. */
-  occupied: readonly string[];
   onSelectWorkspace: (name: string) => void;
+  /** The workspaces this screen has, which are the ones shown. */
+  workspaces: readonly string[];
 };
 
 /**
@@ -72,15 +74,17 @@ type Props = {
 export const TopBar = ({
   current,
   domicile,
+  focused,
   mode,
-  occupied,
   onSelectWorkspace,
+  workspaces,
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
     <Workspaces
       current={current}
-      occupied={occupied}
+      focused={focused}
       onSelect={onSelectWorkspace}
+      workspaces={workspaces}
     />
     <div className={middleStyles}>
       <Clock />

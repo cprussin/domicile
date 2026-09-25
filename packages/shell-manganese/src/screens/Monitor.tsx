@@ -19,6 +19,7 @@ import {
   currentOn,
   WindowAction,
   workspaceOn,
+  workspacesOn,
 } from "../window-management/window-state";
 
 type Props = {
@@ -102,11 +103,12 @@ export const Monitor = ({
       <TopBar
         current={current}
         domicile={domicile}
+        focused={windows.focused === display.name}
         mode={windows.mode}
-        occupied={windows.occupied}
         onSelectWorkspace={(name) => {
           act(WindowAction.WorkspaceSelected(name));
         }}
+        workspaces={workspacesOn(windows, display.name)}
       />
       <Stage
         activeId={windows.activeId}

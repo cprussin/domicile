@@ -27,8 +27,10 @@ and the page says so rather than staying blank.
 **The workspaces span the desk and the screens divide it**, which is sway's
 arrangement. A workspace is shown on one screen at a time; `mod+2` goes to
 whichever screen is showing workspace 2, rather than taking it off that screen;
-a workspace nobody is showing comes to the screen the keyboard is on; and a
-window opens where the keyboard is. The keyboard follows the pointer across
+a hidden workspace belongs to the screen it was last on, which shows it again
+and is the only bar that lists it; an empty one comes to the screen the keyboard
+is on; and a window opens where the keyboard is. Only the screen the keyboard is
+on fills its workspace on the bar. The keyboard follows the pointer across
 monitors, so moving your hand to the other screen is how you get there.
 
 **A desk of several monitors is several pages of this shell**, because one

@@ -14,7 +14,6 @@ import {
   reduceWindows,
   WindowActionKind,
 } from "./window-state";
-import { windowsOn } from "./workspace";
 
 /** What the terminal launcher asks the compositor to run. */
 const TERMINAL_COMMAND = ["kitty"] as const;
@@ -32,8 +31,6 @@ export type Windows = WindowState & {
   act: (action: WindowAction) => void;
   /** The window the user is working in, floating or tiled. */
   activeId: string | undefined;
-  /** The workspaces with something on them, which is what the bar shows. */
-  occupied: readonly string[];
 };
 
 /**
@@ -261,9 +258,6 @@ export const useWindows = (
       ...state,
       act,
       activeId: activeIdOf(state),
-      occupied: state.workspaces
-        .filter((workspace) => windowsOn(workspace).length > 0)
-        .map(({ name }) => name),
     }),
     [act, state],
   );
