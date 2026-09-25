@@ -3,7 +3,13 @@ import { useMemo } from "react";
 import { hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 
-import { createHandle, ModalDialog, PLACEMENTS, SURFACES } from "./ModalDialog";
+import {
+  createHandle,
+  ModalDialog,
+  PLACEMENTS,
+  SIZES,
+  SURFACES,
+} from "./ModalDialog";
 
 const meta = {
   args: {
@@ -12,6 +18,7 @@ const meta = {
     disablePointerDismissal: false,
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
   },
   argTypes: {
@@ -50,6 +57,11 @@ const meta = {
       options: PLACEMENTS,
       table: { category: "Appearance" },
     },
+    size: {
+      control: "inline-radio",
+      options: SIZES,
+      table: { category: "Appearance" },
+    },
     surface: {
       control: "inline-radio",
       options: SURFACES,
@@ -68,7 +80,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A modal dialog with an optional title, footer, and trigger. Wraps the @base-ui/react Dialog primitive and always renders a portal, backdrop, popup and body; the corner close button, the placement in the viewport and the surface it is drawn on are the caller's to choose.",
+          "A modal dialog with an optional title, footer, and trigger. Wraps the @base-ui/react Dialog primitive and always renders a portal, backdrop, popup and body; the corner close button, the placement in the viewport, the width and the surface it is drawn on are the caller's to choose.",
       },
     },
   },
@@ -93,6 +105,7 @@ export const Settings: StoryObj<typeof ModalDialog> = {
     ),
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     title: "Settings",
     trigger: <Button size="xl">Click Me</Button>,
@@ -115,6 +128,7 @@ export const NoTitle: StoryObj<typeof ModalDialog> = {
     ),
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     trigger: <Button size="xl">Open</Button>,
   },
@@ -129,6 +143,7 @@ export const NoTitleOrFooter: StoryObj<typeof ModalDialog> = {
     disablePointerDismissal: false,
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     trigger: <Button size="xl">Open</Button>,
   },
@@ -142,6 +157,7 @@ export const NoFooter: StoryObj<typeof ModalDialog> = {
     disablePointerDismissal: false,
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     title: "About",
     trigger: <Button size="xl">Open</Button>,
@@ -160,6 +176,7 @@ export const Imperative: StoryObj<typeof ModalDialog> = {
     ),
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     title: "Imperatively Controlled",
   },
@@ -197,6 +214,7 @@ export const Palette: StoryObj<typeof ModalDialog> = {
     disablePointerDismissal: false,
     modal: true,
     placement: "top",
+    size: "lg",
     surface: "glass",
     title: "Open",
     trigger: <Button size="xl">Open</Button>,
@@ -230,6 +248,7 @@ export const Scrolling: StoryObj<typeof ModalDialog> = {
     ),
     modal: true,
     placement: "center",
+    size: "md",
     surface: "card",
     title: "Terms of Service",
     trigger: <Button size="xl">Open</Button>,

@@ -30,6 +30,16 @@ export type Placement = (typeof PLACEMENTS)[number];
 export const SURFACES = ["card", "glass"] as const;
 export type Surface = (typeof SURFACES)[number];
 
+/**
+ * How wide the popup is.
+ *
+ * `lg` is for a popup whose rows carry more than one thing to read — a
+ * launcher's file name and the directory beside it — where `md` would leave
+ * room for only one of them.
+ */
+export const SIZES = ["md", "lg"] as const;
+export type Size = (typeof SIZES)[number];
+
 const CloseButton = (props: ComponentProps<typeof Button>) => (
   <BaseDialog.Close render={<Button {...props} />} />
 );
@@ -46,6 +56,7 @@ type Props = ExtendProps<
     closeButton?: boolean | undefined;
     footer?: ReactNode | undefined;
     placement?: Placement | undefined;
+    size?: Size | undefined;
     surface?: Surface | undefined;
     title?: ReactNode | undefined;
     trigger?: ReactElement | undefined;
@@ -57,6 +68,7 @@ const ModalDialogComponent = ({
   closeButton = true,
   footer,
   placement = "center",
+  size = "md",
   surface = "card",
   title,
   trigger,
@@ -67,12 +79,13 @@ const ModalDialogComponent = ({
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className={backdropStyles({ surface })} />
       <BaseDialog.Viewport className={viewportStyles}>
-        {/* The placement and the surface are written on the popup rather than
+        {/* The placement, the size and the surface are written on the popup rather than
             carried in its class name so that what a dialog is doing is
             legible in the inspector — and so a test has something to read. */}
         <BaseDialog.Popup
           className={popupStyles}
           data-placement={placement}
+          data-size={size}
           data-surface={surface}
         >
           {title !== undefined && (
@@ -182,6 +195,9 @@ const popupStyles = flex({
   "&[data-placement=top]": {
     marginBlockEnd: "auto",
     marginBlockStart: "8vh",
+  },
+  "&[data-size=lg]": {
+    inlineSize: "min({spacing.180}, 92vw)",
   },
   "&[data-surface=glass]": {
     _before: {

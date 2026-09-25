@@ -75,6 +75,10 @@ export const Launcher = ({ onDismiss, onLaunch, open, search }: Props) => (
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
+    // Wide, because a row is a name and the directory it is in, and at the
+    // width of a question dialog a long one of either leaves no room for the
+    // other.
+    size="lg"
     // A pane rather than a card, because there is a desktop behind it worth
     // keeping: a launcher is a thing held up over your work for a second and
     // a half, and one that blanked what it was over would read as a page the
@@ -497,7 +501,7 @@ const listStyles = flex({
   gap: 0.5,
 });
 
-const rowStyles = css({
+const rowStyles = hstack({
   _hover: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
   },
@@ -528,17 +532,11 @@ const rowStyles = css({
     borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
     color: "accent",
   },
-  alignItems: "center",
   borderRadius: "md",
   color: "foreground",
-  columnGap: 2.5,
   cursor: "pointer",
-  display: "grid",
   fontSize: "sm",
-  // The tile takes what it needs, the name takes what it needs after that,
-  // and the directory takes the rest — so a path too long for the panel loses
-  // the part that only disambiguates rather than the part being looked for.
-  gridTemplateColumns: "auto minmax(0, auto) minmax(0, 1fr)",
+  gap: 2.5,
   paddingBlock: 1.5,
   paddingInline: 2,
   transition: "background-color {durations.fast} {easings.out}",
@@ -580,7 +578,16 @@ const markStyles = css({
   fontWeight: "semibold",
 });
 
+// A NAME AND A DIRECTORY TOO LONG FOR THE ROW BOTH GIVE WAY, in proportion to
+// how long each is, rather than one of them taking the row: a name that did
+// would leave two files of one name looking like one, and a directory that
+// did would leave nothing to read but where they are. The floor is the whole
+// name or half the row, whichever is less — so a short name is never cut to
+// make room for a long directory, and a long one keeps the half it is read
+// by.
 const rowNameStyles = css({
+  flex: "0 1 auto",
+  minInlineSize: "calc-size(max-content, min(size, 50%))",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -591,10 +598,16 @@ const rowNameStyles = css({
 // not settled it — and a column of them down the panel's edge is a column the
 // eye can run down, where one that started wherever each name happened to end
 // is a ragged line it has to hunt along.
+//
+// Pushed there by its margin rather than aligned there in a column, because
+// an aligned box as wide as its text is as wide as its text however narrow the
+// room — and a long directory then ran out of the row's start, over the name.
 const rowDirectoryStyles = css({
   color: "muted",
+  flex: "0 1 auto",
   fontSize: "xs",
-  justifySelf: "end",
+  marginInlineStart: "auto",
+  minInlineSize: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",

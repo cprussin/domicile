@@ -78,12 +78,18 @@ describe("Launcher", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
+  it("opens wide, so a row has room for its name and its directory", () => {
+    launcher();
+
+    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("lg");
+  });
+
   it("offers what the host found, named before it is placed", async () => {
     // A path is read from its end: the name is what was typed part of and the
     // directories above it are only there to tell two files of that name
     // apart, so a row is the two of them in that order rather than one line
     // of text handed to `text-overflow`. Nothing separates them in
-    // `textContent` because what separates them on screen is the grid's gap.
+    // `textContent` because what separates them on screen is the row's gap.
     const panel = launcher();
 
     expect(await panel.rows()).toStrictEqual([
