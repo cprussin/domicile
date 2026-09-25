@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 #ifndef UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_MASTER_H_
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_MASTER_H_

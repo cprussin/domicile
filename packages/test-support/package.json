@@ -23,6 +23,7 @@
     "matchers.d.ts",
     "src/**/*"
   ],
+  "license": "MIT",
   "name": "@domicile/test-support",
   "peerDependencies": {
     "react": "catalog:"

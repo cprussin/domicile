@@ -63,3 +63,7 @@ Tiling, workspaces, a bar, native apps, and browser windows. No clone or Chromiu
 See [shell-manganese](packages/shell-manganese/README.md) for configuration and keys.
 
 [shell-simple](packages/shell-simple/README.md) is the same terrible idea with fewer opinions.
+
+## License
+
+[MIT](LICENSE). The engine's patches edit Chromium files, which keep Chromium's licenses; see [`packages/domicile-engine/LICENSE`](packages/domicile-engine/LICENSE).

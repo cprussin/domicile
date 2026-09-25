@@ -16,6 +16,7 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
+  "license": "MIT",
   "name": "@domicile/shell-simple",
   "private": true,
   "productName": "domicile-shell-simple",
