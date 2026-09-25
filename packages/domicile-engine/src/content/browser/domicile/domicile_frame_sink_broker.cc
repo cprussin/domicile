@@ -305,7 +305,7 @@ class DomicileBrowserService {
     mojo::OutgoingInvitation::Send(std::move(invitation),
                                    base::kNullProcessHandle,
                                    std::move(endpoint));
-    LOG(WARNING) << "domicile: frame sink broker listening on " << socket_path;
+    LOG(INFO) << "domicile: frame sink broker listening on " << socket_path;
   }
 
   domicile::FrameSinkBroker broker_;

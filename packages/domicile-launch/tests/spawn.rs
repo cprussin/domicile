@@ -398,10 +398,12 @@ fn the_engine_is_asked_to_say_what_it_did_about_input() {
     // the message is at least `kAlwaysPrintErrorLevel` (`LOGGING_ERROR`), and
     // a release build with no `--enable-logging` has the flag clear. The
     // fork's account of a desktop that came up deaf -- a device handed over
-    // revoked, a force pause, a console taken back -- is written at WARNING,
+    // revoked, a force pause, a console taken back -- was written at WARNING,
     // so a run with no keyboard produced a log with nothing about input in
-    // it. Asked for on every platform: a nested developer run has the same
-    // engine and the same warnings.
+    // it. It is ERROR now, and ERROR is the floor: WARNING is where upstream
+    // Chromium says what a nested run's host compositor lacks, a dozen lines
+    // a start that is not news. Asked for on every platform: a nested
+    // developer run has the same engine and the same account.
     for platform in ["drm", "wayland", "headless"] {
         let args = args_of(&engine(
             Path::new("/l/engine"),
@@ -415,14 +417,14 @@ fn the_engine_is_asked_to_say_what_it_did_about_input() {
             "{platform}: {args:?}"
         );
         assert!(
-            args.contains(&"--log-level=1".to_string()),
+            args.contains(&"--log-level=2".to_string()),
             "{platform}: {args:?}"
         );
     }
 }
 
 #[test]
-fn a_run_that_wants_more_than_warnings_can_ask_for_them() {
+fn a_run_that_wants_more_than_errors_can_ask_for_them() {
     // The default is a floor rather than a ceiling. `extra` is appended after
     // the built list, and `CommandLine::AppendSwitchNative` overwrites the
     // value of a switch it has already seen -- so the last `--log-level` on
@@ -439,7 +441,7 @@ fn a_run_that_wants_more_than_warnings_can_ask_for_them() {
         .iter()
         .filter(|arg| arg.starts_with("--log-level="))
         .collect();
-    assert_eq!(levels, vec!["--log-level=1", "--log-level=0"], "{args:?}");
+    assert_eq!(levels, vec!["--log-level=2", "--log-level=0"], "{args:?}");
 }
 
 #[test]

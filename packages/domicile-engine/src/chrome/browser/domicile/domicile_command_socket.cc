@@ -104,7 +104,7 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   ShellSource::Get().Set(root, module);
   shell->GetController().Reload(content::ReloadType::BYPASSING_CACHE,
                                 /*check_for_repost=*/false);
-  LOG(WARNING) << "domicile: now serving " << module << " out of " << root;
+  LOG(INFO) << "domicile: now serving " << module << " out of " << root;
   return true;
 }
 
@@ -152,7 +152,7 @@ class CommandSocket {
     CHECK_EQ(result, net::OK)
         << "domicile: could not listen on " << path << ": "
         << net::ErrorToString(result);
-    LOG(WARNING) << "domicile: taking commands on " << path;
+    LOG(INFO) << "domicile: taking commands on " << path;
     Accept();
   }
 

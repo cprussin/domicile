@@ -310,21 +310,21 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     // in the background, the device is correctly parked and the activation
     // will reclaim it.
     if (attempt == 0 && SessionIsActive()) {
-      LOG(WARNING) << "logind handed over " << params.path.value() << " ("
-                   << number->major << ":" << number->minor
-                   << ") revoked while also saying this session is active; "
-                      "taking it again, because no Active edge will arrive to "
-                      "do it later";
+      LOG(ERROR) << "logind handed over " << params.path.value() << " ("
+                 << number->major << ":" << number->minor
+                 << ") revoked while also saying this session is active; "
+                    "taking it again, because no Active edge will arrive to "
+                    "do it later";
       continue;
     }
 
-    LOG(WARNING) << "logind handed over " << params.path.value() << " ("
-                 << number->major << ":" << number->minor
-                 << ") already revoked, because this session is not the one "
-                    "in front of the user. Nothing from this device reaches "
-                    "the desktop until the session goes Active, which is "
-                    "answered by taking it again -- switch back to this "
-                    "console (Ctrl+Alt+F<n>) if it does not.";
+    LOG(ERROR) << "logind handed over " << params.path.value() << " ("
+               << number->major << ":" << number->minor
+               << ") already revoked, because this session is not the one "
+                  "in front of the user. Nothing from this device reaches "
+                  "the desktop until the session goes Active, which is "
+                  "answered by taking it again -- switch back to this "
+                  "console (Ctrl+Alt+F<n>) if it does not.";
     return base::ScopedFD();
   }
 
@@ -420,14 +420,14 @@ void DrmLogindInput::OnPauseDevice(dbus::Signal* signal) {
       // desktop whose every keyboard and every trackpad stopped in the same
       // instant said nothing at all in its own log. It says this instead,
       // once per device, naming the way out.
-      LOG(WARNING) << "logind force-paused input device " << number.major << ":"
-                   << number.minor
-                   << ": it has ALREADY revoked that descriptor, and a force "
-                      "pause comes for every input device this session holds "
-                      "at once -- so the desktop is deaf from here. Taking "
-                      "them back when the session goes Active; if input does "
-                      "not return, switch to this console with "
-                      "Ctrl+Alt+F<n>.";
+      LOG(ERROR) << "logind force-paused input device " << number.major << ":"
+                 << number.minor
+                 << ": it has ALREADY revoked that descriptor, and a force "
+                    "pause comes for every input device this session holds "
+                    "at once -- so the desktop is deaf from here. Taking "
+                    "them back when the session goes Active; if input does "
+                    "not return, switch to this console with "
+                    "Ctrl+Alt+F<n>.";
       return;
 
     case PauseAnswer::kCompleteIt:
@@ -484,11 +484,11 @@ void DrmLogindInput::OnPropertiesChanged(dbus::Signal*) {
 
   const size_t reclaimed = devices_.Reclaim();
   if (reclaimed > 0) {
-    LOG(WARNING) << "this console is in front of the user again; giving "
-                 << reclaimed
-                 << " revoked input device(s) back to logind and taking them "
-                    "again, because a revoked descriptor cannot be repaired "
-                    "in place";
+    LOG(ERROR) << "this console is in front of the user again; giving "
+               << reclaimed
+               << " revoked input device(s) back to logind and taking them "
+                  "again, because a revoked descriptor cannot be repaired "
+                  "in place";
   }
 }
 
