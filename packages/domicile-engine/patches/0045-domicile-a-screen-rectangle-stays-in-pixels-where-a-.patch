@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 21:38:53 +0000
+Subject: [PATCH] domicile: a screen rectangle stays in pixels where a window
+ turns
+
+Patch 0043 gave each DRM display its scale, and a views window converted
+its screen rectangle by that scale like everywhere else. But a display's
+bounds on this platform are its CRTC's pixels -- window binding,
+fullscreen and the compositor's connector row all read them that way --
+so a window at 2880 across read back as 1920, which is the monitor to its
+left. Anything that asked which display a window is on, a fullscreen
+request among them, got the wrong one: on a desk of three monitors two
+windows landed on one CRTC and the other screens went dark.
+
+Where windows turn with their display, a screen rectangle converts by
+nothing and the scale stays inside the window: the root window is the
+window's pixels over the scale, and the root transform is the scale and
+the turn, as before.
+---
+ .../desktop_window_tree_host_platform.cc      | 26 +++++++++++++++++--
+ .../desktop_window_tree_host_platform.h       | 14 +++++++---
+ 2 files changed, 34 insertions(+), 6 deletions(-)
+
+diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
+index 332dc5029f..62b2a3373e 100644
+--- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
++++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
+@@ -36,6 +36,7 @@
+ #include "ui/display/screen.h"
+ #include "ui/display/types/display_constants.h"
+ #include "ui/gfx/geometry/dip_util.h"
++#include "ui/gfx/geometry/size.h"
+ #include "ui/ozone/public/ozone_platform.h"
+ #include "ui/platform_window/extensions/begin_frame_source_extension.h"
+ #include "ui/platform_window/extensions/workspace_extension.h"
+@@ -960,7 +961,7 @@ bool DesktopWindowTreeHostPlatform::AreScreenshotsAllowed() {
+ }
+ 
+ gfx::Transform DesktopWindowTreeHostPlatform::GetRootTransform() const {
+-  gfx::Transform transform = GetScaleTransform();
++  gfx::Transform transform = GetContentScaleTransform();
+   // DOMICILE: A MONITOR ON ITS SIDE, TURNED HERE AND NOWHERE ELSE. The root
+   // window is laid out upright -- as tall as the panel is wide -- and this is
+   // what takes its DIPs onto the panel's pixels, so an event arriving in the
+@@ -980,6 +981,20 @@ gfx::Transform DesktopWindowTreeHostPlatform::GetRootTransform() const {
+ }
+ 
+ gfx::Transform DesktopWindowTreeHostPlatform::GetScaleTransform() const {
++  // DOMICILE: A SCREEN RECTANGLE IS IN PIXELS WHERE WINDOWS TURN WITH THEIR
++  // DISPLAY. A display's bounds there are its CRTC's, scale or no scale, so a
++  // window's bounds have to be the same pixels or nothing lines up: a window
++  // at 2880 across read back as 1920 is on the monitor to its left, and a
++  // fullscreen request for "the display it is on" puts it there. The scale
++  // belongs inside the window, which is `GetContentScaleTransform`.
++  if (TurnsWithDisplay()) {
++    return gfx::Transform();
++  }
++  return GetContentScaleTransform();
++}
++
++gfx::Transform DesktopWindowTreeHostPlatform::GetContentScaleTransform()
++    const {
+   // TODO(crbug.com/40218466): This can use wrong scale during initialization.
+   // Revisit this as a part of 'use dip' work.
+ 
+@@ -1016,7 +1031,14 @@ void DesktopWindowTreeHostPlatform::HideImpl() {
+ }
+ 
+ gfx::Rect DesktopWindowTreeHostPlatform::CalculateRootWindowBounds() const {
+-  gfx::Rect bounds(platform_window()->GetBoundsInDIP().size());
++  // DOMICILE: where screen rectangles are pixels, the window's own DIPs are
++  // those pixels over the scale drawn inside it.
++  gfx::Rect bounds(
++      TurnsWithDisplay()
++          ? gfx::ScaleToFlooredSize(
++                GetBoundsInPixels().size(),
++                1.f / GetContentScaleTransform().To2dScale().x())
++          : platform_window()->GetBoundsInDIP().size());
+   // DOMICILE: a quarter turn stands the root window on its side.
+   const display::Display::Rotation turn = GetDisplayTurn();
+   if (turn == display::Display::ROTATE_90 ||
+diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
+index c531afcfb5..5db3299cc6 100644
+--- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
++++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
+@@ -246,12 +246,18 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
+   // Helper method that returns the display for the |window()|.
+   display::Display GetDisplayNearestRootWindow() const;
+ 
+-  // DOMICILE: the device scale factor alone, which is what a rectangle in
+-  // screen coordinates is converted by. GetRootTransform() is this and the
+-  // display's turn, and the turn is about the window's own corner: applied to
+-  // a rectangle somewhere on the screen it would swing it off the desktop.
++  // DOMICILE: what a rectangle in screen coordinates is converted by. The
++  // device scale factor alone, and nothing at all where windows turn with
++  // their display: there a screen rectangle is in pixels, as a display's
++  // bounds are. The turn is never in it -- it is about the window's own
++  // corner, and applied to a rectangle elsewhere on the screen it would swing
++  // it off the desktop.
+   gfx::Transform GetScaleTransform() const;
+ 
++  // DOMICILE: the device scale factor, which is what the window draws at.
++  // GetRootTransform() is this and the display's turn.
++  gfx::Transform GetContentScaleTransform() const;
++
+   // DOMICILE: the turn this window is drawn at, which is its display's where
+   // the platform turns windows with their display and none everywhere else.
+   // See `turns_windows_with_their_display` in ui/ozone/public/ozone_platform.h.
