@@ -97,18 +97,25 @@ fn a_rename_the_kernel_could_not_pair_is_left_alone() {
 }
 
 #[test]
-fn a_hidden_path_is_not_offered_however_it_arrived() {
-    // The same rule the walk keeps, kept at the other end: a `git commit` is
-    // hundreds of events under `.git`, none of which is a thing anybody opens
-    // by name. Without this the index would grow a copy of every checkout's
-    // object store the moment somebody worked in it — which the boot walk
-    // would then throw away, so the launcher's contents would depend on how
-    // long ago it started.
-    let deep = Event::new(EventKind::Create(CreateKind::File)).add_path(under("src/.git/HEAD"));
-    let top = Event::new(EventKind::Create(CreateKind::File)).add_path(under(".bashrc"));
+fn an_omitted_path_is_not_offered_however_deep_under_it() {
+    // The same rule the walk keeps, kept at the other end: a `cargo build` is
+    // thousands of events under `target/`, and an index that took them would
+    // grow what the walk left out the moment somebody worked in it — which
+    // the next walk would then throw away, so the launcher's contents would
+    // depend on how long ago it started. The watch sees the whole tree where
+    // the walk never went, so it asks of every ancestor, not only the path.
+    let omitted = |path: &str| path == "src/target";
+    let under_it = Event::new(EventKind::Create(CreateKind::File))
+        .add_path(under("src/target/debug/build.log"));
+    let it = Event::new(EventKind::Create(CreateKind::Folder)).add_path(under("src/target"));
+    let beside_it = Event::new(EventKind::Create(CreateKind::File)).add_path(under("src/main.rs"));
 
-    assert_eq!(read(&deep), Vec::new());
-    assert_eq!(read(&top), Vec::new());
+    assert_eq!(changes(&under_it, Path::new(HOME), &omitted), Vec::new());
+    assert_eq!(changes(&it, Path::new(HOME), &omitted), Vec::new());
+    assert_eq!(
+        changes(&beside_it, Path::new(HOME), &omitted),
+        vec![Change::Appeared("src/main.rs".to_string())]
+    );
 }
 
 #[test]
@@ -134,7 +141,7 @@ fn the_home_directory_itself_is_not_a_row() {
 
 /// What `event` does to an index of `HOME`.
 fn read(event: &Event) -> Vec<Change> {
-    changes(event, Path::new(HOME))
+    changes(event, Path::new(HOME), &|_: &str| false)
 }
 
 /// A path in the home the tests read against.

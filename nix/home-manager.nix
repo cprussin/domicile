@@ -242,6 +242,27 @@ in {
       type = lib.types.submodule {
         freeformType = toml.type;
         options = {
+          files.omit = lib.mkOption {
+            description = ''
+              What the launcher's file index leaves out of the home, as globs
+              over paths relative to it -- gitignore's rules: a `*` stops at a
+              `/` and a `**` does not, a pattern starting with `!` takes a
+              path back, and the last pattern to match a path decides it. An
+              omitted directory is not walked, so nothing under it can be
+              taken back.
+
+              The default leaves out whatever is hidden, at any depth. A list
+              that is set replaces it rather than adding to it, so a desk can
+              offer its dotfiles.
+
+              Followed on a reload: the home is walked again under the new
+              rule.
+            '';
+            type = lib.types.listOf lib.types.str;
+            default = ["**/.*"];
+            example = ["*/*" "!Scratch/*"];
+          };
+
           idle = {
             blank_after_seconds = lib.mkOption {
               description = ''

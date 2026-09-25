@@ -16,9 +16,11 @@
 //! configuration. All of this is pure logic and unit-tested.
 
 mod desktop;
+mod files;
 mod profile;
 
 pub use desktop::{Desktop, Display};
+pub use files::{FilesConfig, Omit};
 pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 
 use std::path::{Path, PathBuf};
@@ -560,6 +562,7 @@ pub struct ThemeConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub files: FilesConfig,
     pub idle: IdleConfig,
     pub input: InputConfig,
     pub output: OutputConfig,

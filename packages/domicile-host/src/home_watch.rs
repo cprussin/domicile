@@ -8,25 +8,21 @@
 //! split `domicile_config::watch` makes, for the same reason.
 
 use std::path::Path;
-use std::sync::mpsc::Receiver;
 
-/// A live watch over a home directory.
+/// A live watch over a home directory, for as long as it is kept.
 ///
-/// **Keep the whole `HomeWatcher` for as long as you read `rx`.** The OS
-/// watcher is the field beside it and owns the sending half, so dropping the
-/// struct closes the channel: `recv` then returns `Err` rather than blocking,
-/// which reads as a home nobody is writing in rather than as a watcher nobody
-/// kept. A `move` closure in edition 2021 captures the *fields* it names, so
-/// `thread::spawn(move || … watcher.rx.recv() …)` takes the receiver alone and
-/// leaves the watcher to be dropped where it stood — name the whole struct
-/// inside the closure to move it in. `domicile_config::ConfigWatcher` says the
-/// same thing and has been got wrong twice.
+/// **Dropping it ends the watch**, and nothing says so: `heard` is simply not
+/// called again, which reads as a home nobody is writing in.
 pub struct HomeWatcher {
     _watcher: notify::RecommendedWatcher,
-    pub rx: Receiver<notify::Result<notify::Event>>,
 }
 
 /// Begin watching `home`, and everything under it, for changes.
+///
+/// Each one is handed to `heard`, on the watcher's own thread. A callback
+/// rather than a channel of its own, so the caller can fold what the home
+/// reports into whatever else it is waiting on — the index thread also hears
+/// the desk's config.
 ///
 /// **Recursive, which is the expensive word.** On Linux that is one inotify
 /// watch per directory, and a home of ten thousand directories is ten thousand
@@ -36,23 +32,18 @@ pub struct HomeWatcher {
 /// desktop that will not start: what is lost is the index staying current, and
 /// the boot walk still ran.
 ///
-/// The errors on `rx` are the watcher's own — a directory that went away
+/// The errors handed to `heard` are the watcher's own — a directory that went away
 /// mid-walk, a queue that overflowed — and the second of those matters: an
 /// event flagged `Rescan` means the kernel dropped some, which is what
 /// [`crate::file_index::FileIndex::rebuilding`] exists for.
-pub fn watch_home(home: &Path) -> notify::Result<HomeWatcher> {
+pub fn watch_home(
+    home: &Path,
+    heard: impl Fn(notify::Result<notify::Event>) + Send + 'static,
+) -> notify::Result<HomeWatcher> {
     use notify::Watcher;
 
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = notify::recommended_watcher(move |event| {
-        // The receiver is gone when the desktop is shutting down, which is not
-        // a thing to report from a watcher thread.
-        let _ = tx.send(event);
-    })?;
+    let mut watcher = notify::recommended_watcher(heard)?;
     watcher.watch(home, notify::RecursiveMode::Recursive)?;
 
-    Ok(HomeWatcher {
-        _watcher: watcher,
-        rx,
-    })
+    Ok(HomeWatcher { _watcher: watcher })
 }

@@ -24,15 +24,17 @@
 //! no reason to stop at a depth or to make a person name their document
 //! directories in the desktop's source.
 //!
-//! # The one rule that is kept
+//! # What is left out is the desk's to say
 //!
-//! **Nothing hidden**, at every depth: an entry whose name starts with a dot
-//! is neither offered nor descended into. The original did this in two halves
-//! that disagreed — a glob that hid `~/.config` and a `-not -path` that hid
-//! `~/Notes/.git/HEAD` while offering `~/Notes/.git` — and the disagreement
-//! was worth keeping only while both halves were cheap. At full depth it is
-//! not: a `.git` walked to the bottom is most of what is in a home full of
-//! checkouts, and none of it is a thing anybody opens by name.
+//! The walk is handed a question — is this path omitted? — and asks it of
+//! every entry by its name relative to the home: an omitted one is neither
+//! offered nor descended into. The answer is `[files] omit` in the desk's
+//! config (`domicile_config::Omit`), whose default is the rule this walk used
+//! to keep itself: **nothing hidden**, at every depth. A `.git` walked to the
+//! bottom is most of what is in a home full of checkouts, and none of it is a
+//! thing anybody opens by name — but a desk that wants its dotfiles offered
+//! can say so, and one with a `~/Library` too big to be worth reading can say
+//! that.
 
 use std::collections::VecDeque;
 use std::io;
@@ -70,11 +72,45 @@ impl Directory for RealDirectory {
 /// the launcher is offered whatever has been found so far, so a walk that only
 /// existed as its finished `Vec` would be a launcher with no list for as long
 /// as a home takes to read.
-pub fn walk<'a, D: Directory>(home: &Path, directory: &'a D) -> io::Result<Walk<'a, D>> {
+///
+/// `omitted` is asked of every path by its name relative to `home`, and one it
+/// says yes to is neither offered nor walked.
+pub fn walk<'a, D: Directory, O: Fn(&str) -> bool>(
+    home: &Path,
+    directory: &'a D,
+    omitted: &'a O,
+) -> io::Result<Walk<'a, D, O>> {
+    started_at(home, home, directory, omitted)
+}
+
+/// Everything under `path` in `home`, named and omitted as [`walk`] would.
+///
+/// For a directory that turns up after the walk: its contents are rows the
+/// boot walk would have found, so they are named from the home and left out by
+/// the same rule rather than by one relative to where they arrived. `Err` is
+/// `path` not being a directory that reads, which for a plain file is the
+/// ordinary answer.
+pub fn walk_within<'a, D: Directory, O: Fn(&str) -> bool>(
+    home: &Path,
+    path: &str,
+    directory: &'a D,
+    omitted: &'a O,
+) -> io::Result<Walk<'a, D, O>> {
+    started_at(home, &home.join(path), directory, omitted)
+}
+
+/// A walk of everything under `root`, named relative to `home`.
+fn started_at<'a, D: Directory, O: Fn(&str) -> bool>(
+    home: &Path,
+    root: &Path,
+    directory: &'a D,
+    omitted: &'a O,
+) -> io::Result<Walk<'a, D, O>> {
     Ok(Walk {
+        pending: offerable(directory.read(root)?, home, omitted),
         home: home.to_path_buf(),
-        pending: offerable(directory.read(home)?),
         directory,
+        omitted,
     })
 }
 
@@ -90,13 +126,14 @@ pub fn walk<'a, D: Directory>(home: &Path, directory: &'a D) -> io::Result<Walk<
 /// A queue rather than recursion for the same reason it is lazy: the caller
 /// takes a batch, hands it to the index and comes back, which a recursive walk
 /// has no way to be stopped in the middle of.
-pub struct Walk<'a, D: Directory> {
+pub struct Walk<'a, D: Directory, O: Fn(&str) -> bool> {
     home: PathBuf,
     pending: VecDeque<PathBuf>,
     directory: &'a D,
+    omitted: &'a O,
 }
 
-impl<D: Directory> Iterator for Walk<'_, D> {
+impl<D: Directory, O: Fn(&str) -> bool> Iterator for Walk<'_, D, O> {
     type Item = String;
 
     fn next(&mut self) -> Option<String> {
@@ -108,7 +145,8 @@ impl<D: Directory> Iterator for Walk<'_, D> {
             // leaves: the path is still offered, and the walk carries on with
             // the rest of the home rather than stopping on it.
             if let Ok(children) = self.directory.read(&path) {
-                self.pending.extend(offerable(children));
+                self.pending
+                    .extend(offerable(children, &self.home, self.omitted));
             }
             // A name the kernel stored as bytes no `str` can hold is a path a
             // launcher cannot print, so it cannot be offered — but everything
@@ -121,26 +159,27 @@ impl<D: Directory> Iterator for Walk<'_, D> {
     }
 }
 
-/// A directory's entries in the order they are walked, hidden ones dropped.
+/// A directory's entries in the order they are walked, omitted ones dropped.
 ///
 /// Sorted, so that two machines with the same home produce the same index in
 /// the same order. `read_dir` hands back whatever order the filesystem keeps
 /// its entries in, which is neither stable across filesystems nor across
 /// writes to one — and a half-built index whose contents depend on that is one
 /// a person sees a different half of on each boot.
-fn offerable(entries: Vec<PathBuf>) -> VecDeque<PathBuf> {
+///
+/// A name that is not text cannot be asked about, and is kept: it is not
+/// offered either — see [`named_from`] — but what is under it still can be.
+fn offerable(
+    entries: Vec<PathBuf>,
+    home: &Path,
+    omitted: &impl Fn(&str) -> bool,
+) -> VecDeque<PathBuf> {
     let mut offerable: Vec<PathBuf> = entries
         .into_iter()
-        .filter(|entry| !is_hidden(entry))
+        .filter(|entry| !named_from(entry, home).is_some_and(|name| omitted(&name)))
         .collect();
     offerable.sort();
     offerable.into()
-}
-
-/// Whether the last component starts with a dot.
-fn is_hidden(path: &Path) -> bool {
-    path.file_name()
-        .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."))
 }
 
 /// `path` as the launcher shows it: relative to `home`, and dropped when it is

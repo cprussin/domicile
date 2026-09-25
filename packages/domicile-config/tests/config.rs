@@ -220,6 +220,72 @@ mode = "system"
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
+// ---- files ----------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_files_omits_what_is_hidden_at_any_depth() {
+    // The rule the index kept before it was a setting: a `.git` walked to the
+    // bottom is most of a home full of checkouts, and none of it is opened by
+    // name.
+    let omit = Config::parse("").unwrap().files.omit;
+    assert!(omit.omits(".config"));
+    assert!(omit.omits("src/.git"));
+    assert!(!omit.omits("src"));
+    assert!(!omit.omits("src/main.rs"));
+}
+
+#[test]
+fn a_desk_that_states_what_to_omit_replaces_the_default() {
+    // Replaced rather than added to, so a desk can offer its dotfiles: the
+    // default is only what saying nothing means.
+    let omit = Config::parse(
+        r#"
+[files]
+omit = ["Library/*/*"]
+"#,
+    )
+    .unwrap()
+    .files
+    .omit;
+    assert!(omit.omits("Library/Mail/inbox"));
+    assert!(!omit.omits("Library/Mail"));
+    assert!(!omit.omits("Projects/.archive"));
+}
+
+#[test]
+fn the_last_pattern_to_match_a_path_decides_it() {
+    // Which is gitignore's rule, and what makes "everything two deep except
+    // under `Scratch`" sayable: a later `!` takes back what an earlier pattern
+    // omitted. A `*` stops at a `/`, so `*/*` is two deep and no deeper.
+    let omit = Config::parse(
+        r#"
+[files]
+omit = ["*/*", "!Scratch/*"]
+"#,
+    )
+    .unwrap()
+    .files
+    .omit;
+    assert!(!omit.omits("src"));
+    assert!(omit.omits("src/domicile"));
+    assert!(!omit.omits("Scratch/notes"));
+    assert!(!omit.omits("Scratch/notes/today.org"));
+}
+
+#[test]
+fn rejects_a_pattern_that_is_not_a_glob() {
+    // At load, where the file can be named, rather than at the walk -- which
+    // would be an index quietly built with one rule fewer than the desk said.
+    let err = Config::parse(
+        r#"
+[files]
+omit = ["Library/[unclosed"]
+"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
 #[test]
 fn rejects_invalid_syntax() {
     let err = Config::parse("{ this is not toml").unwrap_err();
