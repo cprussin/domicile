@@ -437,6 +437,8 @@ impl Screens {
                     id: id_of(&display.name, displays),
                     enabled: display.enabled,
                     origin: display.origin,
+                    transform: display.transform,
+                    scale: display.scale,
                 })
                 .collect(),
             outputs: layout
@@ -1364,6 +1366,11 @@ size = [800, 600]
                     id: 2,
                     enabled: true,
                     origin: (0, 0),
+                    // The turn and the scale go with the connector as well as
+                    // onto the desktop: the engine draws each window with them,
+                    // which is what lets a page lay out logical and upright.
+                    transform: Transform::Rotate270,
+                    scale: 1.2,
                 },
                 Connector {
                     id: 1,
@@ -1373,6 +1380,8 @@ size = [800, 600]
                     // across: what is laid out on a desktop and what is
                     // scanned out of a card are two arrangements.
                     origin: (1920, 0),
+                    transform: Transform::Normal,
+                    scale: 1.5,
                 },
             ]
         );

@@ -63,11 +63,11 @@ export const hostDisplays = (domicile: DomicileClient): DisplaySource => ({
  * **`scanout` is the one place the two shapes differ rather than regroup.**
  * The engine states three flat facts — the mode, the turn, and whether this
  * screen is the whole page — because WebIDL has no nullable dictionary
- * attribute. `<Screen>` wants the one thing they add up to: a window this
- * region has to cover, or nothing. So the flag is read here and becomes a
- * presence, which is what puts the "is this a window?" question in one place
- * instead of leaving a mode and a turn lying around for a region to decide
- * about.
+ * attribute. `<Screen>` wants the one thing they add up to: the monitor this
+ * page is, or nothing. So the flag is read here and becomes a presence, which
+ * puts the "is this my screen?" question in one place. The mode and the turn
+ * ride along as description — the engine has already drawn the page with
+ * them.
  */
 const asDisplay = (display: DomicileDisplay): Display => ({
   name: display.name,

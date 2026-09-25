@@ -18,17 +18,14 @@ export type Display = {
   /** Logical width and height. */
   size: readonly [number, number];
   /**
-   * The pixels the monitor scans out, un-turned, where its window is this
-   * monitor. `undefined` everywhere else, which is every desktop the page's
-   * window is the whole of.
+   * The monitor this page's window is, and how it is bolted to the desk.
+   * `undefined` everywhere else, which is every display but the page's own and
+   * every desktop the page's window is the whole of.
    *
-   * **Its presence is the claim, which is why it is one field rather than
-   * three.** A window that IS a monitor has to draw its logical box over the
-   * whole of itself, turned by `transform` and scaled by however many of these
-   * pixels a logical one is worth; a page that is the desktop has nothing to
-   * map and gets nothing to map it with. A `size` and a `transform` sitting
-   * there unconditionally would be description, and a region would have to be
-   * told separately whether to believe them.
+   * **Its presence is the claim**: this display is the page. Nothing here is
+   * for a shell to apply — the engine turns and scales the window itself, so
+   * the page is already `size` CSS pixels, the right way up. The mode and the
+   * turn are description, for a shell that wants to say what a monitor is.
    *
    * Not a second spelling of `size`: a monitor on its side scans out exactly
    * as it did lying down, so a portrait 4K panel is a 3840×2160 mode and an
@@ -38,16 +35,16 @@ export type Display = {
 };
 
 /**
- * What a display's window is, for a region that has to cover it.
+ * The monitor a page's window is.
  *
  * @see Display.scanout
  */
 export type Scanout = {
-  /** The window's size in CSS pixels: the monitor's mode, un-turned. */
+  /** The monitor's mode, in its own pixels, un-turned. */
   size: readonly [number, number];
   /**
    * Which way up the monitor is, as the turn the content takes to come out
-   * upright — the `wl_output` convention. Applied as written.
+   * upright — the `wl_output` convention. Already applied by the engine.
    */
   transform: Transform;
 };

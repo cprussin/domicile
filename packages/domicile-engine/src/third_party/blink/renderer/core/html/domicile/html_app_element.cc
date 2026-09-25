@@ -120,6 +120,11 @@ void HTMLAppElement::Embed() {
       app_id,
       frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
       configured_size_,
+      // THE SCALE THE BOX IS IN, because the box is in device pixels and a
+      // client is configured in logical ones. Said here rather than left to
+      // the compositor to guess: a desk of several monitors is several pages,
+      // each at its own monitor's scale, and only this one knows which.
+      frame->LayoutZoomFactor(),
       reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
                     : ExternalSurfaceEmbedder::Allocation::kAdopt,
       BindOnce(&HTMLAppElement::OnEmbedded, WrapPersistent(this)));

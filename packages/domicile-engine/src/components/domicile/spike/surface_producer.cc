@@ -91,7 +91,8 @@ void SurfaceProducer::OnFrameSinkCreated(
 // embedder's to mint, and the size is its layout box.
 void SurfaceProducer::OnSurfaceEmbedded(
     const viz::LocalSurfaceId& local_surface_id,
-    const gfx::Size& size) {
+    const gfx::Size& size,
+    double scale) {
   const bool first = !submitting_;
   local_surface_id_ = local_surface_id;
   size_ = size;

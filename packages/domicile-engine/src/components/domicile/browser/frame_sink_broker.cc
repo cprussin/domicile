@@ -21,11 +21,13 @@ FrameSinkBroker::PendingEmbed::PendingEmbed(
     const viz::FrameSinkId& parent_frame_sink_id,
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Size& size,
+    double scale,
     EmbedCallback callback)
     : app_id(app_id),
       parent_frame_sink_id(parent_frame_sink_id),
       local_surface_id(local_surface_id),
       size(size),
+      scale(scale),
       callback(std::move(callback)) {}
 
 FrameSinkBroker::PendingEmbed::PendingEmbed(PendingEmbed&&) = default;
@@ -63,6 +65,7 @@ void FrameSinkBroker::Embed(const std::string& app_id,
                             const viz::FrameSinkId& parent_frame_sink_id,
                             const viz::LocalSurfaceId& local_surface_id,
                             const gfx::Size& size,
+                            double scale,
                             EmbedCallback callback) {
   BrokeredFrameSink* frame_sink = SinkForApp(app_id);
   if (!frame_sink) {
@@ -72,11 +75,11 @@ void FrameSinkBroker::Embed(const std::string& app_id,
     // app id rather than answered with whatever is brokered next, so an
     // element waiting for one window is not handed another.
     pending_embeds_.emplace_back(app_id, parent_frame_sink_id, local_surface_id,
-                                 size, std::move(callback));
+                                 size, scale, std::move(callback));
     return;
   }
 
-  frame_sink->Embed(parent_frame_sink_id, local_surface_id, size);
+  frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale);
   std::move(callback).Run(frame_sink->frame_sink_id());
 }
 
@@ -113,7 +116,7 @@ void FrameSinkBroker::CreateFrameSink(
       continue;
     }
     raw_frame_sink->Embed(embed.parent_frame_sink_id, embed.local_surface_id,
-                          embed.size);
+                          embed.size, embed.scale);
     std::move(embed.callback).Run(frame_sink_id);
   }
   pending_embeds_ = std::move(still_waiting);

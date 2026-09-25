@@ -66,9 +66,9 @@
   // browser parses it into four cases and anything else is `normal`.
   readonly attribute DOMString transform;
 
-  // This screen is the whole page, so the page has to fill it: `modeWidth` and
-  // `modeHeight` are the window's own size in CSS pixels, and the logical box
-  // above has to be turned and scaled to cover them.
+  // This screen is the whole page. The browser turns and scales its window,
+  // so the page is the logical box above, upright, and `modeWidth`,
+  // `modeHeight` and `transform` only say how it was drawn.
   //
   // True where the engine scans out, which is where it opens one window per
   // CRTC and each one is told the single display it covers. False for every

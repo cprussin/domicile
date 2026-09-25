@@ -966,58 +966,45 @@ somebody is at this desktop again; its screens come back on
 and, under `--vmodule=drm*=1`, the `configuring N display(s)` that says the
 modeset behind them ran.
 
-### Turning a monitor is the page's job, and it took a window each to get there
+### Turning a monitor is the engine's job, and it took a window each to get there
 
 **The modeset does not turn a pixel and never will.**
 `DisplayConfigurationParams` is `{id, origin, mode, enable_vrr}` and has no
 field for a rotation, so a rotated monitor is lit exactly as it was lying
 down.
 
-**And a rotation does not belong there anyway.** This used to say the answer
-was `DisplayConfigurator` and `//ui/display/manager`, the 478 lines this fork
-does not port. That was wrong, and checkably so: `display_configurator.h` at
-the pin does not contain the string `rotat`. ChromeOS turns a screen in the
-**render tree**, not at the modeset and not on the plane —
-`ash::RootWindowTransformer::GetTransform` converts root-window DIP to host
-window coordinates and "normally includes rotation and scaling"
-(`ash/host/root_window_transformer.h`). The CRTC scans out its mode the way
-it always does; what changes is what is drawn into it.
+**ChromeOS turns a screen in the render tree**, not at the modeset —
+`ash::RootWindowTransformer` and a display transform hint on the compositor —
+and so does this, with the same parts. A root transform belongs to a window,
+which is why it waited for *one browser window per CRTC*: each monitor's
+window is turned and scaled on its own.
 
-Which put it behind *one browser window per CRTC* rather than beside it. A
-root transform belongs to a window, and one window covering a desk whose
-monitors a profile may turn differently would have meant rotating per region
-inside a single page, in coordinates that stop being the desktop's. Each
-display has a window now, so the render tree is one region and the turn is a
-CSS `transform` on it:
+| Piece | What it does |
+|---|---|
+| The compositor's layout | Each `DomicileDisplayLayout` carries the profile's `transform` and `scale` beside the corner, so the browser knows how every connector is bolted and how dense it is |
+| `DrmScreen` | Puts both on the `display::Display` — `rotation` (clockwise, so `rotate-270` is `ROTATE_90`) and `device_scale_factor` — and keeps `bounds` as the CRTC's pixels, which window binding, fullscreen and the compositor's connector row all read |
+| `DesktopWindowTreeHostPlatform` (patch `0043`) | Where the platform sets `turns_windows_with_their_display` — DRM only — its root transform turns DIPs onto the panel, its root window is laid out upright, and the compositor gets the turn as a display transform hint, so viz renders upright and turns the frame on the way out |
+| `CursorController` | Compiled off ChromeOS, so `DrmCursor::MoveCursor` turns a hand's travel with the monitor. `DrmWindowHost` tells it the turn when a window moves or a display turns under it |
+| `wm::CursorLoader` | Turns and scales the arrow off the display it is told about, which it now has |
 
-```
-translate(0, 2160px) rotate(-90deg) scale(1.2)
-```
+**So a page is the monitor's logical box, upright, at its density.** A 4K
+panel on its side at 1.2 is a page 1800×3200 CSS pixels big with a
+`devicePixelRatio` of 1.2; `<Screen>` places a region at the origin with no
+transform, events arrive in those pixels, and anything a shell draws outside a
+region — a portal, a dialog — is the right way up too. The shell writes none
+of it. It used to: `<Screen>` drew the turn as a CSS transform, a shell had to
+map every pointer position and warp through it, and whatever was portalled out
+of a region came out sideways, as did the arrow.
 
-That is `packages/component-library/src/Screen/cover-the-window.ts`, and a
-shell writes none of it. `<Screen>` applies it, and it applies it only to a
-region that is a whole window — which is what `fills_the_window` says, and what
-is false on every desktop the page's window is the whole of.
-
-**Everything downstream already handled it**, which is why this is a table
-lookup and not a subsystem. A window is a layer in the page, so what CSS does
-to the page it does to the windows; `measure` reports the element→screen affine
-and `surfaceLocal` inverts it, so an app under any transform — rotated, scaled,
-skewed — still gets correct surface-local pointer coordinates. That was written
-for CSS the shell applies and it is the same seam.
-
-**The scale comes free and was a bug on its own.** The window is the mode in
-CSS pixels and the region is the logical box, so a 3840-wide panel at density
-1.2 is a 3200-wide region in a 3840-wide window — an upright desktop in the
-corner of a black screen, before any rotation. One `mode ÷ box`, read across
-the turn, is both.
+**Each `<app>` says the scale its box is in** (patch `0044` and the
+`configure_at` callback), because the box is in the page's device pixels and a
+configure is in logical ones, and a desk of several monitors is several pages
+at several scales.
 
 **The two quarter turns count counterclockwise, as `wl_output` and kanshi do.**
 `rotate-270` turns the content a quarter *clockwise*, for a panel on its left
-side; `rotate-90` the other way. A desk once came up with them reversed —
-applied as clockwise — and swapping the arms of `turn` in
-`cover-the-window.ts`, with `turnOf` and `straightened` beside it, was the
-whole fix.
+side; `rotate-90` the other way. `RotationOf` in `drm_screen.cc` is the one
+place that converts.
 
 **A client that pre-rotates its own buffer is still wrong**, and rotation is
 what makes that reachable. `wl_output.transform` is advertised so a client can

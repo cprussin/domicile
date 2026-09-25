@@ -155,10 +155,9 @@ describe("the desktop a shell lays out against", () => {
 
   it("drops a mode nothing claimed was a window", () => {
     // A desktop the page's window is the whole of still carries a mode and a
-    // turn -- they are facts about the panel -- and a region that took them
-    // for an instruction would scale a nested run by the density and draw it
-    // off its own window. The flag is what says which, and it is read here so
-    // that a region never has to.
+    // turn -- they are facts about the panel -- and a page that took one of
+    // its displays for its own would draw only that one. The flag is what
+    // says which, and it is read here so that a region never has to.
     const [client, host] = connected();
 
     host.describes([{ ...SIDEWAYS, fillsTheWindow: false }]);

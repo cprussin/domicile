@@ -100,35 +100,18 @@ describe("Screen", () => {
     ).toEqual(["left", "right"]);
   });
 
-  it("draws a region that is a whole window over the whole of it", () => {
+  it("lays a region that is a whole window out as it is, upright and logical", () => {
     // The tty case. The engine opens a browser window per CRTC and each is
-    // told one display at the origin, so the region's job is the window rather
-    // than a part of the page: a 4K panel on its side at density 1.2 is an
-    // 1800x3200 box that has to cover 3840x2160 of window.
-    //
-    // Asserted through the DOM rather than through `coverTheWindow`, which has
-    // its own tests: what this one is about is that a `<Screen>` reaches for
-    // it at all, and about `transform-origin`, which lives here and which the
-    // arithmetic over there assumes.
+    // told one display at the origin -- and the ENGINE turns and scales that
+    // window, so a 4K panel on its side at density 1.2 is a page 1800x3200
+    // CSS pixels big, the right way up. A region over it is the display's own
+    // rectangle and nothing more: a transform here would turn it twice, and
+    // would leave everything a shell puts outside a region -- a portal, a
+    // dialog -- the other way round from everything inside one.
     on([SIDEWAYS], <Screen name="sideways">stuff</Screen>);
     const region = document.querySelector("[data-screen]") as HTMLElement;
-    expect(region.style.transform).toBe(
-      "translate(3840px, 0) rotate(90deg) scale(1.2)",
-    );
-    expect(region.style.transformOrigin).toBe("top left");
-  });
-
-  it("leaves a region that is part of a page untransformed", () => {
-    // Every desktop the page's window is the whole of. A transform here would
-    // be an identity on every render and a stacking context to explain
-    // forever after -- and the two monitors of a nested run are laid out by
-    // their `left`/`top` exactly as they always were.
-    on([LEFT, RIGHT], <Screen everywhere>stuff</Screen>);
-    expect(
-      [...document.querySelectorAll("[data-screen]")].map(
-        (region) => (region as HTMLElement).style.transform,
-      ),
-    ).toEqual(["", ""]);
+    expect(region.style.transform).toBe("");
+    expect(regions()).toEqual(["0px,0px+1800pxx3200px"]);
   });
 
   it("puts its children over the display it names", () => {

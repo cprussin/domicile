@@ -23,6 +23,7 @@ use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
+use domicile_config::Transform;
 use libloading::{Library, Symbol};
 use thiserror::Error;
 
@@ -195,7 +196,7 @@ pub struct Display {
 /// By the engine's own id, which is the only name both sides have. The
 /// `wl_output` this compositor advertises is called `drm-<id>`, and that is a
 /// name it invented out of this number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Connector {
     /// Which display, as [`Display::id`] named it.
     pub id: i64,
@@ -205,17 +206,30 @@ pub struct Connector {
     /// pixels -- stated for a dark connector too, because the engine's own
     /// display list carries one whether or not it is lit.
     pub origin: (i32, i32),
+    /// Which way up the monitor is. The engine turns this connector's window
+    /// by it, so the page in it lays out upright.
+    pub transform: Transform,
+    /// Device pixels per logical pixel. The engine draws this connector's
+    /// window at it, so the page in it lays out in logical pixels.
+    pub scale: f64,
 }
 
 /// What the browser has to tell the compositor, and what each already is in
 /// Wayland terms.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     /// `xdg_toplevel.configure`: the page's layout box changed.
+    ///
+    /// `width` and `height` are the box in the page's device pixels, and
+    /// `scale` is how many of them the page draws one of its CSS pixels with.
+    /// Per box rather than per desktop, because a desk of several monitors is
+    /// several pages and each draws at its own monitor's scale. `None` from an
+    /// engine older than the scale crossing, which only ever said the box.
     Configure {
         surface: SurfaceId,
         width: u32,
         height: u32,
+        scale: Option<f64>,
     },
     /// `wl_surface.frame`: viz asked for a frame.
     Frame {
@@ -296,6 +310,7 @@ struct Callbacks {
     released: Option<extern "C" fn(*mut c_void, SurfaceId, BufferId)>,
     displays: Option<extern "C" fn(*mut c_void, *const RawDisplay, u32)>,
     copied: Option<extern "C" fn(*mut c_void, u32, *const c_char, usize)>,
+    configure_at: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64)>,
 }
 
 /// The engine's opaque handle.
@@ -347,11 +362,11 @@ struct RawDisplay {
 /// `DomicileDisplayLayout`, exactly as the C header lays it out.
 ///
 /// Flat scalars and an `int32_t` for what is an `Option` on the safe side,
-/// because C has neither tuples nor sum types. One `int64_t` and three
-/// `int32_t`, which is 20 bytes in a struct that is 24 -- see the size test
+/// because C has neither tuples nor sum types. One `int64_t`, three `int32_t`,
+/// a `uint32_t` and a `double`, which is 32 bytes with no padding -- see the size test
 /// below, and the C header this mirrors. Not public: [`Connector`] is what a
 /// caller wants.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 struct RawLayout {
     id: i64,
@@ -360,6 +375,9 @@ struct RawLayout {
     enabled: i32,
     x: i32,
     y: i32,
+    /// `DomicileDisplayTransform`: the `wl_output` order, normal first.
+    transform: u32,
+    scale: f64,
 }
 
 /// `DomicileSpikeCapture`, exactly as the C header lays it out.
@@ -756,6 +774,7 @@ fn join(
         released: Some(on_released),
         displays: Some(on_displays),
         copied: Some(on_copied),
+        configure_at: Some(on_configure_at),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -801,6 +820,25 @@ extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u3
             surface,
             width,
             height,
+            scale: None,
+        },
+    );
+}
+
+extern "C" fn on_configure_at(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    width: u32,
+    height: u32,
+    scale: f64,
+) {
+    push(
+        user_data,
+        Event::Configure {
+            surface,
+            width,
+            height,
+            scale: Some(scale),
         },
     );
 }
@@ -896,6 +934,13 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
             enabled: i32::from(connector.enabled),
             x: connector.origin.0,
             y: connector.origin.1,
+            transform: match connector.transform {
+                Transform::Normal => 0,
+                Transform::Rotate90 => 1,
+                Transform::Rotate180 => 2,
+                Transform::Rotate270 => 3,
+            },
+            scale: connector.scale,
         })
         .collect()
 }
@@ -1010,21 +1055,77 @@ mod tests {
     }
 
     #[test]
-    fn a_connector_is_the_one_int64_and_three_int32_the_c_header_declares() {
-        // 8 for the id, 12 for the three `int32_t`, and four bytes of tail
-        // padding to the struct's own alignment: 24. Asserted rather than
-        // summed, for the reason the display's 48 is: the padding is as much
-        // part of the ABI as the fields are.
-        assert_eq!(std::mem::size_of::<RawLayout>(), 24);
+    fn a_connector_is_the_int64_four_int32s_and_double_the_c_header_declares() {
+        // 8 for the id, 16 for the three `int32_t` and the `uint32_t`, 8 for
+        // the `double`: 32,
+        // with no padding anywhere because the double lands on its own
+        // alignment. Asserted rather than summed, for the reason the
+        // display's 48 is: the padding is as much part of the ABI as the
+        // fields are, and here there being none is the claim.
+        assert_eq!(std::mem::size_of::<RawLayout>(), 32);
     }
 
     #[test]
+    fn a_connector_crosses_with_the_turn_and_scale_its_window_is_drawn_at() {
+        // The engine draws the turn and the scale, so a page lays out in
+        // logical pixels the right way up. Numbered as the C header numbers
+        // `DomicileDisplayTransform`, which is the `wl_output` order.
+        let turned = |transform| layouts_from(&[Connector { transform, ..LIT }])[0].transform;
+        assert_eq!(
+            [
+                turned(Transform::Normal),
+                turned(Transform::Rotate90),
+                turned(Transform::Rotate180),
+                turned(Transform::Rotate270),
+            ],
+            [0, 1, 2, 3]
+        );
+        assert_eq!(layouts_from(&[LIT])[0].scale, 1.2);
+    }
+
+    #[test]
+    fn a_configure_carries_the_scale_of_the_page_that_laid_it_out() {
+        // A desk of several monitors is several pages, each at its own
+        // monitor's scale, so the box one `<app>` states in device pixels
+        // comes back down to logical ones by its own page's scale -- which
+        // only the engine knows.
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        on_configure_at(queue, 3, 1200, 900, 1.5);
+        on_configure(queue, 4, 800, 600);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::Configure {
+                    surface: 3,
+                    width: 1200,
+                    height: 900,
+                    scale: Some(1.5),
+                },
+                // An engine from before the scale crossed says nothing.
+                Event::Configure {
+                    surface: 4,
+                    width: 800,
+                    height: 600,
+                    scale: None,
+                },
+            ]
+        );
+    }
+
+    /// A lit connector at a density and a turn, for the tests to vary.
+    const LIT: Connector = Connector {
+        id: 7,
+        enabled: true,
+        origin: (3840, 0),
+        transform: Transform::Rotate270,
+        scale: 1.2,
+    };
+
+    #[test]
     fn a_lit_connector_crosses_as_its_corner_and_a_yes() {
-        let raw = layouts_from(&[Connector {
-            id: 7,
-            enabled: true,
-            origin: (3840, 0),
-        }]);
+        let raw = layouts_from(&[LIT]);
 
         assert_eq!(
             raw,
@@ -1033,6 +1134,8 @@ mod tests {
                 enabled: 1,
                 x: 3840,
                 y: 0,
+                transform: 3,
+                scale: 1.2,
             }]
         );
     }
@@ -1047,6 +1150,8 @@ mod tests {
             id: 3,
             enabled: false,
             origin: (11520, 0),
+            transform: Transform::Normal,
+            scale: 1.0,
         }]);
 
         assert_eq!(
@@ -1056,6 +1161,8 @@ mod tests {
                 enabled: 0,
                 x: 11520,
                 y: 0,
+                transform: 0,
+                scale: 1.0,
             }]
         );
     }
