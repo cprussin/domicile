@@ -6,10 +6,12 @@ import type {
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
   DomicileClipboardEvent,
+  DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
 } from "./domicile-host";
+import { FilePreview } from "./file-preview";
 import {
   appAppeared,
   appCursor,
@@ -17,6 +19,7 @@ import {
   appTitled,
   battery,
   clipboard,
+  filePreview,
   focusChanged,
   foundFiles,
   modifiers,
@@ -231,6 +234,44 @@ describe("what a search found", () => {
         }) as DomicileFilesEvent,
       ),
     ).toStrictEqual(fields);
+  });
+});
+
+describe("what a file holds", () => {
+  /** A `DomicileFilePreviewEvent`, with what its kind does not carry empty. */
+  const previewEvent = (
+    fields: Partial<Omit<DomicileFilePreviewEvent, keyof Event>>,
+  ): DomicileFilePreviewEvent =>
+    Object.assign(new Event("filepreview"), {
+      arrival: 0,
+      entries: [],
+      kind: "unreadable",
+      path: "Notes",
+      text: "",
+      ...fields,
+    });
+
+  it("arrives as the path and what the kind says is in it", () => {
+    expect(
+      filePreview(previewEvent({ kind: "text", text: "* today\n" })),
+    ).toStrictEqual({ path: "Notes", preview: FilePreview.Text("* today\n") });
+    expect(
+      filePreview(
+        previewEvent({ entries: ["2026/", "today.org"], kind: "directory" }),
+      ).preview,
+    ).toStrictEqual(FilePreview.Directory(["2026/", "today.org"]));
+    expect(filePreview(previewEvent({ kind: "binary" })).preview).toStrictEqual(
+      FilePreview.Binary(),
+    );
+    expect(
+      filePreview(previewEvent({ kind: "unreadable" })).preview,
+    ).toStrictEqual(FilePreview.Unreadable());
+  });
+
+  it("refuses a kind it does not know rather than drawing nothing", () => {
+    // An engine newer than this SDK could say one. A preview that silently
+    // drew as empty would be that skew with nothing said.
+    expect(() => filePreview(previewEvent({ kind: "video" }))).toThrow();
   });
 });
 
