@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
@@ -28,18 +28,34 @@ const searching =
     });
   };
 
+/** Every path the panel asked the host to preview, in order. */
+const previewed: string[] = [];
+
 /** What the host says each path holds: its own name, as text. */
-const previewing = (path: string) =>
-  Promise.resolve({
+const previewing = (path: string) => {
+  previewed.push(path);
+  return Promise.resolve({
     path,
-    preview:
-      path === "src"
-        ? FilePreview.Directory(["domicile/", "README.md"])
-        : FilePreview.Text(`contents of ${path}`),
+    preview: holding(path),
   });
+};
+
+/** What the home the tests run over has in each path. */
+const holding = (path: string): FilePreview => {
+  if (path === "src") {
+    return FilePreview.Directory(["domicile/", "README.md"]);
+  } else if (path === "empty") {
+    return FilePreview.Directory([]);
+  } else if (path.endsWith(".bin")) {
+    return FilePreview.Binary();
+  } else {
+    return FilePreview.Text(`contents of ${path}`);
+  }
+};
 
 /** The panel open over a home with those files in it, recording what it launched. */
 const launcher = (files: readonly string[] = FILES, indexing = false) => {
+  previewed.length = 0;
   const launched: Launch[] = [];
   const dismissed: true[] = [];
   render(
@@ -93,17 +109,19 @@ describe("Launcher", () => {
     expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
   });
 
-  it("offers what the host found, named before it is placed", async () => {
+  it("offers what the host found, each name under the directory it is in", async () => {
     // A path is read from its end: the name is what was typed part of and the
     // directories above it are only there to tell two files of that name
-    // apart, so a row is the two of them in that order rather than one line
-    // of text handed to `text-overflow`. Nothing separates them in
-    // `textContent` because what separates them on screen is the row's gap.
+    // apart, so a row is the two of them apart rather than one line of text
+    // handed to `text-overflow` — the directory a small line over the name,
+    // which leaves the row's width to the preview beside it. Nothing
+    // separates them in `textContent` because what separates them on screen
+    // is the row's own lines.
     const panel = launcher();
 
     expect(await panel.rows()).toStrictEqual([
-      "april.orgNotes/2026",
-      "today.orgNotes",
+      "Notes/2026april.org",
+      "Notestoday.org",
       "src",
       "todo.txt",
     ]);
@@ -115,8 +133,8 @@ describe("Launcher", () => {
     await panel.user.type(panel.box(), "notes");
 
     expect(await panel.rows()).toStrictEqual([
-      "april.orgNotes/2026",
-      "today.orgNotes",
+      "Notes/2026april.org",
+      "Notestoday.org",
       "Search for notes",
     ]);
   });
@@ -242,6 +260,29 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
     });
 
+    it("waits for the typing to settle before it asks", async () => {
+      // Every keystroke moves the highlight, and a preview per keystroke is a
+      // file read, or a page loaded, and thrown away per keystroke.
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "today");
+      await within(previewPane()).findByText("contents of Notes/today.org");
+
+      expect(previewed).toStrictEqual(["Notes/today.org"]);
+    });
+
+    it("shows the highlighted image as itself, served from home", async () => {
+      // The engine draws what the host cannot send: `domicile://home/` is the
+      // home, to the shell's own document only.
+      const panel = launcher(["Pictures/cat.png"]);
+
+      await panel.user.type(panel.box(), "cat");
+
+      expect(
+        (await within(previewPane()).findByRole("img")).getAttribute("src"),
+      ).toBe("domicile://home/Pictures/cat.png");
+    });
+
     it("shows what the highlighted directory holds", async () => {
       const panel = launcher();
 
@@ -249,6 +290,18 @@ describe("Launcher", () => {
 
       expect(
         await within(previewPane()).findByText("README.md"),
+      ).toBeInTheDocument();
+    });
+
+    it("says so for a directory with nothing in it", async () => {
+      // An empty list is an answer, and a blank pane would read as one still
+      // on its way.
+      const panel = launcher(["empty/"]);
+
+      await panel.user.type(panel.box(), "empty");
+
+      expect(
+        await within(previewPane()).findByText("Empty folder"),
       ).toBeInTheDocument();
     });
 
@@ -277,13 +330,48 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows nothing while no row is highlighted", async () => {
+    it("says what to do while no row is highlighted", async () => {
       // An empty box has chosen nothing, and previewing whatever sorted to the
-      // top of the home would be the launcher choosing for it.
+      // top of the home would be the launcher choosing for it — but the pane
+      // is never blank, because a blank pane reads as a broken one.
       const panel = launcher();
       await panel.rows();
 
-      expect(previewPane()).toBeEmptyDOMElement();
+      expect(previewPane()).toHaveTextContent("Nothing selected");
+    });
+
+    it("names a file it cannot draw, and says why", async () => {
+      const panel = launcher(["firmware.bin"]);
+
+      await panel.user.type(panel.box(), "firmware");
+
+      expect(
+        await within(previewPane()).findByText("No preview for this file"),
+      ).toBeInTheDocument();
+      expect(previewPane()).toHaveTextContent("firmware.bin");
+    });
+
+    it("names the file while its preview is on the way", async () => {
+      // Before the typing settles and before the host answers, the row it
+      // will be is already known.
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "todo");
+
+      expect(previewPane()).toHaveTextContent("todo.txt");
+    });
+
+    it("names a file the engine could not draw after all", async () => {
+      // An extension is a guess: a `.png` that is not one is an image that
+      // fails to load, and a pane showing a broken image is a blank pane.
+      const panel = launcher(["Pictures/cat.png"]);
+
+      await panel.user.type(panel.box(), "cat");
+      fireEvent.error(await within(previewPane()).findByRole("img"));
+
+      expect(
+        await within(previewPane()).findByText("No preview for this file"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -304,7 +392,7 @@ describe("Launcher", () => {
     await panel.user.type(panel.box(), "{ArrowDown}{ArrowDown}");
     scrollIntoView.mockRestore();
 
-    expect(scrolled.at(-1)).toBe("today.orgNotes");
+    expect(scrolled.at(-1)).toBe("Notestoday.org");
   });
 
   it("says so while the desktop is still working out what there is", async () => {
