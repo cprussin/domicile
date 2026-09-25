@@ -147,8 +147,12 @@ concurrency:
 # The release is built and published here now, and `engine-release.nix` is
 # written back onto the branch — a commit this job pushes, which is what the
 # token needs `contents: write` for. See `.github/scripts/engine-release-needed.sh`.
+#
+# `actions: write` is for one thing: a run whose commit its branch has moved
+# past, found while waiting for the compile slot, cancels itself.
 permissions:
   contents: write
+  actions: write
 
 jobs:
   # A tree that already passed is not run again: the write-back push, and main
@@ -421,11 +425,43 @@ jobs:
       # the cost: a warm run queued behind it waits for the holder to finish,
       # where a refusal freed the runner after 30 minutes. Taken, because a
       # refused run had to be noticed and re-run by hand.
+      #
+      # AND IT STOPS WAITING WHEN ITS COMMIT IS REPLACED. A push to the branch
+      # makes this run's answer one nobody will read, and the concurrency group
+      # never cancels a run in progress, so without this it held the runner
+      # until the slot came round and then built the old commit. Checked once
+      # a minute while waiting, and only for a pull request from this
+      # repository: a fork's branch is not on origin to ask about. See
+      # .github/scripts/crux-still-head.sh.
       - name: Take the compile slot
+        id: slot
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
         env:
           DOMICILE_COMPILE_SLOT_WAIT: 36000
+          DOMICILE_COMPILE_SLOT_STILL_WANTED: >-
+            ${{ github.event_name == 'pull_request'
+                && github.event.pull_request.head.repo.full_name == github.repository
+                && '.github/scripts/crux-still-head.sh "$HEAD_REF" "$HEAD_SHA"' || '' }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
+
+      # Canceled rather than failed: nothing is wrong with the commit, it just
+      # is not the branch's any more, and a red X on it would read as a finding.
+      # The wait after the request keeps this step running until the cancel
+      # lands, so the job does not end as a failure first. The `always()` drops
+      # below still run on a canceled job.
+      - name: Cancel this run, its commit was replaced
+        if: ${{ failure() && steps.slot.outputs.superseded == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -sS -f -X POST -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+          sleep 120
+          echo "::error::asked GitHub to cancel run ${{ github.run_id }} and it has not" >&2
+          exit 1
 
       - name: Reset the checkout to the pin
         if: ${{ steps.series.outputs.carries != 'true' }}

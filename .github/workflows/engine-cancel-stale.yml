@@ -1,4 +1,4 @@
-name: Cancel a closed pull request's queued engine runs
+name: Cancel a pull request's stale queued engine runs
 
 # `crux` has one job slot, and GitHub does not care whether the pull request
 # that queued a run still exists.
@@ -8,6 +8,13 @@ name: Cancel a closed pull request's queued engine runs
 # -- #460's own pre-merge head and #461's -- while three open pull requests sat
 # behind them in the queue. Neither result could change anything: both branches
 # were already in main, and main's own push runs were queued separately.
+#
+# A PUSH LEAVES THE SAME WASTE BEHIND. On 2026-09-25 #578 and #579 each had a
+# run queued for a commit they had already pushed past, ahead of the run for
+# the commit that mattered. So on `synchronize` this cancels the branch's
+# waiting runs for every commit but the new head. A stale run that already
+# has the machine and is waiting for the compile slot is engine.yml's to end:
+# see its "Take the compile slot" step.
 #
 # IT CANCELS ONLY RUNS THAT NEVER STARTED, and that restriction is the whole
 # design rather than a detail. A killed `autoninja` leaves a half-linked
@@ -34,12 +41,11 @@ name: Cancel a closed pull request's queued engine runs
 # useless runs behind.
 on:
   pull_request:
-    types: [closed]
+    types: [closed, synchronize]
 
-# Per pull request. Two closes of the same one are the same work, and the
-# second has nothing left to find.
+# Per pull request, in order: each pass cancels what the one before it left.
 concurrency:
-  group: engine-cancel-closed-${{ github.event.number }}
+  group: engine-cancel-stale-${{ github.event.number }}
   cancel-in-progress: false
 
 permissions:
@@ -61,6 +67,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           API: https://api.github.com/repos/${{ github.repository }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
+          # The commit to keep: the new head on a push, none on a close.
+          KEEP: ${{ github.event.action == 'synchronize' && github.event.pull_request.head.sha || '' }}
         run: |
           set -euo pipefail
 
@@ -73,7 +81,7 @@ jobs:
           # this workflow is not going to fix.
           runs="$(api "$API/actions/runs?branch=$BRANCH&per_page=100")"
 
-          stale="$(printf '%s' "$runs" | .github/scripts/crux-stale-runs.sh "$BRANCH")"
+          stale="$(printf '%s' "$runs" | .github/scripts/crux-stale-runs.sh "$BRANCH" "$KEEP")"
           # Which is also the whole of what a fork's pull request does here. A
           # `pull_request` event from a fork carries a read-only token, so the
           # cancel below would answer 403 -- but a fork never has a crux run to
@@ -81,7 +89,7 @@ jobs:
           # described in engine.yml. So this returns before the token matters.
           [ -n "$stale" ] || { echo "nothing of $BRANCH's is waiting for crux"; exit 0; }
 
-          echo "$BRANCH is closed; these of its runs never started:"
+          echo "$BRANCH ${KEEP:+moved on to $KEEP}${KEEP:-is closed}; these of its runs never started:"
           printf '%s\n' "$stale" | sed 's/^/  run /'
 
           printf '%s\n' "$stale" | while IFS= read -r id; do

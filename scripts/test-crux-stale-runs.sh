@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Which runs a closed pull request leaves behind, and which of them may be
-# canceled.
+# Which runs a closed or moved-on pull request leaves behind, and which of them
+# may be canceled.
 #
 # `crux` has one job slot and an engine run holds it for half an hour. GitHub
 # dispatches a queued run whether or not the pull request that created it still
@@ -61,8 +61,9 @@ grep -q 'self-hosted, *crux' "$ROOT/$CRUX_WORKFLOW" ||
 ! grep -q 'self-hosted, *crux' "$ROOT/$HOSTED_WORKFLOW" ||
   { echo "fixture is stale: $HOSTED_WORKFLOW now runs on crux" >&2; exit 1; }
 
-run() { # id, status, branch, workflow path
-  printf '{"id":%s,"status":"%s","head_branch":"%s","path":"%s"}' "$1" "$2" "$3" "$4"
+run() { # id, status, branch, workflow path, head sha
+  printf '{"id":%s,"status":"%s","head_branch":"%s","path":"%s","head_sha":"%s"}' \
+    "$1" "$2" "$3" "$4" "${5:-old}"
 }
 runs_json() { printf '{"workflow_runs":[%s]}' "$(printf '%s,' "$@" | sed 's/,$//')"; }
 
@@ -110,6 +111,38 @@ expect "a stale run on a hosted runner is not ours to cancel" "" \
 expect "the whole mixture, decided one run at a time" "$(printf '101\n102')" \
   "$(filter "$(runs_json "$waiting_for_the_runner" "$held_by_the_group" \
                          "$building" "$finished" "$somebody_else" "$hosted")")"
+
+# ---- a branch that moved on -----------------------------------------------
+
+# A PUSH MAKES THE BRANCH'S OLDER RUNS STALE TOO, not only a close: on
+# 2026-09-25 #578 and #579 each had a queued run for a commit they had already
+# pushed past, ahead of the run for the commit that mattered. So given the
+# commit the branch is at now, the filter keeps that commit's runs and takes
+# the rest -- by the same never-started rule.
+moved() { printf '%s' "$1" | "$FILTER" "$BRANCH" new 2>&1; }
+old_queued="$(run 201 queued "$BRANCH" "$CRUX_WORKFLOW" old)"
+new_pending="$(run 202 pending "$BRANCH" "$CRUX_WORKFLOW" new)"
+old_building="$(run 203 in_progress "$BRANCH" "$CRUX_WORKFLOW" old)"
+expect "a run for a commit the branch has moved past is canceled" "201" \
+  "$(moved "$(runs_json "$old_queued")")"
+expect "the run for the commit it is at now is kept" "" \
+  "$(moved "$(runs_json "$new_pending")")"
+expect "and a run that has started is still never canceled" "" \
+  "$(moved "$(runs_json "$old_building")")"
+expect "all three at once" "201" \
+  "$(moved "$(runs_json "$old_queued" "$new_pending" "$old_building")")"
+
+# And the workflow that runs it does so on a push to the branch as well as on
+# a close, handing it the new head on a push and nothing on a close.
+CANCELER="$ROOT/.github/workflows/engine-cancel-stale.yml"
+[ -f "$CANCELER" ]
+expect "the canceler is engine-cancel-stale.yml" 0 "$?"
+grep -q 'types: \[closed, synchronize\]' "$CANCELER"
+expect "it runs on a push to the branch as well as a close" 0 "$?"
+grep -q "crux-stale-runs.sh \"\$BRANCH\" \"\$KEEP\"" "$CANCELER"
+expect "and hands the filter the commit to keep" 0 "$?"
+grep -q "KEEP: \${{ github.event.action == 'synchronize' && github.event.pull_request.head.sha || '' }}" "$CANCELER"
+expect "which is the new head on a push and nothing on a close" 0 "$?"
 
 # ---- the silent-no-op cases ----------------------------------------------
 
