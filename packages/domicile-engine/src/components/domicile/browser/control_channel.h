@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -197,7 +198,7 @@ class ControlChannel : public mojom::ControlChannel {
   size_t write_offset_ = 0;
 
   scoped_refptr<net::IOBuffer> read_buffer_;
-  std::string read_remainder_;
+  LineFramer framer_;
 
   base::WeakPtrFactory<ControlChannel> weak_factory_{this};
 };
