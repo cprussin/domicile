@@ -309,6 +309,11 @@ export type HostMessageMap = {
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
   idle: IdleMessage;
+  /**
+   * Which way round the desk's windows are drawn: `theme`'s other half,
+   * arriving once they have turned. See {@link DomicileHost.themeCaptured}.
+   */
+  windows_theme: ThemeMessage;
 };
 
 /** The name of every message this build knows how to deliver. */

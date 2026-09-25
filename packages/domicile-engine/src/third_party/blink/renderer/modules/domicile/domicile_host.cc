@@ -232,19 +232,42 @@ void DomicileHost::setDevicePixelRatio(ScriptState*, double ratio,
 // `AppCursor` makes, pointing the other way -- it fires only if the .idl and
 // the X-macro have drifted, which is a build this repository should not have
 // produced.
+namespace {
+
+domicile::mojom::blink::Theme MojoTheme(V8DomicileTheme theme) {
+  const std::optional<domicile::mojom::blink::Theme> mode =
+      domicile::ThemeFromWire<domicile::mojom::blink::Theme>(
+          theme.AsString().Utf8());
+  CHECK(mode.has_value()) << "no theme named '" << theme.AsString().Utf8()
+                          << "', so domicile_theme.idl and theme.h disagree";
+  return *mode;
+}
+
+V8DomicileTheme PageTheme(domicile::mojom::blink::Theme theme) {
+  const std::string_view name = domicile::ThemeToWire(theme);
+  const std::optional<V8DomicileTheme> mode =
+      V8DomicileTheme::Create(String::FromUtf8(name));
+  CHECK(mode.has_value()) << "no DomicileTheme named '" << name
+                          << "', so domicile_theme.idl and theme.h disagree";
+  return *mode;
+}
+
+}  // namespace
+
 void DomicileHost::setTheme(ScriptState*, V8DomicileTheme theme,
                             ExceptionState& exception_state) {
   // `Ready` first, which every other member here does and this one did not:
   // a call on a host whose channel is not up throws, and doing the lookup and
   // the assertion in front of that would be work on the way to a throw.
   if (Ready(exception_state)) {
-    const std::optional<domicile::mojom::blink::Theme> mode =
-        domicile::ThemeFromWire<domicile::mojom::blink::Theme>(
-            theme.AsString().Utf8());
-    CHECK(mode.has_value())
-        << "no theme named '" << theme.AsString().Utf8()
-        << "', so domicile_theme.idl and theme.h disagree";
-    channel_->SetTheme(*mode);
+    channel_->SetTheme(MojoTheme(theme));
+  }
+}
+
+void DomicileHost::themeCaptured(ScriptState*, V8DomicileTheme theme,
+                                 ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->ThemeCaptured(MojoTheme(theme));
   }
 }
 
@@ -456,14 +479,16 @@ void DomicileHost::Clipboard(
 // reason and with `AppCursor`'s unreachable CHECK.
 void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
                                 base::TimeTicks arrival) {
-  const std::string_view name = domicile::ThemeToWire(theme);
-  const std::optional<V8DomicileTheme> mode =
-      V8DomicileTheme::Create(String::FromUtf8(name));
-  CHECK(mode.has_value())
-      << "no DomicileTheme named '" << name
-      << "', so domicile_theme.idl and theme.h disagree";
   DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
-      event_type_names::kTheme, *mode, Arrival(arrival)));
+      event_type_names::kTheme, PageTheme(theme), Arrival(arrival)));
+}
+
+// The same event interface as `theme`, under its own type: what it carries is
+// the same closed set, about the desk's windows rather than its chrome.
+void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme,
+                                       base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
+      event_type_names::kWindowstheme, PageTheme(theme), Arrival(arrival)));
 }
 
 // Pushed like Battery, and a state rather than an edge -- the compositor
