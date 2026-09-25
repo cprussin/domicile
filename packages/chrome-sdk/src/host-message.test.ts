@@ -17,8 +17,8 @@ import {
   appTitled,
   battery,
   clipboard,
-  files,
   focusChanged,
+  foundFiles,
   modifiers,
   shortcut,
 } from "./host-message";
@@ -209,55 +209,28 @@ describe("the modifiers the seat holds", () => {
   });
 });
 
-describe("what there is to open", () => {
-  it("arrives as a plain array of paths", () => {
-    // A `FrozenArray<DOMString>` on the IDL side, which is an ordinary array
-    // to a page — and the order is the answer rather than incidental, so
-    // nothing here sorts it a second time.
-    const offered = files(
-      Object.assign(new Event("files"), {
-        arrival: 0,
-        files: ["Notes/today.org", "src"],
-        indexing: false,
-      }) as DomicileFilesEvent,
-    );
+describe("what a search found", () => {
+  it("arrives as the query it answers, the paths, how many and whether that is all", () => {
+    // `indexing` is the one field a launcher cannot work out for itself: a
+    // short answer from an index still being built and a short answer from a
+    // small home look identical, and only one of them means "keep typing, it
+    // is coming". `query` is what tells an answer from the answer to a
+    // keystroke ago.
+    const fields = {
+      files: ["Notes/", "Notes/today.org"],
+      indexing: true,
+      matched: 40,
+      query: "notes",
+    };
 
-    expect(offered).toStrictEqual({
-      files: ["Notes/today.org", "src"],
-      indexing: false,
-    });
-  });
-
-  it("carries an empty list as an empty list", () => {
-    // A home with nothing to offer is an answer. It has to survive as one:
-    // a launcher that read it as "not told yet" would sit waiting for a
-    // second message that is never coming.
     expect(
-      files(
+      foundFiles(
         Object.assign(new Event("files"), {
           arrival: 0,
-          files: [],
-          indexing: false,
+          ...fields,
         }) as DomicileFilesEvent,
       ),
-    ).toStrictEqual({ files: [], indexing: false });
-  });
-
-  it("keeps the flag that says the list is not all of it", () => {
-    // THE ONE FIELD A LAUNCHER CANNOT WORK OUT FOR ITSELF. A short list from
-    // an index still being built and a short list from a small home look
-    // identical, and only one of them means "keep typing, it is coming" — so
-    // a translator that dropped this would leave a shell no way to tell a
-    // person their desktop has not finished looking.
-    expect(
-      files(
-        Object.assign(new Event("files"), {
-          arrival: 0,
-          files: ["src"],
-          indexing: true,
-        }) as DomicileFilesEvent,
-      ),
-    ).toStrictEqual({ files: ["src"], indexing: true });
+    ).toStrictEqual(fields);
   });
 });
 

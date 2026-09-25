@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 dictionary DomicileFilesEventInit : EventInit {
+  DOMString query = "";
   sequence<DOMString> files = [];
+  unsigned long matched = 0;
   boolean indexing = false;
   DOMHighResTimeStamp arrival = 0;
 };

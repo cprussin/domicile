@@ -328,31 +328,32 @@ export type DomicileModifiersEvent = Event & {
 };
 
 /**
- * What there is to open, answering {@link DomicileHost.listFiles} and also
- * arriving unasked.
+ * What matched a {@link DomicileHost.searchFiles}, answering it and nothing
+ * else — the compositor's index of the home never crosses into the page.
  *
- * Paths relative to the home directory the desktop is running as — sorted,
- * and the order is the answer rather than whatever a `read_dir` handed back.
- * An empty list is a home with nothing to offer; a home that could not be read
- * is no event at all, because "you have no files" is not something a broken
- * desktop should be able to say.
- *
- * The compositor keeps an index of the home, so this also arrives whenever
- * that index changes — when the startup walk finishes, and when a watch on the
- * home reports something that moved.
+ * Paths relative to the home directory the desktop is running as, sorted, and
+ * a directory ends in `/`. Only the front of what matched is here; `matched`
+ * is how many there were. A home that could not be read is no event at all,
+ * because "you have no files" is not something a broken desktop should be
+ * able to say.
  */
 export type DomicileFilesEvent = Event & {
+  /** The query this answers. */
+  readonly query: string;
+
   readonly files: readonly string[];
 
+  /** How many paths matched, of which {@link files} is the front. */
+  readonly matched: number;
+
   /**
-   * Whether the compositor is still building the index this list came out of.
+   * Whether the compositor is still building the index this was found in.
    *
-   * **The difference between an incomplete answer and a wrong one.** The list
-   * is a launcher's whole evidence that a file exists, so one taken from an
+   * **The difference between an incomplete answer and a wrong one.** The rows
+   * are a launcher's whole evidence that a file exists, so an answer from an
    * index still being walked has to arrive saying so — otherwise a person who
    * typed the name of a file the walk has not reached yet is told, in the only
-   * language a launcher has, that they do not have it. Draw it; another event
-   * follows when the walk ends.
+   * language a launcher has, that they do not have it. Draw it, and ask again.
    */
   readonly indexing: boolean;
 
@@ -492,10 +493,7 @@ export type DomicileHostEventMap = {
   apptitled: DomicileAppTitledEvent;
   shortcut: DomicileShortcutEvent;
   modifiers: DomicileModifiersEvent;
-  /**
-   * What there is to open: the answer to a {@link DomicileHost.listFiles},
-   * and also whatever the compositor's index of the home has become since.
-   */
+  /** What a {@link DomicileHost.searchFiles} found. Only ever an answer. */
   files: DomicileFilesEvent;
   /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
   battery: DomicileBatteryEvent;
@@ -551,28 +549,27 @@ export type DomicileHost = {
   spawn(command: readonly string[]): void;
 
   /**
-   * Ask what there is to open. Answered with a `files` event.
+   * Ask what in the home matches `query`. Answered with a `files` event
+   * carrying the same query.
    *
    * **It takes no path, and that is the security property rather than an
    * oversight.** A shell is served over `domicile://` precisely so that it has
    * an origin without a port, not so that it gets a filesystem; a call that
    * named a directory would be one, and every document the engine serves would
-   * have it. What is read is the compositor's to decide — see
-   * `domicile_host::file_index` — and this asks only that it decide.
+   * have it. What is searched is the compositor's to decide — see
+   * `domicile_host::file_search` — and this only asks it to look.
    *
-   * **A question that also arrives unasked.** The compositor keeps an index of
-   * the home and pushes a `files` event when it changes, so a panel that is
-   * already open fills in under the person typing into it. This call is still
-   * how a page that has just loaded gets a list at all — a push only reaches
-   * the pages that were connected for it.
+   * **The compositor matches, and only what matched crosses.** Its index is
+   * the whole home, which on a real one is hundreds of thousands of paths; a
+   * page that was handed that list to filter was a desktop that took no input
+   * while it arrived.
    */
-  listFiles(): void;
+  searchFiles(query: string): void;
 
   /**
    * Put a row of the clipboard's history back on the clipboard.
    *
-   * **It names a row and carries no text**, which is the same property
-   * `listFiles` has for the same reason: a page that could put arbitrary bytes
+   * **It names a row and carries no text**: a page that could put arbitrary bytes
    * on the seat's clipboard would be writing the desktop's clipboard rather
    * than choosing among what is already on it. The `id` is one the last
    * `clipboard` event carried.

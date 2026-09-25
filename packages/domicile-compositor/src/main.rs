@@ -384,20 +384,22 @@ struct ChromeHub {
     /// The name of *our* Wayland socket, which is what a client we spawn must
     /// connect to.
     wayland_display: OsString,
-    /// What a launcher is offered, as the indexing thread last worked it out.
+    /// What a launcher's search is answered from, as the indexing thread last
+    /// worked it out.
     ///
     /// **Here rather than on the Wayland thread because this is what reads
-    /// it**: `list_files` is answered on the connection it arrived on, and the
-    /// answer must not wait for a disk or for a compositor mid-frame. The
+    /// it**: `search_files` is answered on the connection it arrived on, and
+    /// the answer must not wait for a disk or for a compositor mid-frame. The
     /// index itself never leaves the indexing thread — see
     /// [`crate::file_indexing`] — so what is behind this lock is a value that
-    /// a connection clones and lets go of.
+    /// a connection takes a handle on and lets go of, searching after the
+    /// lock is released.
     ///
     /// `None` is a desktop with no index: no `HOME`, or a home directory that
-    /// could not be read. `list_files` then answers nothing at all, which is
+    /// could not be read. `search_files` then answers nothing at all, which is
     /// what it has always done on a broken desktop — a launcher told "you have
     /// no files" would draw that breakage as an ordinary empty home.
-    offered: Mutex<Option<Offered>>,
+    offered: Mutex<Option<Arc<Offered>>>,
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
@@ -852,6 +854,13 @@ struct FrameReport {
 /// again under another name.
 const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 
+/// How many of what a search matched are sent back.
+///
+/// A panel's worth and then some: nobody reads the two-hundred-and-first row
+/// of a launcher, they type another letter, and `matched` still says how many
+/// there were in all.
+const FOUND: usize = 200;
+
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
@@ -1117,37 +1126,43 @@ fn read_chrome_messages(
             // The one message here the compositor answers rather than acts
             // on, and it is answered out of memory. A shell's launcher is a
             // page and a page has no filesystem, so the reading is the
-            // compositor's -- and it can be, safely, because `list_files`
+            // compositor's -- and it can be, safely, because `search_files`
             // names no path: what is read is decided here and nowhere a
             // document can reach.
             //
-            // IT USED TO WALK THE HOME IN THIS ARM, one level deep plus two
-            // named trees, because a panel opening was waiting on it. There is
-            // an index now -- `crate::file_indexing` builds it at startup and
-            // a watch keeps it -- so this is a clone of the last answer, and
-            // what a launcher is offered is the whole home at every depth.
-            //
-            // Still asked for as well as broadcast: a page that has just
-            // reloaded missed every announcement there has ever been.
-            Ok(ChromeMessage::ListFiles) => hub
-                .offered
-                .lock()
-                .unwrap()
-                .as_ref()
-                .map(|offered| HostMessage::Files {
-                    files: offered.files.clone(),
-                    indexing: offered.indexing,
-                })
-                // Answered with nothing rather than with an empty list, which
-                // is what a desktop with no index has to say -- no HOME, or a
-                // home directory that would not open. "You have no files" is
-                // that breakage wearing the face of an ordinary answer: a
-                // shell told it would draw an empty launcher and nobody would
-                // ever find the line that explains it. Left unanswered, the
-                // panel still opens and still takes a path, a URL or a query;
-                // what it has not got is a list.
-                .into_iter()
-                .collect(),
+            // ONLY WHAT MATCHED IS SENT. The index is the whole home, and it
+            // used to cross into every page whole -- on every change, and
+            // twice a second through the startup walk -- so that the page
+            // could filter it. On half a million paths each crossing was tens
+            // of megabytes through the engine's control channel and a desktop
+            // that took no input until it was over.
+            Ok(ChromeMessage::SearchFiles { query }) => {
+                // Out of the lock before the search: a walk publishing the
+                // next index must not wait on a scan of the last one.
+                let offered = hub.offered.lock().unwrap().clone();
+                offered
+                    .map(|offered| {
+                        let found = offered.search.find(&query, FOUND);
+                        HostMessage::FoundFiles {
+                            query,
+                            files: found.files,
+                            matched: u32::try_from(found.matched)
+                                .expect("a home of fewer than four billion paths"),
+                            indexing: offered.indexing,
+                        }
+                    })
+                    // Answered with nothing rather than with an empty list,
+                    // which is what a desktop with no index has to say -- no
+                    // HOME, or a home directory that would not open. "You have
+                    // no files" is that breakage wearing the face of an
+                    // ordinary answer: a shell told it would draw an empty
+                    // launcher and nobody would ever find the line that
+                    // explains it. Left unanswered, the panel still opens and
+                    // still takes a path, a URL or a query; what it has not
+                    // got is a list.
+                    .into_iter()
+                    .collect()
+            }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
@@ -5632,23 +5647,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     //
     // A desktop with no `HOME` has nothing to index. It is the one thing this
     // compositor reads from its environment that is not instrumentation --
-    // see `home_directory` -- and without it `list_files` goes on answering
+    // see `home_directory` -- and without it `search_files` goes on answering
     // nothing, which is what it did before this existed.
     match home_directory() {
         Some(home) => {
             let hub = data.state.hub.clone();
             thread::spawn(move || {
                 keep_the_index(home, kept_at(), |offered| {
-                    // Published for `list_files` to answer from *and*
-                    // broadcast, because the two reach different pages: a
-                    // chrome connected now is told, and one that reloads in an
-                    // hour asks. The list is cloned once for the copy that
-                    // stays behind.
-                    *hub.offered.lock().unwrap() = Some(offered.clone());
-                    hub.broadcast(HostMessage::Files {
-                        files: offered.files,
-                        indexing: offered.indexing,
-                    });
+                    // Published for `search_files` to answer from, and
+                    // nothing else: no page is told the index, only what its
+                    // own query found in it.
+                    *hub.offered.lock().unwrap() = Some(Arc::new(offered));
                 });
             });
         }

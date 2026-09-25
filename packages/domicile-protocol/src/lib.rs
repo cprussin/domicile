@@ -196,24 +196,23 @@ pub enum ChromeMessage {
     /// long as the desktop does, and `[theme]` is what it comes up as.
     SetTheme { theme: Theme },
 
-    /// What is there to open? Answered with [`HostMessage::Files`].
+    /// What is there to open that matches `query`? Answered with
+    /// [`HostMessage::FoundFiles`].
     ///
     /// A shell's launcher is a page, and a page has no filesystem: there is no
     /// `readdir` on `window.domicile` and this is deliberately not one. **It
     /// carries no path**, so nothing a page can say decides which directory is
     /// read — the compositor holds that policy, and the document served over
-    /// `domicile://` gains no reach into the filesystem by asking. A launcher
-    /// wants one list of what a user might open, not a directory browser, and
-    /// this is that list.
+    /// `domicile://` gains no reach into the filesystem by asking.
     ///
-    /// Asked whenever a shell wants the list — a page that has just reloaded
-    /// has none, and a launcher opening is when having one matters. It is no
-    /// longer the *only* way one arrives: the compositor keeps an index of the
-    /// home and broadcasts [`HostMessage::Files`] when that index changes, so
-    /// a panel that is already open fills in under the person typing into it.
-    /// This is still here because a broadcast only reaches the chromes that
-    /// were connected for it.
-    ListFiles,
+    /// **A query, not a request for the list.** The compositor keeps an index
+    /// of the whole home, which on a real one is hundreds of thousands of
+    /// paths; it used to cross into the page whole so the page could filter
+    /// it, and each crossing was a desktop that took no input until it was
+    /// over. The filter is the compositor's now — see
+    /// `domicile_host::file_search` — and all a page is ever told is what
+    /// matched.
+    SearchFiles { query: String },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -399,55 +398,38 @@ pub enum HostMessage {
     /// same question asked where the answer is known.
     FocusRequested { app_id: String },
 
-    /// What there is to open, answering [`ChromeMessage::ListFiles`].
+    /// What matched a [`ChromeMessage::SearchFiles`], and only that.
     ///
-    /// Paths relative to the home directory — `Notes/today.org` rather than
-    /// `/home/you/Notes/today.org` — because that is what a launcher draws and
-    /// because the part every row would share is the part no row needs. A
-    /// shell that opens one hands it straight back to `spawn`, and the
-    /// compositor's child inherits the home directory it was named from.
+    /// `query` is the one this answers, sent back so a shell can tell the
+    /// answer to what is in its box from the answer to a keystroke ago.
     ///
-    /// Sorted, and the order is the answer: see `domicile_host::file_index`,
-    /// which is what holds it, and `domicile_host::home_walk`, which is what
-    /// fills it.
+    /// `files` is the front of what matched: paths relative to the home
+    /// directory — `Notes/today.org` rather than `/home/you/Notes/today.org`
+    /// — in byte order, and a directory ends in `/`. A shell that opens one
+    /// hands it straight back to `spawn`, and the compositor's child inherits
+    /// the home directory it was named from. `matched` is how many there were
+    /// in all, which a launcher counts beside its box.
     ///
-    /// **Pushed as well as answered**, which it did not used to be. The
-    /// compositor holds an index of the home rather than walking it as the
-    /// panel opens, so there is something to push: it broadcasts this when the
-    /// boot walk ends and when what the home holds changes under a watch. A
-    /// shell still asks — a page that reloaded has no list — and gets the same
-    /// message back.
-    ///
-    /// `indexing` is whether this is all of it. **It is the difference between
-    /// an incomplete answer and a wrong one**: the list is a launcher's whole
-    /// evidence that a file exists, so one taken from an index still being
-    /// built has to arrive saying so, or a person who typed the name of a file
-    /// the walk has not reached yet is told — in the only language the panel
-    /// has — that they do not have it. A shell draws that as a line saying the
-    /// index is still being built; `packages/shell-manganese`'s launcher is
-    /// the worked example.
-    ///
-    /// An empty list is a home with nothing to offer, which is a real answer
-    /// rather than a failure — the same distinction [`HostMessage::Displays`]
-    /// draws. An empty list with `indexing` set is the other thing entirely: a
-    /// desktop that has only just started and has not looked yet.
-    Files {
+    /// `indexing` is whether the index this was found in is all of the home.
+    /// **It is the difference between an incomplete answer and a wrong one**:
+    /// a launcher's rows are its whole evidence that a file exists, so an
+    /// answer from an index still being built has to arrive saying so, or a
+    /// person who typed the name of a file the walk has not reached yet is
+    /// told — in the only language the panel has — that they do not have it.
+    /// A shell that is told this asks again; `packages/shell-manganese`'s
+    /// launcher is the worked example.
+    FoundFiles {
+        query: String,
         files: Vec<String>,
-        /// `#[serde(default)]` for the reason [`PROTOCOL_VERSION`] gives and
-        /// not as a compatibility floor: nothing can complete a handshake with
-        /// this build and then send a `files` without it. It is here so a line
-        /// that predates the field can still be *read* — by a captured
-        /// session, or by a hand-written fixture.
-        #[serde(default)]
+        matched: u32,
         indexing: bool,
     },
 
     /// The machine's battery: how full, and whether a lead is in.
     ///
-    /// **Pushed, and only pushed.** There is no `ListBattery` beside
-    /// [`ChromeMessage::ListFiles`]: a charge is one reading rather than a
-    /// list, and a page that has just loaded is caught up by the next one
-    /// without having to ask. The
+    /// **Pushed, and only pushed.** There is no `ListBattery`: a charge is
+    /// one reading rather than a list, and a page that has just loaded is
+    /// caught up by the next one without having to ask. The
     /// kernel announces a supply that changed and the compositor re-reads
     /// `/sys/class/power_supply` when it does, sending this if the reading
     /// moved — plus once more to a chrome that has just connected, so a page
@@ -489,9 +471,6 @@ pub enum HostMessage {
     /// is an event the compositor already
     /// hears; a shell that had to ask would be asking on a timer or on a
     /// keystroke, and either one draws a panel that is a moment out of date.
-    /// [`HostMessage::Files`] is pushed too and is still askable, because the
-    /// list is long enough that a chrome which missed a broadcast needs a way
-    /// to get one rather than waiting for the home to change.
     /// Sent whenever the history changes, and again to a chrome that has just
     /// connected — a page that reloaded would otherwise have an empty panel
     /// until the next copy.

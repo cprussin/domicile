@@ -4,7 +4,28 @@ import userEvent from "@testing-library/user-event";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
 
-const FILES = ["Notes/2026/april.org", "Notes/today.org", "src", "todo.txt"];
+const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
+
+/**
+ * The host's search over a home of `files`, sending at most two hundred of
+ * what matched the way the compositor does — every word, any order, any case.
+ */
+const searching =
+  (files: readonly string[], indexing: boolean) => (query: string) => {
+    const words = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) => word !== "");
+    const matched = files.filter((path) =>
+      words.every((word) => path.toLowerCase().includes(word)),
+    );
+    return Promise.resolve({
+      files: matched.slice(0, 200),
+      indexing,
+      matched: matched.length,
+      query,
+    });
+  };
 
 /** The panel open over a home with those files in it, recording what it launched. */
 const launcher = (files: readonly string[] = FILES, indexing = false) => {
@@ -12,8 +33,6 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
   const dismissed: true[] = [];
   render(
     <Launcher
-      files={files}
-      indexing={indexing}
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -21,6 +40,7 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
         launched.push(launch);
       }}
       open
+      search={searching(files, indexing)}
     />,
   );
   return {
@@ -28,6 +48,9 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
       screen.getByRole("combobox", { name: "Open a file, a URL, or search" }),
     dismissed,
     launched,
+    /** The rows, as they read, once the host has answered what the box says. */
+    rows: async () =>
+      (await screen.findAllByRole("option")).map((row) => row.textContent),
     user: userEvent.setup(),
   };
 };
@@ -45,28 +68,25 @@ describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
       <Launcher
-        files={FILES}
-        indexing={false}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
+        search={searching(FILES, false)}
       />,
     );
 
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("offers every file it was handed, named before it is placed", () => {
+  it("offers what the host found, named before it is placed", async () => {
     // A path is read from its end: the name is what was typed part of and the
     // directories above it are only there to tell two files of that name
     // apart, so a row is the two of them in that order rather than one line
     // of text handed to `text-overflow`. Nothing separates them in
     // `textContent` because what separates them on screen is the grid's gap.
-    launcher();
+    const panel = launcher();
 
-    expect(
-      screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual([
+    expect(await panel.rows()).toStrictEqual([
       "april.orgNotes/2026",
       "today.orgNotes",
       "src",
@@ -74,39 +94,54 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("narrows to the files still being asked about", async () => {
+  it("asks the host about what the box says", async () => {
     const panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
 
-    expect(
-      screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["april.orgNotes/2026", "today.orgNotes"]);
+    expect(await panel.rows()).toStrictEqual([
+      "april.orgNotes/2026",
+      "today.orgNotes",
+    ]);
   });
 
   it("edits the file that was clicked", async () => {
     const panel = launcher();
 
-    await panel.user.click(screen.getByRole("option", { name: "todo.txt" }));
+    await panel.user.click(
+      await screen.findByRole("option", { name: "todo.txt" }),
+    );
 
     expect(panel.launched).toStrictEqual([Launch.Edited("todo.txt")]);
   });
 
-  it("edits the first match on Enter, which is what typing a name is for", () => {
+  it("edits a directory without the slash the host marked it with", async () => {
+    const panel = launcher();
+
+    await panel.user.click(await screen.findByRole("option", { name: "src" }));
+
+    expect(panel.launched).toStrictEqual([Launch.Edited("src")]);
+  });
+
+  it("edits the first match on Enter, which is what typing a name is for", async () => {
     // The whole reason the list is ranked at all: a person types enough of a
     // name to see it at the top and presses Enter without ever looking at the
     // keyboard again.
     const panel = launcher();
 
-    return panel.user.type(panel.box(), "today{Enter}").then(() => {
-      expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
-    });
+    await panel.user.type(panel.box(), "today");
+    await panel.rows();
+    await panel.user.keyboard("{Enter}");
+
+    expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
   });
 
   it("edits the row the arrow keys walked to instead", async () => {
     const panel = launcher();
 
-    await panel.user.type(panel.box(), "notes{ArrowDown}{Enter}");
+    await panel.user.type(panel.box(), "notes");
+    await panel.rows();
+    await panel.user.keyboard("{ArrowDown}{Enter}");
 
     expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
   });
@@ -151,7 +186,7 @@ describe("Launcher", () => {
 
     await panel.user.type(panel.box(), "notes");
 
-    expect(screen.getByText("2 of 4")).toBeInTheDocument();
+    expect(await screen.findByText("2 matched")).toBeInTheDocument();
   });
 
   it("says what Enter would do with a query no file matches", async () => {
@@ -178,28 +213,30 @@ describe("Launcher", () => {
     });
     const panel = launcher();
 
+    await panel.rows();
     await panel.user.type(panel.box(), "{ArrowDown}{ArrowDown}");
     scrollIntoView.mockRestore();
 
     expect(scrolled.at(-1)).toBe("today.orgNotes");
   });
 
-  it("says so while the desktop is still working out what there is", () => {
+  it("says so while the desktop is still working out what there is", async () => {
     // WITHOUT THIS THE PANEL LIES BY OMISSION. A list that is a third of a
     // home looks exactly like a home with a third as much in it, so a person
     // who types the name of a file the walk has not reached is told they do
     // not have it — and the evidence that they are wrong is nowhere on screen.
     launcher(["src"], true);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(await screen.findByRole("status")).toHaveTextContent(
       "Still finding your files",
     );
   });
 
-  it("says nothing about an index that is not being built", () => {
+  it("says nothing about an index that is not being built", async () => {
     // Which is every launcher after the first seconds of a session. A notice
     // that stayed up would be a panel that never stops apologizing.
-    launcher();
+    const panel = launcher();
+    await panel.rows();
 
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -217,20 +254,17 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([Launch.Edited("Scratch")]);
   });
 
-  it("draws a bounded number of rows however big the home is", () => {
-    // A HOME IS A HUNDRED THOUSAND PATHS NOW. The list used to be a few
-    // hundred because the walk stopped a level down; an index of the whole
-    // home, drawn a row per path, is a panel that hangs the shell on the
-    // keystroke that opens it. The rows past the cap are not rows anybody
-    // scrolls to — what narrows the list is typing — and the counter beside
-    // the box still says how many there really are, so the cap is never
-    // mistaken for the answer.
+  it("draws what the host sent and counts everything it matched", async () => {
+    // A HOME IS A HUNDRED THOUSAND PATHS. The host sends the front of what
+    // matched rather than all of it — the rows past it are not rows anybody
+    // scrolls to, what narrows the list is typing — and the counter beside the
+    // box says how many there really are, so the front is never mistaken for
+    // the answer.
     const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
+    const panel = launcher(home);
 
-    launcher(home);
-
-    expect(screen.getAllByRole("option")).toHaveLength(200);
-    expect(screen.getByText("500 of 500")).toBeInTheDocument();
+    expect(await panel.rows()).toHaveLength(200);
+    expect(screen.getByText("500 matched")).toBeInTheDocument();
   });
 
   it("keeps the arrow keys inside the rows it drew", async () => {
@@ -241,6 +275,7 @@ describe("Launcher", () => {
     const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
     const panel = launcher(home);
 
+    await panel.rows();
     await panel.user.keyboard("{ArrowUp}{Enter}");
 
     expect(panel.launched).toStrictEqual([Launch.Edited("file-199")]);
