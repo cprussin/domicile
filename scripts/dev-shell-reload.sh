@@ -102,8 +102,14 @@ while [ ! -s "$SOCKET_FILE" ]; do
   sleep "$TICK"
 done
 
-echo "reloading $MODULE on every build"
+# THE STAMP FIRST AND THE LINE SECOND, so the line means what a reader takes
+# it to mean: everything built after it is a build this loop has not already
+# counted as the shell the desktop came up on. The other order left a window
+# between the two in which a build was swallowed by the baseline, and
+# `scripts/test-dev-shell.sh` used to bet `sleep 0.5` that bash got here
+# first.
 SERVED="$(stamp)"
+echo "reloading $MODULE on every build"
 while true; do
   sleep "$TICK"
   LATEST="$(stamp)"

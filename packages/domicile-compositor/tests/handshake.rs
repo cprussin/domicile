@@ -18,7 +18,7 @@ mod running;
 
 use std::io::BufReader;
 use std::os::unix::net::UnixStream;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use domicile_protocol::{ChromeMessage, HostMessage, PROTOCOL_VERSION};
 use domicile_test_chrome::{hear, say, ChromeError};
@@ -49,6 +49,23 @@ size = [2560, 1440]
 /// *first*, so by the time this is spent the desktop has already gone out to
 /// everyone the compositor meant to send it to.
 const LONG_ENOUGH_TO_HAVE_ARRIVED: Duration = Duration::from_secs(2);
+
+/// How long a message that *is* coming is waited for.
+///
+/// The other question entirely, and it must not be answered with the number
+/// above. A reconfigure reaches the chromes through the config watcher, which
+/// coalesces a burst before it acts on it and gives up coalescing after two
+/// seconds — and the run directory this fixture writes the config into is
+/// also where the session document, the chrome socket and the cache live, so
+/// it never goes quiet and the reload rides that cap every time. Measured on
+/// an idle machine, the desktop arrives 1.94s to 1.99s after the rename, in
+/// sixty-eight runs out of sixty-eight.
+///
+/// So a wait of two seconds for it is not a wait at all: it is one
+/// two-second window against another, decided by whichever timer the kernel
+/// serves first. Generous here instead, because this one only ever costs
+/// anything when the test is failing anyway.
+const AS_LONG_AS_THE_COMPOSITOR_TAKES: Duration = Duration::from_secs(20);
 
 /// A chrome that speaks a version this build does not is answered, and then
 /// left out of the desktop's conversation.
@@ -152,10 +169,29 @@ fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
 
     compositor.reconfigure(TWO_DISPLAYS);
 
-    let described = twice.count(|message| matches!(message, HostMessage::Displays { .. }));
+    // THE FIRST ONE IS WAITED FOR, NOT TIMED, and it is the only test here
+    // that has to say so: the other four keep an accepted chrome alongside
+    // and wait on *that* before they count, so the broadcast has demonstrably
+    // happened by the time their `count` starts. This one counts what arrived
+    // on its own socket — see the note on the demoted chrome below — so
+    // counting straight from the reconfigure was a two-second timeout racing
+    // the compositor's own two-second coalescing cap, and a machine with
+    // anything else running on it decided that race the other way: naught
+    // descriptions, reported as a compositor that never described the desktop
+    // at all.
+    twice.await_message(|message| matches!(message, HostMessage::Displays { .. }));
+
+    // And now the duplicate, which is the thing this test is actually about.
+    // A timeout is the right instrument for *this* half and the wrong one for
+    // the half above, because a second description is what must not come —
+    // and it would ride the same walk of the broadcast list as the first, so
+    // by now it is either already on the socket or was never written.
+    let described_again = twice.count(|message| matches!(message, HostMessage::Displays { .. }));
     assert_eq!(
-        described, 1,
-        "one desktop, described {described} times down one socket"
+        described_again,
+        0,
+        "one desktop, described {} times down one socket",
+        described_again + 1
     );
 }
 
@@ -295,6 +331,29 @@ impl Raw {
     /// stopped rather than paused.
     fn drain(&mut self) {
         while self.next_message().is_some() {}
+    }
+
+    /// The next message `wanted` accepts, however long the compositor takes.
+    ///
+    /// Reads past the short timeout rather than raising it: that timeout is
+    /// the only thing that lets [`Raw::count`] and [`Raw::drain`] stop at all,
+    /// and this is the opposite question — a message that is coming, on a
+    /// machine that may be slow to send it. Everything read on the way is
+    /// discarded, which is what every caller of this wants: the counting
+    /// starts afterward.
+    fn await_message(&mut self, wanted: impl Fn(&HostMessage) -> bool) {
+        let until = Instant::now() + AS_LONG_AS_THE_COMPOSITOR_TAKES;
+        loop {
+            match self.next_message() {
+                Some(message) if wanted(&message) => return,
+                Some(_) => {}
+                None => assert!(
+                    Instant::now() < until,
+                    "the compositor sent nothing that was waited for in \
+                     {AS_LONG_AS_THE_COMPOSITOR_TAKES:?}"
+                ),
+            }
+        }
     }
 
     /// How many messages `wanted` accepts before the socket goes quiet.
