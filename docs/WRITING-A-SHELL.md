@@ -39,9 +39,10 @@ measured bit-exact against an ordinary element laid out beside it, on a GPU,
 and a submitted frame reaches the screen in one display frame
 ([the measurements](/docs/architecture/ENGINE-FORK.md)). Two things are not
 promised: a client that draws in shared memory rather than on the GPU gets a
-blank window, and a `backdrop-filter` over an `<app>` should work and has not
-been run — [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md)
-keeps that list.
+blank window, and a `backdrop-filter` over an `<app>` is asserted by a guard
+rather than reported as a number —
+[WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) keeps that
+list.
 
 **One CSS construct is drawn right and clicked wrong: a perspective.** A window
 projected by a `perspective` above it — or by a `perspective()` in a transform
