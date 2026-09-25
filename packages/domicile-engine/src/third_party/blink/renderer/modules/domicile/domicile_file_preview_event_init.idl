@@ -1,0 +1,10 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+dictionary DomicileFilePreviewEventInit : EventInit {
+  DOMString path = "";
+  DOMString kind = "";
+  DOMString text = "";
+  sequence<DOMString> entries = [];
+  DOMHighResTimeStamp arrival = 0;
+};

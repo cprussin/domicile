@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_file_preview_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
@@ -134,6 +135,14 @@ void DomicileHost::searchFiles(ScriptState*,
                                ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->SearchFiles(query);
+  }
+}
+
+void DomicileHost::previewFile(ScriptState*,
+                               const String& path,
+                               ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->PreviewFile(path);
   }
 }
 
@@ -398,6 +407,18 @@ void DomicileHost::Files(const String& query,
                          base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
       event_type_names::kFiles, query, files, matched, indexing,
+      Arrival(arrival)));
+}
+
+// An answer, like Files: the path is the one previewFile() was given, and it
+// comes back so a launcher can drop the preview of a row it has since left.
+void DomicileHost::FilePreview(const String& path,
+                               const String& kind,
+                               const String& text,
+                               const Vector<String>& entries,
+                               base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileFilePreviewEvent>(
+      event_type_names::kFilepreview, path, kind, text, entries,
       Arrival(arrival)));
 }
 

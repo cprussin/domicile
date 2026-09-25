@@ -35,9 +35,10 @@ export type Surface = (typeof SURFACES)[number];
  *
  * `lg` is for a popup whose rows carry more than one thing to read — a
  * launcher's file name and the directory beside it — where `md` would leave
- * room for only one of them.
+ * room for only one of them. `xl` is for one that shows two things side by
+ * side — a launcher's rows and a preview of the one it is on.
  */
-export const SIZES = ["md", "lg"] as const;
+export const SIZES = ["md", "lg", "xl"] as const;
 export type Size = (typeof SIZES)[number];
 
 const CloseButton = (props: ComponentProps<typeof Button>) => (
@@ -198,6 +199,9 @@ const popupStyles = flex({
   },
   "&[data-size=lg]": {
     inlineSize: "min({spacing.180}, 92vw)",
+  },
+  "&[data-size=xl]": {
+    inlineSize: "min({spacing.280}, 92vw)",
   },
   "&[data-surface=glass]": {
     _before: {

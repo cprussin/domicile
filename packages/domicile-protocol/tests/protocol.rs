@@ -8,7 +8,7 @@
 
 use domicile_protocol::{
     negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    HostMessage, PROTOCOL_VERSION,
+    FilePreview, HostMessage, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -68,6 +68,9 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::SearchFiles {
         query: "plan".into(),
     });
+    chrome_round_trip(&ChromeMessage::PreviewFile {
+        path: "Notes/today.org".into(),
+    });
 }
 
 /// The launcher's ask carries a query and no path, and that is the security
@@ -96,6 +99,45 @@ fn spawn_wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "spawn");
     assert_eq!(v["command"][0], "kitty");
+}
+
+/// A preview names the one path it is about, as a search answered it.
+///
+/// Unlike `search_files` this does carry a path, and the compositor answers
+/// only for one its index holds — so it reads nothing a search could not
+/// already have named.
+#[test]
+fn asking_for_a_preview_names_the_path_a_search_answered() {
+    let v = serde_json::to_value(ChromeMessage::PreviewFile {
+        path: "Notes/today.org".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({"type": "preview_file", "path": "Notes/today.org"})
+    );
+}
+
+/// The preview's kind sits beside its path rather than nested under it, so
+/// the engine reads one flat object the way it reads every other message.
+#[test]
+fn a_preview_is_flat_on_the_wire() {
+    let v = serde_json::to_value(HostMessage::FilePreview {
+        path: "Notes".into(),
+        preview: FilePreview::Directory {
+            entries: vec!["2026/".into(), "today.org".into()],
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "file_preview",
+            "path": "Notes",
+            "kind": "directory",
+            "entries": ["2026/", "today.org"],
+        })
+    );
 }
 
 #[test]
@@ -146,6 +188,21 @@ fn host_messages_round_trip() {
         matched: 2,
         indexing: false,
     });
+    for preview in [
+        FilePreview::Text {
+            text: "* today".into(),
+        },
+        FilePreview::Directory {
+            entries: vec!["2026/".into()],
+        },
+        FilePreview::Binary,
+        FilePreview::Unreadable,
+    ] {
+        host_round_trip(&HostMessage::FilePreview {
+            path: "Notes/today.org".into(),
+            preview,
+        });
+    }
     host_round_trip(&HostMessage::Clipboard {
         entries: vec![ClipboardEntry {
             id: 3,

@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { FilePreview } from "@domicile/chrome-sdk/file-preview";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
@@ -27,6 +28,16 @@ const searching =
     });
   };
 
+/** What the host says each path holds: its own name, as text. */
+const previewing = (path: string) =>
+  Promise.resolve({
+    path,
+    preview:
+      path === "src"
+        ? FilePreview.Directory(["domicile/", "README.md"])
+        : FilePreview.Text(`contents of ${path}`),
+  });
+
 /** The panel open over a home with those files in it, recording what it launched. */
 const launcher = (files: readonly string[] = FILES, indexing = false) => {
   const launched: Launch[] = [];
@@ -40,6 +51,7 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
         launched.push(launch);
       }}
       open
+      preview={previewing}
       search={searching(files, indexing)}
     />,
   );
@@ -55,14 +67,8 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
   };
 };
 
-/**
- * The line under the list saying what Enter would do, read whole.
- *
- * `getByText` matches an element's own text nodes, and this line is a glyph,
- * a verb and what the verb is about — so it is the paragraph's `textContent`
- * that has the sentence in it.
- */
-const promised = () => screen.getByRole("paragraph").textContent;
+/** The pane showing what the highlighted row is. */
+const previewPane = () => screen.getByRole("region", { name: "Preview" });
 
 describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
@@ -71,6 +77,7 @@ describe("Launcher", () => {
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
+        preview={previewing}
         search={searching(FILES, false)}
       />,
     );
@@ -78,10 +85,10 @@ describe("Launcher", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("opens wide, so a row has room for its name and its directory", () => {
+  it("opens wide, so the rows and a preview both have room", () => {
     launcher();
 
-    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("lg");
+    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
   });
 
   it("offers what the host found, named before it is placed", async () => {
@@ -108,6 +115,33 @@ describe("Launcher", () => {
     expect(await panel.rows()).toStrictEqual([
       "april.orgNotes/2026",
       "today.orgNotes",
+      "Search for notes",
+    ]);
+  });
+
+  it("offers a URL above the file it names, and a search below both", async () => {
+    // A URL typed whole is a URL meant, so it is on top — but the file of the
+    // same name and a search for the words are both still one arrow away.
+    const panel = launcher(["example.com"]);
+
+    await panel.user.type(panel.box(), "example.com");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Go to https://example.com",
+      "example.com",
+      "Search for example.com",
+    ]);
+  });
+
+  it("searches for a name that matched a file, when that row is chosen", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "today");
+    await panel.rows();
+    await panel.user.keyboard("{ArrowDown}{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Browsed("https://google.com/search?q=today"),
     ]);
   });
 
@@ -195,15 +229,60 @@ describe("Launcher", () => {
     expect(await screen.findByText("2 matched")).toBeInTheDocument();
   });
 
-  it("says what Enter would do with a query no file matches", async () => {
-    // The one thing a panel with an empty list cannot otherwise show: the
-    // box still does something on Enter, and what that is is the whole
-    // question the user is holding while they type.
-    const panel = launcher();
+  describe("the preview", () => {
+    it("shows what the highlighted file holds", async () => {
+      const panel = launcher();
 
-    await panel.user.type(panel.box(), "example.com");
+      await panel.user.type(panel.box(), "today");
 
-    expect(promised()).toBe("Go to https://example.com");
+      expect(
+        await within(previewPane()).findByText("contents of Notes/today.org"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows what the highlighted directory holds", async () => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "src");
+
+      expect(
+        await within(previewPane()).findByText("README.md"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the highlighted site in a view of its own", async () => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "example.com");
+
+      expect(
+        (await within(previewPane()).findByTitle("https://example.com"))
+          .tagName,
+      ).toBe("WEBVIEW");
+    });
+
+    it("follows the highlight onto a search", async () => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "today");
+      await panel.rows();
+      await panel.user.keyboard("{ArrowDown}");
+
+      expect(
+        await within(previewPane()).findByTitle(
+          "https://google.com/search?q=today",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("shows nothing while no row is highlighted", async () => {
+      // An empty box has chosen nothing, and previewing whatever sorted to the
+      // top of the home would be the launcher choosing for it.
+      const panel = launcher();
+      await panel.rows();
+
+      expect(previewPane()).toBeEmptyDOMElement();
+    });
   });
 
   it("brings the row the arrow keys reached into view", async () => {
