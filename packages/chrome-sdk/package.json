@@ -106,6 +106,7 @@
   "files": [
     "dist/**"
   ],
+  "license": "MIT",
   "name": "@domicile/chrome-sdk",
   "private": false,
   "publishConfig": {

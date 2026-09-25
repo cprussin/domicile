@@ -1,0 +1,19 @@
+# domicile-engine's license
+
+This directory is MIT, like the rest of the repo, except where it is Chromium.
+
+- `src/` is MIT, per `/LICENSE`.
+- Each patch in `patches/` edits a file Chromium owns, and that file keeps its
+  license:
+  - Most are Chromium's BSD-3-Clause, in `LICENSE.chromium`. The lines the
+    patch adds are MIT.
+  - Some are Blink files inherited from WebKit or KHTML — `style_adjuster.cc`,
+    `html.css` and `html_frame_element_base.h` among them — which are
+    LGPL-2.0-or-later, so the patch to one is too.
+  - A file a patch adds with Chromium's header (`input_device_opener.cc`) is
+    Chromium's BSD-3-Clause.
+- Everything else here (`scripts/`, `upstream/`, `README.md`, the Nix files) is
+  MIT.
+
+A built engine is Chromium, with all of Chromium's third-party licenses. Its
+own `about:credits` lists them.
