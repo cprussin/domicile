@@ -42,6 +42,14 @@ FILE=packages/domicile-engine/engine-release.nix
 generated="$(mktemp)"
 cp "$FILE" "$generated"
 
+# And put the merge ref's copy back, because a checkout refuses to walk over a
+# modified file whose content it has to change — which is what this is as soon
+# as main has repinned since the branch was cut, and `engine-release.nix` is
+# the only file the generator writes. Nothing is lost in the discard: the bytes
+# it produced are in "$generated" and go onto the tip below. Without this the
+# job fell over here having already built Chromium and published the engine.
+git checkout -q -- "$FILE"
+
 # Its own identity, so a `git am` or a `commit` here cannot fail on a runner
 # whose HOME is deleted on every start. See engine.yml, where this failed the
 # apply step in zero seconds and looked like the patches not applying.
