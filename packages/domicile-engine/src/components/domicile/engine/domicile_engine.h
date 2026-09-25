@@ -57,6 +57,17 @@ typedef uint32_t DomicileClipboard;
 // zwp_primary_selection_device_v1.
 #define DOMICILE_CLIPBOARD_PRIMARY 1u
 
+// Which way up a monitor is bolted to the desk, as the turn what is drawn on it
+// takes to come out upright -- the `wl_output.transform` rotations, in that
+// order, which count counterclockwise. A plain integer for the reason
+// DomicileClipboard above is one.
+typedef uint32_t DomicileDisplayTransform;
+
+#define DOMICILE_DISPLAY_TRANSFORM_NORMAL 0u
+#define DOMICILE_DISPLAY_TRANSFORM_ROTATE_90 1u
+#define DOMICILE_DISPLAY_TRANSFORM_ROTATE_180 2u
+#define DOMICILE_DISPLAY_TRANSFORM_ROTATE_270 3u
+
 // A surface, as the compositor names one. Zero is never valid, so it doubles as
 // the failure return of domicile_surface_create.
 typedef uint32_t DomicileSurfaceId;
@@ -155,6 +166,14 @@ typedef struct DomicileDisplayLayout {
   // zero is what to send instead of one.
   int32_t x;
   int32_t y;
+  // Which way up the monitor is, and how many of its pixels one logical pixel
+  // is worth. THE BROWSER DRAWS BOTH: it turns and scales the window it puts
+  // on this connector, so the page in it lays out upright in the logical
+  // pixels the desktop is described in, and a shell never has to know the
+  // monitor is on its side. Read for a dark connector too, because its window
+  // outlives the dark.
+  DomicileDisplayTransform transform;
+  double scale;
 } DomicileDisplayLayout;
 
 // What the browser has to tell the compositor. Each maps onto a Wayland request
@@ -216,6 +235,20 @@ typedef struct DomicileEngineCallbacks {
                  DomicileClipboard clipboard,
                  const char* text,
                  size_t length);
+  // `configure`, and the scale the box was laid out at: how many of the
+  // page's device pixels one of its CSS pixels is. A desk of several monitors
+  // is several pages, each drawn at its own monitor's scale, so the box of one
+  // window comes back down to logical pixels by its own page's scale and not
+  // by whichever page last said what its ratio was.
+  //
+  // Called INSTEAD of `configure` where it is set, and last in the struct for
+  // the reason stated above it: an engine that predates it reads the prefix
+  // and goes on calling `configure`.
+  void (*configure_at)(void* user_data,
+                       DomicileSurfaceId surface,
+                       uint32_t width,
+                       uint32_t height,
+                       double scale);
 } DomicileEngineCallbacks;
 
 // Joins the browser's mojo graph over the named socket the browser is

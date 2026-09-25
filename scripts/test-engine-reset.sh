@@ -115,6 +115,16 @@ mkdir -p "$TREE/.git/rebase-apply"
 expect "a tree left mid-\`git am\` is reset rather than refused" ok \
   "$(status "$(run_reset)")"
 
+# A git killed mid-operation leaves .git/index.lock, and every later git in the
+# tree refuses with "index.lock: File exists" — runs 36165934836 and
+# 36172865348. The job holds the tree lock by now, so the lock is stale.
+lay_the_series_down
+touch "$TREE/.git/index.lock"
+stale="$(run_reset)"
+expect "a tree with a stale index.lock is reset rather than refused" ok \
+  "$(status "$stale")"
+contains "and says it removed the lock" "removed a stale" "$stale"
+
 # The identity `git am` needs, in the checkout's own config: the runner has no
 # ~/.gitconfig and never will, and apply.sh runs inside a bwrap FHS shell that
 # curates the environment.

@@ -2050,6 +2050,7 @@ impl DomicileCompositor {
                     surface,
                     width,
                     height,
+                    scale,
                 } => {
                     let app_id = self
                         .engine
@@ -2067,8 +2068,16 @@ impl DomicileCompositor {
                     // IN LOGICAL ONES. Sent as it arrives, a window on a 1.2x
                     // display is told to lay out 1.2x the content its box
                     // holds and draws every bit of it 1.2x too small.
-                    let (width, height) =
-                        crate::scale::logical_box((width, height), self.device_pixel_ratio);
+                    //
+                    // By the scale of the page that laid the box out, which
+                    // the engine says with it: a desk of several monitors is
+                    // several pages at several scales, and the last one to
+                    // report its ratio is not the one this box is on. The
+                    // reported ratio is only for an engine too old to say.
+                    let (width, height) = crate::scale::logical_box(
+                        (width, height),
+                        scale.unwrap_or(self.device_pixel_ratio),
+                    );
                     tracing::debug!(%app_id, width, height, "engine configure -> client");
                     toplevel.with_pending_state(|state| {
                         state.size = Some((width as i32, height as i32).into());
@@ -3155,7 +3164,7 @@ impl DomicileCompositor {
             return;
         };
         if self.the_screens_are_dark() {
-            let dark = darkened(&self.engine_displays);
+            let dark = darkened(&self.engine_displays, self.screens.scanout());
             if !dark.is_empty() {
                 session.configure_displays(&dark);
             }

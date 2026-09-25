@@ -34,8 +34,9 @@ void ExternalSurfaceProvider::Embed(
     const viz::FrameSinkId& parent_frame_sink_id,
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Size& size,
+    double scale,
     EmbedCallback callback) {
-  broker_->Embed(app_id, parent_frame_sink_id, local_surface_id, size,
+  broker_->Embed(app_id, parent_frame_sink_id, local_surface_id, size, scale,
                  std::move(callback));
 }
 

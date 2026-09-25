@@ -468,7 +468,11 @@ impl Layout {
 /// wide. The engine's is this one: physical pixels, untuned and unturned,
 /// because that is what a CRTC scans out however the desktop above chooses to
 /// read it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Except that it carries the turn and the scale too: those are how the
+/// engine draws this connector's window, which is what makes the page in it
+/// logical and upright without a shell doing anything.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Scanout {
     /// The display's output name — `drm-<id>` on a tty — which is how the
     /// engine that reported the monitor knows it.
@@ -488,6 +492,13 @@ pub struct Scanout {
     /// than one that is merely off — the first of them wins every lookup,
     /// including the one that sizes the window the desktop is drawn in.
     pub origin: (i32, i32),
+    /// Which way up the monitor is. The engine turns this connector's window
+    /// by it, so a page lays out upright and never hears about it.
+    pub transform: Transform,
+    /// Device pixels per logical pixel, which the engine draws this
+    /// connector's window at -- so a page lays out in the logical pixels the
+    /// desktop is described in rather than in the mode's.
+    pub scale: f64,
 }
 
 /// One display of an applied profile, placed in the desktop's own coordinates.
@@ -615,6 +626,8 @@ fn scanout(
                     .find(|(name, _)| *name == display.name)
                     .map(|(_, origin)| *origin)
                     .expect("every display the profile names is in the row"),
+                transform: placement.transform,
+                scale: placement.scale,
             }
         })
         .collect())

@@ -35,6 +35,7 @@ use domicile_protocol::HostMessage;
 
 use crate::engine::{Connector, Display};
 use crate::ClientRequest;
+use domicile_config::Transform;
 
 /// What the screens have to do, on the one turn the answer changed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -292,13 +293,25 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
 /// [`Engine::configure_displays`](crate::engine::Engine::configure_displays).
 /// That is a nested run, whose screens are the host's monitors and never this
 /// compositor's to blank.
-pub fn darkened(displays: &[Display]) -> Vec<Connector> {
+///
+/// **THE TURN AND THE SCALE ARE KEPT**, from `scanout` where it names the
+/// connector. The engine draws a connector's window turned and scaled by them,
+/// and the window outlives the dark: dropping them would lay the page out
+/// again at the mode's own pixels, and back again on waking, for a screen
+/// nobody is looking at. A connector `scanout` does not name was never turned
+/// or scaled, so it is left that way.
+pub fn darkened(displays: &[Display], scanout: &[Connector]) -> Vec<Connector> {
     displays
         .iter()
-        .map(|display| Connector {
-            id: display.id,
-            enabled: false,
-            origin: display.position,
+        .map(|display| {
+            let drawn = scanout.iter().find(|connector| connector.id == display.id);
+            Connector {
+                id: display.id,
+                enabled: false,
+                origin: display.position,
+                transform: drawn.map_or(Transform::Normal, |connector| connector.transform),
+                scale: drawn.map_or(1.0, |connector| connector.scale),
+            }
         })
         .collect()
 }
@@ -333,6 +346,7 @@ mod tests {
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::engine::{Clipboard, Connector, Display};
     use crate::ClientRequest;
+    use domicile_config::Transform;
 
     const AFTER: Duration = Duration::from_secs(600);
 
@@ -635,19 +649,45 @@ mod tests {
         // answers by lighting what the hardware reports -- the exact opposite
         // of what a blanked desktop is asking for.
         assert_eq!(
-            darkened(&[monitor(3, (0, 0)), monitor(7, (1920, 0))]),
+            darkened(&[monitor(3, (0, 0)), monitor(7, (1920, 0))], &[]),
             vec![
                 Connector {
                     id: 3,
                     enabled: false,
                     origin: (0, 0),
+                    transform: Transform::Normal,
+                    scale: 1.0,
                 },
                 Connector {
                     id: 7,
                     enabled: false,
                     origin: (1920, 0),
+                    transform: Transform::Normal,
+                    scale: 1.0,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn a_dark_connector_keeps_the_turn_and_scale_its_window_is_drawn_at() {
+        // The engine draws a connector's window turned and scaled, and the
+        // window outlives the dark: a connector turned off with neither would
+        // relay the page out at the mode's own pixels and back again on the
+        // way out of it, for a screen nobody is looking at.
+        let lit = Connector {
+            id: 7,
+            enabled: true,
+            origin: (1920, 0),
+            transform: Transform::Rotate270,
+            scale: 1.2,
+        };
+        assert_eq!(
+            darkened(&[monitor(7, (1920, 0))], &[lit]),
+            vec![Connector {
+                enabled: false,
+                ..lit
+            }]
         );
     }
 
@@ -655,7 +695,7 @@ mod tests {
     fn a_desktop_with_no_monitors_read_has_nothing_to_turn_off() {
         // A nested run, where the screens belong to the host's compositor and
         // this one has never been told about a connector.
-        assert!(darkened(&[]).is_empty());
+        assert!(darkened(&[], &[]).is_empty());
     }
 
     #[test]
