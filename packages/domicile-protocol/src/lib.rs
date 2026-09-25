@@ -196,6 +196,20 @@ pub enum ChromeMessage {
     /// long as the desktop does, and `[theme]` is what it comes up as.
     SetTheme { theme: Theme },
 
+    /// This page is holding its old frame for the theme it was told: turn the
+    /// desk's windows over now.
+    ///
+    /// Sent from inside the shell's wipe, once the frame it wipes away from is
+    /// captured. A window that turned before then is in that frame already
+    /// turned, and the wipe passes over it rather than across it. The
+    /// compositor waits for every chrome on the desk -- or for
+    /// `domicile_host::theme_turnover::CAPTURE_WITHIN` -- then tells the
+    /// clients, and answers with [`HostMessage::WindowsTheme`].
+    ///
+    /// Carries the theme it is for, so a capture for a theme the desk has
+    /// already moved past is not counted towards the next one.
+    ThemeCaptured { theme: Theme },
+
     /// What is there to open that matches `query`? Answered with
     /// [`HostMessage::FoundFiles`].
     ///
@@ -575,6 +589,22 @@ pub enum HostMessage {
     /// its decision rather than the page's, and no message here makes a page
     /// the thing that says no. `ROADMAP.md` carries that too.
     Idle { idle: bool },
+
+    /// Which way round the desk's *windows* are drawn now.
+    ///
+    /// [`HostMessage::Theme`]'s other half. The chrome turns over when it is
+    /// told the theme; the windows turn over once every chrome has sent
+    /// [`ChromeMessage::ThemeCaptured`], so a shell's wipe can pass across
+    /// them. This is sent once they have had their chance to repaint: the
+    /// settings portal told, each mapped window's next frame committed or
+    /// `domicile_host::theme_turnover::REPAINT_WITHIN` gone. The browser
+    /// process takes the scheme its own pages are drawn in from it, and a
+    /// shell holding its wipe lets go on it.
+    ///
+    /// Also sent to a chrome that has just connected, beside
+    /// [`HostMessage::Theme`], because the browser has no other way to learn
+    /// what its pages should be drawn in.
+    WindowsTheme { theme: Theme },
 }
 
 /// One thing that was copied, as the shell is told about it.
@@ -822,6 +852,19 @@ mod wire_names {
         assert_eq!(
             serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
             ChromeMessage::SetTheme {
+                theme: Theme::Light
+            }
+        );
+    }
+
+    /// The exact JSON the SDK sends when a page's old frame is held, spelled
+    /// out, for [`the_theme_the_sdk_sends_parses`]'s reason.
+    #[test]
+    fn the_capture_the_sdk_sends_parses() {
+        let sent = r#"{"type":"theme_captured","theme":"light"}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::ThemeCaptured {
                 theme: Theme::Light
             }
         );

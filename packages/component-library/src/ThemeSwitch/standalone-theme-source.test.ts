@@ -23,6 +23,12 @@ describe(standaloneThemeSource, () => {
     expect(standaloneThemeSource().theme).toBe("dark");
   });
 
+  it("has no windows to wait for", async () => {
+    // A page with no desk has nothing behind its wipe but itself, so the
+    // wipe goes ahead at once.
+    await standaloneThemeSource().turnWindows("light");
+  });
+
   it("stops telling a handler that let go", () => {
     // A provider that unmounted while its source outlived it would otherwise
     // keep being told, and would set state on a tree that is gone.

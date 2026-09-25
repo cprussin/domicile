@@ -565,6 +565,12 @@ export type DomicileHostEventMap = {
    */
   idle: DomicileIdleEvent;
   /**
+   * Which way round the desk's windows are drawn: `theme`'s other half. It
+   * arrives once they have turned — see {@link DomicileHost.themeCaptured} —
+   * and on connecting.
+   */
+  windowstheme: DomicileThemeEvent;
+  /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
    * is now.
@@ -701,6 +707,18 @@ export type DomicileHost = {
    * is what the desk comes up on, and a toggle lasts as long as the desktop.
    */
   setTheme(theme: Theme): void;
+
+  /**
+   * This page's old frame is held for `theme`: turn the desk's windows now.
+   *
+   * Called from inside a shell's wipe, once the frame it wipes away from is
+   * captured. The windows are in that frame, so they have to still be drawn
+   * the old way when it is taken and the new way when the wipe starts — which
+   * is only true if they are told in between. The compositor waits for every
+   * chrome on the desk (or gives up waiting), tells the windows, and answers
+   * with a `windowstheme` event once they have repainted.
+   */
+  themeCaptured(theme: Theme): void;
 
   /**
    * Route a key combination to the page rather than to the focused client.
