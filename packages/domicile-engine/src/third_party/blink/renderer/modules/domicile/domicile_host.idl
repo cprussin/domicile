@@ -118,6 +118,16 @@
   [CallWith=ScriptState, RaisesException] undefined setTheme(
       DomicileTheme theme);
 
+  // This page's old frame is held for `theme`: turn the desk's windows now.
+  //
+  // Called from inside a shell's wipe, once the frame it wipes away from is
+  // captured, so that the wipe passes across windows that turn inside it
+  // rather than over windows that had already turned. Answered with a
+  // `windowstheme` event once every chrome has called it and the windows have
+  // had their chance to repaint -- or once the compositor stopped waiting.
+  [CallWith=ScriptState, RaisesException] undefined themeCaptured(
+      DomicileTheme theme);
+
   // Route a key combination to the page rather than to the focused client.
   //
   // The press comes back as a `shortcut` event carrying the same fields, so a
@@ -184,6 +194,14 @@
   // preference, and under Domicile there is no system above the desktop to
   // have one. The theme is the compositor's, and this is how it arrives.
   attribute EventHandler ontheme;
+
+  // Which way round the desk's windows are drawn, as a DomicileThemeEvent.
+  //
+  // `theme`'s other half: it arrives once the windows have turned for a
+  // theme every chrome called themeCaptured() for, and on connecting. This
+  // engine draws its own pages -- the sites in browser windows -- that way
+  // before the event is dispatched.
+  attribute EventHandler onwindowstheme;
 
   // What has been copied on this desktop, as a DomicileClipboardEvent.
   //

@@ -150,5 +150,6 @@ const absentHost = (): DomicileHost => ({
   setDevicePixelRatio: () => undefined,
   setTheme: () => undefined,
   spawn: () => undefined,
+  themeCaptured: () => undefined,
   warpPointer: () => undefined,
 });
