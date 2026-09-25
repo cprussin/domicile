@@ -81,9 +81,29 @@ case "$action" in
     wait_for="${DOMICILE_COMPILE_SLOT_WAIT:-1800}"
     started="$(date +%s)"
     took=""
+    asked=0
     while :; do
       mkdir "$LOCK" 2>/dev/null && { took=1; break; }
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
+      # Whether this run is still worth waiting for, when the workflow says
+      # how to tell: exit 0 yes, 1 no, anything else could not ask. A wait
+      # can outlast a cold repin, and a run for a commit its branch has moved
+      # past holds a runner that whole time for nothing. A check that cannot
+      # answer is not a no, so a flaky network never ends a wanted run's wait.
+      if [ -n "${DOMICILE_COMPILE_SLOT_STILL_WANTED:-}" ] &&
+         [ $(($(date +%s) - asked)) -ge "${DOMICILE_COMPILE_SLOT_RECHECK:-60}" ]; then
+        asked="$(date +%s)"
+        why="$(sh -c "$DOMICILE_COMPILE_SLOT_STILL_WANTED" 2>&1)"
+        case $? in
+          0) ;;
+          1)
+            echo "::error::no longer waiting for the compile slot: $why" >&2
+            [ -z "${GITHUB_OUTPUT:-}" ] || echo "superseded=true" >>"$GITHUB_OUTPUT"
+            exit 1
+            ;;
+          *) echo "could not ask whether this run is still wanted, so still waiting: $why" ;;
+        esac
+      fi
       # Once per holder, not once: a wait can outlast a cold repin, and hours
       # of one line cannot say whether the slot has changed hands since.
       now_held="$(holder)"

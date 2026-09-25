@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Which of a closed pull request's runs may be canceled, decided off a listing
-# rather than off the API.
+# Which of a pull request's runs may be canceled, decided off a listing rather
+# than off the API.
 #
-#   curl ... /actions/runs?branch=<ref> | .github/scripts/crux-stale-runs.sh <ref>
+#   curl ... /actions/runs?branch=<ref> | .github/scripts/crux-stale-runs.sh <ref> [<keep-sha>]
 #
 # Prints one run id per line: the runs that are waiting for `crux` and will
-# never be worth what they cost. Everything else it stays away from.
+# never be worth what they cost. Everything else it stays away from. Without a
+# <keep-sha> that is every waiting run of the branch (it closed); with one it
+# is every waiting run for any other commit (the branch moved on to that one).
 #
 # WHY THIS IS A FILTER AND NOT A SCRIPT THAT CANCELS. The decision is the whole
 # of the risk here and the API call is not, so the decision is a pure function
@@ -36,7 +38,8 @@
 # decides the same question.
 set -euo pipefail
 
-BRANCH="${1:?usage: crux-stale-runs.sh <head branch> < runs.json}"
+BRANCH="${1:?usage: crux-stale-runs.sh <head branch> [<keep sha>] < runs.json}"
+KEEP="${2:-}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORKFLOWS="${DOMICILE_WORKFLOWS:-$ROOT/.github/workflows}"
 
@@ -61,12 +64,14 @@ crux_workflows="$(
   exit 1
 }
 
-jq -r --arg branch "$BRANCH" --arg paths "$crux_workflows" '
+jq -r --arg branch "$BRANCH" --arg keep "$KEEP" --arg paths "$crux_workflows" '
   ($paths | split("\n")) as $crux
   | .workflow_runs[]
   # Never started: no runner, nothing compiled, nothing to leave half-linked.
   | select(.status == "queued" or .status == "pending")
   | select(.head_branch == $branch)
+  # The commit the branch is at now is the one run worth having.
+  | select($keep == "" or .head_sha != $keep)
   | select(.path as $p | $crux | index($p))
   | .id
 '
