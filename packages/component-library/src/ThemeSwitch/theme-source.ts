@@ -51,4 +51,15 @@ export type ThemeSource = {
    * A request rather than a setter: what comes back is an `onTheme`.
    */
   setTheme: (theme: Theme) => void;
+  /**
+   * This page has captured the frame its wipe starts from, for `theme`: turn
+   * the desk's windows, and settle once they have repainted.
+   *
+   * The windows are in that frame, so a window turned before it was captured
+   * is wiped over already turned, and one turned after the wipe starts pops
+   * over mid-wipe. {@link flipThemeWithAnimation} calls this from inside the
+   * wipe's update and holds the old frame until it settles, so the wipe
+   * passes across windows that turned behind it.
+   */
+  turnWindows: (theme: Theme) => Promise<void>;
 };

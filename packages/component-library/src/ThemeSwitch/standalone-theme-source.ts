@@ -35,6 +35,8 @@ export const standaloneThemeSource = (
       state.handler?.(theme);
     },
     theme: initial,
+    // Nothing behind the page but the page.
+    turnWindows: () => Promise.resolve(),
   };
   return source;
 };

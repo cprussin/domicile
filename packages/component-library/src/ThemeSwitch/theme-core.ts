@@ -72,6 +72,12 @@ export type FlipThemeOptions = {
    */
   applyNextTheme: () => void;
   /**
+   * Turn the desk's windows, once the frame the wipe starts from is captured.
+   * The wipe holds that frame until this settles — see
+   * {@link ThemeSource.turnWindows}.
+   */
+  turnWindows: () => Promise<void>;
+  /**
    * Commit the new theme to React state. Called inside `flushSync` after the
    * wipe finishes (and before the rise), so that the toggle's
    * `data-theme-mode` attribute has the new value committed *before* the slot
@@ -88,7 +94,8 @@ export type FlipThemeOptions = {
  * `data-theme-flip-to` (page wipe) on `<html>`, runs the wipe via
  * `document.startViewTransition` where the browser supports it, and falls back
  * to a snap apply otherwise. Total animation: 150ms set + 500ms wipe + 200ms
- * rise.
+ * rise, with the old frame held between set and wipe for as long as the
+ * desk's windows take to turn.
  *
  * **Driven by the theme *arriving*, not by the click.** The desk owns the
  * theme, so a shell's toggle asks and the answer comes back to every page on
@@ -101,6 +108,7 @@ export const flipThemeWithAnimation = ({
   next,
   applyNextTheme,
   commitTheme,
+  turnWindows,
 }: FlipThemeOptions): void => {
   const root = document.documentElement;
   // Phase 1 (set): force every slot below the window via the
@@ -124,8 +132,13 @@ export const flipThemeWithAnimation = ({
       typeof document.startViewTransition !== "function"
     ) {
       // Nothing to wipe between, or nothing to wipe with: the slots still
-      // set and rise, and the theme snaps over in between.
+      // set and rise, and the theme snaps over in between -- the windows'
+      // too, which have nothing to wait for.
       applyNextTheme();
+      turnWindows().catch((error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: surfacing a failed turnover
+        console.error("Failed to turn the desk's windows", error);
+      });
       startRise();
     } else {
       // Phase 2 (wipe). The two attributes drive the rules in the
@@ -136,8 +149,12 @@ export const flipThemeWithAnimation = ({
       // before the rise triggers.
       root.setAttribute("data-theme-flipping", "");
       root.setAttribute("data-theme-flip-to", next);
+      // The old frame is captured before this update runs, and the wipe
+      // starts once it settles: the windows turn in between, behind a frame
+      // that still shows them the old way.
       const transition = document.startViewTransition(() => {
         applyNextTheme();
+        return turnWindows();
       });
       const cleanup = () => {
         root.removeAttribute("data-theme-flipping");

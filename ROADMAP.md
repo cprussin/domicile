@@ -408,6 +408,13 @@ costs nothing.
   live desk, until it is restarted. Making it stick wants somewhere for a
   desktop's own state to live that is not the shell's generated config, and
   there is no such place yet.
+- **Whether a Wayland window is in the theme wipe's old frame is unmeasured.**
+  The windows turn inside the shell's view transition, once it has captured
+  the frame it wipes away from — see `domicile_host::theme_turnover`. A
+  `<webview>`'s guest was measured in that frame against the published engine;
+  an `<app>` is embedded the same way, as a surface layer, and no pixel guard
+  has yet put one under a transition. If it is not captured, a window shows
+  through the wipe live and turns before it rather than behind it.
 - **A portal frontend already running under another desktop is not
   re-routed.** `xdg-desktop-portal` reads which backend to use out of its
   *own* `XDG_CURRENT_DESKTOP`, so the compositor puts the name into the D-Bus

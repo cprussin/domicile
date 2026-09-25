@@ -265,6 +265,9 @@ export class DomicileClient {
     host.addEventListener("locked", (event) => {
       this.#deliver("locked", locked(event));
     });
+    host.addEventListener("windowstheme", (event) => {
+      this.#deliver("windows_theme", theme(event));
+    });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
       // engine writes before it dispatches — so reading it here is reading
@@ -418,6 +421,15 @@ export class DomicileClient {
    */
   unlock(passphrase: string): void {
     this.#host.unlock(passphrase);
+  }
+
+  /**
+   * This page's old frame is held for `theme`: turn the desk's windows now.
+   * Answered with a `windows_theme` message once they have. See
+   * {@link DomicileHost.themeCaptured}.
+   */
+  themeCaptured(theme: Theme): void {
+    this.#host.themeCaptured(theme);
   }
 
   /**

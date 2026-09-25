@@ -21,6 +21,7 @@ const ignored = (): undefined => undefined;
  */
 class Host implements DomicileHost {
   readonly asked: Theme[] = [];
+  readonly captured: Theme[] = [];
   displays: readonly DomicileDisplay[] | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
@@ -39,8 +40,19 @@ class Host implements DomicileHost {
     );
   }
 
+  /** The compositor saying which way round the desk's windows are drawn. */
+  turnsItsWindows(theme: Theme): void {
+    this.#listeners.get("windowstheme")?.(
+      Object.assign(new Event("windowstheme"), { arrival: 0, theme }) as never,
+    );
+  }
+
   setTheme = (theme: Theme): void => {
     this.asked.push(theme);
+  };
+
+  themeCaptured = (theme: Theme): void => {
+    this.captured.push(theme);
   };
 
   readonly closeApp = ignored;
@@ -125,5 +137,40 @@ describe("the theme a shell paints in", () => {
     host.states("light");
 
     expect(told).toStrictEqual([]);
+  });
+});
+
+describe("the windows a shell's wipe passes across", () => {
+  it("are turned by telling the desk the old frame is held", () => {
+    const [client, host] = connected();
+
+    hostTheme(client)
+      .turnWindows("light")
+      .catch(() => undefined);
+
+    expect(host.captured).toStrictEqual(["light"]);
+  });
+
+  it("have turned once the desk says so, and not before", async () => {
+    // What the wipe holds its old frame for: a wipe that started sooner
+    // would reveal windows still drawn the old way, and they would pop over
+    // behind it.
+    const [client, host] = connected();
+    // The handshake states the windows' theme too, and a shell has said
+    // hello long before anybody clicks: that one is not an answer.
+    host.turnsItsWindows("dark");
+    const turning = hostTheme(client).turnWindows("light");
+
+    expect(
+      await Promise.race([
+        turning.then(() => "turned"),
+        new Promise((resolve) => {
+          setTimeout(resolve, 50, "held");
+        }),
+      ]),
+    ).toBe("held");
+
+    host.turnsItsWindows("light");
+    await turning;
   });
 });
