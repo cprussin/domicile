@@ -363,8 +363,10 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
 }
 
 #[test]
-fn the_compositor_is_given_a_log_level_it_can_be_debugged_at() {
-    // The default a desktop is worth watching at, and an explicit `RUST_LOG`
+fn the_compositor_is_quiet_unless_asked_otherwise() {
+    // A desktop's default log is warnings, plus the few `INFO` lines the
+    // compositor keeps for things a person acts on; the rest is at `DEBUG`,
+    // and dependencies say nothing below a warning. An explicit `RUST_LOG`
     // wins: somebody who set it is asking for something else.
     let quiet = compositor(
         Path::new("/b/c"),
@@ -375,7 +377,7 @@ fn the_compositor_is_given_a_log_level_it_can_be_debugged_at() {
     );
     assert_eq!(
         env_of(&quiet, "RUST_LOG").unwrap(),
-        "info,domicile_compositor=debug"
+        "warn,domicile_compositor=info,domicile=info"
     );
 
     let asked = |name: &str| (name == "RUST_LOG").then(|| "warn".to_string());

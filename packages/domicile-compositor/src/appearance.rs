@@ -52,7 +52,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
 use domicile_protocol::Theme;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::SignalContext;
 
@@ -200,7 +200,7 @@ fn answer(theme: Theme, changes: &Receiver<Theme>) -> Result<(), zbus::Error> {
         .name(BUS_NAME)?
         .serve_at(OBJECT_PATH, Settings { theme })?
         .build()?;
-    info!(
+    debug!(
         name = BUS_NAME,
         scheme = color_scheme(theme),
         "this desktop answers the settings portal, so its clients follow its theme"
