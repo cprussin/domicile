@@ -64,6 +64,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
+  // And its preview, of the same index, for the same reason.
+  const preview = useCallback(
+    (path: string) => domicile.previewFile(path),
+    [domicile],
+  );
 
   // Pushed rather than asked for, which is the other shape: a copy is an event
   // the compositor already hears, so the history is here before the panel is
@@ -152,6 +157,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
           }
         }}
         open={windows.launcherOpen}
+        preview={preview}
         search={search}
       />
       {/* Over the whole desktop, like the launcher and for its reason. */}

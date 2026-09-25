@@ -328,6 +328,28 @@ export type DomicileModifiersEvent = Event & {
 };
 
 /**
+ * What a path holds, answering {@link DomicileHost.previewFile}.
+ *
+ * `kind` is `text`, `directory`, `binary` or `unreadable`; `text` is filled
+ * for the first and `entries` for the second, and both are empty otherwise.
+ */
+export type DomicileFilePreviewEvent = Event & {
+  /** The path this answers. */
+  readonly path: string;
+
+  readonly kind: string;
+
+  /** The front of the file, for a `text` preview. */
+  readonly text: string;
+
+  /** The front of the directory, for a `directory` preview. */
+  readonly entries: readonly string[];
+
+  /** When the browser process had it, on `performance.now()`'s clock. */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
+/**
  * What matched a {@link DomicileHost.searchFiles}, answering it and nothing
  * else — the compositor's index of the home never crosses into the page.
  *
@@ -495,6 +517,8 @@ export type DomicileHostEventMap = {
   modifiers: DomicileModifiersEvent;
   /** What a {@link DomicileHost.searchFiles} found. Only ever an answer. */
   files: DomicileFilesEvent;
+  /** What a {@link DomicileHost.previewFile} found. Only ever an answer. */
+  filepreview: DomicileFilePreviewEvent;
   /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
   battery: DomicileBatteryEvent;
   /** What has been copied, whenever that changes. Nobody asked for it either. */
@@ -565,6 +589,17 @@ export type DomicileHost = {
    * while it arrived.
    */
   searchFiles(query: string): void;
+
+  /**
+   * Ask what `path` holds. Answered with a `filepreview` event carrying the
+   * same path.
+   *
+   * **This one names a path**, and what keeps it from being a filesystem is
+   * that the compositor answers only for a path its index of the home holds —
+   * anything else is `unreadable`. So a page reads nothing a search could not
+   * already have named. See `domicile_host::file_preview`.
+   */
+  previewFile(path: string): void;
 
   /**
    * Put a row of the clipboard's history back on the clipboard.

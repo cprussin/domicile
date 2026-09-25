@@ -144,6 +144,7 @@ const absentHost = (): DomicileHost => ({
   pointerButton: () => undefined,
   pointerLeave: () => undefined,
   pointerMotion: () => undefined,
+  previewFile: () => undefined,
   searchFiles: () => undefined,
   setDesktopSize: () => undefined,
   setDevicePixelRatio: () => undefined,

@@ -1,4 +1,8 @@
-import type { FoundFilesMessage } from "@domicile/chrome-sdk/host-message";
+import { FilePreviewKind } from "@domicile/chrome-sdk/file-preview";
+import type {
+  FilePreviewMessage,
+  FoundFilesMessage,
+} from "@domicile/chrome-sdk/host-message";
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
@@ -7,19 +11,18 @@ import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
-import type { ReactNode } from "react";
 import { Fragment, useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
-import { fileRow } from "./file-row";
-import type { Hint } from "./hint";
-import { HintKind, hintFor } from "./hint";
+import type { Choice } from "./choices";
+import { ChoiceKind, choicesFor, launchOf } from "./choices";
+import type { FileRow } from "./file-row";
 import type { Launch } from "./launch";
-import { launchFor } from "./launch";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
 import { useFound } from "./useFound";
+import { usePreview } from "./usePreview";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
 const PROMPT = "Open a file, a URL, or search";
@@ -32,6 +35,8 @@ type Props = {
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
   open: boolean;
+  /** What a path holds, answered by the host, for the preview. */
+  preview: Preview;
   /**
    * What in the home matches a query, answered by the host.
    *
@@ -43,6 +48,9 @@ type Props = {
 
 /** How the panel asks what matches what is in its box. */
 type Search = (query: string) => Promise<FoundFilesMessage>;
+
+/** How the panel asks what the highlighted file holds. */
+type Preview = (path: string) => Promise<FilePreviewMessage>;
 
 /**
  * One box, over a backdrop, that opens a file, a URL or a search.
@@ -59,7 +67,13 @@ type Search = (query: string) => Promise<FoundFilesMessage>;
  * the first time `mod+space` was pressed over one the desktop thought was
  * shut.
  */
-export const Launcher = ({ onDismiss, onLaunch, open, search }: Props) => (
+export const Launcher = ({
+  onDismiss,
+  onLaunch,
+  open,
+  preview,
+  search,
+}: Props) => (
   <ModalDialog
     // Escape and the backdrop are what put it away, and the footer says the
     // first of those — a corner ✕ on a panel driven from the keyboard is a
@@ -75,10 +89,9 @@ export const Launcher = ({ onDismiss, onLaunch, open, search }: Props) => (
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
-    // Wide, because a row is a name and the directory it is in, and at the
-    // width of a question dialog a long one of either leaves no room for the
-    // other.
-    size="lg"
+    // Wide, because a row is a name and the directory it is in, and beside
+    // the rows is a preview of the one the highlight is on.
+    size="xl"
     // A pane rather than a card, because there is a desktop behind it worth
     // keeping: a launcher is a thing held up over your work for a second and
     // a half, and one that blanked what it was over would read as a page the
@@ -91,12 +104,13 @@ export const Launcher = ({ onDismiss, onLaunch, open, search }: Props) => (
       only while it is open, which is what makes every open start on an empty
       box and a full list without an effect anywhere to clear them.
     */}
-    <Query onLaunch={onLaunch} search={search} />
+    <Query onLaunch={onLaunch} preview={preview} search={search} />
   </ModalDialog>
 );
 
 type QueryProps = {
   onLaunch: (launch: Launch) => void;
+  preview: Preview;
   search: Search;
 };
 
@@ -109,30 +123,20 @@ type QueryProps = {
  * actually is — a person types, watches the list narrow, and presses Enter
  * without having looked at the screen for the last two of those.
  */
-const Query = ({ onLaunch, search }: QueryProps) => {
+const Query = ({ onLaunch, preview, search }: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
   // Where the arrow keys have walked to, and `undefined` for a list nobody has
   // walked. Not the highlight itself — see `highlightIn`, which is what turns
-  // "nobody has walked it" into "the first match, because they typed".
+  // "nobody has walked it" into "the first row, because they typed".
   const [stepped, setStepped] = useState<number | undefined>(undefined);
 
   const found = useFound(search, query);
-  const shown = found.files.map(fileRow);
-  // What a launch is judged against: the host's answer is the only evidence a
-  // page has that a file exists. See `launch.ts`.
-  const offered = shown.map((row) => row.path);
-  const highlighted = highlightIn(offered, query, stepped);
-  const hint = hintFor(query, offered);
-
-  const launch = (typed: string) => {
-    const launched = launchFor(typed, offered);
-    // `undefined` is an empty box, which is Enter on a keystroke nobody meant
-    // as a command. Nothing to do, and nothing to report either.
-    if (launched !== undefined) {
-      onLaunch(launched);
-    }
-  };
+  // Every row is a thing Enter can do — the files, and a site and a search
+  // around them — so the list is the whole answer to what it will do.
+  const choices = choicesFor(query, found.files);
+  const highlighted = highlightIn(choices.length, query, stepped);
+  const chosen = highlighted === undefined ? undefined : choices[highlighted];
 
   return (
     <div className={panelStyles}>
@@ -163,18 +167,20 @@ const Query = ({ onLaunch, search }: QueryProps) => {
               // Taken from the box, which would otherwise put the caret at the
               // end of the query on the way past.
               event.preventDefault();
-              setStepped(steppedTo(highlighted, 1, shown.length));
+              setStepped(steppedTo(highlighted, 1, choices.length));
               break;
             }
             case "ArrowUp": {
               event.preventDefault();
-              setStepped(steppedTo(highlighted, -1, shown.length));
+              setStepped(steppedTo(highlighted, -1, choices.length));
               break;
             }
             case "Enter": {
-              const chosen =
-                highlighted === undefined ? query : offered[highlighted];
-              launch(chosen ?? query);
+              // Nothing highlighted is an empty box, which is Enter on a
+              // keystroke nobody meant as a command.
+              if (chosen !== undefined) {
+                onLaunch(launchOf(chosen));
+              }
               break;
             }
           }
@@ -198,40 +204,37 @@ const Query = ({ onLaunch, search }: QueryProps) => {
         }
         value={query}
       />
-      {/*
-        THE SAME SIZE WHATEVER IS IN IT. The rows are filtered on every
-        keystroke and the host's answer lands after the panel is already up,
-        so a box that fitted its contents would resize under the hand typing
-        into it — a panel that grew and shrank between one letter and the
-        next, taking everything below the rows with it. Scrolling belongs
-        here rather than on the listbox, so that the line under the rows
-        shares the room rather than being pushed out of it.
-      */}
-      <div className={resultsStyles}>
+      <div className={splitStyles}>
         {/*
-          A listbox of options rather than a list of buttons: the rows are one
-          choice among many and the keyboard that walks them never leaves the
-          box above, which is what `aria-activedescendant` says. Two hundred
-          buttons would say there are two hundred things to press.
-
-          Divs rather than `ul`/`li` because an `li` is non-interactive markup
-          and an option is not — the roles are the structure here, and
-          doubling them up with list elements is what the lint is objecting
-          to.
+          THE SAME SIZE WHATEVER IS IN IT. The rows are filtered on every
+          keystroke and the host's answer lands after the panel is already up,
+          so a box that fitted its contents would resize under the hand typing
+          into it — a panel that grew and shrank between one letter and the
+          next, taking everything below the rows with it.
         */}
-        <div className={listStyles} id={listId} role="listbox">
-          {shown.map((row, at) => {
-            const path = row.path;
-            return (
+        <div className={resultsStyles}>
+          {/*
+            A listbox of options rather than a list of buttons: the rows are
+            one choice among many and the keyboard that walks them never leaves
+            the box above, which is what `aria-activedescendant` says. Two
+            hundred buttons would say there are two hundred things to press.
+
+            Divs rather than `ul`/`li` because an `li` is non-interactive
+            markup and an option is not — the roles are the structure here, and
+            doubling them up with list elements is what the lint is objecting
+            to.
+          */}
+          <div className={listStyles} id={listId} role="listbox">
+            {choices.map((choice, at) => (
               // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox above owns the keyboard for these rows, which is the whole point of `aria-activedescendant`
               <div
                 aria-selected={at === highlighted}
                 className={rowStyles}
                 data-highlighted={at === highlighted ? "" : undefined}
                 id={rowId(listId, at)}
-                key={path}
+                key={keyOf(choice)}
                 onClick={() => {
-                  launch(path);
+                  onLaunch(launchOf(choice));
                 }}
                 // Only the highlighted row carries it, and it is the same
                 // function every render, so React calls it exactly when the
@@ -239,55 +242,20 @@ const Query = ({ onLaunch, search }: QueryProps) => {
                 ref={at === highlighted ? keepInView : undefined}
                 role="option"
                 // Reachable programmatically and never in the tab ring: focus
-                // stays in the box, which is what makes typing and choosing one
-                // gesture rather than two.
+                // stays in the box, which is what makes typing and choosing
+                // one gesture rather than two.
                 tabIndex={-1}
               >
-                {/*
-                  Drawn twice and one of them shown, because a weight is a
-                  different set of paths rather than a color: an outline
-                  Phosphor glyph is filled shapes with holes in them, so
-                  nothing in CSS can thicken one. The pair is what the
-                  component library does for its own icon swap — see
-                  `_control/PrefixIconStack` — and it costs the row a second
-                  `<svg>` that is never laid out on its own.
-                */}
-                <span className={rowTileStyles} data-row-tile="">
-                  <span className={rowGlyphStyles} data-row-glyph="resting">
-                    {row.isDirectory ? (
-                      <FolderIcon size={ICON_SIZE} />
-                    ) : (
-                      <FileIcon size={ICON_SIZE} />
-                    )}
-                  </span>
-                  <span className={rowGlyphStyles} data-row-glyph="reached">
-                    {row.isDirectory ? (
-                      <FolderIcon size={ICON_SIZE} weight="fill" />
-                    ) : (
-                      <FileIcon size={ICON_SIZE} weight="fill" />
-                    )}
-                  </span>
-                </span>
-                <span className={rowNameStyles}>
-                  <Marked marks={marked(row.name, query)} />
-                </span>
-                {row.directory !== undefined && (
-                  <span className={rowDirectoryStyles}>
-                    <Marked marks={marked(row.directory, query)} />
-                  </span>
-                )}
+                <ChoiceRow choice={choice} query={query} />
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
-        {/*
-          With a row highlighted the answer is on screen already, and a second
-          one under the list would contradict it the moment an arrow key
-          moved.
-        */}
-        {highlighted === undefined && hint !== undefined && (
-          <HintLine hint={hint} />
-        )}
+        <section aria-label="Preview" className={previewStyles}>
+          {chosen !== undefined && (
+            <ChoicePreview choice={chosen} preview={preview} />
+          )}
+        </section>
       </div>
       {/*
         Under the rows rather than among them, because it is about the list
@@ -298,6 +266,132 @@ const Query = ({ onLaunch, search }: QueryProps) => {
       {found.indexing && <StillIndexing />}
     </div>
   );
+};
+
+/** What one row says, by the kind of thing Enter on it would do. */
+const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
+  switch (choice.kind) {
+    case ChoiceKind.File: {
+      return <FileChoice query={query} row={choice.row} />;
+    }
+    case ChoiceKind.Site: {
+      return (
+        <>
+          <RowTile icon={GlobeSimpleIcon} />
+          <span className={rowNameStyles}>
+            <span className={rowVerbStyles}>Go to</span> {choice.url}
+          </span>
+        </>
+      );
+    }
+    case ChoiceKind.Search: {
+      return (
+        <>
+          <RowTile icon={MagnifyingGlassIcon} />
+          <span className={rowNameStyles}>
+            <span className={rowVerbStyles}>Search for</span> {choice.query}
+          </span>
+        </>
+      );
+    }
+  }
+};
+
+/** A path's row: its name, and the directory it is in. */
+const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
+  <>
+    <RowTile icon={row.isDirectory ? FolderIcon : FileIcon} />
+    <span className={rowNameStyles}>
+      <Marked marks={marked(row.name, query)} />
+    </span>
+    {row.directory !== undefined && (
+      <span className={rowDirectoryStyles}>
+        <Marked marks={marked(row.directory, query)} />
+      </span>
+    )}
+  </>
+);
+
+/**
+ * The glyph a row starts with, in a tile of its own.
+ *
+ * Drawn twice and one of them shown, because a weight is a different set of
+ * paths rather than a color: an outline Phosphor glyph is filled shapes with
+ * holes in them, so nothing in CSS can thicken one. The pair is what the
+ * component library does for its own icon swap — see
+ * `_control/PrefixIconStack` — and it costs the row a second `<svg>` that is
+ * never laid out on its own.
+ */
+const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
+  <span className={rowTileStyles} data-row-tile="">
+    <span className={rowGlyphStyles} data-row-glyph="resting">
+      <Icon size={ICON_SIZE} />
+    </span>
+    <span className={rowGlyphStyles} data-row-glyph="reached">
+      <Icon size={ICON_SIZE} weight="fill" />
+    </span>
+  </span>
+);
+
+/**
+ * What the highlighted row is: a file's front, or the page a URL is.
+ *
+ * A site in a `<webview>` of its own, which the pointer passes through: a
+ * click in it would take the keyboard into the page, and the keyboard belongs
+ * to the box.
+ */
+const ChoicePreview = ({
+  choice,
+  preview,
+}: {
+  choice: Choice;
+  preview: Preview;
+}) => {
+  switch (choice.kind) {
+    case ChoiceKind.File: {
+      return <FilePreviewPane path={choice.row.path} preview={preview} />;
+    }
+    case ChoiceKind.Site:
+    case ChoiceKind.Search: {
+      return (
+        <webview className={viewStyles} src={choice.url} title={choice.url} />
+      );
+    }
+  }
+};
+
+/** What the host says a path holds, drawn by kind. */
+const FilePreviewPane = ({
+  path,
+  preview,
+}: {
+  path: string;
+  preview: Preview;
+}) => {
+  const shown = usePreview(preview, path);
+  switch (shown?.kind) {
+    case undefined: {
+      return undefined;
+    }
+    case FilePreviewKind.Text: {
+      return <pre className={textPreviewStyles}>{shown.text}</pre>;
+    }
+    case FilePreviewKind.Directory: {
+      return (
+        <ul className={entriesStyles}>
+          {shown.entries.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      );
+    }
+    case FilePreviewKind.Binary: {
+      return <p className={noPreviewStyles}>Not a text file</p>;
+    }
+    case FilePreviewKind.Unreadable: {
+      return <p className={noPreviewStyles}>Nothing to show</p>;
+    }
+  }
 };
 
 /**
@@ -324,46 +418,6 @@ const Marked = ({ marks }: { marks: readonly Mark[] }) => (
     )}
   </>
 );
-
-/** What Enter would do, for a box no row has been chosen in. */
-const HintLine = ({ hint }: { hint: Hint }) => {
-  const { icon, says, subject } = drawnAs(hint);
-  return (
-    <p className={hintStyles}>
-      <span className={hintIconStyles}>{icon}</span>
-      {says} <span className={hintSubjectStyles}>{subject}</span>
-    </p>
-  );
-};
-
-/** The glyph, the verb and the subject one kind of hint is drawn as. */
-const drawnAs = (
-  hint: Hint,
-): { icon: ReactNode; says: string; subject: string } => {
-  switch (hint.kind) {
-    case HintKind.Edit: {
-      return {
-        icon: <FileIcon size={ICON_SIZE} />,
-        says: "Edit",
-        subject: hint.path,
-      };
-    }
-    case HintKind.Search: {
-      return {
-        icon: <MagnifyingGlassIcon size={ICON_SIZE} />,
-        says: "Search for",
-        subject: hint.query,
-      };
-    }
-    case HintKind.Site: {
-      return {
-        icon: <GlobeSimpleIcon size={ICON_SIZE} />,
-        says: "Go to",
-        subject: hint.url,
-      };
-    }
-  }
-};
 
 /**
  * The line that says the list is not all of the home yet.
@@ -403,23 +457,23 @@ const Keys = () => (
 );
 
 /**
- * Which row is highlighted: the one walked to, the first match, or none.
+ * Which of `count` rows is highlighted: the one walked to, the first, or none.
  *
  * The middle case is the one worth spelling out. A query that has narrowed the
  * list to something has already chosen — that is what typing a name is for —
  * so Enter takes the top row without anybody pressing an arrow key. An *empty*
  * box has not chosen, even though every file is on screen and one of them is
- * first, so it highlights nothing and Enter has only the query to go on.
+ * first, so it highlights nothing and Enter does nothing.
  */
 const highlightIn = (
-  shown: readonly string[],
+  count: number,
   query: string,
   stepped: number | undefined,
 ): number | undefined => {
-  if (shown.length === 0) {
+  if (count === 0) {
     return undefined;
   } else if (stepped !== undefined) {
-    return Math.min(stepped, shown.length - 1);
+    return Math.min(stepped, count - 1);
   } else if (query.trim() === "") {
     return undefined;
   } else {
@@ -448,6 +502,21 @@ const steppedTo = (
   }
 };
 
+/** What tells one row from the others across a keystroke. */
+const keyOf = (choice: Choice): string => {
+  switch (choice.kind) {
+    case ChoiceKind.File: {
+      return `file:${choice.row.path}`;
+    }
+    case ChoiceKind.Site: {
+      return "site";
+    }
+    case ChoiceKind.Search: {
+      return "search";
+    }
+  }
+};
+
 /** A row's own id, which is what `aria-activedescendant` points at. */
 const rowId = (listId: string, at: number): string =>
   `${listId}-${at.toString()}`;
@@ -473,6 +542,14 @@ const panelStyles = vstack({
   gap: 3,
 });
 
+// The rows and the preview side by side, the rows a little the wider: they
+// are what is being read, and the preview is what confirms it.
+const splitStyles = css({
+  display: "grid",
+  gap: 3,
+  gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
+});
+
 // Tall enough to be worth scrolling and short enough to leave the backdrop
 // showing: the panel is a thing over the desktop, and one that reached the
 // bottom of the screen would read as a page. A block size rather than a
@@ -494,6 +571,50 @@ const resultsStyles = css({
   // So a row scrolled to by `keepInView` lands inside the box rather than
   // flush against the edge it came over.
   scrollPaddingBlock: 1,
+});
+
+// The same ground and the same height as the rows beside it, so the two read
+// as one box split in half.
+const previewStyles = css({
+  backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
+  blockSize: 80,
+  borderRadius: "md",
+  overflow: "hidden",
+});
+
+// The page a URL is, drawn small and not touchable: the pointer passes through
+// it to the pane, so a click cannot take the keyboard out of the box.
+const viewStyles = css({
+  blockSize: "100%",
+  border: "none",
+  display: "block",
+  inlineSize: "100%",
+  pointerEvents: "none",
+});
+
+const textPreviewStyles = css({
+  blockSize: "100%",
+  fontFamily: "mono",
+  fontSize: "xs",
+  margin: 0,
+  overflow: "hidden",
+  padding: 3,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-all",
+});
+
+const entriesStyles = css({
+  fontSize: "sm",
+  listStyle: "none",
+  margin: 0,
+  padding: 3,
+});
+
+const noPreviewStyles = css({
+  color: "muted",
+  fontSize: "sm",
+  margin: 0,
+  padding: 3,
 });
 
 const listStyles = flex({
@@ -593,6 +714,11 @@ const rowNameStyles = css({
   whiteSpace: "nowrap",
 });
 
+// What a site or a search row does, said quieter than what it does it to.
+const rowVerbStyles = css({
+  color: "muted",
+});
+
 // AT THE FAR END OF THE ROW RATHER THAN BESIDE THE NAME. A directory is what
 // tells two files of one name apart, so it is read when the names alone have
 // not settled it — and a column of them down the panel's edge is a column the
@@ -608,30 +734,6 @@ const rowDirectoryStyles = css({
   fontSize: "xs",
   marginInlineStart: "auto",
   minInlineSize: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-});
-
-// Set like a row rather than like a message, because it stands where the rows
-// would be and says the same kind of thing: here is what this line opens.
-const hintStyles = hstack({
-  color: "muted",
-  fontSize: "sm",
-  gap: 2,
-  margin: 0,
-  paddingBlock: 1.5,
-  paddingInline: 2,
-});
-
-const hintIconStyles = css({
-  alignItems: "center",
-  color: "accent",
-  display: "inline-flex",
-});
-
-const hintSubjectStyles = css({
-  color: "foreground",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -661,7 +763,7 @@ const indexingStyles = hstack({
 // A full turn, for the one thing on this panel that is still happening. On the
 // span rather than on the glyph, because a Phosphor icon is somebody else's
 // component and this panel styles its icons by what they sit in — the same
-// wrapper the hint line and the row tiles use.
+// wrapper the row tiles use.
 //
 // `prefers-reduced-motion` stops it: what the line says is in the words, and
 // the turn is only what keeps them from reading as a state nobody is working

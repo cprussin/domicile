@@ -50,6 +50,10 @@
       "types": "./dist/element-transform.d.ts",
       "default": "./dist/element-transform.js"
     },
+    "./file-preview": {
+      "types": "./dist/file-preview.d.ts",
+      "default": "./dist/file-preview.js"
+    },
     "./focus-app": {
       "types": "./dist/focus-app.d.ts",
       "default": "./dist/focus-app.js"

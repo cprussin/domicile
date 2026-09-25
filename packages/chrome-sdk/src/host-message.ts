@@ -36,11 +36,17 @@ import type {
   DomicileClipboardEntry,
   DomicileClipboardEvent,
   DomicileDisplay,
+  DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
 } from "./domicile-host";
+import {
+  FilePreview,
+  FilePreviewKind,
+  filePreviewKindSchema,
+} from "./file-preview";
 import type { Theme } from "./theme";
 
 /**
@@ -198,6 +204,15 @@ export type FoundFilesMessage = {
    * Say so on screen, and ask again.
    */
   indexing: boolean;
+};
+
+/**
+ * What a path holds: the answer to {@link DomicileClient.previewFile}.
+ */
+export type FilePreviewMessage = {
+  /** The path this answers. */
+  path: string;
+  preview: FilePreview;
 };
 
 /**
@@ -362,6 +377,39 @@ export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
   matched: event.matched,
   query: event.query,
 });
+
+/**
+ * What a path holds, with the engine's `kind` word parsed.
+ *
+ * Parsed rather than trusted for the reason `appCursor` is: the engine and
+ * this SDK ship apart, and a kind this SDK cannot name would otherwise draw as
+ * an empty preview with nothing said.
+ */
+export const filePreview = (
+  event: DomicileFilePreviewEvent,
+): FilePreviewMessage => ({
+  path: event.path,
+  preview: previewOf(event),
+});
+
+/** The one preview `event`'s kind carries. */
+const previewOf = (event: DomicileFilePreviewEvent): FilePreview => {
+  const kind = filePreviewKindSchema.parse(event.kind);
+  switch (kind) {
+    case FilePreviewKind.Text: {
+      return FilePreview.Text(event.text);
+    }
+    case FilePreviewKind.Directory: {
+      return FilePreview.Directory(event.entries);
+    }
+    case FilePreviewKind.Binary: {
+      return FilePreview.Binary();
+    }
+    case FilePreviewKind.Unreadable: {
+      return FilePreview.Unreadable();
+    }
+  }
+};
 
 /** The charge, with the SDK's own `arrival` left behind: no shell draws it. */
 export const battery = (event: DomicileBatteryEvent): BatteryMessage => ({
