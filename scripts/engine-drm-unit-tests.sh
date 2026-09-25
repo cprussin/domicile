@@ -47,6 +47,7 @@ SUITES=(
   DrmFullscreenTest:4
   DrmMasterTest:7
   DrmInputDevicesTest:25
+  DrmInputControllerTest:1
   DrmCursorFactoryTest:4
   DrmEdidSerialTest:18
 )
