@@ -148,6 +148,30 @@ interface DisplayListObserver {
   OnDisplaysChanged(array<Display> displays);
 };
 
+// Which of the desktop's two clipboards something is on.
+//
+// The pair every desktop has and neither of which is the other: one is what
+// Ctrl-C puts somewhere, and the other is what selecting a word does for the
+// middle button to paste.
+enum Clipboard {
+  kCopy,
+  kPrimary,
+};
+
+// Tells a producer what was copied in the browser.
+//
+// WITHOUT THIS THE BROWSER HAS A CLIPBOARD NOTHING ELSE CAN REACH. It is not a
+// Wayland client of the producer -- on a tty there is no display server for it
+// to be one of -- so a copy made in a page reaches no seat on its own, and the
+// desktop ends up with one clipboard inside the browser and another outside
+// it. See ui/ozone/platform/drm/domicile/drm_clipboard.h, which is where a
+// copy made here starts.
+interface ClipboardObserver {
+  // What was copied, as the text of it. The producer is what puts it on the
+  // seat; nothing here waits for it to.
+  OnCopied(Clipboard clipboard, string text);
+};
+
 // Brokers viz frame sinks to a compositing producer that is not a renderer.
 //
 // blink.mojom.EmbeddedFrameSinkProvider is the same thing for renderers, and it
@@ -270,6 +294,26 @@ interface FrameSinkBroker {
   // producer learns instead is the next `OnDisplaysChanged`, which the modeset
   // itself provokes.
   ConfigureDisplays(array<DisplayLayout> layout);
+
+  // What is on one of the desktop's clipboards now.
+  //
+  // THE BROWSER IS TOLD RATHER THAN ASKED, because the producer already has
+  // the bytes: a selection arriving on the seat is read out of the client that
+  // offered it whether or not anybody pastes, so there is nothing left to
+  // fetch and a page pasting is answered out of this process's memory.
+  //
+  // An empty string is a clipboard with nothing on it, which is what a desktop
+  // that has just started has, and is said rather than left unsaid: a browser
+  // never told would go on offering whatever it was told last.
+  SetClipboard(Clipboard clipboard, string text);
+
+  // Registers `observer` for copies made in the browser.
+  //
+  // Nothing is sent on registration, unlike `ObserveDisplays`: what a producer
+  // would be caught up on is a copy it made itself. The clipboard a browser
+  // that has just started should hold is the producer's to state, with
+  // `SetClipboard` above.
+  ObserveClipboard(pending_remote<ClipboardObserver> observer);
 
   // Registers `observer` for the display list, and sends it the current one.
   //

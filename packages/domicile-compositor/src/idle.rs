@@ -304,7 +304,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{darkened, somebody_is_here, Blanking, Idle, StillThere};
-    use crate::engine::{Connector, Display};
+    use crate::engine::{Clipboard, Connector, Display};
     use crate::ClientRequest;
 
     const AFTER: Duration = Duration::from_secs(600);
@@ -706,6 +706,7 @@ mod tests {
             (
                 "a client putting something on the clipboard",
                 ClientRequest::ClipboardCopied {
+                    clipboard: Clipboard::Copy,
                     text: "what was copied".into(),
                 },
             ),

@@ -297,6 +297,17 @@ costs nothing.
   name that does not match, active mixed content — need an https fixture with a
   cert the browser distrusts, and until one exists `dangerous` is a path no run
   has taken.
+- **A nested desktop's browser reads the host's clipboard.** On a tty the
+  engine reads and writes this desktop's — `ui/ozone/platform/drm/domicile/`
+  holds the browser's end of it, and the compositor is the clipboard — but the
+  ozone platform a nested run uses is Wayland's, whose clipboard is the session
+  Domicile is a window inside. So a copy made in a terminal is not in a tab
+  there, which is the split a tty no longer has. The fix is the same pair of
+  `OzonePlatform` entry points implemented on that platform.
+- **Nothing but text crosses to the browser.** A page that copies an image
+  leaves every window outside the browser with no text to paste, which is what
+  they are told, and an image copied in a terminal is not in a tab. The engine
+  ABI carries a string; carrying bytes and a mime type is what it would take.
 - **The clipboard's history holds text and nothing else.** A selection that
   offers only an image or a file list is not recorded — a list of previews is
   not a store, and a manager that drew a row it could not hand back would be

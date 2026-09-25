@@ -318,6 +318,42 @@ class Displays : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
+// What the browser copied, pushed at the compositor.
+//
+// Its own receiver for the reason Displays above has one: a copy is a fact
+// about the desktop rather than about any one window, and a producer with no
+// surfaces at all still has a clipboard.
+class Copies : public mojom::ClipboardObserver {
+ public:
+  explicit Copies(EngineEventQueue* queue) : queue_(queue) {}
+
+  Copies(const Copies&) = delete;
+  Copies& operator=(const Copies&) = delete;
+
+  ~Copies() override = default;
+
+  mojo::PendingRemote<mojom::ClipboardObserver> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  // Unbound on the thread it was bound on, like Displays::Unbind.
+  void Unbind() { receiver_.reset(); }
+
+  // mojom::ClipboardObserver implementation.
+  void OnCopied(mojom::Clipboard clipboard, const std::string& text) override {
+    EngineEvent event{.type = EngineEvent::Type::kCopied};
+    event.clipboard = clipboard == mojom::Clipboard::kPrimary
+                          ? DOMICILE_CLIPBOARD_PRIMARY
+                          : DOMICILE_CLIPBOARD_COPY;
+    event.copied = text;
+    queue_->Push(event);
+  }
+
+ private:
+  const raw_ptr<EngineEventQueue> queue_;
+  mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
+};
+
 // A client's dmabuf, as mojo wants it. The fds are duplicated: the caller keeps
 // the originals, which is what a compositor holding a wl_buffer expects.
 gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
@@ -436,6 +472,15 @@ struct DomicileEngine {
                                 static_cast<uint32_t>(records.size()));
           }
           break;
+        case domicile::EngineEvent::Type::kCopied:
+          if (callbacks_.copied) {
+            // The characters belong to the event, which lives until this loop
+            // ends -- the same lifetime the display names above have, and the
+            // one the header states for this pointer.
+            callbacks_.copied(callbacks_.user_data, event.clipboard,
+                              event.copied.data(), event.copied.size());
+          }
+          break;
       }
     }
   }
@@ -537,7 +582,26 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  // Copied on the caller's thread rather than borrowed across the post: the
+  // ABI lends these bytes for the duration of the call, and the browser is
+  // told on another thread some time after it returns.
+  void SetClipboard(DomicileClipboard clipboard, std::string text) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::SetClipboardOnThread,
+                                  base::Unretained(this), clipboard,
+                                  std::move(text)));
+  }
+
  private:
+  void SetClipboardOnThread(DomicileClipboard clipboard, std::string text) {
+    if (broker_) {
+      broker_->SetClipboard(clipboard == DOMICILE_CLIPBOARD_PRIMARY
+                                ? domicile::mojom::Clipboard::kPrimary
+                                : domicile::mojom::Clipboard::kCopy,
+                            text);
+    }
+  }
+
   void ConfigureDisplaysOnThread(
       std::vector<domicile::mojom::DisplayLayoutPtr> wanted) {
     if (broker_) {
@@ -578,6 +642,10 @@ struct DomicileEngine {
       // put on them. The browser answers immediately if it has already read
       // them, and says nothing until it has if it has not.
       broker_->ObserveDisplays(displays_.BindRemote());
+      // And the clipboard, for the same kind of reason: a copy can be made in
+      // a page before this desktop has any windows at all, and the compositor
+      // is what has to put it on the seat.
+      broker_->ObserveClipboard(copies_.BindRemote());
     }
     *connected = broker_.is_bound();
   }
@@ -779,6 +847,7 @@ struct DomicileEngine {
     probe_.reset();
     // And a mojo::Receiver validates the same thing.
     displays_.Unbind();
+    copies_.Unbind();
   }
 
   void RunOnThreadAndWait(base::OnceClosure task) {
@@ -798,6 +867,7 @@ struct DomicileEngine {
   // Bound on the engine's thread, in ConnectOnThread, like every other
   // receiver here.
   domicile::Displays displays_{&queue_};
+  domicile::Copies copies_{&queue_};
   base::Thread thread_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> ipc_support_;
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;
@@ -885,6 +955,25 @@ void domicile_displays_configure(DomicileEngine* engine,
   // `base::span` is happy to build empty.
   if (engine && (layout || count == 0)) {
     engine->ConfigureDisplays(layout, count);
+  }
+}
+
+void domicile_clipboard_set(DomicileEngine* engine,
+                            DomicileClipboard clipboard,
+                            const char* text,
+                            size_t length) {
+  // A null pointer with a length is a caller bug and a read through nothing; a
+  // null pointer with no length is the ordinary way to say "nothing is on this
+  // clipboard", which is an empty string.
+  if (engine && (text || length == 0)) {
+    // SAFETY: the ABI says `text` points at `length` bytes, valid for the
+    // duration of this call, and the line above has refused a null one
+    // carrying a length. A span for `domicile_displays_configure`'s reason --
+    // Chromium compiles with `-Wunsafe-buffer-usage` -- and `UNSAFE_BUFFERS`
+    // because building one from a pointer and a length is what that warning is
+    // about. The string is copied before this returns.
+    const auto bytes = UNSAFE_BUFFERS(base::span(text, length));
+    engine->SetClipboard(clipboard, std::string(bytes.begin(), bytes.end()));
   }
 }
 
