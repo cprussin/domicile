@@ -115,6 +115,29 @@ mkdir -p "$TREE/.git/rebase-apply"
 expect "a tree left mid-\`git am\` is reset rather than refused" ok \
   "$(status "$(run_reset)")"
 
+# A git killed mid-operation leaves .git/index.lock, and every later git in the
+# tree refuses with "index.lock: File exists" — runs 36165934836 and
+# 36172865348. The job holds the tree lock by now, so the lock is stale.
+lay_the_series_down
+touch "$TREE/.git/index.lock"
+stale="$(run_reset)"
+expect "a tree with a stale index.lock is reset rather than refused" ok \
+  "$(status "$stale")"
+contains "and says it removed the lock" "removed a stale" "$stale"
+
+# And `git am --abort` does not always clear rebase-apply: run 36179097048 got
+# past the reset with it still there and `git am` refused the series. What it
+# leaves depends on the git and on where the killed am stopped; a stray file is
+# the shape every git leaves alone, so it stands in for the rest.
+lay_the_series_down
+rm -rf "$TREE/.git/rebase-apply"
+echo "left by a killed git am" >"$TREE/.git/rebase-apply"
+stray="$(run_reset)"
+expect "a tree whose rebase-apply outlives the abort is reset" ok \
+  "$(status "$stray")"
+expect "and git am can run in it again" gone \
+  "$([ -e "$TREE/.git/rebase-apply" ] && echo "still there" || echo gone)"
+
 # The identity `git am` needs, in the checkout's own config: the runner has no
 # ~/.gitconfig and never will, and apply.sh runs inside a bwrap FHS shell that
 # curates the environment.
