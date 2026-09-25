@@ -1,6 +1,5 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
 
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_EXTERNAL_SURFACE_EMBEDDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_EXTERNAL_SURFACE_EMBEDDER_H_
