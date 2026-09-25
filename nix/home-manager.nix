@@ -59,9 +59,9 @@
     then map withoutNulls value
     else value;
 
-  # The four `wl_output` rotations, named for the turn the CONTENT takes to
-  # come out upright -- `rotate-90` is a quarter turn clockwise, for a panel
-  # bolted a quarter turn counterclockwise. Spelled the way the file spells them,
+  # The four `wl_output` rotations, which count counterclockwise the way kanshi
+  # and sway do -- `rotate-270` turns the content a quarter clockwise, for a
+  # panel standing on its left side. Spelled the way the file spells them,
   # which is not serde's kebab-case of the Rust variant.
   transform = lib.types.enum ["normal" "rotate-90" "rotate-180" "rotate-270"];
 

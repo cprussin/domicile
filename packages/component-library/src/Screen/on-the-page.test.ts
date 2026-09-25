@@ -40,25 +40,25 @@ describe("onThePage", () => {
     ).toStrictEqual([120, 240]);
   });
 
-  it("turns a spot counterclockwise with the region it is in", () => {
+  it("turns a spot clockwise with the region it is in", () => {
     // This desk. The region's top-left corner is drawn at the window's
-    // BOTTOM-left, so a spot's logical x runs up the window and its y runs
-    // across it — scaled first, exactly as the CSS applies it.
+    // top-RIGHT, so a spot's logical x runs down the window and its y runs
+    // back across it — scaled first, exactly as the CSS applies it.
     expect(
       onThePage(
         panel(UPRIGHT, { size: MODE, transform: "rotate-270" }),
         [100, 200],
       ),
-    ).toStrictEqual([240, 2040]);
+    ).toStrictEqual([3600, 120]);
   });
 
-  it("turns a spot clockwise with the region it is in", () => {
+  it("turns a spot counterclockwise with the region it is in", () => {
     expect(
       onThePage(
         panel(UPRIGHT, { size: MODE, transform: "rotate-90" }),
         [100, 200],
       ),
-    ).toStrictEqual([3600, 120]);
+    ).toStrictEqual([240, 2040]);
   });
 
   it("turns a spot over with the region it is in", () => {
@@ -73,13 +73,13 @@ describe("onThePage", () => {
   it("puts the region's own corner on the window's", () => {
     // The anchor the three turns are read against: `transform-origin` is the
     // region's top-left, so wherever that corner lands is where the turn put
-    // it — the bottom-left of the window for a counterclockwise quarter.
+    // it — the top-right of the window for a clockwise quarter.
     expect(
       onThePage(
         panel(UPRIGHT, { size: MODE, transform: "rotate-270" }),
         [0, 0],
       ),
-    ).toStrictEqual([0, 2160]);
+    ).toStrictEqual([3840, 0]);
   });
 
   it("measures the turn from the region's corner and not the page's", () => {
@@ -131,23 +131,23 @@ describe("offThePage", () => {
     ).toStrictEqual([100, 200]);
   });
 
-  it("turns a travel back out of a region turned counterclockwise", () => {
+  it("turns a travel back out of a region turned clockwise", () => {
     // This desk. A drag down the window is a drag across the desktop, so a
     // window that added the pointer's own numbers moved at a right angle to
     // the hand holding it.
     expect(
       offThePage(
         panel(UPRIGHT, { size: MODE, transform: "rotate-270" }),
-        [240, -120],
+        [-240, 120],
       ),
     ).toStrictEqual([100, 200]);
   });
 
-  it("turns a travel back out of a region turned clockwise", () => {
+  it("turns a travel back out of a region turned counterclockwise", () => {
     expect(
       offThePage(
         panel(UPRIGHT, { size: MODE, transform: "rotate-90" }),
-        [-240, 120],
+        [240, -120],
       ),
     ).toStrictEqual([100, 200]);
   });

@@ -3,11 +3,11 @@
 // The four `wl_output.transform` rotations, spelled the way the config file
 // writes them. Mirrors `domicile_protocol::DisplayTransform`.
 //
-// **Named for the turn the content takes, not the one the panel did.** That is
-// the `wl_output` convention and the config's: `transform_90` is an output
-// rotated a quarter turn counterclockwise, so what is drawn on it has to go a
-// quarter turn *clockwise* to come out upright, and `rotate-90` names that
-// clockwise turn. A shell applies it as written.
+// **Named for the `wl_output` value, which counts counterclockwise.**
+// `transform_90` is content turned a quarter turn *counterclockwise* to come
+// out upright — the one for a panel bolted a quarter turn clockwise — and
+// `rotate-270` is the clockwise quarter a panel on its left side needs. The
+// same numbers kanshi and sway write.
 //
 // **A schema rather than a union, and for a weaker reason than
 // `cursor-shape.ts` next door.** That one parses a WebIDL `enum`, which is a

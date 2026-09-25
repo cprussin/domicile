@@ -118,11 +118,11 @@ export type DomicileDisplay = {
    * Which way up the monitor is bolted to the desk: `normal`, `rotate-90`,
    * `rotate-180` or `rotate-270`.
    *
-   * **Named for the turn the content takes, not the one the panel did** — the
-   * `wl_output` convention, which the config file and the host both follow. An
-   * output rotated a quarter turn counterclockwise needs what is drawn on it
-   * turned a quarter turn *clockwise* to come out upright, and `rotate-90` is
-   * that clockwise turn. A shell applies it as written.
+   * **Named for the `wl_output` value, which counts counterclockwise** — the
+   * convention the config file and the host both follow. `rotate-90` is
+   * content turned a quarter turn *counterclockwise*, for a panel bolted a
+   * quarter turn clockwise; `rotate-270` is the clockwise quarter a panel on
+   * its left side needs.
    */
   readonly transform: string;
   /**

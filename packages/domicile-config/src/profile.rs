@@ -289,13 +289,13 @@ pub enum Transform {
     #[default]
     #[serde(rename = "normal")]
     Normal,
-    /// A quarter turn clockwise.
+    /// Content turned a quarter counterclockwise.
     #[serde(rename = "rotate-90")]
     Rotate90,
     #[serde(rename = "rotate-180")]
     Rotate180,
-    /// A quarter turn counterclockwise, which is how a monitor on a desk usually
-    /// ends up standing on its side.
+    /// Content turned a quarter clockwise, for a panel standing on its left side,
+    /// which is how a monitor on a desk usually ends up.
     #[serde(rename = "rotate-270")]
     Rotate270,
 }

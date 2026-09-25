@@ -997,13 +997,12 @@ CSS pixels and the region is the logical box, so a 3840-wide panel at density
 corner of a black screen, before any rotation. One `mode ÷ box`, read across
 the turn, is both.
 
-**What a desk still has to settle is which way round the two quarter turns
-are.** `rotate-90` is the turn the *content* takes, which is the `wl_output`
-convention and the config file's — an output bolted a quarter turn
-counterclockwise needs what is drawn on it turned clockwise — and every list from
-`domicile-config` to `TURNS` in `cover-the-window.ts` applies it as written.
-Reading agrees with itself all the way down; only glass can say whether the
-reading was right. Swapping two arms of one `switch` is the whole fix.
+**The two quarter turns count counterclockwise, as `wl_output` and kanshi do.**
+`rotate-270` turns the content a quarter *clockwise*, for a panel on its left
+side; `rotate-90` the other way. A desk once came up with them reversed —
+applied as clockwise — and swapping the arms of `turn` in
+`cover-the-window.ts`, with `turnOf` and `straightened` beside it, was the
+whole fix.
 
 **A client that pre-rotates its own buffer is still wrong**, and rotation is
 what makes that reachable. `wl_output.transform` is advertised so a client can

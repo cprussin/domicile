@@ -113,7 +113,7 @@ describe("Screen", () => {
     on([SIDEWAYS], <Screen name="sideways">stuff</Screen>);
     const region = document.querySelector("[data-screen]") as HTMLElement;
     expect(region.style.transform).toBe(
-      "translate(0, 2160px) rotate(-90deg) scale(1.2)",
+      "translate(3840px, 0) rotate(90deg) scale(1.2)",
     );
     expect(region.style.transformOrigin).toBe("top left");
   });

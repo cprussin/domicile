@@ -105,13 +105,13 @@ const turnOf = (
       return [x, y];
     }
     case "rotate-90": {
-      return [modeWidth - y, x];
+      return [y, modeHeight - x];
     }
     case "rotate-180": {
       return [modeWidth - x, modeHeight - y];
     }
     case "rotate-270": {
-      return [y, modeHeight - x];
+      return [modeWidth - y, x];
     }
   }
 };
@@ -130,13 +130,13 @@ const straightened = (transform: Transform, [dx, dy]: Travel): Travel => {
       return [dx, dy];
     }
     case "rotate-90": {
-      return [dy, -dx];
+      return [-dy, dx];
     }
     case "rotate-180": {
       return [-dx, -dy];
     }
     case "rotate-270": {
-      return [-dy, dx];
+      return [dy, -dx];
     }
   }
 };

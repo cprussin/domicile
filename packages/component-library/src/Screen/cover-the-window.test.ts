@@ -43,25 +43,26 @@ describe("coverTheWindow", () => {
   });
 
   it("turns a region a quarter clockwise and pushes it back into view", () => {
-    // `rotate-90` is the content's clockwise quarter turn, which takes the
-    // box's top-left corner to the window's top-RIGHT — so every pixel of it
-    // lands at a negative x until it is pushed back by the window's width.
+    // The quarter turn this desk actually uses: kanshi says `transform =
+    // "270"` for the three monitors on their sides, and the domicile config
+    // says `rotate-270` for the same three. `wl_output`'s `transform_270` is a
+    // panel whose content is turned a quarter CLOCKWISE to come out upright,
+    // which takes the box's top-left corner to the window's top-RIGHT — so
+    // every pixel of it lands at a negative x until it is pushed back by the
+    // window's width.
     //
     // The scale comes first (transforms apply right to left), so what is
     // turned is the box at its full 2160×3840 rather than its logical size.
-    expect(coverTheWindow(BOX, { size: MODE, transform: "rotate-90" })).toBe(
+    expect(coverTheWindow(BOX, { size: MODE, transform: "rotate-270" })).toBe(
       "translate(3840px, 0) rotate(90deg) scale(1.2)",
     );
   });
 
   it("turns a region a quarter counterclockwise and pushes it back into view", () => {
-    // The other quarter turn, and the one this desk actually uses: kanshi
-    // says `transform = "270"` for the three monitors on their sides, and the
-    // domicile config says `rotate-270` for the same three.
-    //
-    // Counterclockwise takes the top-left corner to the window's bottom-left, so
-    // the push is down by the window's height rather than right by its width.
-    expect(coverTheWindow(BOX, { size: MODE, transform: "rotate-270" })).toBe(
+    // `rotate-90`, the other quarter turn. Counterclockwise takes the top-left
+    // corner to the window's bottom-left, so the push is down by the window's
+    // height rather than right by its width.
+    expect(coverTheWindow(BOX, { size: MODE, transform: "rotate-90" })).toBe(
       "translate(0, 2160px) rotate(-90deg) scale(1.2)",
     );
   });

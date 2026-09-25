@@ -92,16 +92,16 @@ export const densityOf = (
  * behind the origin — and the window's own mode is the distance back. A half
  * turn puts both behind it; a quarter turn puts one.
  *
- * **Applied as written, because the name is already the content's turn.**
- * `wl_output`'s `transform_90` is an output rotated a quarter turn
- * counterclockwise, so what is drawn on it goes a quarter turn *clockwise* to
- * come out upright — and `rotate-90` names that clockwise turn, all the way
- * from the config file the user wrote. CSS measures positive angles clockwise,
- * so the two agree and the degrees below are the names in other units.
+ * **The name is the `wl_output` one, which counts counterclockwise.**
+ * `transform_90` is content turned a quarter turn *counterclockwise* — the
+ * one for a panel bolted a quarter turn clockwise — and `rotate-270` is the
+ * clockwise quarter that a panel on its left side needs, which is what kanshi
+ * and sway mean by `270` too. CSS measures positive angles clockwise, so the
+ * degrees below are the names negated.
  *
- * **IF A DESK COMES UP UPSIDE DOWN, THIS FUNCTION IS THE FIX.** The two
- * quarter turns are the one thing in the whole path that a screen can settle
- * and reading cannot; swapping their two arms is the whole of it.
+ * **Settled by a screen, not by reading.** These two arms were once the other
+ * way round, applying each name as a clockwise turn, and every monitor on its
+ * side came up upside down.
  *
  * **AND `on-the-page.ts` SAYS THE SAME THING AS ARITHMETIC, TWICE**: `turnOf`
  * for the places a shell has to point at rather than draw, and `straightened`
@@ -119,17 +119,17 @@ const turn = ({
     case "normal": {
       return "";
     }
-    // Clockwise: the box's left edge swings above the origin's x, so the
-    // window's width is what brings it back.
+    // Counterclockwise: the box's top edge swings above the origin's y, so
+    // the window's height is what brings it back.
     case "rotate-90": {
-      return `translate(${String(modeWidth)}px, 0) rotate(90deg) `;
+      return `translate(0, ${String(modeHeight)}px) rotate(-90deg) `;
     }
     case "rotate-180": {
       return `translate(${String(modeWidth)}px, ${String(modeHeight)}px) rotate(180deg) `;
     }
-    // Counterclockwise: the box's top edge swings above the origin's y instead.
+    // Clockwise: the box's left edge swings behind the origin's x instead.
     case "rotate-270": {
-      return `translate(0, ${String(modeHeight)}px) rotate(-90deg) `;
+      return `translate(${String(modeWidth)}px, 0) rotate(90deg) `;
     }
   }
 };

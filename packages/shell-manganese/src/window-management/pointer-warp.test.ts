@@ -46,7 +46,7 @@ describe("pageBoxOf", () => {
         WINDOW,
         panel([540, 960], { size: [1920, 1080], transform: "rotate-270" }),
       ),
-    ).toStrictEqual({ height: 400, width: 200, x: 100, y: 480 });
+    ).toStrictEqual({ height: 400, width: 200, x: 1620, y: 200 });
   });
 });
 

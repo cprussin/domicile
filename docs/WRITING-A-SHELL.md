@@ -376,10 +376,10 @@ The same arithmetic is what makes a display of a density your page does not
 render at come out the right size, so a 1.2 monitor no longer draws its
 desktop in the corner of a black screen.
 
-**`transform` names the turn the *content* takes**, which is the `wl_output`
-convention and the config file's: `rotate-90` is a quarter turn clockwise, for
-an output bolted a quarter turn counterclockwise. A shell reading it applies it as
-written.
+**`transform` is the `wl_output` value, which counts counterclockwise**, as the
+config file, kanshi and sway do: `rotate-90` turns the content a quarter
+counterclockwise, for an output bolted a quarter turn clockwise, and
+`rotate-270` the other way. CSS counts clockwise, so a shell negates it.
 
 `@domicile/chrome-sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it
