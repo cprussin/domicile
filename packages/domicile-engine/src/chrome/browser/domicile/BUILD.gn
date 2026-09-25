@@ -47,8 +47,5 @@ source_set("domicile") {
     # label for it and `ui/gfx/native_widget_types.h` is the wrong header --
     # both were true of a Chromium older than this pin, and the build said so.
     "//ui/gfx:native_ui_types",
-    # `gfx::ScaleToEnclosingRect`, which a shell window's first rectangle is
-    # divided by the primary display's scale with.
-    "//ui/gfx/geometry",
   ]
 }
