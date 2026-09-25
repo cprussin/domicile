@@ -272,9 +272,9 @@ class ShellWindows : public display::DisplayObserver {
     BrowserWindowInterface* shell = held.front().window;
     tabs::TabInterface* tab = shell->GetActiveTabInterface();
     if (tab == nullptr) {
-      LOG(WARNING) << "domicile: the shell window has no tab to copy, so "
-                      "display "
-                   << id << " stays dark";
+      LOG(ERROR) << "domicile: the shell window has no tab to copy, so "
+                    "display "
+                 << id << " stays dark";
       return;
     }
     const GURL url = tab->GetContents()->GetLastCommittedURL();
@@ -315,8 +315,8 @@ class ShellWindows : public display::DisplayObserver {
   void Opened(int64_t id, const GURL& url, BrowserWindowInterface* window) {
     std::erase(opening_, id);
     if (window == nullptr) {
-      LOG(WARNING) << "domicile: no shell window for display " << id
-                   << "; it stays dark until something asks again";
+      LOG(ERROR) << "domicile: no shell window for display " << id
+                 << "; it stays dark until something asks again";
       return;
     }
     // BEFORE THE PAGE IS LOADED, because the page's own channel asks which
