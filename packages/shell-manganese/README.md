@@ -669,7 +669,7 @@ shell that wants its own pictures owns its own list.
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
-| `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — it searches its index of the whole home and sends back only the front of what matched — so the panel also says when that index is not finished, and asks again until it is. |
+| `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — it searches its index of the whole home and sends back only the front of what matched — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the files, then a search, always. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds, or the page a URL is. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |

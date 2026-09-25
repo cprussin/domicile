@@ -18,6 +18,7 @@ pub mod battery;
 pub mod clipboard;
 pub mod file_changes;
 pub mod file_index;
+pub mod file_preview;
 pub mod file_search;
 pub mod home_walk;
 pub mod home_watch;
@@ -379,6 +380,7 @@ impl Host {
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::SearchFiles { .. }
+            | ChromeMessage::PreviewFile { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::PointerMotion { .. }

@@ -67,6 +67,14 @@ impl FileSearch {
         }
     }
 
+    /// Whether the index holds `path`, which is what a preview is allowed to
+    /// read.
+    pub fn holds(&self, path: &str) -> bool {
+        self.paths
+            .binary_search_by(|other| other.as_str().cmp(path))
+            .is_ok()
+    }
+
     /// `path`, with a `/` after it if anything is inside it.
     ///
     /// A binary search rather than a look at the next path, because the next

@@ -268,6 +268,17 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
+// What a path holds, answering `preview_file`. `kind` says which of `text`
+// and `entries` it carries; a `binary` or `unreadable` preview carries
+// neither.
+const filePreviewSchema = z.looseObject({
+  entries: z.array(z.string()).optional(),
+  kind: z.enum(["text", "directory", "binary", "unreadable"]),
+  path: z.string(),
+  text: z.string().optional(),
+  type: z.literal("file_preview"),
+});
+
 // The machine's battery: how full, and whether a lead is in.
 //
 // Pushed rather than answered — a charge changes on its own, so there is no
@@ -349,6 +360,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shortcutMessageSchema,
   modifiersSchema,
   foundFilesSchema,
+  filePreviewSchema,
   batterySchema,
   clipboardSchema,
   themeMessageSchema,
@@ -378,6 +390,7 @@ export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
+export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;

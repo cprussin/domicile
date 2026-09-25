@@ -214,7 +214,7 @@ export const Palette: StoryObj<typeof ModalDialog> = {
     disablePointerDismissal: false,
     modal: true,
     placement: "top",
-    size: "lg",
+    size: "xl",
     surface: "glass",
     title: "Open",
     trigger: <Button size="xl">Open</Button>,
