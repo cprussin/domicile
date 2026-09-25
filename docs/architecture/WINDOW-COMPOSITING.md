@@ -52,7 +52,9 @@ type through the same property trees. Measured on a GPU against an ordinary
 element laid out beside it — `z-index`, `transform`, `border-radius`,
 `opacity`, `filter: blur()`, `mix-blend-mode` and a resize — **every one is
 bit-exact**. An `<app>` is not a `<div>` up to an outline; it is a `<div>`.
-`ENGINE-FORK.md` has the table.
+`ENGINE-FORK.md` has the table. The same cells run again with a
+`backdrop-filter` stacked over them, and that one is asserted rather than
+reported — see *What is open*.
 
 Nothing here is reimplemented, and that is the point of the fork rather than a
 detail of it: an effect works because the page's compositor applies it to a
@@ -66,8 +68,22 @@ layer, so there is no list of supported properties to keep in step with CSS.
   with `saveLayer(SkCanvasPriv::ScaledBackdropLayer(...))` on the canvas of the
   render pass the filtered quad sits in (`skia_renderer.cc:1785` at the pin),
   and by then aggregation has drawn the window's quad into that same pass. So
-  the filter has the window's pixels to read. **Nobody has run it.** Until
-  someone does, treat it as likely-correct and unmeasured rather than promised.
+  the filter has the window's pixels to read.
+
+  **`guard-css-and-resize.sh` asks now, and what it asserts is this:** it runs
+  `spike-css-page.html` a second time with `?backdrop-filter=`, which stacks a
+  filtering element over every property cell, and every one of those cells has
+  to come out the way it does unfiltered — an `<app>` under a filter is a
+  `<div>` under the same filter, pixel for pixel. A filter with none of the
+  window's pixels to read leaves the two halves of every cell disagreeing,
+  which is the failure. The run's last cell takes the filter on its ordinary
+  half alone, so a filter that did nothing at all fails there rather than
+  passing as parity — an unfiltered run of that page is the run above, and it
+  passes. The value is a per-pixel filter rather than a blur, because the
+  verdict is read off interior pixels and a blur carries a resampled edge into
+  them; `BACKDROP_FILTER='blur(8px)' GPU=1` is the blur measurement, on the
+  hardware where there is no edge to carry. **What comes back is CI's to say.**
+  The guard runs on `crux`, and this is what it asserts rather than a result.
 
   **The way it could fail is overlay promotion** — the optimization named at
   the top of this doc. A quad viz puts on a hardware plane is not in the render
@@ -85,6 +101,12 @@ layer, so there is no list of supported properties to keep in step with CSS.
   than luck. One exception to know: the underlay test is
   `!candidate.requires_overlay && ...`, so a quad viz *must* scan out —
   protected content — is promoted under a filter anyway.
+
+  **And that half stays open whatever the guard says.** It runs headless and
+  software-composited, where no quad is a candidate for a hardware plane at
+  all, so a pass there is the filter reading a window's quads out of a render
+  pass and nothing about the decline. Promotion wants a lit CRTC, which is the
+  same thing presentation wants — `ENGINE-FORK.md`, phase 3.
 - **`wl_shm` clients.** A client that draws into shared memory has no dmabuf to
   import, so its window is blank and the compositor says so once per client.
   The upload that would give it one does not exist — `ENGINE-FORK.md`, phase 2.

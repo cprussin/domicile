@@ -46,14 +46,14 @@ same reason.
 | `scripts/guard-webview-new-window.sh`, `guard-webview-new-window.js`, `guard-webview-new-window-server.py` | a link with `target="_blank"` clicked in a browser window, and the second window it has to produce: the event the element dispatches, the address on it, and the page that then loads in the second `<webview>` the shell opens — because an event is not a window. Its control is the other half of the same page, an ordinary link, which must ask for nothing. Headless, and the click goes in over the debugging port |
 | `scripts/guard-webview-guest-page.py` | the page a browser window shows for the keyboard and click guards, saying what it was given |
 | `scripts/guard_webview_devtools.py` | driving a key or a press at a running engine over the debugging port, which is the only keyboard and pointer `crux` has. Imported, which is why it is the one file here with underscores |
-| `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, the resize, and the latency |
+| `scripts/guard-css-and-resize.sh` | the measurement: seven CSS properties, those properties again under a `backdrop-filter`, the resize, and the latency |
 | `scripts/guard-latency.sh` | keystroke to pixel with a real client — the whole of what a user waits for, read out of the compositor's own `latency` lines. Under `under-wayland.sh` |
 | `scripts/guard-control-arrival.sh`, `guard-control-arrival.js`, `guard-control-arrival-compositor.py` | the hop from the compositor's socket into the page, measured off the `arrival` stamp every `ControlChannelClient` method carries, and the cursor keyword set read end to end |
 | `scripts/lib-latency.sh` | what a latency run means, read out of a log. Sourced by `guard-latency.sh` and by `/scripts/test-latency-report.sh`, so the reading is exercised without starting a browser |
 | `scripts/lib-annotate.sh` | how a guard says where it stopped, as a GitHub annotation rather than a line in a thousand-line job log |
-| `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs twice |
+| `scripts/spike.sh` | run one step of the spike end to end; the producer's exit code is the verdict. What `guard-css-and-resize.sh` runs three times |
 | `scripts/spike-page.html` | steps 2 and 3's page: a `<canvas>` that embeds instead of drawing |
-| `scripts/spike-css-page.html` | the CSS half's page — each property on an `<app>` and on a `<div>` beside it |
+| `scripts/spike-css-page.html` | the CSS run's page — each property on an `<app>` and on a `<div>` beside it, and, with `?backdrop-filter=`, the same cells under a filter stacked over them |
 | `scripts/spike-resize-page.html` | the resize cell, which needs a page to itself |
 | `scripts/spike-engine.sh` | phase 1's library, end to end, from a C process. Run by hand, not by CI |
 | `scripts/spike-dmabuf.sh` | a real dmabuf, imported, submitted and released. By hand, always under `under-wayland.sh` |
@@ -609,6 +609,16 @@ property bands failed at and the reason the fork exists.
 `in effect` is the check that stops a property that never reached the page from
 passing as parity, and the last row is the check that stops a diff that cannot
 see a difference from passing at all.
+
+**The same eight cells run a second time with a `backdrop-filter` over them**,
+which is translucent chrome above a window: the filter reads the render pass
+aggregation has already drawn the window's quads into, so an `<app>` under one
+has to come out the same as a `<div>` under one. That run makes its last cell a
+different control — the filter on its ordinary half and not on its `<app>` half,
+both back on the producer's color — because an unfiltered run of this page is
+the run above, and it passes. No table is quoted for it here: `crux` is the only
+thing that can answer it, and `WINDOW-COMPOSITING.md` has what is asserted
+rather than what came back.
 
 Steps 2 and 3 are still `spike.sh`, and still a single pixel:
 
