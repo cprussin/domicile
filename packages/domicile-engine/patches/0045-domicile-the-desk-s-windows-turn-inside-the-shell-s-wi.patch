@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the desk's windows turn inside the shell's wipe
+
+A theme change now turns the chrome first and the windows once every
+shell has captured the frame its wipe starts from, so the wipe passes
+across windows turning inside it. DomicileHost says so with a second
+event, `windowstheme`, carrying the same DomicileThemeEvent as `theme`.
+
+One name in Chromium's event registry is all it needs here; the member,
+the mojom and the dispatch are the fork's own files.
+---
+ third_party/blink/renderer/core/events/event_type_names.json5 | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
+--- a/third_party/blink/renderer/core/events/event_type_names.json5
++++ b/third_party/blink/renderer/core/events/event_type_names.json5
+@@ -35,6 +35,7 @@
+     "battery",
+     "clipboard",
+     "theme",
++    "windowstheme",
+     "filepreview",
+     "focuschanged",
+     "focusrequested",
