@@ -50,8 +50,12 @@ contains() {
 }
 
 # A repository shaped like this one, with a remote to push to and a branch that
-# has moved on since the merge ref was computed.
+# has moved on since the merge ref was computed. Given an argument, main's
+# later commit repins as well, so `engine-release.nix` holds different bytes on
+# the merge ref than on the branch tip — which is the case the checkout refuses
+# to walk over, below.
 setup() {
+  local main_repins="${1:-}"
   rm -rf "$WORK/remote" "$WORK/repo"
   git init -q --bare "$WORK/remote"
 
@@ -87,6 +91,8 @@ setup() {
   # main. Detached, as `actions/checkout` leaves it.
   git -C "$WORK/repo" checkout -q main
   echo "main moved" >"$WORK/repo/marker"
+  [ -z "$main_repins" ] ||
+    echo "pinned = 2" >"$WORK/repo/packages/domicile-engine/engine-release.nix"
   git -C "$WORK/repo" commit -qam "main moved"
   git -C "$WORK/repo" push -q origin main
   git -C "$WORK/repo" checkout -q --detach
@@ -143,6 +149,26 @@ expect "the commit touches one file" \
 
 contains "the message says what it is" "engine-sabc123456789" \
   "$(git -C "$WORK/repo" log -1 --format=%B "$tip")"
+
+echo
+echo "== a repin main got to first does not block the checkout =="
+
+# THE GENERATOR RUNS AT THE MERGE REF AND THE COMMIT GOES ONTO THE TIP, so
+# between the two there is a working tree holding a modified file the checkout
+# is about to change. Git refuses that outright — `Your local changes to the
+# following files would be overwritten by checkout` — whenever
+# `engine-release.nix` differs between the merge ref and the tip, which is what
+# a pull request that main has repinned since looks like. It is the most
+# expensive way this job can fail: the Chromium build and the publish have both
+# already succeeded by the time this runs, so a refusal here throws away an
+# hour of work that cannot be reused.
+setup main-repins-too
+out="$(repin)"
+expect "the repin succeeds" ok "$(status "$out")"
+expect "and the branch holds what the generator wrote" \
+  "pinned = 1 # engine-sabc123456789" \
+  "$(git -C "$WORK/repo" show \
+       "$(pushed feature):packages/domicile-engine/engine-release.nix" 2>/dev/null)"
 
 echo
 echo "== it does nothing when there is nothing to do =="
