@@ -9,29 +9,31 @@
   constructor(DOMString type,
               optional DomicileFilesEventInit eventInitDict = {});
 
-  // What there is to open, answering DomicileHost.listFiles().
+  // The query this answers, as DomicileHost.searchFiles() was given it.
+  readonly attribute DOMString query;
+
+  // The front of what matched: paths relative to the home directory the
+  // desktop is running as -- `Notes/today.org`, not
+  // `/home/you/Notes/today.org` -- already in the order they go on screen, and
+  // a directory ends in `/`.
   //
-  // Paths relative to the home directory the desktop is running as --
-  // `Notes/today.org`, not `/home/you/Notes/today.org` -- because that is what
-  // a launcher draws and the part every row would share is the part no row
-  // needs. Already in the order they go on screen: the compositor sorts, so a
-  // launcher does not have to invent a second rule for it.
-  //
-  // An empty array is a home with nothing to offer, which is an answer. A home
+  // An empty array is a query that matched nothing, which is an answer. A home
   // that could not be READ is no event at all -- the compositor logs that and
   // says nothing, because "you have no files" is not a thing a broken desktop
   // should be able to say on a working one's behalf.
   readonly attribute FrozenArray<DOMString> files;
 
-  // Whether the compositor is still building the index this list came out of.
+  // How many paths matched, of which `files` is the front.
+  readonly attribute unsigned long matched;
+
+  // Whether the compositor is still building the index this was found in.
   //
-  // THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The list is a
-  // launcher's whole evidence that a file exists, so one taken from an index
+  // THE DIFFERENCE BETWEEN AN INCOMPLETE ANSWER AND A WRONG ONE. The rows are
+  // a launcher's whole evidence that a file exists, so an answer from an index
   // still being walked has to arrive saying so -- otherwise a person who typed
   // the name of a file the walk has not reached yet is told, in the only
   // language the panel has, that they do not have it. A shell draws this as a
-  // line saying the index is being built, and the compositor sends another of
-  // these unasked when the walk ends.
+  // line saying the index is being built, and asks again.
   readonly attribute boolean indexing;
 
   // When the browser process had this message, on `performance.now()`'s clock.

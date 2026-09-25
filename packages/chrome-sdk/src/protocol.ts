@@ -249,32 +249,29 @@ const keymapSchema = z.looseObject({
   type: z.literal("keymap"),
 });
 
-// What there is to open, answering `list_files` and also arriving unasked.
-// Paths relative to the home directory, sorted — the order is the answer,
-// worked out by `domicile_host::file_index` rather than by whatever a
-// `read_dir` handed back.
+// What matched a `search_files`, answering it and nothing else: the index
+// itself never crosses. `query` is the one answered; `files` is the front of
+// what matched, relative to the home directory, in byte order, with a
+// directory ending in `/`; `matched` is how many there were in all.
 //
-// An empty list is a home with nothing to offer. A home that could not be read
-// is not this message at all: the compositor logs that and says nothing, so a
-// launcher shows no list rather than an empty one it would have to explain.
+// A home that could not be read is not this message at all: the compositor
+// logs that and says nothing, so a launcher shows no list rather than an empty
+// one it would have to explain.
 //
-// `indexing` is whether the compositor has finished walking the home this came
-// out of, and it defaults to false — which is "this is the whole home", the
-// state a list is in for all but the first seconds of a session and the right
-// reading of a line written before the index existed. The same default the
-// Rust half carries as `#[serde(default)]`, for the same reason: nothing that
-// completes a handshake with this build omits it, and a captured session or a
-// hand-written fixture can.
-const filesSchema = z.looseObject({
+// `indexing` is whether the compositor has finished walking the home the
+// answer was found in.
+const foundFilesSchema = z.looseObject({
   files: z.array(z.string()),
-  indexing: z.boolean().default(false),
-  type: z.literal("files"),
+  indexing: z.boolean(),
+  matched: z.number().int().nonnegative(),
+  query: z.string(),
+  type: z.literal("found_files"),
 });
 
 // The machine's battery: how full, and whether a lead is in.
 //
 // Pushed rather than answered — a charge changes on its own, so there is no
-// `list_battery` beside `list_files`. The compositor reads
+// `list_battery`. The compositor reads
 // `/sys/class/power_supply` and sends this when the reading moves far enough
 // to draw, plus once to a chrome that has just connected.
 //
@@ -296,7 +293,7 @@ const batterySchema = z.looseObject({
 // What has been copied on this desktop, newest first.
 //
 // Pushed, like the battery: a copy is an event the compositor already hears,
-// so there is no `list_clipboard` beside `list_files`. Sent whenever the
+// so there is no `list_clipboard`. Sent whenever the
 // history changes and again to a chrome that has just connected — an empty
 // list is a desktop nothing has been copied on yet, which is an answer and the
 // ordinary state of one that has just started.
@@ -351,7 +348,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   focusRequestedSchema,
   shortcutMessageSchema,
   modifiersSchema,
-  filesSchema,
+  foundFilesSchema,
   batterySchema,
   clipboardSchema,
   themeMessageSchema,
@@ -380,7 +377,7 @@ export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
 export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
-export type FilesMessage = z.infer<typeof filesSchema>;
+export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;

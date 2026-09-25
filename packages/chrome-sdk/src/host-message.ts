@@ -175,29 +175,27 @@ export type DisplaysMessage = {
 };
 
 /**
- * What there is to open.
+ * What a search of the home found: the answer to
+ * {@link DomicileClient.searchFiles}, and never anything more.
  *
- * Paths relative to the home directory — `Notes/today.org`, not
- * `/home/you/Notes/today.org` — and already in the order they go on screen, so
- * a launcher draws the list rather than sorting it a second time under a rule
- * of its own.
- *
- * Answers `listFiles` and also arrives on its own, whenever the compositor's
- * index of the home changes.
- *
- * An empty list is a home with nothing to offer, and is an answer: a shell
- * that read it as "not told yet" would wait for a message that is not coming.
- * A home that could not be read produces no message at all.
+ * `files` is the front of what matched — paths relative to the home directory,
+ * `Notes/today.org` rather than `/home/you/Notes/today.org`, in the order they
+ * go on screen, and a directory ends in `/`. `matched` is how many there were
+ * in all. The index itself stays in the compositor: it is the whole home, and
+ * a page has no use for the rows nobody asked for.
  */
-export type FilesMessage = {
+export type FoundFilesMessage = {
+  /** The query this answers. */
+  query: string;
   files: readonly string[];
+  matched: number;
   /**
-   * Whether the index behind the list is still being built.
+   * Whether the index the answer was found in is still being built.
    *
    * **The difference between an incomplete answer and a wrong one**, and a
-   * thing a shell cannot work out for itself: a short list from an index still
-   * being walked and a short list from a small home look identical. Say so on
-   * screen — another message follows when the walk ends.
+   * thing a shell cannot work out for itself: a short answer from an index
+   * still being walked and a short answer from a small home look identical.
+   * Say so on screen, and ask again.
    */
   indexing: boolean;
 };
@@ -265,7 +263,6 @@ export type HostMessageMap = {
   shortcut: ShortcutMessage;
   modifiers: ModifiersMessage;
   displays: DisplaysMessage;
-  files: FilesMessage;
   battery: BatteryMessage;
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
@@ -351,18 +348,19 @@ export const shortcut = (event: DomicileShortcutEvent): ShortcutMessage => ({
 });
 
 /**
- * What there is to open, passed through rather than translated.
+ * What a search found, passed through rather than translated.
  *
  * A `FrozenArray<DOMString>` is already an array of strings to a page, and the
  * order it arrives in is the answer — so this is the one translator with no
  * decision in it, and it exists so that `domicile-client.ts` has the same one
  * call per listener that every other event gets. `arrival` is left behind, as
- * everywhere else here; `indexing` is not, because it is what says whether the
- * list is all of it.
+ * everywhere else here.
  */
-export const files = (event: DomicileFilesEvent): FilesMessage => ({
+export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
   files: event.files,
   indexing: event.indexing,
+  matched: event.matched,
+  query: event.query,
 });
 
 /** The charge, with the SDK's own `arrival` left behind: no shell draws it. */

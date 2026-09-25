@@ -5,16 +5,16 @@
 //! [`domicile_host::home_walk`], what a filesystem event does to it is
 //! [`domicile_host::file_changes`], and each of those is a function over
 //! values with tests of its own. This is the loop that runs them, and the only
-//! decisions in it are about *when*: when a half-built index is worth telling
-//! the chromes about, and how long a burst of writes is gathered for.
+//! decisions in it are about *when*: when a half-built index is worth
+//! republishing, and how long a burst of writes is gathered for.
 //!
 //! # The index is not shared, and the answer is
 //!
 //! [`FileIndex`] lives on this thread and nothing else touches it. What
-//! crosses to the chrome connections is [`Offered`] — the list as it stood at
-//! the last announcement — which is a value rather than a thing to lock
-//! against. A connection answering `list_files` clones it and never waits for
-//! a walk; nothing on the Wayland thread waits for a disk.
+//! crosses to the chrome connections is [`Offered`] — a search over the list
+//! as it stood at the last announcement — which is a value rather than a thing
+//! to lock against. A connection answering `search_files` takes a handle on it
+//! and never waits for a walk; nothing on the Wayland thread waits for a disk.
 //!
 //! # Why it is a thread and not the event loop
 //!
@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 
 use domicile_host::file_changes::{changes, Change};
 use domicile_host::file_index::FileIndex;
+use domicile_host::file_search::FileSearch;
 use domicile_host::home_walk::{walk, RealDirectory};
 use domicile_host::home_watch::{watch_home, HomeWatcher};
 use domicile_host::index_file::{read, write, IndexFileError};
@@ -43,10 +44,10 @@ const BATCH: usize = 2_000;
 
 /// How often a walk that is still running is worth announcing.
 ///
-/// The message carries the whole list, so this is the rate at which a home's
-/// worth of paths crosses into every connected page. Twice a second is a
-/// launcher that visibly fills in; ten times a second is the same list ten
-/// times over for one more directory.
+/// Each announcement folds the whole list into a new [`FileSearch`], so this
+/// is how often a home's worth of paths is lowered on this thread. Twice a
+/// second is a launcher whose searches visibly fill in; ten times a second is
+/// the same list ten times over for one more directory.
 const WHILE_BUILDING: Duration = Duration::from_millis(500);
 
 /// How long a burst of filesystem events is gathered before it is applied.
@@ -66,15 +67,15 @@ const SETTLE: Duration = Duration::from_millis(250);
 /// the first place.
 const KEPT_FRESH: Duration = Duration::from_secs(300);
 
-/// What a launcher is offered, as the last announcement left it.
+/// What a launcher's search is answered from, as the last announcement left
+/// it.
 ///
-/// The whole list rather than what changed, for the reason the clipboard sends
-/// the whole history: a page reconciling deltas is wrong forever after missing
-/// one, and this is a message a shell can also *ask* for — so it has to be
-/// able to stand on its own.
-#[derive(Debug, Clone)]
+/// Never sent anywhere whole. The index is the size of a home directory, and
+/// what crosses into a page is what one query matched — see
+/// `domicile_host::file_search`.
+#[derive(Debug)]
 pub struct Offered {
-    pub files: Vec<String>,
+    pub search: FileSearch,
     /// Whether the walk behind this list is still running, which is what a
     /// shell draws its "still building" line from. See
     /// `domicile_protocol::HostMessage::Files`.
@@ -85,8 +86,9 @@ pub struct Offered {
 ///
 /// Meant to be handed a thread of its own. `tell` is how the rest of the
 /// desktop hears about it, called only when something a page would draw has
-/// moved: the compositor publishes the [`Offered`] for `list_files` to answer
-/// from and broadcasts it to the chromes that are already connected.
+/// moved: the compositor publishes the [`Offered`] for `search_files` to
+/// answer from. Nothing is broadcast: a page is only ever told what its own
+/// query matched.
 ///
 /// **Nothing below the home is fatal.** A cache file that will not read, a
 /// directory that will not open, a watch that cannot be established: each
@@ -168,8 +170,8 @@ fn walk_the_home(home: &Path, index: &mut FileIndex, tell: &impl Fn(Offered)) ->
             break;
         }
         index.found(batch);
-        // On a clock rather than per batch, because what a batch costs the
-        // chromes is the whole list over again: see `WHILE_BUILDING`.
+        // On a clock rather than per batch, because what a batch costs is the
+        // whole list folded over again: see `WHILE_BUILDING`.
         if last_told.elapsed() >= WHILE_BUILDING {
             announce(index, tell);
             last_told = Instant::now();
@@ -253,8 +255,8 @@ fn hold_it_current(
     let mut written = Instant::now();
     while let Ok(first) = watcher.rx.recv() {
         // A `git checkout` is thousands of events over a second or two. Taken
-        // one at a time they would be one announcement of the whole home per
-        // file, so the burst is gathered until it stops.
+        // one at a time they would be the whole home folded again per file, so
+        // the burst is gathered until it stops.
         let gathered = std::iter::once(first)
             .chain(std::iter::from_fn(|| watcher.rx.recv_timeout(SETTLE).ok()));
 
@@ -318,11 +320,11 @@ fn appeared(index: &mut FileIndex, home: &Path, path: String) {
 ///
 /// Whether it is is the index's own question rather than one asked here: most
 /// of what a home directory reports changes nothing a page would draw, and
-/// this message carries the whole list.
+/// an announcement folds the whole list.
 fn announce(index: &mut FileIndex, tell: &impl Fn(Offered)) {
     if index.changed() {
         tell(Offered {
-            files: index.files(),
+            search: FileSearch::new(index.files()),
             indexing: index.indexing(),
         });
     }

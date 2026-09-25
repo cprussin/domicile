@@ -18,6 +18,7 @@ pub mod battery;
 pub mod clipboard;
 pub mod file_changes;
 pub mod file_index;
+pub mod file_search;
 pub mod home_walk;
 pub mod home_watch;
 pub mod index_file;
@@ -377,7 +378,7 @@ impl Host {
             // — the window leaves the scene when it actually goes away.
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
-            | ChromeMessage::ListFiles
+            | ChromeMessage::SearchFiles { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::PointerMotion { .. }

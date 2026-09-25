@@ -72,7 +72,11 @@ import type {
   DomicileHost,
   DomicileShortcut,
 } from "./domicile-host";
-import type { HostMessageOf, HostMessageType } from "./host-message";
+import type {
+  FoundFilesMessage,
+  HostMessageOf,
+  HostMessageType,
+} from "./host-message";
 import {
   appAppeared,
   appClosed,
@@ -81,9 +85,9 @@ import {
   appTitled,
   battery,
   clipboard,
-  files,
   focusChanged,
   focusRequested,
+  foundFiles,
   modifiers,
   shortcut,
   theme,
@@ -161,6 +165,20 @@ export class DomicileClient {
    */
   readonly #surfaceSizes = new Map<string, SurfaceSize>();
 
+  /**
+   * The searches waiting on an answer, by the query each asked.
+   *
+   * By query rather than in order, because the compositor answers each one
+   * with the query it answers: two searches for the same thing settle with the
+   * one answer, and an answer to `n` is never taken for the answer to `no`.
+   * Not in the handler table, because an answer has an asker and a handler
+   * slot does not.
+   */
+  readonly #searches = new Map<
+    string,
+    ((found: FoundFilesMessage) => void)[]
+  >();
+
   constructor(host: DomicileHost) {
     this.#host = host;
 
@@ -209,7 +227,11 @@ export class DomicileClient {
       this.#deliver("modifiers", modifiers(event));
     });
     host.addEventListener("files", (event) => {
-      this.#deliver("files", files(event));
+      const found = foundFiles(event);
+      for (const settle of this.#searches.get(found.query) ?? []) {
+        settle(found);
+      }
+      this.#searches.delete(found.query);
     });
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
@@ -425,20 +447,25 @@ export class DomicileClient {
   }
 
   /**
-   * Ask what there is to open. The answer arrives as a `files` message.
+   * What in the home matches `query`: every word of it, in any order,
+   * ignoring case.
    *
-   * A page has no filesystem and this is deliberately not one: it names no
-   * path, so what gets read is the compositor's decision and not something a
-   * document served over `domicile://` can steer. See `DomicileHost.listFiles`.
+   * The compositor looks and answers with the front of what matched and how
+   * many there were — its index of the home never crosses into the page. It
+   * names no path, so what gets searched is the compositor's decision and not
+   * something a document served over `domicile://` can steer. See
+   * `DomicileHost.searchFiles`.
    *
-   * Asked *and* subscribed to: a launcher asks each time it opens, and the
-   * compositor also sends a `files` message on its own whenever its index of
-   * the home changes. The hold in {@link #held} is what makes the asking safe
-   * from an effect, where the answer can be back before the handler for it is
-   * registered.
+   * **A desktop with no index never settles this.** No `HOME`, or a home
+   * that would not open, is a compositor that says so in its log and answers
+   * nothing — because "you have no files" is that breakage wearing the face of
+   * an ordinary answer.
    */
-  listFiles(): void {
-    this.#host.listFiles();
+  searchFiles(query: string): Promise<FoundFilesMessage> {
+    return new Promise((settle) => {
+      this.#searches.set(query, [...(this.#searches.get(query) ?? []), settle]);
+      this.#host.searchFiles(query);
+    });
   }
 
   /**

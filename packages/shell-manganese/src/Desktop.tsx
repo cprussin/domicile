@@ -8,7 +8,6 @@ import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
-import { useFiles } from "./launcher/useFiles";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { Wallpaper } from "./wallpaper/Wallpaper";
@@ -57,10 +56,14 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // it.
   const keyed = useRef(false);
 
-  // Asked for each time the panel goes up, and pushed in between: the
-  // compositor keeps an index of the home and broadcasts it as it changes, but
-  // a page that has just reloaded has heard none of that.
-  const offered = useFiles(domicile, windows.launcherOpen);
+  // The launcher's rows are the host's answer to what is in its box: the
+  // compositor keeps an index of the home and searches it, and all that
+  // crosses into this page is what matched. One function for the life of the
+  // client, because a new one would be a new search.
+  const search = useCallback(
+    (query: string) => domicile.searchFiles(query),
+    [domicile],
+  );
 
   // Pushed rather than asked for, which is the other shape: a copy is an event
   // the compositor already hears, so the history is here before the panel is
@@ -133,8 +136,6 @@ export const Desktop = ({ desk, domicile }: Props) => {
         viewport is this monitor, and the panel is over the whole of it.
       */}
       <Launcher
-        files={offered.files}
-        indexing={offered.indexing}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}
@@ -151,6 +152,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
           }
         }}
         open={windows.launcherOpen}
+        search={search}
       />
       {/* Over the whole desktop, like the launcher and for its reason. */}
       <Clipboard

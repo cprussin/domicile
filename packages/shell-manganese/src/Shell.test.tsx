@@ -93,6 +93,11 @@ class FakeDomicile {
 
   readonly #handlers = new Map<string, (message: unknown) => void>();
 
+  /** What the host's index holds, or `undefined` until a test says. */
+  #home: readonly string[] | undefined;
+  /** Searches the host has not answered yet. */
+  readonly #asked: { query: string; settle: (found: unknown) => void }[] = [];
+
   on(type: string, handler: (message: never) => void): this {
     this.#handlers.set(type, handler as (message: unknown) => void);
     return this;
@@ -123,8 +128,35 @@ class FakeDomicile {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
-  listFiles(): void {
-    this.calls.push(["listFiles"]);
+  /**
+   * The host's search, answered once {@link holds} has said what the home is —
+   * and never before, which is a desktop whose walk has told it nothing yet.
+   */
+  searchFiles(query: string): Promise<unknown> {
+    this.calls.push(["searchFiles", query]);
+    return new Promise((settle) => {
+      this.#asked.push({ query, settle });
+      this.#answer();
+    });
+  }
+
+  /** The home the host searches, which settles every search still waiting. */
+  async holds(files: readonly string[]): Promise<void> {
+    this.#home = files;
+    await act(async () => {
+      this.#answer();
+      await Promise.resolve();
+    });
+  }
+
+  #answer(): void {
+    const home = this.#home;
+    if (home !== undefined) {
+      for (const { query, settle } of this.#asked.splice(0)) {
+        const files = home.filter((path) => path.includes(query));
+        settle({ files, indexing: false, matched: files.length, query });
+      }
+    }
   }
   copyClipboardEntry(entry: number): void {
     this.calls.push(["copyClipboardEntry", entry]);
@@ -1571,10 +1603,9 @@ describe("the launcher", () => {
       (view) => view.getAttribute("src") ?? "",
     );
 
-  /** The host answering a `list_files`, which is what fills the panel. */
-  const homeHolds = (...files: readonly string[]): void => {
-    domicile.emit("files", { files });
-  };
+  /** What the host's index of the home holds, which is what fills the panel. */
+  const homeHolds = (...files: readonly string[]): Promise<void> =>
+    domicile.holds(files);
 
   it("is not on screen until the key that opens it", () => {
     renderShell();
@@ -1582,23 +1613,23 @@ describe("the launcher", () => {
     expect(launcherBox()).toBeNull();
   });
 
-  it("opens on mod+space and asks the host what there is to open", () => {
+  it("opens on mod+space and asks the host what matches its empty box", () => {
     // The ask rides with the opening rather than with the shell starting: a
-    // home directory changes for reasons nothing here is watching, so the list
-    // has to be current at the moment the panel is.
+    // home directory changes for reasons nothing here is watching, so the
+    // answer has to be current at the moment the panel is.
     renderShell();
 
     press("space");
 
     expect(launcherBox()).toBeVisible();
-    expect(domicile.calls).toContainEqual(["listFiles"]);
+    expect(domicile.calls).toContainEqual(["searchFiles", ""]);
   });
 
-  it("shows the files the host answered with", () => {
+  it("shows the files the host answered with", async () => {
     renderShell();
     press("space");
 
-    homeHolds("Notes/today.org", "todo.txt");
+    await homeHolds("Notes/today.org", "todo.txt");
 
     // A row is the name and then the directories above it — see
     // `launcher/file-row.ts` — with the grid's gap, rather than any text,
@@ -1613,7 +1644,7 @@ describe("the launcher", () => {
     // there and nowhere this page can see. See `launcher/editor-command.ts`.
     renderShell();
     press("space");
-    homeHolds("Notes/today.org");
+    await homeHolds("Notes/today.org");
 
     await userEvent.setup().click(screen.getByRole("option"));
 
@@ -1633,7 +1664,7 @@ describe("the launcher", () => {
   it("opens a typed URL in a browser window on the desktop", async () => {
     const { container } = renderShell();
     press("space");
-    homeHolds("todo.txt");
+    await homeHolds("todo.txt");
 
     await typeIntoLauncher("example.com{Enter}");
 

@@ -16,20 +16,15 @@ namespace blink {
 
 class DomicileFilesEventInit;
 
-// What there is to open, answering DomicileHost::listFiles() and also arriving
-// unasked.
+// What a search of the home found, answering DomicileHost::searchFiles().
 //
 // The one event on this channel that answers a question at all. It is an event
-// and not a promise because everything else here is: a shell registers one
-// listener per message type through `DomicileClient`, whose hold covers the
-// gap between the call and the handler, and a promise would be a second
-// delivery mechanism for one message. That shape is also what lets the
-// compositor send this on its own, which it does whenever the index behind the
-// list changes -- a promise would have had nowhere to put those.
+// and not a promise because everything else here is; the query it carries is
+// what lets `DomicileClient` settle the search that asked it.
 //
 // The paths are relative to the home directory and already sorted -- see the
-// IDL, and `domicile_host::file_index` in the compositor, which is where the
-// list is kept and the order is decided.
+// IDL, and `domicile_host::file_search` in the compositor, which is where the
+// matching is done.
 class MODULES_EXPORT DomicileFilesEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -40,15 +35,19 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
   DomicileFilesEvent(const AtomicString& type,
                      const DomicileFilesEventInit* initializer);
   DomicileFilesEvent(const AtomicString& type,
+                     String query,
                      Vector<String> files,
+                     uint32_t matched,
                      bool indexing,
                      DOMHighResTimeStamp arrival);
   ~DomicileFilesEvent() override;
 
+  const String& query() const { return query_; }
   const FrozenArray<IDLString>& files() const { return *files_; }
+  uint32_t matched() const { return matched_; }
 
-  // Whether the index this list came out of is still being built. See the IDL:
-  // an incomplete answer that did not say so would read as a complete one.
+  // Whether the index this was found in is still being built. See the IDL: an
+  // incomplete answer that did not say so would read as a complete one.
   bool indexing() const { return indexing_; }
 
   // When the browser process had this, on `performance.now()`'s clock. See
@@ -59,14 +58,13 @@ class MODULES_EXPORT DomicileFilesEvent final : public Event {
   void Trace(Visitor*) const override;
 
  private:
+  String query_;
   // Frozen because the IDL says so, and never null: both constructors build
-  // one, an empty home included. An absent list and an empty one are the same
-  // answer here -- a home with nothing to offer -- because the compositor does
-  // not send this message at all when it has nothing to say.
+  // one, an empty answer included. An absent list and an empty one are the
+  // same answer here -- nothing matched -- because the compositor does not
+  // send this message at all when it has nothing to say.
   Member<FrozenArray<IDLString>> files_;
-  // False by default, which is "this is the whole home": the state a list is
-  // in for all but the first seconds of a session, and the reading an event
-  // built without the field should get.
+  uint32_t matched_ = 0;
   bool indexing_ = false;
   DOMHighResTimeStamp arrival_ = 0;
 };

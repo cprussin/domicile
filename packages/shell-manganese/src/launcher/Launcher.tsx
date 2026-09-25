@@ -1,3 +1,4 @@
+import type { FoundFilesMessage } from "@domicile/chrome-sdk/host-message";
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
@@ -7,18 +8,18 @@ import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import type { ReactNode } from "react";
-import { Fragment, useId, useMemo, useState } from "react";
+import { Fragment, useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
-import { directoriesIn, fileRow } from "./file-row";
+import { fileRow } from "./file-row";
 import type { Hint } from "./hint";
 import { HintKind, hintFor } from "./hint";
 import type { Launch } from "./launch";
 import { launchFor } from "./launch";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
-import { folded, matching } from "./matching";
+import { useFound } from "./useFound";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
 const PROMPT = "Open a file, a URL, or search";
@@ -26,36 +27,22 @@ const PROMPT = "Open a file, a URL, or search";
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
 
-/**
- * How many rows are drawn, however many the query left.
- *
- * **A home is a hundred thousand paths.** The list used to be a few hundred
- * because the walk behind it stopped a level into each directory; it is an
- * index of the whole home now, and a row per path is a panel that hangs the
- * shell on the keystroke that opens it. Nothing is lost by the cap: the rows
- * past it are not rows anybody scrolls to — what narrows this list is typing —
- * and the counter beside the box goes on saying how many there really are, so
- * what is drawn is never mistaken for what matched.
- */
-const ROWS = 200;
-
 type Props = {
-  /** What there is to open, in the order the host answered. */
-  files: readonly string[];
-  /**
-   * Whether the desktop is still walking the home the list came out of.
-   *
-   * Drawn, and it has to be: a list that is a third of a home looks exactly
-   * like a home with a third as much in it, so a person who types the name of
-   * a file the walk has not reached would otherwise be told they do not have
-   * it, with nothing on screen to say otherwise.
-   */
-  indexing: boolean;
   /** Escape, or a click on the backdrop. The desktop decides what that means. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
   open: boolean;
+  /**
+   * What in the home matches a query, answered by the host.
+   *
+   * The host searches and the panel draws: the compositor's index is the whole
+   * home, and all a page is ever told is what one query found in it.
+   */
+  search: Search;
 };
+
+/** How the panel asks what matches what is in its box. */
+type Search = (query: string) => Promise<FoundFilesMessage>;
 
 /**
  * One box, over a backdrop, that opens a file, a URL or a search.
@@ -72,19 +59,13 @@ type Props = {
  * the first time `mod+space` was pressed over one the desktop thought was
  * shut.
  */
-export const Launcher = ({
-  files,
-  indexing,
-  onDismiss,
-  onLaunch,
-  open,
-}: Props) => (
+export const Launcher = ({ onDismiss, onLaunch, open, search }: Props) => (
   <ModalDialog
     // Escape and the backdrop are what put it away, and the footer says the
     // first of those — a corner ✕ on a panel driven from the keyboard is a
     // button nobody aims at and a line of chrome over the thing being read.
     closeButton={false}
-    footer={<Footer indexing={indexing} />}
+    footer={<Keys />}
     onOpenChange={(next) => {
       if (!next) {
         onDismiss();
@@ -106,13 +87,13 @@ export const Launcher = ({
       only while it is open, which is what makes every open start on an empty
       box and a full list without an effect anywhere to clear them.
     */}
-    <Query files={files} onLaunch={onLaunch} />
+    <Query onLaunch={onLaunch} search={search} />
   </ModalDialog>
 );
 
 type QueryProps = {
-  files: readonly string[];
   onLaunch: (launch: Launch) => void;
+  search: Search;
 };
 
 /**
@@ -124,7 +105,7 @@ type QueryProps = {
  * actually is — a person types, watches the list narrow, and presses Enter
  * without having looked at the screen for the last two of those.
  */
-const Query = ({ files, onLaunch }: QueryProps) => {
+const Query = ({ onLaunch, search }: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
   // Where the arrow keys have walked to, and `undefined` for a list nobody has
@@ -132,23 +113,16 @@ const Query = ({ files, onLaunch }: QueryProps) => {
   // "nobody has walked it" into "the first match, because they typed".
   const [stepped, setStepped] = useState<number | undefined>(undefined);
 
-  // Folded once per list rather than once per keystroke, which on a home of a
-  // hundred thousand paths is the difference between a launcher and a launcher
-  // that drops a frame of the desktop on every letter. `matching.ts` has the
-  // measurement.
-  const offered = useMemo(() => folded(files), [files]);
-  // Two lists, and the difference between them is the whole of `ROWS`: what
-  // matched is what the counter reports, and what is drawn is the front of it.
-  const matched = useMemo(() => matching(offered, query), [offered, query]);
-  const shown = useMemo(() => matched.slice(0, ROWS), [matched]);
-  // Over everything offered rather than over what is shown: `Notes` is a
-  // directory whether or not the query still asks about anything inside it.
-  const directories = useMemo(() => directoriesIn(files), [files]);
-  const highlighted = highlightIn(shown, query, stepped);
-  const hint = hintFor(query, files);
+  const found = useFound(search, query);
+  const shown = found.files.map(fileRow);
+  // What a launch is judged against: the host's answer is the only evidence a
+  // page has that a file exists. See `launch.ts`.
+  const offered = shown.map((row) => row.path);
+  const highlighted = highlightIn(offered, query, stepped);
+  const hint = hintFor(query, offered);
 
   const launch = (typed: string) => {
-    const launched = launchFor(typed, files);
+    const launched = launchFor(typed, offered);
     // `undefined` is an empty box, which is Enter on a keystroke nobody meant
     // as a command. Nothing to do, and nothing to report either.
     if (launched !== undefined) {
@@ -195,7 +169,7 @@ const Query = ({ files, onLaunch }: QueryProps) => {
             }
             case "Enter": {
               const chosen =
-                highlighted === undefined ? query : shown[highlighted];
+                highlighted === undefined ? query : offered[highlighted];
               launch(chosen ?? query);
               break;
             }
@@ -214,11 +188,9 @@ const Query = ({ files, onLaunch }: QueryProps) => {
         // narrowing — a find bar's counter, and the one number that says
         // whether one more letter is worth typing.
         suffixIcon={
-          files.length === 0 ? undefined : (
-            <span aria-hidden="true" className={countStyles}>
-              {`${matched.length.toString()} of ${files.length.toString()}`}
-            </span>
-          )
+          <span aria-hidden="true" className={countStyles}>
+            {`${found.matched.toString()} matched`}
+          </span>
         }
         value={query}
       />
@@ -244,8 +216,8 @@ const Query = ({ files, onLaunch }: QueryProps) => {
           to.
         */}
         <div className={listStyles} id={listId} role="listbox">
-          {shown.map((path, at) => {
-            const row = fileRow(path, directories);
+          {shown.map((row, at) => {
+            const path = row.path;
             return (
               // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox above owns the keyboard for these rows, which is the whole point of `aria-activedescendant`
               <div
@@ -313,6 +285,13 @@ const Query = ({ files, onLaunch }: QueryProps) => {
           <HintLine hint={hint} />
         )}
       </div>
+      {/*
+        Under the rows rather than among them, because it is about the list
+        rather than about any row in it — and the rows above are a box of one
+        size, so a line that appears and vanishes here moves nothing a person
+        is reading.
+      */}
+      {found.indexing && <StillIndexing />}
     </div>
   );
 };
@@ -381,22 +360,6 @@ const drawnAs = (
     }
   }
 };
-
-/**
- * Under the panel: what the desktop is still doing, and the keys it answers.
- *
- * The notice goes here rather than among the rows because it is about the list
- * rather than about any row in it — and because the footer is the one part of
- * this panel that does not move when a letter is typed. A line that appeared
- * and vanished between the box and the rows would shift everything under it on
- * the keystroke that made it appear.
- */
-const Footer = ({ indexing }: { indexing: boolean }) => (
-  <>
-    {indexing && <StillIndexing />}
-    <Keys />
-  </>
-);
 
 /**
  * The line that says the list is not all of the home yet.
