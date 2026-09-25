@@ -248,6 +248,15 @@ void ControlChannel::SearchFiles(const std::string& query) {
   SendMessage(std::move(message));
 }
 
+// A path relative to the home, as a `found_files` answer named it. What makes
+// that safe is the compositor's, not this: it answers only for a path in its
+// own index of the home -- see ControlChannel::PreviewFile in the mojom.
+void ControlChannel::PreviewFile(const std::string& path) {
+  base::DictValue message = Typed("preview_file");
+  message.Set("path", path);
+  SendMessage(std::move(message));
+}
+
 // The one member that names a row of the clipboard, and the whole of what a
 // page may do to the seat's selection: it says which of the things already
 // copied to put back, and cannot say what was copied.
@@ -730,6 +739,35 @@ void ControlChannel::DispatchLine(const std::string& line,
     // would wait for a message the compositor has already sent.
     client_->Files(*query, std::move(files), static_cast<uint32_t>(*matched),
                    *indexing, arrival);
+    return;
+  }
+
+  if (*type == "file_preview") {
+    const std::string* path = message.FindString("path");
+    const std::string* kind = message.FindString("kind");
+    // The path and the kind or nothing, as `found_files` above: an answer
+    // without its path cannot be told from the answer to the row before, and a
+    // kind that is not one of the four is a word the page would have to guess
+    // at. A missing `text` or `entries` is an empty one, which is what every
+    // kind but its own carries anyway.
+    if (!path || !kind ||
+        (*kind != "text" && *kind != "directory" && *kind != "binary" &&
+         *kind != "unreadable")) {
+      return;
+    }
+    const std::string* text = message.FindString("text");
+    const base::ListValue* listed = message.FindList("entries");
+    std::vector<std::string> entries;
+    if (listed) {
+      entries.reserve(listed->size());
+      for (const base::Value& entry : *listed) {
+        if (const std::string* name = entry.GetIfString()) {
+          entries.push_back(*name);
+        }
+      }
+    }
+    client_->FilePreview(*path, *kind, text ? *text : std::string(),
+                         std::move(entries), arrival);
     return;
   }
 

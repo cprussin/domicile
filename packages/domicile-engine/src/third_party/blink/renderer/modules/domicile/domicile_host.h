@@ -58,6 +58,10 @@ class MODULES_EXPORT DomicileHost final
   // event. Names no path -- see the IDL, where that is written down as a
   // property rather than a convenience.
   void searchFiles(ScriptState*, const String& query, ExceptionState&);
+  // Ask what is in one file; the answer arrives as a `filepreview` event.
+  // The path is one a `files` event named -- see the IDL for why that is the
+  // whole of what it may name.
+  void previewFile(ScriptState*, const String& path, ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
@@ -115,6 +119,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(filepreview, kFilepreview)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(theme, kTheme)
@@ -167,6 +172,11 @@ class MODULES_EXPORT DomicileHost final
              uint32_t matched,
              bool indexing,
              base::TimeTicks arrival) override;
+  void FilePreview(const String& path,
+                   const String& kind,
+                   const String& text,
+                   const Vector<String>& entries,
+                   base::TimeTicks arrival) override;
   void Battery(double charge,
                bool charging,
                base::TimeTicks arrival) override;

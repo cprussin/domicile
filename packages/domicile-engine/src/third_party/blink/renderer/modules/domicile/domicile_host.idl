@@ -39,6 +39,17 @@
   // arrived.
   [CallWith=ScriptState, RaisesException] undefined searchFiles(DOMString query);
 
+  // Ask what is in one file. Answered with a `filepreview` event carrying the
+  // same path.
+  //
+  // THIS ONE TAKES A PATH, which searchFiles() above says is the point of not
+  // taking one -- so what it may name is narrow: a path relative to the home,
+  // as a `files` event named it (a directory without its trailing `/`). The
+  // compositor answers only for a path in its own index of the home, and
+  // anything else comes back "unreadable", so this reads nothing a search
+  // could not already have named.
+  [CallWith=ScriptState, RaisesException] undefined previewFile(DOMString path);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: a shell is served over domicile:// so
@@ -148,6 +159,10 @@
 
   // What a searchFiles() found, as a DomicileFilesEvent. Only ever an answer.
   attribute EventHandler onfiles;
+
+  // What a previewFile() found, as a DomicileFilePreviewEvent. Only ever an
+  // answer.
+  attribute EventHandler onfilepreview;
 
   // The machine's battery, as a DomicileBatteryEvent.
   //
