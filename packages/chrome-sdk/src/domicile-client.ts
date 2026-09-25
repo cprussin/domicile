@@ -91,6 +91,7 @@ import {
   focusRequested,
   foundFiles,
   idle,
+  locked,
   modifiers,
   shortcut,
   theme,
@@ -261,6 +262,9 @@ export class DomicileClient {
     host.addEventListener("idle", (event) => {
       this.#deliver("idle", idle(event));
     });
+    host.addEventListener("locked", (event) => {
+      this.#deliver("locked", locked(event));
+    });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
       // engine writes before it dispatches — so reading it here is reading
@@ -398,6 +402,22 @@ export class DomicileClient {
    */
   setTheme(theme: Theme): void {
     this.#host.setTheme(theme);
+  }
+
+  /**
+   * Offer a passphrase at a locked desk.
+   *
+   * **Nothing is applied here, and that matters more than it does for
+   * {@link setTheme}.** What comes back is a `locked` message — to every chrome
+   * on the desk, this one included — so a shell clears its lock screen because
+   * the desk opened, never because it believed its own keystrokes. A page that
+   * did the latter would be a lock anybody with the devtools could open.
+   *
+   * A wrong passphrase is answered with nothing at all: the desk stays shut, and
+   * the compositor says so in its own log without the passphrase in it.
+   */
+  unlock(passphrase: string): void {
+    this.#host.unlock(passphrase);
   }
 
   /**

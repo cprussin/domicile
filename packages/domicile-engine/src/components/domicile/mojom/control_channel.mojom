@@ -265,6 +265,22 @@ interface ControlChannel {
   // a toggle clicked on one of them is the whole desktop changing.
   SetTheme(Theme theme);
 
+  // Offer a passphrase at a locked desk.
+  //
+  // THE ONE MEMBER HERE THAT CARRIES A SECRET, and the note at the top of this
+  // file is what keeps it one: the browser binds this interface only for a
+  // document whose origin is the shell's, so no ordinary web content can reach
+  // it. Nothing in this process logs the argument, and the compositor's own
+  // `Passphrase` type refuses to print itself.
+  //
+  // Answered with ControlChannelClient::Locked, to every chrome rather than to
+  // the one that asked, and only when the desk actually opened -- the same
+  // one-path-that-decides arrangement SetTheme has, for a harder reason: a page
+  // that cleared its own lock screen because it believed its own keystrokes
+  // would be a lock anybody with the devtools could open. A wrong passphrase is
+  // answered with nothing at all.
+  Unlock(string passphrase);
+
   // A key combination the compositor should route to the page rather than to
   // whichever client has focus.
   GrabShortcut(Shortcut shortcut);
@@ -461,10 +477,33 @@ interface ControlChannelClient {
   // platform has says somebody is here on a desk nobody has been at for an
   // hour. A desktop with no idle timeout sends none of these at all.
   //
-  // NOT A LOCK, and nothing here can be made into one: the seat is the
+  // NOT THE LOCK, and nothing here can be made into one: the seat is the
   // compositor's, so refusing to deliver what is typed is its decision rather
-  // than the page's.
+  // than the page's. That refusal is Locked below, which is a member of its own
+  // because the two are not the same fact -- a desk can be dark and open, and a
+  // locked desk somebody has just wiggled the mouse at is lit and shut.
   Idle(bool idle, mojo_base.mojom.TimeTicks arrival);
+
+  // Whether this desk is locked: true is a desktop that will not deliver a
+  // keystroke or a click to any client until somebody says the passphrase.
+  //
+  // THE COMPOSITOR HOLDS IT, which is what the whole thing is for. Input on
+  // this system does not originate there -- the shell's page owns it and
+  // forwards it over ControlChannel above, and the compositor injects it into a
+  // Wayland seat -- so the lock is that injection not happening. A page reload
+  // does not open the desk, an engine that died and came back does not, and a
+  // page edited in the devtools of the browser drawing it does not either.
+  //
+  // The renderer keeps its own keys throughout, which reads like a hole and is
+  // the opposite: the page is the thing forwarding, so it can draw a lock
+  // screen and take a passphrase while nothing it forwards arrives anywhere.
+  //
+  // Pushed like Idle, and a state rather than an edge for its reason with the
+  // stakes the other way up: the edge a reloaded page missed is the one that
+  // would have raised its lock screen. Sent on the turn the answer changes and
+  // once more to a chrome that has just connected. A desktop with no passphrase
+  // configured sends none of these at all, because it cannot lock.
+  Locked(bool locked, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);

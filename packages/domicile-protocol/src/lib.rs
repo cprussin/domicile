@@ -45,6 +45,53 @@ pub struct Shortcut {
     pub logo: bool,
 }
 
+/// What somebody typed at a locked desk, carried so that it cannot be printed.
+///
+/// **A NEWTYPE BECAUSE THE FAILURE MODE IS A TRACE MACRO, NOT A DESIGN.** A
+/// `String` in [`ChromeMessage::Unlock`] would be correct and would stay
+/// correct until somebody added `debug!(?message)` to the message loop — a
+/// line with every reason to exist and none to be thinking about the lock —
+/// and the desk's passphrase would be in the journal from then on. So this
+/// carries its own [`Debug`], which prints the field and never the secret, and
+/// the value comes out only through [`Passphrase::as_str`], which nothing a
+/// formatter reaches calls.
+///
+/// Transparent on the wire: the message field is the string itself, so the
+/// redaction costs the protocol nothing.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Passphrase(String);
+
+impl Passphrase {
+    /// The secret itself, for the one caller that has to compare it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for Passphrase {
+    fn from(passphrase: &str) -> Passphrase {
+        Passphrase(passphrase.to_string())
+    }
+}
+
+impl From<String> for Passphrase {
+    fn from(passphrase: String) -> Passphrase {
+        Passphrase(passphrase)
+    }
+}
+
+/// Says that there is a passphrase here and never what it is.
+///
+/// Derived `Debug` is what this type exists to not have — see the note on
+/// [`Passphrase`]. The field is named so that a reader of a log line can tell
+/// a redacted passphrase from an empty one.
+impl std::fmt::Debug for Passphrase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Passphrase(<redacted>)")
+    }
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -223,6 +270,27 @@ pub enum ChromeMessage {
     /// else. So a page learns nothing about a path a search could not already
     /// have named — and it can already `spawn`.
     PreviewFile { path: String },
+
+    /// Somebody typed a passphrase at the lock screen. Let this desk go if it
+    /// is the right one.
+    ///
+    /// **AN ATTEMPT, AND THE COMPOSITOR IS WHAT DECIDES.** A shell draws the
+    /// lock screen and collects what was typed; it does not check it, and it is
+    /// not told directly whether this one was right. What it gets is
+    /// [`HostMessage::Locked`] — to *every* chrome, and only when the desk
+    /// actually opened — which is the same one-path-that-decides arrangement
+    /// [`ChromeMessage::SetTheme`] has, for a harder reason: a page that
+    /// cleared its own lock screen because it believed its own keystrokes would
+    /// be a lock anybody could open by editing the page.
+    ///
+    /// A wrong passphrase is answered with nothing at all. There is no count,
+    /// no delay and no "that was wrong" on this protocol yet; the desk stays
+    /// shut and the compositor says so in its own log, without the passphrase
+    /// in it. `ROADMAP.md` carries what is left of that.
+    ///
+    /// The passphrase is a [`Passphrase`] rather than a `String` so that it
+    /// cannot be printed by accident — see that type.
+    Unlock { passphrase: Passphrase },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -573,8 +641,44 @@ pub enum HostMessage {
     /// **Not a lock.** A dark screen is a screen and anybody can type at one:
     /// the seat is the compositor's, so refusing to deliver what is typed is
     /// its decision rather than the page's, and no message here makes a page
-    /// the thing that says no. `ROADMAP.md` carries that too.
+    /// the thing that says no. That refusal is [`HostMessage::Locked`], which
+    /// is a message of its own because the two are not the same fact: a desk
+    /// can be dark and open, and a locked desk that somebody has just wiggled
+    /// the mouse at is lit and shut.
     Idle { idle: bool },
+
+    /// Whether this desk is locked.
+    ///
+    /// `true` is a desk that will not deliver a keystroke or a click to any
+    /// client until somebody says the passphrase; `false` is one that will.
+    ///
+    /// **THE COMPOSITOR HOLDS THIS, WHICH IS THE ENTIRE POINT.** The lock is
+    /// not a thing the page is doing. Every key and every pointer event on this
+    /// system is forwarded by the shell's page and injected into the seat here,
+    /// and while this is `true` the injection does not happen — see
+    /// `crate::lock` in `domicile-compositor`. So a page reload does not open
+    /// the desk, an engine that died and came back does not open the desk, and
+    /// neither does a shell edited in the devtools of the browser that is
+    /// drawing it. What a shell draws over a locked desktop is a surface over
+    /// a desktop that has already stopped listening.
+    ///
+    /// **A state, and a chrome saying hello is told it.** For
+    /// [`HostMessage::Idle`]'s reason with the stakes the other way up: a page
+    /// that has just loaded has missed every edge there was, and the edge it
+    /// missed is the one that would have raised its lock screen.
+    ///
+    /// The page keeps its own keys throughout, which is what makes a lock
+    /// screen possible at all: it is the thing forwarding input, so refusing to
+    /// forward is not what stops it — the compositor refusing to inject is.
+    /// That is also why the shell can take a passphrase while the desk is shut,
+    /// and [`ChromeMessage::Unlock`] is how it offers one.
+    ///
+    /// **A desk with no passphrase configured never sends this**, not even
+    /// `false`: it cannot lock, because a desk that locked with nothing to
+    /// unlock it would be a desk nobody could get back into. So silence here is
+    /// a desktop with no lock, the way silence on `idle` is a desktop with no
+    /// clock.
+    Locked { locked: bool },
 }
 
 /// One thing that was copied, as the shell is told about it.

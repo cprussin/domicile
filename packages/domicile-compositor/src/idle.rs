@@ -27,10 +27,11 @@
 //! where that is decided: a page reloads, and one that has just loaded has
 //! missed every edge there ever was.
 //!
-//! One thing this deliberately is not: **it is not a lock.** A dark screen is
-//! a screen, and anybody can still type at this desktop. The lock needs the
-//! shell, the host↔chrome protocol and a decision about where input stops;
-//! `ROADMAP.md` carries it.
+//! One thing this deliberately is not: **it is not itself the lock.** A dark
+//! screen is a screen, and going dark is not what stops a keystroke. What does
+//! is [`crate::lock`], which this module's dark edge is what *reaches*: the desk
+//! shuts on the same turn the connectors do, and from then on the refusal is at
+//! the injection rather than here.
 
 use std::time::{Duration, Instant};
 
@@ -319,6 +320,15 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // shell's own page and never came through here at all.
         | ClientRequest::ClipboardCopied { .. }
         | ClientRequest::CopyClipboardEntry { .. } => false,
+        // A HAND, AND THE ONE ARM HERE THAT IS NOT A KEY OR A POINTER. Somebody
+        // is typing at the lock screen, which is a person at this desk by
+        // definition — and the keystrokes that typed it did *not* arrive as
+        // `Key`s to be counted instead, because a page with the focus in its own
+        // field forwards nothing. So a desk whose screens went dark while
+        // somebody was still typing the passphrase comes back on the attempt,
+        // right or wrong, which is the only way there is light to read the
+        // refusal by.
+        ClientRequest::Unlock { .. } => true,
     }
 }
 
