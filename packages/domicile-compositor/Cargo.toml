@@ -63,7 +63,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 #
 # 4 rather than 5, which is not a preference: zbus 5 wants rustc 1.87 and this
 # workspace pins `rust-version = "1.75"`. Moving it is its own change.
-zbus = { version = "4.4", default-features = false, features = [
+zbus = { version = "5.0", default-features = false, features = [
     "async-io",
     "blocking",
 ] }
