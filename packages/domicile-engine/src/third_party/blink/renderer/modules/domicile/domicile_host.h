@@ -7,6 +7,7 @@
 
 #include "base/time/time.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -70,6 +71,16 @@ class MODULES_EXPORT DomicileHost final
                  ExceptionState&);
   void setDesktopSize(ScriptState*, double width, double height, ExceptionState&);
   void setDevicePixelRatio(ScriptState*, double ratio, ExceptionState&);
+  // Draw the desktop the other way round. Answered with a `theme` event to
+  // every chrome on the desk, this one included.
+  //
+  // BY VALUE, which is what the bindings hand an enumeration: `blink_v8_bridge`
+  // gives an IDL enum `ref_fmt` and `const_ref_fmt` of `{}` alike, and
+  // `V8DomicileTheme` is a trivially copyable wrapper over an `enum class`. A
+  // `const&` compiles -- the generated call site passes an lvalue -- and is a
+  // pointer where the value is smaller. `DomicileAppCursorEvent`'s ctor takes
+  // its `V8DomicileCursorShape` the same way.
+  void setTheme(ScriptState*, V8DomicileTheme theme, ExceptionState&);
   void grabShortcut(ScriptState*,
                     const DomicileShortcut* shortcut,
                     ExceptionState&);
@@ -107,6 +118,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(theme, kTheme)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -159,6 +171,8 @@ class MODULES_EXPORT DomicileHost final
                base::TimeTicks arrival) override;
   void Clipboard(Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
                  base::TimeTicks arrival) override;
+  void ThemeChanged(domicile::mojom::blink::Theme theme,
+                    base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

@@ -94,6 +94,7 @@ use smithay::{
 };
 use tracing::{debug, error, info, warn};
 
+mod appearance;
 mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
@@ -123,6 +124,7 @@ use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 use crate::latency::{Latency, Step as LatencyStep};
 
+use crate::appearance::{Appearance, CURRENT_DESKTOP};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -138,7 +140,7 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use crate::which_engine::another_engine;
-use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig};
+use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig, ThemeMode};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -146,7 +148,7 @@ use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
@@ -396,6 +398,14 @@ struct ChromeHub {
     /// what it has always done on a broken desktop — a launcher told "you have
     /// no files" would draw that breakage as an ordinary empty home.
     offered: Mutex<Option<Offered>>,
+    /// How the desk's *clients* are told the theme, which is the other half of
+    /// broadcasting one.
+    ///
+    /// Here beside `chromes` because the two go together and a caller must not
+    /// be able to do one without the other: a theme told to the pages and not
+    /// to the windows is a desktop half turned over. See [`crate::appearance`],
+    /// which is also where the answer to "what if there is no bus" is.
+    appearance: Appearance,
 }
 
 impl ChromeHub {
@@ -403,6 +413,7 @@ impl ChromeHub {
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
         wayland_display: OsString,
+        appearance: Appearance,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
         let hub = Arc::new(ChromeHub {
@@ -414,8 +425,32 @@ impl ChromeHub {
             max_scale: AtomicU32::new(max_scale),
             wayland_display,
             offered: Mutex::new(None),
+            appearance,
         });
         (hub, outbound_rx)
+    }
+
+    /// Take up a theme: remember it, tell every chrome, and tell the desk's
+    /// clients.
+    ///
+    /// **One function because there is one theme.** Three things set it — the
+    /// config read at startup, a reload whose `[theme]` moved, and a click on
+    /// the shell's toggle arriving as [`ChromeMessage::SetTheme`] — and all
+    /// three have to do all three of these. A caller that broadcast without
+    /// announcing would turn the panels over and leave the windows; one that
+    /// announced without remembering would leave the chrome that connects next
+    /// painting in the theme the desk came up on.
+    ///
+    /// Says nothing where nothing moved, which is the ordinary case rather
+    /// than the odd one: a config file is rewritten for all sorts of reasons,
+    /// and a restatement would run the theme wipe on every page on the desk
+    /// over a theme that did not change. See `Host::set_theme`.
+    fn take_up_the_theme(&self, theme: Theme) {
+        let told = self.host.lock().unwrap().set_theme(theme);
+        if let Some(message) = told {
+            self.broadcast(message);
+            self.appearance.announce(theme);
+        }
     }
 
     /// Forward an input event to the Wayland thread.
@@ -1053,6 +1088,21 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::Spawn { command }) => {
                 spawn_client(&command, &hub.wayland_display);
+                Vec::new()
+            }
+            // The one message from a chrome that says what the desktop IS
+            // rather than asking it for something -- and the reason it comes
+            // here at all rather than staying in the page is the second half
+            // of what this does: the desk's Wayland clients hear about a theme
+            // through the settings portal, which is this process's to answer.
+            //
+            // Answered with nothing, and that is not silence. What the page
+            // gets back is the `theme` broadcast `take_up_the_theme` makes,
+            // which reaches every chrome on the desk including this one -- so
+            // a desk of three monitors turns over together, and a page renders
+            // from being told rather than from its own click.
+            Ok(ChromeMessage::SetTheme { theme }) => {
+                hub.take_up_the_theme(theme);
                 Vec::new()
             }
             // Compositor-level, like the spawn above: the clipboard is the
@@ -3161,6 +3211,15 @@ impl DomicileCompositor {
         if let Some(idle) = &restated.idle {
             self.reset_the_idle_clock(idle);
         }
+        if let Some(theme) = restated.theme {
+            // THE FILE OVERRULES THE TOGGLE, deliberately. A click on the
+            // shell's bar changes the live theme and writes nothing back --
+            // this file is generated, and a desktop editing a build product
+            // would be a desk that fought its own configuration. So an edit
+            // that moves `[theme]` is a shell (or home-manager) restating what
+            // this desk is, and what it states is what the desk becomes.
+            self.hub.take_up_the_theme(theme_on_the_wire(theme));
+        }
     }
 
     /// Take up a new `[idle]`: when a desktop nobody is at turns its screens
@@ -4877,6 +4936,22 @@ fn spawn_client(command: &[String], wayland_display: &OsStr) {
     }
 }
 
+/// A theme as the config file spells it, as the wire spells it.
+///
+/// Two enumerations of one closed set, mapped here rather than shared, which
+/// is the arrangement `domicile_protocol::DisplayTransform` and
+/// `domicile_config::Transform` are already in and for the same reason:
+/// `domicile-protocol` carries serde and nothing else, and a config crate in
+/// its dependency list would be the protocol crate stopping being a portable
+/// description of the protocol. `scripts/test-themes-agree.sh` is what keeps
+/// the two lists honest.
+fn theme_on_the_wire(mode: ThemeMode) -> Theme {
+    match mode {
+        ThemeMode::Dark => Theme::Dark,
+        ThemeMode::Light => Theme::Light,
+    }
+}
+
 /// The home directory whose files a launcher is offered.
 ///
 /// **The one thing this compositor reads from its environment that is not
@@ -4910,6 +4985,11 @@ fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command
     child
         .args(args)
         .env("WAYLAND_DISPLAY", wayland_display)
+        // Which desktop this is, for a `.desktop` file's `OnlyShowIn` and
+        // for any toolkit that reads it. NOT what routes the portal: that is
+        // matched against the *frontend's* own environment, which
+        // `appearance::say_which_desktop` is what reaches.
+        .env("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)
         .env_remove("DISPLAY");
     Some(child)
 }
@@ -5207,8 +5287,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (request_tx, request_rx) = channel::<ClientRequest>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
-    let (hub, outbound_rx) =
-        ChromeHub::new(request_tx, config.output.max_scale, socket_name.clone());
+    let (hub, outbound_rx) = ChromeHub::new(
+        request_tx,
+        config.output.max_scale,
+        socket_name.clone(),
+        // Started before the hub rather than lazily, because the name has
+        // to be taken before the first client is spawned: an app that
+        // asked the frontend for a color scheme while this was still
+        // starting would be answered by whatever other backend the desk
+        // has, and would not be asked again.
+        appearance::serve(theme_on_the_wire(config.theme.mode)),
+    );
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
     {
@@ -5219,6 +5308,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // decodes every key the shell is typed with, and off ChromeOS nothing
         // else in Chromium ever hands its layout engine one. See `keymap`.
         host.set_keymap(keymap);
+        // And the theme, for the handshake's reason one more time: it is what
+        // the page paints in, and a page told late paints once in the wrong
+        // one. Set rather than taken up -- `take_up_the_theme` broadcasts, and
+        // there is nobody connected to broadcast to yet.
+        host.set_theme(theme_on_the_wire(config.theme.mode));
     }
     // Bound here rather than in the serving thread, so that a socket that
     // cannot be bound ends the run rather than a thread. The shell is waiting
@@ -5966,13 +6060,13 @@ mod tests {
     use super::{
         announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
         broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
-        desk_from_the_window, freshened, parse_find_colors, to_line, write_responses, Chrome,
-        ChromeHub, ClientRequest, Committer, Handshake, Outbound,
+        desk_from_the_window, freshened, parse_find_colors, to_line, write_responses, Appearance,
+        Chrome, ChromeHub, ClientRequest, Committer, Handshake, Outbound,
     };
 
     use std::sync::Arc;
 
-    use domicile_protocol::{ChromeMessage, HostMessage};
+    use domicile_protocol::{ChromeMessage, HostMessage, Theme};
 
     #[test]
     fn a_chrome_that_goes_away_is_forgotten() {
@@ -5985,7 +6079,12 @@ mod tests {
         // connection thread is waiting on: nothing short of the peer going
         // away ends the loop this asserts the far side of.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -6021,7 +6120,12 @@ mod tests {
         // both ends gives the read loop EOF on the next pass regardless, so
         // only a half-close makes it observable.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -6053,7 +6157,12 @@ mod tests {
         // behavior is one sentence about this function, and the integration
         // failure needs a socket to fill up under parallel load to say it.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (_page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -6098,7 +6207,12 @@ mod tests {
         // lock, so handing in answers built against an older desktop is the
         // interleaving — without having to win a race to produce it.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -6154,7 +6268,12 @@ mod tests {
         // the answer's own copy lands last on the socket, and latest-wins
         // leaves the chrome on the desktop that is gone.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let described = vec![window_following("domicile-0", [1280, 800], 2)];
         hub.host
             .lock()
@@ -6180,7 +6299,12 @@ mod tests {
         // what this chrome asked, and a version re-derived at write time would
         // be a different chrome's answer on this chrome's socket.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let welcome = HostMessage::Welcome {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
         };
@@ -6257,7 +6381,12 @@ mod tests {
         // `desk_from_the_window` next door is the same claim on the broadcast
         // path. This is the response path, where the lookup lives.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let HostMessage::Displays { displays } = two_screens() else {
             unreachable!("two_screens is a desktop");
         };
@@ -6319,12 +6448,73 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_the_shell_picked_reaches_every_page_on_the_desk() {
+        // A click lands on one monitor's page and the desk has three. What
+        // makes them move together is that the compositor answers rather than
+        // the page applying: this is that answer, and it goes out to every
+        // chrome including the one that asked.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
+
+        hub.take_up_the_theme(Theme::Light);
+
+        assert!(
+            matches!(
+                outbound.recv_until(Duration::from_millis(100)),
+                Some(Some(Outbound::Message(HostMessage::Theme {
+                    theme: Theme::Light
+                })))
+            ),
+            "the theme is broadcast"
+        );
+        assert_eq!(
+            hub.host.lock().unwrap().describe_theme(),
+            HostMessage::Theme {
+                theme: Theme::Light
+            },
+            "and remembered, so the chrome that connects next is told it too"
+        );
+    }
+
+    #[test]
+    fn a_theme_that_is_already_the_desks_is_not_restated() {
+        // The ordinary case rather than the odd one: a config file is
+        // rewritten for all sorts of reasons and a reload takes up the theme
+        // it names. A broadcast for one that did not move would run the wipe
+        // animation on every page on the desk over nothing.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
+
+        hub.take_up_the_theme(Theme::Dark);
+
+        assert!(
+            matches!(outbound.recv_until(Duration::from_millis(100)), Some(None)),
+            "a host that came up dark is already dark, so nothing is queued"
+        );
+    }
+
+    #[test]
     fn a_page_that_says_hello_is_told_what_is_already_running() {
         // Nothing else ever re-sends `app_appeared`. Without this the desktop
         // is only ever built up by live ones, so a page that reloads comes back
         // to a compositor full of running clients and an empty screen.
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (first, _) = hub
             .host
             .lock()
@@ -6459,7 +6649,12 @@ mod tests {
         // client — only its own toplevel can — so the message has to leave the
         // chrome thread for the Wayland one, where the toplevel is.
         let (request_tx, requests) = channel::<ClientRequest>();
-        let (hub, _outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
         let writer = Arc::new(Mutex::new(
             compositor.try_clone().expect("the stream clones"),
@@ -6537,7 +6732,12 @@ mod tests {
     /// in it.
     fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
         let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(request_tx, 1, OsString::from("wayland-1"));
+        let (hub, outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
         let app_id = {
             let mut host = hub.host.lock().unwrap();
             let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
@@ -6680,6 +6880,20 @@ mod tests {
     #[test]
     fn a_spawned_client_gets_no_x_display() {
         assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
+    }
+
+    #[test]
+    fn a_spawned_client_is_told_which_desktop_it_is_on() {
+        // A routing key rather than a label: `xdg-desktop-portal` matches
+        // this against the `UseIn=` in the `.portal` files it finds, which is
+        // what sends a client's question about the color scheme to this
+        // compositor's own settings backend rather than to whichever other
+        // one is installed. A desk that said nothing would have its clients
+        // answered by a backend that has never heard of its theme.
+        assert_eq!(
+            child_env(&kitty(), "wayland-7", "XDG_CURRENT_DESKTOP"),
+            Some(OsString::from("domicile")),
+        );
     }
 
     #[test]

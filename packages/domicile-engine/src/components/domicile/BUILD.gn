@@ -115,6 +115,18 @@ source_set("display_transform") {
   public_deps = [ "//base" ]
 }
 
+# Which way round the desktop is drawn, and the wire names for it. The same
+# shape as :cursor_shape and :display_transform above and wanted by the same
+# two places -- the browser reading the compositor's socket, and Blink handing
+# a name to the page. Header only, and templated over the enum so the same list
+# serves `mojom::Theme` and its `-blink` variant without this depending on
+# either.
+source_set("theme") {
+  sources = [ "common/theme.h" ]
+
+  public_deps = [ "//base" ]
+}
+
 # Serving the shell over domicile://.
 #
 # A target of its own rather than part of :browser, because this depends on
@@ -265,6 +277,7 @@ source_set("control_channel") {
     ":cursor_shape",
     ":display_transform",
     ":shortcut_registry",
+    ":theme",
     "//base",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
@@ -286,6 +299,7 @@ source_set("unit_tests") {
     "browser/shortcut_registry_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
+    "common/theme_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
@@ -312,6 +326,7 @@ source_set("unit_tests") {
     ":shell_source",
     ":shell_windows",
     ":shortcut_registry",
+    ":theme",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
     "//base",

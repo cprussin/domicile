@@ -21,8 +21,9 @@
 //! | `output.displays` | the desktop it describes — `Screens::reloaded_into`, `adopt_the_desktop` |
 //! | `output.profiles` | re-matched against the monitors that are plugged in, same path |
 //! | `idle.blank_after_seconds` | the clock restarted and its timer re-armed — `reset_the_idle_clock` |
+//! | `theme.mode` | told to every chrome and to the desk's clients — `take_up_the_theme` |
 //!
-//! Five rows for the five fields [`Config`] has: a reload acts on each of them
+//! Six rows for the six fields [`Config`] has: a reload acts on each of them
 //! rather than storing it. Three limits read like gaps and are not.
 //! `output.max_scale` governs only the output that follows Domicile's own
 //! window — a described display states its own scale, and a desktop the config
@@ -40,7 +41,7 @@
 //! nothing anywhere saying so. The unit tests below are the shape to copy:
 //! what moved is restated, and what did not is not.
 
-use domicile_config::{Config, IdleConfig, KeyboardConfig};
+use domicile_config::{Config, IdleConfig, KeyboardConfig, ThemeMode};
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -57,6 +58,15 @@ pub struct Restatement {
     /// about idle" — a desktop that never blanks — is a value this can carry
     /// rather than a second `None` meaning the opposite of the first.
     pub idle: Option<IdleConfig>,
+    /// Which way round the desk is drawn, or `None` where the file did not
+    /// move it.
+    ///
+    /// The mode rather than the whole `[theme]` section, which is the
+    /// opposite of what `idle` above does, and the difference is that a theme
+    /// has no absence: saying nothing about `[theme]` is dark, the same value
+    /// as saying `mode = "dark"`, where saying nothing about `[idle]` is a
+    /// desk that never blanks and has no spelling of its own.
+    pub theme: Option<ThemeMode>,
 }
 
 impl Restatement {
@@ -68,6 +78,7 @@ impl Restatement {
             max_scale: (was.output.max_scale != now.output.max_scale)
                 .then_some(now.output.max_scale),
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
+            theme: (was.theme != now.theme).then_some(now.theme.mode),
         }
     }
 }
@@ -111,6 +122,32 @@ mod tests {
                 .expect("the timeout moved")
                 .blank_after_seconds,
             Some(60)
+        );
+    }
+
+    #[test]
+    fn a_theme_that_moved_is_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_DRAWN_LIGHT);
+
+        assert_eq!(
+            Restatement::between(&was, &now).theme,
+            Some(ThemeMode::Light)
+        );
+    }
+
+    #[test]
+    fn a_file_that_restates_the_theme_it_already_had_restates_nothing() {
+        // The edit that matters here is the one somebody made to a *different*
+        // field: `[theme]` is generated along with the rest of the file, so a
+        // reload that moved a display rewrites the theme line untouched. A
+        // restatement for it would run the wipe on every page on the desk over
+        // a theme that did not change.
+        let was = parsed(A_DESK_DRAWN_LIGHT);
+
+        assert_eq!(
+            Restatement::between(&was, &parsed(A_DESK_DRAWN_LIGHT)).theme,
+            None
         );
     }
 
@@ -177,6 +214,20 @@ xkb_options = ["caps:swapescape"]
 
 [output]
 max_scale = 1
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, stated the other way round.
+    const A_DESK_DRAWN_LIGHT: &str = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[theme]
+mode = "light"
 
 [[output.displays]]
 name = "one"

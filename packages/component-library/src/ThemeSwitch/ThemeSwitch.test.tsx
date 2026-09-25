@@ -2,29 +2,31 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { standaloneThemeSource } from "./standalone-theme-source";
 import { ThemeProvider } from "./ThemeProvider";
 import { ThemeSwitch } from "./ThemeSwitch";
-import { THEME_CYCLE, THEME_PREFERENCES } from "./theme-core";
-
-const THEME_KEY = "theme:v1";
+import { OTHER_THEME, THEMES } from "./theme-core";
 
 describe(ThemeSwitch, () => {
   describe("rendering (theme injected)", () => {
-    it("exposes the current preference via data attribute", () => {
+    it("exposes the theme via a data attribute", () => {
+      // `data-theme-mode` rather than `data-theme`: the preset's light
+      // condition is `[data-theme=light] &`, so naming it that would make the
+      // toggle's own descendants resolve light tokens over a dark page.
       render(
         <ThemeSwitch
-          useTheme={() => ({ cycle: () => undefined, preference: "dark" })}
+          useTheme={() => ({ flip: () => undefined, theme: "dark" })}
         />,
       );
-      expect(
-        screen.getByRole("button").getAttribute("data-theme-preference"),
-      ).toBe("dark");
+      expect(screen.getByRole("button").getAttribute("data-theme-mode")).toBe(
+        "dark",
+      );
     });
 
-    it("uses a preference-specific aria-label that hints at the next step", () => {
+    it("uses a theme-specific aria-label that names the other one", () => {
       render(
         <ThemeSwitch
-          useTheme={() => ({ cycle: () => undefined, preference: "light" })}
+          useTheme={() => ({ flip: () => undefined, theme: "light" })}
         />,
       );
       expect(
@@ -32,47 +34,42 @@ describe(ThemeSwitch, () => {
       ).toBeInTheDocument();
     });
 
-    it("calls the context's cycle when clicked", async () => {
-      const cycle = mock();
-      render(
-        <ThemeSwitch useTheme={() => ({ cycle, preference: "system" })} />,
-      );
+    it("calls the context's flip when clicked", async () => {
+      const flip = mock();
+      render(<ThemeSwitch useTheme={() => ({ flip, theme: "dark" })} />);
       await userEvent.click(screen.getByRole("button"));
-      expect(cycle).toHaveBeenCalledTimes(1);
+      expect(flip).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("wired to a real provider", () => {
     beforeEach(() => {
-      globalThis.localStorage.clear();
       document.documentElement.removeAttribute("data-theme");
     });
 
-    it("renders the provider's current preference with no props", () => {
-      globalThis.localStorage.setItem(THEME_KEY, "dark");
+    it("renders the theme the desk is on with no props", () => {
       render(
-        <ThemeProvider>
+        <ThemeProvider source={standaloneThemeSource("light")}>
           <ThemeSwitch />
         </ThemeProvider>,
       );
       expect(screen.getByRole("button")).toHaveAttribute(
-        "data-theme-preference",
-        "dark",
+        "data-theme-mode",
+        "light",
       );
     });
 
-    it("cycles the preference through the provider when clicked", async () => {
-      globalThis.localStorage.setItem(THEME_KEY, "dark");
+    it("flips through the provider when clicked", async () => {
       render(
-        <ThemeProvider>
+        <ThemeProvider source={standaloneThemeSource("dark")}>
           <ThemeSwitch />
         </ThemeProvider>,
       );
       const button = screen.getByRole("button");
       await userEvent.click(button);
-      // dark → system, committed after the async wipe.
+      // Committed after the async wipe, and only because the source answered.
       await waitFor(() => {
-        expect(button).toHaveAttribute("data-theme-preference", "system");
+        expect(button).toHaveAttribute("data-theme-mode", "light");
       });
     });
 
@@ -84,17 +81,15 @@ describe(ThemeSwitch, () => {
     });
   });
 
-  describe("THEME_CYCLE", () => {
-    it("covers every preference", () => {
-      for (const preference of THEME_PREFERENCES) {
-        expect(THEME_CYCLE[preference]).toBeDefined();
+  describe("OTHER_THEME", () => {
+    it("takes every theme to the only other one", () => {
+      // Two members, so "the other one" is total and an involution. A third
+      // member would break both, which is what this is here to notice — see
+      // `theme-core.ts` for why there is not going to be one.
+      for (const theme of THEMES) {
+        expect(OTHER_THEME[theme]).not.toBe(theme);
+        expect(OTHER_THEME[OTHER_THEME[theme]]).toBe(theme);
       }
-    });
-
-    it("cycles light → dark → system → light", () => {
-      expect(THEME_CYCLE.light).toBe("dark");
-      expect(THEME_CYCLE.dark).toBe("system");
-      expect(THEME_CYCLE.system).toBe("light");
     });
   });
 });

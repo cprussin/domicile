@@ -1,4 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
@@ -38,8 +39,18 @@ type Props = {
  * `mod+Return` and the launcher, which is what opens a window on a URL or a
  * search, is `mod+Space`. Both are where sway's config puts them and so where
  * a user of this desktop already looks. What is on the bar is what no key can
- * be pressed to ask: which workspace this is, what time it is, and how much
- * charge is left.
+ * be pressed to ask: which workspace this is, what time it is, how much charge
+ * is left, and which way round the desk is drawn.
+ *
+ * **The theme toggle is the one control here, and it is not a launcher.** It
+ * changes what is already on screen rather than putting something new on it,
+ * which is the line the paragraph above draws — and there is no key to press
+ * instead, because a theme is not a thing a desk does often enough to spend a
+ * chord on. It has two positions rather than three: this bar *is* the system,
+ * so there is nothing above it for a `system` to follow. What a click does is
+ * ask the compositor, which answers every page on the desk and hands the same
+ * value to the settings portal the desk's GTK and Qt windows read — so the
+ * windows turn over with the panels rather than after them.
  *
  * **Over nothing but the wallpaper.** The windows are laid out in what is left
  * of the screen under it, so nothing is behind it but the picture. A window
@@ -78,6 +89,7 @@ export const TopBar = ({
       {mode === BindingMode.Resize && (
         <span className={modeStyles}>resize</span>
       )}
+      <ThemeSwitch />
       <Battery domicile={domicile} />
     </div>
   </header>
@@ -111,6 +123,14 @@ const barStyles = grid({
   // do: it flips with the theme, and the wallpaper does not. The scrim
   // darkens the band and the shadow draws each letter off it; a picture
   // bright behind one word and dark behind the next needs both.
+  //
+  // THE BUTTONS ON THE BAR TAKE IT TOO, through the preflight reset's
+  // `color: inherit` on form elements rather than through a rule here — the
+  // workspace chips say the same thing on their own side. The theme toggle
+  // leans on it hardest: it draws both its icons in `currentcolor` and dims
+  // the parked one with a `color-mix` of it, so this one declaration is what
+  // puts it in the bar's white rather than in a `foreground` that would go
+  // black over a photograph the moment the desk went light.
   color: "white",
   // Three columns, the outer two equal: what is in them can be any width and
   // the middle one stays in the middle of the screen.

@@ -86,8 +86,10 @@ import {
   focusRequested,
   modifiers,
   shortcut,
+  theme,
 } from "./host-message";
 import { claimShortcut } from "./shortcut-claims";
+import type { Theme } from "./theme";
 import type { AxisDelta } from "./wheel-axis";
 
 type Handler = (message: never) => void;
@@ -215,6 +217,9 @@ export class DomicileClient {
     host.addEventListener("clipboard", (event) => {
       this.#deliver("clipboard", clipboard(event));
     });
+    host.addEventListener("theme", (event) => {
+      this.#deliver("theme", theme(event));
+    });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
       // engine writes before it dispatches — so reading it here is reading
@@ -333,6 +338,25 @@ export class DomicileClient {
   /** Tell the compositor the display density it should advertise to clients. */
   setDevicePixelRatio(ratio: number): void {
     this.#host.setDevicePixelRatio(ratio);
+  }
+
+  /**
+   * Draw the desktop the other way round.
+   *
+   * **Nothing is applied here, and that is the point.** What comes back is a
+   * `theme` message — to every chrome on the desk, this one included — so a
+   * shell renders from the message rather than from its own click. A desk of
+   * three monitors is three pages and the toggle is on one of them; a page
+   * that painted itself would be the only one that had.
+   *
+   * It leaves the page at all because the compositor is the only process the
+   * desk's *clients* can hear: it answers the settings portal GTK, Qt and
+   * Electron read a color scheme from, out of this same value. A theme kept
+   * here would be a desktop whose panels went dark and whose windows stayed
+   * light.
+   */
+  setTheme(theme: Theme): void {
+    this.#host.setTheme(theme);
   }
 
   /**

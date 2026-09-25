@@ -9,7 +9,7 @@
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host};
 use domicile_protocol::{
-    ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, PROTOCOL_VERSION,
+    ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Theme, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -386,8 +386,59 @@ fn the_displays_are_answered_after_the_welcome() {
             HostMessage::Displays {
                 displays: vec![lying_down("left", [0, 0], [1920, 1080], 1)],
             },
+            HostMessage::Theme { theme: Theme::Dark },
         ]
     );
+}
+
+// ---- the theme the desktop is drawn in ------------------------------------
+
+#[test]
+fn a_host_nobody_told_a_theme_is_the_one_the_chrome_was_drawn_against() {
+    // Unlike the keymap beside it, this is never absent. A keymap a host has
+    // not been handed is a desk with no keyboard behind it and inventing a
+    // layout for it would be a desktop typing in one nobody chose; a theme is
+    // not like that -- a page paints in one or the other, and the one it
+    // paints in when nothing said is the dark the chrome was designed for.
+    assert_eq!(
+        Host::new().describe_theme(),
+        HostMessage::Theme { theme: Theme::Dark }
+    );
+}
+
+#[test]
+fn a_theme_that_moved_is_what_every_chrome_is_told() {
+    // The answer is the broadcast: a toggle clicked on one monitor's page is
+    // the whole desktop changing, and the compositor sends what this hands
+    // back to every chrome rather than only to the one that asked.
+    let mut host = Host::new();
+
+    assert_eq!(
+        host.set_theme(Theme::Light),
+        Some(HostMessage::Theme {
+            theme: Theme::Light
+        })
+    );
+    assert_eq!(
+        host.describe_theme(),
+        HostMessage::Theme {
+            theme: Theme::Light
+        },
+        "and the chrome that connects next is told the one the desk is on"
+    );
+}
+
+#[test]
+fn a_theme_that_did_not_move_is_not_restated() {
+    // A config file is rewritten for all sorts of reasons and a page that just
+    // connected is told the theme it is already painting in -- so "set it to
+    // what it is" is the ordinary case rather than the odd one, and a
+    // broadcast for it would be every chrome on the desk running the wipe
+    // animation over a theme that did not change.
+    let mut host = Host::new();
+    host.set_theme(Theme::Light);
+
+    assert_eq!(host.set_theme(Theme::Light), None);
 }
 
 #[test]

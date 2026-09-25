@@ -11,9 +11,11 @@
 #include "base/check.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
+#include "components/domicile/common/theme.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -29,6 +31,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
@@ -204,6 +207,33 @@ void DomicileHost::setDevicePixelRatio(ScriptState*, double ratio,
   }
   if (Ready(exception_state)) {
     channel_->SetDevicePixelRatio(ratio);
+  }
+}
+
+// THROUGH THE WIRE NAME, for the reason `AppCursor` below reads one: the only
+// mapping between `DomicileTheme` and `mojom::Theme` in either direction is
+// the X-macro in components/domicile/common/theme.h, so the list stays
+// singular and scripts/test-themes-agree.sh can read every writing of it.
+//
+// No argument guard, and nothing to guard: the bindings have already refused
+// anything that is not one of the two, which is what the enum in
+// domicile_theme.idl is for. The `CHECK` is the same unreachable assertion
+// `AppCursor` makes, pointing the other way -- it fires only if the .idl and
+// the X-macro have drifted, which is a build this repository should not have
+// produced.
+void DomicileHost::setTheme(ScriptState*, V8DomicileTheme theme,
+                            ExceptionState& exception_state) {
+  // `Ready` first, which every other member here does and this one did not:
+  // a call on a host whose channel is not up throws, and doing the lookup and
+  // the assertion in front of that would be work on the way to a throw.
+  if (Ready(exception_state)) {
+    const std::optional<domicile::mojom::blink::Theme> mode =
+        domicile::ThemeFromWire<domicile::mojom::blink::Theme>(
+            theme.AsString().Utf8());
+    CHECK(mode.has_value())
+        << "no theme named '" << theme.AsString().Utf8()
+        << "', so domicile_theme.idl and theme.h disagree";
+    channel_->SetTheme(*mode);
   }
 }
 
@@ -395,6 +425,22 @@ void DomicileHost::Clipboard(
   }
   DispatchEvent(*MakeGarbageCollected<DomicileClipboardEvent>(
       event_type_names::kClipboard, std::move(history), Arrival(arrival)));
+}
+
+// Pushed, like Battery, and the one pushed message this page can cause:
+// `setTheme` above is answered with it, to every chrome on the desk rather
+// than to the one that called. Through the wire name, for `AppCursor`'s
+// reason and with `AppCursor`'s unreachable CHECK.
+void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
+                                base::TimeTicks arrival) {
+  const std::string_view name = domicile::ThemeToWire(theme);
+  const std::optional<V8DomicileTheme> mode =
+      V8DomicileTheme::Create(String::FromUtf8(name));
+  CHECK(mode.has_value())
+      << "no DomicileTheme named '" << name
+      << "', so domicile_theme.idl and theme.h disagree";
+  DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
+      event_type_names::kTheme, *mode, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

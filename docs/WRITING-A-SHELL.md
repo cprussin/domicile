@@ -233,7 +233,8 @@ guessing between those picks one for somebody who meant the other.
 it touched: the compositor watches the config and takes up the whole of a
 reload, so a new `xkb_layout` retypes the desktop, a new `output.max_scale`
 re-advertises it, a new `idle.blank_after_seconds` restarts the clock its
-screens go dark on, and the display list and the profiles rearrange it. The
+screens go dark on, a new `theme.mode` repaints the shell and every window that
+follows the portal, and the display list and the profiles rearrange it. The
 windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
 edit replaced.
@@ -263,6 +264,36 @@ film holds the screens on through the timeout — `zwp_idle_inhibit_manager_v1`,
 which is between that client and the compositor — so a desk that has not
 blanked is not necessarily one whose timeout is wrong; there is nothing here
 for a shell to write either way.
+
+**The theme is the desktop's, and there are two of them.** `[theme] mode` is
+`"dark"` or `"light"`, and it is where a desk states the one it comes up on.
+There is no `"system"` and there is not going to be one: every other desktop
+offers "follow the system" because it is a program running on one, and Domicile
+*is* the system — a `system` here would be the desk deferring to itself, so the
+word is refused by name rather than read as one of the two. `prefers-color-
+scheme` still answers inside the shell's page, as it answers in any browser,
+and a shell that read it would be asking the engine what the engine was told.
+
+```toml
+[theme]
+mode = "light"
+```
+
+**What it changes is the whole desk, not the page.** The shell is told the
+theme with the handshake and again whenever it moves; the compositor hands the
+same value to the *settings portal* — `color-scheme` in the
+`org.freedesktop.appearance` namespace, which GTK4, Qt6, Electron and Firefox
+all read and follow while they run — so the windows turn over with the panels
+rather than after them. A desk with no session bus keeps its own theme working
+and says once in the log that its clients will not be following it.
+
+**And it goes the other way.** `domicile.setTheme("light")` from a shell asks
+the compositor, which answers every chrome on the desk — a desk of three
+monitors is three pages, and the toggle is on one of them. Nothing is written
+back to this file: it is generated, a desktop that edited a build product would
+be a desk fighting its own configuration, and a toggle lasts as long as the
+desktop does. An edit to `[theme]` therefore overrules whatever the toggle last
+did, which is the honest reading of somebody restating what this desk is.
 
 Two of the things it can say about a desktop are different in kind, and which
 one a shell generates depends on whether there is hardware under it:
@@ -834,6 +865,15 @@ That constraint pays for itself. A `<link>` is render-blocking and a
 *before* any of your code has run — which is exactly where a theme flash comes
 from. With no link there is nothing to paint yet, and your first line is early
 enough.
+
+Early enough for *what*, though, is worth being exact about, because the theme
+arrives with the handshake and the handshake is a few milliseconds after that
+first line. A shell has two honest answers and `manganese` takes the second:
+paint in the dark the tokens default to and let the first `theme` message wipe
+to light where it has to, or write down the theme the desk was last seen in and
+paint in that. The second is a *guess* rather than a setting — the desk may
+have been reconfigured, or this may be a different desk — and it is corrected
+by the first message like any other guess.
 
 There is no `node_modules` beside a shell and nothing resolves at run time, so
 everything the page needs has to be *in* the bundle. That is vite's default for

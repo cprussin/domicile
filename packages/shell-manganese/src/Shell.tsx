@@ -2,6 +2,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { DisplayProvider } from "@domicile/component-library/DisplayProvider";
 import type { DisplaySource } from "@domicile/component-library/display-source";
 import { Provider } from "@domicile/component-library/Provider";
+import type { ThemeSource } from "@domicile/component-library/theme-source";
 
 import { Desktop } from "./Desktop";
 import type { DeskChannel } from "./window-management/desk-channel";
@@ -25,6 +26,14 @@ type Props = {
    */
   displays: DisplaySource;
   domicile: DomicileClient;
+  /**
+   * Where the theme comes from, and what the bar's toggle asks. The host over
+   * the control channel, or the page itself where there is no host — passed in
+   * for {@link displays}'s reason, and for one more: the theme is the
+   * desktop's, so a shell that built its own would be the one monitor that
+   * changed.
+   */
+  theme: ThemeSource;
 };
 
 /**
@@ -35,8 +44,8 @@ type Props = {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ desk, displays, domicile }: Props) => (
-  <Provider>
+export const Shell = ({ desk, displays, domicile, theme }: Props) => (
+  <Provider theme={theme}>
     <DisplayProvider source={displays}>
       <Desktop desk={desk} domicile={domicile} />
     </DisplayProvider>

@@ -328,6 +328,16 @@
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
+        # How `xdg-desktop-portal` learns that this desktop answers `Settings`
+        # itself, which is how a theme reaches the desk's GTK, Qt and Electron
+        # windows. The compositor takes the name in that file while it runs and
+        # sets the `XDG_CURRENT_DESKTOP` it is matched on for every client it
+        # spawns; this is the third of the three, and the only one that is not
+        # code. Installed here rather than beside the engine because it is a
+        # fact about the desktop rather than about the browser.
+        mkdir -p "$out/share/xdg-desktop-portal/portals"
+        cp ${./nix/domicile.portal} \
+          "$out/share/xdg-desktop-portal/portals/domicile.portal"
       '';
 
       # A desktop: Domicile with the module already chosen.

@@ -517,6 +517,45 @@ impl IdleConfig {
     }
 }
 
+/// Which way round the desktop is drawn: dark, or light.
+///
+/// **THERE IS NO THIRD ANSWER, AND THE MISSING ONE IS THE POINT.** Every other
+/// desktop offers "follow the system" because it is a program running on one.
+/// Domicile *is* the system: the chrome is the only thing on the screen that
+/// is not a client, and there is nothing above it whose preference it could
+/// follow. A `system` here would be the desktop deferring to itself, so the
+/// word is refused rather than quietly read as one of the two — see
+/// `rejects_a_theme_that_is_neither` in `tests/config.rs`.
+///
+/// It goes the other way instead: this is what the desktop's *clients* follow,
+/// through the settings portal the compositor answers — see
+/// `domicile_compositor::appearance`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemeMode {
+    /// Light text on a dark ground, which is what the chrome was drawn
+    /// against and so what a desk that says nothing gets.
+    #[default]
+    Dark,
+    Light,
+}
+
+/// How the desktop is themed.
+///
+/// One key today. A section of its own rather than a bare top-level `theme =`
+/// because the theme is a subject rather than a setting — an accent color, a
+/// wallpaper and a font all belong under this heading, and a scalar here would
+/// have to become a table to admit the second of them.
+///
+/// Compared, which is what `PartialEq` is for: a reload asks what moved
+/// between two configs, and the theme is one of the answers — see the
+/// compositor's `Restatement`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThemeConfig {
+    pub mode: ThemeMode,
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -524,6 +563,7 @@ pub struct Config {
     pub idle: IdleConfig,
     pub input: InputConfig,
     pub output: OutputConfig,
+    pub theme: ThemeConfig,
 }
 
 impl Config {
