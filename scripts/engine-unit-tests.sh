@@ -18,14 +18,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:LineFramerTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 17,
 # WindowDiff 7, EngineEventQueue 6, ShortcutRegistry 7, ShellURLLoaderFactory
 # 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 8,
-# DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8.
+# DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
+# LineFramer 4.
 #
-# 90, and it was 82 — which displays want a shell window is eight ShellWindows
+# 94, and it was 90 — how the control channel splits the compositor's socket
+# into lines is four LineFramer cases. Before that 90, and it was 82 — which displays want a shell window is eight ShellWindows
 # cases, a suite of its own and so in the filter as well as in the sum. Before
 # that it was 79 — the layout a producer states back is three more
 # FrameSinkBroker cases. Before that 77 — the name a display list now carries,
@@ -38,7 +40,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=90
+FLOOR=94
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

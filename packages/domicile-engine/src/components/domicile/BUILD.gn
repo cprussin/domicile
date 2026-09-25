@@ -261,6 +261,19 @@ source_set("keyboard_layout") {
   ]
 }
 
+# Newline-framed lines out of a socket read a buffer at a time.
+#
+# Its own target beside :control_channel rather than part of it, for the
+# reason :shortcut_registry is one: it is the piece of the channel that can be
+# tested with a string, and the one whose cost was a bug -- see the header.
+# //base-free, because splitting bytes on a newline wants nothing.
+source_set("line_framer") {
+  sources = [
+    "browser/line_framer.cc",
+    "browser/line_framer.h",
+  ]
+}
+
 # The shell's control channel, in the browser process.
 #
 # Its own target so the slice can meet a compiler before the Blink half exists,
@@ -276,6 +289,7 @@ source_set("control_channel") {
     ":common",
     ":cursor_shape",
     ":display_transform",
+    ":line_framer",
     ":shortcut_registry",
     ":theme",
     "//base",
@@ -292,6 +306,7 @@ source_set("unit_tests") {
     "browser/command_protocol_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
+    "browser/line_framer_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
@@ -321,6 +336,7 @@ source_set("unit_tests") {
     ":cursor_shape",
     ":display_transform",
     ":keyboard_layout",
+    ":line_framer",
     ":pointer_warp",
     ":shell_scheme",
     ":shell_source",
