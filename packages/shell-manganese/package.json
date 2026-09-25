@@ -23,6 +23,7 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
+  "license": "MIT",
   "name": "@domicile/shell-manganese",
   "private": true,
   "productName": "domicile-shell-manganese",
