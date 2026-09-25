@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme};
 
 pub mod battery;
 pub mod clipboard;
@@ -79,6 +79,16 @@ pub struct Host {
     /// them would be worse than the silence: it would be a desktop typing in
     /// a layout nobody chose.
     keymap: Option<String>,
+    /// Which way round the desktop is drawn, as every chrome is told — on
+    /// connecting, and again whenever it changes under them.
+    ///
+    /// Not an `Option`, which is where it differs from the keymap above. A
+    /// keymap nobody handed over is a host with no keyboard behind it and
+    /// there is no honest layout to invent for it; a page paints in one theme
+    /// or the other whatever anybody said, so the question is only which — and
+    /// the answer for a host nobody told is the dark the chrome was drawn
+    /// against, which is also what `[theme] mode` defaults to.
+    theme: Theme,
 }
 
 impl Host {
@@ -132,6 +142,37 @@ impl Host {
         self.keymap
             .clone()
             .map(|keymap| HostMessage::Keymap { keymap })
+    }
+
+    /// Take up a theme, and hand back what to tell the chromes — or `None`
+    /// where the desk is already on it.
+    ///
+    /// Three things set one and none of them is this crate's: the config the
+    /// compositor read at startup, a reload whose `[theme]` moved, and a click
+    /// on the shell's toggle arriving as [`ChromeMessage::SetTheme`]. All
+    /// three land here so there is one place the desk's theme is, which is
+    /// what lets the *answer* be the broadcast: a toggle clicked on one
+    /// monitor's page is the whole desktop changing, and the compositor sends
+    /// this to every chrome rather than back to the one that asked.
+    ///
+    /// `None` when nothing moved, because "set it to what it is" is the
+    /// ordinary case rather than the odd one — a config file is rewritten for
+    /// all sorts of reasons — and a broadcast for it would run the theme wipe
+    /// on every page on the desk over a theme that did not change.
+    pub fn set_theme(&mut self, theme: Theme) -> Option<HostMessage> {
+        (self.theme != theme).then(|| {
+            self.theme = theme;
+            self.describe_theme()
+        })
+    }
+
+    /// The theme, in the message a chrome is told it as.
+    ///
+    /// [`Host::describe_desktop`]'s two callers, for its reasons: the
+    /// handshake answers a connecting chrome with it, and the compositor
+    /// broadcasts it when the theme changes under the chromes already there.
+    pub fn describe_theme(&self) -> HostMessage {
+        HostMessage::Theme { theme: self.theme }
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the
@@ -338,6 +379,7 @@ impl Host {
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::ListFiles
             | ChromeMessage::CopyClipboardEntry { .. }
+            | ChromeMessage::SetTheme { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }
@@ -346,6 +388,15 @@ impl Host {
                 // Compositor-level side effects (spawning, input injection). The
                 // compositor intercepts these; the brain ignores them so it stays
                 // pure and testable.
+                //
+                // `SetTheme` is in here for a different reason from the rest,
+                // and it is the reason it is intercepted rather than applied:
+                // what the chrome asked for has to reach the desktop's
+                // *clients* as well as its pages, through a D-Bus service this
+                // crate cannot have — see `domicile_compositor::appearance`.
+                // The compositor calls `Host::set_theme` itself and broadcasts
+                // what comes back, which is the same shape as `Spawn`: the
+                // brain holds the state, the compositor does the deed.
             }
         }
         Ok(())

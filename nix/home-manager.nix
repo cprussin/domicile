@@ -265,6 +265,36 @@ in {
             };
           };
 
+          theme.mode = lib.mkOption {
+            description = ''
+              Which way round the desktop is drawn: light text on a dark
+              ground, or the other way about.
+
+              THERE IS NO `"system"`, and its absence is the design rather
+              than a gap. Every other desktop's theme setting has a third
+              value because it is a program running *on* a system with a
+              preference to follow; Domicile is the system, so `"system"`
+              here would be the desk deferring to itself. It is refused by
+              name rather than read as one of the two.
+
+              What follows it is the whole desk: the shell paints in it, and
+              the compositor hands the same value to the settings portal that
+              this desktop's GTK, Qt, Electron and Firefox windows read their
+              color scheme from -- so the windows turn over with the panels.
+
+              THIS IS WHAT THE DESK COMES UP ON, not what it is stuck with.
+              The shell's own toggle changes the live theme without writing
+              anything back here, because this file is generated and a
+              desktop editing a build product would be a desk fighting its
+              own configuration. A rebuild that moves this line overrules
+              whatever the toggle last did, which is the honest reading of
+              somebody restating what this desk is.
+            '';
+            type = lib.types.enum ["dark" "light"];
+            default = "dark";
+            example = "light";
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Handed to xkb verbatim. Empty means whatever libxkbcommon defaults to.";

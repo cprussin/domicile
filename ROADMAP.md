@@ -307,6 +307,41 @@ costs nothing.
   `zwp_primary_selection_device_manager_v1` is advertised, and
   `packages/domicile-compositor/tests/selection.rs` is the check.
 
+- **A theme picked off the toggle lasts as long as the desktop does.**
+  `[theme] mode` is what a desk comes up on and nothing writes back to it: the
+  file is generated — by a shell, and on NixOS by home-manager — so a desktop
+  that edited it would be overwriting a build product, and a reload would
+  overrule the edit on the next rebuild anyway. What a click changes is the
+  live desk, until it is restarted. Making it stick wants somewhere for a
+  desktop's own state to live that is not the shell's generated config, and
+  there is no such place yet.
+- **A portal frontend already running under another desktop is not
+  re-routed.** `xdg-desktop-portal` reads which backend to use out of its
+  *own* `XDG_CURRENT_DESKTOP`, so the compositor puts the name into the D-Bus
+  and systemd activation environments at startup — which reaches a frontend
+  activated after that and not one already up. A desk started from inside a
+  sway session therefore keeps sway's portal routing until that frontend
+  exits. That is a nested developer run rather than a desk somebody uses, and
+  the real fix is the same one the whole session question wants: a session
+  entry that names `domicile` before anything else in the session starts.
+- **A domicile desk has no screenshot or screencast portal.**
+  `xdg-desktop-portal-gtk` implements neither interface, and the backend that
+  does on a wlroots desk — `xdg-desktop-portal-wlr` — screencopies through
+  `wlr-screencopy-unstable-v1`, which this compositor does not serve. What
+  keeps that backend out is its own `UseIn=`, which names wlroots, sway,
+  Wayfire, river, phosh and Hyprland and not domicile; leaving it out of a
+  desk's portal profile would not be enough on its own, because the frontend
+  falls through the profile to `UseIn=` and then to a last-resort gtk. Closing
+  it takes both halves: the protocol served (or an `impl.portal.ScreenCast` of
+  our own over the engine's capture path) *and* the backend named where the
+  frontend will look.
+- **The settings portal answers one namespace and one key.** A desktop's
+  backend usually carries GNOME's `org.gnome.desktop.interface` as well — the
+  accent color, the interface font, the cursor theme — and Domicile has none
+  of those to answer with. A backend that invented values would be worse than
+  one that says it has nothing: a namespace nobody implements falls through to
+  the next backend, which is the right answer and the reason the list in
+  `nix/domicile.portal` is short rather than aspirational.
 - **A client that draws its own cursor into a surface gets a plain arrow.**
 - **A `wl_output` that is not a panel reports no physical size and no refresh** —
   zero for both, which is what `wl_output` says a screen with no such number

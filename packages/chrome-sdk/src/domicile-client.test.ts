@@ -10,6 +10,7 @@ import type {
 } from "./domicile-host";
 import { BTN_LEFT } from "./input";
 import { isClaimed } from "./shortcut-claims";
+import type { Theme } from "./theme";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -102,6 +103,9 @@ class FakeHost implements DomicileHost {
   }
   setDevicePixelRatio(ratio: number): void {
     this.calls.push(["setDevicePixelRatio", ratio]);
+  }
+  setTheme(theme: Theme): void {
+    this.calls.push(["setTheme", theme]);
   }
   grabShortcut(shortcut: DomicileShortcut): void {
     this.calls.push(["grabShortcut", shortcut]);
@@ -323,6 +327,26 @@ describe("DomicileClient", () => {
       ]);
     });
 
+    it("delivers the theme the desktop is drawn in", () => {
+      // Pushed like the charge, and the one pushed message this page can
+      // cause: `setTheme` is answered with this rather than applied where it
+      // was called, so a desk of three pages moves together.
+      const seen: unknown[] = [];
+      domicile.on("theme", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "theme",
+        Object.assign(new Event("theme"), {
+          arrival: 0,
+          theme: "light" as const,
+        }),
+      );
+
+      expect(seen).toStrictEqual([{ theme: "light" }]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
@@ -433,6 +457,11 @@ describe("DomicileClient", () => {
 
       domicile.setDevicePixelRatio(2);
       expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);
+
+      // Passed on and nothing else: what a page draws comes back as a `theme`
+      // message, because every chrome on the desk is told.
+      domicile.setTheme("light");
+      expect(host.lastCall()).toStrictEqual(["setTheme", "light"]);
 
       domicile.grabShortcut({ altKey: true, keycode: 28 });
       expect(host.lastCall()).toStrictEqual([

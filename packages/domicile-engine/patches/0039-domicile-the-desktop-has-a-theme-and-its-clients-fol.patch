@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 22 Sep 2026 09:12:03 -0700
+Subject: [PATCH] domicile: the desktop has a theme, and its clients follow it
+
+Registers the fourth member of the control protocol that crosses in BOTH
+directions: DomicileHost.setTheme() goes down, and a `theme` event comes back
+up to every chrome on the desk.
+
+Three lists Chromium owns, and nothing else. The interface, the event, the
+event init dictionary, the enum and the two codecs are all new files under
+src/, which is most of this fork -- what cannot be a new file is a name in a
+generated-bindings list and a name in the event registry.
+
+WHY A PAGE CANNOT ANSWER THIS FOR ITSELF, since prefers-color-scheme looks
+like it already does. That media query reports this engine's own notion of a
+system preference, and under Domicile there is no system above the desktop to
+have one: the shell IS the desktop's chrome, and what it paints in comes from
+`[theme] mode` in the compositor's config and from the toggle on its own top
+bar. Reading the media query would be a page asking the engine what the engine
+was told, with a second place for the answer to be wrong.
+
+AND WHY IT GOES BACK DOWN rather than staying in the renderer. The compositor
+is the only process the desk's *clients* can hear -- it answers the settings
+portal that GTK, Qt, Electron and Firefox read a color scheme from, out of this
+same value. A theme that lived in the page would be a desktop whose panels went
+dark while every window stayed light.
+
+DomicileTheme is a WebIDL enum rather than the DOMString DomicileDisplay's
+transform is, and the asymmetry is the direction: a transform is only ever
+read, so the bindings have nothing to refuse, where setTheme() is *called* and
+a DOMString would carry a word that is not a theme all the way to the socket.
+The enum registers in generated_enumeration_sources_in_modules beside
+DomicileCursorShape, which is the other member that earned one.
+
+The mapping in both directions is the X-macro in
+components/domicile/common/theme.h and nothing else, so
+scripts/test-themes-agree.sh can compare all four writings of the set --
+domicile_config::ThemeMode, domicile_protocol::Theme, this header's list and
+mojom::Theme -- for membership and order without building anything.
+
+Adding a member costs a near-full Blink rebuild, because a new inbound message
+needs a new event type and that invalidates the generated bindings.
+---
+ .../bindings/generated_in_modules.gni         |  6 ++++++
+ .../renderer/bindings/idl_in_modules.gni      |  3 +++
+ .../core/events/event_type_names.json5        |  1 +
+ 3 files changed, 10 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -329,6 +329,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
+@@ -1622,5 +1624,7 @@ generated_enumeration_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
+@@ -2402,6 +2406,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -299,6 +299,9 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_theme.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_theme_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_theme_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/navigator_domicile.idl",
+   "//third_party/blink/renderer/modules/domicile/window_domicile.idl",
+   "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
+diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
+--- a/third_party/blink/renderer/core/events/event_type_names.json5
++++ b/third_party/blink/renderer/core/events/event_type_names.json5
+@@ -34,6 +34,7 @@
+     "files",
+     "battery",
+     "clipboard",
++    "theme",
+     "focuschanged",
+     "focusrequested",
+     "displayschanged",

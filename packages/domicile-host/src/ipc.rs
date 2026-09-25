@@ -107,6 +107,13 @@ pub fn apply_chrome_message(
                         protocol_version: agreed,
                     },
                     host.describe_desktop(),
+                    // And the theme, which is neither of those: it is not the
+                    // geometry a page lays out against or the layout it is
+                    // typed in, but the one fact it needs before it paints at
+                    // all. A chrome told it late paints the desk in the wrong
+                    // theme and then flips, which is the flash the shell's
+                    // pre-paint apply exists to end.
+                    host.describe_theme(),
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())

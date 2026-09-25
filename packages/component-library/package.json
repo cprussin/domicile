@@ -45,11 +45,14 @@
     "./Select": "./src/Select/Select.tsx",
     "./SlideOver": "./src/SlideOver/SlideOver.tsx",
     "./spacing": "./src/spacing.ts",
+    "./standalone-theme-source": "./src/ThemeSwitch/standalone-theme-source.ts",
     "./TabRail": "./src/TabRail/TabRail.tsx",
     "./Tabs": "./src/Tabs/Tabs.tsx",
     "./Textarea": "./src/Textarea/Textarea.tsx",
     "./ThemeProvider": "./src/ThemeSwitch/ThemeProvider.tsx",
     "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx",
+    "./theme-core": "./src/ThemeSwitch/theme-core.ts",
+    "./theme-source": "./src/ThemeSwitch/theme-source.ts",
     "./vite-shell": "./src/vite-shell.ts"
   },
   "files": [

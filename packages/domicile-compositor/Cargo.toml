@@ -50,6 +50,20 @@ libloading = "0.9"
 thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# The session bus, for the settings portal this compositor answers -- see
+# `src/appearance.rs`, which is how the desk's GTK, Qt and Electron clients
+# hear about a theme the shell's toggle changed. Pure Rust, so it links
+# nothing: the promise above about libxkbcommon still holds. `blocking`
+# because this process is a `calloop` event loop rather than an async one, and
+# no default features because `tokio` is the alternative and there is no tokio
+# here.
+#
+# 4 rather than 5, which is not a preference: zbus 5 wants rustc 1.87 and this
+# workspace pins `rust-version = "1.75"`. Moving it is its own change.
+zbus = { version = "4.4", default-features = false, features = [
+    "async-io",
+    "blocking",
+] }
 
 # In Domicile the web engine is the renderer, so we deliberately do NOT pull
 # Smithay's winit, DRM or udev backends. Smithay's job here is accepting clients

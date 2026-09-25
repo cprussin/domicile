@@ -39,7 +39,9 @@ import type {
   DomicileFilesEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
+  DomicileThemeEvent,
 } from "./domicile-host";
+import type { Theme } from "./theme";
 
 /**
  * A window exists.
@@ -235,6 +237,22 @@ export type ClipboardMessage = {
   entries: readonly DomicileClipboardEntry[];
 };
 
+/**
+ * Which way round the desktop is drawn now.
+ *
+ * Pushed like the battery and the clipboard, and the one of the three a page
+ * can cause: `setTheme` is answered with it, to every chrome on the desk
+ * rather than to the one that called. It also arrives when the page connects,
+ * so a shell paints in the desk's theme rather than painting and flipping.
+ *
+ * **Not `prefers-color-scheme`**, which is the media query this looks like it
+ * duplicates: that reports the engine's own notion of a system preference, and
+ * a Domicile shell has no system above it to have one. See `theme.ts`.
+ */
+export type ThemeMessage = {
+  theme: Theme;
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -250,6 +268,7 @@ export type HostMessageMap = {
   files: FilesMessage;
   battery: BatteryMessage;
   clipboard: ClipboardMessage;
+  theme: ThemeMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -362,6 +381,18 @@ export const battery = (event: DomicileBatteryEvent): BatteryMessage => ({
  */
 export const clipboard = (event: DomicileClipboardEvent): ClipboardMessage => ({
   entries: event.entries,
+});
+
+/**
+ * The desktop's theme, with the SDK's own `arrival` left behind.
+ *
+ * A pass-through like {@link files}: the engine's `theme` is a
+ * `DomicileTheme`, which is the closed set this SDK spells — the bindings
+ * refuse anything else on the way in, and `setTheme` refuses it on the way
+ * out. Nothing to parse and nothing to fall back to.
+ */
+export const theme = (event: DomicileThemeEvent): ThemeMessage => ({
+  theme: event.theme,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

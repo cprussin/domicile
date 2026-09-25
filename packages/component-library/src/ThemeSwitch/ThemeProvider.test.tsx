@@ -2,54 +2,40 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import {
-  loadPreference,
-  resolveTheme,
-  ThemeProvider,
-  useTheme,
-} from "./ThemeProvider";
-
-const THEME_KEY = "theme:v1";
+import { standaloneThemeSource } from "./standalone-theme-source";
+import { ThemeProvider, useTheme } from "./ThemeProvider";
+import { applyTheme } from "./theme-core";
+import type { ThemeSource } from "./theme-source";
 
 const isLight = () =>
   document.documentElement.getAttribute("data-theme") === "light";
 
-// A minimal consumer: shows the current preference and cycles on click, so the
-// provider's state and its `<html>` side effects can both be observed.
+// A minimal consumer: shows the theme the page is in and asks for the other
+// one on click, so the provider's state and its `<html>` side effects can both
+// be observed.
 const Probe = () => {
-  const { cycle, preference } = useTheme();
+  const { flip, theme } = useTheme();
   return (
-    <button data-testid="pref" onClick={cycle} type="button">
-      {preference}
+    <button data-testid="theme" onClick={flip} type="button">
+      {theme}
     </button>
   );
 };
 
 beforeEach(() => {
-  globalThis.localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
 });
 
-describe("resolveTheme", () => {
-  it("passes explicit preferences straight through", () => {
-    expect(resolveTheme("light")).toBe("light");
-    expect(resolveTheme("dark")).toBe("dark");
-  });
-});
+describe("applyTheme", () => {
+  it("writes light as an attribute and dark as its absence", () => {
+    // Dark is the attribute-less state because the preset's condition is
+    // `[data-theme=light] &`. Writing `data-theme="dark"` would be a second
+    // spelling of the same thing, and the one the preset does not read.
+    applyTheme("light");
+    expect(isLight()).toBe(true);
 
-describe("loadPreference", () => {
-  it("defaults to following the system", () => {
-    expect(loadPreference()).toBe("system");
-  });
-
-  it("reads back a previously saved preference", () => {
-    globalThis.localStorage.setItem(THEME_KEY, "light");
-    expect(loadPreference()).toBe("light");
-  });
-
-  it("ignores an unrecognized stored value", () => {
-    globalThis.localStorage.setItem(THEME_KEY, "chartreuse");
-    expect(loadPreference()).toBe("system");
+    applyTheme("dark");
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
   });
 });
 
@@ -65,34 +51,74 @@ describe("useTheme", () => {
   });
 });
 
-describe("ThemeProvider", () => {
-  it("applies the saved preference to <html> on mount", () => {
-    globalThis.localStorage.setItem(THEME_KEY, "light");
+describe(ThemeProvider, () => {
+  it("paints in the theme the source was already holding", () => {
+    // The desk states a theme in its config and the compositor hands it over
+    // with the handshake, which is before this provider mounts. A provider
+    // that only listened would paint dark until somebody clicked something.
     render(
-      <ThemeProvider>
+      <ThemeProvider source={standaloneThemeSource("light")}>
         <Probe />
       </ThemeProvider>,
     );
-    expect(screen.getByTestId("pref")).toHaveTextContent("light");
+
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
     expect(isLight()).toBe(true);
   });
 
-  it("cycles the preference, re-applies the theme, and persists it", async () => {
-    globalThis.localStorage.setItem(THEME_KEY, "light");
+  it("paints dark while the desk has said nothing", () => {
+    // Not a failure and not a guess: dark is the attribute-less state of
+    // `<html>` AND what `[theme] mode` defaults to, so a page told nothing
+    // paints in the theme the desk most likely has.
     render(
-      <ThemeProvider>
+      <ThemeProvider source={{ ...standaloneThemeSource(), theme: undefined }}>
         <Probe />
       </ThemeProvider>,
     );
-    const pref = screen.getByTestId("pref");
-    expect(pref).toHaveTextContent("light");
 
-    // light → dark: the wipe runs asynchronously, so wait for the commit.
-    await userEvent.click(pref);
-    await waitFor(() => {
-      expect(pref).toHaveTextContent("dark");
-    });
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+  });
+
+  it("asks the source to flip rather than flipping the page itself", async () => {
+    // THE LOAD-BEARING ONE. A desk of three monitors is three pages, and the
+    // theme also has to reach the Wayland clients through the compositor — so
+    // a click is a request, and what repaints this page is the answer coming
+    // back to every page on the desk.
+    const asked: unknown[] = [];
+    const source: ThemeSource = {
+      onTheme: () => () => undefined,
+      setTheme: (theme) => {
+        asked.push(theme);
+      },
+      theme: "dark",
+    };
+    render(
+      <ThemeProvider source={source}>
+        <Probe />
+      </ThemeProvider>,
+    );
+
+    await userEvent.click(screen.getByTestId("theme"));
+
+    expect(asked).toStrictEqual(["light"]);
+    // And nothing moved here, because nothing answered.
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
     expect(isLight()).toBe(false);
-    expect(globalThis.localStorage.getItem(THEME_KEY)).toBe("dark");
+  });
+
+  it("repaints when the desk answers", async () => {
+    render(
+      <ThemeProvider source={standaloneThemeSource("dark")}>
+        <Probe />
+      </ThemeProvider>,
+    );
+    const probe = screen.getByTestId("theme");
+
+    // The wipe runs asynchronously, so wait for the commit.
+    await userEvent.click(probe);
+    await waitFor(() => {
+      expect(probe).toHaveTextContent("light");
+    });
+    expect(isLight()).toBe(true);
   });
 });
