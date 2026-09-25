@@ -261,6 +261,24 @@ source_set("keyboard_layout") {
   ]
 }
 
+# The color scheme every page in the browser process is drawn in.
+#
+# Its own target beside :keyboard_layout, for that one's reason: it is the
+# piece of the theme's crossing a test can reach with no socket and no browser.
+# //ui/native_theme and the mojom's enum -- no //content.
+source_set("color_scheme") {
+  sources = [
+    "browser/color_scheme.cc",
+    "browser/color_scheme.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+    "//ui/native_theme",
+  ]
+}
+
 # The shell's control channel, in the browser process.
 #
 # Its own target so the slice can meet a compiler before the Blink half exists,
@@ -289,6 +307,7 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
@@ -317,6 +336,7 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    ":color_scheme",
     ":command_protocol",
     ":cursor_shape",
     ":display_transform",
