@@ -35,6 +35,7 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
             },
             HostMessage::Displays { displays: vec![] },
             HostMessage::Theme { theme: Theme::Dark },
+            HostMessage::WindowsTheme { theme: Theme::Dark },
         ]
     );
 }
@@ -215,6 +216,7 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
             },
             HostMessage::Displays { displays: vec![] },
             HostMessage::Theme { theme: Theme::Dark },
+            HostMessage::WindowsTheme { theme: Theme::Dark },
             HostMessage::Keymap {
                 keymap: KEYMAP.into()
             },

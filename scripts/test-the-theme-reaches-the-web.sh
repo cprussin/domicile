@@ -34,11 +34,20 @@ fail() {
   "Nothing sets the engine's color scheme, so a site's prefers-color-scheme" \
   "never follows the desktop's theme."
 
-# The channel's `theme` arm hands the theme on, not only to the page.
-awk '/\*type == "theme"/,/^  }$/' "$CHANNEL" | grep -q 'theme_sink_.Run' || fail \
-  "$CHANNEL's \`theme\` arm does not run theme_sink_" \
+# The channel's `windows_theme` arm hands the theme on, not only to the page.
+# That arm and not `theme`'s: the chrome is told first, and the windows --
+# sites included -- only once every chrome has captured the frame its wipe
+# starts from. A site turned on `theme` is in that frame already turned.
+awk '/\*type == "windows_theme"/,/^  }$/' "$CHANNEL" | grep -q 'theme_sink_.Run' || fail \
+  "$CHANNEL's \`windows_theme\` arm does not run theme_sink_" \
   "The page hears the theme; the engine's NativeTheme does not, and every" \
   "site keeps the scheme the process started with."
+if awk '/\*type == "theme"/,/^  }$/' "$CHANNEL" | grep -q 'theme_sink_.Run'; then
+  fail \
+    "$CHANNEL's \`theme\` arm runs theme_sink_" \
+    "Sites would turn before the shell captured its old frame, and the wipe" \
+    "would pass over them already turned."
+fi
 
 grep -q 'SetPreferredColorSchemeOverride' "$SCHEME" || fail \
   "$SCHEME does not call NativeTheme::SetPreferredColorSchemeOverride" \

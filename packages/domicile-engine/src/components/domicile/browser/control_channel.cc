@@ -334,6 +334,12 @@ void ControlChannel::Unlock(const std::string& passphrase) {
   SendMessage(std::move(message));
 }
 
+void ControlChannel::ThemeCaptured(mojom::Theme theme) {
+  base::DictValue message = Typed("theme_captured");
+  message.Set("theme", std::string(ThemeToWire(theme)));
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
   // RECORDED HERE RATHER THAN RELAYED, and the compositor no longer has a
   // message for it. It used to hold the claims, and it is the layer that
@@ -820,10 +826,27 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!theme) {
       return;
     }
-    // The engine's own color scheme as well as the page's: the page repaints
-    // the panels, and this is what a site's `prefers-color-scheme` reads.
-    theme_sink_.Run(*theme);
     client_->ThemeChanged(*theme, arrival);
+    return;
+  }
+
+  if (*type == "windows_theme") {
+    // Refused rather than defaulted, for `theme`'s reason above.
+    const std::string* named = message.FindString("theme");
+    if (!named) {
+      return;
+    }
+    const std::optional<mojom::Theme> theme =
+        ThemeFromWire<mojom::Theme>(*named);
+    if (!theme) {
+      return;
+    }
+    // The engine's own color scheme, which is what a site's
+    // `prefers-color-scheme` reads. Here rather than on `theme`, because the
+    // shell captures the frame its wipe starts from in between: a site
+    // turned on `theme` would be in that frame already turned.
+    theme_sink_.Run(*theme);
+    client_->WindowsThemeChanged(*theme, arrival);
     return;
   }
 
