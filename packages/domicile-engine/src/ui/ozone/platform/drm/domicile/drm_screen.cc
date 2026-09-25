@@ -39,6 +39,40 @@ const DomicileDisplayLayout* WantedFor(
   return nullptr;
 }
 
+// The layout's turn, as display::Display counts it.
+//
+// THE TWO COUNT OPPOSITE WAYS. The layout's is `wl_output.transform`'s, the
+// turn what is drawn takes to come out upright, which counts
+// counterclockwise; display::Display::Rotation counts clockwise. So the two
+// quarter turns swap and the half turn is its own opposite -- and a monitor
+// read with them the same way round comes up upside down, which is how the
+// page-side version of this once shipped.
+display::Display::Rotation RotationOf(DomicileDisplayLayout::Transform turn) {
+  switch (turn) {
+    case DomicileDisplayLayout::Transform::kNormal:
+      return display::Display::ROTATE_0;
+    case DomicileDisplayLayout::Transform::kRotate90:
+      return display::Display::ROTATE_270;
+    case DomicileDisplayLayout::Transform::kRotate180:
+      return display::Display::ROTATE_180;
+    case DomicileDisplayLayout::Transform::kRotate270:
+      return display::Display::ROTATE_90;
+  }
+}
+
+// The turn and the scale the compositor asked this display's window to be
+// drawn at. See `DisplaysFromSnapshots` in the header for why the bounds stay
+// the CRTC's.
+void TurnAndScale(display::Display& screen,
+                  const DomicileDisplayLayout& wanted) {
+  // Captured before the scale is set: `GetSizeInPixel` answers bounds times
+  // scale until it is told otherwise, and the bounds here already are pixels.
+  const gfx::Size pixels = screen.bounds().size();
+  screen.set_rotation(RotationOf(wanted.transform));
+  screen.set_device_scale_factor(static_cast<float>(wanted.scale));
+  screen.set_size_in_pixels(pixels);
+}
+
 }  // namespace
 
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
@@ -152,8 +186,12 @@ std::vector<display::Display> DisplaysFromSnapshots(
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
-    displays.push_back(DisplayFromSnapshot(
-        *snapshot, wanted ? wanted->origin : snapshot->origin()));
+    display::Display screen = DisplayFromSnapshot(
+        *snapshot, wanted ? wanted->origin : snapshot->origin());
+    if (wanted) {
+      TurnAndScale(screen, *wanted);
+    }
+    displays.push_back(screen);
   }
   return displays;
 }
@@ -238,6 +276,17 @@ void DrmScreen::OnDisplaysChanged(
   for (const int64_t id : unplugged) {
     display_list_.RemoveDisplay(id);
   }
+
+  // A DISPLAY TURNED UNDER A WINDOW THAT STAYED PUT. A reloaded profile that
+  // stands a monitor on its side moves no window, so nothing else tells the
+  // pointer over it to travel the new way round.
+  for (const display::Display& display : display_list_.displays()) {
+    DrmWindowHost* window =
+        window_manager_->GetWindowAt(display.bounds().CenterPoint());
+    if (window) {
+      window->FollowDisplayTurn();
+    }
+  }
 }
 
 const std::vector<display::Display>& DrmScreen::GetAllDisplays() const {
@@ -275,10 +324,10 @@ gfx::Point DrmScreen::GetCursorScreenPoint() const {
 
 gfx::AcceleratedWidget DrmScreen::GetAcceleratedWidgetAtScreenPoint(
     const gfx::Point& point_in_dip) const {
-  // GetWindowAt() matches on GetBoundsInPixels(), and the point is in DIP. The
-  // two are the same number while every display here has a scale factor of 1:
-  // nothing sets one, because a snapshot does not carry it. When one does,
-  // this is the line that has to scale.
+  // GetWindowAt() matches on GetBoundsInPixels(), and the point is in the
+  // screen's coordinates. Those are pixels on this platform even where a
+  // display has a scale: its bounds are the CRTC's -- `DisplaysFromSnapshots`
+  // says why -- and the scale only reaches what is drawn inside a window.
   const DrmWindowHost* window = window_manager_->GetWindowAt(point_in_dip);
   return window ? window->GetAcceleratedWidget() : gfx::kNullAcceleratedWidget;
 }

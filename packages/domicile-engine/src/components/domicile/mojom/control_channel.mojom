@@ -150,11 +150,10 @@ struct DisplayInfo {
   uint32 mode_width;
   uint32 mode_height;
   DisplayTransform transform;
-  // This display is the whole page, so the page has to fill it: the mode above
-  // is the window's own size in CSS pixels, and the logical box has to be
-  // turned and scaled to cover it. False for every desktop the page's window
-  // is the whole of, where the page's CSS pixels already are the desktop's
-  // logical ones.
+  // This display is the whole page. The browser turns and scales its window,
+  // so the page is the logical box above, upright; the mode and transform say
+  // how it was drawn. False for every desktop the page's window is the whole
+  // of.
   bool fills_the_window;
 };
 

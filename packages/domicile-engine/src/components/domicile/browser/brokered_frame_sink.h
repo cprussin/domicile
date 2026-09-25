@@ -113,9 +113,14 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // Registering the hierarchy is deliberately here rather than at construction:
   // until a page embeds, there is no parent to name, and step 2 established
   // that hierarchy is about BeginFrames rather than about getting drawn.
+  //
+  // `scale` is how many of the page's device pixels `size` counts per CSS
+  // pixel, which the producer needs to turn the box back into the logical
+  // pixels a client is configured in: each monitor's page is at its own.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
-             const gfx::Size& size);
+             const gfx::Size& size,
+             double scale);
 
   // Imports a dmabuf and returns the id to name it by, or 0. This is the
   // components/exo/buffer.cc path: a GpuMemoryBufferHandle becomes a

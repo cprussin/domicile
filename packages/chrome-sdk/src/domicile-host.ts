@@ -126,14 +126,13 @@ export type DomicileDisplay = {
    */
   readonly transform: string;
   /**
-   * This screen is the whole page, so the page has to fill it: the mode above
-   * is the window's own size in CSS pixels, and the logical box has to be
-   * turned and scaled to cover it.
+   * This screen is the whole page.
    *
    * True where the engine scans out — one window per CRTC, each told the
-   * single display it covers. False for every desktop the page's window is the
-   * whole of, where the page's CSS pixels already are the desktop's logical
-   * ones and there is nothing to map.
+   * single display it covers, and each turned and scaled by the engine so the
+   * page is this screen's logical box, upright. Nothing to map: the mode and
+   * transform above say how the engine drew it. False for every desktop the
+   * page's window is the whole of.
    */
   readonly fillsTheWindow: boolean;
 };

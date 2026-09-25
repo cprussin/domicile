@@ -155,13 +155,12 @@ const focusRequestedSchema = z.looseObject({
 // the top-left of the displays' bounding box, so `position` is directly where
 // a `<Screen>` goes on the page.
 const displayInfoSchema = z.looseObject({
-  // This display is the whole page, so the page has to fill it: `mode` is the
-  // viewport, and the logical box has to be turned and scaled to cover it.
+  // This display is the whole page. The engine turns and scales the window,
+  // so the page is this display's logical box, upright, with nothing to map.
   //
   // False for every desktop the page's window is the whole of — a nested run,
-  // a developer window — where the page's CSS pixels already are the desktop's
-  // logical ones and there is nothing to map. False is therefore also the
-  // right answer for a host that does not send the field at all.
+  // a developer window. False is therefore also the right answer for a host
+  // that does not send the field at all.
   fills_the_window: z
     .boolean()
     .nullish()
@@ -174,8 +173,7 @@ const displayInfoSchema = z.looseObject({
   //
   // Optional, and `[0, 0]` where the host has nothing to say — a message from
   // before the fork scanned anything out, a captured session, a hand-written
-  // fixture. Neither is a divisor: `fills_the_window` is the field that
-  // decides whether anybody divides by this, and it is false in both cases.
+  // fixture. Description only: nothing divides by it.
   mode: z
     .tuple([z.int().nonnegative(), z.int().nonnegative()])
     .nullish()

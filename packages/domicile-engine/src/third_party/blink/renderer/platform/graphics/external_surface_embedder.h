@@ -81,9 +81,14 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
   // that app*, because an <app> element exists before the window behind it
   // does. So this may take arbitrarily long, and if that producer never
   // connects it never runs.
+  //
+  // `scale` is how many of `size`'s pixels the page draws one CSS pixel with
+  // -- its layout zoom factor -- which is how the producer gets the box back
+  // into the logical pixels it configures a client in.
   void Embed(const String& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const gfx::Size& size,
+             double scale,
              Allocation allocation,
              EmbeddedCallback callback);
 

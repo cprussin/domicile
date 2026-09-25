@@ -1389,11 +1389,11 @@ describe("Shell", () => {
       ).toBe(was + 40);
     });
 
-    it("moves it by what the hand crossed of the desktop, not of the window", () => {
-      // THE REGRESSION, and the drag's half of the one above it. A pointer
-      // exists in the pixels the page draws, so a hand that crossed 80 of them
-      // crossed 40 of the ones the window was laid out in — and a window moved
-      // by the 80 runs out from under the hand holding it.
+    it("moves it by what the hand crossed, on a page that is one monitor too", () => {
+      // The engine turns and scales a monitor's window, so the page on it is
+      // laid out in the desktop's own pixels and a pointer is reported in
+      // them: a hand that crossed 80 crossed 80 of what the window is placed
+      // in, whatever the monitor's density or turn.
       const { container } = renderShell([SCANOUT]);
       clientAppears("term");
       press("Tab", true);
@@ -1406,7 +1406,7 @@ describe("Shell", () => {
 
       expect(
         Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
-      ).toBe(was + 40);
+      ).toBe(was + 80);
     });
 
     it("keys a floating window around the desktop instead of retiling it", () => {
@@ -1455,25 +1455,22 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
-    it("speaks in the page's pixels and not the layout's", () => {
-      // THE REGRESSION. Where a page is one monitor, `<Screen>` draws its
-      // region over the whole window through a transform, so a window laid
-      // out at 960 across is drawn at 1920 — and the pointer only ever exists
-      // in what the page draws. Asking for the layout's own number put the
-      // cursor a fraction of the way to the window.
+    it("speaks in the layout's pixels on a page that is one monitor too", () => {
+      // The engine turns and scales a monitor's window, so the page on it is
+      // the display's logical box and the pointer is put where the layout
+      // says: the window's own middle, whatever the monitor's density or turn.
       const { container } = renderShell([SCANOUT]);
       clientAppears("one");
 
       // Its logical box is the screen less the bar, so its middle is 480
-      // across and 286 down of the region — twice that on the window it
-      // covers.
+      // across and 301 down.
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         height: "478px",
         width: "960px",
         x: "0px",
         y: "62px",
       });
-      expect(domicile.calls).toContainEqual(["warpPointer", [960, 602]]);
+      expect(domicile.calls).toContainEqual(["warpPointer", [480, 301]]);
     });
 
     it("takes the pointer to a window that has just opened", () => {

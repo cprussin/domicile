@@ -33,7 +33,8 @@ TEST(EngineEventQueueTest, PushingWakesThePollingThreadAndCarriesTheEvent) {
   queue.Push({.type = EngineEvent::Type::kConfigure,
               .surface = 7,
               .width = 180,
-              .height = 130});
+              .height = 130,
+              .scale = 1.5});
 
   EXPECT_TRUE(Readable(queue.fd()));
   const std::vector<EngineEvent> drained = queue.Drain();
@@ -42,6 +43,7 @@ TEST(EngineEventQueueTest, PushingWakesThePollingThreadAndCarriesTheEvent) {
   EXPECT_EQ(drained[0].surface, 7u);
   EXPECT_EQ(drained[0].width, 180u);
   EXPECT_EQ(drained[0].height, 130u);
+  EXPECT_EQ(drained[0].scale, 1.5);
 }
 
 // The one event carrying a variable-length payload, and the only reason this

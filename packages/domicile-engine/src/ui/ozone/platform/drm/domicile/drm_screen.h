@@ -81,6 +81,19 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 
 // Every snapshot, or the displayless fallback above when there are none.
 //
+// EACH TURNED AND SCALED THE WAY THE LAYOUT SAYS, which is how a shell gets
+// out of knowing a monitor is on its side. The rotation and the scale are
+// what views turns this display's window by and what every page on it lays
+// out at, so the page's CSS pixels are the compositor's logical ones, upright.
+// A display the layout does not name is neither.
+//
+// THE BOUNDS STAY THE CRTC'S, in pixels, scale or no scale -- not the DIP
+// rectangle a display's bounds usually are. Everything on this platform reads
+// them that way: a window is bound to a CRTC on an exact match with them, a
+// fullscreen window is sized from them, and the compositor places its
+// connectors in them. What the rotation and the scale change is what is drawn
+// INSIDE the window, which is the only place either belongs.
+//
 // `layout` IS THE COMPOSITOR'S, and it reaches the display list as well as the
 // modeset because a dark connector is still a connector the browser has to
 // place somewhere. A display the layout names takes the corner the layout gave

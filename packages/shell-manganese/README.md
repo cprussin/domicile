@@ -135,14 +135,10 @@ says a window is new is that it was not there a render ago; a window that
 opens WITHOUT the keyboard moves nothing, because the pointer has no quarrel
 with it.
 
-**Both ask in the page's pixels, which on a tty are not the layout's.** Where
-a page is one monitor, `<Screen>` draws its region over the whole window
-through a transform — a 4K panel at density 1.2 is laid out as a 3200-wide box
-and drawn across 3840 — and a pointer only ever exists in what the page draws.
-So a window's box goes through `onThePage` before either question is asked of
-it. Laying that step out wrongly is a cursor that lands a fraction of the way
-to the window, right at the screen's corner and further out the further from
-it, which is what it looked like before this existed.
+**Both ask in the layout's own pixels, on a tty as anywhere.** The engine
+turns and scales each monitor's window itself, so the page is the monitor's
+logical box, upright, and a pointer is reported in the numbers a window is
+laid out at.
 
 ### The keys are physical, and the layout is written down
 
@@ -198,12 +194,6 @@ knowing about:
   routes to the chrome instead — and a transparent sheet over the window
   catches what falls through. The same mechanism that stops a window
   swallowing the clicks meant for a menu drawn over it.
-- **A drag is measured in the pointer's pixels, and those are not the
-  window's.** Where a page is one monitor, `<Screen>` covers its window with a
-  transform, so a hand that crossed 120 of the page's pixels crossed 60 of the
-  ones the window was laid out in — and crossed them sideways on a monitor on
-  its side. The travel goes through `offThePage` before it is added to the box,
-  which is the seam the pointer warp crosses in the other direction.
 - **The page cannot see the modifier while a window has the keyboard.**
   `wl_keyboard.modifiers` goes to the focused surface, so the compositor
   broadcasts the held set instead and the shell listens (`modifiers`). The

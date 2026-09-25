@@ -3,6 +3,7 @@
 
 module domicile.mojom;
 
+import "components/domicile/mojom/control_channel.mojom";
 import "services/viz/public/mojom/compositing/compositor_frame_sink.mojom";
 import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
@@ -26,9 +27,13 @@ interface SurfaceObserver {
   // The embedder is showing `size` of this producer's surface at
   // `local_surface_id`. Submit to that id, at that size, until told another.
   //
-  // This is xdg_toplevel.configure.
+  // This is xdg_toplevel.configure. `size` is in the page's device pixels, and
+  // `scale` is how many of them the page draws one CSS pixel with -- which is
+  // what brings the box back to the logical pixels a client is configured in.
+  // Per embed rather than per desktop: each monitor's page is at its own.
   OnSurfaceEmbedded(viz.mojom.LocalSurfaceId local_surface_id,
-                    gfx.mojom.Size size);
+                    gfx.mojom.Size size,
+                    double scale);
 
   // Viz asked for a frame. Only sent to a producer whose sink the browser
   // owns — one that passed no receiver to CreateFrameSink — because a producer
@@ -130,6 +135,14 @@ struct DisplayLayout {
   // nullable one: a display that is not being lit has no corner, and zero is
   // the only honest thing to send instead of one.
   gfx.mojom.Point origin;
+
+  // Which way up the monitor is, and how many of its pixels one logical pixel
+  // is worth. THE BROWSER DRAWS BOTH: it turns and scales the window it puts
+  // on this connector, so the page in it lays out upright in the producer's
+  // logical pixels and a shell never has to know the monitor is on its side.
+  // Read for a dark connector too, because its window outlives the dark.
+  DisplayTransform transform;
+  double scale;
 };
 
 // Tells a producer what the screens are.

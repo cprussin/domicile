@@ -434,6 +434,36 @@ fn a_disabled_display_is_a_connector_to_leave_dark() {
 }
 
 #[test]
+fn a_connector_carries_the_turn_and_scale_its_window_is_drawn_at() {
+    // The engine draws each monitor's page, so it is the engine that turns and
+    // scales it -- a shell lays out in logical pixels and never hears about
+    // either. That makes the turn and the scale a fact about the connector as
+    // much as about the desktop, and the dark one keeps what its entry says.
+    let layout = layout(
+        HOME_OFFICE_FULL,
+        &[
+            connected(LAPTOP, PANEL_MODE),
+            connected(LEFT, DESK_MODE),
+            connected(CENTER, DESK_MODE),
+            connected(RIGHT, DESK_MODE),
+        ],
+    );
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.name.as_str(), display.transform, display.scale))
+            .collect::<Vec<_>>(),
+        vec![
+            (LAPTOP, Transform::Normal, 1.0),
+            (LEFT, Transform::Rotate270, 1.2),
+            (CENTER, Transform::Rotate270, 1.2),
+            (RIGHT, Transform::Rotate270, 1.2),
+        ]
+    );
+}
+
+#[test]
 fn the_connectors_are_stepped_across_in_the_order_the_profile_places_them() {
     // NOT the order the entries are written in, and not the order the engine
     // reported them: the order they are placed left to right. The engine's own

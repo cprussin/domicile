@@ -467,12 +467,10 @@ fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
 /// page laying out in a desktop it has no corner of. A blank one is honest and
 /// lasts until the reconciliation closes the window.
 ///
-/// **AND ITS OWN DISPLAY IS THE WHOLE WINDOW.** Every display carries its
-/// `mode` and its `transform` as description; on one of them they stop being
-/// description. A window whose display is stood on its side or laid out at a
-/// density its own pixels do not match has to turn and scale what it draws to
-/// cover itself, and `fills_the_window` is what tells the page so. Set only
-/// here, because this is the only place that knows a window is a monitor —
+/// **AND ITS OWN DISPLAY IS THE WHOLE WINDOW**, which `fills_the_window`
+/// says. The engine turns and scales that window itself, so the page is the
+/// display's logical box the right way up and has nothing to map; the flag is
+/// how a page knows which display is its own. Set only here, because this is the only place that knows a window is a monitor —
 /// `Advertised::described` describes a desktop, and a desktop is not anybody's
 /// viewport.
 pub fn as_seen_from(displays: &[DisplayInfo], name: &str) -> Vec<DisplayInfo> {

@@ -419,7 +419,7 @@ fn the_desktop_is_described_to_the_chrome() {
 
 #[test]
 fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
-    // The three fields a page turns into a CSS transform. `size` is the box
+    // The three fields that say how a monitor is drawn. `size` is the box
     // the shell lays out in, `mode` is the pixels the panel has, and the two
     // are not each other's units: 3840x2160 stood on its side at density 1.2
     // is a 1800x3200 box. Nothing can be derived from the other two --

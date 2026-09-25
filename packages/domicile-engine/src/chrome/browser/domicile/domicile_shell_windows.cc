@@ -35,6 +35,9 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/native_ui_types.h"
 #include "url/gurl.h"
 
@@ -186,7 +189,15 @@ class ShellWindows : public display::DisplayObserver {
     const std::vector<int64_t> windowed = places_.Update(SightingsOf(held));
     for (size_t index = 0; index < held.size(); ++index) {
       if (windowed[index] == display.id()) {
-        held[index].window->GetWindow()->SetBounds(display.bounds());
+        // IN PIXELS, AND STRAIGHT TO THE HOST. A display's bounds are its
+        // CRTC's on this platform, scale or no scale -- drm_screen.h says why
+        // -- and `BaseWindow::SetBounds` takes DIPs, which it would multiply
+        // by the scale into a rectangle no CRTC has.
+        held[index]
+            .window->GetWindow()
+            ->GetNativeWindow()
+            ->GetHost()
+            ->SetBoundsInPixels(display.bounds());
       }
     }
   }
@@ -286,9 +297,20 @@ class ShellWindows : public display::DisplayObserver {
     // arranges. Fullscreen from the start rather than toggled afterwards,
     // because a window that is briefly somewhere else is a frame drawn on the
     // wrong monitor.
+    //
+    // DIVIDED BY THE PRIMARY'S SCALE, which is not a display this window is
+    // for. The bounds are DIPs to views and it has no window yet to take a
+    // scale from, so it multiplies them by the primary display's -- and a
+    // display's bounds here are already its CRTC's pixels. Divided first, the
+    // window starts over the CRTC it is for, near enough that going
+    // fullscreen finds that display and takes its exact rectangle.
+    const float primary_scale =
+        display::Screen::Get()->GetPrimaryDisplay().device_scale_factor();
     BrowserWindowCreateParams params = BrowserWindowCreateParams::CreateForApp(
         web_app::GenerateApplicationNameFromURL(url),
-        /*trusted_source=*/true, wanted->bounds(), shell->GetProfile(),
+        /*trusted_source=*/true,
+        gfx::ScaleToEnclosingRect(wanted->bounds(), 1.f / primary_scale),
+        shell->GetProfile(),
         /*user_gesture=*/false);
     params.initial_show_state = ui::mojom::WindowShowState::kFullscreen;
     // A desktop is not a session to restore. These windows are a function of

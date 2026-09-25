@@ -9,7 +9,6 @@ import { TOP_BAR, TopBar } from "../top-bar/TopBar";
 import type { Geometry, Screenful } from "../window-management/placement";
 import { placementsOf } from "../window-management/placement";
 import type { Focus } from "../window-management/pointer-warp";
-import { pageBoxOf } from "../window-management/pointer-warp";
 import type { Rect } from "../window-management/rect";
 import { Stage } from "../window-management/Stage";
 import { usePointerWarp } from "../window-management/usePointerWarp";
@@ -84,8 +83,8 @@ export const Monitor = ({
   // `focusOn` reads this screen's own placements, which is where the answer
   // comes from.
   const focus = useMemo(
-    () => focusOn(screenful, windows.activeId, display),
-    [display, screenful, windows.activeId],
+    () => focusOn(screenful, windows.activeId),
+    [screenful, windows.activeId],
   );
   const open = useMemo(
     () => windows.windows.map(({ id }) => id),
@@ -117,7 +116,6 @@ export const Monitor = ({
         // is the page's — see `AppWindow`.
         behindPanel={windows.launcherOpen || windows.clipboardOpen}
         current={current}
-        display={display}
         domicile={domicile}
         draggingId={windows.draggingId}
         floats={workspace.floats}
@@ -177,21 +175,16 @@ export const Monitor = ({
  * see `Stage` — so the region the pointer has to be in to hold the focus is
  * the one the window draws in, not the bar above it. A window a tab is hiding
  * has only that bar, which is where the window is.
- *
- * **In the page's coordinates and not the layout's**, which is `pageBoxOf`'s
- * whole reason: a pointer exists in what the page draws, and where a page is
- * one monitor those are not the same numbers.
  */
 const focusOn = (
   screenful: Screenful,
   activeId: string | undefined,
-  display: Display,
 ): Focus | undefined => {
   const placement = screenful.placements.find(({ id }) => id === activeId);
   return placement === undefined
     ? undefined
     : {
-        box: pageBoxOf(placement.surface ?? placement.bar, display),
+        box: placement.surface ?? placement.bar,
         id: placement.id,
       };
 };

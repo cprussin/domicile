@@ -75,6 +75,8 @@ struct EngineEvent {
   // kConfigure.
   uint32_t width = 0;
   uint32_t height = 0;
+  // kConfigure: device pixels per CSS pixel of the page the box is in.
+  double scale = 1.0;
   // kFrame.
   uint64_t deadline_us = 0;
   // kReleased.

@@ -174,13 +174,32 @@ std::optional<domicile::mojom::Clipboard> ClipboardOf(
   }
 }
 
+// The producer's turn, in ozone's words. The same four names in the same
+// order, and a switch rather than a cast so that a fifth is a compile error
+// here rather than a monitor turned the wrong way.
+ui::DomicileDisplayLayout::Transform TransformOf(
+    domicile::mojom::DisplayTransform transform) {
+  switch (transform) {
+    case domicile::mojom::DisplayTransform::kNormal:
+      return ui::DomicileDisplayLayout::Transform::kNormal;
+    case domicile::mojom::DisplayTransform::kRotate90:
+      return ui::DomicileDisplayLayout::Transform::kRotate90;
+    case domicile::mojom::DisplayTransform::kRotate180:
+      return ui::DomicileDisplayLayout::Transform::kRotate180;
+    case domicile::mojom::DisplayTransform::kRotate270:
+      return ui::DomicileDisplayLayout::Transform::kRotate270;
+  }
+}
+
 void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   std::vector<ui::DomicileDisplayLayout> wanted;
   wanted.reserve(layout.size());
   for (const domicile::mojom::DisplayLayoutPtr& display : layout) {
     wanted.push_back({.id = display->id,
                       .enabled = display->enabled,
-                      .origin = display->origin});
+                      .origin = display->origin,
+                      .transform = TransformOf(display->transform),
+                      .scale = display->scale});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
 }
