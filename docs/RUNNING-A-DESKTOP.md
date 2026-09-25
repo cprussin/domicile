@@ -71,6 +71,27 @@ on.
 **On a bare tty none of this happens** — there is no host compositor, the
 desktop *is* the compositor, and the request is not made.
 
+## What the launcher offers
+
+The launcher searches an index of the home, walked at startup and kept current
+by a watch. What it leaves out is `[files] omit`: globs over paths relative to
+the home, with gitignore's rules — `*` stops at a `/`, `**` does not, `!` takes
+a path back, and the last pattern to match decides. An omitted directory is not
+walked, so nothing under it can be taken back.
+
+```toml
+[files]
+# Everything two deep is left out, except under Scratch.
+omit = ["*/*", "!Scratch/*"]
+```
+
+- **Leaving it out omits what is hidden**, at any depth: `["**/.*"]`. A list
+  that is stated replaces that, so a desk can offer its dotfiles.
+- **A reload walks the home again** under the new rule; the launcher keeps its
+  list until the walk corrects it.
+
+On NixOS that is `programs.domicile.settings.files.omit`.
+
 ## The screen going dark
 
 A desktop left alone turns its screens off — if you ask it to. Nothing blanks

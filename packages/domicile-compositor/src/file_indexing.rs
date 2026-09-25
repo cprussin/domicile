@@ -24,16 +24,18 @@
 //! read follows.
 
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
+use domicile_config::Omit;
 use domicile_host::file_changes::{changes, Change};
 use domicile_host::file_index::FileIndex;
 use domicile_host::file_search::FileSearch;
-use domicile_host::home_walk::{walk, RealDirectory};
-use domicile_host::home_watch::{watch_home, HomeWatcher};
+use domicile_host::home_walk::{walk, walk_within, RealDirectory};
+use domicile_host::home_watch::watch_home;
 use domicile_host::index_file::{read, write, IndexFileError};
 use domicile_host::index_location::index_file;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 /// How many paths are taken off the walk before the index is told.
 ///
@@ -82,9 +84,25 @@ pub struct Offered {
     pub indexing: bool,
 }
 
+/// What the index thread is told: the home moving, or the desk's rule for it.
+///
+/// One channel for both, because the thread spends its life waiting on the
+/// first and has to hear the second while it does.
+#[derive(Debug)]
+pub enum Heard {
+    /// What the watch on the home reported.
+    Filesystem(notify::Result<notify::Event>),
+    /// A reload moved `[files] omit`, which is a walk under the new rule —
+    /// what it now leaves out has to go, and what it now takes back was never
+    /// read.
+    Omitting(Omit),
+}
+
 /// Build the index, write it down, and then keep it current, forever.
 ///
-/// Meant to be handed a thread of its own. `tell` is how the rest of the
+/// Meant to be handed a thread of its own. `omit` is what the desk's config
+/// leaves out, and a new one arrives on `heard`; `told` is the other end of
+/// it, which the watch is given so what it reports arrives there too. `tell` is how the rest of the
 /// desktop hears about it, called only when something a page would draw has
 /// moved: the compositor publishes the [`Offered`] for `search_files` to
 /// answer from. Nothing is broadcast: a page is only ever told what its own
@@ -98,14 +116,20 @@ pub struct Offered {
 /// no list rather than with an empty one, because "you have no files" said on
 /// a full home is the worse answer. The panel still opens and still takes a
 /// path, a URL or a query.
-pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Offered)) {
+pub fn keep_the_index(
+    home: PathBuf,
+    kept_at: Option<PathBuf>,
+    mut omit: Omit,
+    (told, heard): (Sender<Heard>, Receiver<Heard>),
+    tell: impl Fn(Offered),
+) {
     if kept_at.is_none() {
         debug!("nowhere to keep a file index, so every start walks the home");
     }
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
     loop {
-        if !walk_the_home(&home, &mut index, &tell) {
+        if !walk_the_home(&home, &omit, &mut index, &tell) {
             return;
         }
         write_it_down(kept_at.as_deref(), &index);
@@ -115,7 +139,15 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
         // launcher had before any of this existed, and is worth a loud line
         // rather than a thread that spins trying again. The usual cause is
         // `fs.inotify.max_user_watches`, which the line names.
-        let watcher = match watch_home(&home) {
+        let told = told.clone();
+        // Held to the end of this turn of the loop and no further: a walk
+        // again is a watch again, and the old one's events are the ones the
+        // walk just took the place of.
+        let _watcher = match watch_home(&home, move |event| {
+            // Only refused when this thread has gone, which is the desktop
+            // going away — nothing to report from a watcher's thread.
+            let _ = told.send(Heard::Filesystem(event));
+        }) {
             Ok(watcher) => watcher,
             Err(err) => {
                 error!(
@@ -128,10 +160,16 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
             }
         };
 
-        if !hold_it_current(&watcher, &home, kept_at.as_deref(), &mut index, &tell) {
-            return;
+        match hold_it_current(&heard, &home, &omit, kept_at.as_deref(), &mut index, &tell) {
+            Held::Lost => {
+                debug!("the kernel dropped filesystem events, so the home is being walked again");
+            }
+            Held::Omitting(new) => {
+                info!("the desk's config moved `files.omit`, so the home is being walked again");
+                omit = new;
+            }
+            Held::Ended => return,
         }
-        debug!("the kernel dropped filesystem events, so the home is being walked again");
         index.rebuilding();
     }
 }
@@ -142,8 +180,9 @@ pub fn keep_the_index(home: PathBuf, kept_at: Option<PathBuf>, tell: impl Fn(Off
 /// the indexing. Everything the walk meets *below* the home — a directory it
 /// may not read, a name that is not text — is the walk's own business and is
 /// not reported here; see [`domicile_host::home_walk`].
-fn walk_the_home(home: &Path, index: &mut FileIndex, tell: &impl Fn(Offered)) -> bool {
-    let mut walking = match walk(home, &RealDirectory) {
+fn walk_the_home(home: &Path, omit: &Omit, index: &mut FileIndex, tell: &impl Fn(Offered)) -> bool {
+    let omitted = |path: &str| omit.omits(path);
+    let mut walking = match walk(home, &RealDirectory, &omitted) {
         Ok(walking) => walking,
         Err(err) => {
             error!(
@@ -240,34 +279,48 @@ fn write_it_down(kept_at: Option<&Path>, index: &FileIndex) {
     }
 }
 
-/// Apply what the watch reports until the kernel says it lost some.
-///
-/// `true` to walk the home again — a dropped event is an index wrong in a way
-/// nothing can work out from here — and `false` when the watch has ended,
-/// which is the desktop going away.
+/// Why [`hold_it_current`] stopped holding.
+enum Held {
+    /// The kernel dropped events, and the index is wrong in a way nothing can
+    /// work out from here.
+    Lost,
+    /// The desk's config moved what is left out.
+    Omitting(Omit),
+    /// Nothing is left to hear from, which is the desktop going away.
+    Ended,
+}
+
+/// Apply what the watch reports until the home has to be walked again.
 fn hold_it_current(
-    watcher: &HomeWatcher,
+    heard: &Receiver<Heard>,
     home: &Path,
+    omit: &Omit,
     kept_at: Option<&Path>,
     index: &mut FileIndex,
     tell: &impl Fn(Offered),
-) -> bool {
+) -> Held {
+    let omitted = |path: &str| omit.omits(path);
     let mut written = Instant::now();
-    while let Ok(first) = watcher.rx.recv() {
+    while let Ok(first) = heard.recv() {
         // A `git checkout` is thousands of events over a second or two. Taken
         // one at a time they would be the whole home folded again per file, so
         // the burst is gathered until it stops.
-        let gathered = std::iter::once(first)
-            .chain(std::iter::from_fn(|| watcher.rx.recv_timeout(SETTLE).ok()));
+        let gathered =
+            std::iter::once(first).chain(std::iter::from_fn(|| heard.recv_timeout(SETTLE).ok()));
 
         let mut rescan = false;
-        for event in gathered {
-            match event {
-                Ok(event) => {
+        let mut omitting = None;
+        for heard in gathered {
+            match heard {
+                // Taken after the burst rather than at once, because the rest
+                // of the burst is still true of the home and a walk under the
+                // new rule starts from this index either way.
+                Heard::Omitting(new) => omitting = Some(new),
+                Heard::Filesystem(Ok(event)) => {
                     rescan |= event.need_rescan();
-                    for change in changes(&event, home) {
+                    for change in changes(&event, home, &omitted) {
                         match change {
-                            Change::Appeared(path) => appeared(index, home, path),
+                            Change::Appeared(path) => appeared(index, home, &omitted, path),
                             Change::Vanished(path) => index.vanished(&path),
                         }
                     }
@@ -275,7 +328,9 @@ fn hold_it_current(
                 // A directory that went away mid-read, a permission that
                 // moved. The watch survives it, and whatever it cost the index
                 // is what the next walk reconciles.
-                Err(err) => warn!(%err, "a filesystem watch reported a problem"),
+                Heard::Filesystem(Err(err)) => {
+                    warn!(%err, "a filesystem watch reported a problem");
+                }
             }
         }
 
@@ -288,11 +343,14 @@ fn hold_it_current(
             write_it_down(kept_at, index);
             written = Instant::now();
         }
+        if let Some(new) = omitting {
+            return Held::Omitting(new);
+        }
         if rescan {
-            return true;
+            return Held::Lost;
         }
     }
-    false
+    Held::Ended
 }
 
 /// Take in a path that has turned up, and everything already inside it.
@@ -305,13 +363,13 @@ fn hold_it_current(
 /// inside are never sent to anybody. Left alone, the index would hold the
 /// directory and none of its contents until the next boot.
 ///
-/// So anything that appears is walked. A plain file is a `read_dir` that
-/// fails, which is the walk's own answer for a leaf — see
-/// [`domicile_host::home_walk`] — so the ordinary case costs one failed system
-/// call and says nothing.
-fn appeared(index: &mut FileIndex, home: &Path, path: String) {
-    if let Ok(inside) = walk(&home.join(&path), &RealDirectory) {
-        index.found(inside.map(|under| format!("{path}/{under}")));
+/// So anything that appears is walked, under the same rule as the boot walk.
+/// A plain file is a `read_dir` that fails, which is the walk's own answer for
+/// a leaf — see [`domicile_host::home_walk`] — so the ordinary case costs one
+/// failed system call and says nothing.
+fn appeared(index: &mut FileIndex, home: &Path, omitted: &impl Fn(&str) -> bool, path: String) {
+    if let Ok(inside) = walk_within(home, &path, &RealDirectory, omitted) {
+        index.found(inside);
     }
     index.appeared(path);
 }

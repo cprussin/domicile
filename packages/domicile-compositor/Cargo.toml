@@ -47,6 +47,9 @@ libc = "0.2"
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
 # Smithay loads it (it treats a missing library as fatal).
 libloading = "0.9"
+# The events of the watch on the home, which the file index's thread hears on
+# the same channel as a reloaded `[files]` — see `src/file_indexing.rs`.
+notify.workspace = true
 thiserror.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

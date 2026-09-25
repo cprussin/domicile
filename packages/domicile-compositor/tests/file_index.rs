@@ -113,6 +113,42 @@ fn what_the_walk_found_is_written_down_for_the_next_run() {
     assert_eq!(written, "domicile-file-index 1\ntodo.txt\n");
 }
 
+#[test]
+fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
+    // Both halves of a new rule: what it takes back was never read, and what
+    // it now leaves out is already in the index. A watch sees neither, since
+    // nothing on the disk moved — so the index thread is told, and walks.
+    let home = tempfile::tempdir().expect("a home to lay out");
+    write(home.path(), ".config/domicile.toml");
+    write(home.path(), "src/main.rs");
+    write(home.path(), "src/target/debug.log");
+    let omitting = |omit: &str| format!("[files]\nomit = [{omit}]\n{ONE_DISPLAY}");
+
+    let compositor = Compositor::started_in_a_home(&omitting(r#""src/target""#), Some(home.path()));
+    let mut chrome = compositor.chrome();
+    assert_eq!(
+        found_with(&mut chrome, "", "src/main.rs"),
+        vec![
+            ".config/".to_string(),
+            ".config/domicile.toml".to_string(),
+            "src/".to_string(),
+            "src/main.rs".to_string(),
+        ]
+    );
+
+    compositor.reconfigure(&omitting(r#""**/.*""#));
+
+    assert_eq!(
+        found_with(&mut chrome, "", "src/target/debug.log"),
+        vec![
+            "src/".to_string(),
+            "src/main.rs".to_string(),
+            "src/target/".to_string(),
+            "src/target/debug.log".to_string(),
+        ]
+    );
+}
+
 /// What `query` finds once the walk is over and `path` is among it.
 ///
 /// Asked until it is, because both conditions are a race rather than the

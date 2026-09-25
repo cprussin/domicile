@@ -23,6 +23,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -129,7 +130,7 @@ use crate::appearance::{Appearance, CURRENT_DESKTOP};
 use crate::coalesce::last_of_burst;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
-use crate::file_indexing::{keep_the_index, kept_at, Offered};
+use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
 use crate::modifiers::{Held, Modifiers};
@@ -141,7 +142,9 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use crate::which_engine::another_engine;
-use domicile_config::{Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig, ThemeMode};
+use domicile_config::{
+    Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig, Omit, ThemeMode,
+};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
@@ -1707,6 +1710,12 @@ struct DomicileCompositor {
     /// and what [`StillThere`] asks about, because a surface of a client that
     /// is gone is not alive.
     idle: Option<Idle<WlSurface>>,
+    /// How a reload reaches the thread keeping the file index, or `None` on a
+    /// desktop with no home to index.
+    ///
+    /// Only a new `[files] omit` goes this way — see
+    /// [`omit_from_the_index`](DomicileCompositor::omit_from_the_index).
+    index: Option<mpsc::Sender<Heard>>,
     /// The timer that asks the clock, where there is a clock to ask.
     ///
     /// Held so a reload can take it away again: a desk whose timeout is
@@ -3287,6 +3296,9 @@ impl DomicileCompositor {
         if let Some(idle) = &restated.idle {
             self.reset_the_idle_clock(idle);
         }
+        if let Some(omit) = &restated.omit {
+            self.omit_from_the_index(omit);
+        }
         if let Some(theme) = restated.theme {
             // THE FILE OVERRULES THE TOGGLE, deliberately. A click on the
             // shell's bar changes the live theme and writes nothing back --
@@ -3295,6 +3307,30 @@ impl DomicileCompositor {
             // that moves `[theme]` is a shell (or home-manager) restating what
             // this desk is, and what it states is what the desk becomes.
             self.hub.take_up_the_theme(theme_on_the_wire(theme));
+        }
+    }
+
+    /// Take up a new `[files] omit`: what the file index leaves out of the
+    /// home.
+    ///
+    /// Handed to the index's own thread, which walks the home again under it
+    /// — the one way to both drop what is newly left out and find what is
+    /// newly let in, which no walk ever read. The launcher keeps the list it
+    /// has until the walk corrects it, as it does after a lost watch.
+    fn omit_from_the_index(&self, omit: &Omit) {
+        match &self.index {
+            Some(index) => {
+                if index.send(Heard::Omitting(omit.clone())).is_err() {
+                    // The thread has returned, which it does only after
+                    // logging why: an unreadable home, or a watch that would
+                    // not start. Either way nothing is keeping the index.
+                    warn!(
+                        "the file index is no longer kept, so `files.omit` \
+                         reaches it at the next start"
+                    );
+                }
+            }
+            None => debug!("no home is indexed, so `files.omit` has nothing to change"),
         }
     }
 
@@ -5688,6 +5724,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // moment anything on this side knows which process is serving one.
         engine_process: None,
         idle: Idle::after(config.idle.blank_after(), Instant::now()),
+        // Started below, once the event loop's own sources are in.
+        index: None,
         // Armed below rather than here, through the one path a reload uses
         // too — see `arm_the_idle_clock`.
         idle_clock: None,
@@ -5830,8 +5868,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     match home_directory() {
         Some(home) => {
             let hub = data.state.hub.clone();
+            let omit = config.files.omit.clone();
+            let (told, heard) = mpsc::channel();
+            data.state.index = Some(told.clone());
             thread::spawn(move || {
-                keep_the_index(home, kept_at(), |offered| {
+                keep_the_index(home, kept_at(), omit, (told, heard), |offered| {
                     // Published for `search_files` to answer from, and
                     // nothing else: no page is told the index, only what its
                     // own query found in it.

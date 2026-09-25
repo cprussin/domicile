@@ -22,8 +22,9 @@
 //! | `output.profiles` | re-matched against the monitors that are plugged in, same path |
 //! | `idle.blank_after_seconds` | the clock restarted and its timer re-armed — `reset_the_idle_clock` |
 //! | `theme.mode` | told to every chrome and to the desk's clients — `take_up_the_theme` |
+//! | `files.omit` | handed to the index, which walks the home again under it — `omit_from_the_index` |
 //!
-//! Six rows for the six fields [`Config`] has: a reload acts on each of them
+//! Seven rows for the seven fields [`Config`] has: a reload acts on each of them
 //! rather than storing it. Three limits read like gaps and are not.
 //! `output.max_scale` governs only the output that follows Domicile's own
 //! window — a described display states its own scale, and a desktop the config
@@ -41,7 +42,7 @@
 //! nothing anywhere saying so. The unit tests below are the shape to copy:
 //! what moved is restated, and what did not is not.
 
-use domicile_config::{Config, IdleConfig, KeyboardConfig, ThemeMode};
+use domicile_config::{Config, IdleConfig, KeyboardConfig, Omit, ThemeMode};
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -67,6 +68,8 @@ pub struct Restatement {
     /// as saying `mode = "dark"`, where saying nothing about `[idle]` is a
     /// desk that never blanks and has no spelling of its own.
     pub theme: Option<ThemeMode>,
+    /// What the file index leaves out, or `None` where that did not move.
+    pub omit: Option<Omit>,
 }
 
 impl Restatement {
@@ -79,6 +82,7 @@ impl Restatement {
                 .then_some(now.output.max_scale),
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
             theme: (was.theme != now.theme).then_some(now.theme.mode),
+            omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
         }
     }
 }
@@ -152,6 +156,20 @@ mod tests {
     }
 
     #[test]
+    fn what_the_index_omits_is_restated_when_it_moved() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_OFFERING_ITS_DOTFILES);
+
+        let omit = Restatement::between(&was, &now)
+            .omit
+            .expect("the omitted paths moved");
+        assert!(
+            !omit.omits(".config"),
+            "the rule handed back is the new one, not the one being replaced"
+        );
+    }
+
+    #[test]
     fn a_cap_on_the_scale_that_moved_is_restated() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_CAPPED_DESK);
@@ -176,6 +194,20 @@ mod tests {
     }
 
     const A_DVORAK_DESK: &str = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, with nothing left out of its file index.
+    const A_DESK_OFFERING_ITS_DOTFILES: &str = r#"
+[files]
+omit = []
+
 [input.keyboard]
 xkb_variant = "dvp"
 xkb_options = ["caps:swapescape"]

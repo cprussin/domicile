@@ -30,22 +30,25 @@ pub enum Change {
 
 /// What `event` does to an index of `home`, which is usually nothing.
 ///
+/// `omitted` is the walk's question — see [`crate::home_walk`] — and a path
+/// it says yes to, or that is under one it says yes to, is not offered.
+///
 /// A list rather than one, because a rename the kernel paired up is both a
 /// departure and an arrival — and in that order, which is the contract: a file
 /// renamed over itself would otherwise have the arrival removed by the
 /// departure that followed it.
-pub fn changes(event: &Event, home: &Path) -> Vec<Change> {
+pub fn changes(event: &Event, home: &Path, omitted: &impl Fn(&str) -> bool) -> Vec<Change> {
     match event.kind {
-        EventKind::Create(_) => offerable(&event.paths, home)
+        EventKind::Create(_) => offerable(&event.paths, home, omitted)
             .map(Change::Appeared)
             .collect(),
-        EventKind::Remove(_) => offerable(&event.paths, home)
+        EventKind::Remove(_) => offerable(&event.paths, home, omitted)
             .map(Change::Vanished)
             .collect(),
         // A rename the kernel paired up, which `notify` reports as the two
         // paths of one event: what was there, then what is there now.
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
-            let mut named = offerable(&event.paths, home);
+            let mut named = offerable(&event.paths, home, omitted);
             named
                 .next()
                 .map(Change::Vanished)
@@ -55,12 +58,16 @@ pub fn changes(event: &Event, home: &Path) -> Vec<Change> {
         }
         // And the halves of one it could not: a `mv` out of the home has no
         // arrival to pair with, because the other end is not watched.
-        EventKind::Modify(ModifyKind::Name(RenameMode::From)) => offerable(&event.paths, home)
-            .map(Change::Vanished)
-            .collect(),
-        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => offerable(&event.paths, home)
-            .map(Change::Appeared)
-            .collect(),
+        EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+            offerable(&event.paths, home, omitted)
+                .map(Change::Vanished)
+                .collect()
+        }
+        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+            offerable(&event.paths, home, omitted)
+                .map(Change::Appeared)
+                .collect()
+        }
         // `Any` is a name that changed without saying which way, which neither
         // half can be worked out from: reading it as an arrival would offer a
         // path that may have just gone, and as a departure would drop one that
@@ -76,18 +83,30 @@ pub fn changes(event: &Event, home: &Path) -> Vec<Change> {
 /// Three things are dropped, and the first is the only one that should ever
 /// arrive: the home directory itself, which names every row and so names
 /// itself as the empty string. A path outside the home has no name relative to
-/// it, and a hidden one is held out for the reason the walk holds it out — a
+/// it, and an omitted one is held out for the reason the walk holds it out — a
 /// `git commit` is hundreds of events under a `.git`, and an index that took
 /// them would grow a copy of every checkout's object store that the next boot
 /// walk would then throw away.
-fn offerable<'a>(
+///
+/// **EVERY ANCESTOR IS ASKED, NOT ONLY THE PATH.** The walk never reaches what
+/// is under an omitted directory, so it only ever asks of the directory; the
+/// watch is on the whole tree and reports `src/target/debug/build.log` with
+/// nothing to say it is under `src/target`.
+fn offerable<'a, O: Fn(&str) -> bool>(
     paths: &'a [std::path::PathBuf],
     home: &'a Path,
+    omitted: &'a O,
 ) -> impl Iterator<Item = String> + 'a {
     paths.iter().filter_map(move |path| {
         let named = path.strip_prefix(home).ok()?.to_str()?;
-        let offerable =
-            !named.is_empty() && !named.split('/').any(|component| component.starts_with('.'));
+        let offerable = !named.is_empty() && !ancestry(named).any(omitted);
         offerable.then(|| named.to_string())
     })
+}
+
+/// `path` and every directory above it, shallowest first: `a`, `a/b`, `a/b/c`.
+fn ancestry(path: &str) -> impl Iterator<Item = &str> {
+    path.match_indices('/')
+        .map(|(at, _)| &path[..at])
+        .chain(std::iter::once(path))
 }

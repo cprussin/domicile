@@ -8,17 +8,17 @@
 //! so the depth limit and the two hand-picked roots buy nothing and cost a
 //! launcher that cannot find a file three directories down.
 //!
-//! What is kept is the hidden-file rule, and it is kept whole rather than in
-//! the original's two disagreeing halves: nothing whose name starts with a dot
-//! is offered and nothing under it is walked. A launcher that offered
-//! `src/.git/objects/4a/…` would be a launcher with a hundred thousand rows
-//! nobody will ever type.
+//! What is left out is the desk's to say — `[files] omit` in its config — and
+//! is kept whole at every depth: an omitted path is not offered and nothing
+//! under it is walked. The config's default omits whatever is hidden, since a
+//! launcher that offered `src/.git/objects/4a/…` would be a launcher with a
+//! hundred thousand rows nobody will ever type.
 
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use domicile_host::home_walk::{walk, Directory};
+use domicile_host::home_walk::{walk, walk_within, Directory};
 
 #[test]
 fn every_path_under_home_is_found_at_every_depth() {
@@ -76,23 +76,56 @@ fn the_shallow_paths_come_first_because_a_half_built_index_is_read() {
 }
 
 #[test]
-fn a_hidden_entry_is_neither_offered_nor_walked_at_any_depth() {
-    // One rule at every depth, where the `find` this replaces had two that
-    // disagreed: a glob that hid a dotfile at the top of home and a `-not
-    // -path` that hid one below it, so `Notes/.git` was offered and
-    // `Notes/.git/HEAD` was not. Nothing turns on which of those a launcher
-    // does, and everything turns on it doing one of them — a `.git` walked all
-    // the way down is most of what is in a home full of checkouts.
+fn an_omitted_entry_is_neither_offered_nor_walked_at_any_depth() {
+    // Which entries is the desk's to say — `[files] omit` in its config — and
+    // the walk asks of every one it meets, by its name relative to the home.
+    // Not walked, because what an omit is *for* is a `~/Library` or a
+    // `target/` too big to be worth reading. A dot is nothing special here:
+    // hiding those is the config's default, not the walk's rule.
     let home = home([
         ("/home/you", &[".config", "src"][..]),
         ("/home/you/.config", &["domicile"]),
-        ("/home/you/src", &[".git", "main.rs"]),
-        ("/home/you/src/.git", &["HEAD"]),
+        ("/home/you/src", &["main.rs", "target"]),
+        ("/home/you/src/target", &["debug"]),
     ]);
 
-    let found = found(Path::new("/home/you"), &home);
+    let found: Vec<String> = walk(Path::new("/home/you"), &home, &|path: &str| {
+        path == "src/target"
+    })
+    .expect("home reads")
+    .collect();
 
-    assert_eq!(found, vec!["src".to_string(), "src/main.rs".to_string()]);
+    assert_eq!(
+        found,
+        vec![
+            ".config".to_string(),
+            "src".to_string(),
+            ".config/domicile".to_string(),
+            "src/main.rs".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn a_walk_within_the_home_names_and_omits_as_one_of_all_of_it_would() {
+    // What a directory that turns up under a watch is walked with — see the
+    // compositor's `file_indexing` — so the rows it adds have to be the rows a
+    // boot walk would have found there, named from the home and omitted by
+    // the same rule.
+    let home = home([
+        ("/home/you/src", &["new"][..]),
+        ("/home/you/src/new", &["main.rs", "target"]),
+        ("/home/you/src/new/target", &["debug"]),
+    ]);
+
+    let found: Vec<String> =
+        walk_within(Path::new("/home/you"), "src/new", &home, &|path: &str| {
+            path == "src/new/target"
+        })
+        .expect("the directory reads")
+        .collect();
+
+    assert_eq!(found, vec!["src/new/main.rs".to_string()]);
 }
 
 #[test]
@@ -122,7 +155,7 @@ fn a_home_that_cannot_be_read_is_a_failure_rather_than_an_empty_walk() {
     // still be typed a path into.
     let nothing = home([]);
 
-    let refused = walk(Path::new("/home/you"), &nothing);
+    let refused = walk(Path::new("/home/you"), &nothing, &nothing_omitted);
 
     assert!(refused.is_err());
 }
@@ -147,7 +180,14 @@ fn a_name_that_is_not_text_is_left_out_rather_than_ending_the_walk() {
 
 /// Everything the walk finds, in the order it finds it.
 fn found(home: &Path, directory: &FakeHome) -> Vec<String> {
-    walk(home, directory).expect("home reads").collect()
+    walk(home, directory, &nothing_omitted)
+        .expect("home reads")
+        .collect()
+}
+
+/// A desk that omits nothing from its index.
+fn nothing_omitted(_: &str) -> bool {
+    false
 }
 
 /// A filesystem of exactly the directories named, and nothing else.
