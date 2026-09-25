@@ -65,6 +65,10 @@ struct EngineEvent {
     // is the process holding DRM master, so this is the compositor's only
     // reading of what its screens are.
     kDisplays,
+    // A copy made in a page or a browser window. The browser is not a Wayland
+    // client of the compositor, so this is the only way one reaches a seat --
+    // see ui/ozone/platform/drm/domicile/drm_clipboard.h.
+    kCopied,
   };
 
   Type type = Type::kFrame;
@@ -79,6 +83,11 @@ struct EngineEvent {
   // kDisplays. Never empty: an empty list is a screen nobody has read yet
   // rather than a desktop with no displays, and the browser does not send one.
   std::vector<EngineDisplay> displays;
+  // kCopied: which of the two clipboards, as DomicileClipboard numbers them,
+  // and the bytes that were copied. Empty text is a clipboard with nothing on
+  // it, which is what copying something that is not text leaves behind.
+  uint32_t clipboard = 0;
+  std::string copied;
 };
 
 // Thread-safe, and deliberately only just: one writer thread (mojo's) and one

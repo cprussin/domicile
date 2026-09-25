@@ -1132,6 +1132,42 @@ screen with no such number and what a projector or a virtual output reports — 
 the compositor advertises the reading, including when the reading is that there
 is nothing to read.
 
+## The clipboard
+
+`Clipboard::Create` asks the ozone platform for a `PlatformClipboard` and falls
+back to `ClipboardNonBacked` — an in-process store connected to nothing — when
+there is none. ozone/drm had none, so on a tty the browser's clipboard was a
+second clipboard: a copy made in a terminal was not in a tab, and a copy made
+in a tab was not in the terminal.
+
+`ui/ozone/platform/drm/domicile/drm_clipboard.h` is the one it was missing, and
+it is not a store. **The compositor is the clipboard**; this is the browser's
+end of it:
+
+| | |
+|---|---|
+| a copy made in a page | `OfferClipboardData` → `OzonePlatform::SetDomicileCopiedCallback`'s callback → the engine ABI → the compositor sets the seat's selection |
+| a copy made anywhere else | the compositor reads it off the client that offered it → the engine ABI → `OzonePlatform::SetDomicileClipboard` → `SetContents` |
+
+Two things follow from the compositor reading every selection as it is made,
+which it already did for the history:
+
+- **The browser is told, not asked.** There is nothing left to fetch by the
+  time a page pastes, so `RequestClipboardData` answers synchronously out of
+  memory — no nested run loop, which is what ozone/wayland needs.
+- **This process is never the selection owner**, whatever it just copied. That
+  answer is `ClipboardOzone` asking whether it may serve a read out of its own
+  cache of what it last offered; it may not, because the next copy can be made
+  in any window on the desktop.
+
+Both clipboards cross. `IsSelectionBufferAvailable` answers yes, because the
+compositor advertises `zwp_primary_selection_device_manager_v1` — so a
+middle-click paste in a page asks for something that exists.
+
+Nested is still split: that run's ozone platform is Wayland's, whose clipboard
+is the session Domicile is a window inside. The same two `OzonePlatform` entry
+points implemented there is the whole of the fix; `ROADMAP.md` carries it.
+
 ## The window has to be the size of the CRTC
 
 **This is why the first desktop on real hardware was black, and nothing about it
@@ -1278,6 +1314,10 @@ of this — both selections land on that card and agree.
   branch at all. Every one was silent — nothing failed, so nothing logged. When
   a piece of ozone/drm appears to work and its effect never arrives, look for
   ash supplying the other half before looking for a bug.
+- **Let the compositor own the clipboard and push it.** The alternative — the
+  browser asking on every paste — buys nothing, because the compositor already
+  reads every selection for the history, and costs a round trip inside the
+  gesture a person is waiting on.
 - **Prove what a build can prove in CI.** The probe cost one engine-job slot and
   found three of the eight edits in the patch, one of them a link error no `git
   grep` and no compiler could have reached.

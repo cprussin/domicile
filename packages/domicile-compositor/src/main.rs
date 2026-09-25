@@ -70,7 +70,8 @@ use smithay::wayland::{
         ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
     },
     selection::primary_selection::{
-        set_primary_focus, PrimarySelectionHandler, PrimarySelectionState,
+        request_primary_client_selection, set_primary_focus, set_primary_selection,
+        PrimarySelectionHandler, PrimarySelectionState,
     },
     selection::{SelectionHandler, SelectionSource, SelectionTarget},
     shell::xdg::{
@@ -119,7 +120,7 @@ mod uevents;
 mod viewport;
 mod which_engine;
 
-use crate::engine::{Bounds, Capture};
+use crate::engine::{Bounds, Capture, Clipboard};
 use crate::engine_buffers::Returned;
 use crate::engine_session::EngineSession;
 use crate::latency::{Latency, Step as LatencyStep};
@@ -331,6 +332,7 @@ enum ClientRequest {
     /// stranger's work on a deadline and nothing on the Wayland thread may
     /// wait for it. See [`DomicileCompositor::read_what_was_copied`].
     ClipboardCopied {
+        clipboard: Clipboard,
         text: String,
     },
     /// The shell picked something out of the clipboard's history; put it back
@@ -1476,7 +1478,28 @@ struct DomicileCompositor {
     /// at all — and [`DomicileCompositor::read_what_was_copied`] spends it at
     /// the end of the dispatch, before the flush that carries the request to
     /// the client.
-    copying: Option<String>,
+    ///
+    /// One slot per clipboard, because a client can fill both in one turn:
+    /// selecting a word in a terminal and pressing Ctrl-C arrive as two
+    /// `set_selection` requests, and a single slot would read one of them
+    /// twice.
+    copying: [Option<String>; 2],
+    /// What is on each clipboard, as text, whatever put it there.
+    ///
+    /// **Not the history, and the two answer different questions.** The
+    /// history is what a person may go back to; this is what a paste right now
+    /// would produce — which after a shell picks an old row is that row rather
+    /// than the newest, and which for the middle-click clipboard has no
+    /// history behind it at all.
+    ///
+    /// **Held for the browser's sake.** Nothing on the Wayland side needs it:
+    /// a client pasting what another client copied is served by that client.
+    /// But the browser is not a Wayland client of this compositor and cannot
+    /// be served that way, so what it may paste has to be in this process to
+    /// be handed over — and once it is here, it is also what serves a Wayland
+    /// client pasting something the *browser* copied. See [`Clipboard`], which
+    /// is this compositor's selection user data for exactly that reason.
+    holding: [Option<String>; 2],
     /// The display, for the two paths that have to reach clients from
     /// somewhere other than a request of their own: handing the clipboard's
     /// focus to whoever has the keyboard, and putting an entry from the
@@ -2010,6 +2033,36 @@ impl DomicileCompositor {
                 engine::Event::Frame { .. } => {}
                 // Handled above, where the buffer is.
                 engine::Event::Released { .. } => {}
+                // A copy made in a page or a browser window. THE BROWSER IS
+                // NOT A WAYLAND CLIENT OF THIS COMPOSITOR, so this is the only
+                // way one reaches the seat -- and putting it there is what
+                // makes the desktop have one clipboard rather than the browser
+                // having its own.
+                //
+                // The engine is not told back. It is where this came from, and
+                // a compositor that answered every copy with the same copy
+                // would be a round trip per keystroke of Ctrl-C.
+                engine::Event::Copied { clipboard, text } => {
+                    self.took_a_copy(clipboard, text);
+                    // Set rather than merely recorded, because nothing else
+                    // will: a Wayland client pasting asks the seat, and what
+                    // the seat holds until this line is whatever some other
+                    // client copied.
+                    match clipboard {
+                        Clipboard::Copy => set_data_device_selection(
+                            &self.display_handle,
+                            &self.seat,
+                            text_mimes(),
+                            clipboard,
+                        ),
+                        Clipboard::Primary => set_primary_selection(
+                            &self.display_handle,
+                            &self.seat,
+                            text_mimes(),
+                            clipboard,
+                        ),
+                    }
+                }
                 // The engine holds DRM master, so on a tty its reading of the
                 // screens is the only one there is. `replugged_into` is what
                 // decides whether this desktop is the engine's to define, and
@@ -2967,6 +3020,12 @@ impl DomicileCompositor {
                 // last one said with "nothing to do", so a connector this
                 // desktop's config turned off would come back lit.
                 self.state_the_connectors();
+                // And the clipboards, for the same kind of reason and one
+                // more: a new browser has an empty one of its own, so a person
+                // who copied something before it restarted would find their
+                // paste gone from every window the browser draws and still
+                // there in every other.
+                self.tell_the_engine_the_copies();
                 info!(
                     shown = rejoined.shown.len(),
                     blank = rejoined.blank.len(),
@@ -3492,6 +3551,54 @@ impl DomicileCompositor {
         });
     }
 
+    /// Take what was copied, wherever it was copied.
+    ///
+    /// The one place a copy lands, so that a Wayland client's and the
+    /// browser's are the same event by the time anything acts on it. What
+    /// differs between the two is what has to happen *around* this — the
+    /// browser's has to be put on the seat, a client's is already there — and
+    /// each caller does that itself.
+    ///
+    /// The history is the ordinary clipboard's alone. The middle-click one
+    /// changes on every drag over a word, so a history of it would be a
+    /// history of what the pointer brushed past.
+    fn took_a_copy(&mut self, clipboard: Clipboard, text: String) {
+        if clipboard == Clipboard::Copy && self.clipboard.record(text.clone()) {
+            self.tell_the_chromes_the_clipboard();
+        }
+        self.holding[at(clipboard)] = Some(text);
+    }
+
+    /// Tell the browser what is on one clipboard.
+    ///
+    /// Nothing to do without an engine, which is a desktop whose browser has
+    /// not turned up or has just gone: the next one is told both clipboards
+    /// when it connects, by [`DomicileCompositor::tell_the_engine_the_copies`].
+    ///
+    /// A clipboard nothing has been copied to crosses as the empty string
+    /// rather than as nothing at all, because that is what it is: a browser
+    /// never told would go on offering whatever it was told last.
+    fn tell_the_engine_a_clipboard(&self, clipboard: Clipboard) {
+        if let Some(session) = self.engine.as_ref() {
+            session.set_clipboard(
+                clipboard,
+                self.holding[at(clipboard)].as_deref().unwrap_or_default(),
+            );
+        }
+    }
+
+    /// Tell a browser that has just connected what is on both clipboards.
+    ///
+    /// The clipboard's half of what `announce_open_apps` does for windows: an
+    /// engine that started after a copy was made has heard nothing about it,
+    /// and a person who copied before opening a browser window is exactly the
+    /// person about to paste into one.
+    fn tell_the_engine_the_copies(&self) {
+        for clipboard in BOTH {
+            self.tell_the_engine_a_clipboard(clipboard);
+        }
+    }
+
     /// Read what a client copied, now that the seat is holding its selection.
     ///
     /// **At the end of the dispatch, and both halves of that matter.** After,
@@ -3504,28 +3611,55 @@ impl DomicileCompositor {
     /// `write`, and nothing the desktop's every window is behind may wait for
     /// that. It comes back as [`ClientRequest::ClipboardCopied`].
     fn read_what_was_copied(&mut self) {
-        let Some(mime) = self.copying.take() else {
-            return;
-        };
+        for clipboard in BOTH {
+            let Some(mime) = self.copying[at(clipboard)].take() else {
+                continue;
+            };
+            self.read_one_clipboard(clipboard, mime);
+        }
+    }
+
+    /// Ask whoever holds one clipboard for the bytes on it.
+    ///
+    /// Split from the loop above so that "which clipboard" is stated once per
+    /// request rather than threaded through a body that would otherwise say it
+    /// four times.
+    fn read_one_clipboard(&mut self, clipboard: Clipboard, mime: String) {
         let (ours, theirs) = match clipboard::pipe() {
             Ok(ends) => ends,
             Err(err) => {
-                warn!(%err, "no pipe to read a copy over, so it is not in the history");
+                warn!(%err, "no pipe to read a copy over, so nothing is told what was copied");
                 return;
             }
         };
         // The compositor's own selection answers this with
         // `ServerSideSelection`, which is the right answer and not a failure:
         // it is what a client copying is not, and what is on the clipboard
-        // then is already a row.
-        if let Err(err) = request_data_device_client_selection(&self.seat, mime.clone(), theirs) {
+        // then is something this process already holds.
+        // Two errors of the same name from two of Smithay's modules, said out
+        // rather than joined: they carry the same three cases and neither is
+        // the other's, so the one thing a caller can do with either is read
+        // it.
+        let asked = match clipboard {
+            Clipboard::Copy => {
+                request_data_device_client_selection(&self.seat, mime.clone(), theirs)
+                    .map_err(|err| err.to_string())
+            }
+            Clipboard::Primary => {
+                request_primary_client_selection(&self.seat, mime.clone(), theirs)
+                    .map_err(|err| err.to_string())
+            }
+        };
+        if let Err(err) = asked {
             debug!(%err, %mime, "nothing to read this copy from");
         } else {
             let hub = self.hub.clone();
             thread::spawn(move || {
                 match clipboard::read_copy(ours, LONGEST_COPY, clipboard::PATIENCE) {
                     Ok(copied) => match String::from_utf8(copied) {
-                        Ok(text) => hub.send_request(ClientRequest::ClipboardCopied { text }),
+                        Ok(text) => {
+                            hub.send_request(ClientRequest::ClipboardCopied { clipboard, text });
+                        }
                         // A client that offered `text/plain;charset=utf-8` and
                         // wrote something else. Said rather than repaired:
                         // what a repair would put in the history is not what
@@ -3667,22 +3801,29 @@ impl DomicileCompositor {
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
             }
-            ClientRequest::ClipboardCopied { text } => {
-                if self.clipboard.record(text) {
-                    self.tell_the_chromes_the_clipboard();
-                }
+            ClientRequest::ClipboardCopied { clipboard, text } => {
+                self.took_a_copy(clipboard, text);
+                self.tell_the_engine_a_clipboard(clipboard);
             }
             // The one thing a shell can do to the clipboard, and it names a
             // row rather than carrying text: a page that could put arbitrary
             // bytes on the seat would be writing the desktop's clipboard
             // rather than choosing among what is already on it.
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
-                Some(_) => set_data_device_selection(
-                    &self.display_handle,
-                    &self.seat,
-                    TEXT_MIMES.iter().map(|mime| (*mime).to_string()).collect(),
-                    entry,
-                ),
+                Some(text) => {
+                    // The row becomes what a paste produces, which is not the
+                    // newest row any more -- see
+                    // [`DomicileCompositor::holding`], which is why what is on
+                    // the clipboard is kept apart from what is in the history.
+                    self.holding[at(Clipboard::Copy)] = Some(text.to_owned());
+                    set_data_device_selection(
+                        &self.display_handle,
+                        &self.seat,
+                        text_mimes(),
+                        Clipboard::Copy,
+                    );
+                    self.tell_the_engine_a_clipboard(Clipboard::Copy);
+                }
                 // An id the shell was told about and the history has since
                 // dropped, which is the one way one goes stale. Nothing is
                 // set: putting the newest entry on the clipboard instead
@@ -4801,42 +4942,79 @@ delegate_xdg_activation!(DomicileCompositor);
 
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
+/// The mime types this compositor offers a selection of its own under.
+///
+/// The whole of [`TEXT_MIMES`], because what is asked for is the asking
+/// client's to decide: a GTK program wants `text/plain;charset=utf-8` and an
+/// X11 bridge wants `STRING`, and a selection that offered one spelling would
+/// be unpasteable in half the programs on the desktop.
+fn text_mimes() -> Vec<String> {
+    TEXT_MIMES.iter().map(|mime| (*mime).to_string()).collect()
+}
+
+/// Both of the desktop's clipboards, in the order their slots are in.
+///
+/// A list rather than two calls at every site that has to do something to each
+/// of them: what the compositor does to one it does to the other, and the one
+/// place they differ — that a row of the history is kept for one and not the
+/// other — says so itself.
+const BOTH: [Clipboard; 2] = [Clipboard::Copy, Clipboard::Primary];
+
+/// Which of the two a Smithay selection target is.
+///
+/// The compositor holds two vocabularies for one pair: Smithay's on the
+/// Wayland side, and the engine's on the browser's. This is the join, and it
+/// is a function so that it has a test — swapped, a Ctrl-C would reach the
+/// browser as something the pointer brushed past.
+fn clipboard_of(target: SelectionTarget) -> Clipboard {
+    match target {
+        SelectionTarget::Clipboard => Clipboard::Copy,
+        SelectionTarget::Primary => Clipboard::Primary,
+    }
+}
+
+/// Which slot of a per-clipboard pair one is kept in.
+fn at(clipboard: Clipboard) -> usize {
+    match clipboard {
+        Clipboard::Copy => 0,
+        Clipboard::Primary => 1,
+    }
+}
+
 impl SelectionHandler for DomicileCompositor {
-    /// Which entry of the history the compositor is offering.
+    /// Which clipboard a selection the *compositor* set is on.
     ///
-    /// Carried by Smithay from the moment the selection is set to the moment a
-    /// client asks to read it, which is exactly the hand-over
-    /// [`SelectionHandler::send_selection`] needs and saves the compositor
-    /// holding a second copy of "what is on the clipboard" that could disagree
-    /// with the seat.
-    type SelectionUserData = u32;
+    /// **A selection the compositor owns rather than a client.** Most
+    /// selections on this desktop belong to the client that copied, and
+    /// Smithay hands a paste straight to it; two do not — a row a shell picked
+    /// out of the history, and anything copied in the browser, which is not a
+    /// Wayland client of this compositor at all. Both are served out of
+    /// [`DomicileCompositor::holding`], so which clipboard it is on is the
+    /// whole of what has to be carried.
+    type SelectionUserData = Clipboard;
 
     /// A client copied something. Nothing is read here — see
     /// [`DomicileCompositor::copying`] for why this can only write down what
     /// to ask for.
     ///
-    /// The middle-click clipboard is passed between clients and is not kept:
-    /// it changes on every drag over a word, so a history of it would be a
-    /// history of what the pointer brushed past. Nothing is written down for
-    /// it here, which is what leaves it where Smithay already carries it —
-    /// from the client that selected to the client that pastes.
+    /// **Both clipboards are read, and the middle-click one only for the
+    /// browser.** Nothing on the Wayland side needs its bytes — a client
+    /// pasting it is served by the client that selected — but the browser is
+    /// not a Wayland client of this compositor, so what it may paste has to be
+    /// in this process to be handed over. What is still not kept is a
+    /// *history* of it: it changes on every drag over a word.
     fn new_selection(
         &mut self,
         target: SelectionTarget,
         source: Option<SelectionSource>,
         _seat: Seat<Self>,
     ) {
-        match target {
-            // `None` is a selection being cleared, and a selection whose mime
-            // types hold no text is an image or a file drag. Neither is a row,
-            // and both leave whatever was copied before where it is.
-            SelectionTarget::Clipboard => {
-                self.copying = source
-                    .as_ref()
-                    .and_then(|offered| text_mime(&offered.mime_types()));
-            }
-            SelectionTarget::Primary => {}
-        }
+        // `None` is a selection being cleared, and a selection whose mime
+        // types hold no text is an image or a file drag. Neither is anything
+        // to read, and both leave whatever was copied before where it is.
+        self.copying[at(clipboard_of(target))] = source
+            .as_ref()
+            .and_then(|offered| text_mime(&offered.mime_types()));
     }
 
     /// A client is pasting something this compositor put on the clipboard.
@@ -4847,18 +5025,18 @@ impl SelectionHandler for DomicileCompositor {
     /// Wayland thread — which is every window on the desktop — for as long as
     /// it liked. The deadline in `crate::clipboard` bounds the thread instead.
     ///
-    /// An entry that is gone is a client pasting a selection the compositor
-    /// took back, which the history's bound makes possible: the fd is dropped,
-    /// the client reads end-of-file and pastes nothing.
+    /// Nothing held is a client pasting a selection the compositor no longer
+    /// has: the fd is dropped, the client reads end-of-file and pastes
+    /// nothing.
     fn send_selection(
         &mut self,
         _target: SelectionTarget,
         _mime_type: String,
         fd: OwnedFd,
         _seat: Seat<Self>,
-        entry: &u32,
+        clipboard: &Clipboard,
     ) {
-        match self.clipboard.text(*entry) {
+        match self.holding[at(*clipboard)].as_deref() {
             Some(text) => {
                 let copy = text.to_owned();
                 thread::spawn(move || {
@@ -4870,8 +5048,8 @@ impl SelectionHandler for DomicileCompositor {
                 });
             }
             None => warn!(
-                entry,
-                "a client is pasting an entry this desktop no longer holds, so it gets nothing"
+                ?clipboard,
+                "a client is pasting something this desktop no longer holds, so it gets nothing"
             ),
         }
     }
@@ -5445,7 +5623,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data_device_state,
         primary_selection_state,
         clipboard: History::default(),
-        copying: None,
+        copying: [None, None],
+        holding: [None, None],
         display_handle: dh.clone(),
         seat,
         output_manager_state,
@@ -6058,10 +6237,11 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answers_keystroke, broadcast_closed, broadcast_focus_decision,
-        broadcast_focus_request, channel, chrome_connection, client_command, cursor_shape,
-        desk_from_the_window, freshened, parse_find_colors, to_line, write_responses, Appearance,
-        Chrome, ChromeHub, ClientRequest, Committer, Handshake, Outbound,
+        announce_open_apps, answers_keystroke, at, broadcast_closed, broadcast_focus_decision,
+        broadcast_focus_request, channel, chrome_connection, client_command, clipboard_of,
+        cursor_shape, desk_from_the_window, freshened, parse_find_colors, to_line, write_responses,
+        Appearance, Chrome, ChromeHub, ClientRequest, Clipboard, Committer, Handshake, Outbound,
+        SelectionTarget, BOTH,
     };
 
     use std::sync::Arc;
@@ -6970,5 +7150,30 @@ mod tests {
     fn nothing_to_look_for_is_nothing_to_look_for() {
         assert!(parse_find_colors("").is_empty());
         assert!(parse_find_colors(";  ;").is_empty());
+    }
+
+    /// Which clipboard a selection is on, in the two vocabularies this
+    /// compositor has to hold at once: Smithay's, on the Wayland side, and the
+    /// engine's, on the browser's.
+    ///
+    /// Worth a test for the one mistake it can make, which is silent: swapped,
+    /// a Ctrl-C would arrive in the browser as something the pointer brushed
+    /// past, and a paste would hand back the wrong one of two strings that are
+    /// both plausible.
+    #[test]
+    fn each_clipboard_is_the_same_clipboard_in_both_vocabularies() {
+        assert_eq!(clipboard_of(SelectionTarget::Clipboard), Clipboard::Copy);
+        assert_eq!(clipboard_of(SelectionTarget::Primary), Clipboard::Primary);
+    }
+
+    /// And the two slots are two. The same swap, one layer down: a mime type
+    /// written to the wrong slot is a read of the wrong clipboard.
+    #[test]
+    fn the_two_clipboards_have_a_slot_each() {
+        assert_ne!(at(Clipboard::Copy), at(Clipboard::Primary));
+        assert!(at(Clipboard::Copy) < BOTH.len());
+        assert!(at(Clipboard::Primary) < BOTH.len());
+        assert_eq!(BOTH[at(Clipboard::Copy)], Clipboard::Copy);
+        assert_eq!(BOTH[at(Clipboard::Primary)], Clipboard::Primary);
     }
 }

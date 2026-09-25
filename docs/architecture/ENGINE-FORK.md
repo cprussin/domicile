@@ -850,6 +850,8 @@ the loop the compositor already runs.
 | `frame(surface, deadline_us)` | **`wl_surface.frame`** — a viz `BeginFrame` is the callback the client is waiting on |
 | `configure(surface, width, height)` | **`xdg_toplevel.configure`** — the page bumped `parent_sequence_number` because its layout box changed |
 | `displays(displays, count)` | **`wl_output`** — the whole list, primary first, and never empty |
+| `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive` — what a page pastes, pushed rather than fetched, because the compositor has already read it |
+| `copied(clipboard, text, length)` | **`wl_data_device.set_selection`** — a copy made in a page, which reaches no seat on its own |
 
 `domicile_engine.h` is the whole ABI; the lifetime calls
 (`domicile_engine_connect` / `_destroy`, `domicile_surface_destroy`,
