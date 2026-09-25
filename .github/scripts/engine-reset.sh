@@ -74,6 +74,55 @@ git -C "$CHROMIUM" rev-parse --git-dir >/dev/null 2>&1 || {
 SERIES="$ROOT/packages/domicile-engine/src"
 pin="$(grep -v '^#' "$ROOT/packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
+# A STALE `index.lock` STOPS EVERY RUN AFTER THE ONE THAT LEFT IT. Runs for a
+# superseded commit are canceled, and one canceled inside a git write leaves
+# the lock behind; on 2026-09-25 that failed four pull requests in a row on
+# tree-0, each on `fatal: Unable to create '.../index.lock': File exists`, and
+# it would have gone on failing every run on that tree until somebody ssh'd in.
+#
+# The tree lock (`engine-tree-lock.sh`) is what makes removing it safe: this
+# job holds the tree exclusively, so no other job's git can be in it. That is
+# the guarantee, and the scan of /proc below is a second opinion rather than a
+# replacement — a git of ours that outlived its job, or somebody at a shell on
+# the build host, holds a lock that is not stale, and removing it would corrupt
+# that process's index. So a git whose cwd is in this tree, or that names it
+# with `-C`, is refused rather than raced. A process that exits mid-scan
+# cannot be read, and is by then not holding anything.
+#
+# Only `index.lock`. It is the one a canceled reset, fetch or `am` leaves, and
+# it is the one that failed; the other `*.lock` files are ref locks that each
+# fail one ref rather than the tree, and guessing at them is not this step's.
+GIT_DIR_ABS="$(git -C "$CHROMIUM" rev-parse --absolute-git-dir)"
+INDEX_LOCK="$GIT_DIR_ABS/index.lock"
+if [ -e "$INDEX_LOCK" ]; then
+  tree="$(cd "$CHROMIUM" && pwd -P)"
+  holders=""
+  for proc in /proc/[0-9]*; do
+    case "$(cat "$proc/comm" 2>/dev/null || true)" in
+      (git|git-*) ;;
+      (*) continue ;;
+    esac
+    cwd="$(readlink "$proc/cwd" 2>/dev/null || true)"
+    case "$cwd/" in
+      ("$tree"/*) holders="$holders ${proc#/proc/}"; continue ;;
+    esac
+    tr '\0' '\n' <"$proc/cmdline" 2>/dev/null | grep -qxF -e "$CHROMIUM" -e "$tree" &&
+      holders="$holders ${proc#/proc/}"
+  done
+  if [ -n "$holders" ]; then
+    {
+      echo "::error::$INDEX_LOCK is held by a running git (pid$holders)"
+      echo "This job holds the tree lock, so no other job should be in $CHROMIUM."
+      echo "Something is anyway — a git that outlived its job, or somebody on the"
+      echo "build host — and removing its lock would corrupt its index. Find it"
+      echo "with \`ps -p$holders\`, let it finish or stop it, and re-run this job."
+    } >&2
+    exit 1
+  fi
+  rm -f "$INDEX_LOCK"
+  echo "::warning::removed $INDEX_LOCK, which a canceled run left behind"
+fi
+
 # In case a previous run died mid-series and left the rebase-apply state
 # behind. It fails when there is nothing to abort, which is the ordinary case.
 git -C "$CHROMIUM" am --abort 2>/dev/null || true

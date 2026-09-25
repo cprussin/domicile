@@ -115,6 +115,39 @@ mkdir -p "$TREE/.git/rebase-apply"
 expect "a tree left mid-\`git am\` is reset rather than refused" ok \
   "$(status "$(run_reset)")"
 
+# WHAT FAILED FOUR PULL REQUESTS ON 2026-09-25. A run canceled mid-git —
+# superseded commits are canceled — leaves `.git/index.lock` behind, and every
+# git write after that dies on `File exists` until somebody removes it by hand.
+# The tree lock means nothing else is in this checkout, so a lock is stale.
+lay_the_series_down
+touch "$TREE/.git/index.lock"
+stale="$(run_reset)"
+expect "a tree with a stale index.lock is reset rather than refused" ok \
+  "$(status "$stale")"
+expect "and the lock is gone" gone \
+  "$([ -e "$TREE/.git/index.lock" ] && echo "still there" || echo gone)"
+contains "and the removal is said out loud, naming the file" \
+  "$TREE/.git/index.lock" "$(printf '%s\n' "$stale" | grep '^::warning::' || true)"
+
+# But a lock with a git behind it is not stale: that is another job in the
+# tree, which the tree lock should have made impossible, and removing it would
+# corrupt that job's index. A copy of `sleep` named `git`, sitting in the tree,
+# is what one looks like from /proc.
+mkdir -p "$WORK/bin"
+cp "$(command -v sleep)" "$WORK/bin/git"
+(cd "$TREE" && exec "$WORK/bin/git" 30) &
+busy_git=$!
+touch "$TREE/.git/index.lock"
+busy="$(run_reset)"
+kill "$busy_git"
+wait "$busy_git" 2>/dev/null
+expect "a lock a running git holds is refused, not removed" refused \
+  "$(status "$busy")"
+expect "and the lock is left alone" "still there" \
+  "$([ -e "$TREE/.git/index.lock" ] && echo "still there" || echo gone)"
+contains "and the process is named" "$busy_git" "$busy"
+rm -f "$TREE/.git/index.lock"
+
 # The identity `git am` needs, in the checkout's own config: the runner has no
 # ~/.gitconfig and never will, and apply.sh runs inside a bwrap FHS shell that
 # curates the environment.
