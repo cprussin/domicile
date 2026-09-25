@@ -13,7 +13,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
-    BufferId, Capture, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY,
+    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId, LIBRARY,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_surfaces::Surfaces;
@@ -227,6 +227,14 @@ impl EngineSession {
         self.engine.configure_displays(connectors);
     }
 
+    /// Tells the browser what is on one of the desktop's two clipboards.
+    ///
+    /// See [`crate::engine::Engine::set_clipboard`], including why the browser
+    /// is told rather than asked.
+    pub fn set_clipboard(&self, clipboard: Clipboard, text: &str) {
+        self.engine.set_clipboard(clipboard, text);
+    }
+
     /// Submits a client's buffer as `app_id`'s window.
     ///
     /// `true` means the engine has the buffer and **the caller must not release
@@ -290,7 +298,7 @@ impl EngineSession {
                     self.surfaces.embedded(*surface);
                     None
                 }
-                Event::Frame { .. } | Event::Displays(_) => None,
+                Event::Copied { .. } | Event::Frame { .. } | Event::Displays(_) => None,
             })
             .collect();
         (events, releases)

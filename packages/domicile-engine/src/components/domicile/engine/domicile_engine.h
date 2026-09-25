@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_DOMICILE_ENGINE_DOMICILE_ENGINE_H_
 #define COMPONENTS_DOMICILE_ENGINE_DOMICILE_ENGINE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 // libdomicile_engine.so: the seam between domicile-compositor and the browser.
@@ -41,6 +42,21 @@ extern "C" {
 #endif
 
 typedef struct DomicileEngine DomicileEngine;
+
+// Which of the desktop's two clipboards something is on.
+//
+// The pair every desktop has and neither of which is the other: one is what
+// Ctrl-C puts somewhere, and the other is what selecting a word puts somewhere
+// else for the middle button to paste. A plain integer rather than an `enum`,
+// like every other scalar here, so that what crosses is a width both sides
+// spell out.
+typedef uint32_t DomicileClipboard;
+
+// Ctrl-C and Ctrl-V, which on the Wayland side is wl_data_device.
+#define DOMICILE_CLIPBOARD_COPY 0u
+// Selecting a word and the middle button, which on the Wayland side is
+// zwp_primary_selection_device_v1.
+#define DOMICILE_CLIPBOARD_PRIMARY 1u
 
 // A surface, as the compositor names one. Zero is never valid, so it doubles as
 // the failure return of domicile_surface_create.
@@ -151,10 +167,20 @@ typedef struct DomicileDisplayLayout {
 //   released   wl_buffer.release      — viz is done sampling a buffer, so the
 //                                       client may draw into it again
 //   displays   wl_output              — the whole display list, primary first
+//   copied     wl_data_device.set_selection — something was copied in a page
 //
-// All four fire from domicile_engine_dispatch, on the thread that calls it.
+// All five fire from domicile_engine_dispatch, on the thread that calls it.
 // `user_data` is passed back untouched. A null function pointer means that
 // event is dropped.
+//
+// THIS STRUCT GROWS AT THE END AND NOWHERE ELSE, which is what makes a
+// compositor newer than the engine it loaded safe: the library reads the
+// prefix it knows and ignores the rest. The reverse — an engine newer than the
+// compositor that loaded it — is not safe and is not guarded here, because it
+// is not a configuration this repository ships: `engine-release.nix` pins the
+// engine into the checkout the compositor is built from, and
+// `scripts/test-the-pinned-engine-meets-the-compositor.sh` is what keeps that
+// pair honest.
 //
 // `displays` is the only one carrying an array. It points at `count` records
 // borrowed for the duration of the call — the library owns them and frees them
@@ -174,6 +200,23 @@ typedef struct DomicileEngineCallbacks {
   void (*displays)(void* user_data,
                    const DomicileDisplay* displays,
                    uint32_t count);
+  // Something was copied in a page or a browser window, on its way to the
+  // seat. WITHOUT THIS THE BROWSER HAS A CLIPBOARD NOTHING ELSE CAN REACH: it
+  // is not a Wayland client of the compositor — on a tty there is no display
+  // server for it to be one of — so a copy made in a page reaches no seat on
+  // its own.
+  //
+  // `text` points at `length` bytes borrowed for the duration of the call, and
+  // an empty one is a clipboard with nothing on it — which is what copying
+  // something that is not text leaves behind, because nothing but text crosses
+  // here. LENGTH-CARRIED RATHER THAN NUL-TERMINATED, which is the one place
+  // this ABI differs from itself and is about clipboards rather than taste:
+  // what a person copies is arbitrary bytes and may hold a nul, which a C
+  // string cannot say and would cut short.
+  void (*copied)(void* user_data,
+                 DomicileClipboard clipboard,
+                 const char* text,
+                 size_t length);
 } DomicileEngineCallbacks;
 
 // Joins the browser's mojo graph over the named socket the browser is
@@ -272,6 +315,25 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
     DomicileEngine* engine,
     const DomicileDisplayLayout* layout,
     uint32_t count);
+
+// Tells the browser what is on one of the desktop's two clipboards.
+//
+// THE BROWSER IS TOLD RATHER THAN ASKED, because the compositor already has
+// the bytes: a selection arriving on the seat is read out of the client that
+// offered it whether or not anybody pastes, so there is nothing left to fetch
+// and a page pasting is answered out of the browser's own memory.
+//
+// An empty `text` is a clipboard with nothing on it, which is what a desktop
+// that has just started has, and is worth saying: a browser never told would
+// go on offering whatever it was told last.
+//
+// `text` is borrowed for the duration of the call and carries its length for
+// the reason the `copied` callback does. Nothing comes back; what the browser
+// does with it is put it where a page pasting reads.
+DOMICILE_ENGINE_EXPORT void domicile_clipboard_set(DomicileEngine* engine,
+                                                   DomicileClipboard clipboard,
+                                                   const char* text,
+                                                   size_t length);
 
 // Drops an imported buffer. Every buffer goes when its surface does, so this is
 // for a client that destroys one of its own.

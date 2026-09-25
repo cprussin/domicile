@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,6 +31,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/display/screen.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
@@ -142,6 +144,37 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
 // target deliberately depends on neither that nor //content. Every ozone
 // platform but DRM implements this as nothing, because every other one is a
 // window inside somebody else's session.
+// Which clipboard, in the two vocabularies this file has to hold at once.
+//
+// A function each way rather than a cast, for the reason every other
+// translation here is written out: the two enumerations are somebody else's to
+// reorder, and a copy that arrived on the wrong one of two clipboards would be
+// a paste that quietly produces what a person only brushed past.
+ui::ClipboardBuffer BufferOf(domicile::mojom::Clipboard clipboard) {
+  switch (clipboard) {
+    case domicile::mojom::Clipboard::kCopy:
+      return ui::ClipboardBuffer::kCopyPaste;
+    case domicile::mojom::Clipboard::kPrimary:
+      return ui::ClipboardBuffer::kSelection;
+  }
+}
+
+// The other way. `std::nullopt` is a buffer this desktop has no clipboard for
+// -- `kDrag` is one, on the platforms that have it -- which is dropped rather
+// than folded onto one of the two: a drag is not a copy, and a producer told
+// it was would put it on the seat.
+std::optional<domicile::mojom::Clipboard> ClipboardOf(
+    ui::ClipboardBuffer buffer) {
+  switch (buffer) {
+    case ui::ClipboardBuffer::kCopyPaste:
+      return domicile::mojom::Clipboard::kCopy;
+    case ui::ClipboardBuffer::kSelection:
+      return domicile::mojom::Clipboard::kPrimary;
+    default:
+      return std::nullopt;
+  }
+}
+
 void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   std::vector<ui::DomicileDisplayLayout> wanted;
   wanted.reserve(layout.size());
@@ -151,6 +184,21 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .origin = display->origin});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
+}
+
+// The producer's word about a clipboard, on its way to the one this process
+// pastes out of.
+//
+// Here rather than in //components/domicile/browser for the reason the getters
+// above are there: the clipboard the browser reads is ui::OzonePlatform's, and
+// that target deliberately depends on neither //ui/ozone nor //content. Every
+// ozone platform but DRM implements this as nothing, because every other one
+// is a window inside somebody else's session and reads that session's
+// clipboard.
+void SetClipboard(domicile::mojom::Clipboard clipboard,
+                  const std::string& text) {
+  ui::OzonePlatform::GetInstance()->SetDomicileClipboard(BufferOf(clipboard),
+                                                         text);
 }
 
 // The browser's frame sink broker and the socket a producer reaches it over.
@@ -166,8 +214,16 @@ class DomicileBrowserService {
       : broker_(GetHostFrameSinkManager(),
                 base::BindRepeating(&AllocateFrameSinkId),
                 base::BindRepeating(&GetSharedImageInterface),
-                base::BindRepeating(&SetDisplayLayout)),
+                base::BindRepeating(&SetDisplayLayout),
+                base::BindRepeating(&SetClipboard)),
         provider_(&broker_) {
+    // Registered whatever platform this is, because a copy made in a page has
+    // to reach the producer on all of them: what differs is where a copy made
+    // ELSEWHERE lands, and that is `SetClipboard`'s half. Unretained is the
+    // lifetime this object already has -- a NoDestructor on the UI thread.
+    ui::OzonePlatform::GetInstance()->SetDomicileCopiedCallback(
+        base::BindRepeating(&DomicileBrowserService::Copied,
+                            base::Unretained(this)));
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
     // Watched on the platform that scans out and nowhere else. A nested run's
@@ -194,6 +250,15 @@ class DomicileBrowserService {
   }
 
  private:
+  // Something was copied in this browser, on its way to the producer that is
+  // the desktop's clipboard.
+  void Copied(ui::ClipboardBuffer buffer, const std::string& text) {
+    std::optional<domicile::mojom::Clipboard> clipboard = ClipboardOf(buffer);
+    if (clipboard.has_value()) {
+      broker_.OnCopied(*clipboard, text);
+    }
+  }
+
   // Binding the socket is a mkdir and a bind, and this is the UI thread. So it
   // is posted, wherever it is called from.
   //
