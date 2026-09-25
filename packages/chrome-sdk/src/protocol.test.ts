@@ -24,24 +24,17 @@ describe("parseHostMessage", () => {
     });
   });
 
-  it("decodes a file list that says it is not all of it yet", () => {
-    // The flag a launcher draws its "still building" line from, which it
-    // cannot work out for itself: a short list from an index still being
-    // walked and a short list from a small home look identical on the wire.
+  it("decodes what a search found", () => {
     expect(
-      parseHostMessage('{"type":"files","files":["src"],"indexing":true}'),
-    ).toEqual({ files: ["src"], indexing: true, type: "files" });
-  });
-
-  it("reads a file list with no such flag as the whole home", () => {
-    // Which is what a line written before the index existed means — a captured
-    // session, a hand-written fixture. Nothing this build talks to omits it,
-    // and the default matches the `#[serde(default)]` the Rust half carries
-    // for the same reason.
-    expect(parseHostMessage('{"type":"files","files":["src"]}')).toEqual({
-      files: ["src"],
-      indexing: false,
-      type: "files",
+      parseHostMessage(
+        '{"type":"found_files","query":"src","files":["src/"],"matched":1,"indexing":true}',
+      ),
+    ).toEqual({
+      files: ["src/"],
+      indexing: true,
+      matched: 1,
+      query: "src",
+      type: "found_files",
     });
   });
 

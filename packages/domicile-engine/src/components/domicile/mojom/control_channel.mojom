@@ -191,23 +191,29 @@ interface ControlChannel {
   // There is no shell in this path and there should not be one.
   Spawn(array<string> command);
 
-  // Ask what there is to open. Answered with ControlChannelClient::Files.
+  // Ask what in the home matches `query`. Answered with
+  // ControlChannelClient::Files, carrying the same query.
   //
   // NO PATH, DELIBERATELY. The note at the top of this file says what makes
   // the channel safe is which renderers can reach it, not what is on it --
   // and this member is the one place that would have been untrue if it took a
   // directory: a compromised shell renderer could then read the disk a
-  // directory at a time. What is read is decided in the compositor, which is
-  // also where the walk lives, so the whole of this message is the asking.
-  ListFiles();
+  // directory at a time. What is searched is decided in the compositor, which
+  // is also where the index lives; the query is words to match, not a place.
+  //
+  // THE COMPOSITOR MATCHES, AND ONLY WHAT MATCHED CROSSES. Its index is the
+  // whole home, and it used to cross this channel whole so the page could
+  // filter it -- tens of megabytes of JSON on a real home, parsed on this
+  // process's IO thread, and a desktop that took no input while it was.
+  SearchFiles(string query);
 
   // Put a row of the clipboard's history back on the clipboard.
   //
-  // IT NAMES A ROW AND CARRIES NO TEXT, which is the same property ListFiles
-  // has for the same reason: what makes this channel safe is which renderers
-  // can reach it, and a member that took bytes would let a compromised shell
-  // renderer write the desktop's clipboard rather than choose among what is
-  // already on it. The id is one a Clipboard message carried.
+  // IT NAMES A ROW AND CARRIES NO TEXT: what makes this channel safe is which
+  // renderers can reach it, and a member that took bytes would let a
+  // compromised shell renderer write the desktop's clipboard rather than
+  // choose among what is already on it. The id is one a Clipboard message
+  // carried.
   CopyClipboardEntry(uint32 entry);
 
   // Which window has the keyboard. FocusChrome takes it back to the page.
@@ -342,31 +348,28 @@ interface ControlChannelClient {
   // is an answer rather than a silence, and the page must be able to hold it.
   Displays(array<DisplayInfo> displays);
 
-  // What there is to open, answering ListFiles: paths relative to the home
-  // directory, sorted by the compositor.
+  // What matched a SearchFiles, and only that: `query` is the one answered,
+  // `files` the front of what matched -- paths relative to the home
+  // directory, sorted by the compositor, a directory ending in `/` -- and
+  // `matched` how many there were in all.
   //
   // The one method here that IS because the page asked, which is why the note
   // above says "one method, not a callback on Spawn" rather than "none". It is
   // still a message and not a reply: the page has one listener per message
   // type and a callback would be a second shape of delivery for one answer.
+  // The query comes back so the page can tell answers apart.
   //
-  // An empty array is a home with nothing to offer. A home that could not be
-  // read sends nothing at all -- the compositor logs it -- because a launcher
-  // drawing an empty list is how that failure would otherwise look.
+  // A home that could not be read sends nothing at all -- the compositor logs
+  // it -- because a launcher drawing an empty list is how that failure would
+  // otherwise look.
   //
-  // PUSHED AS WELL AS ANSWERED. The compositor keeps an index of the home
-  // rather than walking it when asked, so it also sends this when the index
-  // changes: when the startup walk finishes, and when a watch on the home
-  // reports something that moved. ListFiles stays because a broadcast only
-  // reaches the pages that were connected for it, and a page that reloads has
-  // no list at all.
-  //
-  // `indexing` is whether that walk is still running, which is the difference
-  // between an incomplete answer and a wrong one: the list is a launcher's
-  // whole evidence that a file exists, so one taken from an index still being
-  // built has to arrive saying so. A shell draws it as a line saying the index
-  // is being built.
-  Files(array<string> files,
+  // `indexing` is whether the compositor's walk of the home is still running,
+  // which is the difference between an incomplete answer and a wrong one: the
+  // rows are a launcher's whole evidence that a file exists, so an answer from
+  // an index still being built has to arrive saying so.
+  Files(string query,
+        array<string> files,
+        uint32 matched,
         bool indexing,
         mojo_base.mojom.TimeTicks arrival);
 

@@ -5,9 +5,10 @@
 // glance as the first — which is the whole of what a search field is for, and
 // what makes a narrowing list legible rather than magic.
 //
-// The rule is `matching.ts`'s, read the other way round: every word of the
-// query appears somewhere in the path, ignoring case, so every place any of
-// them appears is a place the row earned.
+// The rule is the host's search, read the other way round (see
+// `domicile_host::file_search`): every word of the query appears somewhere in
+// the path, ignoring case, so every place any of them appears is a place the
+// row earned.
 
 /** A run of a row's text, and whether the query is what put it there. */
 export type Mark = {

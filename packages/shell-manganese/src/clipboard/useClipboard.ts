@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 /**
  * What has been copied on this desktop, newest first.
  *
- * **Pushed rather than asked for**, which is the opposite of `useFiles` and
- * for the opposite reason: a copy is `wl_data_device.set_selection` arriving
- * at the compositor, which is an event it already hears, where a file
- * appearing in a home directory is not an event anything on this desktop sees.
- * So there is nothing to ask and nothing to ask on — a panel that fetched on
- * opening would be fetching what it has already been told.
+ * **Pushed rather than asked for**, which is the opposite of the launcher's
+ * `useFound`: a copy is `wl_data_device.set_selection` arriving at the
+ * compositor, which is an event it already hears, where a launcher's rows are
+ * the answer to a query only the page knows. So there is nothing to ask and
+ * nothing to ask on — a panel that fetched on opening would be fetching what
+ * it has already been told.
  *
  * **Not `navigator.clipboard`, which is the thing that looks like this and is
  * not.** That API answers what is on the clipboard *now* — one string, the

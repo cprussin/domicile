@@ -55,10 +55,10 @@ class MODULES_EXPORT DomicileHost final
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
   void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
-  // Ask what there is to open; the answer arrives as a `files` event. Names
-  // no path -- see the IDL, where that is written down as a property rather
-  // than a convenience.
-  void listFiles(ScriptState*, ExceptionState&);
+  // Ask what in the home matches `query`; the answer arrives as a `files`
+  // event. Names no path -- see the IDL, where that is written down as a
+  // property rather than a convenience.
+  void searchFiles(ScriptState*, const String& query, ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
@@ -163,7 +163,9 @@ class MODULES_EXPORT DomicileHost final
                  bool shift,
                  bool meta,
                  base::TimeTicks arrival) override;
-  void Files(const Vector<String>& files,
+  void Files(const String& query,
+             const Vector<String>& files,
+             uint32_t matched,
              bool indexing,
              base::TimeTicks arrival) override;
   void Battery(double charge,

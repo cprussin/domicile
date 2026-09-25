@@ -14,8 +14,8 @@
 {"type":"focus_changed","app_id":"app-2"}
 {"type":"focus_changed","app_id":null}
 {"type":"focus_requested","app_id":"app-2"}
-{"type":"files","files":["Notes/2026/plan.org","src","src/domicile"],"indexing":false}
-{"type":"files","files":["Notes/2026/plan.org"],"indexing":true}
+{"type":"found_files","query":"o","files":["Notes/2026/plan.org","src/","src/domicile/"],"matched":3,"indexing":false}
+{"type":"found_files","query":"plan","files":["Notes/2026/plan.org"],"matched":1,"indexing":true}
 {"type":"battery","charge":0.42,"charging":true}
 {"type":"theme","theme":"light"}
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}

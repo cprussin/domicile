@@ -65,19 +65,27 @@ fn chrome_messages_round_trip() {
         keycode: 30,
         pressed: true,
     });
-    chrome_round_trip(&ChromeMessage::ListFiles);
+    chrome_round_trip(&ChromeMessage::SearchFiles {
+        query: "plan".into(),
+    });
 }
 
-/// The launcher's ask carries nothing, and that is the security property.
+/// The launcher's ask carries a query and no path, and that is the security
+/// property.
 ///
 /// A page cannot name a directory to enumerate, so this message is no route
-/// out of the sandbox the shell is served in: it asks "what can I open", and
-/// where the compositor looks for the answer is the compositor's.
+/// out of the sandbox the shell is served in: it asks "what matches this",
+/// and where the compositor looks for the answer is the compositor's.
 #[test]
-fn asking_what_there_is_to_open_names_nothing() {
-    let v = serde_json::to_value(ChromeMessage::ListFiles).unwrap();
-    assert_eq!(v["type"], "list_files");
-    assert_eq!(v.as_object().expect("an object").len(), 1);
+fn searching_for_something_to_open_names_no_directory() {
+    let v = serde_json::to_value(ChromeMessage::SearchFiles {
+        query: "plan".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({"type": "search_files", "query": "plan"})
+    );
 }
 
 #[test]
@@ -132,8 +140,10 @@ fn host_messages_round_trip() {
         app_id: "term".into(),
         cursor: CursorShape::Text,
     });
-    host_round_trip(&HostMessage::Files {
-        files: vec!["Notes/today.org".into(), "src".into()],
+    host_round_trip(&HostMessage::FoundFiles {
+        query: "o".into(),
+        files: vec!["Notes/today.org".into(), "src/".into()],
+        matched: 2,
         indexing: false,
     });
     host_round_trip(&HostMessage::Clipboard {
@@ -144,50 +154,31 @@ fn host_messages_round_trip() {
     });
 }
 
-/// The answer is paths relative to the home directory, in the order they go
-/// on screen.
+/// The answer is the query it answers, paths relative to the home directory
+/// in the order they go on screen, and how many there were.
 ///
 /// Relative because that is what a launcher shows — `Notes/today.org`, not
-/// `/home/you/Notes/today.org` — and because the home directory is the one
-/// piece of the path the list has no use for repeating on every row.
+/// `/home/you/Notes/today.org`. The query comes back so a shell can tell the
+/// answer to what is in its box from the answer to a keystroke ago.
 #[test]
-fn the_files_a_launcher_can_offer_are_named_from_home() {
-    let v = serde_json::to_value(HostMessage::Files {
-        files: vec!["Notes/today.org".into(), "src".into()],
-        indexing: false,
-    })
-    .unwrap();
-    assert_eq!(v["type"], "files");
-    assert_eq!(v["files"], serde_json::json!(["Notes/today.org", "src"]));
-}
-
-/// An answer given while the index is still being built says so.
-///
-/// The list is the launcher's whole evidence that a file exists, so one that
-/// is not all of them has to arrive saying which it is — otherwise a person
-/// who typed a name their desktop has not reached yet is told, in the only
-/// language the panel has, that they do not have that file.
-#[test]
-fn a_partial_answer_says_that_it_is_partial() {
-    let v = serde_json::to_value(HostMessage::Files {
-        files: vec!["src".into()],
+fn what_a_search_found_is_named_from_home() {
+    let v = serde_json::to_value(HostMessage::FoundFiles {
+        query: "o".into(),
+        files: vec!["Notes/today.org".into(), "src/".into()],
+        matched: 40,
         indexing: true,
     })
     .unwrap();
-    assert_eq!(v["indexing"], serde_json::json!(true));
-}
-
-/// A home with nothing in it is an answer, and the empty list has to survive
-/// the wire to be one — the same reason a desktop of no displays does.
-#[test]
-fn a_home_with_nothing_to_open_is_an_answer() {
-    let v = serde_json::to_value(HostMessage::Files {
-        files: vec![],
-        indexing: false,
-    })
-    .unwrap();
-    assert_eq!(v["type"], "files");
-    assert_eq!(v["files"], serde_json::json!([]));
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "found_files",
+            "query": "o",
+            "files": ["Notes/today.org", "src/"],
+            "matched": 40,
+            "indexing": true,
+        })
+    );
 }
 
 /// What was copied, in the shape a shell draws a row of it.
@@ -229,7 +220,7 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
 /// A desktop nothing has been copied on yet says so, rather than saying
 /// nothing.
 ///
-/// The same distinction [`HostMessage::Files`] draws, and it matters more
+/// The same distinction [`HostMessage::Displays`] draws, and it matters more
 /// here: the history empties when the desktop restarts, so an empty list is
 /// the ordinary state of a fresh session rather than an edge case. A shell
 /// told nothing would wait forever for a first copy it has already been told

@@ -449,7 +449,7 @@ a copy arrives at. It reads the selection over a pipe each time a client sets
 one, keeps the last thirty-two, and moves a repeat back to the top rather than
 drawing it twice — `domicile_host::clipboard` is the rule and
 `packages/domicile-host/tests/clipboard.rs` is what pins it. It is **pushed**,
-like the charge and unlike `list_files`: a copy is an event the compositor
+like the charge and unlike `search_files`: a copy is an event the compositor
 already hears, so the panel is current when it opens rather than fetching on
 the way up.
 
@@ -603,7 +603,7 @@ is in every kernel and wants no daemon and no bus, sums the batteries rather
 than averaging their percentages, and counts a USB-C charger as a lead the same
 as `AC` — `domicile_host::battery` is the reading and `packages/domicile-host/
 tests/battery.rs` is the rule. It is **pushed**, not asked for, which is the
-one place this differs from `list_files`: a charge changes on its own, so there
+one place this differs from `search_files`: a charge changes on its own, so there
 is nothing for a shell to ask. It arrives when the reading moves far enough to
 draw — a whole percent, or the lead — and once more to a page that has just
 connected, so a reload does not wait for the next percent.
@@ -669,7 +669,7 @@ shell that wants its own pictures owns its own list.
 | `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
-| `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its list is the compositor's index of the home — every path at every depth, pushed as it is built — so the panel also says when that index is not finished, and draws a bounded number of rows however big a home is. |
+| `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — it searches its index of the whole home and sends back only the front of what matched — so the panel also says when that index is not finished, and asks again until it is. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |

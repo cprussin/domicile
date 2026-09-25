@@ -83,8 +83,8 @@ class FakeHost implements DomicileHost {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
-  listFiles(): void {
-    this.calls.push(["listFiles"]);
+  searchFiles(query: string): void {
+    this.calls.push(["searchFiles", query]);
   }
   copyClipboardEntry(entry: number): void {
     this.calls.push(["copyClipboardEntry", entry]);
@@ -258,31 +258,6 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual(["appeared:term", "closed:term"]);
     });
 
-    it("delivers what there is to open to a launcher that asked", () => {
-      // The one event that answers a question as well as announcing something.
-      // It goes through the same hold as every other, which is what a launcher
-      // needs twice over: `listFiles` is called from an effect and the answer
-      // can be back before the handler for it is, and the compositor sends
-      // more of these on its own as the index behind them fills in.
-      const seen: unknown[] = [];
-      domicile.on("files", (message) => {
-        seen.push(message);
-      });
-
-      host.dispatch(
-        "files",
-        Object.assign(new Event("files"), {
-          arrival: 0,
-          files: ["Notes/today.org", "src"],
-          indexing: false,
-        }),
-      );
-
-      expect(seen).toStrictEqual([
-        { files: ["Notes/today.org", "src"], indexing: false },
-      ]);
-    });
-
     it("delivers the charge nobody asked for", () => {
       // The other shape of message on this channel: pushed rather than
       // answered, because a battery changes on its own. It goes through the
@@ -449,9 +424,6 @@ describe("DomicileClient", () => {
       domicile.spawn(["kitty"]);
       expect(host.lastCall()).toStrictEqual(["spawn", ["kitty"]]);
 
-      domicile.listFiles();
-      expect(host.lastCall()).toStrictEqual(["listFiles"]);
-
       domicile.copyClipboardEntry(3);
       expect(host.lastCall()).toStrictEqual(["copyClipboardEntry", 3]);
 
@@ -531,6 +503,50 @@ describe("DomicileClient", () => {
       // path is `double`.
       domicile.setDesktopSize([1280.5, 800]);
       expect(host.lastCall()).toStrictEqual(["setDesktopSize", 1280.5, 800]);
+    });
+  });
+
+  describe("searching the home", () => {
+    /** The compositor answering `query`, as the engine dispatches it. */
+    const answer = (query: string, files: readonly string[]) => {
+      host.dispatch(
+        "files",
+        Object.assign(new Event("files"), {
+          arrival: 0,
+          files,
+          indexing: false,
+          matched: files.length,
+          query,
+        }),
+      );
+    };
+
+    it("asks the host, and settles with what that query found", async () => {
+      const found = domicile.searchFiles("notes");
+      expect(host.lastCall()).toStrictEqual(["searchFiles", "notes"]);
+
+      answer("notes", ["Notes/", "Notes/today.org"]);
+
+      expect(await found).toStrictEqual({
+        files: ["Notes/", "Notes/today.org"],
+        indexing: false,
+        matched: 2,
+        query: "notes",
+      });
+    });
+
+    it("settles each search with its own answer, whichever comes back first", async () => {
+      // A launcher asks on every keystroke, so two are in flight whenever
+      // somebody types faster than the compositor answers. The answer to `n`
+      // is not the answer to `no`.
+      const shorter = domicile.searchFiles("n");
+      const longer = domicile.searchFiles("no");
+
+      answer("no", ["Notes/"]);
+      answer("n", ["Notes/", "src/nix/"]);
+
+      expect((await shorter).files).toStrictEqual(["Notes/", "src/nix/"]);
+      expect((await longer).files).toStrictEqual(["Notes/"]);
     });
   });
 

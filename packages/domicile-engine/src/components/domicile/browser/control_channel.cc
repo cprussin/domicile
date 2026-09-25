@@ -238,10 +238,12 @@ void ControlChannel::FocusApp(const std::string& app_id) {
   SendMessage(ForApp("focus_app", app_id));
 }
 
-// No arguments to carry, and that is the whole shape of it: the message asks
-// the compositor what there is to open and says nothing about where to look.
-void ControlChannel::ListFiles() {
-  SendMessage(Typed("list_files"));
+// Words to match and nothing else: the message asks the compositor what in
+// the home matches, and says nothing about where to look.
+void ControlChannel::SearchFiles(const std::string& query) {
+  base::DictValue message = Typed("search_files");
+  message.Set("query", query);
+  SendMessage(std::move(message));
 }
 
 // The one member that names a row of the clipboard, and the whole of what a
@@ -705,30 +707,31 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
-  if (*type == "files") {
-    const base::ListValue* offered = message.FindList("files");
-    if (!offered) {
+  if (*type == "found_files") {
+    const std::string* query = message.FindString("query");
+    const base::ListValue* found = message.FindList("files");
+    const std::optional<int> matched = message.FindInt("matched");
+    const std::optional<bool> indexing = message.FindBool("indexing");
+    // All four or nothing, which is what `battery` below does: an answer
+    // without its query cannot be told from the answer to a keystroke ago,
+    // and one without its count or its flag would be drawn as a claim it did
+    // not make.
+    if (!query || !found || !matched || *matched < 0 || !indexing) {
       return;
     }
     std::vector<std::string> files;
-    files.reserve(offered->size());
-    for (const base::Value& entry : *offered) {
+    files.reserve(found->size());
+    for (const base::Value& entry : *found) {
       const std::string* path = entry.GetIfString();
       if (path) {
         files.push_back(*path);
       }
     }
-    // DEFAULTED RATHER THAN DROPPED, which is what `displays` does above and
-    // the opposite of what `battery` does below. The list is the message and
-    // is already in hand; `indexing` only says whether it is all of it, and a
-    // line without it is one written before the index existed -- from a
-    // captured session or a hand-written fixture -- where "this is the whole
-    // home" is the right reading. Nothing this build talks to omits it.
-    bool indexing = message.FindBool("indexing").value_or(false);
-    // Sent even when it is empty, for the reason `displays` above is: a home
-    // with nothing to offer is an answer, and a launcher that never heard one
+    // Sent even when it is empty, for the reason `displays` above is: a query
+    // that matched nothing is an answer, and a launcher that never heard one
     // would wait for a message the compositor has already sent.
-    client_->Files(std::move(files), indexing, arrival);
+    client_->Files(*query, std::move(files), static_cast<uint32_t>(*matched),
+                   *indexing, arrival);
     return;
   }
 
