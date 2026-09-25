@@ -218,10 +218,14 @@ describe("what there is to open", () => {
       Object.assign(new Event("files"), {
         arrival: 0,
         files: ["Notes/today.org", "src"],
+        indexing: false,
       }) as DomicileFilesEvent,
     );
 
-    expect(offered).toStrictEqual({ files: ["Notes/today.org", "src"] });
+    expect(offered).toStrictEqual({
+      files: ["Notes/today.org", "src"],
+      indexing: false,
+    });
   });
 
   it("carries an empty list as an empty list", () => {
@@ -233,9 +237,27 @@ describe("what there is to open", () => {
         Object.assign(new Event("files"), {
           arrival: 0,
           files: [],
+          indexing: false,
         }) as DomicileFilesEvent,
       ),
-    ).toStrictEqual({ files: [] });
+    ).toStrictEqual({ files: [], indexing: false });
+  });
+
+  it("keeps the flag that says the list is not all of it", () => {
+    // THE ONE FIELD A LAUNCHER CANNOT WORK OUT FOR ITSELF. A short list from
+    // an index still being built and a short list from a small home look
+    // identical, and only one of them means "keep typing, it is coming" — so
+    // a translator that dropped this would leave a shell no way to tell a
+    // person their desktop has not finished looking.
+    expect(
+      files(
+        Object.assign(new Event("files"), {
+          arrival: 0,
+          files: ["src"],
+          indexing: true,
+        }) as DomicileFilesEvent,
+      ),
+    ).toStrictEqual({ files: ["src"], indexing: true });
   });
 });
 

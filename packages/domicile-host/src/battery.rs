@@ -14,7 +14,7 @@
 //! opposite number is [`PowerSupplies`]: the compositor passes
 //! [`RealPowerSupplies`], the tests pass a map.
 //!
-//! [`Directory`]: crate::files::Directory
+//! [`Directory`]: crate::home_walk::Directory
 
 use std::path::{Path, PathBuf};
 

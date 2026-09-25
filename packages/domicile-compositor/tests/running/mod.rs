@@ -71,11 +71,26 @@ impl Compositor {
     /// compositor that would not start is the end of that test either way —
     /// with the difference that a panic here carries its stderr.
     pub fn started_with(config: &str) -> Compositor {
+        Compositor::started_in_a_home(config, None)
+    }
+
+    /// The same, over a home directory the test laid out.
+    ///
+    /// **Every run gets a home of its own, and `None` is an empty one.** The
+    /// compositor walks `$HOME` at startup and then watches it — see
+    /// `crate::file_indexing` — so a fixture that let the runner's own home
+    /// through would have three hundred tests each index a developer's
+    /// machine, take an inotify watch per directory in it, and offer a
+    /// launcher whatever happened to be on that disk. The same reasoning as
+    /// the runtime directory below, with more at stake.
+    pub fn started_in_a_home(config: &str, home: Option<&std::path::Path>) -> Compositor {
         let directory = tempfile::tempdir().expect("a runtime directory");
         let config_file = directory.path().join("config.toml");
         std::fs::write(&config_file, config).expect("the config is written");
         let session_file = directory.path().join("session.json");
         let chrome_socket = directory.path().join("chrome.sock");
+        let empty_home = directory.path().join("home");
+        std::fs::create_dir_all(&empty_home).expect("a home to index");
 
         let child = Command::new(env!("CARGO_BIN_EXE_domicile-compositor"))
             .arg("--chrome-socket")
@@ -87,6 +102,11 @@ impl Compositor {
             // Its own, so a display this binds cannot collide with the
             // session the test runner itself is in.
             .env("XDG_RUNTIME_DIR", directory.path())
+            // What the file index is built from, and where it is written
+            // down. Both inside this run's own directory, so nothing a test
+            // does to one survives into the next.
+            .env("HOME", home.unwrap_or(&empty_home))
+            .env("XDG_CACHE_HOME", directory.path().join("cache"))
             // A decoy, and load-bearing. The compositor aims what it spawns
             // by setting `WAYLAND_DISPLAY`, and a child that inherited the
             // compositor's instead would open on whatever session the runner
@@ -144,6 +164,11 @@ impl Compositor {
     /// one whose whole subject is a handshake that does not happen.
     pub fn socket(&self) -> &std::path::Path {
         &self.session.chrome_socket
+    }
+
+    /// Where this run keeps its caches, which is where its file index goes.
+    pub fn cache_home(&self) -> PathBuf {
+        self.runtime_dir.join("cache")
     }
 
     /// A stand-in chrome, connected and past the handshake.
