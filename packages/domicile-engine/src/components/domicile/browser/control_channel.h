@@ -101,6 +101,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SetDesktopSize(double width, double height) override;
   void SetDevicePixelRatio(double ratio) override;
   void SetTheme(mojom::Theme theme) override;
+  void ThemeCaptured(mojom::Theme theme) override;
   void GrabShortcut(mojom::ShortcutPtr shortcut) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id, double x, double y) override;

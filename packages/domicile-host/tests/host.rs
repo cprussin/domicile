@@ -387,6 +387,7 @@ fn the_displays_are_answered_after_the_welcome() {
                 displays: vec![lying_down("left", [0, 0], [1920, 1080], 1)],
             },
             HostMessage::Theme { theme: Theme::Dark },
+            HostMessage::WindowsTheme { theme: Theme::Dark },
         ]
     );
 }
@@ -439,6 +440,29 @@ fn a_theme_that_did_not_move_is_not_restated() {
     host.set_theme(Theme::Light);
 
     assert_eq!(host.set_theme(Theme::Light), None);
+}
+
+#[test]
+fn the_windows_theme_is_kept_apart_from_the_chromes() {
+    // The chrome turns over when it is told; the windows only once every
+    // chrome has captured the frame its wipe starts from. So between the two
+    // the desk has one theme on its panels and the other on its windows, and
+    // a host that kept one value would tell a chrome connecting in that gap
+    // the wrong thing about half of them.
+    let mut host = Host::new();
+    host.set_theme(Theme::Light);
+
+    assert_eq!(
+        host.describe_windows_theme(),
+        HostMessage::WindowsTheme { theme: Theme::Dark }
+    );
+    assert_eq!(
+        host.set_windows_theme(Theme::Light),
+        Some(HostMessage::WindowsTheme {
+            theme: Theme::Light
+        })
+    );
+    assert_eq!(host.set_windows_theme(Theme::Light), None);
 }
 
 #[test]

@@ -12,8 +12,9 @@
 //! and follow the `SettingChanged` signal for it while they run — it is the
 //! one thing every toolkit on a Linux desktop agrees about, and it is how a
 //! GNOME or a KDE dark-mode switch reaches an app that is neither. So Domicile
-//! answers it, and a click on the shell's toggle turns the windows over with
-//! the panels rather than after them.
+//! answers it, and a click on the shell's toggle turns the windows over too --
+//! once every shell has captured the frame its wipe starts from, so the wipe
+//! passes across them. See `domicile_host::theme_turnover`.
 //!
 //! **The backend half, not the frontend.** `xdg-desktop-portal` is the process
 //! apps actually talk to; what a desktop supplies is an implementation of

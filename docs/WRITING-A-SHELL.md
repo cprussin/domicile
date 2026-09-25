@@ -286,9 +286,21 @@ mode = "light"
 theme with the handshake and again whenever it moves; the compositor hands the
 same value to the *settings portal* — `color-scheme` in the
 `org.freedesktop.appearance` namespace, which GTK4, Qt6, Electron and Firefox
-all read and follow while they run — so the windows turn over with the panels
-rather than after them. A desk with no session bus keeps its own theme working
-and says once in the log that its clients will not be following it.
+all read and follow while they run — and draws the sites in browser windows
+the same way. A desk with no session bus keeps its own theme working and says
+once in the log that its clients will not be following it.
+
+**The windows turn after the shell has captured its old frame.** A shell that
+animates the change — a view transition, say — captures the frame it leaves,
+and the windows are in it. So the compositor tells the chromes first and holds
+the windows until every chrome calls `domicile.themeCaptured(theme)`, then
+answers with a `windows_theme` message once they have repainted. Call it from
+inside the transition's update and return a promise that settles on that
+message: the old frame stays up until then, and the transition reveals windows
+already turned. A shell with no animation calls it as soon as it is told.
+One that never calls it gets its windows turned anyway, a second late.
+`ThemeProvider` in `@domicile/component-library` does all of this; a shell
+using it hands `turnWindows` on its `ThemeSource` to `themeCaptured`.
 
 **And it goes the other way.** `domicile.setTheme("light")` from a shell asks
 the compositor, which answers every chrome on the desk — a desk of three
