@@ -238,7 +238,9 @@ follows the portal, a new `files.omit` walks the home again for the launcher's
 index, and the display list and the profiles rearrange it. The
 windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
-edit replaced.
+edit replaced. One field is read at startup and not on a reload:
+`lock.passphrase`, because whether the desk is *locked* is not something that
+file says — see [A locked desk](#a-locked-desk).
 
 Two edits are refused rather than applied, and each says so in the log: a file
 that will not parse, which leaves the last one that did in place, and a keyboard
@@ -259,9 +261,10 @@ their layout into this file; there is no layer below it that will.
 go dark; they come back on the next key, click, scroll or pointer movement,
 and your shell hears both — see [When nobody is at the
 desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
-blanks, which is deliberate: there is no lock behind the blank yet, and nothing
-warns a moment *before* it, so a desk that went dark on a timeout its user
-never set is one that looks like it died. `0` is refused rather than read as
+blanks, which is deliberate: nothing warns a moment *before* it, so a desk that
+went dark on a timeout its user never set is one that looks like it died. It is
+also what locks a desk that states a `lock.passphrase`, which is the only thing
+that locks one — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
 either answer. An app playing a film holds the screens on through the timeout —
 `zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
 — so a desk that has not blanked is not necessarily one whose timeout is wrong,
@@ -678,16 +681,89 @@ put away on `idle: false` is already closed by the time there is light to read
 it by. A desk that warns before it goes dark wants a lead time nothing in the
 config states yet; [ROADMAP.md](/ROADMAP.md) carries that.
 
-**It is not a lock, and nothing you do with it makes one.** A dark screen is a
-screen, and anybody can still type at this desktop: the seat is the
+**It is not the lock, and drawing on this message does not make one.** A dark
+screen is a screen, and anybody can still type at this desktop: the seat is the
 compositor's, so refusing to deliver what is typed is its decision rather than
-your page's. A shell that draws a lock screen on this message has drawn a
-picture of one.
+your page's. A shell that raised a lock screen on `idle: true` alone has drawn a
+picture of one. The real thing is a message of its own, and its own state in the
+compositor — see [A locked desk](#a-locked-desk).
 
 **A desktop that never blanks sends nothing at all** — not even `idle: false`.
 Leaving `idle.blank_after_seconds` out is a desk with no opinion about who is at
 it, so a shell that has never had one of these has no idle affordance to draw,
 which is a different thing from having been told somebody is here.
+
+## A locked desk
+
+A desk that has gone untouched for `idle.blank_after_seconds` **locks itself**,
+if its config states a `lock.passphrase`. Your shell is told, and what it draws
+is a lock screen:
+
+```ts
+domicile.on("locked", ({ locked }) => {
+  // `true` is a desk that delivers nothing to any client. `false` is one that
+  // does.
+  setLocked(locked);
+});
+
+// And the way out, which is an offer rather than a decision:
+domicile.unlock(typed);
+```
+
+**The compositor holds the lock, and your page cannot open it by drawing.** This
+is the one piece of desktop state where that distinction is the whole feature.
+Input on this system does not originate in the compositor — your page owns it and
+forwards it, and the compositor injects it into a Wayland seat — so a locked desk
+is *that injection not happening*. While `locked` is `true`, no client on the
+desk is given a keystroke, a click, a scroll or a pointer movement, whatever your
+page forwards.
+
+So the things that would defeat a lock a page held do not defeat this one. A
+reload does not open the desk. An engine that died and came back does not open
+it. A shell rebuilt from a different bundle does not open it, and neither does
+one edited in the devtools of the browser that is drawing it: there is no
+`locked` to set, only a compositor to be told by.
+
+**You keep your own keys throughout, and that is what makes a lock screen
+possible rather than a hole in one.** You are the thing forwarding, so you can
+hold the keyboard, take a passphrase into a field and show what you like — none
+of it arrives anywhere. `unlock` hands what was typed to the compositor, which
+compares it and, if it was right, sends `locked: false` to **every** chrome on
+the desk. Clear your lock screen on that message and never on your own submit: a
+page that believed its own keystrokes would be a lock anybody could open by
+editing the page. A desk of three monitors is three of your pages and one lock,
+which is the same reason `setTheme` comes back as a `theme` event.
+
+**A wrong passphrase is answered with nothing at all.** No verdict, no count, no
+delay: the desk stays shut and the compositor says so in its own log, without the
+passphrase in it. So your field is the only thing that can say the try happened
+— clear it on every submit rather than waiting for an answer that is not coming.
+There is no "that was wrong" on this protocol yet; [ROADMAP.md](/ROADMAP.md)
+carries it.
+
+**It is a state, and you are told it again when your page connects.** Which here
+is the point rather than a convenience: the edge that shut the desk went out
+before a reloaded page existed, and a shell that had missed it would draw an open
+desktop over a desktop that is listening to nothing — and take a password into a
+text field no client will ever read.
+
+**A desktop with no `lock.passphrase` sends none of these**, not even a `false`.
+It cannot lock: a desk that locked with nothing to open it would be a desk nobody
+could get back into. So a shell that has never had one of these has no lock to
+draw, which is a different thing from having been told the desk is open.
+
+Two things this is not, and both are worth knowing before you build on it. The
+verifier behind that comparison is the passphrase in the compositor's config
+file, which on NixOS is generated into a world-readable store — so today this
+locks a desk against somebody walking up to it and against nobody who can read
+the machine's disk. And a locked desk still answers the rest of this protocol: a
+shell could ask it to close a window or to put a row of the clipboard back on the
+seat, so the panels you do not draw over a locked desk are the panels that stay
+shut. `ROADMAP.md` carries both.
+
+[`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx) is manganese's,
+and [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts) is the
+state it draws from.
 
 ## A browser window
 

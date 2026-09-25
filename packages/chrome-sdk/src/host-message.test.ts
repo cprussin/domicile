@@ -9,6 +9,7 @@ import type {
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileIdleEvent,
+  DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
 } from "./domicile-host";
@@ -24,6 +25,7 @@ import {
   focusChanged,
   foundFiles,
   idle,
+  locked,
   modifiers,
   shortcut,
 } from "./host-message";
@@ -378,5 +380,32 @@ describe("whether anybody is at the desk", () => {
         }) as DomicileIdleEvent,
       ),
     ).toStrictEqual({ idle: false });
+  });
+});
+
+describe("whether the desk is locked", () => {
+  it("arrives as the state, both ways round and without the hop", () => {
+    // BACKWARD IS THE WORST ANSWER HERE TOO, and worse than it is for idle: a
+    // shell that cleared its lock screen on `locked: true` would draw an open
+    // desktop over a desk that delivers nothing, and take a passphrase into a
+    // field nothing will ever read. Both directions, because an inversion reads
+    // perfectly well from either one alone.
+    expect(
+      locked(
+        Object.assign(new Event("locked"), {
+          arrival: 0,
+          locked: true,
+        }) as DomicileLockedEvent,
+      ),
+    ).toStrictEqual({ locked: true });
+
+    expect(
+      locked(
+        Object.assign(new Event("locked"), {
+          arrival: 0,
+          locked: false,
+        }) as DomicileLockedEvent,
+      ),
+    ).toStrictEqual({ locked: false });
   });
 });

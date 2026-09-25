@@ -368,6 +368,39 @@ const idleSchema = z.looseObject({
   type: z.literal("idle"),
 });
 
+// Whether this desk is locked: `true` is a desktop that will not deliver a
+// keystroke or a click to any client until somebody says the passphrase.
+//
+// THE COMPOSITOR HOLDS IT, AND THAT IS WHY THIS MESSAGE EXISTS AT ALL. Input on
+// this system does not originate there — the shell's page owns it and forwards
+// it, and the compositor injects it into a Wayland seat — so a locked desk is
+// that injection not happening. A page reload does not open it, an engine that
+// died and came back does not open it, and a page edited in the devtools of the
+// browser drawing it does not open it either.
+//
+// So the page keeps every key it has while this is `true`, which reads like a
+// hole and is the opposite: the page is the thing forwarding, and what it
+// forwards is dropped at the seat — so it can draw a lock screen and take a
+// passphrase while no client on the desk sees a keystroke. `unlock` is how it
+// offers one, and the answer is another one of these.
+//
+// A state rather than an edge, like `idle`, and a chrome that has just connected
+// is told it — which here is the property the whole design is for rather than a
+// convenience, because the reload is exactly what must not open the desk.
+//
+// A desktop with no `[lock] passphrase` configured sends none of these, not even
+// a `false`: it cannot lock, because a desk that locked with nothing to unlock it
+// would be a desk nobody could get back into.
+const lockedSchema = z.looseObject({
+  // Required, for `idle`'s reason at its sharpest: a missing field here has no
+  // reading that is not a guess about whether this desk is listening, and a
+  // guess that came out `false` would clear a lock screen over a desktop that
+  // looks open, takes a password into a field nothing will ever read, and is
+  // not.
+  locked: z.boolean(),
+  type: z.literal("locked"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -392,6 +425,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   clipboardSchema,
   themeMessageSchema,
   idleSchema,
+  lockedSchema,
 ]);
 
 /** A decoded host message. */
@@ -423,6 +457,7 @@ export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
+export type LockedMessage = z.infer<typeof lockedSchema>;
 
 /** One thing that was copied, as a row of the clipboard's history. */
 export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;

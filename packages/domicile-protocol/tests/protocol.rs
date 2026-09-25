@@ -8,7 +8,7 @@
 
 use domicile_protocol::{
     negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    FilePreview, HostMessage, PROTOCOL_VERSION,
+    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -70,6 +70,9 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::PreviewFile {
         path: "Notes/today.org".into(),
+    });
+    chrome_round_trip(&ChromeMessage::Unlock {
+        passphrase: Passphrase::from("open sesame"),
     });
 }
 
@@ -210,6 +213,7 @@ fn host_messages_round_trip() {
         }],
     });
     host_round_trip(&HostMessage::Idle { idle: true });
+    host_round_trip(&HostMessage::Locked { locked: true });
 }
 
 /// The answer is the query it answers, paths relative to the home directory
@@ -360,6 +364,74 @@ fn whether_anybody_is_at_the_desk_is_a_state_rather_than_an_edge() {
         here["idle"], false,
         "somebody coming back is the same message saying the other thing"
     );
+}
+
+/// Whether this desk is locked, in the one field that says it.
+///
+/// A state and not an edge, for the reason `idle` above is one and a sharper
+/// one: a page reloads, and the whole point of a lock the compositor holds is
+/// that a reload does not open the desk. So a chrome saying hello has to be
+/// able to be told `true` — an edge nobody was there for is a lock screen that
+/// never comes back up.
+#[test]
+fn whether_the_desk_is_locked_is_a_state_rather_than_an_edge() {
+    let shut = serde_json::to_value(HostMessage::Locked { locked: true }).unwrap();
+    assert_eq!(shut["type"], "locked");
+    assert_eq!(shut["locked"], true);
+
+    let open = serde_json::to_value(HostMessage::Locked { locked: false }).unwrap();
+    assert_eq!(open["type"], "locked");
+    assert_eq!(
+        open["locked"], false,
+        "a desk that has just been opened is the same message saying the other thing"
+    );
+}
+
+/// An unlock carries the passphrase and names nothing else.
+///
+/// The whole of what it says: there is no user here to name — a desk has one —
+/// and no verdict to carry back, because the answer is
+/// [`HostMessage::Locked`] to every chrome rather than a reply to the one that
+/// asked.
+#[test]
+fn an_unlock_carries_the_passphrase_and_nothing_else() {
+    let v = serde_json::to_value(ChromeMessage::Unlock {
+        passphrase: Passphrase::from("open sesame"),
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({"type": "unlock", "passphrase": "open sesame"})
+    );
+}
+
+/// A passphrase is not in what a log line would print.
+///
+/// **THE ONE WAY THIS FIELD CAN FAIL IS BY BEING EASY TO PRINT.** Every other
+/// member of `ChromeMessage` is something to trace, and `{:?}` on the message
+/// is how a compositor says which one it refused — so a `String` here would
+/// put the desk's passphrase in the journal the first time anybody added such
+/// a line, in a change with no reason to be thinking about the lock. The
+/// redaction is the type's rather than the call site's, so there is nowhere to
+/// forget it.
+#[test]
+fn a_passphrase_is_never_what_a_log_line_prints() {
+    let secret = "correct horse battery staple";
+
+    assert!(!format!("{:?}", Passphrase::from(secret)).contains(secret));
+
+    // And through the message, which is the shape a trace macro is handed.
+    let message = ChromeMessage::Unlock {
+        passphrase: Passphrase::from(secret),
+    };
+    assert!(
+        !format!("{message:?}").contains(secret),
+        "a message that prints its passphrase is one log line from the journal"
+    );
+
+    // The value survives, or this would be a lost passphrase rather than a
+    // hidden one.
+    assert_eq!(Passphrase::from(secret).as_str(), secret);
 }
 
 /// The chrome assigns the cursor straight to CSS `cursor`, so every shape must

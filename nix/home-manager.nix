@@ -48,9 +48,9 @@
   #
   # TOML has no word for a null, and `domicile` reads several keys' ABSENCE as
   # a real answer -- `idle.blank_after_seconds` absent is a desktop whose
-  # screens never blank, a placement's `mode` absent is whatever the monitor
-  # comes up at -- so leaving the key out is exactly what an unset option
-  # means. Through lists because `output.profiles` is one, and the nullable
+  # screens never blank, `lock.passphrase` absent is one that never locks, a
+  # placement's `mode` absent is whatever the monitor comes up at -- so leaving
+  # the key out is exactly what an unset option means. Through lists because `output.profiles` is one, and the nullable
   # option inside it is in a submodule two lists deep.
   withoutNulls = value:
     if lib.isAttrs value
@@ -270,10 +270,13 @@ in {
                 They come back on the next key, click, scroll or movement of
                 the pointer.
 
-                `null` -- the default -- is a desktop that never blanks. There
-                is no lock behind the blank yet and nothing tells the shell a
-                moment before, so this is opt-in: a desk that says nothing
-                keeps its screens on.
+                `null` -- the default -- is a desktop that never blanks.
+                Nothing warns the shell a moment before, so this is opt-in: a
+                desk that says nothing keeps its screens on.
+
+                It is also what locks a desk that states a `lock.passphrase`,
+                because the dark edge is the only thing that locks one. A desk
+                with no timeout here never locks, whatever else it says.
 
                 Followed on a reload, from either direction: a rebuild can
                 give a running desk a timeout it never had, or take one away.
@@ -283,6 +286,46 @@ in {
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
               example = 600;
+            };
+          };
+
+          lock = {
+            passphrase = lib.mkOption {
+              description = ''
+                What opens this desk once nobody being at it has locked it.
+
+                `null` -- the default -- is a desktop that never locks. That is
+                not merely the conservative reading: a desk that locked with no
+                passphrase to open it is a desk nobody can get back into, and
+                the way out would be another tty.
+
+                THIS IS A MECHANISM AND NOT YET A SECRET. This file is
+                generated into the Nix store, which is world-readable, so a
+                passphrase written here can be read by every process of every
+                user on the machine. It locks this desk against somebody
+                walking up to it and against nobody who can read the disk. The
+                verifier is behind a seam in the compositor so the real one can
+                replace it without moving anything else; that real one is PAM,
+                and `ROADMAP.md` carries it.
+
+                What a locked desk does is refuse to deliver a keystroke or a
+                click to any client: input on this system is forwarded by the
+                shell's page and injected into a Wayland seat by the
+                compositor, and while the desk is locked that injection does
+                not happen. So a shell reloading does not open the desk, and
+                neither does an engine that died and came back.
+
+                A desk locks when `idle.blank_after_seconds` says nobody is at
+                it, which is the only thing that locks one today. Read on
+                startup and not on a reload: whether this desk is locked is not
+                something this file says, and rebuilding the verifier under a
+                locked desk would be either an unlock by file edit or a lock
+                with nothing left to open it. A passphrase added, changed or
+                removed is the passphrase of the next run.
+              '';
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              example = "open sesame";
             };
           };
 

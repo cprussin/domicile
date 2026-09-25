@@ -118,6 +118,24 @@
   [CallWith=ScriptState, RaisesException] undefined setTheme(
       DomicileTheme theme);
 
+  // Offer a passphrase at a locked desk.
+  //
+  // THE WAY OUT OF THE ONE STATE THIS PAGE CANNOT CHANGE BY DRAWING. While the
+  // desk is locked the compositor puts nothing this page forwards into the
+  // Wayland seat -- no client sees a keystroke or a click -- and this call is
+  // the only thing that ends it. The page keeps its own keys throughout, which
+  // is what makes a lock screen possible: it is the thing forwarding, so it can
+  // take a passphrase while nothing it forwards arrives anywhere.
+  //
+  // ANSWERED WITH A `locked` EVENT AND NOT WITH A RETURN VALUE, and only when
+  // the desk actually opened. A wrong passphrase produces nothing at all: the
+  // compositor says so in its own log, without the passphrase in it. A page
+  // that cleared its own lock screen because it believed its own keystrokes
+  // would be a lock anybody with the devtools could open -- and the event goes
+  // to every chrome on the desk rather than to this one, because three monitors
+  // are three pages and the desk they draw has one lock.
+  [CallWith=ScriptState, RaisesException] undefined unlock(DOMString passphrase);
+
   // Route a key combination to the page rather than to the focused client.
   //
   // The press comes back as a `shortcut` event carrying the same fields, so a
@@ -208,6 +226,17 @@
   // rather than which way it just went. A desktop with no idle timeout
   // configured never fires one.
   attribute EventHandler onidle;
+
+  // Whether this desk is locked, as a DomicileLockedEvent.
+  //
+  // Pushed like onidle, and the state it carries is the one thing about this
+  // desktop a page can neither read nor change for itself: the compositor is
+  // what injects forwarded input into the seat, so a locked desk is that
+  // injection not happening. It arrives on the turn the answer changes and once
+  // more to a page that has only just connected -- which is the whole point,
+  // because a reload is exactly what must not open the desk. A desktop with no
+  // passphrase configured never fires one.
+  attribute EventHandler onlocked;
 
   // Focus moved. `appId` is empty when the chrome itself has it.
   attribute EventHandler onfocuschanged;

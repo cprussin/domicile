@@ -141,9 +141,10 @@ xkb_options = ["caps:swapescape", ""]
 #[test]
 fn a_desk_that_asked_for_no_timeout_never_blanks() {
     // SAYING NOTHING MEANS NOTHING HAPPENS. A desk whose shell never mentioned
-    // idle should not start turning its screens off after an upgrade -- there
-    // is no lock behind the blank yet and nothing tells the shell, so a screen
-    // that went dark on its own would read as a desktop that had died.
+    // idle should not start turning its screens off after an upgrade: nothing
+    // warns a moment before, so a screen that went dark on its own would read as
+    // a desktop that had died -- and on a desk that states a passphrase it is
+    // the edge that locks the thing, which is a larger surprise still.
     assert_eq!(Config::parse("").unwrap().idle.blank_after(), None);
 }
 
@@ -179,6 +180,78 @@ blank_after_seconds = 0
         message.contains("idle.blank_after_seconds"),
         "the message should name the key: {message}"
     );
+}
+
+// ---- lock -----------------------------------------------------------------
+
+#[test]
+fn a_desk_that_states_no_passphrase_cannot_lock() {
+    // SAYING NOTHING MEANS THE DESK NEVER LOCKS, and here that is not merely
+    // the conservative default -- it is the only safe reading. A desk that
+    // locked with no passphrase to open it is a desk nobody can get back into,
+    // and the only way out would be another tty.
+    assert_eq!(Config::parse("").unwrap().lock.passphrase(), None);
+}
+
+#[test]
+fn a_desk_that_states_a_passphrase_can_lock() {
+    let lock = Config::parse(
+        r#"
+[lock]
+passphrase = "open sesame"
+"#,
+    )
+    .unwrap()
+    .lock;
+    assert_eq!(lock.passphrase(), Some("open sesame"));
+}
+
+#[test]
+fn rejects_a_passphrase_of_nothing_at_all() {
+    // The empty string is the ambiguous one, exactly as a zero timeout is:
+    // "lock, and let anybody in by pressing Enter" and "never lock" are both
+    // readings of it, and the second already has a spelling -- leave the key
+    // out. So it is refused by name rather than guessed at.
+    let err = Config::parse(
+        r#"
+[lock]
+passphrase = ""
+"#,
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("an empty passphrase is refused rather than taken: {err:?}");
+    };
+    assert!(
+        message.contains("lock.passphrase"),
+        "the message should name the key: {message}"
+    );
+}
+
+#[test]
+fn a_passphrase_is_not_in_what_a_log_line_would_print() {
+    // THE CONFIG IS THE OTHER PLACE THIS SECRET LIVES, and it is a `Debug`
+    // struct inside a `Debug` struct inside the compositor's `Restatement`.
+    // Nothing prints one today; the redaction is here so that the line which
+    // eventually does cannot be the one that leaks the desk's passphrase. The
+    // wire half is `domicile_protocol::Passphrase`, for the same reason.
+    let secret = "correct horse battery staple";
+    let config = Config::parse(&format!(
+        r#"
+[lock]
+passphrase = "{secret}"
+"#
+    ))
+    .unwrap();
+
+    assert!(!format!("{:?}", config.lock).contains(secret));
+    assert!(
+        !format!("{config:?}").contains(secret),
+        "the whole config is what a reload would print"
+    );
+    // And the value survives, or this would be a lost passphrase rather than a
+    // hidden one.
+    assert_eq!(config.lock.passphrase(), Some(secret));
 }
 
 // ---- theme ----------------------------------------------------------------
