@@ -626,11 +626,11 @@ pub struct DisplayInfo {
 /// `wl_output.transform` values the compositor advertises to clients, spelled
 /// the way the config file writes them.
 ///
-/// **NAMED FOR THE TURN THE CONTENT TAKES, NOT THE ONE THE PANEL DID.** That
-/// is the `wl_output` convention and `domicile-config`'s: `transform_90` is an
-/// output rotated a quarter turn counterclockwise, so what is drawn on it has to
-/// go a quarter turn *clockwise* to come out upright, and that clockwise turn
-/// is what this names. A page applies it as written.
+/// **NAMED FOR THE `wl_output` VALUE, WHICH COUNTS COUNTERCLOCKWISE.**
+/// `transform_90` is content turned a quarter turn *counterclockwise* to come
+/// out upright — the one for a panel bolted a quarter turn clockwise — and
+/// `rotate-270` is the clockwise quarter a panel on its left side needs. The
+/// same numbers kanshi and sway write. A page applies the turn this names.
 ///
 /// The spelling is not `rename_all`: serde's kebab-case reads `Rotate270` as
 /// one word and writes `rotate270`, which is neither what the config file says
@@ -641,13 +641,13 @@ pub enum DisplayTransform {
     #[default]
     #[serde(rename = "normal")]
     Normal,
-    /// A quarter turn clockwise.
+    /// Content turned a quarter counterclockwise.
     #[serde(rename = "rotate-90")]
     Rotate90,
     #[serde(rename = "rotate-180")]
     Rotate180,
-    /// A quarter turn counterclockwise, which is how a monitor on a desk usually
-    /// ends up standing on its side.
+    /// Content turned a quarter clockwise, for a panel standing on its left side,
+    /// which is how a monitor on a desk usually ends up.
     #[serde(rename = "rotate-270")]
     Rotate270,
 }

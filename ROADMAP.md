@@ -223,7 +223,6 @@ these is one run, and each has a line to look for.
   watch loop, the coalescing and a refusal — so what is left is a real engine
   taking a rebuilt shell: a saved edit on the screen, the windows where they
   were, and a shell that would not load leaving the desk on the one it had.
-- **Which way round the two quarter turns are** — see the gaps below.
 - Anything about orientation or presentation, and re-measuring latency or CSS
   parity after a change that could move either.
 
@@ -254,11 +253,6 @@ costs nothing.
   profile's mode is a size, because a hertz changes no arithmetic on this side
   and could not be chosen either.
   [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **Only a desk can say which way the quarter turns go.** `rotate-90` names the
-  turn the *content* takes, which is `wl_output`'s convention, and every list
-  from `domicile-config` to `turn()` in `cover-the-window.ts` applies it as
-  written — so the reading agrees with itself all the way down. Swapping two arms
-  of one `switch` is the whole fix if it is wrong.
 - **A client that pre-rotates its own buffer is still wrong.** `wl_output.transform`
   invites it and nothing reads `wl_surface.set_buffer_transform`; the fix is in
   the dmabuf submit path.
