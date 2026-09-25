@@ -119,11 +119,16 @@ The evidence for each of those is in the doc that made the claim —
    length of a switch. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md),
    step 2.
 
-4. **Measure a `backdrop-filter` over an `<app>`.** Expected to work: viz applies
-   a backdrop filter on the render pass aggregation has already inlined the
-   window's quads into, and declines overlay promotion under one. Nobody has run
-   it, and it belongs in `guard-css-and-resize.sh` beside the seven properties
-   already there.
+4. **A `backdrop-filter` over an `<app>`, half measured.**
+   `guard-css-and-resize.sh` runs its eight cells a second time with a filter
+   stacked over them, so every property is now read under one as well as on its
+   own: viz applies the filter on the render pass aggregation has already
+   inlined the window's quads into, and a filter with none of those quads to
+   read leaves an `<app>` looking like nothing a `<div>` looks like. What that
+   run cannot reach is the other half of the argument — that viz declines
+   overlay promotion under a filter. It is headless and software-composited, so
+   no quad was ever a candidate for a hardware plane, and the decline wants the
+   same lit CRTC item 2 does.
    [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
 
 5. **Strip what a desktop never runs.** The tab strip, the New Tab page,

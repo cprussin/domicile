@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Which end step 4 blames, and which half it blames it on.
+# Which end step 4 blames, and which of its runs it blames it on.
 #
-# The unit is `half_verdict` and the summary block in `guard-css-and-resize.sh` — what
-# turns two exit statuses and two logs into the one line the workflow prints.
+# The unit is `run_verdict` and the summary block in `guard-css-and-resize.sh` — what
+# turns three exit statuses and three logs into the one line the workflow prints.
 #
 # It exists because three versions of that sentence lived in the workflow step
-# instead, greping over both halves at once, and every one of them named the
+# instead, greping over every run at once, and every one of them named the
 # wrong end: a resize that disagreed about its own boxes reported as "never got
-# as far as a verdict"; a seam failure in the resize half reported as "the
-# instrument, not the seam" because the CSS half's probe had also stalled; and
+# as far as a verdict"; a seam failure in the resize run reported as "the
+# instrument, not the seam" because the CSS run's probe had also stalled; and
 # `grep -v … | grep -q …` losing to SIGPIPE under `pipefail` on a long log and
 # sending a real cell failure to the catch-all. None of them was ever run.
 #
@@ -19,9 +19,10 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STEP4="$ROOT/packages/domicile-engine/scripts/guard-css-and-resize.sh"
+PARITY_PAGE="$ROOT/packages/domicile-engine/scripts/spike-css-page.html"
 
-# From `half_verdict() {` to the `}` in column 0 that closes it.
-VERDICT="$(awk '/^half_verdict\(\) \{/,/^\}$/' "$STEP4")"
+# From `run_verdict() {` to the `}` in column 0 that closes it.
+VERDICT="$(awk '/^run_verdict\(\) \{/,/^\}$/' "$STEP4")"
 # From the `if` that reads FAILED to the `fi` that closes it.
 SUMMARY="$(awk '/^if \[ \$FAILED -eq 0 \]; then$/,/^fi$/' "$STEP4")"
 for piece in VERDICT SUMMARY; do
@@ -69,38 +70,44 @@ LATENCY_NEVER='latency: FF00C853 never appeared after 200 draws'
 RESIZE_BOXES='expected 180x130, the page and this disagree about its own boxes'
 RESIZE_PRODUCER='the producer is rendering at 120x90, not 180x130'
 NOT_RECONFIGURED='the page never reconfigured'
+# The one line in a run's log that the producer did not write. The
+# backdrop-filter run fails on the page's own silence as well as on the
+# producer's status — a page that ignored `?backdrop-filter=` measures the
+# plain table and passes it — and the guard appends this to that run's log so
+# the verdict below quotes it rather than inventing a sentence for it.
+NEVER_FILTERED='the page never said it applied invert(1), so nothing above was filtered'
 
 log() { local f; f="$(mktemp "$FIXTURES/XXXXXX")"; printf '%s\n' "$@" >"$f"; echo "$f"; }
 
-# --- half_verdict, one half at a time ------------------------------------
+# --- run_verdict, one run at a time ---------------------------------------
 
 expect "a cell marked FAIL is a cell marked FAIL" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_FAIL" "$LATENCY_OK")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_FAIL" "$LATENCY_OK")")"
 
 # The verdict column's last field, with nothing after it. A pattern anchored on
 # a trailing space would miss this and blame the wrong end.
 expect "a bare FAIL at the end of a row counts" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL_BARE")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL_BARE")")"
 
 expect "FAIL with a reason in brackets counts" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_NOT_IN_EFFECT")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_NOT_IN_EFFECT")")"
 
-expect "the resize half's bare FAIL counts" \
+expect "the resize run's bare FAIL counts" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$RESIZE_FAIL")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$RESIZE_FAIL")")"
 
 expect "the iframe check's FAIL wording counts" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$IFRAME_FAIL")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$IFRAME_FAIL")")"
 
 # THE CASE THE `[^E]` IS FOR. This function feeds a line that says FAILED, and
 # a run of it against its own output must not answer its own question.
 expect "the word FAILED is not a cell" \
   "neither a cell nor the probe; its own last words are above" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "step 4 failed: something" "FAILED")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "step 4 failed: something" "FAILED")")"
 
 # THE CASE THAT PINS THE ORDER, and the one no fixture had: both a failed cell
 # and a failed probe, which is the realistic log rather than a contrived one.
@@ -110,51 +117,62 @@ expect "the word FAILED is not a cell" \
 # property that really did behave differently.
 expect "a failed cell outranks a failed probe" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_DEAD")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_DEAD")")"
 
 # And the other end of the same pair.
 expect "a failed cell outranks a color that never arrived" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_NEVER")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_FAIL" "$LATENCY_NEVER")")"
 
-# THE CASE THAT PINS THE ANCHOR. A half that fails for its own reason and still
+# THE CASE THAT PINS THE ANCHOR. A run that fails for its own reason and still
 # completes its latency phase carries `latency over 60 samples…`, which is not
 # a failure at all. A grep for `latency` rather than `^latency: ` reads this as
 # a stalled probe and blames the instrument for a page that did not fit.
 expect "a completed latency block is not a failed probe" \
   "neither a cell nor the probe; its own last words are above" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "off the window: the page does not fit" "$LATENCY_OK")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "off the window: the page does not fit" "$LATENCY_OK")")"
 
 # THE TWO `latency:` LINES ARE OPPOSITE ENDS. One grep for the prefix called
 # both the instrument; `never appeared` is the producer's pixels not arriving,
 # which is the seam and the worst thing this script can find.
 expect "a color that never arrived is the seam, not the instrument" \
   "every cell passed and then a color the producer submitted never reached the screen, which is the seam" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_NEVER")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_NEVER")")"
 
 expect "a clean table and a dead probe is the instrument" \
   "every cell passed and the probe then stopped answering, which is the instrument rather than the seam" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_EDGES" "$LATENCY_DEAD")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_EDGES" "$LATENCY_DEAD")")"
 
 # `pass (edges only)` is what `transform` gets under software rasterization on
 # every run. A pattern matching it as a failure would fail every green run.
 expect "edges-only is a pass, not a cell failure" \
   "neither a cell nor the probe; its own last words are above" \
-  "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_EDGES")")"
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$ROW_EDGES")")"
 
 for case in "$RESIZE_BOXES" "$RESIZE_PRODUCER" "$NOT_RECONFIGURED"; do
   expect "a producer refusal is not blamed on a cell or the probe" \
     "neither a cell nor the probe; its own last words are above" \
-    "$(half_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$case")")"
+    "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$case")")"
 done
 
-# --- the summary, both halves at once -------------------------------------
+# THE BACKDROP-FILTER RUN'S OWN REFUSAL, which is the one line in a log the
+# producer did not write. It has to reach the catch-all: it is neither a cell
+# nor the probe, and the sentence it prints is the one worth quoting. A wording
+# carrying the word FAIL would be classified as a cell and send the reader at
+# the table, which passed.
+expect "a run that was never filtered is not blamed on a cell or the probe" \
+  "neither a cell nor the probe; its own last words are above" \
+  "$(run_verdict "$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_OK" "$NEVER_FILTERED")")"
 
-summary() { # $1 CSS status, $2 CSS log, $3 resize status, $4 resize log
+# --- the summary, all three runs at once -----------------------------------
+
+summary() { # $1 CSS status, $2 CSS log, $3 backdrop status, $4 backdrop log,
+            # $5 resize status, $6 resize log
   (
     FAILED=1
     CSS="$1"; CSS_LOG="$2"
-    RESIZE="$3"; RESIZE_LOG="$4"
+    BACKDROP="$3"; BACKDROP_LOG="$4"
+    RESIZE="$5"; RESIZE_LOG="$6"
     eval "$SUMMARY" 2>&1 >/dev/null
   )
 }
@@ -163,27 +181,35 @@ CLEAN="$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_OK")"
 CELL="$(log "$TABLE_HEAD" "$ROW_FAIL")"
 PROBE="$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_DEAD")"
 BOXES="$(log "$TABLE_HEAD" "$ROW_PASS" "$RESIZE_PRODUCER")"
+UNFILTERED="$(log "$TABLE_HEAD" "$ROW_PASS" "$LATENCY_OK" "$NEVER_FILTERED")"
 
-expect "only the CSS half failing names only the CSS half" \
-  "step 4 failed: the CSS half, a cell is marked FAIL." \
-  "$(summary 1 "$CELL" 0 "$CLEAN")"
+expect "only the CSS run failing names only the CSS run" \
+  "step 4 failed: the CSS run, a cell is marked FAIL." \
+  "$(summary 1 "$CELL" 0 "$CLEAN" 0 "$CLEAN")"
 
-# THE DEFECT THIS WHOLE FILE IS FOR. The resize half failed at the seam and the
-# CSS half's probe stalled; the version that greped both at once announced the
+# THE DEFECT THIS WHOLE FILE IS FOR. The resize run failed at the seam and the
+# CSS run's probe stalled; the version that greped both at once announced the
 # instrument and sent the reader away from the failure.
-expect "a stalled probe in one half does not excuse the other" \
-  "step 4 failed: the CSS half, every cell passed and the probe then stopped answering, which is the instrument rather than the seam. the resize half, neither a cell nor the probe; its own last words are above." \
-  "$(summary 1 "$PROBE" 1 "$BOXES")"
+expect "a stalled probe in one run does not excuse another" \
+  "step 4 failed: the CSS run, every cell passed and the probe then stopped answering, which is the instrument rather than the seam. the resize run, neither a cell nor the probe; its own last words are above." \
+  "$(summary 1 "$PROBE" 0 "$CLEAN" 1 "$BOXES")"
 
 # And the other direction: a producer that disagrees about its own boxes is the
-# resize half's, and it used to be reported as a run that reached no verdict.
-expect "only the resize half failing names only the resize half" \
-  "step 4 failed: the resize half, neither a cell nor the probe; its own last words are above." \
-  "$(summary 0 "$CLEAN" 1 "$BOXES")"
+# resize run's, and it used to be reported as a run that reached no verdict.
+expect "only the resize run failing names only the resize run" \
+  "step 4 failed: the resize run, neither a cell nor the probe; its own last words are above." \
+  "$(summary 0 "$CLEAN" 0 "$CLEAN" 1 "$BOXES")"
 
-expect "both halves failing names both" \
-  "step 4 failed: the CSS half, a cell is marked FAIL. the resize half, a cell is marked FAIL." \
-  "$(summary 1 "$CELL" 1 "$CELL")"
+# The run whose table passed and whose page was never asked anything. Nothing
+# in it is a cell failure, so the only thing that names it is the sentence the
+# guard appended to it.
+expect "only the backdrop-filter run failing names only the backdrop-filter run" \
+  "step 4 failed: the backdrop-filter run, neither a cell nor the probe; its own last words are above." \
+  "$(summary 0 "$CLEAN" 1 "$UNFILTERED" 0 "$CLEAN")"
+
+expect "all three runs failing names all three" \
+  "step 4 failed: the CSS run, a cell is marked FAIL. the backdrop-filter run, a cell is marked FAIL. the resize run, a cell is marked FAIL." \
+  "$(summary 1 "$CELL" 1 "$CELL" 1 "$CELL")"
 
 # A long log is the SIGPIPE case that took a real cell failure to the catch-all
 # when this was a pipeline. 200 KB is past where it was measured to start.
@@ -193,39 +219,70 @@ BIG="$(mktemp "$FIXTURES/XXXXXX")"
 } >"$BIG"
 expect "a cell failure is still found under 200 KB of chatter" \
   "a cell is marked FAIL" \
-  "$(half_verdict "$BIG")"
+  "$(run_verdict "$BIG")"
 
 # THE PIPELINE'S STATUS IS THE PRODUCER'S, NOT `tee`'S, and nothing above says
-# so. Each half runs as `spike.sh … | tee "$LOG"`, and `$?` after a pipeline is
+# so. Each run is `spike.sh … | tee "$LOG"`, and `$?` after a pipeline is
 # the *last* command's — `tee`, which succeeds whenever it can write. So
-# `CSS=$?` instead of `CSS=${PIPESTATUS[0]}` leaves `FAILED` at 0 for a half
+# `CSS=$?` instead of `CSS=${PIPESTATUS[0]}` leaves `FAILED` at 0 for a run
 # that failed, and step 4 exits GREEN having measured a failure. Every case
-# above passes with that mutation in place: they drive `half_verdict` and the
+# above passes with that mutation in place: they drive `run_verdict` and the
 # summary directly and never run a pipeline.
 #
-# Read out of the file rather than run, because running a half means running
-# Chromium. What it establishes is that the status each half is judged by is
+# Read out of the file rather than run, because running one means running
+# Chromium. What it establishes is that the status each run is judged by is
 # taken from the pipeline's first element.
-for half in CSS RESIZE; do
-  expect "the $half half's status comes from the producer, not tee" "yes" \
-    "$(grep -qF "$half=\${PIPESTATUS[0]}" "$STEP4" &&
+for run in CSS BACKDROP RESIZE; do
+  expect "the $run run's status comes from the producer, not tee" "yes" \
+    "$(grep -qF "$run=\${PIPESTATUS[0]}" "$STEP4" &&
          echo yes || echo no)"
 done
 
-expect "the two halves are not judged by one status" "yes" \
-  "$(test "$(grep -cF 'PIPESTATUS[0]}' "$STEP4")" = 2 &&
+expect "the three runs are not judged by one status" "yes" \
+  "$(test "$(grep -cF 'PIPESTATUS[0]}' "$STEP4")" = 3 &&
        echo yes || echo no)"
 
-# Each half's log is its own, which is the other half of "a verdict about a
-# half": pointed at one file, the resize run truncates the CSS run's and the
-# failing half is diagnosed from the one that passed.
-expect "the resize half writes its own engine log" "yes" \
+# Each run's log is its own, which is the other half of "a verdict about a
+# run": pointed at one file, the resize run truncates the CSS run's and the
+# failing one is diagnosed from the one that passed.
+expect "the resize run writes its own engine log" "yes" \
   "$(grep -qF 'ENGINE_LOG=/tmp/domicile-spike-resize-engine.log' \
        "$STEP4" && echo yes || echo no)"
 
-expect "the two halves keep separate logs" "yes" \
+expect "the backdrop-filter run writes its own engine log" "yes" \
+  "$(grep -qF 'BACKDROP_ENGINE_LOG=/tmp/domicile-spike-backdrop-engine.log' \
+       "$STEP4" &&
+     grep -qF 'ENGINE_LOG="$BACKDROP_ENGINE_LOG"' "$STEP4" &&
+       echo yes || echo no)"
+
+expect "the three runs keep separate logs" "yes" \
   "$(grep -qF 'tee "$CSS_LOG"' "$STEP4" &&
+     grep -qF 'tee "$BACKDROP_LOG"' "$STEP4" &&
      grep -qF 'tee "$RESIZE_LOG"' "$STEP4" && echo yes || echo no)"
+
+# --- the backdrop-filter run and the page it asks ---------------------------
+#
+# THE ONE RUN THAT CAN PASS HAVING MEASURED THE OTHER TWO'S PAGE. The filter is
+# a query parameter on the same page the CSS run uses, so a parameter the page
+# does not read is not a failure anywhere: the page lays out the plain table,
+# every cell passes, and the run reports parity for a filter nothing applied.
+# The guard closes that by making the page say what it did and greping its
+# engine log for it — and these two are the agreement that grep depends on,
+# which is the one part of it no run can check, since a run with the two out of
+# step is exactly the run that reports nothing wrong.
+[ -f "$PARITY_PAGE" ] || {
+  echo "no page at $PARITY_PAGE — the parity measurement moved. Fix this test with it." >&2
+  exit 1
+}
+
+expect "the backdrop-filter run asks the page for the filter it names" "yes" \
+  "$(grep -qF 'backdrop-filter=$BACKDROP_FILTER' "$STEP4" &&
+     grep -qF "'backdrop-filter'" "$PARITY_PAGE" && echo yes || echo no)"
+
+expect "the page announces the filter in the words the run greps for" "yes" \
+  "$(grep -qF 'domicile: backdrop-filter ' "$STEP4" &&
+     grep -qF 'domicile: backdrop-filter ' "$PARITY_PAGE" &&
+       echo yes || echo no)"
 
 if [ "$FAILED_COUNT" -gt 0 ]; then
   echo "$FAILED_COUNT failed"
