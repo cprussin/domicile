@@ -9,12 +9,13 @@ import { Workspaces } from "./Workspaces";
  * tenth is in the list because two digits are the case a circle drawn around
  * its contents stops being a circle for.
  */
-const switcher = () => {
+const switcher = (focused = true) => {
   render(
     <Workspaces
       current="2"
-      occupied={["1", "2", "3", "10"]}
+      focused={focused}
       onSelect={() => undefined}
+      workspaces={["1", "2", "3", "10"]}
     />,
   );
   return (name: string) => screen.getByRole("button", { name });
@@ -28,6 +29,21 @@ describe("Workspaces", () => {
       css({ backgroundColor: "white" }),
     );
     expect(workspace("2").className).toContain(css({ color: "black" }));
+  });
+
+  it("rings the one on screen, unfilled, on a screen the keyboard is not on", () => {
+    // One workspace has the keyboard, and it is on one screen: sway's
+    // `focused_workspace` against its `active_workspace`.
+    const workspace = switcher(false);
+
+    expect(workspace("2").className).not.toContain(
+      css({ backgroundColor: "white" }),
+    );
+    expect(workspace("2").className).toContain(
+      css({
+        borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
+      }),
+    );
   });
 
   it("leaves the rest of them clear, in the white the bar is written in", () => {

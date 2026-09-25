@@ -4,8 +4,8 @@
 // cannot span two CRTCs — the engine opens one per display and each loads this
 // same shell. The workspaces span the desk, though: `workspace 2` goes to
 // whichever monitor is showing it, a window opens on the screen the keyboard
-// is on, and the bar on every monitor shows which workspaces have something on
-// them. None of that is answerable a screen at a time.
+// is on, and a hidden workspace stays with the monitor it was last on. None of
+// that is answerable a screen at a time.
 //
 // So one page reduces the desktop and the others show it. Which one is not
 // negotiated — `leadsTheDesk` in `useWindows` reads it off the desk every page

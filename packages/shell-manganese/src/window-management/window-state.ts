@@ -44,6 +44,7 @@ import {
   splitFlipped,
   windowGrown,
   windowMoved,
+  windowsOn,
 } from "./workspace";
 
 /**
@@ -121,6 +122,17 @@ export type WindowState = {
    */
   focused: string;
   /**
+   * The screen each workspace belongs to, which is the one whose bar lists it.
+   *
+   * sway's outputs: a workspace is on one screen, whether or not that screen
+   * is showing it, and asking for it shows it there rather than here. A
+   * workspace on screen belongs to the screen showing it; a hidden one to the
+   * screen it was last on, or to the screen the keyboard is on once that one
+   * is gone. An empty one nobody is showing belongs nowhere — sway destroys
+   * it — so the next time it is asked for it comes to the keyboard.
+   */
+  homes: Readonly<Partial<Record<string, string>>>;
+  /**
    * The floating window the user has hold of, or `undefined` when none is.
    *
    * Here rather than in the component that reads the pointer because it is
@@ -177,6 +189,7 @@ export const NO_WINDOWS: WindowState = {
   draggingId: undefined,
   focused: UNDESCRIBED_SCREEN,
   focusedId: undefined,
+  homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: BindingMode.Default,
   previous: undefined,
@@ -219,6 +232,13 @@ export const screenShowing = (
   workspace: string,
 ): string | undefined =>
   state.screens.find(({ current }) => current === workspace)?.name;
+
+/** The workspaces `screen`'s bar lists, in order. */
+export const workspacesOn = (
+  state: WindowState,
+  screen: string,
+): readonly string[] =>
+  WORKSPACES.filter((name) => state.homes[name] === screen);
 
 /** The workspace of this name. Throws for a name the desktop does not have. */
 export const workspaceNamed = (state: WindowState, name: string): Workspace => {
@@ -628,6 +648,11 @@ export type WindowAction = ReturnType<
 export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
+): WindowState => rehomed(reduceAction(state, action));
+
+const reduceAction = (
+  state: WindowState,
+  action: WindowAction,
 ): WindowState => {
   switch (action.kind) {
     case WindowActionKind.AppAppeared: {
@@ -954,10 +979,12 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
  * screen showing it, which is sway's answer and the only one that keeps a
  * workspace in one place: taking it here would leave the monitor it came from
  * showing nothing and put two screens on one workspace. Work nobody is
- * showing comes to the screen the keyboard is on.
+ * showing goes back on its own screen — see {@link WindowState.homes} — and
+ * the keyboard with it; a workspace with no screen comes to the keyboard's.
  */
 const showWorkspace = (state: WindowState, name: string): WindowState => {
   const shown = screenShowing(state, name);
+  const home = state.homes[name] ?? state.focused;
   if (shown === state.focused) {
     // Already in view with the keyboard in it, which is every reach into the
     // window the user is already working in. The state it was given, object
@@ -967,9 +994,10 @@ const showWorkspace = (state: WindowState, name: string): WindowState => {
   } else if (shown === undefined) {
     return {
       ...state,
+      focused: home,
       previous: currentHere(state),
       screens: state.screens.map((screen) =>
-        screen.name === state.focused ? { ...screen, current: name } : screen,
+        screen.name === home ? { ...screen, current: name } : screen,
       ),
     };
   } else {
@@ -1188,5 +1216,43 @@ const showScratchpad = (state: WindowState): WindowState => {
       { ...state, scratchpad: state.scratchpad.slice(0, -1) },
       (found) => shown(found, hidden),
     );
+  }
+};
+
+/**
+ * The state with {@link WindowState.homes} brought up to date with what the
+ * reduction did to the screens and the workspaces — the same object when
+ * nothing moved, which the reductions that hand back their own state rely on.
+ */
+const rehomed = (state: WindowState): WindowState => {
+  const homes = Object.fromEntries(
+    state.workspaces.flatMap((workspace) => {
+      const home = homeOf(state, workspace);
+      return home === undefined ? [] : [[workspace.name, home]];
+    }),
+  );
+  return WORKSPACES.every((name) => homes[name] === state.homes[name])
+    ? state
+    : { ...state, homes };
+};
+
+/** The screen `workspace` belongs to now, or `undefined` for none. */
+const homeOf = (
+  state: WindowState,
+  workspace: Workspace,
+): string | undefined => {
+  const shown = screenShowing(state, workspace.name);
+  const before = state.homes[workspace.name];
+  if (shown !== undefined) {
+    return shown;
+  } else if (windowsOn(workspace).length === 0) {
+    return undefined;
+  } else if (
+    before !== undefined &&
+    state.screens.some(({ name }) => name === before)
+  ) {
+    return before;
+  } else {
+    return state.focused;
   }
 };

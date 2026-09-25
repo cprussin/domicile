@@ -1,19 +1,21 @@
 import { cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
-import { WORKSPACES } from "../window-management/window-state";
 
 type Props = {
-  /** The workspace on screen. */
+  /** The workspace this screen is showing. */
   current: string;
-  /** The workspaces with something on them. */
-  occupied: readonly string[];
+  /** Whether the keyboard is on this screen, which is what fills `current`. */
+  focused: boolean;
   onSelect: (name: string) => void;
+  /** The workspaces this screen has, in order. */
+  workspaces: readonly string[];
 };
 
 /**
  * The workspaces, at the left-hand end of the bar — sway's own bar, and the
- * same rule for which of them are on it: the ones with windows on them, and
- * the one being looked at whether or not it has any.
+ * same rule for which of them are on it: the ones on this screen with windows
+ * on them, and the one it is showing whether or not it has any. A workspace
+ * is on one screen, so it is on one bar.
  *
  * The desktop keeps all ten all the time, which is the one place that
  * difference from sway would show. It does not show: an empty workspace
@@ -21,12 +23,15 @@ type Props = {
  *
  * **A number in a ring**, which is the shape the author's waybar draws: a
  * circle the height of the bar's own text, clear until the pointer is over it
- * and filled for the one on screen. The circle is what makes the row legible
- * over a photograph at a glance — the marked one is a shape rather than a
- * shade of the same white as its neighbors — and it is the same circle for
- * all ten of them, which is what the type being set smaller than the bar's
- * buys: the tenth workspace is two digits, and a ring drawn around its
- * contents would be a lozenge.
+ * and filled for the one on screen — on the screen the keyboard is on. The
+ * one on any other screen is ringed rather than filled, which is sway's
+ * `focused_workspace` against its `active_workspace`: one workspace has the
+ * keyboard, so one chip on the whole desk is filled. The circle is what makes
+ * the row legible over a photograph at a glance — the marked one is a shape
+ * rather than a shade of the same white as its neighbors — and it is the same
+ * circle for all ten of them, which is what the type being set smaller than
+ * the bar's buys: the tenth workspace is two digits, and a ring drawn around
+ * its contents would be a lozenge.
  *
  * The control is a purpose-built `<button>` rather than the library's, for
  * the reason the tab-select control in the library's own `TabRail` is one:
@@ -35,18 +40,23 @@ type Props = {
  * The bar's white and the shadow under it are inherited rather than declared
  * — a plain button takes the color and the font of the row it is in.
  */
-export const Workspaces = ({ current, occupied, onSelect }: Props) => (
+export const Workspaces = ({
+  current,
+  focused,
+  onSelect,
+  workspaces,
+}: Props) => (
   <nav aria-label="Workspaces" className={listStyles}>
-    {WORKSPACES.filter(
-      (name) => name === current || occupied.includes(name),
-    ).map((name) => (
+    {workspaces.map((name) => (
       <button
         // The marked one is the one on screen, which is what `aria-current`
         // says on a navigation control — `disabled` would say it cannot be
         // reached, and pressing it is how `workspaceAutoBackAndForth` goes
         // back to the last one.
         aria-current={name === current ? "true" : undefined}
-        className={workspaceStyles({ current: name === current })}
+        className={workspaceStyles({
+          shown: shownAs(name === current, focused),
+        })}
         key={name}
         onClick={() => {
           onSelect(name);
@@ -115,19 +125,8 @@ const workspaceStyles = cva({
     `,
   },
   variants: {
-    current: {
-      false: {
-        _hover: {
-          // The ring the pointer draws, and a wash inside it. White rather
-          // than a token, for the reason the bar's text is white: what is
-          // behind this is the wallpaper, which does not flip with the theme.
-          backgroundColor:
-            "color-mix(in oklab, {colors.white} 15%, transparent)",
-          borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
-        },
-        backgroundColor: "transparent",
-      },
-      true: {
+    shown: {
+      focused: {
         backgroundColor: "white",
         // Dark on the chip, and black rather than `background` for the same
         // reason the fill is white rather than `foreground`: the chip is
@@ -140,6 +139,38 @@ const workspaceStyles = cva({
         // shadow on it only smudges the glyph.
         textShadow: "none",
       },
+      hidden: {
+        _hover: {
+          // The ring the pointer draws, and a wash inside it. White rather
+          // than a token, for the reason the bar's text is white: what is
+          // behind this is the wallpaper, which does not flip with the theme.
+          backgroundColor:
+            "color-mix(in oklab, {colors.white} 15%, transparent)",
+          borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
+        },
+        backgroundColor: "transparent",
+      },
+      // On screen, but not the screen the keyboard is on: the ring the
+      // pointer would draw, there without it, and nothing filled.
+      visible: {
+        _hover: {
+          backgroundColor:
+            "color-mix(in oklab, {colors.white} 15%, transparent)",
+        },
+        backgroundColor: "transparent",
+        borderColor: "color-mix(in oklab, {colors.white} 70%, transparent)",
+      },
     },
   },
 });
+
+const shownAs = (
+  current: boolean,
+  focused: boolean,
+): "focused" | "hidden" | "visible" => {
+  if (current) {
+    return focused ? "focused" : "visible";
+  } else {
+    return "hidden";
+  }
+};
