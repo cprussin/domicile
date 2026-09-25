@@ -130,9 +130,11 @@ void DomicileHost::focusApp(ScriptState*, const String& app_id,
   }
 }
 
-void DomicileHost::listFiles(ScriptState*, ExceptionState& exception_state) {
+void DomicileHost::searchFiles(ScriptState*,
+                               const String& query,
+                               ExceptionState& exception_state) {
   if (Ready(exception_state)) {
-    channel_->ListFiles();
+    channel_->SearchFiles(query);
   }
 }
 
@@ -386,18 +388,18 @@ void DomicileHost::Displays(
   DispatchEvent(*Event::Create(event_type_names::kDisplayschanged));
 }
 
-// The one message on this channel that answers a question AND is pushed. It is
-// an event either way, because the page reads every other one as an event and a
-// promise here would be a second delivery mechanism for a single message --
-// with its own answer to what happens when the reply beats the listener, which
-// `DomicileClient`'s hold already answers once for all ten. That shape is what
-// lets the compositor also send this unasked, when the index behind it
-// finishes building or the home changes under a watch.
-void DomicileHost::Files(const Vector<String>& files,
+// The one message on this channel that answers a question. It is an event
+// rather than a promise because the page reads every other one as an event --
+// and the query it carries is what lets `DomicileClient` settle the search
+// that asked it, which is where the promise a shell sees is made.
+void DomicileHost::Files(const String& query,
+                         const Vector<String>& files,
+                         uint32_t matched,
                          bool indexing,
                          base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
-      event_type_names::kFiles, files, indexing, Arrival(arrival)));
+      event_type_names::kFiles, query, files, matched, indexing,
+      Arrival(arrival)));
 }
 
 // Pushed, so there is no ask for this to be the answer to. The compositor

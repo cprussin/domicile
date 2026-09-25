@@ -48,12 +48,12 @@ class Host implements DomicileHost {
   readonly focusApp = ignored;
   readonly focusChrome = ignored;
   readonly grabShortcut = ignored;
-  readonly listFiles = ignored;
   readonly key = ignored;
   readonly pointerAxis = ignored;
   readonly pointerButton = ignored;
   readonly pointerLeave = ignored;
   readonly pointerMotion = ignored;
+  readonly searchFiles = ignored;
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly spawn = ignored;

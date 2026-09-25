@@ -21,17 +21,23 @@ DomicileFilesEvent::DomicileFilesEvent(
     const AtomicString& type,
     const DomicileFilesEventInit* initializer)
     : Event(type, initializer),
+      query_(initializer->query()),
       files_(MakeGarbageCollected<FrozenArray<IDLString>>(
           initializer->files())),
+      matched_(initializer->matched()),
       indexing_(initializer->indexing()),
       arrival_(initializer->arrival()) {}
 
 DomicileFilesEvent::DomicileFilesEvent(const AtomicString& type,
+                                       String query,
                                        Vector<String> files,
+                                       uint32_t matched,
                                        bool indexing,
                                        DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
+      query_(std::move(query)),
       files_(MakeGarbageCollected<FrozenArray<IDLString>>(std::move(files))),
+      matched_(matched),
       indexing_(indexing),
       arrival_(arrival) {}
 

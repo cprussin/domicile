@@ -12,6 +12,7 @@ mod running;
 
 use std::fs;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 
@@ -24,12 +25,12 @@ size = [1920, 1080]
 "#;
 
 #[test]
-fn a_launcher_is_offered_the_whole_home_at_every_depth() {
+fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     // THE POINT OF THE INDEX, END TO END. `Notes/2026/april/plan.org` is four
     // levels down; the walk this replaced stopped at two and only for two
     // hand-named directories, so a person who typed `plan` was told they had
     // no such file. Nothing here names a directory — what is read is the
-    // compositor's decision, and `list_files` carries no path.
+    // compositor's decision, and `search_files` carries no path.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), "todo.txt");
     write(home.path(), "Notes/2026/april/plan.org");
@@ -41,53 +42,51 @@ fn a_launcher_is_offered_the_whole_home_at_every_depth() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    chrome.say(&ChromeMessage::ListFiles).expect("it asks");
 
     assert_eq!(
-        offered_with(&mut chrome, "todo.txt"),
+        found_with(&mut chrome, "", "todo.txt"),
         vec![
-            "Notes".to_string(),
-            "Notes/2026".to_string(),
-            "Notes/2026/april".to_string(),
+            "Notes/".to_string(),
+            "Notes/2026/".to_string(),
+            "Notes/2026/april/".to_string(),
             "Notes/2026/april/plan.org".to_string(),
-            "src".to_string(),
-            "src/domicile".to_string(),
+            "src/".to_string(),
+            "src/domicile/".to_string(),
             "src/domicile/README.md".to_string(),
             "todo.txt".to_string(),
         ]
     );
+    // Only what matched crosses into the page: the index is the whole home,
+    // and on a real one that is tens of megabytes a page has no use for.
+    assert_eq!(
+        found_with(&mut chrome, "plan", "Notes/2026/april/plan.org"),
+        vec!["Notes/2026/april/plan.org".to_string()]
+    );
 }
 
 #[test]
-fn a_file_written_afterward_is_offered_without_anybody_asking() {
+fn a_file_written_afterward_is_found_by_the_next_search() {
     // THE SUBSCRIPTION, AND THE ONLY PLACE IT CAN BE SHOWN. A file created in
     // a terminal is not an event any other part of this desktop sees; what
     // makes the index stay true is a real inotify watch on a real home, which
     // is a kernel and two processes rather than anything a unit test holds.
-    //
-    // Nothing is asked for here after the first answer. The panel a person has
-    // open is the one this is for: they are typing at a list, and the file
-    // they just saved in another window appears in it.
     let home = tempfile::tempdir().expect("a home to lay out");
     write(home.path(), "Notes/today.org");
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
-    // Connected before the file is written, because a broadcast reaches the
-    // chromes that are connected for it and no others.
     let mut chrome = compositor.chrome();
-    chrome.say(&ChromeMessage::ListFiles).expect("it asks");
     assert_eq!(
-        offered_with(&mut chrome, "Notes/today.org"),
-        vec!["Notes".to_string(), "Notes/today.org".to_string()]
+        found_with(&mut chrome, "notes", "Notes/today.org"),
+        vec!["Notes/".to_string(), "Notes/today.org".to_string()]
     );
 
     write(home.path(), "Notes/2026/plan.org");
 
     assert_eq!(
-        offered_with(&mut chrome, "Notes/2026/plan.org"),
+        found_with(&mut chrome, "notes", "Notes/2026/plan.org"),
         vec![
-            "Notes".to_string(),
-            "Notes/2026".to_string(),
+            "Notes/".to_string(),
+            "Notes/2026/".to_string(),
             "Notes/2026/plan.org".to_string(),
             "Notes/today.org".to_string(),
         ]
@@ -105,38 +104,43 @@ fn what_the_walk_found_is_written_down_for_the_next_run() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    chrome.say(&ChromeMessage::ListFiles).expect("it asks");
     // The file is written when the walk ends, and a settled answer is how a
     // test knows it has.
-    offered_with(&mut chrome, "todo.txt");
+    found_with(&mut chrome, "", "todo.txt");
 
     let written = compositor.await_file(&compositor.cache_home().join("domicile/file-index"));
 
     assert_eq!(written, "domicile-file-index 1\ntodo.txt\n");
 }
 
-/// The next settled answer that has `path` in it, as its sorted list.
+/// What `query` finds once the walk is over and `path` is among it.
 ///
-/// Two conditions, and both are about a race rather than about the claim.
-/// `indexing` false waits for the walk to be over: a startup walk publishes
-/// what it has found so far, so the first `files` message is whatever a disk
-/// had got to. And `path` waits for *which* settled answer — the boot
-/// broadcast and the reply to `list_files` are two messages saying the same
-/// thing, so a test that took the next one after writing a file could be
-/// handed one of those instead and would be asserting against the home as it
-/// was a moment ago.
-fn offered_with(chrome: &mut domicile_test_chrome::Chrome, path: &str) -> Vec<String> {
-    let answer = chrome
-        .wait_for(|message| match message {
-            HostMessage::Files { files, indexing } => {
-                !indexing && files.iter().any(|offered| offered == path)
+/// Asked until it is, because both conditions are a race rather than the
+/// claim: a search during the startup walk answers from what a disk had got
+/// to, and one right after a write answers from before the watch saw it.
+fn found_with(chrome: &mut domicile_test_chrome::Chrome, query: &str, path: &str) -> Vec<String> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        chrome
+            .say(&ChromeMessage::SearchFiles {
+                query: query.to_string(),
+            })
+            .expect("it asks");
+        let answer = chrome
+            .wait_for(|message| {
+                matches!(message, HostMessage::FoundFiles { query: answered, .. } if answered == query)
+            })
+            .expect("the compositor answers the search");
+        match answer {
+            HostMessage::FoundFiles {
+                files, indexing, ..
+            } if !indexing && files.iter().any(|found| found == path) => return files,
+            HostMessage::FoundFiles { .. } => {
+                assert!(Instant::now() < deadline, "{query:?} never found {path}");
+                std::thread::sleep(Duration::from_millis(50));
             }
-            _ => false,
-        })
-        .expect("the compositor says what there is to open");
-    match answer {
-        HostMessage::Files { files, .. } => files,
-        other => panic!("that is not a file list: {other:?}"),
+            other => panic!("that is not a search's answer: {other:?}"),
+        }
     }
 }
 

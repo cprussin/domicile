@@ -4,7 +4,7 @@
 //
 // `$EDITOR` and `$HOME` exist in the process the compositor spawns and nowhere
 // this page can reach: a shell served over `domicile://` has an origin, not an
-// environment, and the host answers `list_files` in paths relative to a home
+// environment, and the host answers `search_files` in paths relative to a home
 // directory it never names. So the two are read where they are, by the one
 // thing in this path that can read them.
 //
