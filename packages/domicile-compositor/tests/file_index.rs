@@ -24,6 +24,12 @@ name = "left"
 size = [1920, 1080]
 "#;
 
+/// What the compositor says once its index thread has published an answer.
+///
+/// Waited for before the first search — see [`asked_until_settled`], which is
+/// where the reason is written down.
+const HAS_AN_ANSWER: &str = "the home directory is indexed";
+
 #[test]
 fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     // THE POINT OF THE INDEX, END TO END. `Notes/2026/april/plan.org` is four
@@ -44,6 +50,7 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     let mut chrome = compositor.chrome();
 
     settles_on(
+        &compositor,
         &mut chrome,
         "",
         &[
@@ -59,7 +66,12 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     );
     // Only what matched crosses into the page: the index is the whole home,
     // and on a real one that is tens of megabytes a page has no use for.
-    settles_on(&mut chrome, "plan", &["Notes/2026/april/plan.org"]);
+    settles_on(
+        &compositor,
+        &mut chrome,
+        "plan",
+        &["Notes/2026/april/plan.org"],
+    );
 }
 
 #[test]
@@ -74,7 +86,7 @@ fn a_preview_reads_what_the_index_holds_and_nothing_else() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    settles_on(&mut chrome, "", &["Notes/", "Notes/today.org"]);
+    settles_on(&compositor, &mut chrome, "", &["Notes/", "Notes/today.org"]);
 
     assert_eq!(
         previewed(&mut chrome, "Notes/today.org"),
@@ -99,9 +111,15 @@ fn a_file_written_afterward_is_found_by_the_next_search() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    settles_on(&mut chrome, "notes", &["Notes/", "Notes/today.org"]);
+    settles_on(
+        &compositor,
+        &mut chrome,
+        "notes",
+        &["Notes/", "Notes/today.org"],
+    );
 
     settles_on_once_written(
+        &compositor,
         &mut chrome,
         home.path(),
         "Notes/2026/plan.org",
@@ -128,7 +146,7 @@ fn what_the_walk_found_is_written_down_for_the_next_run() {
     let mut chrome = compositor.chrome();
     // The file is written when the walk ends, and a settled answer is how a
     // test knows it has.
-    settles_on(&mut chrome, "", &["todo.txt"]);
+    settles_on(&compositor, &mut chrome, "", &["todo.txt"]);
 
     let written = compositor.await_file(&compositor.cache_home().join("domicile/file-index"));
 
@@ -149,6 +167,7 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
     let compositor = Compositor::started_in_a_home(&omitting(r#""src/target""#), Some(home.path()));
     let mut chrome = compositor.chrome();
     settles_on(
+        &compositor,
         &mut chrome,
         "",
         &[".config/", ".config/domicile.toml", "src/", "src/main.rs"],
@@ -157,6 +176,7 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
     compositor.reconfigure(&omitting(r#""**/.*""#));
 
     settles_on(
+        &compositor,
         &mut chrome,
         "",
         &["src/", "src/main.rs", "src/target/", "src/target/debug.log"],
@@ -200,8 +220,13 @@ const BETWEEN_ASKS: Duration = Duration::from_millis(500);
 ///
 /// Which makes the assertion the wait: what a settled answer must be is stated
 /// once, and being told it in time is not a separate claim.
-fn settles_on(chrome: &mut domicile_test_chrome::Chrome, query: &str, expected: &[&str]) {
-    asked_until_settled(chrome, query, expected, || {});
+fn settles_on(
+    compositor: &Compositor,
+    chrome: &mut domicile_test_chrome::Chrome,
+    query: &str,
+    expected: &[&str],
+) {
+    asked_until_settled(compositor, chrome, query, expected, || {});
 }
 
 /// The same, for a `path` this writes into `home` itself.
@@ -218,13 +243,16 @@ fn settles_on(chrome: &mut domicile_test_chrome::Chrome, query: &str, expected: 
 /// it once was, a 400ms sleep in front of it failed this check every run while
 /// the write was made once, and passed it every run while it was made per turn.
 fn settles_on_once_written(
+    compositor: &Compositor,
     chrome: &mut domicile_test_chrome::Chrome,
     home: &Path,
     path: &str,
     query: &str,
     expected: &[&str],
 ) {
-    asked_until_settled(chrome, query, expected, || made_again(home, path));
+    asked_until_settled(compositor, chrome, query, expected, || {
+        made_again(home, path);
+    });
 }
 
 /// Ask `query` until a settled answer is `expected`, arranging `again` first.
@@ -233,12 +261,32 @@ fn settles_on_once_written(
 /// for a stimulus that can be *lost* rather than merely be late — see
 /// [`settles_on_once_written`]. It is nothing at all for a wait on something
 /// the compositor is already doing.
+///
+/// # Asking early is not the same as being answered late
+///
+/// The loop below is built to ask again, and every deadline in it assumes it
+/// will get the chance. One question takes that chance away: a `search_files`
+/// that lands before the index thread has published anything is answered with
+/// **nothing at all** — deliberately, so that an empty list is never said on a
+/// desktop that has no index to search; see the `SearchFiles` arm in the
+/// compositor. There is no reply to read, so `Chrome::wait_for` sits out its
+/// whole patience and the check dies inside the *first* turn of a loop whose
+/// own deadline was never so much as read.
+///
+/// That is not a slow compositor, and it does not want a longer deadline: it
+/// wants the question asked once there is somebody to answer it. So this waits
+/// for the compositor to say the walk published an answer, which it does after
+/// the first announcement and every one after. It costs nothing on a machine
+/// that was going to win the race anyway, and it is what a loaded one was
+/// losing: twenty seconds, and a report that the compositor had gone quiet.
 fn asked_until_settled(
+    compositor: &Compositor,
     chrome: &mut domicile_test_chrome::Chrome,
     query: &str,
     expected: &[&str],
     again: impl Fn(),
 ) {
+    compositor.wait_for_log(HAS_AN_ANSWER);
     let deadline = Instant::now() + SETTLES_WITHIN;
     loop {
         again();

@@ -223,21 +223,61 @@ built() { touch "$WORK/$1/shell.js"; }
 handed_over() { grep -c 'load-shell' "$WORK/$1/domicile.log"; }
 stop_watching() { kill "$RELOADER" 2>/dev/null; wait "$RELOADER" 2>/dev/null; }
 
+# NOTHING BELOW SLEEPS A FIXED TIME FOR THE RELOAD LOOP. Each of those sleeps
+# was a stopwatch against another process: a tenth-of-a-second tick, a `stat`
+# and a subshell per turn, and a budget of a second and a half for all of it.
+# Measured, that handover takes a third of a second on an idle runner and one
+# and a half on a loaded one — so the budget was spent and the count was read
+# early, which is the whole of "wanted: 3 / got: 2". A loop that is slow to
+# hand a build over is not a loop that fails to; the stopwatch was the only
+# thing failing.
+#
+# So the waits are for the thing itself, and they are a *bound* rather than a
+# verdict: running out says nothing and lets the expectation below report what
+# it found, because that message is the one worth reading and two failures for
+# one fault are worse than none.
+waited() { # $1 a shell test, re-run every tick until it holds
+  local ticks=0
+  until eval "$1"; do
+    ticks=$((ticks + 1))
+    [ "$ticks" -ge 200 ] && return 1
+    sleep 0.1
+  done
+}
+# And the one thing every case starts by waiting for. `dev-shell-reload.sh`
+# takes the stamp it compares against and *then* says this, so a build made
+# after this line is one it will see rather than one it has already counted as
+# the shell the desktop came up on.
+now_watching() { # $1 case
+  waited "grep -q 'reloading' \"\$WORK/$1/loop.log\""
+}
+
 # THE BUILD THE DESKTOP CAME UP ON IS NOT HANDED BACK TO IT. The launch starts
 # the desktop on the module that is already there, and a loop that reloaded
 # whatever it found would put the same shell on it a moment after it opened —
 # and would do it while the engine was still starting, which is a refusal
 # nobody caused.
 watching baseline 2 50
+now_watching baseline
+# ASSERTED RATHER THAN ASSUMED, and this is the one case that has to say so.
+# Everywhere else a `waited` that ran out is reported by the expectation after
+# it, which finds nothing and says what it wanted. Here the expectation is
+# that nothing happened, so a loop that never started would satisfy it — the
+# check would pass by having asked the question of nobody, which is worse than
+# failing.
+expect "the loop is watching before it is asked what it did" "yes" \
+  "$(grep -q 'reloading' "$WORK/baseline/loop.log" && echo yes || echo no)"
+# And then the only bounded wait left in this file, because what follows it
+# cannot be waited for: an absence has no arrival to wait on.
 sleep 1
 stop_watching
 expect "the shell the desktop started on is not handed to it again" "0" \
   "$(handed_over baseline)"
 
 watching rebuilt 2 50
-sleep 0.5
+now_watching rebuilt
 built rebuilt
-sleep 1.5
+waited '[ "$(handed_over rebuilt)" -ge 1 ]'
 expect "a rebuilt shell is handed to the desktop at the socket it printed" \
   "load-shell $WORK/rebuilt/shell.js sock=$SOCKET" \
   "$(head -1 "$WORK/rebuilt/domicile.log")"
@@ -246,15 +286,16 @@ expect "a rebuilt shell is handed to the desktop at the socket it printed" \
 # one: it is what a syntax error saved halfway through an edit looks like. The
 # engine's own sentence is what says which, and a dev loop that died on the
 # first one would be worse than one that never reloaded.
-echo "the shell would not load: Unexpected token '}'" >"$WORK/rebuilt/answer"
+REFUSAL="Unexpected token '}'"
+echo "the shell would not load: $REFUSAL" >"$WORK/rebuilt/answer"
 built rebuilt
-sleep 1.5
+waited 'grep -qF "$REFUSAL" "$WORK/rebuilt/loop.log"'
 expect "a refused reload says why, in the engine's own words" "yes" \
-  "$(grep -qF "Unexpected token '}'" "$WORK/rebuilt/loop.log" && echo yes || echo no)"
+  "$(grep -qF "$REFUSAL" "$WORK/rebuilt/loop.log" && echo yes || echo no)"
 
 echo loaded >"$WORK/rebuilt/answer"
 built rebuilt
-sleep 1.5
+waited '[ "$(handed_over rebuilt)" -ge 3 ]'
 stop_watching
 expect "and the next build is still handed over" "3" "$(handed_over rebuilt)"
 
@@ -265,12 +306,18 @@ expect "and the next build is still handed over" "3" "$(handed_over rebuilt)"
 # bash, and the quiet window here is long enough that the burst below cannot
 # settle inside it.
 watching burst 15 300
-sleep 0.5
+now_watching burst
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   built burst
   sleep 0.1
 done
-sleep 3
+# The reload is waited for; the *second* one is what this is asserting does
+# not come, so that half is a settle window and a margin rather than a wait.
+# The old `sleep 3` was both at once, and the arrival is the half that broke —
+# on a loaded runner it read naught reloads and reported the coalescing as
+# having eaten the build.
+waited '[ "$(handed_over burst)" -ge 1 ]'
+sleep 2
 stop_watching
 expect "a burst of writes is one reload rather than ten" "1" "$(handed_over burst)"
 
@@ -278,12 +325,12 @@ expect "a burst of writes is one reload rather than ten" "1" "$(handed_over burs
 # bundle whose writes never leave a gap would otherwise never be handed over at
 # all — not handed over late, not handed over.
 watching relentless 50 6
-sleep 0.4
+now_watching relentless
 for _ in $(seq 1 30); do
   built relentless
   sleep 0.05
 done
-sleep 0.5
+waited '[ "$(handed_over relentless)" -ge 1 ]'
 stop_watching
 expect "a bundle that never goes quiet is handed over anyway" "yes" \
   "$([ "$(handed_over relentless)" -gt 0 ] && echo yes || echo no)"
