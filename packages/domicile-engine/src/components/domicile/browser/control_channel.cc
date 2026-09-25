@@ -35,10 +35,12 @@ ControlChannel::ControlChannel(
     mojo::PendingReceiver<mojom::ControlChannel> receiver,
     KeymapSink keymap_sink,
     PointerWarpSink warp_sink,
+    ThemeSink theme_sink,
     const std::string& screen)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
+      theme_sink_(std::move(theme_sink)),
       screen_(screen),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
@@ -765,6 +767,9 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!theme) {
       return;
     }
+    // The engine's own color scheme as well as the page's: the page repaints
+    // the panels, and this is what a site's `prefers-color-scheme` reads.
+    theme_sink_.Run(*theme);
     client_->ThemeChanged(*theme, arrival);
     return;
   }
@@ -829,6 +834,7 @@ void ControlChannel::DispatchLine(const std::string& line,
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
+                        ThemeSink theme_sink,
                         const std::string& screen) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -845,7 +851,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
-                     std::move(warp_sink), screen);
+                     std::move(warp_sink), std::move(theme_sink), screen);
 }
 
 }  // namespace domicile
