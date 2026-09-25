@@ -265,6 +265,13 @@ interface ControlChannel {
   // a toggle clicked on one of them is the whole desktop changing.
   SetTheme(Theme theme);
 
+  // This page's old frame is held for `theme`: the desk's windows may turn.
+  //
+  // Called from inside the shell's wipe, once the frame it wipes away from is
+  // captured. The compositor waits for every chrome, tells the windows, and
+  // answers with ControlChannelClient::WindowsThemeChanged.
+  ThemeCaptured(Theme theme);
+
   // A key combination the compositor should route to the page rather than to
   // whichever client has focus.
   GrabShortcut(Shortcut shortcut);
@@ -465,6 +472,14 @@ interface ControlChannelClient {
   // compositor's, so refusing to deliver what is typed is its decision rather
   // than the page's.
   Idle(bool idle, mojo_base.mojom.TimeTicks arrival);
+
+  // Which way round the desk's windows are drawn now: ThemeChanged's other
+  // half. It arrives once every chrome has called ThemeCaptured -- or the
+  // compositor stopped waiting -- and the windows have had their chance to
+  // repaint, and again when a chrome connects. The browser has already drawn
+  // its own pages this way by the time it arrives; a shell holding its wipe
+  // lets go on it.
+  WindowsThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
