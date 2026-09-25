@@ -24,6 +24,23 @@
   not measured anything, so its control is a color the producer never submits
   and the run fails if the diff does not notice.
 
+  TWO RUNS COME THROUGH HERE, and `?backdrop-filter=` is which. Without it this
+  is the table above. With it, a filtering element is stacked over every
+  property cell — translucent chrome over a window, which is the case
+  WINDOW-COMPOSITING.md leaves open: the filter reads the render pass
+  aggregation has already drawn the window's quads into, so an <app> under one
+  has to come out the same as a <div> under one, and a window viz had promoted
+  to an overlay instead would leave the filter nothing of it to read.
+
+  THE FILTERED RUN HAS ITS OWN NEGATIVE CONTROL, because the plain run's is not
+  one here: an unfiltered run of this page is the run above, and it passes.
+  So the last cell's ordinary half takes the filter and its <app> half does
+  not, with both halves back on the producer's color — which leaves the filter
+  as the only thing that can make that cell differ, and the run fails if it
+  does not. The two together are the whole assertion: every property cell says
+  a filter over an <app> is a filter over a <div>, and the last cell says there
+  was a filter.
+
   THE GEOMETRY HERE MUST MATCH components/domicile/spike/css_parity_layout.h.
   Nothing checks that they agree, and nothing has to: a disagreement misaligns
   both halves of every cell, which reads as everything failing rather than as
@@ -83,6 +100,27 @@
     width: 120px;
   }
 
+  /* The backdrop-filter run's filtering element: chrome over a window. It
+     covers most of the box under test — including one of its edges — and runs
+     out over the gradient and the page background beside it, so what a run
+     reads is a filter over a window's pixels and over ordinary ones at once.
+     Its own edges land on none of `.box`'s, which are the only ones the two
+     halves of a cell can disagree about.
+
+     It has no paint of its own — no background, no border — and that is what
+     makes the last cell a control rather than a decoration: with the filter a
+     no-op this element leaves no mark at all, the two halves of that cell come
+     out identical, and the run fails. A translucent background would have made
+     them differ whether the filter did anything or not. */
+  .filter {
+    height: 90px;
+    left: 60px;
+    position: absolute;
+    top: 60px;
+    width: 160px;
+    z-index: 3;                /* over `.over`, the highest thing in a cell */
+  }
+
   /* Ordinary elements for the <app> to stack between. */
   .under, .over {
     height: 90px;
@@ -116,26 +154,36 @@
 
   const DEFAULT_COLOR = '00C853';
 
-  // In the order css_parity_layout.h's kCells lists them.
+  // In the order css_parity_layout.h's kCells lists them. `filtered` is which
+  // halves the backdrop-filter run stacks its filtering element over, and is
+  // read only on that run.
+  //
+  // The baseline cell never takes one, and the reason is the cell below it in
+  // this list rather than the baseline itself: the negative control's <app>
+  // half is compared against the baseline's and has to be pixel-identical to
+  // it, and that half is unfiltered because the filter has to be the only
+  // difference between the control's two halves.
   const CELLS = [
-    { backdrop: true, controlColor: undefined, property: undefined,
-      stack: false },
-    { backdrop: false, controlColor: undefined, property: 'p-zindex',
-      stack: true },
-    { backdrop: true, controlColor: undefined, property: 'p-transform',
-      stack: false },
-    { backdrop: true, controlColor: undefined, property: 'p-borderradius',
-      stack: false },
-    { backdrop: true, controlColor: undefined, property: 'p-opacity',
-      stack: false },
-    { backdrop: true, controlColor: undefined, property: 'p-blur',
-      stack: false },
-    { backdrop: true, controlColor: undefined, property: 'p-blend',
-      stack: false },
-    // The control the diff has to notice. Everything else about it is a
-    // baseline cell.
-    { backdrop: true, controlColor: '#ff1744', property: undefined,
-      stack: false },
+    { backdrop: true, controlColor: undefined, filtered: undefined,
+      property: undefined, stack: false },
+    { backdrop: false, controlColor: undefined, filtered: 'both',
+      property: 'p-zindex', stack: true },
+    { backdrop: true, controlColor: undefined, filtered: 'both',
+      property: 'p-transform', stack: false },
+    { backdrop: true, controlColor: undefined, filtered: 'both',
+      property: 'p-borderradius', stack: false },
+    { backdrop: true, controlColor: undefined, filtered: 'both',
+      property: 'p-opacity', stack: false },
+    { backdrop: true, controlColor: undefined, filtered: 'both',
+      property: 'p-blur', stack: false },
+    { backdrop: true, controlColor: undefined, filtered: 'both',
+      property: 'p-blend', stack: false },
+    // The control the diff has to notice, which each run makes different its
+    // own way: a color the producer never submits, or — where that would be no
+    // control at all — the filter on one half and not the other. Everything
+    // else about it is a baseline cell.
+    { backdrop: true, controlColor: '#ff1744', filtered: 'control',
+      property: undefined, stack: false },
   ];
 
   /**
@@ -173,6 +221,56 @@
   const APP_ID =
     new URLSearchParams(location.search).get('app') ?? 'domicile-spike';
 
+  // Which run this is: the CSS value the filtering element carries, or nothing
+  // at all for the plain table. guard-css-and-resize.sh is what passes it.
+  const BACKDROP_FILTER =
+    new URLSearchParams(location.search).get('backdrop-filter') ?? undefined;
+
+  /**
+   * What the ordinary element in a cell is filled with.
+   *
+   * The producer's color everywhere but the negative control, which the plain
+   * run makes different with a color the producer never submits. The
+   * backdrop-filter run cannot use that one: a wrong color makes those halves
+   * differ whether or not the filter did anything, and that cell is the whole
+   * of what says the filter did something. So on that run it goes back to the
+   * producer's color and the filter is left as the only difference.
+   */
+  const controlColorOf = (spec) =>
+    BACKDROP_FILTER === undefined ? spec.controlColor ?? COLOR : COLOR;
+
+  /**
+   * Whether this half of this cell is one the filtering element goes over.
+   *
+   * Both halves of every property cell, because the question the run asks is
+   * whether an <app> under a filter is a <div> under one; the ordinary half
+   * alone of the negative control, because that cell's job is to differ.
+   */
+  const isFiltered = (spec, side) =>
+    BACKDROP_FILTER !== undefined &&
+    (spec.filtered === 'both' ||
+     (spec.filtered === 'control' && side === 'control-half'));
+
+  /**
+   * The filtering element, carrying the value this run was asked for.
+   *
+   * A value the engine does not parse is dropped on assignment and leaves an
+   * element that filters nothing, which is a whole table passing about a
+   * filter that was never there — so this reads the property back and throws
+   * rather than laying out a run that cannot fail.
+   */
+  const buildFilter = (value) => {
+    const filter = document.createElement('div');
+    filter.className = 'filter';
+    filter.style.backdropFilter = value;
+    if (filter.style.backdropFilter === '') {
+      throw new Error(
+        '?backdrop-filter= is not a value this engine parses: "' + value + '"');
+    } else {
+      return filter;
+    }
+  };
+
   /**
    * Builds one half of a cell: the backdrop or the stack it composites
    * against, and the element under test.
@@ -204,6 +302,9 @@
         half.append(neighbor);
       }
     }
+    if (isFiltered(spec, side)) {
+      half.append(buildFilter(BACKDROP_FILTER));
+    }
     return half;
   };
 
@@ -227,7 +328,7 @@
     app.setAttribute('app-id', APP_ID);
 
     const control = document.createElement('div');
-    control.style.background = spec.controlColor ?? COLOR;
+    control.style.background = controlColorOf(spec);
 
     cell.append(buildHalf(spec, 'app-half', app));
     cell.append(buildHalf(spec, 'control-half', control));
@@ -236,6 +337,20 @@
   };
 
   const apps = CELLS.map(buildCell);
+
+  // WHAT THE HARNESS READS BACK, and the one thing about this run a table of
+  // pixels cannot report. `?backdrop-filter=` is a parameter on the page the
+  // plain run also uses, so a page that never read it lays that run out
+  // instead: eight cells that pass, about a filter that was never there.
+  // guard-css-and-resize.sh greps the engine's log for this line and fails the
+  // run without it. Printed after the cells are built and the value has been
+  // through the engine's parser, so it reports what is on them rather than
+  // what was asked for.
+  if (BACKDROP_FILTER !== undefined) {
+    console.log('domicile: backdrop-filter ' + BACKDROP_FILTER + ' is over ' +
+                'every property cell and over the ordinary half of the ' +
+                'negative control.');
+  }
 
   // WHAT A PAGE CAN AND CANNOT SEE THROUGH THE NATIVE TAG. Through the canvas
   // this was a promise, and a rejected one named its own reason. `<app>` has
