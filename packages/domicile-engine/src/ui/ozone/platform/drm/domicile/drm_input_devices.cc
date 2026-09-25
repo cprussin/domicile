@@ -196,12 +196,12 @@ bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
 
   const bool forgotten = devices_.find(number) == devices_.end();
   if (forgotten) {
-    LOG(WARNING) << "logind resumed input device " << number.major << ":"
-                 << number.minor << " (" << path.value()
-                 << "), which this session was holding a moment ago and is "
-                    "not holding now; taking logind's word for it, because "
-                    "the descriptor it sent is a live one and dropping it "
-                    "leaves this device dead for the rest of the run";
+    LOG(ERROR) << "logind resumed input device " << number.major << ":"
+               << number.minor << " (" << path.value()
+               << "), which this session was holding a moment ago and is "
+                  "not holding now; taking logind's word for it, because "
+                  "the descriptor it sent is a live one and dropping it "
+                  "leaves this device dead for the rest of the run";
   }
 
   // THE DESCRIPTOR A RESUME CARRIES IS A LIVE ONE, so the device stops being

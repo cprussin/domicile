@@ -633,10 +633,13 @@ instead of believed. If logind says the session is active right now, the
 again — **twice at most**, a `for` with two turns rather than recursion, because
 a race that does not settle in one more ask will not settle in ten.
 
-Both the force pause and the inactive take are `LOG(WARNING)`, each naming the
+Both the force pause and the inactive take are `LOG(ERROR)`, each naming the
 device and what has already happened to it. A desktop that lost every input
 device said nothing at all in its own log, which is why it cost a reboot instead
-of a line to read.
+of a line to read. ERROR rather than WARNING because `domicile-launch` runs the
+engine at `--log-level=2`: WARNING is where upstream Chromium lists what a
+nested run's host lacks, and these lines are the ones that must not be buried
+under it.
 
 **Reasoned from systemd's source and not yet run.** `DrmInputDevicesTest` has
 nineteen cases over the table above and `scripts/test-input-comes-from-logind.sh`

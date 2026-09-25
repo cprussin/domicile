@@ -501,8 +501,8 @@ void ControlChannel::DispatchLine(const std::string& line,
   std::optional<base::DictValue> parsed =
       base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
   if (!parsed) {
-    LOG(WARNING) << "domicile: control channel sent a line that is not a JSON "
-                    "object; dropped.";
+    LOG(ERROR) << "domicile: control channel sent a line that is not a JSON "
+                  "object; dropped.";
     return;
   }
   const base::DictValue& message = *parsed;
