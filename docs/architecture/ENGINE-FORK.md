@@ -1253,6 +1253,13 @@ have the same shape as each other:
 `--domicile-shell-root` and `--domicile-shell-module` say what to serve, the
 same shape as `--domicile-broker-socket`.
 
+**`domicile://home/` is the user's home, for the launcher's previews** — an
+`<img>`, `<video>` or PDF of a file the search found. Two refusals beyond the
+shell's containment: no path with a dotfile in it (the file index's own line),
+and no request whose initiator is not `domicile://shell` — the subresource
+factory is every frame's, and a site in a `<webview>` that could put
+`domicile://home/` in an `<img>` would learn which files exist.
+
 **The shell's document is written by the fork**, in
 `components/domicile/browser/shell_url_loader_factory.cc`, and it has three
 properties on purpose: a charset, because a page without one is decoded by

@@ -4,8 +4,11 @@
 #include "components/domicile/browser/shell_url_loader_factory.h"
 
 #include "base/files/file_path.h"
+#include "components/domicile/common/domicile_scheme.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/origin.h"
+#include "url/url_util.h"
 
 namespace domicile {
 namespace {
@@ -118,6 +121,87 @@ TEST(ShellURLLoaderFactoryTest, RefusesEverythingWithoutARoot) {
 // The document. What is in it is not negotiable, so it is pinned rather than
 // described: each of these is something a desktop cannot do without, and each
 // has a failure that looks like something else when it is missing.
+
+base::FilePath Home() {
+  return base::FilePath("/home/you");
+}
+
+bool ResolveHome(const std::string& url, base::FilePath* out) {
+  return ShellURLLoaderFactory::ResolveHomePath(Home(), GURL(url), out);
+}
+
+TEST(ShellURLLoaderFactoryTest, ResolvesAFileUnderHome) {
+  // What the launcher previews: an image, a video, a PDF, by the path the
+  // compositor's search named it by.
+  base::FilePath path;
+  ASSERT_TRUE(ResolveHome("domicile://home/Pictures/cat%20one.png", &path));
+  EXPECT_EQ(path, Home().Append("Pictures").Append("cat one.png"));
+}
+
+TEST(ShellURLLoaderFactoryTest, RefusesADotfileUnderHome) {
+  // The line the compositor's index draws, and the one that keeps keys and
+  // tokens out of reach: nothing under a dot is offered, so nothing under a dot
+  // is served -- escaped or not.
+  base::FilePath path;
+  EXPECT_FALSE(ResolveHome("domicile://home/.ssh/id_ed25519", &path));
+  EXPECT_FALSE(ResolveHome("domicile://home/src/.git/HEAD", &path));
+  EXPECT_FALSE(ResolveHome("domicile://home/%2essh/id_ed25519", &path));
+}
+
+TEST(ShellURLLoaderFactoryTest, HomeAndShellAreTwoPlaces) {
+  // Each resolver answers for its own host only, so neither root can be
+  // reached through the other's name.
+  base::FilePath path;
+  EXPECT_FALSE(ResolveHome("domicile://shell/main.js", &path));
+  EXPECT_FALSE(Resolve("domicile://home/main.js", &path));
+}
+
+TEST(ShellURLLoaderFactoryTest, AnythingResolvedUnderHomeIsInsideIt) {
+  for (const char* url : {
+           "domicile://home/../../etc/passwd",
+           "domicile://home/a/../../b.png",
+           "domicile://home//etc/passwd",
+       }) {
+    base::FilePath path;
+    if (ResolveHome(url, &path)) {
+      EXPECT_TRUE(Home().IsParent(path)) << url;
+    }
+  }
+}
+
+TEST(ShellURLLoaderFactoryTest, OnlyTheShellMayAskForHome) {
+  // THE SUBRESOURCE FACTORY IS EVERY FRAME'S, sites in a browser window's
+  // <webview> included. A site that could put domicile://home/ in an <img>
+  // would learn which files exist from load and error alone.
+  //
+  // The scheme has to be a standard one for any of that to be askable. An
+  // origin is what a standard scheme buys -- url::Origin::Create reads a
+  // scheme, a host and a port out of a URL whose scheme is registered as
+  // standard, and hands back an *opaque* origin, whose scheme and host are both
+  // empty, for one that is not. Every process of the engine registers it in
+  // ChromeContentClient::AddAdditionalSchemes, which content turns into this
+  // same call; a unit test binary runs none of that, so the registration is
+  // here. Without it the shell's own origin is opaque, so the line below is
+  // false and the three refusals under it pass for the wrong reason -- they
+  // refuse an empty scheme rather than the origin they name. The scoped
+  // registry puts the list back as it found it.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
+
+  const url::Origin shell = url::Origin::Create(GURL("domicile://shell/"));
+  EXPECT_TRUE(ShellURLLoaderFactory::MayReadHome(shell, /*desk_locked=*/false));
+  EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(
+      url::Origin::Create(GURL("https://example.com/")), false));
+  EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(
+      url::Origin::Create(GURL("domicile://home/")), false));
+  EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(std::nullopt, false));
+
+  // A LOCKED DESK READS NOTHING OUT OF THE HOME, the compositor's rule for
+  // `search_files` and `preview_file` and this host's for the same reason: a
+  // launcher left up over a lock screen would otherwise still draw the home's
+  // pictures, even to the shell that asked.
+  EXPECT_FALSE(ShellURLLoaderFactory::MayReadHome(shell, /*desk_locked=*/true));
+}
 
 TEST(ShellDocumentTest, DeclaresACharset) {
   // Without one the page is decoded by guesswork.
