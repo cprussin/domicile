@@ -71,6 +71,15 @@ describe(ModalDialog, () => {
       );
     });
 
+    it("says how wide it is, so the stylesheet can size it", () => {
+      render(
+        <ModalDialog open size="lg" title="Settings">
+          Body
+        </ModalDialog>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-size", "lg");
+    });
+
     it("renders the footer when provided", () => {
       render(
         <ModalDialog footer={<Button variant="solid">Save</Button>} open>
