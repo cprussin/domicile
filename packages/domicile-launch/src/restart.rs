@@ -326,10 +326,10 @@ fn next(policy: &Policy, started: Started, failures: u32, lived: Duration) -> Ne
 /// the bind, so a file the last engine left is the next desktop's browser
 /// process ending on a line about a path rather than a desktop.
 ///
-/// The profile goes too. It is this run's own temporary directory rather than
-/// anybody's browser profile, and what a Chromium killed with `SIGKILL` leaves
-/// in one is a singleton lock and a session to restore, neither of which
-/// belongs to the desktop being started.
+/// The engine's profile does NOT go: it is kept between desktops, and a
+/// desktop that failed is not a reason to sign a person out of everything. The
+/// singleton lock a Chromium killed with `SIGKILL` leaves in it names a
+/// process that is gone, which the next engine sees and takes over itself.
 ///
 /// The control socket does NOT go: it is this process's, it is still bound,
 /// `DOMICILE_SOCK` still names it, and a `domicile which-shell` typed between
@@ -350,13 +350,11 @@ pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
 /// Take away what the last ENGINE bound, and nothing else, so that another can
 /// be started under the compositor that is still serving.
 ///
-/// THE THREE THAT ARE THE ENGINE'S. The broker socket is the one the next
+/// THE TWO THAT ARE THE ENGINE'S. The broker socket is the one the next
 /// engine creates and the compositor re-dials; the command socket is the
 /// loudest leftover there is, because `StartCommandSocket` `CHECK`s its bind
 /// and a path already there is a browser process ending on a line about a
-/// file; and the profile is this run's own temporary directory, whose
-/// singleton lock and session-to-restore belong to a Chromium that was killed
-/// rather than to the one being started.
+/// file. Not the profile, for the reason [`clear_the_last_one`] gives.
 ///
 /// THE TWO THAT ARE NOT GO NOWHERE NEAR THIS. The chrome socket is bound by a
 /// compositor that is still listening on it, and the session document is that
@@ -366,8 +364,7 @@ pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
 /// as "the compositor is up".
 pub fn clear_the_last_engine(runtime: &Runtime) -> Result<(), Leftover> {
     gone(&runtime.broker, std::fs::remove_file(&runtime.broker))?;
-    gone(&runtime.command, std::fs::remove_file(&runtime.command))?;
-    gone(&runtime.profile, std::fs::remove_dir_all(&runtime.profile))
+    gone(&runtime.command, std::fs::remove_file(&runtime.command))
 }
 
 fn doubling(policy: &Policy, failures: u32) -> Duration {

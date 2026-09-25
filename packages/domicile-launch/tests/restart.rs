@@ -216,7 +216,7 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
         std::fs::write(path, "the last desktop's").expect("it is written");
     }
     std::fs::create_dir(&runtime.profile).expect("it is created");
-    std::fs::write(runtime.profile.join("SingletonLock"), "stale").expect("it is written");
+    std::fs::write(runtime.profile.join("Cookies"), "a sign-in").expect("it is written");
     std::fs::write(&runtime.control, "this process's own").expect("it is written");
 
     clear_the_last_one(&runtime).expect("it clears");
@@ -241,9 +241,11 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
         !runtime.session.exists(),
         "the session document is still there"
     );
+    // Not the profile: it is the person's, kept between desktops, and a
+    // desktop that fails is not a reason to sign them out of everything.
     assert!(
-        !runtime.profile.exists(),
-        "the engine's profile is still there"
+        runtime.profile.join("Cookies").exists(),
+        "the engine's profile was cleared"
     );
     // Not the control socket: it is this process's, it is still bound, and
     // `DOMICILE_SOCK` still names it.
@@ -359,6 +361,7 @@ fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
         std::fs::write(path, "the desktop's").expect("it is written");
     }
     std::fs::create_dir(&runtime.profile).expect("it is created");
+    std::fs::write(runtime.profile.join("Cookies"), "a sign-in").expect("it is written");
 
     clear_the_last_engine(&runtime).expect("it clears");
 
@@ -368,8 +371,8 @@ fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
         "the engine's command socket is still there"
     );
     assert!(
-        !runtime.profile.exists(),
-        "the engine's profile is still there"
+        runtime.profile.join("Cookies").exists(),
+        "the engine's profile was cleared"
     );
     assert!(
         runtime.chrome_socket.exists(),

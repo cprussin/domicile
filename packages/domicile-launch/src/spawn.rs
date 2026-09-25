@@ -34,7 +34,7 @@ pub struct Spawn {
     pub env: Vec<(String, OsString)>,
 }
 
-/// Where the sockets and the profile live for one run.
+/// Where the sockets live for one run, and the profile it uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Runtime {
     /// The socket the engine opens and the compositor submits through.
@@ -60,7 +60,8 @@ pub struct Runtime {
     /// [`crate::control_socket::address`] says and is named in the
     /// environment.
     pub control: PathBuf,
-    /// The engine's own profile, thrown away with the run.
+    /// The engine's own profile, kept between runs — see
+    /// [`crate::profile_path`].
     pub profile: PathBuf,
     /// Where the compositor publishes what it bound, once it is serving.
     ///
