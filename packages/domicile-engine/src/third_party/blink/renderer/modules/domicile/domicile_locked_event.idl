@@ -1,0 +1,37 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+    RuntimeEnabled=DomicileControlChannel,
+    Exposed=Window
+] interface DomicileLockedEvent : Event {
+  constructor(DOMString type,
+              optional DomicileLockedEventInit eventInitDict = {});
+
+  // Whether this desk is locked: true is a desktop that will not deliver a
+  // keystroke or a click to any client until somebody says the passphrase.
+  //
+  // THE COMPOSITOR HOLDS IT, AND NOTHING IN THIS RENDERER CAN CHANGE IT. Input
+  // on this system does not originate in the compositor -- the shell's page
+  // owns it and forwards it, and the compositor injects it into a Wayland seat
+  // -- so the lock is the injection not happening. That is why a page reload
+  // does not open the desk, why an engine that died and came back does not, and
+  // why a page edited in the devtools of the browser drawing it does not
+  // either.
+  //
+  // THE PAGE KEEPS ITS OWN KEYS while this is true, which reads like a hole and
+  // is the opposite: the page is the thing forwarding, so it can draw a lock
+  // screen and take a passphrase while nothing it forwards reaches a client.
+  // DomicileHost.unlock() is how it offers one.
+  //
+  // A state rather than an edge, and sent again to a page that has only just
+  // connected -- see DomicileIdleEvent.idle, which says why that is the shape
+  // the wire needs. Here it is also the point: the edge a reloaded page missed
+  // is the one that would have raised its lock screen.
+  readonly attribute boolean locked;
+
+  // When the browser process had this message, on `performance.now()`'s clock.
+  // See DomicileModifiersEvent.arrival for what this is and what it is not.
+  readonly attribute DOMHighResTimeStamp arrival;
+};

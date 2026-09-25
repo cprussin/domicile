@@ -476,11 +476,14 @@ impl std::fmt::Display for Axis {
 /// When a desktop nobody is at turns its screens off.
 ///
 /// **ABSENT IS NEVER, AND THAT IS THE DEFAULT.** A blank screen is
-/// indistinguishable from a desktop that has died, and there is nothing behind
-/// this one yet -- no lock, and nothing telling the shell a moment before --
-/// so a desk whose shell never mentioned idle would go dark for the first time
-/// on an upgrade it did not ask for, with no way to tell that from a crash.
-/// A shell that wants the screens off says how long.
+/// indistinguishable from a desktop that has died, and nothing warns a moment
+/// before this one, so a desk whose shell never mentioned idle would go dark for
+/// the first time on an upgrade it did not ask for, with no way to tell that
+/// from a crash. A shell that wants the screens off says how long.
+///
+/// **It is also what locks a desk**, on a desktop that states a
+/// [`LockConfig::passphrase`]: the dark edge is the only thing that locks one, so
+/// a desk with no timeout here never locks whatever else it says.
 ///
 /// Seconds, spelled in the name, because this file is generated: a unit that
 /// has to be read out of a doc comment is one a generator gets wrong, and the
@@ -516,6 +519,84 @@ impl IdleConfig {
             ));
         }
         Ok(())
+    }
+}
+
+/// What opens this desk once it has locked itself.
+///
+/// **ABSENT IS NEVER, AND THAT IS THE DEFAULT** — for the reason
+/// [`IdleConfig`] above says nothing means never, and one that is not merely
+/// conservative: a desk that locked with no passphrase to open it is a desk
+/// nobody can get back into, and the way out would be another tty. So the lock
+/// is opt-in, and a desk that states no passphrase never locks and never sends
+/// `HostMessage::Locked` at all.
+///
+/// **A PASSPHRASE IN THIS FILE IS A MECHANISM AND NOT YET A SECRET.** This file
+/// is generated — on NixOS by home-manager, into a world-readable store — so a
+/// passphrase written here is readable by every process of every user on the
+/// machine. It is here because the lock needs *some* verifier to be a lock at
+/// all, and the compositor is where the seat is; the verifier is behind a seam
+/// (`crate::lock::Verifier` in `domicile-compositor`) precisely so that the
+/// real one can replace it without moving anything else. That real one is PAM,
+/// which needs no engine release and is written down in `ROADMAP.md`. Until it
+/// lands, this locks a desk against somebody walking up to it and not against
+/// anybody who can read the machine's disk.
+///
+/// Compared, which is what `PartialEq` is for: a reload asks what moved between
+/// two configs, and whether this desk can lock is one of the answers -- see the
+/// compositor's `Restatement`.
+#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LockConfig {
+    /// What opens this desk. Absent is a desk that never locks; the empty
+    /// string is refused rather than read as either one -- see
+    /// [`LockConfig::validate`].
+    ///
+    /// **What keeps this out of a log is the `Debug` below and not its
+    /// visibility.** Private would buy nothing here: `{:?}` on the struct
+    /// holding it goes through that impl either way, and a caller that wanted
+    /// the string would reach it through the accessor. It is `pub` like every
+    /// other key in this file, which is also what lets
+    /// `scripts/test-the-home-manager-module-agrees.sh` read it -- a key the
+    /// module writes and this struct does not accept refuses the whole config
+    /// file, so being readable by that comparison is worth more than a
+    /// visibility that protects nothing.
+    pub passphrase: Option<String>,
+}
+
+impl LockConfig {
+    /// What opens this desk, or `None` for one that never locks.
+    pub fn passphrase(&self) -> Option<&str> {
+        self.passphrase.as_deref()
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.passphrase.as_deref() == Some("") {
+            return Err(ConfigError::Validation(
+                "lock.passphrase must not be empty; leave the key out for a desktop that \
+                 never locks"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Says whether there is a passphrase here and never what it is.
+///
+/// Derived `Debug` is what this struct exists to not have. It is reached by
+/// `Config`'s own derive and by the compositor's `Restatement`, so the
+/// redaction has to live on the type rather than at whichever call site
+/// eventually prints one. `domicile_protocol::Passphrase` is the same decision
+/// on the wire half.
+impl std::fmt::Debug for LockConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LockConfig")
+            .field(
+                "passphrase",
+                &self.passphrase.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
     }
 }
 
@@ -565,6 +646,7 @@ pub struct Config {
     pub files: FilesConfig,
     pub idle: IdleConfig,
     pub input: InputConfig,
+    pub lock: LockConfig,
     pub output: OutputConfig,
     pub theme: ThemeConfig,
 }
@@ -613,6 +695,7 @@ impl Config {
     fn validate(&self) -> Result<(), ConfigError> {
         self.idle.validate()?;
         self.input.keyboard.validate()?;
+        self.lock.validate()?;
         self.output.validate()
     }
 }
