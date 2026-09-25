@@ -4,6 +4,7 @@
 
 #include "components/domicile/browser/control_channel.h"
 
+#include <string_view>
 #include <utility>
 
 #include "base/command_line.h"
@@ -473,13 +474,9 @@ void ControlChannel::OnRead(int result) {
   // rather than outside it.
   const base::TimeTicks arrival = base::TimeTicks::Now();
 
-  read_remainder_.append(read_buffer_->data(), static_cast<size_t>(result));
-
-  size_t newline = read_remainder_.find('\n');
-  while (newline != std::string::npos) {
-    DispatchLine(read_remainder_.substr(0, newline), arrival);
-    read_remainder_.erase(0, newline + 1);
-    newline = read_remainder_.find('\n');
+  for (const std::string& line : framer_.Take(std::string_view(
+           read_buffer_->data(), static_cast<size_t>(result)))) {
+    DispatchLine(line, arrival);
   }
 
   ReadLoop();
