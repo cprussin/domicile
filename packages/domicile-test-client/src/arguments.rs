@@ -76,15 +76,24 @@ pub struct Arguments {
     /// not show a desktop that confuses them.
     pub copy_primary: Option<String>,
 
-    /// Whether to hold this desktop's screens on for as long as the window
-    /// is open.
+    /// When to take an idle inhibitor, or `None` to take none.
     ///
-    /// Off by default: almost every check wants a plain window, and a client
-    /// that vetoed blanking on every run would make the idle checks about this
-    /// flag. On, it binds `zwp_idle_inhibit_manager_v1` and takes an inhibitor
-    /// on its own surface — what a video player does, and the only way to
-    /// produce one from a real client.
-    pub hold_the_screens_on: bool,
+    /// `None` by default: almost every check wants a plain window, and a
+    /// client that vetoed blanking on every run would make the idle checks
+    /// about this flag. Either way round it binds
+    /// `zwp_idle_inhibit_manager_v1` and takes an inhibitor on its own
+    /// surface — what a video player does, and the only way to produce one
+    /// from a real client.
+    pub hold_the_screens_on: Option<HoldTheScreensOn>,
+
+    /// Whether this client stays when its window is closed.
+    ///
+    /// Off by default: a client whose window is closed is a client whose job
+    /// is over, and every check but one wants to see it go. On, it destroys
+    /// the `xdg_toplevel` and keeps its connection — which is the one way to
+    /// tell a *window* going away apart from the *client* that had it going
+    /// away, because everything a dead client was holding goes with it.
+    pub outlive_its_window: bool,
 
     /// Whether to read out whatever is offered on either selection.
     ///
@@ -94,6 +103,23 @@ pub struct Arguments {
     /// is a real paste, pipe and all, rather than a report that one was
     /// possible.
     pub paste: bool,
+}
+
+/// When a client takes the inhibitor it was asked for.
+///
+/// Two moments rather than a flag and a second flag, because they are two
+/// answers to one question and a client takes one inhibitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldTheScreensOn {
+    /// Once the surface has a window, which is when a video player asks.
+    OnItsWindow,
+    /// Before the surface has a window at all.
+    ///
+    /// The protocol allows it — an inhibitor names a surface, and a surface
+    /// need not be anything anybody can see — and it is what a desktop has to
+    /// answer for: a client that took one here and never showed the surface
+    /// would hold the screens on for as long as it ran.
+    BeforeItHasAWindow,
 }
 
 /// A command line the client will not run.
@@ -120,6 +146,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut follow_configure = None;
     let mut ask_for_focus = None;
     let mut hold_the_screens_on = None;
+    let mut outlive_its_window = None;
     let mut copy = None;
     let mut copy_primary = None;
     let mut paste = None;
@@ -144,7 +171,21 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
                 take(&mut ask_for_focus, &flag, true)?;
             }
             "--hold-the-screens-on" => {
-                take(&mut hold_the_screens_on, &flag, true)?;
+                take(
+                    &mut hold_the_screens_on,
+                    &flag,
+                    HoldTheScreensOn::OnItsWindow,
+                )?;
+            }
+            "--hold-the-screens-on-before-it-has-a-window" => {
+                take(
+                    &mut hold_the_screens_on,
+                    &flag,
+                    HoldTheScreensOn::BeforeItHasAWindow,
+                )?;
+            }
+            "--outlive-its-window" => {
+                take(&mut outlive_its_window, &flag, true)?;
             }
             "--copy" => {
                 take(&mut copy, &flag, value(&mut args, &flag)?)?;
@@ -165,7 +206,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         trace: trace.unwrap_or(false),
         translucent: translucent.unwrap_or(false),
         ask_for_focus: ask_for_focus.unwrap_or(false),
-        hold_the_screens_on: hold_the_screens_on.unwrap_or(false),
+        hold_the_screens_on,
+        outlive_its_window: outlive_its_window.unwrap_or(false),
         copy,
         copy_primary,
         paste: paste.unwrap_or(false),

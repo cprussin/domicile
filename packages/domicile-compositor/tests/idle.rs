@@ -18,12 +18,21 @@
 //! *died* still holds one is a question about a connection being cleaned up.
 //! Neither is arithmetic, and neither can be asked of `crate::idle` alone.
 //!
+//! The two below it are the other half of what an inhibitor is worth, and
+//! they are about a *window* rather than about a request: whether a surface is
+//! one this desktop shows is the compositor's own reading, and neither a
+//! window appearing under an inhibitor taken before it nor a window closed on
+//! a client that is still running is anything `crate::idle` can be asked
+//! about.
+//!
 //! Read off the compositor's own log rather than off the connectors, because
 //! the connectors are the *engine's* and no engine is attached here. The line
 //! is the edge into dark, which is where the decision is; `e2e` and the
 //! machine-with-a-screen check in `ROADMAP.md` are what watch glass go off.
 
 mod running;
+
+use domicile_protocol::{ChromeMessage, HostMessage};
 
 use crate::running::Compositor;
 
@@ -111,10 +120,17 @@ fn a_timeout_edited_while_the_screens_are_off_turns_them_back_on() {
 /// The client is killed rather than asked to stop, because that is the case
 /// worth proving: a player that crashes sends no
 /// `zwp_idle_inhibitor_v1.destroy`, so the only thing that can let go of its
-/// inhibitor is the compositor noticing that the connection is gone. That path
-/// is the only one that says this second line — the clock coming round says
-/// something else — so a compositor which leaked the inhibitor fails here
-/// rather than passing a timeout later.
+/// inhibitor is the compositor noticing that the client is gone. Two things
+/// do — the window going and the surface going — and the second line below is
+/// what either of them says, where the clock coming round says something
+/// else. So a compositor which leaked the inhibitor fails here rather than
+/// passing a timeout later.
+///
+/// Two, because a client that dies takes its window with it: the connection is
+/// cleaned up object by object and the `xdg_toplevel` goes with the rest, so
+/// which of them reaches the answer first is a fact about smithay's cleanup
+/// rather than about this desktop. Both are the right answer and this check
+/// does not pick one.
 #[test]
 fn a_film_holds_the_screens_on_until_the_client_playing_it_is_gone() {
     let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
@@ -124,5 +140,65 @@ fn a_film_holds_the_screens_on_until_the_client_playing_it_is_gone() {
     compositor.wait_for_log("a client is holding this desktop awake");
 
     drop(film);
-    compositor.wait_for_log("the client holding this desktop awake is gone");
+    compositor.wait_for_log("this desktop's screens go dark");
+}
+
+/// An inhibitor arriving before the window it belongs to holds nothing until
+/// the window is there.
+///
+/// Both halves of the same claim, in one run and in the only order that can
+/// show them. The client takes its inhibitor on a surface with no role — which
+/// the protocol allows and a desktop must not honor — and then asks for a
+/// window on that same surface. So the line below can only be said by a desk
+/// that was **still dark** when the window arrived: a compositor that let the
+/// bare surface hold would have come back on the request and had no edge left
+/// for the window, and one that never noticed the window would still be dark
+/// now.
+#[test]
+fn an_inhibitor_taken_before_a_window_holds_nothing_until_the_window_is_there() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    let _film = compositor.client_with("film", &["--hold-the-screens-on-before-it-has-a-window"]);
+
+    compositor
+        .wait_for_log("a window appeared under an inhibitor; this desktop's screens come back on");
+}
+
+/// A window closed under an inhibitor stops holding, though its client is
+/// still there.
+///
+/// A window is not the client that had it, and this is the only check that can
+/// tell the two apart: the client is asked to close by the chrome, destroys
+/// its `xdg_toplevel` and keeps the connection, so the surface is alive, the
+/// inhibitor is alive, and the only thing that changed is that this desktop
+/// has no window for it. A client that *died* reaches the same line by the
+/// same path, which is why the last assertion is that this one did not.
+#[test]
+fn the_screens_go_dark_when_the_window_holding_them_on_is_closed() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    let mut chrome = compositor.chrome();
+    let mut film =
+        compositor.client_with("film", &["--hold-the-screens-on", "--outlive-its-window"]);
+    compositor.wait_for_log("a client is holding this desktop awake");
+
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("the film's window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    chrome
+        .say(&ChromeMessage::CloseApp { app_id })
+        .expect("the chrome socket takes a close");
+
+    compositor.wait_for_log(
+        "the window holding this desktop awake is gone; this desktop's screens go dark",
+    );
+    assert!(
+        film.is_running(),
+        "the client outlived its window, so what let the screens go was the window and not a death",
+    );
 }

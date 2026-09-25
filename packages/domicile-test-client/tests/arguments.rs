@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 
-use domicile_test_client::arguments::{arguments, ArgumentError, Arguments};
+use domicile_test_client::arguments::{arguments, ArgumentError, Arguments, HoldTheScreensOn};
 
 /// A command line, as the shell hands one over.
 fn given(args: &[&str]) -> Result<Arguments, ArgumentError> {
@@ -47,9 +47,13 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.paste,
         "a client reads neither selection unless a check asks it to",
     );
-    assert!(
-        !asked.hold_the_screens_on,
+    assert_eq!(
+        asked.hold_the_screens_on, None,
         "and a window is not a film: a client lets the desk blank under it",
+    );
+    assert!(
+        !asked.outlive_its_window,
+        "a client is done when its window is closed, unless a check needs it there after",
     );
 }
 
@@ -61,8 +65,61 @@ fn a_client_can_be_asked_to_hold_the_screens_on() {
     // one.
     let asked = given(&["--hold-the-screens-on"]).expect("a client that keeps a desk awake");
 
-    assert!(asked.hold_the_screens_on);
+    assert_eq!(
+        asked.hold_the_screens_on,
+        Some(HoldTheScreensOn::OnItsWindow)
+    );
     assert!(!asked.ask_for_focus, "and nothing else came on with it");
+}
+
+#[test]
+fn a_client_can_take_its_inhibitor_before_it_has_a_window() {
+    // The case a desktop must not honor: the protocol lets a client inhibit on
+    // any surface it owns, including one that is not a window, and nothing
+    // else here produces a request in that order.
+    let asked = given(&["--hold-the-screens-on-before-it-has-a-window"])
+        .expect("a client that asks before it shows anything");
+
+    assert_eq!(
+        asked.hold_the_screens_on,
+        Some(HoldTheScreensOn::BeforeItHasAWindow)
+    );
+}
+
+#[test]
+fn a_client_cannot_take_its_inhibitor_at_both_moments() {
+    // One inhibitor at one moment, and the two flags are two answers to the
+    // same question — so asking for both is the repeat every other flag
+    // refuses, rather than a client that takes two.
+    assert_eq!(
+        given(&[
+            "--hold-the-screens-on",
+            "--hold-the-screens-on-before-it-has-a-window"
+        ]),
+        Err(ArgumentError::Repeated {
+            flag: "--hold-the-screens-on-before-it-has-a-window".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_outlive_its_window() {
+    // A window closed on a client that keeps running, which is the one way to
+    // tell a window going away apart from the client that had it going away.
+    let asked = given(&["--outlive-its-window"]).expect("a client that stays when its window goes");
+
+    assert!(asked.outlive_its_window);
+    assert!(!asked.ask_for_focus, "and nothing else came on with it");
+}
+
+#[test]
+fn outliving_a_window_twice_is_refused_like_any_other_repeat() {
+    assert_eq!(
+        given(&["--outlive-its-window", "--outlive-its-window"]),
+        Err(ArgumentError::Repeated {
+            flag: "--outlive-its-window".to_string()
+        })
+    );
 }
 
 #[test]

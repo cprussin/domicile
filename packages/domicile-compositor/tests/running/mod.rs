@@ -825,6 +825,20 @@ impl Client {
         }
     }
 
+    /// Whether this client is still running.
+    ///
+    /// The other side of [`Client::wait_for_exit`], and it waits for nothing:
+    /// the question it answers is asked *after* something the compositor said,
+    /// so the client either outlived that or it did not. What it is for is
+    /// telling a compositor's answer to a closed window apart from its answer
+    /// to a dead client, which produce the same emptiness on this side.
+    pub fn is_running(&mut self) -> bool {
+        self.child
+            .try_wait()
+            .expect("the client is waitable")
+            .is_none()
+    }
+
     /// Wait until the client has traced at least `wanted` lines matching
     /// `pattern`, and answer whether it did.
     ///

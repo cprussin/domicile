@@ -1731,8 +1731,12 @@ struct DomicileCompositor {
     ///
     /// What it holds its inhibitors as is the surface each was taken on, which
     /// is what `zwp_idle_inhibit_manager_v1` hands over in both directions —
-    /// and what [`StillThere`] asks about, because a surface of a client that
-    /// is gone is not alive.
+    /// and what both halves of `crate::idle`'s answer are asked about: whether
+    /// it is [`StillThere`], because a surface of a client that is gone is not
+    /// alive, and whether it is one of
+    /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop),
+    /// because a surface this desktop has no window for is one nobody can
+    /// see.
     idle: Option<Idle<WlSurface>>,
     /// How a reload reaches the thread keeping the file index, or `None` on a
     /// desktop with no home to index.
@@ -3260,19 +3264,21 @@ impl DomicileCompositor {
     /// A desk that states no timeout has no clock to veto, so there is nothing
     /// here to keep: it never blanks, which is what the client was asking for.
     fn hold_the_screens_on(&mut self, surface: WlSurface) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        let edge = idle.inhibited_by(surface, Instant::now());
+        let edge = idle.inhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
     }
 
     /// A client let one go, which is the only half of this that a client says.
     fn let_the_screens_go(&mut self, surface: &WlSurface) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        let edge = idle.uninhibited_by(surface, Instant::now());
+        let edge = idle.uninhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "nothing is holding this desktop awake now");
     }
 
@@ -3295,12 +3301,40 @@ impl DomicileCompositor {
     /// same dead inhibitor the next time it came round, but "the next time"
     /// is a whole timeout, which on the desk this is for is ten minutes of
     /// glass lit for a player that is not running.
+    ///
+    /// Rarely the one that reports the edge any more, because a client that
+    /// dies takes its `xdg_toplevel` with it and
+    /// [`the_windows_changed`](DomicileCompositor::the_windows_changed) has
+    /// already said the desk belongs dark by the time this is asked. What it
+    /// still owes either way is letting go: an inhibitor a dead client took on
+    /// a surface that was never a window holds nothing and is on no list the
+    /// window path keeps, so nothing else would ever drop it.
     fn let_go_of_what_the_dead_were_holding(&mut self) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        let edge = idle.the_dead_let_go(Instant::now());
+        let edge = idle.the_dead_let_go(Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
+    }
+
+    /// The windows on this desktop changed, so what its inhibitors are worth
+    /// may have changed with them.
+    ///
+    /// **A WINDOW IS NOT A REQUEST**, which is why this exists at all: an
+    /// inhibitor holds only while the surface it was taken on is a window on
+    /// this desktop, and a window appearing or going away is something no
+    /// client sends `zwp_idle_inhibitor_v1` a word about. Both directions are
+    /// real — a client that takes its inhibitor before it maps starts holding
+    /// when the window arrives, and one whose window closes while it keeps
+    /// running stops holding then rather than a timeout later.
+    fn the_windows_changed(&mut self, why: &str) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        let edge = idle.the_desktop_changed(Instant::now(), &on_the_desktop);
+        self.the_inhibitors_changed(edge, why);
     }
 
     /// Act on an answer that the inhibitors changed, saying why.
@@ -3327,11 +3361,12 @@ impl DomicileCompositor {
     /// blanked one once a timeout after that — see [`Idle::next_check`].
     fn the_idle_clock_came_round(&mut self) -> Duration {
         let now = Instant::now();
+        let on_the_desktop = self.surfaces_on_the_desktop();
         let idle = self
             .idle
             .as_mut()
             .expect("the idle clock is armed only where a timeout was stated");
-        let going_dark = idle.elapsed(now);
+        let going_dark = idle.elapsed(now, &on_the_desktop);
         // Before the edge is acted on, because acting on it borrows the rest
         // of this compositor.
         let next = idle.next_check(now);
@@ -3344,6 +3379,24 @@ impl DomicileCompositor {
             self.state_the_connectors();
         }
         next
+    }
+
+    /// Every surface this desktop has a window for.
+    ///
+    /// The window path's own answer and not a second one: it is the list
+    /// `new_toplevel` announced as an `<app>` and `toplevel_destroyed` takes
+    /// back out, which is the same list [`app_id_of`](Self::app_id_of) reads.
+    /// The idle clock is handed it on every question it answers, because an
+    /// inhibitor on a surface that is not among them holds nothing.
+    ///
+    /// Cloned rather than borrowed because the clock is a field of this same
+    /// struct and answering takes it mutably. A `WlSurface` is a handle, so a
+    /// clone of one is a reference count.
+    fn surfaces_on_the_desktop(&self) -> Vec<WlSurface> {
+        self.toplevels
+            .iter()
+            .map(|(_, toplevel)| toplevel.wl_surface().clone())
+            .collect()
     }
 
     /// Take up everything in a reloaded config that is not the display list.
@@ -4596,7 +4649,10 @@ delegate_dmabuf!(DomicileCompositor);
 /// Smithay hands over the surface in both directions and nothing else, which
 /// is why that is what `Idle` holds. `uninhibit` is the client saying so —
 /// and only that; the inhibitors of clients that never will are let go of by
-/// [`DomicileCompositor::let_go_of_what_the_dead_were_holding`].
+/// [`DomicileCompositor::let_go_of_what_the_dead_were_holding`], and what an
+/// inhibitor on a surface this desktop shows no window for is worth is decided
+/// without asking the client at all — see
+/// [`DomicileCompositor::the_windows_changed`].
 impl IdleInhibitHandler for DomicileCompositor {
     fn inhibit(&mut self, surface: WlSurface) {
         self.hold_the_screens_on(surface);
@@ -4886,6 +4942,11 @@ impl XdgShellHandler for DomicileCompositor {
             announce
         };
         self.hub.broadcast(announce);
+        // A client is free to take its idle inhibitor before it maps anything,
+        // and one that did was holding nothing until this moment — see
+        // `crate::idle::holds`. On a desk that had gone dark in the meantime
+        // this is the edge that brings it back.
+        self.the_windows_changed("a window appeared under an inhibitor");
     }
 
     /// A client named its window, or renamed it.
@@ -4974,6 +5035,11 @@ impl XdgShellHandler for DomicileCompositor {
             // client that crashed rather than closed never got the chance, so
             // the compositor is the one that has to guarantee this.
             self.focus_chrome();
+            // And an inhibitor taken on that window's surface is holding
+            // nothing from here on: the client may still be running, but there
+            // is no longer anything on this desktop for a person to be
+            // watching.
+            self.the_windows_changed("the window holding this desktop awake is gone");
         }
     }
 

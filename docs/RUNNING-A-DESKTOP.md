@@ -112,10 +112,12 @@ pointer.
   and "never blank", and "never" already has a spelling.
 - **A film keeps the screens on.** A player that asks the desktop to stay
   awake — `zwp_idle_inhibit_manager_v1`, which every toolkit reaches through
-  its own idle-inhibit API — is obeyed for as long as it is running, so a video
-  with nobody touching the trackpad does not blank. The desk goes dark when the
-  last such client lets go or exits, without waiting for a hand; a player that
-  *crashes* holding one does not keep the screens on.
+  its own idle-inhibit API — is obeyed for as long as it is running and its
+  window is open, so a video with nobody touching the trackpad does not blank.
+  The desk goes dark when the last such client lets go, closes its window or
+  exits, without waiting for a hand; a player that *crashes* holding one does
+  not keep the screens on, and neither does a program that asks on a window it
+  never shows.
 
 **It is not a lock.** The screens go dark and anybody can still walk up and
 type; nothing asks for a password on the way back. That is open work —
