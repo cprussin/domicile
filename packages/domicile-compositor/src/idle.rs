@@ -3,9 +3,10 @@
 //! One question — *has anybody touched this desktop inside the timeout* — and
 //! the one answer that has somewhere to go today: the screens go dark, and
 //! they come back on the next input. The effectful half is in `main.rs`, where
-//! the engine session is; everything here is arithmetic over an instant that
-//! is handed in, so a desk going dark can be tested on a machine with no
-//! screen. There is no clock in this module for the same reason.
+//! the engine session is; everything here is arithmetic over facts that are
+//! handed in — what time it is, and which surfaces this desktop has windows
+//! for — so a desk going dark can be tested on a machine with no screen.
+//! There is no clock and no Wayland in this module for the same reason.
 //!
 //! **THE EDGE IS WHAT THIS REPORTS, not the state.** Lighting a connector is a
 //! modeset, and a desktop that restated "be dark" on every tick — or "be lit"
@@ -17,8 +18,10 @@
 //! holding a `zwp_idle_inhibit_manager_v1` inhibitor — a film playing, with
 //! nobody near the trackpad — vetoes the answer. A veto rather than a hand on
 //! the desk or a clock that is paused; `Idle::should_be_dark` is where that
-//! choice is argued, and [`StillThere`] is the half of it that says what an
-//! inhibitor held by a client that *died* is worth.
+//! choice is argued. What an inhibitor is worth is [`holds`], and it takes
+//! two: somebody left to hold it — [`StillThere`], which is the answer to the
+//! client that *died* — and a window on this desktop for the surface it was
+//! taken on, which is the answer to the surface nobody can see.
 //!
 //! The shell is the one thing told the state instead, and [`announced`] is
 //! where that is decided: a page reloads, and one that has just loaded has
@@ -106,9 +109,9 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// is dark. A desktop comes back because a hand moved or because something
     /// asked it to stay awake — [`Idle::stirred`] and [`Idle::inhibited_by`] —
     /// and never because a timer fired.
-    pub fn elapsed(&mut self, now: Instant) -> Option<Blanking> {
-        if self.should_be_dark(now) {
-            self.settle(now)
+    pub fn elapsed(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
+        if self.should_be_dark(now, on_the_desktop) {
+            self.settle(now, on_the_desktop)
         } else {
             None
         }
@@ -116,9 +119,14 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// A client asked that this desktop stay awake. `Some` only on the edge
     /// out of a dark desktop.
-    pub fn inhibited_by(&mut self, inhibitor: S, now: Instant) -> Option<Blanking> {
+    pub fn inhibited_by(
+        &mut self,
+        inhibitor: S,
+        now: Instant,
+        on_the_desktop: &[S],
+    ) -> Option<Blanking> {
         self.inhibitors.push(inhibitor);
-        self.settle(now)
+        self.settle(now, on_the_desktop)
     }
 
     /// A client let one of them go. `Some` only on the edge into a dark
@@ -130,11 +138,16 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// there was no clock to hold it. Nothing changed then, and a desk is
     /// blanked by the clock rather than by an answer to something that did not
     /// happen.
-    pub fn uninhibited_by(&mut self, inhibitor: &S, now: Instant) -> Option<Blanking> {
+    pub fn uninhibited_by(
+        &mut self,
+        inhibitor: &S,
+        now: Instant,
+        on_the_desktop: &[S],
+    ) -> Option<Blanking> {
         match self.inhibitors.iter().position(|held| held == inhibitor) {
             Some(one) => {
                 self.inhibitors.remove(one);
-                self.settle(now)
+                self.settle(now, on_the_desktop)
             }
             None => None,
         }
@@ -145,14 +158,26 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// Answers nothing when they were holding nothing, which is the ordinary
     /// case: this is asked after every turn of a compositor's clients, and
     /// almost none of them ever took an inhibitor.
-    pub fn the_dead_let_go(&mut self, now: Instant) -> Option<Blanking> {
+    pub fn the_dead_let_go(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
         let held = self.inhibitors.len();
         self.inhibitors.retain(StillThere::still_there);
         if self.inhibitors.len() == held {
             None
         } else {
-            self.settle(now)
+            self.settle(now, on_the_desktop)
         }
+    }
+
+    /// The windows on this desktop changed. `Some` only on the edge, either
+    /// way.
+    ///
+    /// The other half of what an inhibitor is worth, and the half no client
+    /// sends: a window appearing under an inhibitor taken before it makes that
+    /// inhibitor start holding, and the window it was taken on going away
+    /// makes it stop. Both are answers to the same list this is handed on
+    /// every other question — see [`Idle::should_be_dark`].
+    pub fn the_desktop_changed(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
+        self.settle(now, on_the_desktop)
     }
 
     /// Take over the inhibitors another clock was holding.
@@ -203,8 +228,8 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// Take up the answer the facts now give, and report it only if it
     /// changed.
-    fn settle(&mut self, now: Instant) -> Option<Blanking> {
-        let should_be_dark = self.should_be_dark(now);
+    fn settle(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
+        let should_be_dark = self.should_be_dark(now, on_the_desktop);
         let changed = should_be_dark != self.dark;
         self.dark = should_be_dark;
         if !changed {
@@ -227,11 +252,33 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// inhibitor going away on a desk nobody has touched in an hour flips it
     /// to dark then and there rather than a timeout later.
     ///
-    /// An inhibitor nobody is left to hold is not one. See [`StillThere`].
-    fn should_be_dark(&self, now: Instant) -> bool {
+    /// An inhibitor nobody is left to hold is not one, and neither is one on a
+    /// surface nobody can see. See [`StillThere`] and [`holds`].
+    fn should_be_dark(&self, now: Instant, on_the_desktop: &[S]) -> bool {
         now.duration_since(self.stirred_at) >= self.blank_after
-            && !self.inhibitors.iter().any(StillThere::still_there)
+            && !self
+                .inhibitors
+                .iter()
+                .any(|inhibitor| holds(inhibitor, on_the_desktop))
     }
+}
+
+/// Whether one inhibitor is holding anything.
+///
+/// Two questions, and an inhibitor has to answer both. The first is whether
+/// anybody is left to hold it — see [`StillThere`]. The second is whether this
+/// desktop shows a window on the surface it was taken on, because
+/// `zwp_idle_inhibit_manager_v1` lets a client take one on any surface it owns
+/// and says in as many words that what an unmapped one is worth is the
+/// compositor's to decide. A client that takes an inhibitor on a surface it
+/// never shows is asking for screens that never blank with nothing on them to
+/// say why, and the answer is no.
+///
+/// `on_the_desktop` is handed in for the reason the instant is: this module is
+/// arithmetic, and which surfaces have windows is the compositor's own reading
+/// of them.
+fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool {
+    inhibitor.still_there() && on_the_desktop.contains(inhibitor)
 }
 
 /// Whether this request is a person at the desk.
@@ -394,6 +441,19 @@ mod tests {
         Idle::after(Some(AFTER), start).expect("a timeout was stated")
     }
 
+    /// A desktop showing a window on one surface, as the clock is handed it.
+    ///
+    /// Every question `Idle` answers is asked against the surfaces this
+    /// desktop has windows for, because an inhibitor on any other surface
+    /// holds nothing. The film in these checks is a window on surface 1, so
+    /// this is what most of them hand over.
+    fn showing(surface: u32) -> [Inhibitor; 1] {
+        [Inhibitor::on(surface)]
+    }
+
+    /// A desktop with no windows on it.
+    const SHOWING_NOTHING: &[Inhibitor] = &[];
+
     fn monitor(id: i64, position: (i32, i32)) -> Display {
         Display {
             id,
@@ -414,7 +474,10 @@ mod tests {
     fn a_desktop_still_inside_its_timeout_stays_lit() {
         let start = Instant::now();
         let mut idle = desk(start);
-        assert_eq!(idle.elapsed(start + AFTER - Duration::from_millis(1)), None);
+        assert_eq!(
+            idle.elapsed(start + AFTER - Duration::from_millis(1), SHOWING_NOTHING),
+            None
+        );
         assert!(!idle.dark());
     }
 
@@ -422,7 +485,10 @@ mod tests {
     fn a_desktop_nobody_touched_for_the_whole_timeout_goes_dark() {
         let start = Instant::now();
         let mut idle = desk(start);
-        assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
+        assert_eq!(
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
         assert!(idle.dark());
     }
 
@@ -432,8 +498,8 @@ mod tests {
         // tick, on a desk nobody is at.
         let start = Instant::now();
         let mut idle = desk(start);
-        idle.elapsed(start + AFTER);
-        assert_eq!(idle.elapsed(start + AFTER * 2), None);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
+        assert_eq!(idle.elapsed(start + AFTER * 2, SHOWING_NOTHING), None);
         assert!(idle.dark());
     }
 
@@ -444,18 +510,21 @@ mod tests {
         let stirred = start + AFTER - Duration::from_millis(1);
         assert_eq!(idle.stirred(stirred), None);
         assert_eq!(
-            idle.elapsed(start + AFTER),
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
             None,
             "the deadline moved with the key"
         );
-        assert_eq!(idle.elapsed(stirred + AFTER), Some(Blanking::GoDark));
+        assert_eq!(
+            idle.elapsed(stirred + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
     }
 
     #[test]
     fn the_next_input_lights_a_dark_desktop_back_up() {
         let start = Instant::now();
         let mut idle = desk(start);
-        idle.elapsed(start + AFTER);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
         assert_eq!(idle.stirred(start + AFTER * 2), Some(Blanking::ComeBack));
         assert!(!idle.dark());
     }
@@ -486,7 +555,7 @@ mod tests {
         // keeps the timer armed, once a timeout rather than once a second.
         let start = Instant::now();
         let mut idle = desk(start);
-        idle.elapsed(start + AFTER);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
         assert_eq!(idle.next_check(start + AFTER), AFTER);
     }
 
@@ -497,11 +566,11 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         assert_eq!(
-            idle.inhibited_by(Inhibitor::on(1), start),
+            idle.inhibited_by(Inhibitor::on(1), start, &showing(1)),
             None,
             "a desk somebody is at is already lit"
         );
-        assert_eq!(idle.elapsed(start + AFTER), None);
+        assert_eq!(idle.elapsed(start + AFTER, &showing(1)), None);
         assert!(!idle.dark());
     }
 
@@ -511,9 +580,9 @@ mod tests {
         // the answer changed without a hand, so the edge is real.
         let start = Instant::now();
         let mut idle = desk(start);
-        idle.elapsed(start + AFTER);
+        idle.elapsed(start + AFTER, &showing(1));
         assert_eq!(
-            idle.inhibited_by(Inhibitor::on(1), start + AFTER),
+            idle.inhibited_by(Inhibitor::on(1), start + AFTER, &showing(1)),
             Some(Blanking::ComeBack)
         );
         assert!(!idle.dark());
@@ -526,10 +595,10 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         let film = Inhibitor::on(1);
-        idle.inhibited_by(film.clone(), start);
-        idle.elapsed(start + AFTER);
+        idle.inhibited_by(film.clone(), start, &showing(1));
+        idle.elapsed(start + AFTER, &showing(1));
         assert_eq!(
-            idle.uninhibited_by(&film, start + AFTER * 2),
+            idle.uninhibited_by(&film, start + AFTER * 2, &showing(1)),
             Some(Blanking::GoDark)
         );
         assert!(idle.dark());
@@ -544,9 +613,15 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         let film = Inhibitor::on(1);
-        idle.inhibited_by(film.clone(), start);
-        assert_eq!(idle.uninhibited_by(&film, start + AFTER / 2), None);
-        assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
+        idle.inhibited_by(film.clone(), start, &showing(1));
+        assert_eq!(
+            idle.uninhibited_by(&film, start + AFTER / 2, &showing(1)),
+            None
+        );
+        assert_eq!(
+            idle.elapsed(start + AFTER, &showing(1)),
+            Some(Blanking::GoDark)
+        );
     }
 
     #[test]
@@ -557,15 +632,15 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         let film = Inhibitor::on(1);
-        idle.inhibited_by(film.clone(), start);
-        idle.inhibited_by(film.clone(), start);
+        idle.inhibited_by(film.clone(), start, &showing(1));
+        idle.inhibited_by(film.clone(), start, &showing(1));
         assert_eq!(
-            idle.uninhibited_by(&film, start + AFTER),
+            idle.uninhibited_by(&film, start + AFTER, &showing(1)),
             None,
             "the other one still holds"
         );
         assert_eq!(
-            idle.uninhibited_by(&film, start + AFTER),
+            idle.uninhibited_by(&film, start + AFTER, &showing(1)),
             Some(Blanking::GoDark)
         );
     }
@@ -578,9 +653,63 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         let film = Inhibitor::on(1);
-        idle.inhibited_by(film.clone(), start);
+        idle.inhibited_by(film.clone(), start, &showing(1));
         film.the_client_died();
-        assert_eq!(idle.elapsed(start + AFTER), Some(Blanking::GoDark));
+        assert_eq!(
+            idle.elapsed(start + AFTER, &showing(1)),
+            Some(Blanking::GoDark)
+        );
+    }
+
+    #[test]
+    fn an_inhibitor_on_a_surface_this_desktop_shows_no_window_for_holds_nothing() {
+        // The gap the veto leaves on its own: the protocol lets a client take
+        // an inhibitor on any surface it owns, including one it never shows,
+        // and a desk that honored that is one a program holds awake for as
+        // long as it runs with nothing on screen to say so.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.inhibited_by(Inhibitor::on(1), start, SHOWING_NOTHING);
+        assert_eq!(
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
+        assert!(idle.dark());
+    }
+
+    #[test]
+    fn a_window_appearing_under_an_inhibitor_brings_a_dark_desk_back() {
+        // A client that takes its inhibitor before it maps, which the protocol
+        // allows and a film does on a desk that is already dark: the request
+        // held nothing when it arrived, and what makes it hold is the window.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.inhibited_by(Inhibitor::on(1), start, SHOWING_NOTHING);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
+
+        assert_eq!(
+            idle.the_desktop_changed(start + AFTER, &showing(1)),
+            Some(Blanking::ComeBack)
+        );
+        assert!(!idle.dark());
+    }
+
+    #[test]
+    fn the_window_an_inhibitor_was_taken_on_closing_lets_the_screens_go() {
+        // A player whose window is closed and whose process is still there:
+        // nothing died, no destroy was sent, and there is nothing left on this
+        // desktop that a person could be watching. The desk belongs dark then
+        // and there, for the reason it does when a film ends.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.inhibited_by(Inhibitor::on(1), start, &showing(1));
+        idle.elapsed(start + AFTER, &showing(1));
+
+        assert_eq!(
+            idle.the_desktop_changed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
+        assert!(idle.dark());
     }
 
     #[test]
@@ -592,10 +721,13 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
         let film = Inhibitor::on(1);
-        idle.inhibited_by(film.clone(), start);
-        idle.elapsed(start + AFTER);
+        idle.inhibited_by(film.clone(), start, &showing(1));
+        idle.elapsed(start + AFTER, &showing(1));
         film.the_client_died();
-        assert_eq!(idle.the_dead_let_go(start + AFTER), Some(Blanking::GoDark));
+        assert_eq!(
+            idle.the_dead_let_go(start + AFTER, &showing(1)),
+            Some(Blanking::GoDark)
+        );
         assert!(idle.dark());
     }
 
@@ -610,8 +742,11 @@ mod tests {
         let start = Instant::now();
         let mut idle = desk(start);
 
-        assert_eq!(idle.the_dead_let_go(start + AFTER), None);
-        assert_eq!(idle.uninhibited_by(&Inhibitor::on(1), start + AFTER), None);
+        assert_eq!(idle.the_dead_let_go(start + AFTER, SHOWING_NOTHING), None);
+        assert_eq!(
+            idle.uninhibited_by(&Inhibitor::on(1), start + AFTER, SHOWING_NOTHING),
+            None
+        );
         assert!(!idle.dark());
     }
 
@@ -623,11 +758,11 @@ mod tests {
         // the thing that would have vetoed it is gone.
         let start = Instant::now();
         let mut old = desk(start);
-        old.inhibited_by(Inhibitor::on(1), start);
+        old.inhibited_by(Inhibitor::on(1), start, &showing(1));
 
         let mut reloaded = desk(start).takes_over_from(&mut old);
 
-        assert_eq!(reloaded.elapsed(start + AFTER), None);
+        assert_eq!(reloaded.elapsed(start + AFTER, &showing(1)), None);
         assert!(!reloaded.dark());
     }
 
@@ -638,7 +773,7 @@ mod tests {
         // film lasts.
         let start = Instant::now();
         let mut idle = desk(start);
-        idle.inhibited_by(Inhibitor::on(1), start);
+        idle.inhibited_by(Inhibitor::on(1), start, &showing(1));
         assert_eq!(idle.next_check(start + AFTER * 2), AFTER);
     }
 

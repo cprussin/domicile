@@ -941,12 +941,29 @@ an inhibitor a client holds makes the desk lit whatever the clock says — a
 what makes the two awkward cases fall out of one predicate: a film started on a
 desk that is already dark flips the answer back and takes the same `ComeBack`
 edge a keystroke would, and the last inhibitor going away on a desk nobody has
-touched in an hour goes dark then and there rather than a timeout later. The
-one thing the protocol leaves to the compositor is the client that dies holding
-one — smithay reports an inhibitor released only for the request that releases
-it, so the compositor asks after every turn of its clients whether the surfaces
-it is holding are still alive. A leaked inhibitor is a desk that never blanks
-again with nothing anywhere saying why.
+touched in an hour goes dark then and there rather than a timeout later.
+
+**An inhibitor holds only while the surface it was taken on is a window on
+this desktop.** The protocol lets a client take one on any surface it owns,
+says nothing about whether that surface is mapped, and leaves the answer to the
+compositor — so a client that took one on a surface it never shows would hold
+every screen on for as long as it ran, with nothing on any of them to say why.
+`crate::idle::holds` is the whole of it, and neither half is a fact this module
+reads for itself:
+
+| Question | Answered by |
+|---|---|
+| **Is anybody left to hold it?** | `WlSurface::is_alive`. Smithay reports an inhibitor released only for the request that releases it, and a client that crashes sends no request, so the compositor asks after every turn of its clients |
+| **Is there a window on that surface?** | The list the window path already keeps — the toplevels `new_toplevel` announced as `<app>` elements and `toplevel_destroyed` takes back out, handed to the clock the way the instant is |
+
+Both directions of the second one are real, and neither is a request any client
+sends: a client that takes its inhibitor before it maps starts holding when the
+window arrives, and one whose window is closed while it keeps running stops
+holding then rather than a timeout later. So `new_toplevel` and
+`toplevel_destroyed` ask the clock again, and the edge that comes back is
+stated to the connectors like any other. An inhibitor on a *subsurface* holds
+nothing either: the list is toplevels, and a client that wants the screens on
+has one.
 
 The case that is easy to miss is a monitor plugged in while the screens are
 dark: it arrives lit, off the engine's own modeset, and `adopt_the_desktop`
@@ -1319,6 +1336,10 @@ of this — both selections land on that card and agree.
   browser asking on every paste — buys nothing, because the compositor already
   reads every selection for the history, and costs a round trip inside the
   gesture a person is waiting on.
+- **An idle inhibitor is a window's, not a surface's.** The protocol leaves the
+  unmapped case to the compositor, and honoring it is a program that holds
+  every screen on with nothing to show for it. The answer is the list the
+  window path already keeps rather than a second reading of what is mapped.
 - **Prove what a build can prove in CI.** The probe cost one engine-job slot and
   found three of the eight edits in the patch, one of them a link error no `git
   grep` and no compiler could have reached.

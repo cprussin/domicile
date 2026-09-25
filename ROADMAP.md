@@ -76,7 +76,9 @@ The evidence for each of those is in the doc that made the claim —
    `crate::idle` in the compositor for the decision and the edge, the
    connectors going dark and coming back on the next key, click, scroll or
    pointer movement — with a client playing a film holding them on through all
-   of it
+   of it, for exactly as long as it is running and the window it is playing in
+   is on the desktop: an inhibitor whose client died holds nothing, and neither
+   does one taken on a surface nobody can see
    ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it))
    — and an `idle` message on the host↔chrome protocol that tells the shell
    which of the two a desk is in ([what a shell does with
@@ -96,14 +98,6 @@ The evidence for each of those is in the doc that made the claim —
      before the blank to speak, or telling the shell the timeout and letting it
      count. Neither is written, and which is right depends on the lock, since
      the lock is the thing that most wants the warning.
-   - **An inhibitor on a surface nobody can see still holds.** The inhibit half
-     shipped — `zwp_idle_inhibit_manager_v1` is advertised, a client's
-     inhibitor vetoes the answer in `Idle`, and one held by a client that died
-     stops holding the moment that connection is cleaned up. What it does not
-     ask is whether the surface is *mapped*: a client that takes an inhibitor
-     on a surface it never shows holds the screens on for as long as it runs,
-     and the protocol leaves that to the compositor. It wants the same answer
-     the window path already has about which surfaces are on a desktop.
 
 ## In the engine fork — the agent on `crux`
 

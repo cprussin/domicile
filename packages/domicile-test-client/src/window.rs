@@ -35,7 +35,7 @@ use wayland_protocols::wp::primary_selection::zv1::client::{
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
 
-use crate::arguments::Arguments;
+use crate::arguments::{Arguments, HoldTheScreensOn};
 
 /// What can go wrong being a client.
 #[derive(Debug, thiserror::Error)]
@@ -198,9 +198,18 @@ struct Client {
     /// Whether this client asks for the keyboard once its window is up — see
     /// [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: bool,
-    /// Whether this client holds the desktop's screens on — see
+    /// When this client takes an inhibitor, if it takes one — see
     /// [`crate::arguments::Arguments::hold_the_screens_on`].
-    hold_the_screens_on: bool,
+    hold_the_screens_on: Option<HoldTheScreensOn>,
+    /// Whether this client stays when its window is closed — see
+    /// [`crate::arguments::Arguments::outlive_its_window`].
+    outlive_its_window: bool,
+    /// Whether the window has been closed on a client that outlives it.
+    ///
+    /// What it stops is the drawing: the surface is still there, and so is
+    /// anything taken on it, but its role object is gone and there is nothing
+    /// left to commit a frame to.
+    window_is_gone: bool,
     /// What to put on the clipboard — see [`Arguments::copy`].
     copy: Option<String>,
     /// What to put on the middle-click selection — see
@@ -368,6 +377,8 @@ impl Client {
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
             hold_the_screens_on: asked.hold_the_screens_on,
+            outlive_its_window: asked.outlive_its_window,
+            window_is_gone: false,
             copy: asked.copy.clone(),
             copy_primary: asked.copy_primary.clone(),
             paste: asked.paste,
@@ -471,6 +482,13 @@ impl Client {
         }
 
         let surface = compositor.create_surface(handle, ());
+        // Before the surface is anything anybody can see, where a check asked
+        // for that: an inhibitor names a surface, and this one has no role
+        // yet, so what the desktop is holding at this point is a request for a
+        // window that does not exist.
+        if self.hold_the_screens_on == Some(HoldTheScreensOn::BeforeItHasAWindow) {
+            self.take_an_inhibitor(&surface, handle)?;
+        }
         let xdg = wm_base.get_xdg_surface(&surface, handle, ());
         let toplevel = xdg.get_toplevel(handle, ());
         toplevel.set_title(self.title.clone());
@@ -488,17 +506,8 @@ impl Client {
         // the compositor answers it with the size the surface may use, and
         // attaching before that is asking for a size nobody agreed to.
         surface.commit();
-        if self.hold_the_screens_on {
-            let inhibit = self.globals.inhibit.as_ref().ok_or(ClientError::Missing {
-                global: "zwp_idle_inhibit_manager_v1",
-            })?;
-            // Kept by the connection rather than by this client: an inhibitor
-            // holds for as long as the object exists, and `wayland-client`
-            // sends no destroy of its own when the handle is dropped. Which is
-            // also the case the compositor has to answer for — nothing this
-            // client does when it is killed either.
-            let inhibitor = inhibit.create_inhibitor(&surface, handle, ());
-            crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
+        if self.hold_the_screens_on == Some(HoldTheScreensOn::OnItsWindow) {
+            self.take_an_inhibitor(&surface, handle)?;
         }
         self.window = Some(Window {
             surface,
@@ -506,6 +515,26 @@ impl Client {
             size: SIZE,
             scale: 1,
         });
+        Ok(())
+    }
+
+    /// Ask that the desktop stay awake for as long as `surface` holds one.
+    ///
+    /// Kept by the connection rather than by this client: an inhibitor holds
+    /// for as long as the object exists, and `wayland-client` sends no destroy
+    /// of its own when the handle is dropped. Which is also the case the
+    /// compositor has to answer for — nothing this client does when it is
+    /// killed either.
+    fn take_an_inhibitor(
+        &self,
+        surface: &wl_surface::WlSurface,
+        handle: &QueueHandle<Client>,
+    ) -> Result<(), ClientError> {
+        let inhibit = self.globals.inhibit.as_ref().ok_or(ClientError::Missing {
+            global: "zwp_idle_inhibit_manager_v1",
+        })?;
+        let inhibitor = inhibit.create_inhibitor(surface, handle, ());
+        crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
         Ok(())
     }
 
@@ -893,9 +922,14 @@ fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
 }
 
 fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
-    if let Err(err) = client.draw(handle) {
-        eprintln!("domicile-test-client: {err}");
-        std::process::exit(1);
+    // A window that has been closed on a client that outlives it has nothing
+    // to draw into: the frame callback asked for before the close still
+    // arrives, and the surface it named has no role object left to commit to.
+    if !client.window_is_gone {
+        if let Err(err) = client.draw(handle) {
+            eprintln!("domicile-test-client: {err}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -1087,7 +1121,19 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
         // wait mean "the close arrived and was acted on" rather than "the
         // client stopped for some reason".
         if let xdg_toplevel::Event::Close = event {
-            std::process::exit(0);
+            // Unless a check needs this client *after* its window, in which
+            // case the window is the only thing that goes: the toplevel is
+            // destroyed, the surface and whatever was taken on it stay, and
+            // the connection is still up. That is what tells a compositor's
+            // answer to a closed window apart from its answer to a dead
+            // client.
+            if client.outlive_its_window {
+                crate::say!(toplevel.id(), "destroy()");
+                toplevel.destroy();
+                client.window_is_gone = true;
+            } else {
+                std::process::exit(0);
+            }
         }
     }
 }
