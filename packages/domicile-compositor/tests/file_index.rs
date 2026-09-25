@@ -43,25 +43,23 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
 
-    assert_eq!(
-        found_with(&mut chrome, "", "todo.txt"),
-        vec![
-            "Notes/".to_string(),
-            "Notes/2026/".to_string(),
-            "Notes/2026/april/".to_string(),
-            "Notes/2026/april/plan.org".to_string(),
-            "src/".to_string(),
-            "src/domicile/".to_string(),
-            "src/domicile/README.md".to_string(),
-            "todo.txt".to_string(),
-        ]
+    settles_on(
+        &mut chrome,
+        "",
+        &[
+            "Notes/",
+            "Notes/2026/",
+            "Notes/2026/april/",
+            "Notes/2026/april/plan.org",
+            "src/",
+            "src/domicile/",
+            "src/domicile/README.md",
+            "todo.txt",
+        ],
     );
     // Only what matched crosses into the page: the index is the whole home,
     // and on a real one that is tens of megabytes a page has no use for.
-    assert_eq!(
-        found_with(&mut chrome, "plan", "Notes/2026/april/plan.org"),
-        vec!["Notes/2026/april/plan.org".to_string()]
-    );
+    settles_on(&mut chrome, "plan", &["Notes/2026/april/plan.org"]);
 }
 
 #[test]
@@ -76,7 +74,7 @@ fn a_preview_reads_what_the_index_holds_and_nothing_else() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    found_with(&mut chrome, "", "Notes/today.org");
+    settles_on(&mut chrome, "", &["Notes/", "Notes/today.org"]);
 
     assert_eq!(
         previewed(&mut chrome, "Notes/today.org"),
@@ -101,21 +99,19 @@ fn a_file_written_afterward_is_found_by_the_next_search() {
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
-    assert_eq!(
-        found_with(&mut chrome, "notes", "Notes/today.org"),
-        vec!["Notes/".to_string(), "Notes/today.org".to_string()]
-    );
+    settles_on(&mut chrome, "notes", &["Notes/", "Notes/today.org"]);
 
-    write(home.path(), "Notes/2026/plan.org");
-
-    assert_eq!(
-        found_with(&mut chrome, "notes", "Notes/2026/plan.org"),
-        vec![
-            "Notes/".to_string(),
-            "Notes/2026/".to_string(),
-            "Notes/2026/plan.org".to_string(),
-            "Notes/today.org".to_string(),
-        ]
+    settles_on_once_written(
+        &mut chrome,
+        home.path(),
+        "Notes/2026/plan.org",
+        "notes",
+        &[
+            "Notes/",
+            "Notes/2026/",
+            "Notes/2026/plan.org",
+            "Notes/today.org",
+        ],
     );
 }
 
@@ -132,7 +128,7 @@ fn what_the_walk_found_is_written_down_for_the_next_run() {
     let mut chrome = compositor.chrome();
     // The file is written when the walk ends, and a settled answer is how a
     // test knows it has.
-    found_with(&mut chrome, "", "todo.txt");
+    settles_on(&mut chrome, "", &["todo.txt"]);
 
     let written = compositor.await_file(&compositor.cache_home().join("domicile/file-index"));
 
@@ -152,37 +148,101 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
 
     let compositor = Compositor::started_in_a_home(&omitting(r#""src/target""#), Some(home.path()));
     let mut chrome = compositor.chrome();
-    assert_eq!(
-        found_with(&mut chrome, "", "src/main.rs"),
-        vec![
-            ".config/".to_string(),
-            ".config/domicile.toml".to_string(),
-            "src/".to_string(),
-            "src/main.rs".to_string(),
-        ]
+    settles_on(
+        &mut chrome,
+        "",
+        &[".config/", ".config/domicile.toml", "src/", "src/main.rs"],
     );
 
     compositor.reconfigure(&omitting(r#""**/.*""#));
 
-    assert_eq!(
-        found_with(&mut chrome, "", "src/target/debug.log"),
-        vec![
-            "src/".to_string(),
-            "src/main.rs".to_string(),
-            "src/target/".to_string(),
-            "src/target/debug.log".to_string(),
-        ]
+    settles_on(
+        &mut chrome,
+        "",
+        &["src/", "src/main.rs", "src/target/", "src/target/debug.log"],
     );
 }
 
-/// What `query` finds once the walk is over and `path` is among it.
+/// How long a search is asked again before the index is reported wrong.
 ///
-/// Asked until it is, because both conditions are a race rather than the
-/// claim: a search during the startup walk answers from what a disk had got
-/// to, and one right after a write answers from before the watch saw it.
-fn found_with(chrome: &mut domicile_test_chrome::Chrome, query: &str, path: &str) -> Vec<String> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+/// Not `running::PATIENCE`, which is how long the *compositor* has to answer
+/// one search at all. What is waited on here is a walk of a real disk, a
+/// kernel's watch, and the quarter second `file_indexing::SETTLE` gathers a
+/// burst of writes for — on a machine that may be running every other check in
+/// this repo at the same time. Measured on an idle one, the longest of these
+/// waits is answered in about half a second, so this is twenty times what it
+/// costs: a compositor that is going to answer has answered, and the deadline
+/// firing is a finding rather than a loaded machine.
+const SETTLES_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long a turn leaves the compositor alone before asking again.
+///
+/// **Longer than `file_indexing::SETTLE`, and that is the whole constraint.**
+/// The index gathers filesystem events until a quarter of a second passes with
+/// none and announces the result once, so a check that wrote every fiftieth of
+/// a second handed the burst something new before it could ever settle and the
+/// answer a search got never moved — which is a check that hangs for its whole
+/// patience over an index that is right. Twice that quarter second, so one
+/// write is one burst.
+const BETWEEN_ASKS: Duration = Duration::from_millis(500);
+
+/// A search for `query`, asked until the whole of `expected` is its answer.
+///
+/// **The whole answer rather than one row of it, because every one of these
+/// waits is on an index that is still being made.** A search taken during a
+/// walk — the one at startup, or the one a reload's new `omit` sets off — is
+/// answered from what a disk had got to by then, and one taken between two
+/// bursts of filesystem events is answered from the half of a change that had
+/// arrived. So a check that waited for the row it named and then compared the
+/// rest is comparing against an index a burst behind the one it waited for,
+/// which is exactly the failure this was: `Notes/2026/plan.org` had landed and
+/// the `Notes/2026/` it is in had not.
+///
+/// Which makes the assertion the wait: what a settled answer must be is stated
+/// once, and being told it in time is not a separate claim.
+fn settles_on(chrome: &mut domicile_test_chrome::Chrome, query: &str, expected: &[&str]) {
+    asked_until_settled(chrome, query, expected, || {});
+}
+
+/// The same, for a `path` this writes into `home` itself.
+///
+/// **AND IT WRITES IT AGAIN ON EVERY TURN, WHICH IS THE POINT.** A file
+/// written after the startup walk is not something waiting longer finds:
+/// `file_indexing::keep_the_index` establishes its inotify watch *after* the
+/// walk ends, and the search that says the walk is over is answered from the
+/// announcement that ends it — so a write that lands between those two is a
+/// change the kernel had nobody to report to, and the index goes on without it
+/// until something else moves. A write per turn closes that, because whichever
+/// one the watch is up for is the one that gets reported.
+///
+/// Measured rather than reasoned: a 400ms sleep in front of `watch_home` fails
+/// this check every run while the write is made once, and passes it every run
+/// while it is made per turn.
+fn settles_on_once_written(
+    chrome: &mut domicile_test_chrome::Chrome,
+    home: &Path,
+    path: &str,
+    query: &str,
+    expected: &[&str],
+) {
+    asked_until_settled(chrome, query, expected, || made_again(home, path));
+}
+
+/// Ask `query` until a settled answer is `expected`, arranging `again` first.
+///
+/// `again` runs before every ask rather than once before the first, which is
+/// for a stimulus that can be *lost* rather than merely be late — see
+/// [`settles_on_once_written`]. It is nothing at all for a wait on something
+/// the compositor is already doing.
+fn asked_until_settled(
+    chrome: &mut domicile_test_chrome::Chrome,
+    query: &str,
+    expected: &[&str],
+    again: impl Fn(),
+) {
+    let deadline = Instant::now() + SETTLES_WITHIN;
     loop {
+        again();
         chrome
             .say(&ChromeMessage::SearchFiles {
                 query: query.to_string(),
@@ -196,10 +256,21 @@ fn found_with(chrome: &mut domicile_test_chrome::Chrome, query: &str, path: &str
         match answer {
             HostMessage::FoundFiles {
                 files, indexing, ..
-            } if !indexing && files.iter().any(|found| found == path) => return files,
-            HostMessage::FoundFiles { .. } => {
-                assert!(Instant::now() < deadline, "{query:?} never found {path}");
-                std::thread::sleep(Duration::from_millis(50));
+            } => {
+                let settled = !indexing
+                    && files
+                        .iter()
+                        .map(String::as_str)
+                        .eq(expected.iter().copied());
+                if settled {
+                    return;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "{query:?} never answered {expected:?} in {SETTLES_WITHIN:?}; \
+                     the last answer held {files:?}, and was still indexing: {indexing}"
+                );
+                std::thread::sleep(BETWEEN_ASKS);
             }
             other => panic!("that is not a search's answer: {other:?}"),
         }
@@ -229,4 +300,27 @@ fn write(home: &Path, path: &str) {
     let file = home.join(path);
     fs::create_dir_all(file.parent().expect("a file has a parent")).expect("the directories");
     fs::write(&file, "").expect("the file is written");
+}
+
+/// The same, from nothing, however much of it is already there.
+///
+/// Two things make this more than a second [`write`], and both are what the
+/// index is told rather than what the disk holds. A write into a path the index
+/// already has is not a change `domicile_host::file_changes` reads — only a
+/// path arriving or leaving is — so the file has to go before it can arrive
+/// again. And the directory holding it is a row of its own that nothing
+/// synthesizes from the file's name, so it has to arrive again too.
+///
+/// **The directory is this check's to lose, then**: whatever else is in it goes
+/// with it. Every caller writes into one it introduced itself.
+fn made_again(home: &Path, path: &str) {
+    let directory = home
+        .join(path)
+        .parent()
+        .expect("a file has a parent")
+        .to_path_buf();
+    if directory.exists() {
+        fs::remove_dir_all(&directory).expect("what was written is taken away again");
+    }
+    write(home, path);
 }
