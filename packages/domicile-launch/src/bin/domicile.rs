@@ -30,6 +30,7 @@ use domicile_launch::control_socket::{
 use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
+use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
     clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
     Ending, Policy,
@@ -156,16 +157,23 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     )
     .map_err(|why| why.to_string())?;
 
-    // One directory per run, thrown away with it. The sockets and the engine's
-    // profile go in it, so a desktop that exits leaves nothing behind and two
-    // running at once do not meet.
+    // Kept between runs, unlike everything below it: a profile thrown away
+    // with the run is every sign-in thrown away with it. Refused rather than
+    // guessed when nothing names a home, because a person's logins kept
+    // somewhere nobody named are logins nobody can find to delete.
+    let profile = profile_directory(&env)
+        .ok_or("nowhere to keep the engine's profile -- neither XDG_STATE_HOME nor HOME is set")?;
+
+    // One directory per run, thrown away with it. The sockets go in it, so a
+    // desktop that exits leaves nothing behind and two running at once do not
+    // meet.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
     let places = Runtime {
         broker: runtime.join("broker"),
         chrome_socket: runtime.join("chrome.sock"),
         command: runtime.join("command.sock"),
         control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
-        profile: runtime.join("profile"),
+        profile,
         session: runtime.join("session.json"),
     };
 
@@ -188,6 +196,9 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // the wrong place and a default that was picked up instead are the same
     // line otherwise.
     println!("config: {config}");
+    // A path nobody typed, and the one that decides which sign-ins a desk
+    // comes up with.
+    println!("profile: {}", places.profile.display());
 
     // Taken before anything is started, because the compositor is started with
     // this path in its environment and there is nothing to hand on if the bind
