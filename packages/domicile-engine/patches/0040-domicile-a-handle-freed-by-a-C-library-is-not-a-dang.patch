@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a handle freed by a C library is not a dangling
+ raw_ptr
+
+A console desktop came up and then lost its GPU process on the first
+modeset and its browser process on the first trackpad event, both to the
+dangling-pointer checker:
+
+  ui::gbm_wrapper::Buffer::UnmapGbmBo()
+  ui::LibInputEventConverter::LibInputEvent::~LibInputEvent()
+
+Both hold a `raw_ptr` to memory a C library frees -- mesa's map record
+in `gbm_bo_unmap`, libinput's event, device and context -- and both
+still held it when the library freed it. The allocator shim makes that
+library's `malloc` PartitionAlloc's, so the checker sees it.
+
+Patch 0027 wrote the libinput half, on the claim that `raw_ptr` "costs
+nothing" on libinput's handles. It does not. The gbm half is upstream's,
+reachable only on a non-ChromeOS DRM build.
+
+Each is released with `ExtractAsDangling`, as `~Buffer` already does for
+`bo_`.
+---
+ ui/events/ozone/evdev/libinput_event_converter.cc |  6 +++---
+ ui/events/ozone/evdev/libinput_event_converter.h  | 10 ++++++----
+ ui/gfx/linux/gbm_wrapper.cc                       |  8 ++++++--
+ 3 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index 160a98cc70..d92469b05c 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -74,7 +74,7 @@ LibInputEventConverter::LibInputEvent::LibInputEvent(
+ 
+ LibInputEventConverter::LibInputEvent::~LibInputEvent() {
+   if (event_) {
+-    libinput_event_destroy(event_);
++    libinput_event_destroy(event_.ExtractAsDangling());
+   }
+ }
+ 
+@@ -111,7 +111,7 @@ LibInputEventConverter::LibInputDevice::LibInputDevice(LibInputDevice&& other)
+ 
+ LibInputEventConverter::LibInputDevice::~LibInputDevice() {
+   if (device_) {
+-    libinput_device_unref(device_);
++    libinput_device_unref(device_.ExtractAsDangling());
+   }
+ }
+ 
+@@ -187,7 +187,7 @@ LibInputEventConverter::LibInputContext::LibInputContext(
+ 
+ LibInputEventConverter::LibInputContext::~LibInputContext() {
+   if (li_) {
+-    libinput_unref(li_);
++    libinput_unref(li_.ExtractAsDangling());
+   }
+ }
+ 
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index 9a9c2c02e6..175b49024a 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -42,10 +42,12 @@ class LibInputEventConverter : public EventConverterEvdev {
+ 
+    private:
+     // `raw_ptr` on a handle libinput allocated and libinput frees: the
+-    // checker asks for it on every pointer member, and it costs nothing here
+-    // because the protection it adds only applies to memory this process
+-    // allocated. This file had never been compiled outside ChromeOS, where
+-    // the plugin does not run, which is why upstream reads as it does.
++    // checker asks for it on every pointer member. libinput's `malloc` is
++    // PartitionAlloc's, so the protection applies here too, and every
++    // destructor below hands the handle over with `ExtractAsDangling` rather
++    // than holding it while libinput frees it. This file had never been
++    // compiled outside ChromeOS, where the plugin does not run, which is why
++    // upstream reads as it does.
+     raw_ptr<libinput_event> event_;
+   };
+ 
+diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
+index 2aea5aca7a..9c9fc1290a 100644
+--- a/ui/gfx/linux/gbm_wrapper.cc
++++ b/ui/gfx/linux/gbm_wrapper.cc
+@@ -250,8 +250,12 @@ class Buffer final : public ui::GbmBuffer {
+  private:
+   static void UnmapGbmBo(void* pixels, void* context) {
+     Buffer* buffer = static_cast<Buffer*>(context);
+-    gbm_bo_unmap(buffer->bo_, buffer->mmap_data_);
+-    buffer->mmap_data_ = nullptr;
++    // `ExtractAsDangling` because `gbm_bo_unmap` frees what `mmap_data_`
++    // points at -- mesa's map record, allocated by a `malloc` that is
++    // PartitionAlloc's -- so a `raw_ptr` still holding it is dangling, and the
++    // checker crashes the GPU process on the first modeset. It also leaves
++    // `mmap_data_` null, which `GetSurface` and `~Buffer` both require.
++    gbm_bo_unmap(buffer->bo_, buffer->mmap_data_.ExtractAsDangling());
+   }
+ 
+   raw_ptr<gbm_bo> bo_;
