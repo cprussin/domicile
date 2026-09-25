@@ -73,6 +73,7 @@ import type {
   DomicileShortcut,
 } from "./domicile-host";
 import type {
+  FilePreviewMessage,
   FoundFilesMessage,
   HostMessageOf,
   HostMessageType,
@@ -85,6 +86,7 @@ import {
   appTitled,
   battery,
   clipboard,
+  filePreview,
   focusChanged,
   focusRequested,
   foundFiles,
@@ -179,6 +181,12 @@ export class DomicileClient {
     ((found: FoundFilesMessage) => void)[]
   >();
 
+  /** The previews waiting on an answer, by the path each asked about. */
+  readonly #previews = new Map<
+    string,
+    ((preview: FilePreviewMessage) => void)[]
+  >();
+
   constructor(host: DomicileHost) {
     this.#host = host;
 
@@ -232,6 +240,13 @@ export class DomicileClient {
         settle(found);
       }
       this.#searches.delete(found.query);
+    });
+    host.addEventListener("filepreview", (event) => {
+      const previewed = filePreview(event);
+      for (const settle of this.#previews.get(previewed.path) ?? []) {
+        settle(previewed);
+      }
+      this.#previews.delete(previewed.path);
     });
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
@@ -465,6 +480,21 @@ export class DomicileClient {
     return new Promise((settle) => {
       this.#searches.set(query, [...(this.#searches.get(query) ?? []), settle]);
       this.#host.searchFiles(query);
+    });
+  }
+
+  /**
+   * What `path` holds — the front of a file, or of a directory — for a
+   * launcher's preview of the row it has reached.
+   *
+   * `path` is one a {@link searchFiles} answered. The compositor reads only a
+   * path its index holds, and says `Unreadable` for anything else. Like a
+   * search, a desktop with no index never settles this.
+   */
+  previewFile(path: string): Promise<FilePreviewMessage> {
+    return new Promise((settle) => {
+      this.#previews.set(path, [...(this.#previews.get(path) ?? []), settle]);
+      this.#host.previewFile(path);
     });
   }
 

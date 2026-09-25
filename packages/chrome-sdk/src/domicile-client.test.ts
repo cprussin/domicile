@@ -8,6 +8,7 @@ import type {
   DomicileHostEventMap,
   DomicileShortcut,
 } from "./domicile-host";
+import { FilePreview } from "./file-preview";
 import { BTN_LEFT } from "./input";
 import { isClaimed } from "./shortcut-claims";
 import type { Theme } from "./theme";
@@ -85,6 +86,9 @@ class FakeHost implements DomicileHost {
   }
   searchFiles(query: string): void {
     this.calls.push(["searchFiles", query]);
+  }
+  previewFile(path: string): void {
+    this.calls.push(["previewFile", path]);
   }
   copyClipboardEntry(entry: number): void {
     this.calls.push(["copyClipboardEntry", entry]);
@@ -547,6 +551,39 @@ describe("DomicileClient", () => {
 
       expect((await shorter).files).toStrictEqual(["Notes/", "src/nix/"]);
       expect((await longer).files).toStrictEqual(["Notes/"]);
+    });
+  });
+
+  describe("previewing a file", () => {
+    /** The compositor saying what `path` holds, as text. */
+    const answer = (path: string, text: string) => {
+      host.dispatch(
+        "filepreview",
+        Object.assign(new Event("filepreview"), {
+          arrival: 0,
+          entries: [],
+          kind: "text",
+          path,
+          text,
+        }),
+      );
+    };
+
+    it("asks the host, and settles each preview with its own path's answer", async () => {
+      // A launcher asks as the highlight moves, so two are in flight whenever
+      // an arrow key is faster than the compositor.
+      const first = domicile.previewFile("a.txt");
+      expect(host.lastCall()).toStrictEqual(["previewFile", "a.txt"]);
+      const second = domicile.previewFile("b.txt");
+
+      answer("b.txt", "bee");
+      answer("a.txt", "ay");
+
+      expect(await first).toStrictEqual({
+        path: "a.txt",
+        preview: FilePreview.Text("ay"),
+      });
+      expect((await second).preview).toStrictEqual(FilePreview.Text("bee"));
     });
   });
 

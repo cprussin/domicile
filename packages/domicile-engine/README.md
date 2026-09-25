@@ -137,14 +137,21 @@ an engine release rather than a TypeScript edit. That trade was made
 deliberately; it is worth knowing which side of it you are on before asking for
 a new message.
 
-**Implemented — every member the fork keeps.** Outbound: `spawn`, `focus_app`,
+**Implemented — every member the fork keeps.** Outbound: `spawn`,
+`search_files`, `preview_file`, `copy_clipboard_entry`, `focus_app`,
 `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
-`set_device_pixel_ratio`, `grab_shortcut`, `warp_pointer`, `key`,
+`set_device_pixel_ratio`, `set_theme`, `grab_shortcut`, `warp_pointer`, `key`,
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
-Inbound: `welcome`,
-`app_appeared`, `app_titled`, `app_resized`, `app_closed`, `app_cursor`,
-`shortcut`, `modifiers`, `focus_changed`, `focus_requested`, `displays`,
-`keymap`.
+Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
+`app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
+`file_preview`, `battery`, `clipboard`, `theme`, `focus_changed`,
+`focus_requested`, `displays`, `keymap`.
+
+`preview_file` is the one outbound member that names a path, which
+`search_files` exists not to. The path is relative to the home, as a
+`found_files` answer named it, and the compositor answers only for a path in
+its own index of the home — anything else is `unreadable` — so it reads nothing
+a search could not already have named.
 
 `resize_app` is implemented here and nothing sends it. An `<app>`'s layout box
 *is* the client's `xdg_toplevel.configure` — `LayoutAppSurface` reports it and
