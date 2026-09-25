@@ -57,6 +57,12 @@ type Props = ExtendProps<
     closeButton?: boolean | undefined;
     footer?: ReactNode | undefined;
     placement?: Placement | undefined;
+    /**
+     * Whether the popup is drawn. Turn it off to draw only the backdrop — a
+     * desk of several monitors is several pages, and the panel belongs on the
+     * one the keyboard is on while the others are only dimmed under it.
+     */
+    popup?: boolean | undefined;
     size?: Size | undefined;
     surface?: Surface | undefined;
     title?: ReactNode | undefined;
@@ -69,6 +75,7 @@ const ModalDialogComponent = ({
   closeButton = true,
   footer,
   placement = "center",
+  popup = true,
   size = "md",
   surface = "card",
   title,
@@ -78,49 +85,55 @@ const ModalDialogComponent = ({
   <BaseDialog.Root {...rootProps}>
     {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
     <BaseDialog.Portal>
-      <BaseDialog.Backdrop className={backdropStyles({ surface })} />
-      <BaseDialog.Viewport className={viewportStyles}>
-        {/* The placement, the size and the surface are written on the popup rather than
+      <BaseDialog.Backdrop
+        className={backdropStyles({ surface })}
+        data-backdrop=""
+        data-surface={surface}
+      />
+      {popup && (
+        <BaseDialog.Viewport className={viewportStyles}>
+          {/* The placement, the size and the surface are written on the popup rather than
             carried in its class name so that what a dialog is doing is
             legible in the inspector — and so a test has something to read. */}
-        <BaseDialog.Popup
-          className={popupStyles}
-          data-placement={placement}
-          data-size={size}
-          data-surface={surface}
-        >
-          {title !== undefined && (
-            <header className={headerStyles({ hasCloseButton: closeButton })}>
-              <BaseDialog.Title className={titleStyles}>
-                {title}
-              </BaseDialog.Title>
-            </header>
-          )}
-          {closeButton && (
-            <span className={closeStyles}>
-              <BaseDialog.Close
-                render={
-                  <Button label="Close" variant="ghost">
-                    <XIcon />
-                  </Button>
-                }
-              />
-            </span>
-          )}
-          <div
-            className={bodyStyles({
-              hasCloseButton: closeButton,
-              hasFooter: footer !== undefined,
-              hasTitle: title !== undefined,
-            })}
+          <BaseDialog.Popup
+            className={popupStyles}
+            data-placement={placement}
+            data-size={size}
+            data-surface={surface}
           >
-            {children}
-          </div>
-          {footer !== undefined && (
-            <footer className={footerStyles}>{footer}</footer>
-          )}
-        </BaseDialog.Popup>
-      </BaseDialog.Viewport>
+            {title !== undefined && (
+              <header className={headerStyles({ hasCloseButton: closeButton })}>
+                <BaseDialog.Title className={titleStyles}>
+                  {title}
+                </BaseDialog.Title>
+              </header>
+            )}
+            {closeButton && (
+              <span className={closeStyles}>
+                <BaseDialog.Close
+                  render={
+                    <Button label="Close" variant="ghost">
+                      <XIcon />
+                    </Button>
+                  }
+                />
+              </span>
+            )}
+            <div
+              className={bodyStyles({
+                hasCloseButton: closeButton,
+                hasFooter: footer !== undefined,
+                hasTitle: title !== undefined,
+              })}
+            >
+              {children}
+            </div>
+            {footer !== undefined && (
+              <footer className={footerStyles}>{footer}</footer>
+            )}
+          </BaseDialog.Popup>
+        </BaseDialog.Viewport>
+      )}
     </BaseDialog.Portal>
   </BaseDialog.Root>
 );

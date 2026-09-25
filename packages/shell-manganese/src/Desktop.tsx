@@ -1,5 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
+import type { Display } from "@domicile/component-library/display-source";
 import { useCallback, useEffect, useRef } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
@@ -141,6 +142,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
         viewport is this monitor, and the panel is over the whole of it.
       */}
       <Launcher
+        here={keyboardIsHere(displays, windows.focused)}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}
@@ -174,4 +176,16 @@ export const Desktop = ({ desk, domicile }: Props) => {
       <NoScreens />
     </>
   );
+};
+
+/**
+ * Whether the keyboard is on the monitor this page covers — or, on a page that
+ * covers none because it is the whole desk, on this page at all.
+ */
+const keyboardIsHere = (
+  displays: readonly Display[] | undefined,
+  focused: string,
+): boolean => {
+  const own = displays?.find((display) => display.scanout !== undefined);
+  return own === undefined || own.name === focused;
 };

@@ -1740,6 +1740,23 @@ describe("the launcher", () => {
     expect(launcherBox()).toHaveFocus();
   });
 
+  it("dims a monitor the keyboard is not on and puts the panel on the one it is", () => {
+    // A desk of several monitors is several pages, all told the launcher is
+    // up. This one covers the left monitor and the keyboard is on the right,
+    // so the panel is the right page's to draw: here there is only the
+    // backdrop it is up over.
+    const { baseElement } = renderShell([
+      { ...LEFT, fillsTheWindow: true },
+      RIGHT,
+    ]);
+    press("parenright");
+
+    press("space");
+
+    expect(launcherBox()).toBeNull();
+    expect(baseElement.querySelector("[data-backdrop]")).toBeInTheDocument();
+  });
+
   it("answers the same key handed back by the host", () => {
     // A browser window has the keyboard, so `mod+space` never reaches this
     // document. The launcher is the one thing on the desktop you most want to
