@@ -207,6 +207,17 @@
         # library matching the running kernel driver, and the nixpkgs copies
         # behind it are what a non-NixOS host has instead. The dev shell's own
         # `LD_LIBRARY_PATH` is built the same way and says the same thing.
+        #
+        # GSETTINGS SCHEMAS FOR THE SAME REASON. Chromium's GTK half asks GIO
+        # for settings, and GIO finds schemas through `XDG_DATA_DIRS`; nixpkgs
+        # puts them under `share/gsettings-schemas/<name>`, where a host's own
+        # data dirs never look. With none found there is no schema source at
+        # all, and every start printed
+        #
+        #   GLib-GIO-CRITICAL **: g_settings_schema_source_lookup: assertion
+        #   'source != NULL' failed
+        #
+        # Prefixed, so the host's own dirs still follow.
         postFixup = ''
           mv "$out/chrome" "$out/.chrome-unwrapped"
           makeWrapper "$out/.chrome-unwrapped" "$out/chrome" \
@@ -216,6 +227,12 @@
                 pkgs.mesa
                 pkgs.libgbm
                 pkgs.libGL
+              ]
+            }" \
+            --prefix XDG_DATA_DIRS : "${
+              pkgs.lib.concatMapStringsSep ":" pkgs.glib.getSchemaDataDirPath [
+                pkgs.gsettings-desktop-schemas
+                pkgs.gtk3
               ]
             }"
         '';
@@ -239,6 +256,20 @@
             echo "the engine's chrome is not wrapped, so it carries no GL path" >&2
             exit 1
           }
+          # And that it carries GSettings schemas. Without them GIO has no
+          # schema source at all, and the engine's first GTK settings lookup
+          # prints a GLib-GIO-CRITICAL on every start.
+          schemas=$(grep -o "[^:\"']*/share/gsettings-schemas/[^:\"']*" "$out/chrome" || true)
+          [ -n "$schemas" ] || {
+            echo "the engine's chrome carries no GSettings schemas" >&2
+            exit 1
+          }
+          for dir in $schemas; do
+            [ -e "$dir/glib-2.0/schemas/gschemas.compiled" ] || {
+              echo "$dir has no compiled GSettings schemas" >&2
+              exit 1
+            }
+          done
         '';
 
         meta = {
