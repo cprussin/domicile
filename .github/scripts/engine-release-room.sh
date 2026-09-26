@@ -35,6 +35,7 @@ STAGED="$OUT-staged"
 # two with nothing to spare, and it is where reclaiming stops rather than
 # where it starts: a run 2G short no longer fails, it empties one free tree.
 FLOOR_GB=60
+COLD_GB=40
 
 # The pool, as engine-tree-pool.sh names it. A seam for the tests, which have
 # no /build and should not want one.
@@ -46,12 +47,25 @@ RECLAIMER="$OWNER, reclaiming disk"
 # `df` prints a header and a `54G`, and every comparison below wants the 54.
 free_gb() { df -BG --output=avail "$CHROMIUM" | tail -1 | tr -dc '0-9'; }
 
+# This run's own build, in whole gigabytes. The build writes over these
+# objects rather than beside them, so up to a clean build's worth of them is
+# room already: run 36235996990 had 41G free beside a warm build, and reached
+# 60G free by dropping a free tree's build, the compiler cache and its own
+# build, for a 4h20m clean build it did not need.
+own_gb() {
+  if [ -d "$CHROMIUM/$OUT" ]; then
+    du -s -BG "$CHROMIUM/$OUT" | cut -f1 | tr -dc '0-9'
+  else
+    echo 0
+  fi
+}
+
 # Measures again after a reclaim and says so, and exits the script when that
 # was enough.
 done_if_room() {
   free="$(free_gb)"
-  echo "that leaves ${free}G free"
-  if [ "$free" -ge "$FLOOR_GB" ]; then
+  echo "that leaves ${free}G free, ${reused}G of it in this run's build"
+  if [ $((free + reused)) -ge "$FLOOR_GB" ]; then
     exit 0
   fi
 }
@@ -74,6 +88,13 @@ free="$(free_gb)"
 echo "$CHROMIUM has ${free}G free"
 
 if [ "$free" -ge "$FLOOR_GB" ]; then
+  exit 0
+fi
+
+held="$(own_gb)"
+reused=$((held < COLD_GB ? held : COLD_GB))
+echo "and ${reused}G in $CHROMIUM/$OUT, which the build writes over: $((free + reused))G of the ${FLOOR_GB}G it needs"
+if [ $((free + reused)) -ge "$FLOOR_GB" ]; then
   exit 0
 fi
 
@@ -123,22 +144,30 @@ fi
 # but dropping it turns a ~15m incremental build into a clean one, which is
 # four hours on this machine. A run that takes four hours still publishes an
 # engine; a run refused for want of space publishes nothing at all.
-echo "still short, so the build cache goes too"
-echo "  $CHROMIUM/$OUT — this run's objects, which costs this run a"
-echo "  clean build: four hours rather than the usual few minutes"
-rm -rf "$CHROMIUM/$OUT"
-done_if_room
+#
+# Dropping it frees only what it holds beyond the clean build that writes it
+# back, so it goes only when it holds more than one.
+if [ "$held" -gt "$COLD_GB" ]; then
+  echo "still short, and $OUT holds ${held}G where a clean build is ~${COLD_GB}G, so it goes"
+  echo "  $CHROMIUM/$OUT — this run's objects, which costs this run a"
+  echo "  clean build: four hours rather than the usual few minutes"
+  rm -rf "$CHROMIUM/$OUT"
+  reused=0
+  done_if_room
+fi
 
 # EVERYTHING NOBODY ELSE HOLDS IS ALREADY GONE, so what is left is another
 # run's or is not a cache. The floor holds: a build that cannot finish must
 # not start, because the failure four hours in is a full dataset on the
 # machine this repository's other work lives on.
 {
-  echo "::error::${free}G free after reclaiming; a release build needs ~40G and this will not fit"
+  echo "::error::${free}G free after reclaiming, and ${reused}G in this run's build; a release build needs ${FLOOR_GB}G and this will not fit"
   echo
   echo "This run has already dropped its stage directory, its unpacked"
-  echo "tarball, every build in a tree no run holds, the compiler cache and"
-  echo "its own build. What is holding the rest is not its to remove:"
+  echo "tarball, every build in a tree no run holds and the compiler cache."
+  echo "Its own build is kept unless it outgrew a clean one: dropping it frees"
+  echo "nothing a clean build would not write back. What is holding the rest"
+  echo "is not its to remove:"
   echo
   for slot in $(other_builds); do
     echo "  $("$LOCK_SH" who "$slot/src")"
