@@ -139,6 +139,7 @@ source_set("shell_scheme") {
 
   public_deps = [
     ":common",
+    ":desk_lock",
     ":shell_source",
     "//base",
     "//content/public/browser",
@@ -296,6 +297,16 @@ source_set("color_scheme") {
 # Its own target so the slice can meet a compiler before the Blink half exists,
 # and because what it needs is //net, which nothing else here wants. Like
 # :browser, it does not depend on //content.
+# Whether the desk is locked, as the compositor last said: written by
+# :control_channel, read by :shell_scheme. Its own target because neither of
+# those should depend on the other.
+source_set("desk_lock") {
+  sources = [
+    "browser/desk_lock.cc",
+    "browser/desk_lock.h",
+  ]
+}
+
 source_set("control_channel") {
   sources = [
     "browser/control_channel.cc",
@@ -305,6 +316,7 @@ source_set("control_channel") {
   public_deps = [
     ":common",
     ":cursor_shape",
+    ":desk_lock",
     ":display_transform",
     ":line_framer",
     ":shortcut_registry",
