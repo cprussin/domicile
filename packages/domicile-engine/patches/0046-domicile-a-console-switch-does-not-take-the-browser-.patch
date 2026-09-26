@@ -1,0 +1,170 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 25 Sep 2026 21:54:09 +0000
+Subject: [PATCH] domicile: a console switch does not take the browser down
+ with it
+
+After logind force-paused the session's input devices, the browser died:
+
+  FATAL:base/sequence_checker.cc:21] DCHECK failed:
+  checker.CalledOnValidSequence(&bound_at).
+  ... WeakReference::IsValid ... WorkQueue::RemoveCancelledTasks
+  Task trace: InputControllerEvdev::ScheduleUpdateDeviceSettings
+              dbus::ObjectProxy::HandleMessage
+
+UPSTREAM CALLS THE CONTROLLER FROM THE WRONG THREAD.
+`InputDeviceFactoryEvdev::DetachInputDevice` runs on the evdev thread and
+calls `InputControllerEvdev::OnInputDeviceRemoved`, whose object lives on the
+UI thread. That runs `ScheduleUpdateDeviceSettings` on the evdev thread, which
+posts a task bound to the controller's UI-sequence WeakPtr to the CURRENT
+thread -- the evdev one -- and the evdev thread's queue checking that WeakPtr
+is the DCHECK.
+
+DOMICILE MADE IT ROUTINE. Upstream reaches that path on an unplug. Here a
+console switch revokes every input device, and each one comes back through
+`RemoveInputDevice` then `AddInputDevice` on the evdev thread (`0020`), from
+the logind signal handler -- so every switch removed a dozen devices at once.
+
+The controller now hops. `SetInputDeviceFactory` -- which runs on the
+controller's sequence, before the first scan -- binds the removal with
+`BindPostTaskToCurrentDefault` and a WeakPtr, and `OnInputDeviceRemoved` only
+runs that callback. Until there is a factory, the removal stays inline, which
+is what upstream's single-threaded `InputDeviceFactoryEvdevTest` cases rely on.
+
+TESTED: `DrmInputControllerTest`, in `ozone_unittests` because that is the
+suite CI builds. It removes a device from a real second thread and asserts no
+settings push reached the factory until the controller's own sequence ran.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AM7tJMCYn6EGCw9tCBubSu
+---
+ .../ozone/evdev/input_controller_evdev.cc     | 19 ++++++++++++++++++-
+ .../ozone/evdev/input_controller_evdev.h      | 16 ++++++++++++++++
+ ui/ozone/platform/drm/BUILD.gn                |  7 +++++++
+ 3 files changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/ui/events/ozone/evdev/input_controller_evdev.cc b/ui/events/ozone/evdev/input_controller_evdev.cc
+index 73dce91f83..f707f73ed7 100644
+--- a/ui/events/ozone/evdev/input_controller_evdev.cc
++++ b/ui/events/ozone/evdev/input_controller_evdev.cc
+@@ -13,6 +13,7 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/task/bind_post_task.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "ui/events/devices/device_data_manager.h"
+ #include "ui/events/devices/stylus_state.h"
+@@ -76,7 +77,9 @@ InputControllerEvdev::InputControllerEvdev(
+     MouseButtonMapEvdev* pointing_stick_button_map)
+     : keyboard_(keyboard),
+       mouse_button_map_(mouse_button_map),
+-      pointing_stick_button_map_(pointing_stick_button_map) {}
++      pointing_stick_button_map_(pointing_stick_button_map),
++      remove_device_(base::BindRepeating(&InputControllerEvdev::RemoveDevice,
++                                         base::Unretained(this))) {}
+ 
+ InputControllerEvdev::~InputControllerEvdev() = default;
+ 
+@@ -84,6 +87,16 @@ void InputControllerEvdev::SetInputDeviceFactory(
+     InputDeviceFactoryEvdevProxy* input_device_factory) {
+   input_device_factory_ = input_device_factory;
+ 
++  // THE FACTORY IS ON THE EVDEV THREAD, and it reports removals from there.
++  // Done inline, a removal ran `ScheduleUpdateDeviceSettings` on that thread,
++  // which posted a task bound to this sequence's WeakPtr onto the evdev
++  // thread's queue -- and that queue checking the WeakPtr off its sequence is
++  // `DCHECK failed: checker.CalledOnValidSequence`. Domicile's DRM platform
++  // removes every input device on a console switch, so there it was a crash
++  // on every switch rather than on an unplug.
++  remove_device_ = base::BindPostTaskToCurrentDefault(base::BindRepeating(
++      &InputControllerEvdev::RemoveDevice, weak_ptr_factory_.GetWeakPtr()));
++
+   UpdateDeviceSettings();
+   UpdateCapsLockLed();
+ }
+@@ -501,6 +514,10 @@ void InputControllerEvdev::SetHapticTouchpadEffectForNextButtonRelease(
+ }
+ 
+ void InputControllerEvdev::OnInputDeviceRemoved(int device_id) {
++  remove_device_.Run(device_id);
++}
++
++void InputControllerEvdev::RemoveDevice(int device_id) {
+   input_device_settings_.RemoveDeviceFromSettings(device_id);
+   // Mouse button map and pointing stick map can be null in tests.
+   if (mouse_button_map_) {
+diff --git a/ui/events/ozone/evdev/input_controller_evdev.h b/ui/events/ozone/evdev/input_controller_evdev.h
+index b4c5cb1ace..5a58a06e89 100644
+--- a/ui/events/ozone/evdev/input_controller_evdev.h
++++ b/ui/events/ozone/evdev/input_controller_evdev.h
+@@ -9,6 +9,7 @@
+ 
+ #include "base/component_export.h"
+ #include "base/containers/flat_map.h"
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+@@ -136,6 +137,12 @@ class COMPONENT_EXPORT(EVDEV) InputControllerEvdev : public InputController {
+   void DisableKeyboardImposterCheck() override;
+ 
+   // Notifies the controller to delete any data for the given `device_id`.
++  //
++  // CALLED ON THE EVDEV THREAD, by `InputDeviceFactoryEvdev::DetachInputDevice`,
++  // while everything it touches -- the settings, the button maps, the WeakPtr
++  // `ScheduleUpdateDeviceSettings` binds -- belongs to the sequence
++  // `SetInputDeviceFactory` ran on. So once there is a factory, the work is
++  // posted there rather than done here.
+   void OnInputDeviceRemoved(int device_id);
+ 
+   // Configuration that needs to be passed on to InputDeviceFactory.
+@@ -148,6 +155,9 @@ class COMPONENT_EXPORT(EVDEV) InputControllerEvdev : public InputController {
+   void OnScopedDisableInputDevicesCreated();
+   void OnScopedDisableInputDevicesDestroyed();
+ 
++  // What `OnInputDeviceRemoved` does, on this controller's own sequence.
++  void RemoveDevice(int device_id);
++
+   // Post task to update settings.
+   void ScheduleUpdateDeviceSettings();
+ 
+@@ -181,6 +191,12 @@ class COMPONENT_EXPORT(EVDEV) InputControllerEvdev : public InputController {
+   // Pointing stick button map.
+   const raw_ptr<MouseButtonMapEvdev> pointing_stick_button_map_;
+ 
++  // How a removal reaches `RemoveDevice`. Inline until there is a factory,
++  // which is the only thing that calls from another thread; posted to this
++  // controller's sequence from `SetInputDeviceFactory` on. Set before any
++  // device exists: the first scan starts after it.
++  base::RepeatingCallback<void(int)> remove_device_;
++
+   // Gamepad keybits.
+   base::flat_map<int, std::vector<uint64_t>> gamepad_key_bits_mapping_;
+ 
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index b415e3ac40..b0fdbe5d91 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -260,6 +260,7 @@ source_set("gbm_unittests") {
+     "gpu/proxy_helpers_unittest.cc",
+     "domicile/drm_cursor_factory_unittest.cc",
+     "domicile/drm_fullscreen_unittest.cc",
++    "domicile/drm_input_controller_unittest.cc",
+     "domicile/drm_input_devices_unittest.cc",
+     "domicile/drm_master_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
+@@ -314,6 +315,12 @@ source_set("gbm_unittests") {
+     # this target includes a `//ui/events` header directly rather than only
+     # through `:gbm`, and `gn check` wants the edge said out loud.
+     "//ui/events",
++
++    # `DrmInputControllerTest` builds the evdev input controller this
++    # platform's evdev thread reports to, and the stub layout its keyboard
++    # needs, so it names both directly.
++    "//ui/events/ozone/evdev",
++    "//ui/events/ozone/layout",
+     "//ui/gfx",
+     "//ui/gfx/linux:drm",
+     "//ui/gfx/linux:gbm",
