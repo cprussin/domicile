@@ -6,11 +6,15 @@ import type {
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
+import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
+import { FileXIcon } from "@phosphor-icons/react/dist/ssr/FileX";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
+import { FolderDashedIcon } from "@phosphor-icons/react/dist/ssr/FolderDashed";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import type { ReactNode } from "react";
 import { Fragment, useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
@@ -21,11 +25,23 @@ import type { FileRow } from "./file-row";
 import type { Launch } from "./launch";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
+import { homeUrl, MediaKind, mediaOf } from "./media";
 import { useFound } from "./useFound";
 import { usePreview } from "./usePreview";
+import { useSettled } from "./useSettled";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
 const PROMPT = "Open a file, a URL, or search";
+
+/**
+ * How long the highlight has to stay on a row before it is previewed: long
+ * enough that typing a name is not a preview per letter, short enough that
+ * stopping on a row is not waiting for one.
+ */
+const PREVIEW_SETTLE_MS = 200;
+
+/** How big the glyph for a pane with no picture of its own is drawn. */
+const EMPTY_ICON_SIZE = 64;
 
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
@@ -145,6 +161,10 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
   const choices = choicesFor(query, found.files);
   const highlighted = highlightIn(choices.length, query, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
+  // Keyed rather than the choice itself, because a choice is a new object on
+  // every render and would never be seen to settle.
+  const chosenKey = chosen === undefined ? undefined : keyOf(chosen);
+  const settledKey = useSettled(chosenKey, PREVIEW_SETTLE_MS);
 
   return (
     <div className={panelStyles}>
@@ -260,9 +280,11 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           </div>
         </div>
         <section aria-label="Preview" className={previewStyles}>
-          {chosen !== undefined && (
-            <ChoicePreview choice={chosen} preview={preview} />
-          )}
+          <PreviewOf
+            choice={chosen}
+            preview={preview}
+            settled={chosenKey === settledKey}
+          />
         </section>
       </div>
       {/*
@@ -305,18 +327,20 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
   }
 };
 
-/** A path's row: its name, and the directory it is in. */
+/** A path's row: the directory it is in, over its name. */
 const FileChoice = ({ query, row }: { query: string; row: FileRow }) => (
   <>
     <RowTile icon={row.isDirectory ? FolderIcon : FileIcon} />
-    <span className={rowNameStyles}>
-      <Marked marks={marked(row.name, query)} />
-    </span>
-    {row.directory !== undefined && (
-      <span className={rowDirectoryStyles}>
-        <Marked marks={marked(row.directory, query)} />
+    <span className={rowTextStyles}>
+      {row.directory !== undefined && (
+        <span className={rowDirectoryStyles}>
+          <Marked marks={marked(row.directory, query)} />
+        </span>
+      )}
+      <span className={rowNameStyles}>
+        <Marked marks={marked(row.name, query)} />
       </span>
-    )}
+    </span>
   </>
 );
 
@@ -342,11 +366,93 @@ const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
 );
 
 /**
- * What the highlighted row is: a file's front, or the page a URL is.
+ * What the pane shows, which is never nothing: a blank pane reads as a broken
+ * one. With no row highlighted it says how to choose one, and while the typing
+ * has not settled it names the row it is about to preview.
+ */
+const PreviewOf = ({
+  choice,
+  preview,
+  settled,
+}: {
+  choice: Choice | undefined;
+  preview: Preview;
+  settled: boolean;
+}) => {
+  if (choice === undefined) {
+    return (
+      <Placeholder
+        icon={MagnifyingGlassIcon}
+        note="Type to find a file, a site or a search"
+        title="Nothing selected"
+      />
+    );
+  } else {
+    return settled ? (
+      <ChoicePreview choice={choice} preview={preview} />
+    ) : (
+      <Pending choice={choice} />
+    );
+  }
+};
+
+/** The row a preview is on its way for, named and drawn as its kind. */
+const Pending = ({ choice }: { choice: Choice }) => {
+  switch (choice.kind) {
+    case ChoiceKind.File: {
+      return <NamedFile row={choice.row} />;
+    }
+    case ChoiceKind.Site: {
+      return <Placeholder icon={GlobeSimpleIcon} title={choice.url} />;
+    }
+    case ChoiceKind.Search: {
+      return (
+        <Placeholder
+          icon={MagnifyingGlassIcon}
+          note="Search"
+          title={choice.query}
+        />
+      );
+    }
+  }
+};
+
+/** A file by name and kind alone, with `note` saying why that is all. */
+const NamedFile = ({ note, row }: { note?: string; row: FileRow }) => (
+  <Placeholder
+    icon={row.isDirectory ? FolderIcon : FileIcon}
+    note={note}
+    title={row.name}
+  />
+);
+
+/** A large glyph over a title and a quieter line: a pane with no picture. */
+const Placeholder = ({
+  icon: Icon,
+  note,
+  title,
+}: {
+  icon: typeof FileIcon;
+  note?: ReactNode;
+  title: string;
+}) => (
+  <div className={placeholderStyles}>
+    <Icon size={EMPTY_ICON_SIZE} weight="thin" />
+    <span className={placeholderTitleStyles}>{title}</span>
+    {note !== undefined && (
+      <span className={placeholderNoteStyles}>{note}</span>
+    )}
+  </div>
+);
+
+/**
+ * What the highlighted row is: a file's front, the file itself, or the page a
+ * URL is.
  *
  * A site in a `<webview>` of its own, which the pointer passes through: a
  * click in it would take the keyboard into the page, and the keyboard belongs
- * to the box.
+ * to the box. A file the engine can draw — an image, a video, a PDF — is drawn
+ * from `domicile://home/`; anything else is what the host reads of it.
  */
 const ChoicePreview = ({
   choice,
@@ -357,7 +463,14 @@ const ChoicePreview = ({
 }) => {
   switch (choice.kind) {
     case ChoiceKind.File: {
-      return <FilePreviewPane path={choice.row.path} preview={preview} />;
+      const media = mediaIn(choice.row);
+      // Keyed on the path, so what one row learned — an image that would not
+      // load — is not carried onto the next.
+      return media === undefined ? (
+        <FilePreviewPane preview={preview} row={choice.row} />
+      ) : (
+        <MediaPreview key={choice.row.path} kind={media} row={choice.row} />
+      );
     }
     case ChoiceKind.Site:
     case ChoiceKind.Search: {
@@ -368,24 +481,112 @@ const ChoicePreview = ({
   }
 };
 
+/**
+ * A file drawn as itself, from where the engine serves the home — or, when
+ * the engine could not draw it after all, named as one it cannot. An extension
+ * is a guess, and a broken image is a blank pane.
+ */
+const MediaPreview = ({ kind, row }: { kind: MediaKind; row: FileRow }) => {
+  const [failed, setFailed] = useState(false);
+  const url = homeUrl(row.path);
+  const fail = () => {
+    setFailed(true);
+  };
+  if (failed) {
+    return <CannotPreview row={row} />;
+  } else {
+    switch (kind) {
+      case MediaKind.Image: {
+        return (
+          // biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the image failing to load, not something a person does to it
+          <img
+            alt={row.name}
+            className={mediaStyles}
+            onError={fail}
+            src={url}
+          />
+        );
+      }
+      case MediaKind.Video: {
+        // Muted, because a preview that starts talking is not a preview.
+        return (
+          <video
+            autoPlay
+            className={mediaStyles}
+            loop
+            muted
+            onError={fail}
+            src={url}
+          >
+            <track kind="captions" />
+          </video>
+        );
+      }
+      case MediaKind.Audio: {
+        return (
+          <Placeholder
+            icon={FileIcon}
+            note={
+              <audio controls onError={fail} src={url}>
+                <track kind="captions" />
+              </audio>
+            }
+            title={row.name}
+          />
+        );
+      }
+      case MediaKind.Pdf: {
+        return <iframe className={viewStyles} src={url} title={row.name} />;
+      }
+    }
+  }
+};
+
+/** A file whose kind nothing here can draw, by name. */
+const CannotPreview = ({ row }: { row: FileRow }) => (
+  <Placeholder
+    icon={BinaryIcon}
+    note="No preview for this file"
+    title={row.name}
+  />
+);
+
+/**
+ * What kind of element `row` is drawn in, or `undefined` for one the host
+ * reads. Only under home, which is all the engine serves, and never a
+ * directory, whatever its name ends in.
+ */
+const mediaIn = (row: FileRow): MediaKind | undefined =>
+  row.isDirectory || row.path.startsWith("/") ? undefined : mediaOf(row.path);
+
 /** What the host says a path holds, drawn by kind. */
 const FilePreviewPane = ({
-  path,
   preview,
+  row,
 }: {
-  path: string;
   preview: Preview;
+  row: FileRow;
 }) => {
-  const shown = usePreview(preview, path);
+  const shown = usePreview(preview, row.path);
   switch (shown?.kind) {
+    // The host has not answered yet, and a desktop with no index never will:
+    // either way the row is known, so it is what the pane says.
     case undefined: {
-      return undefined;
+      return <NamedFile row={row} />;
     }
     case FilePreviewKind.Text: {
       return <pre className={textPreviewStyles}>{shown.text}</pre>;
     }
     case FilePreviewKind.Directory: {
-      return (
+      // An empty list is an answer, and a blank pane would read as one still
+      // on its way.
+      return shown.entries.length === 0 ? (
+        <Placeholder
+          icon={FolderDashedIcon}
+          note="Empty folder"
+          title={row.name}
+        />
+      ) : (
         <ul className={entriesStyles}>
           {shown.entries.map((entry) => (
             <li key={entry}>{entry}</li>
@@ -394,10 +595,16 @@ const FilePreviewPane = ({
       );
     }
     case FilePreviewKind.Binary: {
-      return <p className={noPreviewStyles}>Not a text file</p>;
+      return <CannotPreview row={row} />;
     }
     case FilePreviewKind.Unreadable: {
-      return <p className={noPreviewStyles}>Nothing to show</p>;
+      return (
+        <Placeholder
+          icon={FileXIcon}
+          note="This file can't be read"
+          title={row.name}
+        />
+      );
     }
   }
 };
@@ -516,11 +723,13 @@ const keyOf = (choice: Choice): string => {
     case ChoiceKind.File: {
       return `file:${choice.row.path}`;
     }
+    // The URL as well as the kind, so a search that changed with the typing
+    // is a new row for the preview to settle on.
     case ChoiceKind.Site: {
-      return "site";
+      return `site:${choice.url}`;
     }
     case ChoiceKind.Search: {
-      return "search";
+      return `search:${choice.url}`;
     }
   }
 };
@@ -550,12 +759,13 @@ const panelStyles = vstack({
   gap: 3,
 });
 
-// The rows and the preview side by side, the rows a little the wider: they
-// are what is being read, and the preview is what confirms it.
+// The rows and the preview side by side, the preview the wider: a row is a
+// name over its directory and needs little width, and the preview is a page,
+// a picture or a file's text.
 const splitStyles = css({
   display: "grid",
   gap: 3,
-  gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
+  gridTemplateColumns: "minmax(0, 2fr) minmax(0, 3fr)",
 });
 
 // Tall enough to be worth scrolling and short enough to leave the backdrop
@@ -567,7 +777,7 @@ const resultsStyles = css({
   // A ground a shade off the panel's, so the room the fixed height keeps
   // reads as a box waiting to be filled rather than as panel nobody used.
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  blockSize: 80,
+  blockSize: 120,
   borderRadius: "md",
   overflowY: "auto",
   padding: 1,
@@ -583,11 +793,49 @@ const resultsStyles = css({
 
 // The same ground and the same height as the rows beside it, so the two read
 // as one box split in half.
+//
+// Its own color, because the pane is a region of its own: text in it is drawn
+// in the panel's foreground rather than whatever the document defaults to,
+// which over the glass was a dark gray on dark glass.
 const previewStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  blockSize: 80,
+  blockSize: 120,
   borderRadius: "md",
+  color: "foreground",
   overflow: "hidden",
+});
+
+// A picture or a video the size of the pane at most, and never cropped.
+const mediaStyles = css({
+  blockSize: "100%",
+  display: "block",
+  inlineSize: "100%",
+  objectFit: "contain",
+});
+
+// A pane with no picture of its own: a large outline glyph for the kind of
+// thing it is about, in the middle, quiet enough to read as an absence rather
+// than as something to look at, over what it is and why that is all.
+const placeholderStyles = vstack({
+  blockSize: "100%",
+  color: "muted",
+  gap: 2,
+  justifyContent: "center",
+  padding: 6,
+  textAlign: "center",
+});
+
+const placeholderTitleStyles = css({
+  color: "foreground",
+  fontSize: "md",
+  maxInlineSize: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
+
+const placeholderNoteStyles = css({
+  fontSize: "sm",
 });
 
 // The page a URL is, drawn small and not touchable: the pointer passes through
@@ -603,7 +851,7 @@ const viewStyles = css({
 const textPreviewStyles = css({
   blockSize: "100%",
   fontFamily: "mono",
-  fontSize: "xs",
+  fontSize: "sm",
   margin: 0,
   overflow: "hidden",
   padding: 3,
@@ -614,13 +862,6 @@ const textPreviewStyles = css({
 const entriesStyles = css({
   fontSize: "sm",
   listStyle: "none",
-  margin: 0,
-  padding: 3,
-});
-
-const noPreviewStyles = css({
-  color: "muted",
-  fontSize: "sm",
   margin: 0,
   padding: 3,
 });
@@ -707,16 +948,19 @@ const markStyles = css({
   fontWeight: "semibold",
 });
 
-// A NAME AND A DIRECTORY TOO LONG FOR THE ROW BOTH GIVE WAY, in proportion to
-// how long each is, rather than one of them taking the row: a name that did
-// would leave two files of one name looking like one, and a directory that
-// did would leave nothing to read but where they are. The floor is the whole
-// name or half the row, whichever is less — so a short name is never cut to
-// make room for a long directory, and a long one keeps the half it is read
-// by.
+// The directory over the name, each a line of its own that gives way at its
+// own end: stacked, neither can take the other's width, and the row needs only
+// as much of the panel as its longer line.
+const rowTextStyles = css({
+  display: "flex",
+  flex: "1 1 auto",
+  flexDirection: "column",
+  minInlineSize: 0,
+});
+
+// What was typed part of, so the larger of the two lines.
 const rowNameStyles = css({
-  flex: "0 1 auto",
-  minInlineSize: "calc-size(max-content, min(size, 50%))",
+  fontSize: "md",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -727,21 +971,12 @@ const rowVerbStyles = css({
   color: "muted",
 });
 
-// AT THE FAR END OF THE ROW RATHER THAN BESIDE THE NAME. A directory is what
-// tells two files of one name apart, so it is read when the names alone have
-// not settled it — and a column of them down the panel's edge is a column the
-// eye can run down, where one that started wherever each name happened to end
-// is a ragged line it has to hunt along.
-//
-// Pushed there by its margin rather than aligned there in a column, because
-// an aligned box as wide as its text is as wide as its text however narrow the
-// room — and a long directory then ran out of the row's start, over the name.
+// A small line over the name. A directory is what tells two files of one name
+// apart, so it is read when the names alone have not settled it, and it is
+// said quieter than the name for that reason.
 const rowDirectoryStyles = css({
   color: "muted",
-  flex: "0 1 auto",
   fontSize: "xs",
-  marginInlineStart: "auto",
-  minInlineSize: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",

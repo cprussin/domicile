@@ -214,7 +214,7 @@ const popupStyles = flex({
     inlineSize: "min({spacing.180}, 92vw)",
   },
   "&[data-size=xl]": {
-    inlineSize: "min({spacing.280}, 92vw)",
+    inlineSize: "min({spacing.320}, 92vw)",
   },
   "&[data-surface=glass]": {
     _before: {

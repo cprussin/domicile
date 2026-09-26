@@ -1639,7 +1639,7 @@ describe("the launcher", () => {
     // between the two.
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["today.orgNotes", "todo.txt"]);
+    ).toStrictEqual(["Notestoday.org", "todo.txt"]);
   });
 
   it("opens a file in the user's editor and puts the panel away", async () => {

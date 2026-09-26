@@ -21,13 +21,19 @@ namespace domicile {
 // navigate to it nor fetch it.
 inline constexpr char kDomicileScheme[] = "domicile";
 
-// The only host under it. `domicile://shell/` is the shell's document -- the
+// The shell's host. `domicile://shell/` is the shell's document -- the
 // bare root, which `ShellURLLoaderFactory` answers with the page it writes,
 // and not a file on disk. This said `index.html` and the launcher believed it,
 // asked for that path, and got the file resolver looking for a file no build
-// emits; the desktop came up on an empty window. There is no second host, and
-// naming one is how a request for something that is not the shell is refused.
+// emits; the desktop came up on an empty window. The one other host is
+// `kDomicileHomeHost`; naming any other is how a request is refused.
 inline constexpr char kDomicileShellHost[] = "shell";
+
+// The user's home, for what the shell previews: `domicile://home/Notes/a.png`
+// is `$HOME/Notes/a.png`. Answered only for a request the shell's own document
+// made -- see ShellURLLoaderFactory -- and never for a path with a dotfile in
+// it, which is the line the compositor's file index draws too.
+inline constexpr char kDomicileHomeHost[] = "home";
 
 // Where the shell's files are read from. Same shape as
 // --domicile-broker-socket: the engine already takes what it needs on its

@@ -10,10 +10,12 @@
 // they arrived through base/command_line.h, which the shell source replaces. An
 // include this file does not use is not allowed to be what keeps it compiling.
 #include "base/containers/span.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "content/public/browser/file_url_loader.h"
@@ -25,21 +27,27 @@
 
 namespace domicile {
 
-// static
-bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
-                                            const GURL& url,
-                                            base::FilePath* out_path) {
-  // No root means the engine was started without --domicile-shell-root. There
-  // is nothing to serve and no sensible guess to make.
-  if (shell_root.empty()) {
+namespace {
+
+// A domicile:// URL naming `host`, resolved to a file under `root`, or fail.
+// What the shell's files and the home's previews share: every refusal below is
+// about the path, and the path rules are the same for both.
+bool ResolveUnder(const base::FilePath& root,
+                  const char* host,
+                  bool refuse_dotfiles,
+                  const GURL& url,
+                  base::FilePath* out_path) {
+  // No root means the engine was started without --domicile-shell-root, or
+  // without a home. There is nothing to serve and no sensible guess to make.
+  if (root.empty()) {
     return false;
   }
   if (!url.is_valid() || !url.SchemeIs(kDomicileScheme)) {
     return false;
   }
-  // One host. A URL naming any other is refused rather than mapped, so the
-  // scheme cannot grow a second meaning by accident.
-  if (url.host() != kDomicileShellHost) {
+  // One host per root. A URL naming any other is refused rather than mapped,
+  // so neither root can be reached through the other's name.
+  if (url.host() != host) {
     return false;
   }
 
@@ -79,18 +87,53 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
   if (relative.IsAbsolute() || relative.ReferencesParent()) {
     return false;
   }
+  // After the unescape above, so `%2essh` is `.ssh` by the time it is looked at.
+  if (refuse_dotfiles) {
+    for (const std::string& component : relative.GetComponents()) {
+      if (!component.empty() && component.front() == '.') {
+        return false;
+      }
+    }
+  }
 
-  base::FilePath candidate = shell_root.Append(relative);
+  base::FilePath candidate = root.Append(relative);
 
   // The belt to the braces above: whatever the path arithmetic did, the answer
   // has to be inside the root. This is what makes the refusals a property of
   // the result rather than of the cleverness of the checks before it.
-  if (!shell_root.IsParent(candidate)) {
+  if (!root.IsParent(candidate)) {
     return false;
   }
 
   *out_path = std::move(candidate);
   return true;
+}
+
+}  // namespace
+
+// static
+bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
+                                            const GURL& url,
+                                            base::FilePath* out_path) {
+  return ResolveUnder(shell_root, kDomicileShellHost,
+                      /*refuse_dotfiles=*/false, url, out_path);
+}
+
+// static
+bool ShellURLLoaderFactory::ResolveHomePath(const base::FilePath& home,
+                                           const GURL& url,
+                                           base::FilePath* out_path) {
+  return ResolveUnder(home, kDomicileHomeHost, /*refuse_dotfiles=*/true, url,
+                      out_path);
+}
+
+// static
+bool ShellURLLoaderFactory::MayReadHome(
+    const std::optional<url::Origin>& initiator,
+    bool desk_locked) {
+  return !desk_locked && initiator.has_value() &&
+         initiator->scheme() == kDomicileScheme &&
+         initiator->host() == kDomicileShellHost;
 }
 
 
@@ -289,9 +332,11 @@ void ShellURLLoaderFactory::ServeDocument(
 ShellURLLoaderFactory::ShellURLLoaderFactory(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
     const base::FilePath& shell_root,
+    const base::FilePath& home,
     base::SelfDeletingPassKey key)
     : network::SelfDeletingURLLoaderFactory(std::move(factory_receiver), key),
-      shell_root_(shell_root) {}
+      shell_root_(shell_root),
+      home_(home) {}
 
 ShellURLLoaderFactory::~ShellURLLoaderFactory() = default;
 
@@ -302,16 +347,21 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     const network::ResourceRequest& request,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+  const bool home = request.url.host() == kDomicileHomeHost;
   // The bare root is the document Domicile writes, not a file on disk. A shell
   // is a module and a page to load it in; only the module and what it imports
   // come off the filesystem.
-  if (request.url.path() == "/" || request.url.path().empty()) {
+  if (!home && (request.url.path() == "/" || request.url.path().empty())) {
     ServeDocument(std::move(client));
     return;
   }
 
   base::FilePath path;
-  if (!ResolveShellPath(shell_root_, request.url, &path)) {
+  const bool resolved =
+      home ? MayReadHome(request.request_initiator, DeskLock::IsLocked()) &&
+                 ResolveHomePath(home_, request.url, &path)
+           : ResolveShellPath(shell_root_, request.url, &path);
+  if (!resolved) {
     mojo::Remote<network::mojom::URLLoaderClient> client_remote(
         std::move(client));
     client_remote->OnComplete(
@@ -323,7 +373,7 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
   // names the file: URL policy it skips, which is the right thing to skip here:
   // this request never was a file: URL and has already been checked against the
   // only policy that applies to it, which is that it resolve inside the shell
-  // root.
+  // root (or, for the home, that the shell asked and it is no dotfile).
   network::ResourceRequest file_request = request;
   file_request.url = net::FilePathToFileURL(path);
   content::CreateFileURLLoaderBypassingSecurityChecks(
@@ -340,7 +390,8 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
 ShellURLLoaderFactory::Create(const base::FilePath& shell_root) {
   mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote;
   base::MakeSelfDeleting<ShellURLLoaderFactory>(
-      pending_remote.InitWithNewPipeAndPassReceiver(), shell_root);
+      pending_remote.InitWithNewPipeAndPassReceiver(), shell_root,
+      base::GetHomeDir());
   return pending_remote;
 }
 
