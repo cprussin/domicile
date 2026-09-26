@@ -72,6 +72,7 @@ import type {
   DomicileHost,
   DomicileShortcut,
 } from "./domicile-host";
+import { setFocusedApp } from "./element-context";
 import type {
   FilePreviewMessage,
   FoundFilesMessage,
@@ -225,7 +226,14 @@ export class DomicileClient {
       this.#deliver("app_cursor", appCursor(event));
     });
     host.addEventListener("focuschanged", (event) => {
-      this.#deliver("focus_changed", focusChanged(event));
+      const message = focusChanged(event);
+      // The keys this page forwards go where the compositor says the keyboard
+      // is, and not only where the page last asked for it: the compositor
+      // moves it on its own too, and a page that heard only its own requests
+      // went on forwarding every key to a client that no longer had it —
+      // which is a launcher's box, focused and empty under every letter.
+      setFocusedApp(message.app_id);
+      this.#deliver("focus_changed", message);
     });
     host.addEventListener("focusrequested", (event) => {
       this.#deliver("focus_requested", focusRequested(event));

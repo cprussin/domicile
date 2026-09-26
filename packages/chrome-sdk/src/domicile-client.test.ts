@@ -8,7 +8,9 @@ import type {
   DomicileHostEventMap,
   DomicileShortcut,
 } from "./domicile-host";
+import { focusedApp } from "./element-context";
 import { FilePreview } from "./file-preview";
+import { focusApp } from "./focus-app";
 import { BTN_LEFT } from "./input";
 import { isClaimed } from "./shortcut-claims";
 import type { Theme } from "./theme";
@@ -403,6 +405,25 @@ describe("DomicileClient", () => {
       // And nothing was asked of the host: a request the shell has not
       // answered yet is a request, and answering it is `focusApp`.
       expect(host.lastCall()).toBeUndefined();
+    });
+
+    // THE PAGE FORWARDS KEYS TO WHERE THE COMPOSITOR SAYS THE KEYBOARD IS, and
+    // not only to where the page last asked for it. The compositor moves the
+    // keyboard on its own — a focused client going away, a press on another
+    // monitor's page — and a page that heard only its own requests went on
+    // forwarding every key to the client it last named: a launcher's box
+    // focused over that window and taking none of the letters typed into it.
+    it("routes the page's keys to whoever the compositor says has them", () => {
+      focusApp(domicile, "term");
+
+      host.dispatch("focuschanged", appEvent("focuschanged", { appId: "" }));
+      expect(focusedApp()).toBeUndefined();
+
+      host.dispatch(
+        "focuschanged",
+        appEvent("focuschanged", { appId: "editor" }),
+      );
+      expect(focusedApp()).toBe("editor");
     });
   });
 
