@@ -82,10 +82,9 @@ protocol members, and shellDocument still lives in TypeScript.
  .../bindings/generated_in_modules.gni         |  6 ++
  .../renderer/bindings/idl_in_modules.gni      |  4 ++
  .../core/events/event_target_names.json5      |  2 +
- .../core/events/event_type_names.json5        |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
  .../platform/runtime_enabled_features.json5   | 18 ++++++
- 15 files changed, 211 insertions(+), 1 deletion(-)
+ 14 files changed, 209 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
 index 25a8547a34..944111328f 100644
@@ -488,19 +487,6 @@ index d15ba88112..6827dea86d 100644
      "MediaQueryList",
      "ContainerQueryList",
      "BroadcastChannel",
-diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
-index 99d5b1a60a..00469ecc52 100644
---- a/third_party/blink/renderer/core/events/event_type_names.json5
-+++ b/third_party/blink/renderer/core/events/event_type_names.json5
-@@ -23,6 +23,8 @@
-     "animationiteration",
-     "animationstart",
-     "appinstalled",
-+    // Domicile's engine fork: navigator.domicile.onapptitled.
-+    "apptitled",
-     "audioend",
-     "audioprocess",
-     "audiostart",
 diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
 index 5ad3c764ea..2817d32f4a 100644
 --- a/third_party/blink/renderer/modules/BUILD.gn
