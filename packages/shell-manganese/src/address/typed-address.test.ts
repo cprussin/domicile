@@ -38,6 +38,12 @@ describe("typedAddress", () => {
       );
     });
 
+    it("loads a host under any TLD that exists", () => {
+      expect(typedAddress("claude.ai/code")).toStrictEqual(
+        TypedAddress.Site("https://claude.ai/code"),
+      );
+    });
+
     it("loads localhost, which has no dot to recognize it by", () => {
       expect(typedAddress("localhost:5173")).toStrictEqual(
         TypedAddress.Site("https://localhost:5173"),

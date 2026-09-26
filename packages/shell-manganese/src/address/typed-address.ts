@@ -12,6 +12,7 @@
 // the user has to remember which box they are in.
 
 import { searchUrl } from "./search";
+import { TLDS } from "./tlds";
 
 /** Which of the two things a typed line can turn out to be. */
 export enum TypedAddressKind {
@@ -84,31 +85,6 @@ const hasScheme = (typed: string): boolean =>
   BARE_SCHEMES.some((scheme) => typed.toLowerCase().startsWith(`${scheme}:`));
 
 /**
- * The endings that make a word a hostname rather than the end of a sentence.
- *
- * This desktop's own list rather than the public suffix list. A desktop that
- * recognized every TLD would read "the sentence ends. Then another" as a
- * request for a site in `.then`, and there is no shortage of registries whose
- * TLD is an ordinary English word. These are the ones this desktop's user
- * actually types, which is the same argument the shell script makes by
- * carrying a list of nine.
- */
-const TLDS: readonly string[] = [
-  "co",
-  "com",
-  "dev",
-  "do",
-  "edu",
-  "gov",
-  "io",
-  "me",
-  "net",
-  "org",
-  "sh",
-  "xyz",
-];
-
-/**
  * Whether `typed` is a host, with or without a port and a path after it.
  *
  * `localhost` by name, because it is the one hostname with no dot in it that a
@@ -119,7 +95,6 @@ const isHost = (typed: string): boolean => {
   const host = typed.split(/[/:?#]/)[0] ?? "";
   const tld = host.split(".").at(-1) ?? "";
   return (
-    host === "localhost" ||
-    (host.includes(".") && TLDS.includes(tld.toLowerCase()))
+    host === "localhost" || (host.includes(".") && TLDS.has(tld.toLowerCase()))
   );
 };
