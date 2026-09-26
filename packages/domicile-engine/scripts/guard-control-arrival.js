@@ -23,6 +23,10 @@
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
 // own log:
 //
+//   GUARD names missing=…        every event navigator.domicile names, fired
+//                                at an addEventListener listener and at its
+//                                on<name> handler; `none` or which did not
+//                                fire. THE CLAIM about the fork's own names
 //   GUARD listening              `navigator.domicile` exists and a listener is
 //                                registered -- the harness working rather than
 //                                a finding, and what tells "nothing arrived"
@@ -60,6 +64,11 @@ if (host === null || host === undefined) {
 }
 
 host.addEventListener("appcursor", (event) => {
+  // The names check below fires an untrusted `appcursor` of its own, which is
+  // not a cursor the compositor sent and must not read as one.
+  if (!event.isTrusted) {
+    return;
+  }
   say(`app-cursor app=${event.appId} cursor=${event.cursor}`);
 
   // THE SUBTRACTION THIS FILE EXISTS FOR. Both are DOMHighResTimeStamps on this
@@ -83,6 +92,51 @@ host.addEventListener("appcursor", (event) => {
       ` ordered=${event.arrival <= event.timeStamp}`,
   );
 });
+
+// THE NAMES. navigator.domicile's event names are the fork's own, in
+// modules/domicile/domicile_event_names.h, rather than entries in Blink's
+// event_type_names.json5 -- which recompiled most of Blink for every name
+// added. This fires each at a listener and at its on<name> handler: the
+// handler is keyed on the fork's name, so a name the list and the IDL
+// disagree on is a handler that never runs. scripts/test-engine-event-names.sh
+// keeps this list and the fork's the same set.
+const EVENT_NAMES = [
+  "apptitled",
+  "appappeared",
+  "appresized",
+  "appclosed",
+  "appcursor",
+  "shortcut",
+  "modifiers",
+  "files",
+  "filepreview",
+  "battery",
+  "clipboard",
+  "theme",
+  "idle",
+  "focuschanged",
+  "focusrequested",
+  "displayschanged",
+  "locked",
+];
+const missing = EVENT_NAMES.flatMap((name) => {
+  const heard = { handler: false, listener: false };
+  const listener = () => {
+    heard.listener = true;
+  };
+  host.addEventListener(name, listener);
+  host[`on${name}`] = () => {
+    heard.handler = true;
+  };
+  host.dispatchEvent(new Event(name));
+  host.removeEventListener(name, listener);
+  host[`on${name}`] = null;
+  return [
+    ...(heard.listener ? [] : [name]),
+    ...(heard.handler ? [] : [`on${name}`]),
+  ];
+});
+say(`names missing=${missing.length === 0 ? "none" : missing.join(",")}`);
 
 // AFTER the listener, not before: registering one is what binds the channel --
 // see DomicileHost::AddedEventListener -- so the browser does not reach for the
