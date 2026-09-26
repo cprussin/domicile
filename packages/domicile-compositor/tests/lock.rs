@@ -295,3 +295,73 @@ fn a_key_held_when_the_desk_locks_is_let_go_of_for_the_client() {
         client.trace()
     );
 }
+
+/// A program the shell asks to start at a locked desk is not started, and the
+/// same ask at the desk the passphrase opened is.
+///
+/// **A SPAWN BECAUSE IT IS THE ONE A TEST CAN SEE FROM OUTSIDE.** Closing a
+/// window and putting a clipboard row back are refused on the same terms, and
+/// `crate::lock`'s own tests hold the whole list; what this adds is that the
+/// list is asked on the path a shell's `spawn` actually takes.
+///
+/// Counted rather than waited out, for the reason the key test above counts:
+/// "it never ran" is an absence, and an absence is a sleep or a lie. The one
+/// the open desk started says its own pid, and its `spawning client` line is
+/// waited for by that pid — so every line the compositor wrote before it is in
+/// the log, including the one a spawn the lock had let through would have
+/// written, and a count of one is exact.
+#[test]
+fn a_locked_desk_starts_no_program_and_the_passphrase_lets_the_next_one_run() {
+    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let mut chrome = compositor.chrome();
+    lock_the_desk(&compositor, &mut chrome);
+
+    say_start(
+        &mut chrome,
+        &compositor.scratch_file("started-at-a-locked-desk"),
+    );
+
+    chrome
+        .say(&ChromeMessage::Unlock {
+            passphrase: Passphrase::from(THE_PASSPHRASE),
+        })
+        .expect("the chrome socket takes an unlock");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
+        .expect("the passphrase opens the desk and every chrome is told");
+
+    let started = compositor.scratch_file("started-at-an-open-desk");
+    say_start(&mut chrome, &started);
+    let pid = compositor.await_file(&started);
+    compositor.wait_for_log(&format!("spawning client pid={pid}"));
+
+    let said = compositor.complaint();
+    assert_eq!(
+        said.matches("spawning client").count(),
+        1,
+        "the program asked for at the locked desk was started too:\n{said}"
+    );
+    assert!(
+        said.contains("this desktop is locked; what the shell asked for is not done"),
+        "the locked desk refused the spawn without saying so:\n{said}"
+    );
+}
+
+/// Ask for a program that writes its own pid to `reported`.
+///
+/// By rename, for the reason `tests/apps.rs` gives: a plain redirect is
+/// observable while the file is still empty.
+fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Path) {
+    chrome
+        .say(&ChromeMessage::Spawn {
+            command: vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!(
+                    "printf '%s' $$ > {0}.new && mv {0}.new {0}",
+                    reported.display()
+                ),
+            ],
+        })
+        .expect("the chrome socket takes a spawn");
+}

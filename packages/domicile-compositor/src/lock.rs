@@ -1,7 +1,7 @@
-//! Whether this desk is locked, and what stops at the seat while it is.
+//! Whether this desk is locked, and what a locked desk refuses.
 //!
-//! One question — *may what the page just forwarded be put into the seat* — and
-//! the state behind it. The effectful half is in `main.rs`, where the seat is;
+//! One question — *may what the page just forwarded be done* — and the state
+//! behind it. The effectful half is in `main.rs`, where the seat is;
 //! everything here is a decision over values handed in, so a locked desk can be
 //! tested on a machine with no screen and no client.
 //!
@@ -164,13 +164,36 @@ impl<V: Verifier> Lock<V> {
     }
 }
 
-/// Whether this request must not reach the seat while the desk is locked.
+/// Why a locked desk does not do what it was asked.
 ///
-/// **THE REFUSAL, AND IT IS AT THE INJECTION RATHER THAN AT THE SOCKET.** Every
+/// Two answers rather than a boolean, because the compositor says something
+/// different about each. Neither carries what was asked for: a refused spawn's
+/// command line is somebody's, and the line in the log is about the lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// A hand, forwarded to a client. Dropped without a word worth a warning,
+    /// because a hand at a locked desk is ordinary: it is how somebody wakes
+    /// one to type a passphrase at it.
+    Hand,
+    /// Something the shell asked this compositor to do to the desktop on
+    /// behalf of whoever is at it. Said out loud, because a shell that asks
+    /// one of these of a locked desk has drawn a panel over its own lock screen.
+    Command,
+}
+
+/// Whether this request is refused while the desk is locked, and why.
+///
+/// **THE REFUSAL, AND IT IS AT THE COMPOSITOR RATHER THAN IN THE SHELL.** Every
 /// hand on this desktop arrives as one of these, because the page owns the
 /// input and forwards it — the same property that makes [`crate::idle`]'s count
-/// honest. Exhaustive on purpose: a request added later does not get a default,
-/// it gets a decision.
+/// honest — and so does everything a shell can ask done to the desktop. A lock
+/// that trusted the shell not to draw the panels that ask would be a lock the
+/// shell held.
+///
+/// **EXHAUSTIVE, AND THAT IS THE MECHANISM.** No arm here is a wildcard, so a
+/// request added later does not compile until somebody has decided whether a
+/// locked desk answers it. A list that could go stale silently would be a hole
+/// that opened the day it did.
 ///
 /// **A POINTER LEAVING A WINDOW IS REFUSED, WHERE `somebody_is_here` DOES NOT
 /// COUNT IT.** The two questions are not the same one. A leave is a real thing
@@ -179,33 +202,37 @@ impl<V: Verifier> Lock<V> {
 /// move a client's idea of where the pointer is. That it is a poor signal about
 /// whether a *person* is here has nothing to do with it.
 ///
+/// **A WINDOW HANDED THE KEYBOARD IS NOT REFUSED, AND IT IS THE CLOSE CALL.**
+/// The brain moves the focus before this is asked (`FocusApp` in
+/// `read_chrome_messages`), and the seat follows it. Refusing the seat's half would
+/// leave the two disagreeing after the unlock — the page drawing one window
+/// active while every key went into another, which is the bug that ordering
+/// exists to prevent — and it would buy nothing: no key reaches the window it
+/// hands the keyboard to until the desk is open.
+///
 /// The rest are the desktop talking about itself, and refusing any of them
 /// would be worse than useless. `ChromeHello` above all: a page that reloaded
 /// while the desk was locked is told it is locked by *answering* that hello, so
 /// a lock that swallowed it would be a locked desk with no lock screen on it.
 /// `Unlock` is the way out and cannot be refused by the thing it is there to
-/// open.
-///
-/// **WHAT THIS DOES NOT REFUSE IS ALSO A LIST.** A shell over a locked desk can
-/// still ask the compositor to close a window or to put a row of the clipboard
-/// back on the seat — neither is a hand at the keyboard, and neither is stopped
-/// here. What stops them for now is the shell not drawing the panels that ask;
-/// `ROADMAP.md` says so rather than leaving it to be discovered.
-pub fn refused(request: &ClientRequest) -> bool {
+/// open. A client's copy is a client's, not the shell's, and refusing it would
+/// leave the history disagreeing with what a paste produces.
+pub fn refused(request: &ClientRequest) -> Option<Refusal> {
     match request {
         ClientRequest::Key { .. }
         | ClientRequest::PointerMotion { .. }
         | ClientRequest::PointerLeave
         | ClientRequest::PointerButton { .. }
-        | ClientRequest::PointerAxis { .. } => true,
+        | ClientRequest::PointerAxis { .. } => Some(Refusal::Hand),
+        ClientRequest::CloseApp { .. }
+        | ClientRequest::Spawn { .. }
+        | ClientRequest::CopyClipboardEntry { .. } => Some(Refusal::Command),
         ClientRequest::KeyboardFocus { .. }
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
-        | ClientRequest::CloseApp { .. }
         | ClientRequest::ChromeHello { .. }
         | ClientRequest::ClipboardCopied { .. }
-        | ClientRequest::CopyClipboardEntry { .. }
-        | ClientRequest::Unlock { .. } => false,
+        | ClientRequest::Unlock { .. } => None,
     }
 }
 
@@ -228,7 +255,7 @@ pub fn announced(locked: bool) -> HostMessage {
 mod tests {
     use domicile_protocol::{HostMessage, Passphrase};
 
-    use super::{announced, refused, ConfiguredPassphrase, Lock, Unlocking, Verifier};
+    use super::{announced, refused, ConfiguredPassphrase, Lock, Refusal, Unlocking, Verifier};
     use crate::engine::Clipboard;
     use crate::ClientRequest;
 
@@ -349,9 +376,39 @@ mod tests {
                 },
             ),
         ] {
-            assert!(
+            assert_eq!(
                 refused(&request),
+                Some(Refusal::Hand),
                 "{what} must not reach a client on a locked desk"
+            );
+        }
+    }
+
+    #[test]
+    fn what_a_locked_desk_refuses_is_everything_the_shell_asks_done_to_it() {
+        for (what, request) in [
+            (
+                "a window being closed",
+                ClientRequest::CloseApp {
+                    app_id: "app-1".into(),
+                },
+            ),
+            (
+                "a program being started",
+                ClientRequest::Spawn {
+                    command: vec!["foot".into()],
+                },
+            ),
+            (
+                "a row of the clipboard put back on the seat",
+                ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
+        ] {
+            assert_eq!(
+                refused(&request),
+                Some(Refusal::Command),
+                "{what} is the desktop acting for whoever is at it, and a \
+                 locked desk has nobody it acts for"
             );
         }
     }
@@ -379,12 +436,6 @@ mod tests {
                 },
             ),
             (
-                "a window being closed",
-                ClientRequest::CloseApp {
-                    app_id: "app-1".into(),
-                },
-            ),
-            (
                 "a page saying hello",
                 ClientRequest::ChromeHello { served_by: None },
             ),
@@ -396,20 +447,17 @@ mod tests {
                 },
             ),
             (
-                "the shell putting a copy back on the clipboard",
-                ClientRequest::CopyClipboardEntry { entry: 1 },
-            ),
-            (
                 "somebody typing the passphrase",
                 ClientRequest::Unlock {
                     passphrase: Passphrase::from("friend"),
                 },
             ),
         ] {
-            assert!(
-                !refused(&request),
-                "{what} is not a hand, and refusing it would be a desk that \
-                 cannot be told it is locked"
+            assert_eq!(
+                refused(&request),
+                None,
+                "{what} opens nothing, and refusing it would wedge a locked desk \
+                 rather than protect it"
             );
         }
     }

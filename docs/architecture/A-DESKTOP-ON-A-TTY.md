@@ -987,9 +987,27 @@ modeset behind them ran.
 
 A desk that states a `lock.passphrase` **locks itself on the same edge its
 screens go dark on**, and what being locked means is one thing: nothing the
-chrome forwards is put into the seat. `crate::lock::refused` is the list — keys,
-pointer motion, buttons, the wheel and a pointer leave — and
-`handle_client_request` drops each of them before it reaches Smithay.
+chrome forwards reaches a client, and nothing it asks done to the desktop is
+done. `crate::lock::refused` is the list, and
+`handle_client_request` asks it of every request before any of it reaches
+Smithay:
+
+| A locked desk | Requests | Why |
+|---|---|---|
+| **Drops, as a hand** (`debug`) | `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`, `PointerLeave` | Each is something done to a client. A leave is here although `crate::idle` does not count it: it tells a window the pointer has gone |
+| **Refuses, as a command** (`warn`) | `CloseApp`, `Spawn`, `CopyClipboardEntry` | The desktop acting for whoever is at it, and a locked desk acts for nobody. A shell that asks has drawn a panel over its own lock screen, so it is a warning |
+| **Answers** | `ChromeHello`, `Unlock` | The lock screen's own two: how a reloaded page learns the desk is locked, and the way out |
+| **Answers** | `SetOutputScale`, `SetOutputSize` | The page describing its window. Nothing replays them, so a monitor changed under a locked desk would stay wrong after the unlock |
+| **Answers** | `ClipboardCopied` | A client's copy, not the shell's ask. Refused, the history would disagree with what a paste produces |
+| **Answers, and it is the close call** | `KeyboardFocus` | The brain moves the focus before the seat is asked, so a refusal would leave the two disagreeing after the unlock — one window drawn active and the keys going to another. And it buys nothing: no key reaches that window until the desk opens |
+
+**The match has no wildcard, and that is the mechanism.** A request added to
+`ClientRequest` does not compile until somebody has decided whether a locked
+desk answers it. `spawn` used to be started on the chrome connection that read
+it, which the lock cannot see; it crosses to the Wayland thread now, for exactly
+this. What is still answered on a connection — a launcher's `search_files` and
+`preview_file`, and `set_theme` — the lock does not reach, and `ROADMAP.md`
+carries it.
 
 **The injection is the only place a lock could go, and both of the obvious
 alternatives are wrong.** Input does not originate in this compositor: the page
@@ -1006,7 +1024,7 @@ So the page keeps every key it has while the desk is shut. That reads like a hol
 and is the arrangement: what it forwards is dropped, no client sees a keystroke
 or a click, and the shell goes on holding the keyboard over a lock screen.
 
-Three orderings are load-bearing, and each is a line in
+Four orderings are load-bearing, and each is a line in
 `handle_client_request` or beside it:
 
 | Rule | Why |
@@ -1020,8 +1038,7 @@ The verifier is a seam — `crate::lock::Verifier` — and the one behind it tod
 compares the passphrase the config states. That file is generated into a
 world-readable store, so what has shipped locks a desk against somebody walking
 up to it and against nobody who can read the disk; PAM is what goes behind the
-seam next, and `ROADMAP.md` carries it along with what a locked desk still
-answers on the rest of the protocol.
+seam next, and `ROADMAP.md` carries it.
 
 A refused passphrase is a line in the log and no message at all. The line does
 not contain what was typed, and neither does the frame log a few lines above it:
@@ -1031,6 +1048,7 @@ structural rather than a rule for the next person adding a `debug!`.
 ```
 nobody is at this desktop; it locks itself
 this desktop is locked; what the shell forwarded reaches no client
+this desktop is locked; what the shell asked for is not done
 a passphrase this desktop did not take; it stays locked
 the passphrase opened this desktop
 ```
