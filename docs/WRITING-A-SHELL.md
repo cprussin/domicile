@@ -728,6 +728,12 @@ hide your panels for the lock to hold, though a lock screen that covers them is
 still the one that reads as locked. There is no answer on the wire either way:
 the refusal is a line in the compositor's log, like a wrong passphrase.
 
+**And nothing is read out of the home for you.** `searchFiles` and `previewFile`
+at a locked desk never settle — the same nothing a desktop with no index
+answers, whatever the query or path, so it says nothing about what is on the
+disk. Ask again on `locked: false`. `setTheme` is still taken: it opens nothing
+and reads nothing.
+
 So the things that would defeat a lock a page held do not defeat this one. A
 reload does not open the desk. An engine that died and came back does not open
 it. A shell rebuilt from a different bundle does not open it, and neither does
@@ -769,16 +775,13 @@ It cannot lock: a desk that locked with nothing to open it would be a desk nobod
 could get back into. So a shell that has never had one of these has no lock to
 draw, which is a different thing from having been told the desk is open.
 
-Two things this is not, and both are worth knowing before you build on it. A
+One thing this is not, and it is worth knowing before you build on it. A
 desk that states `lock.passphrase` rather than `lock.pam_service` is opened by a
 string in the compositor's config file, which on NixOS is generated into a
 world-readable store — that desk is locked against somebody walking up to it and
 against nobody who can read the machine's disk. Nothing on this protocol tells
 your shell which of the two a desk has, and nothing needs to: the lock screen
-is the same. And a locked desk still answers a launcher: `searchFiles` and
-`previewFile` are answered where the lock does not reach, so a launcher left up
-over a lock screen can still list the home directory and read a preview out of
-it. That one is still yours to hide. `ROADMAP.md` carries it.
+is the same.
 
 [`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx) is manganese's,
 and [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts) is the

@@ -40,14 +40,14 @@
 //! that is in `ROADMAP.md` too.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_config::LockVerifier;
 use domicile_protocol::{HostMessage, Passphrase};
 
 use crate::pam::{NoPam, Pam};
-use crate::ClientRequest;
+use crate::{ClientRequest, ConnectionRequest};
 
 /// Whether a passphrase opens this desk.
 ///
@@ -171,6 +171,7 @@ pub enum Unlocking {
 }
 
 /// Where a desk that can lock stands.
+#[derive(Debug)]
 enum State {
     Open,
     Shut,
@@ -178,15 +179,29 @@ enum State {
     Checking,
 }
 
+impl State {
+    /// Whether this is a locked desk, which a desk with a passphrase being
+    /// checked is: nothing is let through until the verdict says so.
+    fn locked(&self) -> bool {
+        match self {
+            State::Open => false,
+            State::Shut | State::Checking => true,
+        }
+    }
+}
+
 /// Whether this desk is locked, and what would open it.
 ///
 /// Built only for a desktop that stated a verifier — see [`chosen`] — so the
 /// compositor's `Option<Lock>` is the same shape, and for the same reason, as
 /// its `Option<Idle<_>>`.
+///
+/// **`state` IS SHARED, AND MOVED ONLY HERE.** Every [`Seen`] reads it, from
+/// the chrome connections' threads; see there for what orders the two.
 pub struct Lock {
     verifier: Arc<dyn Verifier>,
     answer: Arc<dyn Fn(Verdict) + Send + Sync>,
-    state: State,
+    state: Arc<Mutex<State>>,
 }
 
 impl Lock {
@@ -203,17 +218,18 @@ impl Lock {
         Lock {
             verifier: Arc::from(verifier),
             answer: Arc::new(answer),
-            state: State::Open,
+            state: Arc::new(Mutex::new(State::Open)),
         }
     }
 
-    /// Whether this desk is locked, which a desk with a passphrase being
-    /// checked is: nothing is let through until the verdict says so.
+    /// Whether this desk is locked. See [`State::locked`].
     pub fn locked(&self) -> bool {
-        match self.state {
-            State::Open => false,
-            State::Shut | State::Checking => true,
-        }
+        self.state.lock().unwrap().locked()
+    }
+
+    /// This lock's state, for a thread that is not the one holding it.
+    pub fn seen(&self) -> Seen {
+        Seen(Arc::clone(&self.state))
     }
 
     /// Lock this desk. `true` only on the edge into a locked one.
@@ -226,9 +242,10 @@ impl Lock {
     ///
     /// A desk being checked stays being checked: it is already shut.
     pub fn shut(&mut self) -> bool {
-        match self.state {
+        let mut state = self.state.lock().unwrap();
+        match *state {
             State::Open => {
-                self.state = State::Shut;
+                *state = State::Shut;
                 true
             }
             State::Shut | State::Checking => false,
@@ -249,11 +266,12 @@ impl Lock {
     /// the shell clears its field on every submit, so what was typed while the
     /// desk was busy is already gone from the screen.
     pub fn offered(&mut self, passphrase: &Passphrase) -> Offer {
-        match self.state {
+        let mut state = self.state.lock().unwrap();
+        match *state {
             State::Open => Offer::NothingToOpen,
             State::Checking => Offer::StillChecking,
             State::Shut => {
-                self.state = State::Checking;
+                *state = State::Checking;
                 let verifier = Arc::clone(&self.verifier);
                 let answer = Arc::clone(&self.answer);
                 // A copy, moved into the check and dropped the moment it ends:
@@ -275,25 +293,50 @@ impl Lock {
     /// this is where it comes back, so a verdict for any other state is two
     /// checks where the lock allows one.
     pub fn answered(&mut self, verdict: Verdict) -> Unlocking {
-        match self.state {
+        let mut state = self.state.lock().unwrap();
+        match *state {
             State::Open | State::Shut => {
                 unreachable!("a verdict arrives only for the one passphrase being checked")
             }
             State::Checking => match verdict {
                 Ok(true) => {
-                    self.state = State::Open;
+                    *state = State::Open;
                     Unlocking::Opened
                 }
                 Ok(false) => {
-                    self.state = State::Shut;
+                    *state = State::Shut;
                     Unlocking::Refused
                 }
                 Err(why) => {
-                    self.state = State::Shut;
+                    *state = State::Shut;
                     Unlocking::Unverifiable(why)
                 }
             },
         }
+    }
+}
+
+/// Whether this desk is locked, read from a chrome connection's thread.
+///
+/// The [`Lock`] lives on the Wayland thread, and a few requests are answered
+/// on a connection instead — see [`Asked`]. This is how those see it: the
+/// lock's own state rather than a copy, so a desk with a passphrase being
+/// checked is as shut here as it is there, and there is no second thing to
+/// keep in step on every edge. Read-only, because nothing but the lock may
+/// move it.
+///
+/// **THE MUTEX IS WHAT ORDERS THE EDGES.** The Wayland thread moves the state
+/// before it queues the `locked` message that says so, in both directions. So
+/// a search a page sends after it was told `locked: true` is read by a
+/// connection that sees the desk shut, and one sent after `locked: false` by a
+/// connection that sees it open. One sent after `unlock` and read before the
+/// verdict is refused: it fails shut.
+#[derive(Debug, Clone)]
+pub struct Seen(Arc<Mutex<State>>);
+
+impl Seen {
+    pub fn locked(&self) -> bool {
+        self.0.lock().unwrap().locked()
     }
 }
 
@@ -308,10 +351,26 @@ pub enum Refusal {
     /// because a hand at a locked desk is ordinary: it is how somebody wakes
     /// one to type a passphrase at it.
     Hand,
-    /// Something the shell asked this compositor to do to the desktop on
-    /// behalf of whoever is at it. Said out loud, because a shell that asks
-    /// one of these of a locked desk has drawn a panel over its own lock screen.
+    /// Something the shell asked this compositor to do to the desktop, or to
+    /// read out of the home, on behalf of whoever is at it. Said out loud,
+    /// because a shell that asks one of these of a locked desk has drawn a
+    /// panel over its own lock screen.
     Command,
+}
+
+/// Something a locked desk can be asked, named by where it is asked.
+///
+/// **TWO PLACES AND ONE LIST.** Most of what a chrome says crosses to the
+/// Wayland thread as a [`ClientRequest`], because that is where the seat and
+/// the windows are. A few things are answered on the chrome connection that
+/// read them instead — a launcher's search, above all, which must not wait on
+/// a frame — and a lock that could only see the first kind would be a lock a
+/// launcher walked around. So both kinds come to [`refused`], and the list of
+/// what a locked desk refuses stays one `match` wherever the asking is done.
+#[derive(Clone, Copy)]
+pub enum Asked<'a> {
+    OnTheWaylandThread(&'a ClientRequest),
+    OnTheConnection(&'a ConnectionRequest),
 }
 
 /// Whether this request is refused while the desk is locked, and why.
@@ -350,22 +409,45 @@ pub enum Refusal {
 /// `Unlock` is the way out and cannot be refused by the thing it is there to
 /// open. A client's copy is a client's, not the shell's, and refusing it would
 /// leave the history disagreeing with what a paste produces.
-pub fn refused(request: &ClientRequest) -> Option<Refusal> {
-    match request {
-        ClientRequest::Key { .. }
-        | ClientRequest::PointerMotion { .. }
-        | ClientRequest::PointerLeave
-        | ClientRequest::PointerButton { .. }
-        | ClientRequest::PointerAxis { .. } => Some(Refusal::Hand),
-        ClientRequest::CloseApp { .. }
-        | ClientRequest::Spawn { .. }
-        | ClientRequest::CopyClipboardEntry { .. } => Some(Refusal::Command),
-        ClientRequest::KeyboardFocus { .. }
-        | ClientRequest::SetOutputScale { .. }
-        | ClientRequest::SetOutputSize { .. }
-        | ClientRequest::ChromeHello { .. }
-        | ClientRequest::ClipboardCopied { .. }
-        | ClientRequest::Unlock { .. } => None,
+///
+/// **A LAUNCHER'S SEARCH AND PREVIEW ARE REFUSED, WHERE THEY ARE ANSWERED.**
+/// Both read the home for whoever is at the desk — a list of names, and the
+/// front of a file — which is the desktop acting for somebody a locked desk
+/// does not have. They are answered on the chrome connection, so they are
+/// asked there, as [`Asked::OnTheConnection`]; the answer to a refused one is
+/// no answer at all, whatever the query or path, so it says nothing about what
+/// is on the disk.
+///
+/// **A THEME IS NOT REFUSED.** It opens nothing and reads nothing, and the
+/// person at a locked desk is looking at it anyway. Refusing it would buy
+/// nothing, and a shell that turns its desk over at sunset would leave its lock
+/// screen in the day's colors all night.
+pub fn refused(asked: Asked) -> Option<Refusal> {
+    match asked {
+        Asked::OnTheWaylandThread(
+            ClientRequest::Key { .. }
+            | ClientRequest::PointerMotion { .. }
+            | ClientRequest::PointerLeave
+            | ClientRequest::PointerButton { .. }
+            | ClientRequest::PointerAxis { .. },
+        ) => Some(Refusal::Hand),
+        Asked::OnTheWaylandThread(
+            ClientRequest::CloseApp { .. }
+            | ClientRequest::Spawn { .. }
+            | ClientRequest::CopyClipboardEntry { .. },
+        )
+        | Asked::OnTheConnection(
+            ConnectionRequest::SearchFiles { .. } | ConnectionRequest::PreviewFile { .. },
+        ) => Some(Refusal::Command),
+        Asked::OnTheWaylandThread(
+            ClientRequest::KeyboardFocus { .. }
+            | ClientRequest::SetOutputScale { .. }
+            | ClientRequest::SetOutputSize { .. }
+            | ClientRequest::ChromeHello { .. }
+            | ClientRequest::ClipboardCopied { .. }
+            | ClientRequest::Unlock { .. },
+        )
+        | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. }) => None,
     }
 }
 
@@ -386,7 +468,7 @@ pub fn announced(locked: bool) -> HostMessage {
 
 #[cfg(test)]
 mod tests {
-    use domicile_protocol::{HostMessage, Passphrase};
+    use domicile_protocol::{HostMessage, Passphrase, Theme};
 
     use std::path::Path;
     use std::sync::mpsc;
@@ -396,11 +478,11 @@ mod tests {
     use domicile_config::LockVerifier;
 
     use super::{
-        announced, chosen, refused, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
+        announced, chosen, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
         Verifier,
     };
     use crate::engine::Clipboard;
-    use crate::ClientRequest;
+    use crate::{ClientRequest, ConnectionRequest};
 
     /// A verifier that takes one word, so the tests below are about the lock
     /// rather than about what a passphrase is.
@@ -610,6 +692,33 @@ mod tests {
     }
 
     #[test]
+    fn a_chrome_connection_sees_the_desk_shut_and_open_as_the_lock_does() {
+        // THE LOCK'S OWN STATE AND NOT A COPY OF IT. A copy is a second thing
+        // to keep in step on every edge, and the edge somebody forgets is a
+        // launcher answered at a locked desk -- the likeliest being the one a
+        // passphrase is out being checked on, which PAM holds open for seconds
+        // on a wrong password.
+        let (mut lock, heard) = desk();
+        let seen = lock.seen();
+        assert!(!seen.locked());
+
+        lock.shut();
+        assert!(seen.locked(), "a desk that shut is shut from a connection");
+
+        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert!(
+            seen.locked(),
+            "a desk with a passphrase being checked is shut from a connection too"
+        );
+
+        let verdict = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the verifier answers");
+        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert!(!seen.locked(), "and the verdict opens it there too");
+    }
+
+    #[test]
     fn a_passphrase_offered_at_an_open_desk_opens_nothing() {
         // NOT CHECKED AT ALL, and not reported as a desk that has just been
         // opened: this is a page that sent an unlock at a desk that was never
@@ -663,7 +772,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                refused(&request),
+                refused(Asked::OnTheWaylandThread(&request)),
                 Some(Refusal::Hand),
                 "{what} must not reach a client on a locked desk"
             );
@@ -691,10 +800,35 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                refused(&request),
+                refused(Asked::OnTheWaylandThread(&request)),
                 Some(Refusal::Command),
                 "{what} is the desktop acting for whoever is at it, and a \
                  locked desk has nobody it acts for"
+            );
+        }
+    }
+
+    #[test]
+    fn what_a_locked_desk_refuses_is_reading_the_home_for_a_launcher() {
+        for (what, request) in [
+            (
+                "a search of the home",
+                ConnectionRequest::SearchFiles {
+                    query: "plan".into(),
+                },
+            ),
+            (
+                "a preview of a file in it",
+                ConnectionRequest::PreviewFile {
+                    path: "plan.org".into(),
+                },
+            ),
+        ] {
+            assert_eq!(
+                refused(Asked::OnTheConnection(&request)),
+                Some(Refusal::Command),
+                "{what} reads somebody's files for whoever is at the desk, and \
+                 a locked desk has nobody it reads for"
             );
         }
     }
@@ -740,12 +874,20 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                refused(&request),
+                refused(Asked::OnTheWaylandThread(&request)),
                 None,
                 "{what} opens nothing, and refusing it would wedge a locked desk \
                  rather than protect it"
             );
         }
+        // Answered on the connection rather than on the Wayland thread, and
+        // asked of the same list.
+        assert_eq!(
+            refused(Asked::OnTheConnection(&ConnectionRequest::SetTheme {
+                theme: Theme::Dark,
+            })),
+            None
+        );
     }
 
     #[test]

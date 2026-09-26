@@ -136,7 +136,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{Lock, Offer, Refusal, Unlocking, Verdict};
+use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
@@ -371,6 +371,19 @@ enum ClientRequest {
     },
 }
 
+/// Something a chrome asked that the connection it arrived on answers itself,
+/// off the Wayland thread, out of the desk rather than out of the brain.
+///
+/// The other half of [`ClientRequest`], for the lock's sake: what a locked desk
+/// refuses is one list over both — see [`crate::lock::Asked`]. Each is here
+/// rather than there because its answer must not wait for a frame; see
+/// [`answer_on_the_connection`].
+enum ConnectionRequest {
+    SearchFiles { query: String },
+    PreviewFile { path: String },
+    SetTheme { theme: Theme },
+}
+
 /// One connected chrome: where to write to it, and which display its window
 /// covers.
 ///
@@ -430,6 +443,10 @@ struct ChromeHub {
     /// The home `offered` is an index of, which is what a preview reads under.
     /// Set once, before the indexing thread publishes anything.
     home: OnceLock<std::path::PathBuf>,
+    /// Whether the desk is locked, for what a connection answers itself — see
+    /// [`answer_on_the_connection`]. The lock's own state, set once at startup
+    /// on a desk that can lock and never on one that cannot.
+    lock: OnceLock<Seen>,
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
@@ -458,6 +475,7 @@ impl ChromeHub {
             wayland_display,
             offered: Mutex::new(None),
             home: OnceLock::new(),
+            lock: OnceLock::new(),
             appearance,
         });
         (hub, outbound_rx)
@@ -484,6 +502,15 @@ impl ChromeHub {
             self.broadcast(message);
             self.appearance.announce(theme);
         }
+    }
+
+    /// Whether the desk is locked, asked from a chrome connection.
+    ///
+    /// A desk that cannot lock is not locked, the reading
+    /// `DomicileCompositor::the_desk_is_locked` gives `None` on the Wayland
+    /// thread.
+    fn the_desk_is_locked(&self) -> bool {
+        self.lock.get().is_some_and(Seen::locked)
     }
 
     /// Forward an input event to the Wayland thread.
@@ -1153,20 +1180,8 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::Spawn { command });
                 Vec::new()
             }
-            // The one message from a chrome that says what the desktop IS
-            // rather than asking it for something -- and the reason it comes
-            // here at all rather than staying in the page is the second half
-            // of what this does: the desk's Wayland clients hear about a theme
-            // through the settings portal, which is this process's to answer.
-            //
-            // Answered with nothing, and that is not silence. What the page
-            // gets back is the `theme` broadcast `take_up_the_theme` makes,
-            // which reaches every chrome on the desk including this one -- so
-            // a desk of three monitors turns over together, and a page renders
-            // from being told rather than from its own click.
             Ok(ChromeMessage::SetTheme { theme }) => {
-                hub.take_up_the_theme(theme);
-                Vec::new()
+                answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
             }
             // Compositor-level, like the spawn above: the clipboard is the
             // seat's and the history is the compositor's, so the brain has
@@ -1177,64 +1192,11 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::CopyClipboardEntry { entry });
                 Vec::new()
             }
-            // The one message here the compositor answers rather than acts
-            // on, and it is answered out of memory. A shell's launcher is a
-            // page and a page has no filesystem, so the reading is the
-            // compositor's -- and it can be, safely, because `search_files`
-            // names no path: what is read is decided here and nowhere a
-            // document can reach.
-            //
-            // ONLY WHAT MATCHED IS SENT. The index is the whole home, and it
-            // used to cross into every page whole -- on every change, and
-            // twice a second through the startup walk -- so that the page
-            // could filter it. On half a million paths each crossing was tens
-            // of megabytes through the engine's control channel and a desktop
-            // that took no input until it was over.
             Ok(ChromeMessage::SearchFiles { query }) => {
-                // Out of the lock before the search: a walk publishing the
-                // next index must not wait on a scan of the last one.
-                let offered = hub.offered.lock().unwrap().clone();
-                offered
-                    .map(|offered| {
-                        let found = offered.search.find(&query, FOUND);
-                        HostMessage::FoundFiles {
-                            query,
-                            files: found.files,
-                            matched: u32::try_from(found.matched)
-                                .expect("a home of fewer than four billion paths"),
-                            indexing: offered.indexing,
-                        }
-                    })
-                    // Answered with nothing rather than with an empty list,
-                    // which is what a desktop with no index has to say -- no
-                    // HOME, or a home directory that would not open. "You have
-                    // no files" is that breakage wearing the face of an
-                    // ordinary answer: a shell told it would draw an empty
-                    // launcher and nobody would ever find the line that
-                    // explains it. Left unanswered, the panel still opens and
-                    // still takes a path, a URL or a query; what it has not
-                    // got is a list.
-                    .into_iter()
-                    .collect()
+                answer_on_the_connection(hub, ConnectionRequest::SearchFiles { query })
             }
-            // Answered out of the same index the search is, and only for a
-            // path it holds -- see `domicile_host::file_preview`. A page names
-            // this path, so the index is what keeps the naming from being a
-            // way to read the disk.
             Ok(ChromeMessage::PreviewFile { path }) => {
-                let offered = hub.offered.lock().unwrap().clone();
-                offered
-                    .map(|offered| {
-                        let home = hub.home.get().expect("a home before an index of it");
-                        HostMessage::FilePreview {
-                            preview: preview(home, &path, &offered.search),
-                            path,
-                        }
-                    })
-                    // Nothing, for the reason a search on a desktop with no
-                    // index is answered with nothing above.
-                    .into_iter()
-                    .collect()
+                answer_on_the_connection(hub, ConnectionRequest::PreviewFile { path })
             }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
@@ -1447,6 +1409,130 @@ fn read_chrome_messages(
         }
         if !write_responses(hub, writer, responses) {
             return;
+        }
+    }
+}
+
+/// Answer what a chrome asked of its own connection, unless the desk is locked.
+///
+/// **THE LOCK, ASKED WHERE THE ANSWER IS MADE.** These are answered here, off
+/// the Wayland thread, so that a search per keystroke never waits on a frame —
+/// and the lock lives on the Wayland thread. So the connection asks the same
+/// [`crate::lock::refused`] that `handle_client_request` does, of the lock's
+/// own state through [`Seen`]: one list, asked in two places.
+///
+/// A refused one is answered with nothing, which says nothing about the query
+/// or the path — not even whether the path exists — and is what a desktop with
+/// no index already answers, so the protocol has no new case in it.
+fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
+    let refusal = if hub.the_desk_is_locked() {
+        crate::lock::refused(Asked::OnTheConnection(&request))
+    } else {
+        None
+    };
+    match refusal {
+        Some(refusal) => {
+            say_what_the_lock_refused(refusal);
+            Vec::new()
+        }
+        None => answered_on_the_connection(hub, request),
+    }
+}
+
+/// What a chrome asked of its own connection, answered.
+fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
+    match request {
+        // The one message from a chrome that says what the desktop IS
+        // rather than asking it for something -- and the reason it comes
+        // here at all rather than staying in the page is the second half
+        // of what this does: the desk's Wayland clients hear about a theme
+        // through the settings portal, which is this process's to answer.
+        //
+        // Answered with nothing, and that is not silence. What the page
+        // gets back is the `theme` broadcast `take_up_the_theme` makes,
+        // which reaches every chrome on the desk including this one -- so
+        // a desk of three monitors turns over together, and a page renders
+        // from being told rather than from its own click.
+        ConnectionRequest::SetTheme { theme } => {
+            hub.take_up_the_theme(theme);
+            Vec::new()
+        }
+        // The one message here the compositor answers rather than acts
+        // on, and it is answered out of memory. A shell's launcher is a
+        // page and a page has no filesystem, so the reading is the
+        // compositor's -- and it can be, safely, because `search_files`
+        // names no path: what is read is decided here and nowhere a
+        // document can reach.
+        //
+        // ONLY WHAT MATCHED IS SENT. The index is the whole home, and it
+        // used to cross into every page whole -- on every change, and
+        // twice a second through the startup walk -- so that the page
+        // could filter it. On half a million paths each crossing was tens
+        // of megabytes through the engine's control channel and a desktop
+        // that took no input until it was over.
+        ConnectionRequest::SearchFiles { query } => {
+            // Out of the lock before the search: a walk publishing the
+            // next index must not wait on a scan of the last one.
+            let offered = hub.offered.lock().unwrap().clone();
+            offered
+                .map(|offered| {
+                    let found = offered.search.find(&query, FOUND);
+                    HostMessage::FoundFiles {
+                        query,
+                        files: found.files,
+                        matched: u32::try_from(found.matched)
+                            .expect("a home of fewer than four billion paths"),
+                        indexing: offered.indexing,
+                    }
+                })
+                // Answered with nothing rather than with an empty list,
+                // which is what a desktop with no index has to say -- no
+                // HOME, or a home directory that would not open. "You have
+                // no files" is that breakage wearing the face of an
+                // ordinary answer: a shell told it would draw an empty
+                // launcher and nobody would ever find the line that
+                // explains it. Left unanswered, the panel still opens and
+                // still takes a path, a URL or a query; what it has not
+                // got is a list.
+                .into_iter()
+                .collect()
+        }
+        // Answered out of the same index the search is, and only for a
+        // path it holds -- see `domicile_host::file_preview`. A page names
+        // this path, so the index is what keeps the naming from being a
+        // way to read the disk.
+        ConnectionRequest::PreviewFile { path } => {
+            let offered = hub.offered.lock().unwrap().clone();
+            offered
+                .map(|offered| {
+                    let home = hub.home.get().expect("a home before an index of it");
+                    HostMessage::FilePreview {
+                        preview: preview(home, &path, &offered.search),
+                        path,
+                    }
+                })
+                // Nothing, for the reason a search on a desktop with no
+                // index is answered with nothing above.
+                .into_iter()
+                .collect()
+        }
+    }
+}
+
+/// Say that a locked desk refused something, in the register its kind wants.
+///
+/// **TWO REGISTERS.** A hand at a locked desk is ordinary — it is how somebody
+/// wakes one — so dropping it is a debug line; a shell asking a locked desk to
+/// close a window, start a program or read the home has drawn a panel over its
+/// own lock screen, and that is worth a warning. Neither line says what was
+/// asked for.
+fn say_what_the_lock_refused(refusal: Refusal) {
+    match refusal {
+        Refusal::Hand => {
+            debug!("this desktop is locked; what the shell forwarded reaches no client")
+        }
+        Refusal::Command => {
+            warn!("this desktop is locked; what the shell asked for is not done")
         }
     }
 }
@@ -4091,26 +4177,13 @@ impl DomicileCompositor {
         // a passphrase into. Which requests are refused is
         // [`crate::lock::refused`]: every hand, and everything a shell can ask
         // done to the desktop on somebody's behalf.
-        //
-        // TWO REGISTERS. A hand at a locked desk is ordinary — it is how
-        // somebody wakes one — so dropping it is a debug line; a
-        // shell asking a locked desk to close a window or start a program has
-        // drawn a panel over its own lock screen, and that is worth a warning.
-        // Neither line says what was asked for.
         let refusal = if self.the_desk_is_locked() {
-            crate::lock::refused(&event)
+            crate::lock::refused(Asked::OnTheWaylandThread(&event))
         } else {
             None
         };
         if let Some(refusal) = refusal {
-            match refusal {
-                Refusal::Hand => {
-                    debug!("this desktop is locked; what the shell forwarded reaches no client")
-                }
-                Refusal::Command => {
-                    warn!("this desktop is locked; what the shell asked for is not done")
-                }
-            }
+            say_what_the_lock_refused(refusal);
             return;
         }
         match event {
@@ -6089,6 +6162,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .expect("the loop that hears a verdict outlives the lock that asked for one")
         })
     });
+    // THE LOCK, WHERE A CHROME CONNECTION CAN SEE IT — see
+    // `answer_on_the_connection`. Connections are already being served by now,
+    // and that is safe: a desk comes up open, and nothing can shut it until the
+    // event loop runs.
+    if let Some(lock) = &lock {
+        hub.lock
+            .set(lock.seen())
+            .expect("the lock is handed to the hub once, at startup");
+    }
 
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
@@ -6727,11 +6809,12 @@ mod tests {
     use domicile_protocol::CursorShape;
 
     use super::{
-        announce_open_apps, answers_keystroke, at, broadcast_closed, broadcast_focus_decision,
-        broadcast_focus_request, channel, chrome_connection, client_command, clipboard_of,
-        cursor_shape, desk_from_the_window, freshened, parse_find_colors, to_line, write_responses,
-        Appearance, Chrome, ChromeHub, ClientRequest, Clipboard, Committer, Handshake, Outbound,
-        SelectionTarget, BOTH,
+        announce_open_apps, answer_on_the_connection, answers_keystroke, at, broadcast_closed,
+        broadcast_focus_decision, broadcast_focus_request, channel, chrome_connection,
+        client_command, clipboard_of, cursor_shape, desk_from_the_window, freshened,
+        parse_find_colors, to_line, write_responses, Appearance, Chrome, ChromeHub, ClientRequest,
+        Clipboard, Committer, ConnectionRequest, Handshake, Lock, Offer, Offered, Outbound,
+        Passphrase, SelectionTarget, Unlocking, BOTH,
     };
 
     use std::sync::Arc;
@@ -6812,6 +6895,61 @@ mod tests {
             ),
             "a write to a peer that is gone ends the connection rather than looping"
         );
+    }
+
+    #[test]
+    fn a_search_asked_while_a_passphrase_is_being_checked_is_answered_with_nothing() {
+        // THE LONGEST WINDOW THE LOCK HAS. PAM sleeps on a wrong password on
+        // purpose, so a desk can sit with a passphrase out being checked for
+        // seconds -- shut, and with a launcher that may still be up over the
+        // lock screen. A connection that asked only "is it shut" would answer
+        // that launcher out of the home for as long as the check took.
+        //
+        // Held there without a sleep: a desk leaves `Checking` only when the
+        // verdict is handed back, which is this test's to do.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            Appearance::to_nobody(),
+        );
+        *hub.offered.lock().unwrap() = Some(Arc::new(Offered {
+            search: domicile_host::file_search::FileSearch::new(vec!["plan.org".into()]),
+            indexing: false,
+        }));
+        let verifier = crate::lock::chosen(
+            Some(domicile_config::LockVerifier::Passphrase("friend")),
+            std::path::Path::new("/nonexistent"),
+        )
+        .expect("a passphrase needs nothing from the machine")
+        .expect("a passphrase was stated");
+        let (told, heard) = std::sync::mpsc::channel();
+        let mut lock = Lock::held_by(verifier, move |verdict| {
+            told.send(verdict).expect("the test is listening")
+        });
+        hub.lock.set(lock.seen()).expect("the hub has no lock yet");
+        let search = || {
+            answer_on_the_connection(
+                &hub,
+                ConnectionRequest::SearchFiles {
+                    query: "plan".into(),
+                },
+            )
+        };
+
+        lock.shut();
+        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert!(
+            search().is_empty(),
+            "a desk with a passphrase being checked answered a search out of the home"
+        );
+
+        let verdict = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the verifier answers");
+        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert_eq!(search().len(), 1, "and the verdict opens it to the search");
     }
 
     #[test]
