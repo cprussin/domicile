@@ -44,6 +44,9 @@ for build in "$MEASURED" "$RELEASE" "$IN_JOB"; do
   }
 done
 
+# Whatever this machine exports would pass the assertions below for the builds.
+unset CCACHE_BASEDIR CCACHE_NOHASHDIR
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -66,6 +69,8 @@ GN
 cat >"$WORK/bin/autoninja" <<'NINJA'
 #!/bin/sh
 printf '%s\n' "$*" >>"${NINJA_ARGS_FILE:-/dev/null}"
+printf 'CCACHE_BASEDIR=%s\nCCACHE_NOHASHDIR=%s\n' \
+  "${CCACHE_BASEDIR:-}" "${CCACHE_NOHASHDIR:-}" >"${NINJA_ENV_FILE:-/dev/null}"
 exit 0
 NINJA
 cp "$WORK/bin/autoninja" "$SRC/third_party/depot_tools/autoninja"
@@ -167,6 +172,24 @@ for build in "$MEASURED" "$RELEASE"; do
     fail "$name hands gn the cache it was given" \
       "it exited $STATUS instead: $(cat "$WORK/out")"
   fi
+
+  # ONE CACHE FOR EVERY TREE. crux builds in /build/trees/tree-N/src, and a
+  # compile keyed on which tree it ran in misses in every other one: run
+  # 36236156550 got 0 hits out of 44,033 in tree-1, minutes after tree-0 had
+  # built nearly the same series. Physical, as ccache compares it with getcwd.
+  # Read off autoninja, because that is the process the compiles inherit from.
+  NINJA_ENV_FILE="$WORK/ninja-env"
+  export NINJA_ENV_FILE
+  rm -f "$NINJA_ENV_FILE"
+  run_build "$build"
+  if grep -qxF "CCACHE_BASEDIR=$(cd "$SRC" && pwd -P)" "$NINJA_ENV_FILE" &&
+    grep -qx 'CCACHE_NOHASHDIR=1' "$NINJA_ENV_FILE"; then
+    ok "$name keys the cache on the source, not on which tree holds it"
+  else
+    fail "$name keys the cache on the source, not on which tree holds it" \
+      "autoninja ran with: $(cat "$NINJA_ENV_FILE" 2>/dev/null)"
+  fi
+  unset NINJA_ENV_FILE
 
   # A bare name resolves: refusing `ccache`, the spelling Chromium's
   # cc_wrapper.gni documents, would be a refusal nobody could read.
