@@ -922,6 +922,12 @@ client — its page is inside your own. Three things follow, none optional:
   arrives in this document at all — so `focusApp` alone moves nothing, and a
   browser window left holding the focus makes every other window deaf. Open
   one, and every terminal after it stops taking keystrokes.
+- **Nothing else takes a key.** Chrome's own shortcuts — Ctrl+R, Alt+Left,
+  F11, Ctrl+W and the rest — are not bound, in the shell or in a browser
+  window, and neither is a right click: the page's `contextmenu` event is all
+  there is, so a menu is yours to draw. Ctrl+wheel does not zoom and a swipe
+  does not go back. The browser offers no password saving, autofill,
+  translation or passkeys either.
 - **Claim your desktop chords** with `domicile.grabShortcut`. The browser
   process is the only layer above a focused guest: a key pressed on a site
   reaches neither this page nor the compositor. A claimed chord comes back as a

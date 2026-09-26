@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 26 Sep 2026 16:08:45 +0000
+Subject: [PATCH] domicile: the shell window's keys, clicks and swipes are the
+ desktop's
+
+A desktop runs its shell in a Chrome app window, and Chrome's
+WebContentsDelegate for that window is a browser's:
+
+- every key the shell did not preventDefault fell through to the browser's
+  accelerators. Ctrl+R and F5 reloaded the desktop, Alt+Left took it back,
+  F11 took a CRTC-sized window out of fullscreen (a black screen on a tty),
+  Ctrl+W closed it and Ctrl+Shift+Q quit the desktop.
+- Esc went to the exclusive-access manager before the page saw it.
+- a right click drew Chrome's own context menu over the shell.
+- Ctrl+wheel zoomed the whole desktop, and a two-finger swipe past the
+  edge navigated the shell's history.
+
+None of it is the desktop's, so BrowserWebContentsDelegate now lets every
+key through to the page and leaves the unhandled ones unhandled, claims the
+context menu without drawing one (the page's `contextmenu` event still
+fires), and neither zooms nor overscrolls.
+
+Unconditional: every Browser this engine opens is a shell window. Browser
+windows are <webview> guests, whose delegate is WebViewGuest.
+---
+ .../browser_web_contents_delegate.cc          | 37 ++++++++++---------
+ .../browser_web_contents_delegate.h           |  2 +
+ 2 files changed, 22 insertions(+), 17 deletions(-)
+
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+index b752684b16..0252da10aa 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -317,23 +317,29 @@ content::KeyboardEventProcessingResult
+ BrowserWebContentsDelegate::PreHandleKeyboardEvent(
+     content::WebContents* source,
+     const input::NativeWebKeyboardEvent& event) {
+-  // Forward keyboard events to the manager for fullscreen / mouse lock. This
+-  // may consume the event (e.g., Esc exits fullscreen mode).
+-  // TODO(koz): Write a test for this http://crbug.com/40647724.
+-  if (exclusive_access_manager_->HandleUserKeyEvent(event)) {
+-    return content::KeyboardEventProcessingResult::HANDLED;
+-  }
+-
+-  return window_->PreHandleKeyboardEvent(event);
++  // Domicile: every key is the desktop's. This window is a shell, not a
++  // browser, and Esc leaving fullscreen or a reserved accelerator firing before
++  // the page sees the key is the browser taking a key the shell binds.
++  return content::KeyboardEventProcessingResult::NOT_HANDLED;
+ }
+ 
+ bool BrowserWebContentsDelegate::HandleKeyboardEvent(
+     content::WebContents* source,
+     const input::NativeWebKeyboardEvent& event) {
+-  DevToolsWindow* devtools_window =
+-      DevToolsWindow::GetInstanceForInspectedWebContents(source);
+-  return (devtools_window && devtools_window->ForwardKeyboardEvent(event)) ||
+-         window_->HandleKeyboardEvent(event);
++  // Domicile: a key the shell left alone stays unhandled. Chrome's
++  // accelerators run from here -- Ctrl+R reloading the shell, Alt+Left taking
++  // it back, F11 taking a CRTC-sized window out of fullscreen, Ctrl+W closing
++  // it, Ctrl+Shift+Q quitting the desktop -- and none of them is the desktop's.
++  return false;
++}
++
++bool BrowserWebContentsDelegate::HandleContextMenu(
++    content::RenderFrameHost& render_frame_host,
++    const content::ContextMenuParams& params) {
++  // Domicile: the page's `contextmenu` event is the whole of a right click. A
++  // browser's menu -- back, reload, inspect -- has nothing to act on in a
++  // shell, so claiming it here is what keeps content from drawing one.
++  return true;
+ }
+ 
+ void BrowserWebContentsDelegate::RequestPointerLock(
+@@ -403,11 +409,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
+ }
+ 
+ bool BrowserWebContentsDelegate::CanOverscrollContent() {
+-#if defined(USE_AURA)
+-  return OverscrollPrefManager::From(&browser_.get())->CanOverscrollContent();
+-#else
++  // Domicile: a two-finger swipe past the edge of the shell is not "go back".
+   return false;
+-#endif
+ }
+ 
+ bool BrowserWebContentsDelegate::ShouldPreserveAbortedURLs(
+@@ -849,7 +852,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
+ }
+ 
+ void BrowserWebContentsDelegate::ContentsZoomChange(bool zoom_in) {
+-  chrome::ExecuteCommand(&*browser_, zoom_in ? IDC_ZOOM_PLUS : IDC_ZOOM_MINUS);
++  // Domicile: Ctrl+wheel the shell left alone does not zoom the desktop.
+ }
+ 
+ bool BrowserWebContentsDelegate::TakeFocus(content::WebContents* source,
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
+index 360d1abf0b..6304cfc43d 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
+@@ -59,6 +59,8 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
+       const input::NativeWebKeyboardEvent& event) override;
+   bool HandleKeyboardEvent(content::WebContents* source,
+                            const input::NativeWebKeyboardEvent& event) override;
++  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
++                         const content::ContextMenuParams& params) override;
+   void RequestPointerLock(content::WebContents* web_contents,
+                           bool user_gesture,
+                           bool last_unlocked_by_target) override;
