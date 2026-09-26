@@ -73,6 +73,18 @@ if [ -n "$WRAPPER" ]; then
   fi
   CACHE_ARG="  cc_wrapper = \"$WRAPPER\"
 "
+
+  # ONE CACHE FOR EVERY TREE, which is what Chromium's Linux build instructions
+  # ask for when there is more than one checkout. crux builds in
+  # /build/trees/tree-N/src and picks N per run, so a compile keyed on its
+  # tree misses in every other: run 36236156550 got 0 hits out of 44,033 in
+  # tree-1, minutes after tree-0 had built nearly the same series. BASEDIR
+  # makes ccache hash paths under the tree relative to it, and NOHASHDIR keeps
+  # the working directory out of the hash. Physical, as ccache compares it
+  # with getcwd. Exported, not ccache.conf, so it holds on any machine.
+  CCACHE_BASEDIR="$(pwd -P)"
+  export CCACHE_BASEDIR
+  export CCACHE_NOHASHDIR=1
 fi
 
 # Regenerated whenever the arguments here change, which `gn gen` decides for
