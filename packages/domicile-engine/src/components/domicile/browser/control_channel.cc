@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
+#include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
@@ -906,6 +907,9 @@ void ControlChannel::DispatchLine(const std::string& line,
     if (!locked) {
       return;
     }
+    // Written down before the page hears it, so the home is shut to
+    // domicile://home/ no later than the page learns the desk is locked.
+    DeskLock::Set(*locked);
     client_->Locked(*locked, arrival);
     return;
   }
