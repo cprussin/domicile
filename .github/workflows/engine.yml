@@ -516,15 +516,17 @@ jobs:
 
       # A cold out/Release is ~40G, and a release owed is when it is likeliest
       # to be cold.
+      #
+      # RECLAIMED, NOT ASKED FOR. This measured inline and told a person to
+      # remove a cache, and nobody reads that on `crux`: run 36224113579 died
+      # here at 58G and again at 52G, on a /build every tree and the compiler
+      # cache share. The script drops this run's litter, then the builds in
+      # trees no run holds, then the compiler cache, then this run's own build,
+      # and refuses only when that is still short. After the tree is taken, for
+      # the reason engine-release.yml gives.
       - name: Room to build in
         if: ${{ steps.release.outputs.build == 'true' }}
-        run: |
-          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
-          echo "/build has ${free_gb}G free"
-          [ "$free_gb" -ge 60 ] || {
-            echo "::error::only ${free_gb}G free on /build; a cold out/Release needs ~40G. Reclaim it by removing $CHROMIUM/$OUT_RELEASE, which is a cache." >&2
-            exit 1
-          }
+        run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE" "$LOCK_OWNER"
 
       # out/Release, the shipped configuration, with everything the checks load
       # -- see .github/scripts/engine-build.sh.

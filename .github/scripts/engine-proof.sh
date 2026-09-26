@@ -32,7 +32,20 @@ case "${1:-}" in
   record)
     [ -n "${2:-}" ] || usage
     # Already proved (a dispatch, or the same tree from another commit) is done.
-    git push -q origin "HEAD:refs/tags/$(tag "$2")" || "$0" has "$2"
+    if out="$(git push -q origin "HEAD:refs/tags/$(tag "$2")" 2>&1)"; then
+      exit 0
+    fi
+    printf '%s\n' "$out" >&2
+    # GitHub refuses the job's token any ref whose commit edits a workflow, so
+    # a pull request that changes one cannot tag its proof. The engine passed
+    # all the same; the tree is proved again once it is on main.
+    case "$out" in
+      *'without `workflows` permission'*)
+        echo "::warning::$(tag "$2") not recorded: this commit edits a workflow, which GitHub will not let the job's token tag"
+        exit 0
+        ;;
+    esac
+    "$0" has "$2"
     ;;
   gate)
     : "${GITHUB_OUTPUT:?}"
