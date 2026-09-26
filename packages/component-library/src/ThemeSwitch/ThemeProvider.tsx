@@ -91,6 +91,7 @@ export const ThemeProvider = ({
           },
           next,
           previous,
+          turnWindows: () => source.turnWindows(next),
         });
       }
     };

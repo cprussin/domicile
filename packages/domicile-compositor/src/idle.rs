@@ -318,7 +318,11 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // what `CloseApp` above is: the click that chose it landed on the
         // shell's own page and never came through here at all.
         | ClientRequest::ClipboardCopied { .. }
-        | ClientRequest::CopyClipboardEntry { .. } => false,
+        | ClientRequest::CopyClipboardEntry { .. }
+        // A theme turnover is the desk redrawing itself: the click that
+        // started it was already counted when it landed on the shell.
+        | ClientRequest::TurnTheWindows { .. }
+        | ClientRequest::ThemeCaptured { .. } => false,
     }
 }
 
