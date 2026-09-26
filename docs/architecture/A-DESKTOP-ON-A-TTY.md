@@ -988,26 +988,28 @@ modeset behind them ran.
 A desk that states what opens it under `[lock]` **locks itself on the same
 edge its screens go dark on**, and what being locked means is one thing: nothing the
 chrome forwards reaches a client, and nothing it asks done to the desktop is
-done. `crate::lock::refused` is the list, and
-`handle_client_request` asks it of every request before any of it reaches
-Smithay:
+done or read. `crate::lock::refused` is the list: `handle_client_request` asks
+it of every request before any of it reaches Smithay, and
+`answer_on_the_connection` of what a chrome connection answers itself:
 
 | A locked desk | Requests | Why |
 |---|---|---|
 | **Drops, as a hand** (`debug`) | `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`, `PointerLeave` | Each is something done to a client. A leave is here although `crate::idle` does not count it: it tells a window the pointer has gone |
 | **Refuses, as a command** (`warn`) | `CloseApp`, `Spawn`, `CopyClipboardEntry` | The desktop acting for whoever is at it, and a locked desk acts for nobody. A shell that asks has drawn a panel over its own lock screen, so it is a warning |
+| **Refuses, as a command, on the connection** (`warn`) | `SearchFiles`, `PreviewFile` | Reading the home for whoever is at it. Answered with nothing — what a desk with no index says — so a refusal says nothing about the query, the path or the disk |
 | **Answers** | `ChromeHello`, `Unlock` | The lock screen's own two: how a reloaded page learns the desk is locked, and the way out |
 | **Answers** | `SetOutputScale`, `SetOutputSize` | The page describing its window. Nothing replays them, so a monitor changed under a locked desk would stay wrong after the unlock |
 | **Answers** | `ClipboardCopied` | A client's copy, not the shell's ask. Refused, the history would disagree with what a paste produces |
+| **Answers, on the connection** | `SetTheme` | Opens nothing and reads nothing, and the person at the desk is looking at it anyway. Refused, a shell that turns over at sunset would keep its lock screen in the day's colors all night |
 | **Answers, and it is the close call** | `KeyboardFocus` | The brain moves the focus before the seat is asked, so a refusal would leave the two disagreeing after the unlock — one window drawn active and the keys going to another. And it buys nothing: no key reaches that window until the desk opens |
 
-**The match has no wildcard, and that is the mechanism.** A request added to
-`ClientRequest` does not compile until somebody has decided whether a locked
-desk answers it. `spawn` used to be started on the chrome connection that read
-it, which the lock cannot see; it crosses to the Wayland thread now, for exactly
-this. What is still answered on a connection — a launcher's `search_files` and
-`preview_file`, and `set_theme` — the lock does not reach, and `ROADMAP.md`
-carries it.
+**The match has no wildcard, and that is the mechanism.** It is over
+`crate::lock::Asked` — a `ClientRequest` or a `ConnectionRequest` — so a request
+added to either does not compile until somebody has decided whether a locked
+desk answers it. `spawn` crossed to the Wayland thread to reach the list; a
+search cannot, because it is answered on the connection so that it never waits
+on a frame. So the connection asks the same list, of the lock's own state
+through `crate::lock::Seen` rather than a copy of it.
 
 **The injection is the only place a lock could go, and both of the obvious
 alternatives are wrong.** Input does not originate in this compositor: the page
@@ -1024,13 +1026,14 @@ So the page keeps every key it has while the desk is shut. That reads like a hol
 and is the arrangement: what it forwards is dropped, no client sees a keystroke
 or a click, and the shell goes on holding the keyboard over a lock screen.
 
-Four orderings are load-bearing, and each is a line in
-`handle_client_request` or beside it:
+Five orderings are load-bearing, and each is a line in
+`handle_client_request`, `crate::lock` or beside them:
 
 | Rule | Why |
 |---|---|
 | **The hand is counted before the refusal** | `keep_the_desktop_awake` runs first, so a key at a locked desk still lights the screens and still reaches no client. Otherwise there is nothing to read the lock screen by |
 | **`ChromeHello` is never refused** | It is how a page that reloaded over a locked desk is told so. A lock that swallowed the hello would be a locked desk with no lock screen on it |
+| **The lock moves before the shell is told** | `Lock` moves its state under the mutex `Seen` reads before `locked` is queued, on both edges, and a connection reads its page's lines in order — so a search sent after `locked: true` is refused and one sent after `locked: false` is answered. A desk with a passphrase being checked is shut to it too, and one sent after `unlock` and read before the verdict is refused: it fails shut |
 | **The shell is told before the modeset, like idle** | A relight is tens of milliseconds against a repaint's one, so a lock screen raised now is up before there is light to read the desktop behind it |
 | **The seat lets go of what it is holding as the desk shuts** | A release is the one thing the refusal cannot drop — it is the end of an event that *did* happen. A Shift held while somebody reads the screen sends nothing for the whole timeout, and its release after the lock would leave that key down in the seat for good. `release_pressed_keys`, which is what a reloaded page already gets |
 

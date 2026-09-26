@@ -1,4 +1,5 @@
-//! A locked desk does not put what the shell forwards into the seat.
+//! A locked desk does not put what the shell forwards into the seat, nor read
+//! the home for it.
 //!
 //! `crate::lock` decides what a locked desk refuses and what opens it, and its
 //! unit tests own both. What they cannot reach is the thing the lock is *for*:
@@ -24,7 +25,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage, Passphrase};
+use domicile_protocol::{ChromeMessage, FilePreview, HostMessage, Passphrase};
 
 use crate::running::Compositor;
 
@@ -374,4 +375,127 @@ fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Pa
             ],
         })
         .expect("the chrome socket takes a spawn");
+}
+
+/// A launcher left up over a locked desk is told nothing out of the home, and
+/// the same search at the desk the passphrase opened finds the file.
+///
+/// **THE UNLOCK IS THE FENCE, AND THE SOCKET'S ORDER IS WHAT MAKES IT ONE.** A
+/// search is answered on the connection that read it, before that connection
+/// reads the next line, so an answer the lock had let through would be on the
+/// socket ahead of the `locked: false` the unlock after it produces. Waiting for
+/// whichever of the two comes first is exact rather than a wait for an
+/// absence, and fails for the right reason: a desk that answered hands back the
+/// file list.
+///
+/// The index is waited for before the desk locks, so "answered with nothing"
+/// cannot be a desktop with nothing yet to answer from — which is a nothing
+/// this compositor already says, for a different reason.
+#[test]
+fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the_file() {
+    let home = tempfile::tempdir().expect("a home to lay out");
+    std::fs::write(home.path().join("plan.org"), "").expect("the file");
+    let compositor = Compositor::started_in_a_home(A_DESK_THAT_CAN_LOCK, Some(home.path()));
+    let mut chrome = an_indexed_desk_locked(&compositor);
+
+    say_search(&mut chrome, "plan");
+    let first = opened_or_answered(&mut chrome);
+    assert!(
+        matches!(first, HostMessage::Locked { locked: false }),
+        "the locked desk answered a search out of the home: {first:?}"
+    );
+
+    say_search(&mut chrome, "plan");
+    let found = chrome
+        .wait_for(|message| matches!(message, HostMessage::FoundFiles { .. }))
+        .expect("the desk the passphrase opened answers the search");
+    let HostMessage::FoundFiles { files, .. } = found else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(files, vec!["plan.org".to_string()]);
+
+    let said = compositor.complaint();
+    assert!(
+        said.contains("this desktop is locked; what the shell asked for is not done"),
+        "the locked desk refused the search without saying so:\n{said}"
+    );
+}
+
+/// A preview asked of a locked desk is not read, and the same preview at the
+/// desk the passphrase opened is.
+///
+/// The page names the path here, so this is the one that reads a file's
+/// contents rather than its name — fenced by the unlock for the reason the
+/// search above is.
+#[test]
+fn a_locked_desk_reads_no_preview_and_the_passphrase_lets_the_next_one_read() {
+    let home = tempfile::tempdir().expect("a home to lay out");
+    std::fs::write(home.path().join("plan.org"), "* plan\n").expect("the file");
+    let compositor = Compositor::started_in_a_home(A_DESK_THAT_CAN_LOCK, Some(home.path()));
+    let mut chrome = an_indexed_desk_locked(&compositor);
+
+    say_preview(&mut chrome, "plan.org");
+    let first = opened_or_answered(&mut chrome);
+    assert!(
+        matches!(first, HostMessage::Locked { locked: false }),
+        "the locked desk read a preview out of the home: {first:?}"
+    );
+
+    say_preview(&mut chrome, "plan.org");
+    let read = chrome
+        .wait_for(|message| matches!(message, HostMessage::FilePreview { .. }))
+        .expect("the desk the passphrase opened answers the preview");
+    let HostMessage::FilePreview { preview, .. } = read else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(
+        preview,
+        FilePreview::Text {
+            text: "* plan\n".into()
+        }
+    );
+}
+
+/// A chrome on a desk whose home is indexed, and then locked.
+fn an_indexed_desk_locked(compositor: &Compositor) -> domicile_test_chrome::Chrome {
+    let mut chrome = compositor.chrome();
+    compositor.wait_for_log("the home directory is indexed");
+    lock_the_desk(compositor, &mut chrome);
+    chrome
+}
+
+/// Type the passphrase, and hand back whichever came first: the desk saying it
+/// opened, or an answer out of the home.
+fn opened_or_answered(chrome: &mut domicile_test_chrome::Chrome) -> HostMessage {
+    chrome
+        .say(&ChromeMessage::Unlock {
+            passphrase: Passphrase::from(THE_PASSPHRASE),
+        })
+        .expect("the chrome socket takes an unlock");
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::Locked { locked: false }
+                    | HostMessage::FoundFiles { .. }
+                    | HostMessage::FilePreview { .. }
+            )
+        })
+        .expect("the passphrase opens the desk and every chrome is told")
+}
+
+fn say_search(chrome: &mut domicile_test_chrome::Chrome, query: &str) {
+    chrome
+        .say(&ChromeMessage::SearchFiles {
+            query: query.to_string(),
+        })
+        .expect("the chrome socket takes a search");
+}
+
+fn say_preview(chrome: &mut domicile_test_chrome::Chrome, path: &str) {
+    chrome
+        .say(&ChromeMessage::PreviewFile {
+            path: path.to_string(),
+        })
+        .expect("the chrome socket takes a preview");
 }

@@ -100,10 +100,12 @@ The evidence for each of those is in the doc that made the claim —
    go of whatever it was holding on the turn the desk shuts — a release is the
    one thing a refusal cannot drop. The same refusal covers what a shell asks
    done to the desktop: a locked desk closes no window, starts no program and
-   puts no clipboard row back, whatever panel the shell left up to ask with,
-   and says so in its log. The list is a `match` with no wildcard, so a request
-   added later does not compile until somebody decides whether a locked desk
-   answers it.
+   puts no clipboard row back, and a launcher's `search_files` and
+   `preview_file` are answered with nothing, whatever panel the shell left up to
+   ask with — and it says so in its log. The list is a `match` with no
+   wildcard, over what the Wayland thread is asked and what a chrome connection
+   answers itself, so a request added to either does not compile until somebody
+   decides whether a locked desk answers it.
 
    **And now the verifier**: a desk that states `lock.pam_service` is opened by
    `pam_authenticate` against the user the compositor runs as — the uid, never
@@ -144,15 +146,6 @@ The evidence for each of those is in the doc that made the claim —
      the shell cannot see either. What this wants is a message carrying the
      verdict — and a "checking" state, since keys sent while one is being
      checked reach nothing.
-   - **A locked desk still answers a launcher.** `search_files` and
-     `preview_file` are answered on the chrome connection that asked, off the
-     Wayland thread on purpose so that a search never waits on a frame — and
-     the lock lives on the Wayland thread, so `crate::lock::refused` never sees
-     either. A shell that leaves its launcher up over a lock screen can still
-     list the home directory and read a preview out of it. What this wants is
-     the lock's state where a connection can read it, and the same decision
-     made there for `set_theme`, the one other message answered on the
-     connection.
    - **A reload does not move the lock.** `[lock]` is read at startup and
      nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left
