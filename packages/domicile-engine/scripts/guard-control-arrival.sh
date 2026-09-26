@@ -30,6 +30,10 @@
 #   and one it knows, sent after the one it does not, reaches it anyway — so
 #     "the bad name was refused" can be told apart from "the channel died on
 #     it", which without this reading are the same absence
+#   every event navigator.domicile names reaches both an addEventListener
+#     listener and its on<name> handler. The names are the fork's own
+#     (modules/domicile/domicile_event_names.h), not Blink's global list, and
+#     a name either side lost is a message a shell stops hearing
 #   `arrival` is a finite number, after the document's time origin, and not
 #     after the dispatch it precedes
 set -u
@@ -170,9 +174,10 @@ KNOWN_AFTER=$(saw '"GUARD app-cursor app=guard cursor=zoom-out"')
 UNKNOWN=$(saw '"GUARD app-cursor app=guard cursor=pointr"')
 FINITE=$(saw '"GUARD hop-shape finite=true ')
 POSITIVE=$(saw '"GUARD hop-shape finite=[a-z]+ positive=true ')
+NAMES=$(saw '"GUARD names missing=none"')
 ORDERED=$(saw '"GUARD hop-shape .*ordered=true"')
 
-echo "listening=$LISTENING grab=$KNOWN_FIRST zoom-out=$KNOWN_AFTER" \
+echo "listening=$LISTENING names=$NAMES grab=$KNOWN_FIRST zoom-out=$KNOWN_AFTER" \
   "pointr=$UNKNOWN finite=$FINITE positive=$POSITIVE ordered=$ORDERED"
 
 # THE VERDICT, AND IT IS ORDERED. Each arm rules out a layer, and an arm that
@@ -183,6 +188,8 @@ echo "listening=$LISTENING grab=$KNOWN_FIRST zoom-out=$KNOWN_AFTER" \
 FAILURE=""
 if [ "$LISTENING" != "1" ]; then
   FAILURE="the shell module never registered a listener, so nothing here was measured"
+elif [ "$NAMES" != "1" ]; then
+  FAILURE="an event navigator.domicile names did not reach its listener or its on<name> handler, so the fork's names in modules/domicile/domicile_event_names.h and the page disagree; the GUARD names line says which"
 elif [ "$UNKNOWN" = "1" ]; then
   FAILURE="a cursor name the engine does not know reached the page, so the closed set in components/domicile/common/cursor_shape.h is not being applied and an unknown CSS keyword is a silent no-op there"
 elif [ "$KNOWN_FIRST" != "1" ]; then

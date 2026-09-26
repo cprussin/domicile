@@ -71,14 +71,14 @@ mentions() {
 
 # A run's seven readings, in the order the guard takes them, defaulting to the
 # run that passes. Named arguments would be seven `case` arms to save a comment.
-verdict() { # listening grab pointr zoom-out finite positive ordered
+verdict() { # listening grab pointr zoom-out finite positive ordered names
   LISTENING="${1:-1}" KNOWN_FIRST="${2:-1}" UNKNOWN="${3:-0}" \
     KNOWN_AFTER="${4:-1}" FINITE="${5:-1}" POSITIVE="${6:-1}" \
-    ORDERED="${7:-1}" \
+    ORDERED="${7:-1}" NAMES="${8:-1}" \
     bash -c 'set -u
       LISTENING=$LISTENING KNOWN_FIRST=$KNOWN_FIRST UNKNOWN=$UNKNOWN
       KNOWN_AFTER=$KNOWN_AFTER FINITE=$FINITE POSITIVE=$POSITIVE
-      ORDERED=$ORDERED
+      ORDERED=$ORDERED NAMES=$NAMES
       '"$BLOCK"'
       printf "%s" "$FAILURE"'
 }
@@ -119,8 +119,8 @@ readings() { # reads a log on stdin, prints the seven readings
   cat >"$log"
   out="$(ENGINE_LOG="$log" bash -c 'set -u
     '"$READINGS"'
-    printf "listening=%s grab=%s zoom-out=%s pointr=%s finite=%s positive=%s ordered=%s" \
-      "$LISTENING" "$KNOWN_FIRST" "$KNOWN_AFTER" "$UNKNOWN" "$FINITE" "$POSITIVE" "$ORDERED"')"
+    printf "listening=%s grab=%s zoom-out=%s pointr=%s finite=%s positive=%s ordered=%s names=%s" \
+      "$LISTENING" "$KNOWN_FIRST" "$KNOWN_AFTER" "$UNKNOWN" "$FINITE" "$POSITIVE" "$ORDERED" "$NAMES"')"
   rm -f "$log"
   printf '%s' "$out"
 }
@@ -128,8 +128,9 @@ readings() { # reads a log on stdin, prints the seven readings
 # The run that prompted all of this, as it was actually written. Every reading
 # must be 1 except the cursor that must never arrive.
 expect "a good run reads as a good run" \
-  "listening=1 grab=1 zoom-out=1 pointr=0 finite=1 positive=1 ordered=1" \
+  "listening=1 grab=1 zoom-out=1 pointr=0 finite=1 positive=1 ordered=1 names=1" \
   "$(logged \
+      "names missing=none" \
       "clock now=153.500" \
       "listening" \
       "app-cursor app=guard cursor=grab" \
@@ -142,7 +143,7 @@ expect "a good run reads as a good run" \
 # THE READING THAT COULD NOT FAIL. If the engine ever stops refusing an unknown
 # cursor, this is the only thing that notices.
 expect "a leaked cursor is seen" \
-  "listening=1 grab=1 zoom-out=1 pointr=1 finite=1 positive=1 ordered=1" \
+  "listening=1 grab=1 zoom-out=1 pointr=1 finite=1 positive=1 ordered=1 names=0" \
   "$(logged \
       "listening" \
       "app-cursor app=guard cursor=grab" \
@@ -155,21 +156,21 @@ expect "a leaked cursor is seen" \
 # shape answer for the other and report a run that never saw `grab` as one that
 # did.
 expect "grabbing is not grab" \
-  "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0" \
+  "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(logged "listening" "app-cursor app=guard cursor=grabbing" | readings)"
 
 # The engine's own warning about the refused cursor lands in this same log and
 # is not a console line. A reading that matched it would report the refusal as
 # the failure the refusal prevents.
 expect "the engine's own warning is not a cursor arriving" \
-  "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0" \
+  "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$( { logged "listening"
         echo "[1656824:1656854:0911/102653.593925:WARNING:components/domicile/browser/control_channel.cc:492] domicile: the compositor asked for a cursor named 'pointr', which is not one of the shapes this engine knows; the request was dropped."
       } | readings)"
 
 # A stamp nobody filled in, once `undefined - n` has been through `toFixed`.
 expect "an unfilled stamp reads false on all three" \
-  "listening=1 grab=1 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0" \
+  "listening=1 grab=1 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(logged \
       "listening" \
       "app-cursor app=guard cursor=grab" \
@@ -178,13 +179,27 @@ expect "an unfilled stamp reads false on all three" \
 
 # A log with nothing in it reads as nothing, rather than as anything.
 expect "an empty log reads as no readings" \
-  "listening=0 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0" \
+  "listening=0 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
   "$(printf '' | readings)"
+
+# THE EVENT NAMES. The fork keeps navigator.domicile's names in its own list
+# (domicile_event_names.h) rather than Blink's, and the page fires each one at
+# its addEventListener listener and its on<name> handler. A name either side
+# lost is a whole message a shell stops hearing.
+expect "a name that did not fire is read as missing" \
+  "listening=1 grab=0 zoom-out=0 pointr=0 finite=0 positive=0 ordered=0 names=0" \
+  "$(logged "names missing=ontheme" "listening" | readings)"
+
+mentions "a name that did not fire is blamed on the fork's names" \
+  "domicile_event_names.h" "$(verdict 1 1 0 1 1 1 1 0)"
+
+mentions "and outranks the cursor readings, which it can take down with it" \
+  "domicile_event_names.h" "$(verdict 1 0 0 0 0 0 0 0)"
 
 expect "a run where everything arrived is a pass" "" "$(verdict)"
 
 mentions "a module that never ran is named as the harness, not a finding" \
-  "never registered a listener" "$(verdict 0 0 0 0 0 0 0)"
+  "never registered a listener" "$(verdict 0 0 0 0 0 0 0 0)"
 
 mentions "a known cursor that never arrived blames the path, not the page" \
   "never reached the page" "$(verdict 1 0 0 1)"
