@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -111,22 +112,19 @@ class MODULES_EXPORT DomicileHost final
                    int32_t v120_y,
                    ExceptionState&);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(apptitled, kApptitled)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(appappeared, kAppappeared)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(appresized, kAppresized)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(appclosed, kAppclosed)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(appcursor, kAppcursor)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(shortcut, kShortcut)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(modifiers, kModifiers)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(files, kFiles)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(filepreview, kFilepreview)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(battery, kBattery)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(theme, kTheme)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(idle, kIdle)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
+  // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
+  // rather than event_type_names: see domicile_event_names.h for why.
+#define DOMICILE_ATTRIBUTE_EVENT_LISTENER(lower_name, function_name) \
+  EventListener* on##lower_name() {                                  \
+    return GetAttributeEventListener(                                \
+        domicile_event_names::function_name());                      \
+  }                                                                  \
+  void setOn##lower_name(EventListener* listener) {                  \
+    SetAttributeEventListener(domicile_event_names::function_name(), \
+                              listener);                             \
+  }
+  DOMICILE_EVENT_NAMES(DOMICILE_ATTRIBUTE_EVENT_LISTENER)
+#undef DOMICILE_ATTRIBUTE_EVENT_LISTENER
 
   // The desktop's screens, or null until the compositor has described them.
   // An empty array is a desktop with no screens, which is a different answer.
