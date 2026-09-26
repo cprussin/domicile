@@ -293,7 +293,7 @@ if wanted engine; then
   echo
   echo "== engine =="
   # A skip is not a stop: on a machine with no tree every one of these skips,
-  # and bailing on the first would report one skip where there are eighteen —
+  # and bailing on the first would report one skip where there are nineteen —
   # which under STRICT is one failure naming one check instead of the list of
   # what is not running.
   engine_stop() {
@@ -316,6 +316,7 @@ if wanted engine; then
     scripts/engine-unit-tests.sh \
     scripts/engine-drm-unit-tests.sh \
     scripts/engine-build-the-compositor.sh \
+    scripts/engine-guard-shortcuts-inhibitor.sh \
     scripts/engine-guard-client-window.sh \
     scripts/engine-guard-two-windows.sh \
     scripts/engine-guard-shell.sh \
