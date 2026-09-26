@@ -207,6 +207,21 @@ for name in $both; do
       "a run that waits that long is killed partway through its own compile"
   fi
 
+  # And the latency guard's wait for a quiet machine: what it waits behind is
+  # the same compile, from a run whose tree is warm and has spent minutes.
+  quiet="$(commands "$WORKFLOWS/$name" |
+    sed -n 's/^[[:space:]]*DOMICILE_RENDER_NODE_QUIET_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
+    head -1 | grep . ||
+    sed -n 's/.*DOMICILE_RENDER_NODE_QUIET_WAIT:-\([0-9][0-9]*\).*/\1/p' \
+      "$ROOT/.github/scripts/engine-render-node-lock.sh" | head -1)"
+  quiet=$((quiet / 60))
+  if [ "$quiet" -ge "$FLOOR" ] && [ "$quiet" -le "$mine" ]; then
+    ok "$name's latency guard waits out another run's cold repin (${quiet}m against ${FLOOR}m)"
+  else
+    fail "$name's latency guard waits out another run's cold repin (${quiet}m against ${FLOOR}m, budget ${mine}m)" \
+      "a warm run finishing beside a repin would give up and go red for nothing but the overlap"
+  fi
+
   if [ "$mine" -le "$TOKEN_LIFETIME" ]; then
     ok "$name ends before its token does (${mine}m within ${TOKEN_LIFETIME}m)"
   else

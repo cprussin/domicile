@@ -473,7 +473,7 @@ jobs:
 
       - name: Reset the checkout to the pin
         if: ${{ steps.series.outputs.carries != 'true' }}
-        run: .github/scripts/engine-reset.sh "$CHROMIUM"
+        run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-reset.sh "$CHROMIUM"
 
       # A REPIN NEEDS NOBODY ON `crux`, and this step is the half of that which
       # costs anything. The reset above fetches the revision and puts the tree
@@ -490,7 +490,7 @@ jobs:
       # does pay is the repin, which is rebuilding most of Chromium anyway.
       # See .github/scripts/engine-sync.sh and scripts/test-engine-sync.sh.
       - name: Sync the checkout's DEPS to the pin
-        run: .github/scripts/engine-sync.sh "$CHROMIUM"
+        run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-sync.sh "$CHROMIUM"
 
       # In a script, which is where the reason it does NOT enter Chromium's
       # shell is written down, along with the HEAD check that says the series
@@ -534,8 +534,11 @@ jobs:
       # siso deciding so; a series that HAS moved was just applied. What the
       # skip above saves is the reset and the apply rewriting every patched
       # file, which is what makes this expensive.
+      #
+      # As noise, because it is: another run's latency guard waits it out
+      # rather than timing the machine this compile loads.
       - name: Build
-        run: .github/scripts/engine-build-in-shell.sh "$CHROMIUM"
+        run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-build-in-shell.sh "$CHROMIUM"
 
       - name: Write down what out/Release was built from
         run: .github/scripts/engine-compile-slot.sh built "$CHROMIUM"
@@ -570,7 +573,9 @@ jobs:
       # .github/scripts/engine-render-node-lock.sh. `scripts/engine-guard-latency.sh`
       # takes it around its own measurement and its control and drops it from a
       # trap, which is this job's `if: always()` expressed where the lock now
-      # lives.
+      # lives. It takes it with `quiet`: only once no compile and no other
+      # run's guards are running, which `check.sh` declares for every other
+      # check here via `CARD_OWNER`.
       #
       # `DOMICILE_CHECK_STRICT=1` because on this machine there is nothing a
       # check here may legitimately skip: the tree is warm, the GPU is real and
@@ -586,6 +591,10 @@ jobs:
           # Per runner: kept across runs, and never rebuilt under another run.
           DOMICILE_CARGO_TARGET: /build/cargo-target/${{ runner.name }}
           DOMICILE_CHECK_STRICT: "1"
+          # How long the latency guard waits for a quiet machine: another
+          # run's compile can be a cold repin, so the compile slot's wait.
+          # See scripts/test-the-engine-budget-holds-both-builds.sh.
+          DOMICILE_RENDER_NODE_QUIET_WAIT: 36000
           # Where a failing check's whole log is kept, named because $TMPDIR in
           # there is nix's and nothing else in this job has it — the same reason
           # the cleanup step above stopped using $TMPDIR. /tmp is what the steps
@@ -630,7 +639,7 @@ jobs:
       - name: Package the release
         id: package
         if: ${{ steps.release.outputs.build == 'true' }}
-        run: .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
+        run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
 
       # THE ARTIFACT IS ASSERTED, NOT ASSUMED. The guards above ran against
       # out/Release itself; nothing in them would notice a file left out of
@@ -671,8 +680,10 @@ jobs:
           mkdir -p "$CHROMIUM/out/Release-staged"
           tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
             -C "$CHROMIUM/out/Release-staged" --strip-components=1
-          nix develop .#full --command cargo build -p domicile-compositor
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
+            nix develop .#full --command cargo build -p domicile-compositor
           DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
+            .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
             nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       - name: Publish the release

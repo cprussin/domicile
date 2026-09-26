@@ -158,8 +158,10 @@ jobs:
       # And the other half of the pair, from this tree. Without this the job
       # would be guarding the pinned engine against whatever compositor was
       # lying around, which is a question nobody asked.
+      #
+      # As noise, so the engine job's latency guard waits it out.
       - name: Build the compositor this checkout carries
-        run: nix develop .#full --command cargo build -p domicile-compositor
+        run: .github/scripts/engine-render-node-lock.sh noisy "$CARD_OWNER" -- nix develop .#full --command cargo build -p domicile-compositor
 
       # `.#full` rather than Chromium's toolchain shell, and it is not a
       # superset: `engineRuntimeLibs` in flake.nix puts Chromium's runtime

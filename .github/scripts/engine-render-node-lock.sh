@@ -3,7 +3,18 @@
 # the engine and not the other runner.
 #
 #   .github/scripts/engine-render-node-lock.sh take <owner>
+#   .github/scripts/engine-render-node-lock.sh quiet <owner>
+#   .github/scripts/engine-render-node-lock.sh noisy <owner> -- <command...>
 #   .github/scripts/engine-render-node-lock.sh drop <owner>
+#
+# `quiet` is `take` for a guard that times something, and `noisy` is how a
+# compile or a guard says it is loading the machine; see them below.
+#
+# THE CARD ALONE WAS NOT ENOUGH. Main run 36226737213 held it and its latency
+# guard read floor 44.61 ms, commit to pixel 49.04 ms and an unanswered round;
+# PR #598's run read 38.80 ms against a 33.33 ms bar. Both ran while run
+# 36228817911 compiled Chromium on the other runner; quiet runs read 19-29 ms.
+# A compile never touches the card, so the lock must cover the machine.
 #
 # WHY THIS EXISTS NOW AND DID NOT BEFORE. `crux` had one job slot, and one slot
 # is a lock over everything the machine has -- the card included. It has two
@@ -41,7 +52,8 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <take|drop|who> <owner>" >&2
+  echo "usage: $(basename "$0") <take|quiet|drop|who> <owner>" >&2
+  echo "       $(basename "$0") noisy <owner> -- <command...>" >&2
   exit 2
 }
 
@@ -63,6 +75,18 @@ LOCK="${DOMICILE_RENDER_NODE_LOCK:-/build/.domicile-render-node-lock}"
 # job that is taking its time.
 MAX_WAIT="${DOMICILE_RENDER_NODE_MAX_WAIT:-1200}"
 STALE_AFTER="${DOMICILE_RENDER_NODE_STALE_AFTER:-600}"
+
+# Noise: what `noisy` registers and `quiet` waits out. One directory per
+# registration, beside the lock and for the same reason. A registration says it
+# is alive every NOISE_BEAT seconds and is dead after NOISE_STALE without that:
+# a pid cannot say so, because the two runners are two units that need not see
+# each other's processes.
+NOISE="${DOMICILE_RENDER_NODE_NOISE:-/build/.domicile-noise}"
+NOISE_BEAT="${DOMICILE_RENDER_NODE_NOISE_BEAT:-10}"
+NOISE_STALE="${DOMICILE_RENDER_NODE_NOISE_STALE:-120}"
+# How long a measurement waits for quiet before saying it did not run.
+QUIET_WAIT="${DOMICILE_RENDER_NODE_QUIET_WAIT:-1800}"
+POLL="${DOMICILE_RENDER_NODE_POLL:-5}"
 
 now() { date +%s; }
 
@@ -90,16 +114,68 @@ age_secs() {
   printf '%s\n' "$secs"
 }
 
+claim() {
+  mkdir "$LOCK" 2>/dev/null || return 1
+  printf '%s\n' "$owner" >"$LOCK/owner"
+  now >"$LOCK/since"
+  date -Is >"$LOCK/since-human"
+}
+
+# Held. Before waiting on it, decide whether there is anything there to wait
+# for: a lock older than any guard could possibly hold it is a run that was
+# canceled or a machine that went away, and nothing else clears it. Said loudly
+# rather than quietly, because the one case where this is wrong -- a guard
+# genuinely taking ten minutes -- is worth a line in a log that somebody can
+# find afterward. Once per caller, in `stole`.
+steal_if_stale() {
+  local secs
+  [ "$stole" -eq 0 ] || return 1
+  secs="$(age_secs)" && [ "$secs" -ge "$STALE_AFTER" ] || return 1
+  echo "::warning::the render node lock has been held by '$(holder)' for ${secs}s, which is longer than any guard holds it; taking it"
+  echo "If a guard really was still running, its timings are now worth nothing and it should be re-run." >&2
+  rm -rf "$LOCK"
+  stole=1
+}
+
+# Held and not abandoned, which is what noise holds off for. An age that cannot
+# be read is held, for the reason `take` will not steal it.
+card_in_use() {
+  local secs
+  [ -d "$LOCK" ] || return 1
+  secs="$(age_secs)" || return 0
+  [ "$secs" -lt "$STALE_AFTER" ]
+}
+
+# The owners of live noise, one per line. A registration that stopped saying
+# it is alive is a run that was killed: cleared, out loud, rather than waited
+# on, or every measurement after it is a skip.
+live_noise() {
+  local reg since who
+  for reg in "$NOISE"/*; do
+    [ -d "$reg" ] || continue
+    who="$(cat "$reg/owner" 2>/dev/null || echo "someone who did not write their name in it")"
+    since="$(cat "$reg/since" 2>/dev/null || true)"
+    case "$since" in
+      (''|*[!0-9]*) ;;
+      (*)
+        if [ $(($(now) - since)) -ge "$NOISE_STALE" ]; then
+          echo "::warning::'$who' registered noise and has not said it is alive for $(($(now) - since))s; clearing $reg" >&2
+          rm -rf "$reg"
+          continue
+        fi
+        ;;
+    esac
+    printf '%s\n' "$who"
+  done
+}
+
 case "$action" in
   take)
     [ -n "$owner" ] || usage
     waited=0
     stole=0
     while :; do
-      if mkdir "$LOCK" 2>/dev/null; then
-        printf '%s\n' "$owner" >"$LOCK/owner"
-        now >"$LOCK/since"
-        date -Is >"$LOCK/since-human"
+      if claim; then
         if [ "$waited" -gt 0 ]; then
           echo "took the render node as '$owner' after ${waited}s"
         else
@@ -108,19 +184,7 @@ case "$action" in
         exit 0
       fi
 
-      # Held. Before waiting on it, decide whether there is anything there to
-      # wait for: a lock older than any guard could possibly hold it is a run
-      # that was canceled or a machine that went away, and nothing else clears
-      # it. Said loudly rather than quietly, because the one case where this is
-      # wrong -- a guard genuinely taking ten minutes -- is worth a line in a
-      # log that somebody can find afterward.
-      if secs="$(age_secs)" && [ "$secs" -ge "$STALE_AFTER" ] && [ "$stole" -eq 0 ]; then
-        echo "::warning::the render node lock has been held by '$(holder)' for ${secs}s, which is longer than any guard holds it; taking it"
-        echo "If a guard really was still running, its timings are now worth nothing and it should be re-run." >&2
-        rm -rf "$LOCK"
-        stole=1
-        continue
-      fi
+      steal_if_stale && continue
 
       if [ "$waited" -ge "$MAX_WAIT" ]; then
         {
@@ -144,6 +208,98 @@ case "$action" in
       sleep 5
       waited=$((waited + 5))
     done
+    ;;
+
+  # `take`, for a guard that times something: the card only once nothing on
+  # the machine is noise, and noise holds off until it is dropped. Look, claim,
+  # look again -- and `noisy` registers, then looks at the card -- so whichever
+  # of the two moves second sees the first. Never while waiting, since a card
+  # held for a compile's length would be stolen at STALE_AFTER and would hold
+  # `pinned-engine.yml` off for as long.
+  quiet)
+    [ -n "$owner" ] || usage
+    waited=0
+    stole=0
+    said=""
+    while :; do
+      noise="$(live_noise)"
+      if [ -z "$noise" ]; then
+        if claim; then
+          noise="$(live_noise)"
+          if [ -z "$noise" ]; then
+            echo "took the render node as '$owner' after ${waited}s, with nothing else compiling or running guards here"
+            exit 0
+          fi
+          rm -rf "$LOCK"
+        else
+          steal_if_stale && continue
+        fi
+      fi
+      what="${noise:-the render node, held by '$(holder)'}"
+      what="$(printf '%s\n' "$what" | paste -sd, - | sed 's/,/, /g')"
+      [ "$what" = "$said" ] || {
+        echo "waiting up to ${QUIET_WAIT}s for a quiet machine: $what"
+        said="$what"
+      }
+      if [ "$waited" -ge "$QUIET_WAIT" ]; then
+        echo "SKIP: the machine was never quiet enough to time anything on (${waited}s): $what"
+        {
+          echo "::notice::'$owner' timed nothing: after ${waited}s this machine still had $what"
+          echo "A measurement taken beside a compile or another run's guards"
+          echo "measures the machine, not the pipeline. Re-run this once it is quiet."
+        } >&2
+        exit 77
+      fi
+      sleep "$POLL"
+      waited=$((waited + POLL))
+    done
+    ;;
+
+  # A compile or a guard: the command runs registered as noise, and not while a
+  # measurement holds the card. A heartbeat keeps the registration live and dies
+  # with this wrapper, even one killed outright.
+  noisy)
+    [ -n "$owner" ] && [ "${3:-}" = "--" ] && [ "$#" -ge 4 ] || usage
+    shift 3
+    mkdir -p "$NOISE" || exit 1
+    waited=0
+    said=""
+    while :; do
+      # Looked at before registering as well as after, so a registration that
+      # only exists to back off again is rare rather than every poll.
+      if ! card_in_use; then
+        staged="$(mktemp -d "$NOISE/.new.XXXXXX")" || exit 1
+        printf '%s\n' "$owner" >"$staged/owner"
+        now >"$staged/since"
+        reg="$NOISE/${staged##*/.new.}"
+        mv "$staged" "$reg" || exit 1
+        card_in_use || break
+        rm -rf "$reg"
+      fi
+      [ "$(holder)" = "$said" ] || {
+        said="$(holder)"
+        echo "waiting up to ${MAX_WAIT}s for '$said' to finish with the render node before '$owner' starts"
+      }
+      if [ "$waited" -ge "$MAX_WAIT" ]; then
+        echo "::error::'$owner' will not start beside '$(holder)', which has held the render node for ${waited}s; the lock is at $LOCK" >&2
+        exit 1
+      fi
+      sleep "$POLL"
+      waited=$((waited + POLL))
+    done
+    me=$$
+    ( while kill -0 "$me" 2>/dev/null && [ -d "$reg" ]; do
+        now >"$reg/since"
+        sleep "$NOISE_BEAT"
+      done
+      rm -rf "$reg"
+    ) </dev/null >/dev/null 2>&1 &
+    beat=$!
+    trap 'kill "$beat" 2>/dev/null; rm -rf "$reg"' EXIT
+    trap 'exit 143' TERM
+    trap 'exit 130' INT
+    "$@"
+    exit
     ;;
 
   drop)
