@@ -426,6 +426,12 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
              : content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
+bool WebViewGuest::HandleContextMenu(
+    content::RenderFrameHost& render_frame_host,
+    const content::ContextMenuParams& params) {
+  return true;
+}
+
 void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
