@@ -23,6 +23,7 @@
 //! waits for a stranger's I/O may run on it — the same rule the clipboard's
 //! read follows.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -129,6 +130,27 @@ pub fn keep_the_index(
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
     loop {
+        // BEFORE THE WATCH, BECAUSE WATCHING A HOME IS WALKING IT. A recursive
+        // watch is one inotify watch per directory, set up by visiting every
+        // one, so on a real home it takes as long as the walk below — and a
+        // launcher opened in that time, with nothing yet announced, was
+        // answered nothing: no rows, and no line saying the index was still
+        // being built. Said here, it has last session's list and the fact
+        // that it is being checked, from the moment the home is known to open.
+        //
+        // Not on a home that will not open: that would be a launcher holding
+        // last session's list of a home it cannot see, under a notice saying
+        // it is still looking, for as long as the session lasts.
+        if let Err(err) = fs::read_dir(&home) {
+            error!(
+                %err, home = %home.display(),
+                "the home directory could not be read, so a launcher has \
+                 nothing to be offered"
+            );
+            return;
+        }
+        announce(&mut index, &tell);
+
         // BEFORE THE WALK, AND THAT IS THE ONLY ORDER THAT LOSES NOTHING. The
         // kernel reports what moves under a watch it already has, so a walk
         // with no watch behind it goes stale as it runs: a file written into a
@@ -223,13 +245,6 @@ fn walk_the_home(home: &Path, omit: &Omit, index: &mut FileIndex, tell: &impl Fn
             return false;
         }
     };
-
-    // AFTER THE HOME HAS BEEN OPENED AND NOT BEFORE. This is what publishes
-    // last session's list, and it must not go out on a desktop whose home
-    // turns out to be unreadable — that would be a launcher holding a list of
-    // a home it cannot see, under a notice saying it is still looking, for as
-    // long as the session lasts.
-    announce(index, tell);
 
     let started = Instant::now();
     let mut last_told = Instant::now();
@@ -426,9 +441,10 @@ pub fn kept_at() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::sync::mpsc::channel;
+    use std::path::Path;
+    use std::sync::mpsc::{channel, Receiver, Sender};
     use std::thread;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use domicile_config::Omit;
 
@@ -446,6 +462,40 @@ mod tests {
     const EVERY_ROW: usize = 100;
 
     #[test]
+    fn the_index_says_it_is_building_before_it_watches_the_home() {
+        // WATCHING A HOME IS WALKING IT. A recursive watch is one inotify watch
+        // per directory, set up by visiting every one, so on a real home it
+        // takes as long as the walk does — and nothing was announced until it
+        // was up. A launcher opened in that time was answered nothing at all:
+        // no rows, and no line saying the index was still being built.
+        //
+        // So the first announcement goes out before the watch, and so before
+        // the walk has read anything. A path created while it is in hand is one
+        // the walk still reaches, which the walk's own last announcement shows.
+        let home = tempfile::tempdir().expect("a home to lay out");
+        fs::create_dir(home.path().join("Notes")).expect("the directory");
+        fs::write(home.path().join("Notes/today.org"), "").expect("the file");
+        let (announcements, go_on) = keeping(home.path());
+
+        let (seeded, indexing) = next(&announcements);
+        assert!(indexing, "a walk that has not ended is still indexing");
+        assert!(
+            seeded.is_empty(),
+            "nothing is written down for this home to start from, so the first \
+             announcement is an empty seed: {seeded:?}"
+        );
+        fs::create_dir(home.path().join("Early")).expect("the directory");
+        fs::write(home.path().join("Early/plan.org"), "").expect("the file");
+        go_on.send(()).expect("the walk goes on");
+
+        assert_eq!(
+            walked(&announcements, &go_on),
+            ["Early/", "Early/plan.org", "Notes/", "Notes/today.org"],
+            "the walk read the home after the index said it was building"
+        );
+    }
+
+    #[test]
     fn a_file_written_while_the_home_is_walked_is_still_offered() {
         // THE WINDOW BETWEEN THE WALK AND THE WATCH, WHICH A SESSION USED TO
         // LOSE A FILE TO FOREVER. `keep_the_index` established its watch after
@@ -454,79 +504,69 @@ mod tests {
         // nobody to report it to. Nothing revisits a home until the next boot,
         // so that file was missing from the launcher for the whole session.
         //
-        // The announcement is what makes this a check rather than a race.
-        // `domicile_host::home_walk::walk` reads the home's own top level
-        // before it returns and the first announcement goes out immediately
-        // after, so a path created in the home once that announcement is in
-        // hand is one the walk provably cannot reach: only a watch that was
-        // already up can find it.
+        // The walk's last announcement is what makes this a check rather than
+        // a race: a path created in the home once it is in hand is one the walk
+        // provably cannot reach, so only a watch that was already up can find
+        // it.
         let home = tempfile::tempdir().expect("a home to lay out");
         fs::create_dir(home.path().join("Notes")).expect("the directory");
         fs::write(home.path().join("Notes/today.org"), "").expect("the file");
+        let (announcements, go_on) = keeping(home.path());
 
-        let (announced, announcements) = channel();
-        let (go_on, resumed) = channel();
-        let (told, heard) = channel::<Heard>();
-        let walked = home.path().to_path_buf();
-        thread::spawn(move || {
-            keep_the_index(
-                walked,
-                None,
-                Omit::default(),
-                (told, heard),
-                move |offered| {
-                    // The list, and then a wait for the test to have read
-                    // it: the index thread holds here, so what the home
-                    // holds when the walk goes on is this check's to decide
-                    // rather than a clock's.
-                    let _ = announced
-                        .send((offered.search.find("", EVERY_ROW).files, offered.indexing));
-                    // Refused only once the test has ended, which is the test
-                    // having already said whatever went wrong.
-                    let _ = resumed.recv();
-                },
-            );
-        });
-
-        let (seeded, indexing) = announcements
-            .recv_timeout(ANNOUNCED_WITHIN)
-            .expect("the index announces the list it starts a walk from");
-        assert!(indexing, "a walk that has not ended is still indexing");
-        assert!(
-            seeded.is_empty(),
-            "nothing is written down for this home to start from, so the first \
-             announcement is an empty seed: {seeded:?}"
-        );
-
+        let mut last = walked(&announcements, &go_on);
         // A directory with a file inside it, because the directory is a row of
         // its own that nothing synthesizes from the file's name — the second
         // thing the window cost, a file offered with nowhere to sit.
         fs::create_dir(home.path().join("Late")).expect("the directory");
         fs::write(home.path().join("Late/plan.org"), "").expect("the file");
-        go_on.send(()).expect("the walk goes on");
+        go_on.send(()).expect("the index goes on");
 
-        let expected = [
-            "Late/".to_string(),
-            "Late/plan.org".to_string(),
-            "Notes/".to_string(),
-            "Notes/today.org".to_string(),
-        ];
-        let deadline = Instant::now() + ANNOUNCED_WITHIN;
-        let mut last = seeded;
-        loop {
-            let (files, indexing) = announcements
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "no announcement within {ANNOUNCED_WITHIN:?} offered \
-                         {expected:?}; the last of them offered {last:?}"
-                    )
-                });
+        let expected = ["Late/", "Late/plan.org", "Notes/", "Notes/today.org"];
+        while last != expected {
+            last = next(&announcements).0;
             let _ = go_on.send(());
-            if !indexing && files == expected {
-                return;
+        }
+    }
+
+    /// What each announcement offers and whether it is still indexing, and
+    /// what lets the index go on past each one.
+    type Keeping = (Receiver<(Vec<String>, bool)>, Sender<()>);
+
+    /// An index of `home` kept on a thread of its own, holding at every
+    /// announcement until the test says to go on — so what the home holds when
+    /// the index moves is the test's to decide rather than a clock's.
+    fn keeping(home: &Path) -> Keeping {
+        let (announced, announcements) = channel();
+        let (go_on, resumed) = channel();
+        let (told, heard) = channel::<Heard>();
+        let home = home.to_path_buf();
+        thread::spawn(move || {
+            keep_the_index(home, None, Omit::default(), (told, heard), move |offered| {
+                // Both refused only once the test has ended, which is the test
+                // having already said whatever went wrong.
+                let _ =
+                    announced.send((offered.search.find("", EVERY_ROW).files, offered.indexing));
+                let _ = resumed.recv();
+            });
+        });
+        (announcements, go_on)
+    }
+
+    /// The next announcement, which the index is holding at.
+    fn next(announcements: &Receiver<(Vec<String>, bool)>) -> (Vec<String>, bool) {
+        announcements
+            .recv_timeout(ANNOUNCED_WITHIN)
+            .unwrap_or_else(|_| panic!("the index announced nothing within {ANNOUNCED_WITHIN:?}"))
+    }
+
+    /// What the walk's last announcement offers, with the index held there.
+    fn walked(announcements: &Receiver<(Vec<String>, bool)>, go_on: &Sender<()>) -> Vec<String> {
+        loop {
+            let (files, indexing) = next(announcements);
+            if !indexing {
+                return files;
             }
-            last = files;
+            let _ = go_on.send(());
         }
     }
 }
