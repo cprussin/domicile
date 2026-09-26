@@ -209,4 +209,4 @@ fi
 
 echo "the hop, as the page measured it:"
 grep -F "GUARD hop " "$ENGINE_LOG" >&2 || true
-echo "guard-control-arrival: the stage is measurable and the cursor set is closed"
+echo "PASS: the stage is measurable and the cursor set is closed"

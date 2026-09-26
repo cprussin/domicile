@@ -329,7 +329,7 @@ if [ -z "$DRAWN" ]; then
   echo "the engine never drew a client frame"
   echo "--- the compositor's last words:"
   grep -aE "engine|frame sink|buffer|dmabuf" "$COMP_LOG" | tail -12 | sed 's/^/  /'
-  [ "$NEGATIVE" = "1" ] && { echo "negative control: correct, nothing drew"; exit 0; }
+  [ "$NEGATIVE" = "1" ] && { echo "PASS: negative control: correct, nothing drew"; exit 0; }
   annotate_from "guard-client-window: the engine never drew a client frame" "$COMP_LOG"
   exit 1
 fi

@@ -121,3 +121,10 @@ tail -300 "$LOG" | sed 's/^/  | /'
   fi
   exit 1
 }
+
+# THE GUARD'S OWN VERDICTS, UNQUOTED, because `check.sh` prints a passing
+# check's `PASS:` lines and nothing else of it. Quoted behind `  | ` above they
+# are not that, and past three hundred lines of the three runs they are not
+# there at all. From the whole log, then. Under `set -e` a guard that passed
+# having stated nothing fails here, which is what a pass nobody can read is.
+grep -a '^PASS: ' "$LOG"

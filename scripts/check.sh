@@ -79,6 +79,13 @@ readonly SKIPPED_STATUS=77
 # Everything a check prints goes to a file, and the file is only shown when it
 # fails. A green run is a table; a red one is a table and the output of exactly
 # the thing that broke.
+#
+# EXCEPT A PASS'S OWN WORDS. A check that says what it established does it on a
+# `PASS:` line, and those — and nothing else of its log — are printed under its
+# `ok`. Without them a pass was one word: PR #586's backdrop-filter run went
+# green as `engine-guard-css-and-resize ok`, and nothing in the job said the
+# run had happened at all. Every one of them, not the last: a guard and its
+# control are two claims, and the css guard's is three.
 run() {
   local name="$1"; shift
   local log; log="$(mktemp)"
@@ -109,6 +116,7 @@ verdict() {
   local name="$1" status="$2" log="$3"
   if [ "$status" -eq 0 ]; then
     echo "ok"
+    sed -n 's/^ *PASS: /    PASS: /p' "$log"
     PASSED+=("$name")
   elif [ "$status" -eq "$SKIPPED_STATUS" ]; then
     # Its own words for why, because it is the only thing that knows. Printed
