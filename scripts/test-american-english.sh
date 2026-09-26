@@ -72,11 +72,14 @@ EXEMPT='--realise\b|\bcancelled\(\)'
 
 # Binaries and lockfiles have nothing to read and are megabytes of it. This
 # file goes too, and has to: the list above is sixty British words, so a check
-# that read itself would fail on the thing that defines failing.
+# that read itself would fail on the thing that defines failing. So does the
+# vendored TLD list, which is IANA's words rather than ours — `.theatre` is a
+# registry, and spelled the American way it resolves nowhere.
 SELF="scripts/$(basename "$0")"
+TLDS="packages/shell-manganese/src/address/tlds.ts"
 FILES="$(git ls-files \
   | grep -vE '\.(lock|png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|svg)$' \
-  | grep -vxF "$SELF")"
+  | grep -vxF -e "$SELF" -e "$TLDS")"
 [ -n "$FILES" ] || {
   echo "SKIP: no tracked files to read — not a checkout?"
   exit 77
