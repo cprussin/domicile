@@ -430,9 +430,15 @@ jobs:
       # makes this run's answer one nobody will read, and the concurrency group
       # never cancels a run in progress, so without this it held the runner
       # until the slot came round and then built the old commit. Checked once
-      # a minute while waiting, and only for a pull request from this
-      # repository: a fork's branch is not on origin to ask about. See
+      # a minute while waiting, never once the slot is held, and not for a fork's
+      # pull request: its branch is not on origin to ask about. See
       # .github/scripts/crux-still-head.sh.
+      #
+      # A push run asks a different question, because main's run for 13cc49a
+      # waited over six hours here while main moved four commits past it. Most
+      # of main's commits start no engine run, so it gives up only once main
+      # has changed something the path filter covers: that push started a run
+      # of its own. See .github/scripts/crux-still-latest.sh.
       - name: Take the compile slot
         id: slot
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
@@ -441,7 +447,9 @@ jobs:
           DOMICILE_COMPILE_SLOT_STILL_WANTED: >-
             ${{ github.event_name == 'pull_request'
                 && github.event.pull_request.head.repo.full_name == github.repository
-                && '.github/scripts/crux-still-head.sh "$HEAD_REF" "$HEAD_SHA"' || '' }}
+                && '.github/scripts/crux-still-head.sh "$HEAD_REF" "$HEAD_SHA"'
+                || github.event_name == 'push' && '.github/scripts/crux-still-latest.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"'
+                || '' }}
           HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
