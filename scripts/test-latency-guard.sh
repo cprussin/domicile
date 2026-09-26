@@ -90,7 +90,7 @@ verdict() { # $1 log, $2 NEGATIVE
     NEGATIVE="$2"
     MOST_FRAMES=2
     eval "$VERDICT"
-  ) 2>/dev/null | grep -E '^(::error::|PASS:|negative control: correct)' | head -1
+  ) 2>/dev/null | grep -E '^(::error::|PASS:)' | head -1
 }
 verdict_code() { # $1 log, $2 NEGATIVE
   (
@@ -267,7 +267,7 @@ CONTROL="$(run_log 16.67 '' 3 completed)"
 expect "a client answering no keys is a correct control" \
   "0" "$(verdict_code "$CONTROL" 1)"
 expect "and says so" \
-  "negative control: correct, a client that answers no keys is not a measurement" \
+  "PASS: negative control: correct, a client that answers no keys is not a measurement" \
   "$(verdict "$CONTROL" 1)"
 
 # THE CASE THE CONTROL EXISTS FOR. If the guard were matching something other

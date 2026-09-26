@@ -406,7 +406,7 @@ if [ "$NEGATIVE" = "1" ]; then
          "guard would not have noticed a client that answers nothing"
     exit 1
   fi
-  echo "negative control: correct, a client that answers no keys is not a measurement"
+  echo "PASS: negative control: correct, a client that answers no keys is not a measurement"
   exit 0
 fi
 

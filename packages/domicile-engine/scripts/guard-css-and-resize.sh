@@ -196,7 +196,11 @@ RESIZE=${PIPESTATUS[0]}
 
 echo
 if [ $FAILED -eq 0 ]; then
-  echo "step 4: every property behaves as it does on an ordinary element, under a backdrop-filter as well as under none"
+  # One line per run, because a pass is read from these and nothing else:
+  # `check.sh` prints a passing check's `PASS:` lines and drops the rest.
+  echo "PASS: css — each property on an <app> matches the same property on an ordinary <div>, interior pixel for interior pixel"
+  echo "PASS: backdrop-filter — so does each under $BACKDROP_FILTER, which the page said it applied"
+  echo "PASS: resize — the <app> went from $RESIZE_FROM to $RESIZE_TO, the producer followed it, and it still matches a <div>"
 else
   # One line, whatever failed, because the thing reading it is a workflow step
   # that should not be re-deriving any of this. Every run runs whatever the
