@@ -264,7 +264,7 @@ jobs:
       # spans and released by different steps.
       CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
-      # The one build: what ships, and what the checks run against. ~40G, kept
+      # The one build: what ships, and what the checks run against. ~3G, kept
       # warm because a clean Chromium build is four hours.
       OUT_RELEASE: out/Release
 
@@ -305,6 +305,19 @@ jobs:
         run: |
           rm -f /tmp/domicile-*.log
           rm -rf /tmp/domicile-control-budgets
+
+      # A TEMP DIRECTORY OF THIS JOB'S OWN, as TMPDIR for every step after
+      # this. Every `nix-shell` and `nix develop` leaves a `nix-shell.*` behind
+      # in TMPDIR with whatever the shell wrote to it, and ~70 of them filled
+      # 82G of /build/tmp. They go with this directory, which the step at the
+      # bottom drops whether the job passed, failed or was canceled.
+      # See .github/scripts/engine-job-tmp.sh.
+      - name: A temp directory for this job
+        run: |
+          set -euo pipefail
+          dir="$(.github/scripts/engine-job-tmp.sh make)"
+          echo "TMPDIR=$dir" >>"$GITHUB_ENV"
+          echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
 
       # WHICH TREE THIS RUN OWNS. Picking and locking are one step because
       # they cannot be two: a tree chosen and then locked is a tree another run
@@ -514,16 +527,17 @@ jobs:
         run: .github/scripts/engine-series-stamp.sh record "$CHROMIUM"
 
 
-      # A cold out/Release is ~40G, and a release owed is when it is likeliest
-      # to be cold.
+      # A build needs 15G, measured: a whole out/Release is 1.9-2.8G.
       #
       # RECLAIMED, NOT ASKED FOR. This measured inline and told a person to
       # remove a cache, and nobody reads that on `crux`: run 36224113579 died
       # here at 58G and again at 52G, on a /build every tree and the compiler
-      # cache share. The script drops this run's litter, then the builds in
-      # trees no run holds, then the compiler cache, then this run's own build,
-      # and refuses only when that is still short. After the tree is taken, for
-      # the reason engine-release.yml gives.
+      # cache share. The script drops, cheapest first, stale temp directories,
+      # published tarballs, unpacked tarballs, week-old cache entries, the
+      # builds in trees no run holds and day-old cache entries, and refuses
+      # when that is still short. Never this run's own build, which cost run
+      # 36235996990 a 4h20m cold one. After the tree is taken, for the reason
+      # engine-release.yml gives.
       - name: Room to build in
         if: ${{ steps.release.outputs.build == 'true' }}
         run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE" "$LOCK_OWNER"
@@ -756,6 +770,12 @@ jobs:
       - name: What the guards wrote down
         if: ${{ failure() }}
         run: .github/scripts/engine-diagnostics.sh
+
+      - name: Drop this job's temp directory
+        # `env.DOMICILE_JOB_TMP != ''` because a job that failed before
+        # making one has none to drop.
+        if: ${{ always() && env.DOMICILE_JOB_TMP != '' }}
+        run: .github/scripts/engine-job-tmp.sh drop "$DOMICILE_JOB_TMP"
 
       # Even when something above failed, and *only* if it is still ours: the
       # step that fails because the lock is held by somebody else reaches here
