@@ -60,6 +60,28 @@ expect "recording a tree already proved succeeds" 0 "$?"
 "$PROOF" has "$changed"
 expect "a recorded tree is proved" 0 "$?"
 
+# GitHub refuses the job's token any ref whose commit edits a workflow, so a
+# pull request that changes engine.yml cannot tag its proof. The engine still
+# passed; the tree is just proved again once it is on main.
+cat >"$WORK/origin.git/hooks/pre-receive" <<'EOF'
+#!/bin/sh
+echo 'refusing to allow a GitHub App to create or update workflow `.github/workflows/engine.yml` without `workflows` permission' >&2
+exit 1
+EOF
+chmod +x "$WORK/origin.git/hooks/pre-receive"
+echo y >>packages/domicile-compositor/lib.rs; commit workflow-edit
+out="$("$PROOF" record "$(key)" 2>&1)"
+expect "a tree GitHub will not let the job tag is not a failure" 0 "$?"
+case "$out" in *::warning::*) r=warned ;; *) r=silent ;; esac
+expect "but it says why it is not proved" warned "$r"
+sed -i 's/`workflows` permission/a reason/' "$WORK/origin.git/hooks/pre-receive"
+"$PROOF" record "$(key)" >/dev/null 2>&1
+rc=$?
+[ "$rc" -ne 0 ] && r=fails || r=passes
+expect "any other refusal still fails" fails "$r"
+rm "$WORK/origin.git/hooks/pre-receive"
+git reset -q --hard HEAD~1
+
 "$PROOF" has "$base"
 expect "and no other" 1 "$?"
 

@@ -108,9 +108,10 @@ jobs:
       # not apply it. Nobody can log into `crux` from CI, so that sentence was
       # the end of the release. The floor is unchanged and still refuses a
       # build that cannot finish; what is new is that it first drops what this
-      # workflow owns and measures again.
+      # workflow owns, the builds in trees no run holds and the compiler cache,
+      # measuring again after each.
       - name: Room to build in
-        run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT" "$STAGE"
+        run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT" "$STAGE" "$LOCK_OWNER"
 
       # The same scripts engine.yml resets and syncs with, because it is the
       # same tree, the same reset and the same pin. The reset used to be a
