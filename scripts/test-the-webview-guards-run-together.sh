@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The engine group runs the headless webview guards concurrently. They share
-# no port, broker, profile or log, and serially they were most of the group's
-# wall time. Everything else stays serial and the group still stops at the
+# no broker, profile or log, and take free ports rather than fixed ones
+# (`test-the-webview-guards-take-free-ports.sh`), and serially they were most
+# of the group's wall time. Everything else stays serial and the group still stops at the
 # first failure.
 #
 # And every check but latency runs as noise when the job names itself
