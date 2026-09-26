@@ -79,8 +79,7 @@ added together for that reason.
 ---
  .../bindings/generated_in_modules.gni         | 40 ++++++++++++++++++++++++
  .../renderer/bindings/idl_in_modules.gni      | 21 +++++++++++++
- .../core/events/event_type_names.json5        | 13 ++++++++
- 3 files changed, 74 insertions(+)
+ 2 files changed, 61 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
 index 0e992091ba..0acaed86fc 100644
@@ -185,27 +184,3 @@ index 10082ed9b8..06ab14b6af 100644
    "//third_party/blink/renderer/modules/eyedropper/color_selection_options.idl",
    "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
    "//third_party/blink/renderer/modules/eyedropper/eye_dropper.idl",
-diff --git a/third_party/blink/renderer/core/events/event_type_names.json5 b/third_party/blink/renderer/core/events/event_type_names.json5
-index 00469ecc52..a6741f85eb 100644
---- a/third_party/blink/renderer/core/events/event_type_names.json5
-+++ b/third_party/blink/renderer/core/events/event_type_names.json5
-@@ -25,6 +25,19 @@
-     "appinstalled",
-     // Domicile's engine fork: navigator.domicile.onapptitled.
-     "apptitled",
-+    "idle",
-+    "appappeared",
-+    "appresized",
-+    "appclosed",
-+    "appcursor",
-+    "shortcut",
-+    "modifiers",
-+    "files",
-+    "battery",
-+    "clipboard",
-+    "focuschanged",
-+    "focusrequested",
-+    "displayschanged",
-     "audioend",
-     "audioprocess",
-     "audiostart",
