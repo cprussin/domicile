@@ -177,10 +177,10 @@ jobs:
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          .github/scripts/engine-reset.sh "$CHROMIUM"
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-reset.sh "$CHROMIUM"
           # The DEPS, which the reset does not move. A no-op unless the pin
           # changed; see engine.yml, where the cost of it is written down.
-          .github/scripts/engine-sync.sh "$CHROMIUM"
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-sync.sh "$CHROMIUM"
           packages/domicile-engine/scripts/apply.sh "$CHROMIUM"
           [ "$(git -C "$CHROMIUM" rev-parse HEAD)" != "$pin" ] || {
             echo "::error::apply.sh succeeded but the checkout is still at the pin, so no patch was applied" >&2
@@ -213,7 +213,9 @@ jobs:
           echo "nixpkgs is $nixpkgs"
           export NIX_PATH="nixpkgs=$nixpkgs"
 
+          # As noise: a latency guard on the other runner waits it out.
           if NIX_SHELL_RUN="$GITHUB_WORKSPACE/.github/scripts/engine-drm-probe.sh $CHROMIUM $PROBE" \
+               "$GITHUB_WORKSPACE/.github/scripts/engine-render-node-lock.sh" noisy "$LOCK_OWNER" -- \
                nix-shell "$CHROMIUM/tools/nix/shell.nix" >"$PROBE.log" 2>&1; then
             echo "the shell exited 0"
           else

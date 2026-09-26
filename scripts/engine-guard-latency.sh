@@ -64,7 +64,13 @@ CARD="$ROOT/.github/scripts/engine-render-node-lock.sh"
 # still names them rather than "someone who did not write their name in it".
 CARD_OWNER="${CARD_OWNER:-engine-guard-latency.sh on $(hostname) pid $$}"
 
-"$CARD" take "$CARD_OWNER"
+# `quiet`, NOT `take`: THE CARD ALONE WAS NOT ENOUGH. Main run 36226737213 held
+# it and read a floor of 44.61 ms and 49.04 ms commit to pixel, PR #598's run
+# 38.80 ms, each while another run compiled Chromium on the other runner; quiet
+# runs read 19-29 ms. So this waits until nothing compiles and no other run's
+# guards run (they say so with `noisy`), and a machine never quiet is exit 77:
+# it did not run, which STRICT fails, rather than a number about the machine.
+"$CARD" quiet "$CARD_OWNER"
 trap '"$CARD" drop "$CARD_OWNER"' EXIT
 
 engine_guard_and_control_under_wayland guard-latency.sh

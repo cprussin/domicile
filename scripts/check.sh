@@ -94,12 +94,13 @@ run() {
   verdict "$name" "$?" "$log"
 }
 
-# Scripts at once, then their verdicts in order. Waits on its own PIDs only: a
-# bare `wait` would also wait on the e2e group's Xvfb.
+# The engine group's scripts at once, as noise, then their verdicts in order.
+# Waits on its own PIDs only: a bare `wait` would also wait on the e2e group's
+# Xvfb.
 run_together() {
   local dir script pids=(); dir="$(mktemp -d)"
   for script in "$@"; do
-    ( "$script" >"$dir/$(basename "$script")" 2>&1
+    ( engine_noisy "$script" >"$dir/$(basename "$script")" 2>&1
       echo $? >"$dir/$(basename "$script").status" ) &
     pids+=($!)
   done
@@ -308,10 +309,22 @@ if wanted engine; then
     [ "${#FAILED[@]}" -eq 0 ] && return 1
     echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
   }
+  # AS NOISE, every check but latency: another run's latency guard waits until
+  # none of this is running rather than timing a machine it loads. Only when
+  # the job names itself -- `engine.yml` sets `CARD_OWNER` -- because the
+  # registry is on `crux`'s /build, which a person's machine has no reason to
+  # have. Latency itself is not noise, or it would wait out its own run.
+  engine_noisy() {
+    if [ -n "${CARD_OWNER:-}" ]; then
+      "$ROOT/.github/scripts/engine-render-node-lock.sh" noisy "$CARD_OWNER" -- "$@"
+    else
+      "$@"
+    fi
+  }
   engine_serial() {
     local script
     for script in "$@"; do
-      run "$(basename "$script" .sh)" "$script"
+      run "$(basename "$script" .sh)" engine_noisy "$script"
       engine_stop && return 1
     done
     return 0
@@ -339,9 +352,8 @@ if wanted engine; then
       scripts/engine-guard-webview-routed-link.sh \
       scripts/engine-guard-control-arrival.sh
     ! engine_stop; } &&
-  engine_serial \
-    scripts/engine-guard-css-and-resize.sh \
-    scripts/engine-guard-latency.sh
+  engine_serial scripts/engine-guard-css-and-resize.sh &&
+  run engine-guard-latency scripts/engine-guard-latency.sh
 fi
 
 if wanted e2e; then
