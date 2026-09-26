@@ -236,13 +236,15 @@ If you are adding a message, add it in four places — the mojom, the IDL, the
 browser-side serializer, and the Blink method — and add it to the list above,
 because the list is how the next person knows whether a gap is deliberate.
 
-**Batch them.** A new inbound message means a new event type, and a new event
-type means an entry in `event_type_names.json5`, which invalidates Blink's
-generated bindings and costs most of a full rebuild — tens of minutes, not the
-usual seconds. Nineteen members added together cost one of those. Nineteen
-members added one at a time cost nineteen. This is the standing cost of the
-protocol living in the browser process, and it is the reason to arrive with a
-list rather than with one message at a time.
+**A new event type is a line in `domicile_event_names.h`,** in
+`src/third_party/blink/renderer/modules/domicile/`, beside its `on<name>` in
+the IDL. Not in Blink's `event_type_names.json5`, where these used to be: that
+file generates a header nearly all of Blink includes, so every name added there
+recompiled most of Blink — 79 minutes on engine run 36179223074, holding the
+one compile slot while every other engine run waited. Only this directory
+includes the fork's list, so a name costs a rebuild of this directory.
+`scripts/test-engine-event-names.sh` keeps the list, the IDL and the names
+`guard-control-arrival` fires in a real engine the same set.
 
 ## The command socket, which is how the shell is replaced
 
