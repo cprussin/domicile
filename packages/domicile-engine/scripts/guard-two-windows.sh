@@ -407,7 +407,7 @@ EOF
          "and the embed is not dispatched on app id at all"
     exit 1
   fi
-  echo "negative control: correct, the one running client fills its own half and" \
+  echo "PASS: negative control: correct, the one running client fills its own half and" \
        "the other canvas is not showing it"
   exit 0
 fi

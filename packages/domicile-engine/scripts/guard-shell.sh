@@ -485,7 +485,7 @@ if [ "$NEGATIVE" = "1" ]; then
     grep -aE "engine|frame sink|chrome|ERROR" "$COMP_LOG" | tail -12 | sed 's/^/  /' >&2
     exit 1
   fi
-  echo "negative control: correct, the guard does not match a color no client drew"
+  echo "PASS: negative control: correct, the guard does not match a color no client drew"
   exit 0
 fi
 

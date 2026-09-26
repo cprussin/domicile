@@ -211,6 +211,24 @@ expect "all three runs failing names all three" \
   "step 4 failed: the CSS run, a cell is marked FAIL. the backdrop-filter run, a cell is marked FAIL. the resize run, a cell is marked FAIL." \
   "$(summary 1 "$CELL" 1 "$CELL" 1 "$CELL")"
 
+# AND WHAT A PASS SAYS, one line per run, because a pass is only ever read from
+# these: `check.sh` prints a passing check's `PASS:` lines and nothing else of
+# its log. PR #586's backdrop-filter run went green with no line saying it had
+# happened at all.
+said_on_a_pass() { # the summary's stdout, with every run passing
+  (
+    FAILED=0
+    BACKDROP_FILTER='invert(1)'
+    RESIZE_FROM=120x90; RESIZE_TO=180x130
+    eval "$SUMMARY" 2>/dev/null
+  )
+}
+expect "a pass says what each of the three runs established" \
+  "PASS: css — each property on an <app> matches the same property on an ordinary <div>, interior pixel for interior pixel
+PASS: backdrop-filter — so does each under invert(1), which the page said it applied
+PASS: resize — the <app> went from 120x90 to 180x130, the producer followed it, and it still matches a <div>" \
+  "$(said_on_a_pass | grep '^PASS: ')"
+
 # A long log is the SIGPIPE case that took a real cell failure to the catch-all
 # when this was a pipeline. 200 KB is past where it was measured to start.
 BIG="$(mktemp "$FIXTURES/XXXXXX")"
