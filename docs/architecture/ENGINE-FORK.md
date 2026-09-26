@@ -634,6 +634,18 @@ known and it is a build-system cost, not a language one.
   with `app-id` reflection and default styling, rather than a canvas with a
   method on it. The method is still there, in patch `0002`, because the spike's
   measurement pages go through it.
+- **The browser takes nothing from the desktop.** A shell's window is a Chrome
+  app window, and Chrome's delegate for it is a browser's. Patch `0047` makes
+  it the desktop's: every key reaches the page and an unhandled one stays
+  unhandled (no reload, back, F11, zoom, close or quit), a right click is the
+  page's `contextmenu` event and nothing else, and neither Ctrl+wheel nor a
+  swipe past the edge acts. `WebViewGuest` claims a browser window's context
+  menu the same way. Patch `0048` turns off the password manager, autofill and
+  translate in the profile's prefs and refuses WebAuthn with no UI, with
+  Blink's `WebAuth` off so sites do not offer a passkey. Unconditional: every
+  `Browser` this engine opens is a shell window. `guard-shell-shortcuts.sh` is
+  the keyboard half; the context menu and the offers are drawn by the browser
+  where no guard can read them.
 - **Nested, the engine inhibits the host's shortcuts itself — it does not ask
   the shell to.** Patch `0038` creates a
   `zwp_keyboard_shortcuts_inhibitor_v1` for the toplevel through upstream's own
