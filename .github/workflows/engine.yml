@@ -516,15 +516,18 @@ jobs:
 
       # A cold out/Release is ~40G, and a release owed is when it is likeliest
       # to be cold.
+      #
+      # THE SCRIPT engine-release.yml USES, NOT A COPY OF ITS FIRST LINE. This
+      # was the bare `df` against 60G, with a sentence telling a person to
+      # remove out/Release — and nobody is on `crux`. It refused run
+      # 36229767471 with 52G free beside a warm out/Release, which the build
+      # would have written over rather than beside. The script counts that,
+      # drops this tree's own litter before judging, and when it still refuses
+      # prints what is holding /build. Under the tree lock, which is why it is
+      # after the pool's pick. See .github/scripts/engine-release-room.sh.
       - name: Room to build in
         if: ${{ steps.release.outputs.build == 'true' }}
-        run: |
-          free_gb=$(df -BG --output=avail /build | tail -1 | tr -dc '0-9')
-          echo "/build has ${free_gb}G free"
-          [ "$free_gb" -ge 60 ] || {
-            echo "::error::only ${free_gb}G free on /build; a cold out/Release needs ~40G. Reclaim it by removing $CHROMIUM/$OUT_RELEASE, which is a cache." >&2
-            exit 1
-          }
+        run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
 
       # out/Release, the shipped configuration, with everything the checks load
       # -- see .github/scripts/engine-build.sh.
