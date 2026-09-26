@@ -59,6 +59,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # TMPDIR for every step after this, dropped at the bottom whatever
+      # happens, so what nix leaves in it goes too. See engine.yml.
+      - name: A temp directory for this job
+        run: |
+          set -euo pipefail
+          dir="$(.github/scripts/engine-job-tmp.sh make)"
+          echo "TMPDIR=$dir" >>"$GITHUB_ENV"
+          echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+
       # WHICH TREE THIS RUN OWNS, taken and locked in one step. See engine.yml,
       # which explains the pool; the difference here is that this job always
       # resets and always compiles, so it always takes the compile slot too.
@@ -66,7 +75,7 @@ jobs:
       # `$CHROMIUM` and `$STAGE` come from the pool rather than from this
       # file's env, because there is no one tree any more.
       #
-      # WHICH MEANS `out/Release` IS PER TREE, ~40G OF IT, where it used to be
+      # WHICH MEANS `out/Release` IS PER TREE, ~3G OF IT, where it used to be
       # one directory in whichever tree carried main's pin. That is in the
       # quota chromium-build.nix refuses a deploy under, and the `Room to build
       # in` check below is the runtime half: a release that will not fit
@@ -106,10 +115,11 @@ jobs:
       # It stopped run 35552629257 in two seconds with 54G free, printed the
       # remedy — remove $CHROMIUM/$OUT, a cache and nothing else — and then did
       # not apply it. Nobody can log into `crux` from CI, so that sentence was
-      # the end of the release. The floor is unchanged and still refuses a
-      # build that cannot finish; what is new is that it first drops what this
-      # workflow owns, the builds in trees no run holds and the compiler cache,
-      # measuring again after each.
+      # the end of the release. It still refuses a build that cannot finish,
+      # under a measured 15G floor; first it drops, cheapest first and
+      # measuring after each, stale temp directories, published tarballs,
+      # unpacked tarballs, old compiler cache entries and the builds in trees
+      # no run holds. Never this run's own build. See engine.yml.
       - name: Room to build in
         run: .github/scripts/engine-release-room.sh "$CHROMIUM" "$OUT" "$STAGE" "$LOCK_OWNER"
 
@@ -234,6 +244,11 @@ jobs:
             echo "::endgroup::"
           done
           df -h /build || true
+
+      - name: Drop this job's temp directory
+        # Only if the step above got as far as making one.
+        if: ${{ always() && env.DOMICILE_JOB_TMP != '' }}
+        run: .github/scripts/engine-job-tmp.sh drop "$DOMICILE_JOB_TMP"
 
       # Only if it is still ours, and only if the pool got us one — see
       # engine.yml.

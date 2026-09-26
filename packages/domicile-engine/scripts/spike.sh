@@ -121,7 +121,11 @@ fi
 rm -f "$SOCKET"
 rm -rf "$PROFILE" && mkdir -p "$PROFILE"
 
-"$OUT/chrome" \
+# TMPDIR ON /tmp, because Chrome binds its process singleton's socket under
+# it and CHECKs the path fits a Unix socket's 107 bytes. Run from the CSS
+# guard, TMPDIR is the job's directory with two nix shells nested in it, and
+# that is past 107: every engine died at startup. See test-engine-job-tmp.sh.
+TMPDIR=/tmp "$OUT/chrome" \
   --ozone-platform="$OZONE" \
   "${GPU_FLAGS[@]}" \
   --no-sandbox \

@@ -124,6 +124,15 @@ jobs:
       - name: Forget the last run's log and sentinels
         run: rm -f "$PROBE"*
 
+      # TMPDIR for every step after this, dropped at the bottom whatever
+      # happens, so what nix leaves in it goes too. See engine.yml.
+      - name: A temp directory for this job
+        run: |
+          set -euo pipefail
+          dir="$(.github/scripts/engine-job-tmp.sh make)"
+          echo "TMPDIR=$dir" >>"$GITHUB_ENV"
+          echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+
       # WHICH TREE THIS RUN OWNS, taken and locked in one step — see engine.yml
       # for the pool. Before the room check rather than after it, because the
       # directory whose free space matters is the one this run was given.
@@ -305,6 +314,11 @@ jobs:
         run: |
           rm -rf "${CHROMIUM:?}/${OUT:?}"
           df -BG --output=avail /build | tail -1 | sed 's/^/ free on \/build:/'
+
+      - name: Drop this job's temp directory
+        # Only if the step above got as far as making one.
+        if: ${{ always() && env.DOMICILE_JOB_TMP != '' }}
+        run: .github/scripts/engine-job-tmp.sh drop "$DOMICILE_JOB_TMP"
 
       # Even when something above failed, and *only* if it is still ours: the
       # step that fails because the lock is held by somebody else reaches here
