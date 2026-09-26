@@ -5,7 +5,7 @@
 # somebody else's Wayland session, and nothing observed any part of it until
 # this ran. What it reads is `inhibit_shortcuts` on the wire under
 # `WAYLAND_DEBUG=1` — the request was MADE. Not that a key was pressed, and not
-# that the host honored it; `ROADMAP.md` carries that as what is left.
+# that the host honored it; `engine-guard-shortcuts-inhibitor-chord.sh` is that.
 #
 # Under a nested compositor, because a request needs somebody to make it to:
 # `--ozone-platform=headless` has no host to ask. Its control is the same run

@@ -353,7 +353,11 @@ if wanted engine; then
       scripts/engine-guard-control-arrival.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
-  run engine-guard-latency scripts/engine-guard-latency.sh
+  run engine-guard-latency scripts/engine-guard-latency.sh &&
+  engine_serial scripts/engine-guard-shortcuts-inhibitor-chord.sh
+  # The chord last, because what it can fail on is the host honoring the
+  # inhibitor rather than the build, and a failure here is no reason to stop
+  # the guards that read the build — which a place above them would do.
 fi
 
 if wanted e2e; then
