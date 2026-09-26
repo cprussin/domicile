@@ -341,7 +341,8 @@ if wanted engine; then
     scripts/engine-guard-client-window.sh \
     scripts/engine-guard-two-windows.sh \
     scripts/engine-guard-shell.sh \
-    scripts/engine-guard-shell-manganese.sh &&
+    scripts/engine-guard-shell-manganese.sh \
+    scripts/engine-guard-shell-shortcuts.sh &&
   { run_together \
       scripts/engine-guard-webview-framing.sh \
       scripts/engine-guard-webview-keyboard.sh \

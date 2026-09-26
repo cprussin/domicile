@@ -151,6 +151,13 @@ class WebViewGuest : public mojom::WebViewGuest,
       content::WebContents* source,
       const input::NativeWebKeyboardEvent& event) override;
 
+  // A RIGHT CLICK IS THE PAGE'S AND THE SHELL'S, NEVER THE BROWSER'S. The
+  // page's own `contextmenu` event has already fired by the time this runs,
+  // so a site's menu still works; claiming the rest is what stops content
+  // drawing Chrome's menu -- back, reload, inspect -- over a desktop.
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
+                         const content::ContextMenuParams& params) override;
+
   // WHERE AN ADDRESS BAR'S DEAD BUTTON IS NOTICED. `CanGoBack()` and
   // `CanGoForward()` are the guest's NavigationController's to answer and this
   // process is the only one that can ask, so the renderer is told instead --
