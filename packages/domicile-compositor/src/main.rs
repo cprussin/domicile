@@ -134,7 +134,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{ConfiguredPassphrase, Lock, Unlocking};
+use crate::lock::{ConfiguredPassphrase, Lock, Refusal, Unlocking};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
@@ -268,8 +268,8 @@ struct CalloopData {
     state: DomicileCompositor,
 }
 
-/// Something the chrome asked us to do to a client — inject an input event, or
-/// reconfigure its toplevel. Sent over a calloop channel so it is handled on
+/// Something the chrome asked us to do to a client — inject an input event,
+/// reconfigure its toplevel, or start one. Sent over a calloop channel so it is handled on
 /// the Wayland thread (where the seat and surfaces live).
 enum ClientRequest {
     PointerMotion {
@@ -319,6 +319,15 @@ enum ClientRequest {
     /// client.
     CloseApp {
         app_id: String,
+    },
+    /// The chrome asked for a program to be started on this desktop.
+    ///
+    /// Here rather than started on the connection that read it, which is where
+    /// it used to be, because the lock is here: a spawn is the desktop acting
+    /// for whoever is at it, and a locked desk is one that does not. See
+    /// [`crate::lock::refused`].
+    Spawn {
+        command: Vec<String>,
     },
     /// A chrome's page said `hello`. Whatever it is, it holds no pixels yet.
     ///
@@ -1136,8 +1145,10 @@ fn read_chrome_messages(
                 }
                 responses
             }
+            // To the Wayland thread, where the lock is, rather than started
+            // here: a locked desk starts nothing a shell asks for.
             Ok(ChromeMessage::Spawn { command }) => {
-                spawn_client(&command, &hub.wayland_display);
+                hub.send_request(ClientRequest::Spawn { command });
                 Vec::new()
             }
             // The one message from a chrome that says what the desktop IS
@@ -4049,10 +4060,29 @@ impl DomicileCompositor {
         // injection, which is the only place it can stop: the page owns the
         // input on this system, so a lock that refused at the socket would take
         // the shell's own keys with it and there would be nothing left to type
-        // a passphrase into. Which requests are a hand is
-        // [`crate::lock::refused`].
-        if self.the_desk_is_locked() && crate::lock::refused(&event) {
-            debug!("this desktop is locked; what the shell forwarded reaches no client");
+        // a passphrase into. Which requests are refused is
+        // [`crate::lock::refused`]: every hand, and everything a shell can ask
+        // done to the desktop on somebody's behalf.
+        //
+        // TWO REGISTERS. A hand at a locked desk is ordinary — it is how
+        // somebody wakes one — so dropping it is a debug line; a
+        // shell asking a locked desk to close a window or start a program has
+        // drawn a panel over its own lock screen, and that is worth a warning.
+        // Neither line says what was asked for.
+        let refusal = if self.the_desk_is_locked() {
+            crate::lock::refused(&event)
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
+            match refusal {
+                Refusal::Hand => {
+                    debug!("this desktop is locked; what the shell forwarded reaches no client")
+                }
+                Refusal::Command => {
+                    warn!("this desktop is locked; what the shell asked for is not done")
+                }
+            }
             return;
         }
         match event {
@@ -4267,6 +4297,7 @@ impl DomicileCompositor {
                 self.set_output_scale(scale);
             }
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
+            ClientRequest::Spawn { command } => spawn_client(&command, &self.hub.wayland_display),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");

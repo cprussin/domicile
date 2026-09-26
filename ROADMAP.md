@@ -98,7 +98,12 @@ The evidence for each of those is in the doc that made the claim —
    it](docs/WRITING-A-SHELL.md#a-locked-desk)). The page keeps its own keys
    throughout, which is what lets it draw a lock screen at all, and the seat lets
    go of whatever it was holding on the turn the desk shuts — a release is the
-   one thing a refusal cannot drop.
+   one thing a refusal cannot drop. The same refusal covers what a shell asks
+   done to the desktop: a locked desk closes no window, starts no program and
+   puts no clipboard row back, whatever panel the shell left up to ask with,
+   and says so in its log. The list is a `match` with no wildcard, so a request
+   added later does not compile until somebody decides whether a locked desk
+   answers it.
 
    What is left is
 
@@ -124,13 +129,15 @@ The evidence for each of those is in the doc that made the claim —
      shut. The field clearing is the only feedback there is. What this wants is a
      message carrying the refusal — and, once there is a real verifier behind
      the seam, a delay that grows.
-   - **A locked desk still answers the rest of the protocol.** The refusal is
-     the input path and only that: a shell over a locked desk could still ask
-     the compositor to close a window, spawn a process or put a row of the
-     clipboard back on the seat. What stops it today is the shell not drawing
-     the panels that ask, which is a shell's decision where it should be the
-     compositor's. The list wants the same treatment `crate::lock::refused`
-     already gives the input requests.
+   - **A locked desk still answers a launcher.** `search_files` and
+     `preview_file` are answered on the chrome connection that asked, off the
+     Wayland thread on purpose so that a search never waits on a frame — and
+     the lock lives on the Wayland thread, so `crate::lock::refused` never sees
+     either. A shell that leaves its launcher up over a lock screen can still
+     list the home directory and read a preview out of it. What this wants is
+     the lock's state where a connection can read it, and the same decision
+     made there for `set_theme`, the one other message answered on the
+     connection.
    - **A reload does not move the lock.** `lock.passphrase` is read at startup
      and nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left

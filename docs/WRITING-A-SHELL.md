@@ -719,6 +719,14 @@ is *that injection not happening*. While `locked` is `true`, no client on the
 desk is given a keystroke, a click, a scroll or a pointer movement, whatever your
 page forwards.
 
+**And nothing you ask done to the desktop is done.** `closeApp`, `spawn` and
+`copyClipboardEntry` at a locked desk close no window, start no program and put
+nothing on the clipboard, and the compositor logs a warning for each — a shell
+that asks has left a panel up over its own lock screen. So you do not have to
+hide your panels for the lock to hold, though a lock screen that covers them is
+still the one that reads as locked. There is no answer on the wire either way:
+the refusal is a line in the compositor's log, like a wrong passphrase.
+
 So the things that would defeat a lock a page held do not defeat this one. A
 reload does not open the desk. An engine that died and came back does not open
 it. A shell rebuilt from a different bundle does not open it, and neither does
@@ -757,10 +765,10 @@ Two things this is not, and both are worth knowing before you build on it. The
 verifier behind that comparison is the passphrase in the compositor's config
 file, which on NixOS is generated into a world-readable store — so today this
 locks a desk against somebody walking up to it and against nobody who can read
-the machine's disk. And a locked desk still answers the rest of this protocol: a
-shell could ask it to close a window or to put a row of the clipboard back on the
-seat, so the panels you do not draw over a locked desk are the panels that stay
-shut. `ROADMAP.md` carries both.
+the machine's disk. And a locked desk still answers a launcher: `searchFiles` and
+`previewFile` are answered where the lock does not reach, so a launcher left up
+over a lock screen can still list the home directory and read a preview out of
+it. That one is still yours to hide. `ROADMAP.md` carries both.
 
 [`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx) is manganese's,
 and [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts) is the

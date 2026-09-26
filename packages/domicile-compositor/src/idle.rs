@@ -310,6 +310,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
         | ClientRequest::CloseApp { .. }
+        | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }
         // NEITHER HALF OF THE CLIPBOARD IS A HAND. A client sets the
         // selection whenever it likes — a program copying on a timer is a
@@ -919,6 +920,12 @@ mod tests {
                 "a window being closed",
                 ClientRequest::CloseApp {
                     app_id: "app-1".into(),
+                },
+            ),
+            (
+                "a program being started",
+                ClientRequest::Spawn {
+                    command: vec!["foot".into()],
                 },
             ),
             (
