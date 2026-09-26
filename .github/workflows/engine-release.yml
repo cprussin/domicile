@@ -119,10 +119,10 @@ jobs:
         run: |
           set -euo pipefail
           pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          .github/scripts/engine-reset.sh "$CHROMIUM"
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-reset.sh "$CHROMIUM"
           # The DEPS, which the reset does not move. A no-op unless the pin
           # changed; see engine.yml, where the cost of it is written down.
-          .github/scripts/engine-sync.sh "$CHROMIUM"
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-sync.sh "$CHROMIUM"
           # Directly, not through Chromium's shell: apply.sh needs no host
           # tool, and the sandbox swallowed both its exit status and its
           # output. See engine.yml.
@@ -159,7 +159,9 @@ jobs:
           EOF
           chmod +x /tmp/domicile-release-build
 
+          # As noise: a latency guard on the other runner waits it out.
           if NIX_SHELL_RUN=/tmp/domicile-release-build \
+               "$GITHUB_WORKSPACE/.github/scripts/engine-render-node-lock.sh" noisy "$LOCK_OWNER" -- \
                nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
             echo "the shell exited 0"
           else
@@ -188,7 +190,7 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT" "$STAGE"
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT" "$STAGE"
 
       # The release artifact is asserted by the same pixel guard that asserts
       # the dev build: the tarball is unpacked back into the checkout as an out
@@ -202,13 +204,15 @@ jobs:
           mkdir -p "$CHROMIUM/out/Release-staged"
           tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
             -C "$CHROMIUM/out/Release-staged" --strip-components=1
-          nix develop .#full --command cargo build -p domicile-compositor
+          .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
+            nix develop .#full --command cargo build -p domicile-compositor
           # `DOMICILE_GUARD_CONTROL=0` for the reason pinned-engine.yml sets
           # it: the check runs its control by default and this caller does not
           # want the second run. engine.yml is where that guard is shown to be
           # able to fail.
           DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
             DOMICILE_GUARD_CONTROL=0 \
+            .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
             nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       - name: Publish

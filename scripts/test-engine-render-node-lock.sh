@@ -39,6 +39,8 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 export DOMICILE_RENDER_NODE_LOCK="$WORK/lock"
+export DOMICILE_RENDER_NODE_NOISE="$WORK/noise"
+export DOMICILE_RENDER_NODE_POLL=1
 
 FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
@@ -159,6 +161,132 @@ r="$(DOMICILE_RENDER_NODE_STALE_AFTER=0 DOMICILE_RENDER_NODE_MAX_WAIT=0 run take
 expect "a lock timestamped in the future is not stolen" 1 "$(status_of "$r")"
 expect "and its owner keeps it too" "engine-run-4" \
   "$(cat "$WORK/lock/owner" 2>/dev/null)"
+rm -rf "$WORK/lock"
+
+# --- a quiet machine ---------------------------------------------------------
+
+# WHAT THE CARD ALONE DID NOT BUY. Main run 36226737213 held the card and its
+# latency guard read a floor of 44.61 ms, commit to pixel 49.04 ms, while run
+# 36228817911 compiled Chromium on the other runner. Quiet runs read 19-29 ms.
+# So the timed guard asks for the machine, not only the card: compiles and
+# guards register as noise with `noisy`, and `quiet` takes the card only when
+# there is none.
+noise_count() {
+  find "$WORK/noise" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
+}
+until_noise() { # up to 5s for a registration to appear
+  local n=0
+  while [ "$(noise_count)" -eq 0 ] && [ "$n" -lt 50 ]; do
+    sleep 0.1; n=$((n + 1))
+  done
+}
+
+r="$(run noisy build-1 -- sh -c 'cat "$DOMICILE_RENDER_NODE_NOISE"/*/owner; exit 3')"
+expect "noise runs its command and hands back its status" 3 "$(status_of "$r")"
+contains "and the command runs registered under its owner" "build-1" "$(output_of "$r")"
+expect "and the registration goes when the command does" 0 "$(noise_count)"
+
+r="$(run quiet latency-1)"
+expect "a quiet machine's card is taken" 0 "$(status_of "$r")"
+expect "and held by the measurement" "latency-1" \
+  "$(cat "$WORK/lock/owner" 2>/dev/null)"
+
+# Noise does not start inside somebody's measurement.
+r="$(DOMICILE_RENDER_NODE_MAX_WAIT=0 run noisy build-2 -- touch "$WORK/build-2-ran")"
+expect "noise does not run beside a measurement" 1 "$(status_of "$r")"
+contains "and says whose measurement" "latency-1" "$(output_of "$r")"
+if [ -e "$WORK/build-2-ran" ]; then
+  fail "and its command never ran" "it ran"
+else
+  ok "and its command never ran"
+fi
+expect "and it leaves no registration behind" 0 "$(noise_count)"
+
+# It waits instead, and goes ahead once the measurement is over.
+DOMICILE_RENDER_NODE_MAX_WAIT=20 \
+  "$LOCK_SH" noisy build-3 -- touch "$WORK/build-3-ran" >/dev/null 2>&1 &
+waiting=$!
+sleep 2
+if [ -e "$WORK/build-3-ran" ]; then
+  fail "noise that arrives mid-measurement holds off" "it ran beside latency-1"
+else
+  ok "noise that arrives mid-measurement holds off"
+fi
+"$LOCK_SH" drop latency-1 >/dev/null 2>&1
+wait "$waiting"
+expect "and runs once the measurement drops the card" 0 "$?"
+if [ -e "$WORK/build-3-ran" ]; then ok "and its command ran"; else
+  fail "and its command ran" "no $WORK/build-3-ran"
+fi
+
+# No measurement beside noise, and failing to get one is "did not run" (77),
+# which STRICT makes a failure: not a pass, and not a regression either. The
+# noise outlives the stale bound by then, so this also says the heartbeat keeps
+# a live registration live.
+DOMICILE_RENDER_NODE_NOISE_BEAT=1 DOMICILE_RENDER_NODE_NOISE_STALE=2 \
+  "$LOCK_SH" noisy build-4 -- \
+  sh -c "sleep 5; date +%s.%N >'$WORK/build-4-ended'" >/dev/null 2>&1 &
+noisy_pid=$!
+until_noise
+sleep 3
+r="$(DOMICILE_RENDER_NODE_NOISE_STALE=2 DOMICILE_RENDER_NODE_QUIET_WAIT=0 \
+  run quiet latency-2)"
+expect "no measurement is taken beside noise" 77 "$(status_of "$r")"
+contains "and it says it did not run" "SKIP:" "$(output_of "$r")"
+contains "and names the noise" "build-4" "$(output_of "$r")"
+if [ -d "$WORK/lock" ]; then
+  fail "and it leaves the card free" "held by $(cat "$WORK/lock/owner" 2>/dev/null)"
+else
+  ok "and it leaves the card free"
+fi
+
+r="$(DOMICILE_RENDER_NODE_NOISE_STALE=2 DOMICILE_RENDER_NODE_QUIET_WAIT=30 \
+  run quiet latency-3)"
+took="$(date +%s.%N)"
+expect "a measurement waits the noise out" 0 "$(status_of "$r")"
+ended="$(cat "$WORK/build-4-ended" 2>/dev/null || echo 0)"
+if awk "BEGIN { exit !($ended > 0 && $took >= $ended) }"; then
+  ok "and takes the card only after it ended"
+else
+  fail "and takes the card only after it ended" "ended $ended, took $took"
+fi
+wait "$noisy_pid"
+"$LOCK_SH" drop latency-3 >/dev/null 2>&1
+
+# A card somebody else holds is waited for too.
+"$LOCK_SH" take pinned-1 >/dev/null 2>&1
+r="$(DOMICILE_RENDER_NODE_QUIET_WAIT=0 run quiet latency-4)"
+expect "a measurement does not take a card somebody holds" 77 "$(status_of "$r")"
+contains "and names who holds it" "pinned-1" "$(output_of "$r")"
+"$LOCK_SH" drop pinned-1 >/dev/null 2>&1
+
+# --- noise nothing is keeping alive ------------------------------------------
+
+# A registration whose heartbeat stopped is a run that was killed. Waiting on it
+# would make every measurement after it a skip.
+mkdir -p "$WORK/noise/abandoned"
+echo "engine-run-that-was-killed" >"$WORK/noise/abandoned/owner"
+echo $(($(date +%s) - 3600)) >"$WORK/noise/abandoned/since"
+r="$(DOMICILE_RENDER_NODE_QUIET_WAIT=0 run quiet latency-5)"
+expect "noise with no heartbeat does not hold off a measurement" 0 "$(status_of "$r")"
+contains "and clearing it is said out loud" "::warning::" "$(output_of "$r")"
+contains "and names who left it" "engine-run-that-was-killed" "$(output_of "$r")"
+"$LOCK_SH" drop latency-5 >/dev/null 2>&1
+
+# And the heartbeat stops with the wrapper it speaks for: one killed outright
+# never reaches its own cleanup.
+DOMICILE_RENDER_NODE_NOISE_BEAT=1 "$LOCK_SH" noisy build-5 -- \
+  sh -c "echo \$\$ >'$WORK/build-5-pid'; exec sleep 30" >/dev/null 2>&1 &
+killed=$!
+until_noise
+kill -9 "$killed"
+wait "$killed" 2>/dev/null
+n=0
+while [ "$(noise_count)" -gt 0 ] && [ "$n" -lt 50 ]; do
+  sleep 0.1; n=$((n + 1))
+done
+expect "a killed wrapper's registration goes with it" 0 "$(noise_count)"
+kill "$(cat "$WORK/build-5-pid")" 2>/dev/null
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

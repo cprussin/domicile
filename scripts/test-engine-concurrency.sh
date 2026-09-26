@@ -342,12 +342,15 @@ commands_of() { grep -v '^[[:space:]]*#' "$1"; }
 # appear in the file. Both spellings are required to mention the lock at all
 # first, which is what keeps `engine-tree-lock.sh take` — a different lock over
 # a different thing, in the same workflow — from reading as this one.
-takes_card() {
+takes_card() { # subject, verb (default: either)
   commands_of "$1" | grep -q 'engine-render-node-lock\.sh' || return 1
   commands_of "$1" |
-    grep -qE '(engine-render-node-lock\.sh|\$\{?CARD\}?)"?[[:space:]]+take'
+    grep -qE "(engine-render-node-lock\\.sh|\\\$\\{?CARD\\}?)\"?[[:space:]]+${2:-(take|quiet)}"
 }
 
+# `quiet`, not `take`: the card alone did not keep the timing honest. Main run
+# 36226737213 held it and read a 49.04 ms commit to pixel while run
+# 36228817911 compiled Chromium on the other runner.
 timed=0
 for subject in $(subjects); do
   [ -e "$subject" ] || continue
@@ -355,11 +358,11 @@ for subject in $(subjects); do
   commands_of "$subject" | grep -q 'guard-latency\.sh' || continue
   timed=$((timed + 1))
 
-  if takes_card "$subject"; then
-    ok "$name times something and takes the render node first"
+  if takes_card "$subject" quiet; then
+    ok "$name times something and waits for a quiet machine first"
   else
-    fail "$name times something and takes the render node first" \
-      "it runs guard-latency.sh without taking $LOCK_SH, so another job on the card reads as a regression"
+    fail "$name times something and waits for a quiet machine first" \
+      "it runs guard-latency.sh without \`$LOCK_SH quiet\`, so a compile or another run's guards read as a regression"
   fi
 done
 
@@ -368,6 +371,36 @@ if [ "$timed" -ge 1 ]; then
 else
   fail "something that times a guard was found at all" \
     "nothing runs guard-latency.sh, so the rule above asserted nothing"
+fi
+
+# AND `quiet` IS ONLY AS GOOD AS WHAT DECLARES ITSELF NOISE. Every compile a
+# workflow runs on `crux` does, on the line that runs it, and so does every
+# guard a workflow runs without holding the card around it -- and so do a
+# repin's reset and `gclient` sync, and the packaging, which load the
+# same machine without compiling. (`check.sh engine` declares its own checks;
+# `test-the-webview-guards-run-together.sh` says so.)
+noise=0
+for workflow in "$WORKFLOWS"/*.yml; do
+  name="$(basename "$workflow")"
+  grep -qE '^[[:space:]]*runs-on:.*self-hosted' "$workflow" || continue
+  pattern='nix-shell|engine-build-in-shell\.sh|cargo build|engine-(reset|sync|release-package)\.sh'
+  takes_card "$workflow" || pattern="$pattern|scripts/engine-guard-"
+  while IFS= read -r line; do
+    noise=$((noise + 1))
+    case "$line" in
+      (*engine-render-node-lock.sh\ noisy*|*engine-render-node-lock.sh\"\ noisy*)
+        ok "$name declares its noise: $(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-60)" ;;
+      (*)
+        fail "$name declares its noise" \
+          "it runs this on crux without \`$LOCK_SH noisy\`, so a latency guard can time beside it: $line" ;;
+    esac
+  done < <(commands_of "$workflow" | sed -e ':a' -e '/\\$/N; s/\\\n//; ta' |
+             grep -E "$pattern")
+done
+if [ "$noise" -ge 1 ]; then
+  ok "a workflow compiles something on crux ($noise)"
+else
+  fail "a workflow compiles something on crux" "none found, so the rule above asserted nothing"
 fi
 
 # A LOCK DROPPED ONLY ON THE HAPPY PATH IS A LOCK THAT LEAKS. A canceled run is
