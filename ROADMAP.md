@@ -203,24 +203,34 @@ The evidence for each of those is in the doc that made the claim —
    stays: a desktop should render a PDF in a window. The viewer UI is a separate
    question.
 
-6. **The shortcuts inhibitor is measured as far as the request, and no
-   further.** Patch `0038` asks the host compositor to stop matching its own
-   bindings while the desktop's window has the keyboard — which is what makes a
-   shell's Meta chords reach it nested at all.
-   `packages/domicile-engine/scripts/guard-shortcuts-inhibitor.sh` reads
-   `inhibit_shortcuts` off the engine's own `WAYLAND_DEBUG=1` capture, and its
-   control is the same run with `--domicile-inhibit-host-shortcuts` left off,
-   where the request must be absent. **That is the request having been made and
-   nothing more**: no key was pressed, nothing says the host honored it, and no
-   Meta chord reached a page. The real one is still open — a key into the
-   nested compositor and an answer about which side of the protocol took it.
-   The keyboard is half of the way there: `under-wayland.sh` still runs sway's
-   headless backend with `WLR_LIBINPUT_NO_DEVICES=1`, and the guard now puts a
-   virtual keyboard on the host's seat, because a seat that announces none is a
-   seat the engine will not ask for an inhibitor against. Pressing a chord
-   through that keyboard, and reading which side took it, is the work.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md), *Keystroke to pixel*, is
-   the nearest thing that reads a real key.
+6. **The shortcuts inhibitor is measured against sway and a virtual keyboard,
+   and nowhere else.** Patch `0038` asks the host compositor to stop matching
+   its own bindings while the desktop's window has the keyboard — which is what
+   makes a shell's Meta chords reach it nested at all. Two guards read it, and
+   they are two claims. `guard-shortcuts-inhibitor.sh` reads
+   `inhibit_shortcuts` off the engine's own `WAYLAND_DEBUG=1` capture: the
+   engine **asked**. `guard-shortcuts-inhibitor-chord.sh` presses `Mod4+y`
+   through a virtual keyboard into a sway that has a binding on it, and reads
+   both ends — the binding's line on the host's side, the page's keydown on the
+   other: with `--domicile-inhibit-host-shortcuts` the page must get it and
+   sway must not, and without the switch the reverse. Each observer is shown
+   able to see before its silence is believed: the binding fires once at an
+   empty host, and a plain key reaches the page.
+
+   What neither reaches: a host other than sway — mutter asks the user before
+   it grants an inhibitor, so a nested desktop on GNOME may show a dialog
+   nothing here has seen — and a physical keyboard, whose keys reach sway by a
+   different device than `wtype`'s. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md)
+   carries both guards.
+
+   **Its first three runs on `crux` read neither end**: the engine segfaulted
+   in `xkb_state_update_mask` under `WaylandKeyboard::OnModifiers`, modifiers
+   with no keymap. The calibration press is a `wtype` of its own, and when it
+   exits sway's seat has no active keyboard, so the engine bound one with no
+   keymap. The guard now holds the seat again before the engine starts, and
+   run 36234732979 read both ends, both ways. Still open, and Chromium's rather
+   than this guard's: a host that sends no keymap takes the browser down on its
+   first modifiers instead of leaving it decoding without one.
 
 ## Needs a machine with a screen
 
