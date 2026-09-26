@@ -48,7 +48,7 @@
   #
   # TOML has no word for a null, and `domicile` reads several keys' ABSENCE as
   # a real answer -- `idle.blank_after_seconds` absent is a desktop whose
-  # screens never blank, `lock.passphrase` absent is one that never locks, a
+  # screens never blank, `lock` with neither verifier is one that never locks, a
   # placement's `mode` absent is whatever the monitor comes up at -- so leaving
   # the key out is exactly what an unset option means. Through lists because `output.profiles` is one, and the nullable
   # option inside it is in a submodule two lists deep.
@@ -274,7 +274,7 @@ in {
                 Nothing warns the shell a moment before, so this is opt-in: a
                 desk that says nothing keeps its screens on.
 
-                It is also what locks a desk that states a `lock.passphrase`,
+                It is also what locks a desk that states a verifier under `lock`,
                 because the dark edge is the only thing that locks one. A desk
                 with no timeout here never locks, whatever else it says.
 
@@ -290,23 +290,28 @@ in {
           };
 
           lock = {
-            passphrase = lib.mkOption {
+            pam_service = lib.mkOption {
               description = ''
-                What opens this desk once nobody being at it has locked it.
+                The PAM service that opens this desk once nobody being at it
+                has locked it: the password of the user the desktop runs as,
+                checked the way every other lock screen on Linux checks it.
 
-                `null` -- the default -- is a desktop that never locks. That is
-                not merely the conservative reading: a desk that locked with no
-                passphrase to open it is a desk nobody can get back into, and
-                the way out would be another tty.
+                THIS MODULE CANNOT DECLARE THE SERVICE, because a PAM service
+                is the machine's and home-manager configures a home. The
+                system has to, in its NixOS configuration:
 
-                THIS IS A MECHANISM AND NOT YET A SECRET. This file is
-                generated into the Nix store, which is world-readable, so a
-                passphrase written here can be read by every process of every
-                user on the machine. It locks this desk against somebody
-                walking up to it and against nobody who can read the disk. The
-                verifier is behind a seam in the compositor so the real one can
-                replace it without moving anything else; that real one is PAM,
-                and `ROADMAP.md` carries it.
+                    security.pam.services.domicile = {};
+
+                and this names it: `"domicile"`. A desk that names a service
+                the machine does not have does not come up. It says which file
+                it looked for and what to declare, rather than locking against
+                whatever PAM's `other` service happens to say.
+
+                `null` -- the default -- with no `passphrase` either is a
+                desktop that never locks. That is not merely the conservative
+                reading: a desk that locked with nothing to open it is a desk
+                nobody can get back into, and the way out would be another tty.
+                Setting both is refused: neither is a fallback for the other.
 
                 What a locked desk does is refuse to deliver a keystroke or a
                 click to any client: input on this system is forwarded by the
@@ -320,8 +325,28 @@ in {
                 startup and not on a reload: whether this desk is locked is not
                 something this file says, and rebuilding the verifier under a
                 locked desk would be either an unlock by file edit or a lock
-                with nothing left to open it. A passphrase added, changed or
-                removed is the passphrase of the next run.
+                with nothing left to open it. A verifier added, changed or
+                removed is the verifier of the next run.
+              '';
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              example = "domicile";
+            };
+
+            passphrase = lib.mkOption {
+              description = ''
+                A passphrase that opens this desk, for a machine with no PAM
+                service for it -- `pam_service` above is the one to reach for.
+
+                THIS IS A MECHANISM AND NOT A SECRET. This file is generated
+                into the Nix store, which is world-readable, so a passphrase
+                written here can be read by every process of every user on the
+                machine. It locks this desk against somebody walking up to it
+                and against nobody who can read the disk.
+
+                Everything `pam_service` says about what a locked desk does,
+                when it locks and when this is read holds here too, and so does
+                the rule that a desk states one of the two.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;

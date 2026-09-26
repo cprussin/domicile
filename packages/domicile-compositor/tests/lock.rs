@@ -86,6 +86,16 @@ passphrase = "open sesame"
 /// is about. A helper that opened its own would answer that test's question
 /// before it was asked.
 fn lock_the_desk(compositor: &Compositor, chrome: &mut domicile_test_chrome::Chrome) {
+    // THE `false` THIS CHROME WAS TOLD ON SAYING HELLO, taken out of the way
+    // first. `wait_for` leaves what it did not match waitable, so without this
+    // a later wait for the desk opening is answered by the desk as it was
+    // before it ever shut -- which a test only got away with while a
+    // passphrase was checked in line with the keys behind it. It is checked
+    // off the loop now, so a key sent on that stale answer lands on a desk
+    // still being checked, and is refused.
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
+        .expect("a desk that can lock tells a page that says hello it is open");
     compositor.reconfigure(A_DESK_THAT_LOCKS_IN_A_SECOND);
     chrome
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))

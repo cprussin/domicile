@@ -516,6 +516,10 @@
         # first because on NixOS that is the EGL vendor matching the running
         # kernel driver; the nixpkgs copies behind it cover other hosts.
         #
+        # `pam` is the same arrangement for the lock: a desk that names a
+        # `lock.pam_service` `dlopen`s libpam, and one that does not never
+        # loads it. The service itself is the machine's to declare.
+        #
         # `DOMICILE_PNP_IDS` is the other thing the wrapper hands over: the
         # table that turns the three letters an EDID names its maker with into
         # the vendor's own name. It is hwdata's file, read at run time, and
@@ -527,6 +531,7 @@
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
             libx11 libxcursor libxrandr libxi
+            pam
           ])}" "$out/bin/domicile-compositor"
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
@@ -678,8 +683,11 @@
       #
       # No NixOS module beside it yet. What a NixOS one would add is the part
       # this deliberately leaves out -- a session, a unit, a way for the
-      # machine to boot into a desk -- and that is a decision about a machine
-      # rather than about a home directory.
+      # machine to boot into a desk, and the PAM service a desk's
+      # `lock.pam_service` names -- and that is a decision about a machine
+      # rather than about a home directory. Until there is one, the service is
+      # a line the machine's own configuration carries; RUNNING-A-DESKTOP.md
+      # says which.
       homeManagerModules = rec {
         domicile = import ./nix/home-manager.nix {
           domicilePackages = self.packages.${system};
@@ -963,6 +971,10 @@
               pkgs.libxcursor
               pkgs.libxrandr
               pkgs.libxi
+              # And libpam, which the lock `dlopen`s for a desk that names a
+              # `lock.pam_service` -- and which its tests load too, so they run
+              # against the PAM the package does rather than the host's.
+              pkgs.pam
             ]}:${pkgs.lib.makeLibraryPath engineRuntimeLibs}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"

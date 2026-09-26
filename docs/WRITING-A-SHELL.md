@@ -239,9 +239,9 @@ follows the portal, a new `files.omit` walks the home again for the launcher's
 index, and the display list and the profiles rearrange it. The
 windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
-edit replaced. One field is read at startup and not on a reload:
-`lock.passphrase`, because whether the desk is *locked* is not something that
-file says — see [A locked desk](#a-locked-desk).
+edit replaced. One section is read at startup and not on a reload:
+`[lock]`, because whether the desk is *locked* is not something that file says
+— see [A locked desk](#a-locked-desk).
 
 Two edits are refused rather than applied, and each says so in the log: a file
 that will not parse, which leaves the last one that did in place, and a keyboard
@@ -264,8 +264,8 @@ and your shell hears both — see [When nobody is at the
 desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
 blanks, which is deliberate: nothing warns a moment *before* it, so a desk that
 went dark on a timeout its user never set is one that looks like it died. It is
-also what locks a desk that states a `lock.passphrase`, which is the only thing
-that locks one — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
+also what locks a desk that states what opens it under `[lock]`, which is the
+only thing that locks one — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
 either answer. An app playing a film holds the screens on through the timeout —
 `zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
 — so a desk that has not blanked is not necessarily one whose timeout is wrong,
@@ -697,8 +697,9 @@ which is a different thing from having been told somebody is here.
 ## A locked desk
 
 A desk that has gone untouched for `idle.blank_after_seconds` **locks itself**,
-if its config states a `lock.passphrase`. Your shell is told, and what it draws
-is a lock screen:
+if its config states what opens it: `lock.pam_service`, which is the password of
+the user the desktop runs as, or `lock.passphrase`. Your shell is told, and what
+it draws is a lock screen:
 
 ```ts
 domicile.on("locked", ({ locked }) => {
@@ -737,18 +738,25 @@ one edited in the devtools of the browser that is drawing it: there is no
 possible rather than a hole in one.** You are the thing forwarding, so you can
 hold the keyboard, take a passphrase into a field and show what you like — none
 of it arrives anywhere. `unlock` hands what was typed to the compositor, which
-compares it and, if it was right, sends `locked: false` to **every** chrome on
+checks it and, if it was right, sends `locked: false` to **every** chrome on
 the desk. Clear your lock screen on that message and never on your own submit: a
 page that believed its own keystrokes would be a lock anybody could open by
 editing the page. A desk of three monitors is three of your pages and one lock,
 which is the same reason `setTheme` comes back as a `theme` event.
 
-**A wrong passphrase is answered with nothing at all.** No verdict, no count, no
-delay: the desk stays shut and the compositor says so in its own log, without the
-passphrase in it. So your field is the only thing that can say the try happened
-— clear it on every submit rather than waiting for an answer that is not coming.
-There is no "that was wrong" on this protocol yet; [ROADMAP.md](/ROADMAP.md)
-carries it.
+**A wrong passphrase is answered with nothing at all.** No verdict and no
+count: the desk stays shut and the compositor says so in its own log, without
+the passphrase in it. So your field is the only thing that can say the try
+happened — clear it on every submit rather than waiting for an answer that is
+not coming. There is no "that was wrong" on this protocol yet;
+[ROADMAP.md](/ROADMAP.md) carries it.
+
+**A right one takes as long as PAM takes, and the desk stays shut until then.**
+The check runs beside the compositor rather than in it, so nothing on the desk
+stalls — but a key your page forwards before `locked: false` arrives still
+reaches no client, and a second `unlock` sent while the first is being checked
+is dropped. PAM also sleeps on a *wrong* password, a couple of seconds on most
+machines, so do not read a slow answer as no answer.
 
 **It is a state, and you are told it again when your page connects.** Which here
 is the point rather than a convenience: the edge that shut the desk went out
@@ -756,19 +764,21 @@ before a reloaded page existed, and a shell that had missed it would draw an ope
 desktop over a desktop that is listening to nothing — and take a password into a
 text field no client will ever read.
 
-**A desktop with no `lock.passphrase` sends none of these**, not even a `false`.
+**A desktop that states neither sends none of these**, not even a `false`.
 It cannot lock: a desk that locked with nothing to open it would be a desk nobody
 could get back into. So a shell that has never had one of these has no lock to
 draw, which is a different thing from having been told the desk is open.
 
-Two things this is not, and both are worth knowing before you build on it. The
-verifier behind that comparison is the passphrase in the compositor's config
-file, which on NixOS is generated into a world-readable store — so today this
-locks a desk against somebody walking up to it and against nobody who can read
-the machine's disk. And a locked desk still answers a launcher: `searchFiles` and
+Two things this is not, and both are worth knowing before you build on it. A
+desk that states `lock.passphrase` rather than `lock.pam_service` is opened by a
+string in the compositor's config file, which on NixOS is generated into a
+world-readable store — that desk is locked against somebody walking up to it and
+against nobody who can read the machine's disk. Nothing on this protocol tells
+your shell which of the two a desk has, and nothing needs to: the lock screen
+is the same. And a locked desk still answers a launcher: `searchFiles` and
 `previewFile` are answered where the lock does not reach, so a launcher left up
 over a lock screen can still list the home directory and read a preview out of
-it. That one is still yours to hide. `ROADMAP.md` carries both.
+it. That one is still yours to hide. `ROADMAP.md` carries it.
 
 [`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx) is manganese's,
 and [`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts) is the

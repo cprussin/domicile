@@ -526,21 +526,27 @@ impl IdleConfig {
 ///
 /// **ABSENT IS NEVER, AND THAT IS THE DEFAULT** — for the reason
 /// [`IdleConfig`] above says nothing means never, and one that is not merely
-/// conservative: a desk that locked with no passphrase to open it is a desk
-/// nobody can get back into, and the way out would be another tty. So the lock
-/// is opt-in, and a desk that states no passphrase never locks and never sends
+/// conservative: a desk that locked with nothing to open it is a desk nobody
+/// can get back into, and the way out would be another tty. So the lock is
+/// opt-in, and a desk that states no verifier never locks and never sends
 /// `HostMessage::Locked` at all.
 ///
-/// **A PASSPHRASE IN THIS FILE IS A MECHANISM AND NOT YET A SECRET.** This file
-/// is generated — on NixOS by home-manager, into a world-readable store — so a
-/// passphrase written here is readable by every process of every user on the
-/// machine. It is here because the lock needs *some* verifier to be a lock at
-/// all, and the compositor is where the seat is; the verifier is behind a seam
-/// (`crate::lock::Verifier` in `domicile-compositor`) precisely so that the
-/// real one can replace it without moving anything else. That real one is PAM,
-/// which needs no engine release and is written down in `ROADMAP.md`. Until it
-/// lands, this locks a desk against somebody walking up to it and not against
-/// anybody who can read the machine's disk.
+/// **TWO VERIFIERS, AND A DESK STATES ONE OF THEM.** `pam_service` is the real
+/// one: the desk's own user, authenticated against the PAM service it names —
+/// the arrangement every other lock screen on Linux has, and the one whose
+/// secret is not in this file. `passphrase` is the one that came first, and it
+/// is a mechanism rather than a secret: this file is generated — on NixOS by
+/// home-manager, into a world-readable store — so a passphrase written here is
+/// readable by every process of every user on the machine. It stays because it
+/// is what a desk on a machine with no PAM service for it can use, and because
+/// removing it would change what an existing config means without a word.
+///
+/// **NEITHER IS A FALLBACK FOR THE OTHER.** A desk that states both is refused
+/// by name rather than given one of them, because whichever was picked the
+/// other would be a line that did nothing — and the dangerous reading is a
+/// passphrase somebody believes stands in for PAM when PAM cannot run. A desk
+/// that names a service PAM does not have does not come up at all; the
+/// compositor says which service and what to declare.
 ///
 /// Compared, which is what `PartialEq` is for: a reload asks what moved between
 /// two configs, and whether this desk can lock is one of the answers -- see the
@@ -548,9 +554,8 @@ impl IdleConfig {
 #[derive(Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
-    /// What opens this desk. Absent is a desk that never locks; the empty
-    /// string is refused rather than read as either one -- see
-    /// [`LockConfig::validate`].
+    /// A passphrase that opens this desk. The empty string is refused rather
+    /// than read as "never locks" -- see [`LockConfig::validate`].
     ///
     /// **What keeps this out of a log is the `Debug` below and not its
     /// visibility.** Private would buy nothing here: `{:?}` on the struct
@@ -562,12 +567,38 @@ pub struct LockConfig {
     /// file, so being readable by that comparison is worth more than a
     /// visibility that protects nothing.
     pub passphrase: Option<String>,
+    /// The PAM service this desk's own user is authenticated against, which
+    /// the system has to declare -- `/etc/pam.d/<this>`. On NixOS that is
+    /// `security.pam.services.<this> = {};`, and `"domicile"` is the name the
+    /// docs use.
+    pub pam_service: Option<String>,
+}
+
+/// What a desk said opens it, once [`LockConfig::validate`] has made sure it
+/// said at most one thing.
+///
+/// Borrowed from the config rather than copied out of it, so that asking which
+/// verifier a desk has does not make another copy of a passphrase.
+#[derive(PartialEq, Eq)]
+pub enum LockVerifier<'a> {
+    /// `lock.passphrase`: this string, compared.
+    Passphrase(&'a str),
+    /// `lock.pam_service`: the desk's own user, authenticated by PAM against
+    /// this service.
+    Pam { service: &'a str },
 }
 
 impl LockConfig {
     /// What opens this desk, or `None` for one that never locks.
-    pub fn passphrase(&self) -> Option<&str> {
-        self.passphrase.as_deref()
+    pub fn verifier(&self) -> Option<LockVerifier<'_>> {
+        match (self.passphrase.as_deref(), self.pam_service.as_deref()) {
+            (None, None) => None,
+            (Some(passphrase), None) => Some(LockVerifier::Passphrase(passphrase)),
+            (None, Some(service)) => Some(LockVerifier::Pam { service }),
+            (Some(_), Some(_)) => {
+                unreachable!("validate refuses a [lock] that states both verifiers")
+            }
+        }
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -575,6 +606,20 @@ impl LockConfig {
             return Err(ConfigError::Validation(
                 "lock.passphrase must not be empty; leave the key out for a desktop that \
                  never locks"
+                    .into(),
+            ));
+        }
+        if self.pam_service.as_deref() == Some("") {
+            return Err(ConfigError::Validation(
+                "lock.pam_service must not be empty; name the PAM service this desk \
+                 authenticates against, or leave the key out"
+                    .into(),
+            ));
+        }
+        if self.passphrase.is_some() && self.pam_service.is_some() {
+            return Err(ConfigError::Validation(
+                "lock.passphrase and lock.pam_service are two ways to open this desk and \
+                 it takes one; neither is a fallback for the other"
                     .into(),
             ));
         }
@@ -596,7 +641,21 @@ impl std::fmt::Debug for LockConfig {
                 "passphrase",
                 &self.passphrase.as_ref().map(|_| "<redacted>"),
             )
+            .field("pam_service", &self.pam_service)
             .finish()
+    }
+}
+
+/// The same redaction, for the same reason, on the value the compositor
+/// chooses its verifier from.
+impl std::fmt::Debug for LockVerifier<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LockVerifier::Passphrase(_) => f.write_str("Passphrase(<redacted>)"),
+            LockVerifier::Pam { service } => {
+                f.debug_struct("Pam").field("service", service).finish()
+            }
+        }
     }
 }
 

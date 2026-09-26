@@ -21,6 +21,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::Path;
 use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
@@ -112,6 +113,7 @@ mod latency;
 mod lock;
 mod modifiers;
 mod outbound;
+mod pam;
 mod peer_process;
 mod pnp_ids;
 mod restatement;
@@ -134,7 +136,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{ConfiguredPassphrase, Lock, Refusal, Unlocking};
+use crate::lock::{Lock, Offer, Refusal, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
@@ -1806,19 +1808,19 @@ struct DomicileCompositor {
     idle_clock: Option<RegistrationToken>,
     /// Whether this desk is locked, for a desktop that can lock.
     ///
-    /// `None` is one that cannot, which is what a config stating no
-    /// `[lock] passphrase` means — see
-    /// [`ConfiguredPassphrase::stated`](crate::lock::ConfiguredPassphrase::stated)
-    /// for why that is a desk with no lock rather than a lock nothing opens.
+    /// `None` is one that cannot, which is what a config stating neither
+    /// `[lock] passphrase` nor `[lock] pam_service` means — see
+    /// [`crate::lock::chosen`] for why that is a desk with no lock rather than
+    /// a lock nothing opens.
     ///
     /// **NOT REPLACED BY A RELOAD, which `idle` above is.** Whether this desk is
     /// locked is not something the config says — the config says only whether it
     /// *can* lock — and rebuilding this from an edited file would be one of two
     /// bad things: a desk unlocked by editing a file, or a locked desk whose
     /// verifier has been taken out from under it and which nothing can now
-    /// open. So a passphrase added, changed or removed is the passphrase of the
+    /// open. So a verifier added, changed or removed is the verifier of the
     /// next run. `ROADMAP.md` carries what a reload ought to do instead.
-    lock: Option<Lock<ConfiguredPassphrase>>,
+    lock: Option<Lock>,
     /// The loop this compositor is dispatched by, so that it can arm a source
     /// of its own after startup.
     ///
@@ -3363,6 +3365,12 @@ impl DomicileCompositor {
 
     /// Somebody typed a passphrase at the shell's lock screen.
     ///
+    /// **CHECKED OFF THIS THREAD, AND ANSWERED IN
+    /// [`heard_the_verdict`](DomicileCompositor::heard_the_verdict).** This is
+    /// the Wayland thread, and PAM sleeps on a wrong password on purpose — a
+    /// check here would be every client's frame held while somebody's typo is
+    /// punished. See [`Lock::offered`].
+    ///
     /// **NOTHING GOES BACK TO THE PAGE THAT ASKED, AND THAT IS DELIBERATE.**
     /// What a correct passphrase produces is [`HostMessage::Locked`] to *every*
     /// chrome — a desk of three monitors is three pages, and the desk they are
@@ -3371,17 +3379,36 @@ impl DomicileCompositor {
     /// one-path-that-decides arrangement `SetTheme` has, for a harder reason:
     /// a page that cleared its own lock would be a lock anybody with the
     /// devtools could open.
-    ///
-    /// A refusal is a line in the log and no message at all. It says what
-    /// happened and never what was typed — there is nothing in [`Unlocking`] to
-    /// print, which is what makes that structural rather than a rule to
-    /// remember.
     fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
         let Some(lock) = self.lock.as_mut() else {
             warn!("a chrome offered a passphrase to a desktop that has no lock");
             return;
         };
         match lock.offered(passphrase) {
+            Offer::Checking => debug!("checking a passphrase; the desk stays locked meanwhile"),
+            Offer::StillChecking => warn!(
+                "a chrome offered a passphrase while another was being checked; this one was \
+                 dropped unchecked"
+            ),
+            Offer::NothingToOpen => {
+                warn!("a chrome offered a passphrase to a desktop that is not locked")
+            }
+        }
+    }
+
+    /// The verifier has said what the passphrase it was handed does.
+    ///
+    /// A refusal is a line in the log and no message at all, and so is a
+    /// verifier that could not check — louder, because that one is a desk
+    /// nobody can open until the machine changes. Each says what happened and
+    /// never what was typed: there is nothing in [`Unlocking`] to print, which
+    /// is what makes that structural rather than a rule to remember.
+    fn heard_the_verdict(&mut self, verdict: Verdict) {
+        let lock = self
+            .lock
+            .as_mut()
+            .expect("a verdict comes only from this desk's own lock");
+        match lock.answered(verdict) {
             Unlocking::Opened => {
                 debug!("the passphrase opened this desktop");
                 self.tell_the_chromes_whether_the_desk_is_locked();
@@ -3389,9 +3416,10 @@ impl DomicileCompositor {
             Unlocking::Refused => {
                 warn!("a passphrase this desktop did not take; it stays locked")
             }
-            Unlocking::NothingToOpen => {
-                warn!("a chrome offered a passphrase to a desktop that is not locked")
-            }
+            Unlocking::Unverifiable(why) => error!(
+                %why,
+                "this desktop could not check a passphrase, so it stays locked"
+            ),
         }
     }
 
@@ -5894,6 +5922,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Forward input from the chrome onto the Wayland thread via a channel.
     let (request_tx, request_rx) = channel::<ClientRequest>();
+    // And what a passphrase did back onto it, from the thread that checked it.
+    let (verdicts, heard_verdicts) = channel::<Verdict>();
 
     // Shared brain, driven by both the Wayland side and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
@@ -6045,6 +6075,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // A desk that asked for PAM and cannot have it stops here, with the
+    // service it named and what to declare: coming up with no lock, or with
+    // some other one, would be a desk that is not what its config says. See
+    // `crate::lock::chosen`.
+    //
+    // Each verdict is handed back on this loop, from the thread that reached
+    // it — see `heard_the_verdict`, and the source below.
+    let lock = lock::chosen(config.lock.verifier(), Path::new(pam::SERVICES))?.map(|verifier| {
+        Lock::held_by(verifier, move |verdict| {
+            verdicts
+                .send(verdict)
+                .expect("the loop that hears a verdict outlives the lock that asked for one")
+        })
+    });
+
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
@@ -6112,8 +6157,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         idle_clock: None,
         // Open, on a desk that can lock at all: a desktop comes up with
         // somebody at it, and what shuts it is nobody being at it. Built once
-        // and never from a reload — see the field.
-        lock: ConfiguredPassphrase::stated(config.lock.passphrase()).map(Lock::held_by),
+        // and never from a reload — see the field, and `lock` above.
+        lock,
         loop_handle: event_loop.handle(),
     };
 
@@ -6292,6 +6337,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     handle.insert_source(request_rx, |event, _, data: &mut CalloopData| {
         if let ChannelEvent::Msg(input) = event {
             data.state.handle_client_request(input);
+        }
+    })?;
+
+    // And what a passphrase did, from the thread that checked it, on the
+    // thread the seat is on — which is where the lock can open.
+    handle.insert_source(heard_verdicts, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(verdict) = event {
+            data.state.heard_the_verdict(verdict);
         }
     })?;
 
