@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_SHELL_URL_LOADER_FACTORY_H_
 #define COMPONENTS_DOMICILE_BROWSER_SHELL_URL_LOADER_FACTORY_H_
 
+#include <optional>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -12,10 +13,12 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace domicile {
 
-// Serves `domicile://shell/...` out of a directory on disk.
+// Serves `domicile://shell/...` out of a directory on disk, and
+// `domicile://home/...` out of the user's home for the shell's previews.
 //
 // This is the half of the scheme that reads bytes; registering the scheme so it
 // has an origin is the other half, and lives in the content client. Modeled on
@@ -43,6 +46,7 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   ShellURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
       const base::FilePath& shell_root,
+      const base::FilePath& home,
       base::SelfDeletingPassKey key);
 
   ShellURLLoaderFactory(const ShellURLLoaderFactory&) = delete;
@@ -59,6 +63,22 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   static bool ResolveShellPath(const base::FilePath& shell_root,
                                const GURL& url,
                                base::FilePath* out_path);
+
+  // Resolve a domicile://home/ URL to a file under `home`, or fail. The same
+  // containment as the shell's, and one refusal more: no path with a dotfile
+  // anywhere in it, which is the line the compositor's file index draws, and
+  // what keeps ~/.ssh and every token under ~/.config out of reach.
+  static bool ResolveHomePath(const base::FilePath& home,
+                              const GURL& url,
+                              base::FilePath* out_path);
+
+  // Whether a request from `initiator` may read the home. Only the shell's own
+  // document: this factory is every frame's -- a site in a <webview> too --
+  // and a site that could name domicile://home/ in an <img> would learn which
+  // files exist from load and error alone. And never while the desk is
+  // locked, which is the compositor's rule for its own reads of the home.
+  static bool MayReadHome(const std::optional<url::Origin>& initiator,
+                          bool desk_locked);
 
  private:
   ~ShellURLLoaderFactory() override;
@@ -78,6 +98,7 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
       override;
 
   const base::FilePath shell_root_;
+  const base::FilePath home_;
 };
 
 }  // namespace domicile
