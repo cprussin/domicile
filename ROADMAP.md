@@ -71,9 +71,9 @@ The evidence for each of those is in the doc that made the claim —
      connectors to it again, so the desk comes back — it just goes dark for the
      second or two it takes.
 
-3. **The lock has a mechanism and no verifier worth the name.** A desktop you
-   walk away from locks itself, and what opens it is a string in a
-   world-readable file. The *idle* half shipped first:
+3. **The lock has a verifier, and what is left is around it.** A desktop you
+   walk away from locks itself, and what opens it is the password of the user
+   it runs as. The *idle* half shipped first:
    `idle.blank_after_seconds` in the config, `crate::idle` in the compositor for
    the decision and the edge, the connectors going dark and coming back on the
    next key, click, scroll or pointer movement — with a client playing a film
@@ -85,9 +85,9 @@ The evidence for each of those is in the doc that made the claim —
    which of the two a desk is in ([what a shell does with
    it](docs/WRITING-A-SHELL.md#when-nobody-is-at-the-desk)).
 
-   **And now the lock's mechanism**: a desk that states a `lock.passphrase`
-   locks itself on that same dark edge, `crate::lock` holds whether it is
-   locked, and while it is, every key, click, scroll and pointer movement the
+   **And then the lock's mechanism**: a desk that states what opens it under
+   `[lock]` locks itself on that same dark edge, `crate::lock` holds whether it
+   is locked, and while it is, every key, click, scroll and pointer movement the
    shell forwards is dropped before it reaches the seat — so no Wayland client
    on the desk is given one
    ([where and why](docs/architecture/A-DESKTOP-ON-A-TTY.md#and-it-locks-the-desk-which-is-a-refusal-at-the-injection)).
@@ -105,19 +105,32 @@ The evidence for each of those is in the doc that made the claim —
    added later does not compile until somebody decides whether a locked desk
    answers it.
 
+   **And now the verifier**: a desk that states `lock.pam_service` is opened by
+   `pam_authenticate` against the user the compositor runs as — the uid, never
+   `$USER` — through that PAM service, which is what every other lock screen on
+   Linux does and what takes the secret out of the world-readable file
+   (`crate::pam`, behind the same `crate::lock::Verifier` seam). The check runs
+   on a thread of its own and the verdict comes back through the loop, because
+   PAM sleeps on a wrong password and the thread a passphrase arrives on is the
+   one every client's frame waits for; the desk stays shut while it runs. A desk
+   states `pam_service` or `passphrase` and never both, and neither is a
+   fallback for the other: a service `/etc/pam.d` does not have is a desk that
+   does not come up and says what to declare, and a stack that cannot run is an
+   error in the log rather than a wrong passphrase
+   ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#and-it-locks-the-desk-which-is-a-refusal-at-the-injection)).
+   It needed no engine release and no protocol change. `lock.passphrase` stays,
+   still readable by anybody who can read the disk and still not compared in
+   constant time, for a machine with no service to name.
+
    What is left is
 
-   - **The verifier, which today is a passphrase in a generated file.**
-     `crate::lock::Verifier` is the seam and `ConfiguredPassphrase` is what is
-     behind it: the string `[lock] passphrase` states, compared. That file is
-     generated into a world-readable Nix store, so what has shipped locks a desk
-     against somebody walking up to it and against **nobody who can read the
-     machine's disk**. PAM is what belongs there — `pam_authenticate` against
-     the desk's own user, which is what every other lock screen on Linux does —
-     and it needs no engine release, because nothing about the protocol, the
-     refusal or the shell changes when the thing behind the seam does. The
-     comparison is also not constant-time, which is worth exactly nothing to fix
-     while the passphrase is readable anyway.
+   - **The PAM service is a line the machine carries.** A home-manager module
+     cannot declare one, and there is no NixOS module here to do it, so a desk
+     that names `lock.pam_service = "domicile"` needs
+     `security.pam.services.domicile = {};` in its system configuration too —
+     [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#the-screen-going-dark)
+     says so, and the compositor says so when it is missing. A NixOS module
+     would make that one line rather than two in two places.
    - **Nothing locks a desk on purpose.** The idle edge is the only thing that
      locks one, so there is no "lock now" — no chord, no menu item, no
      `ChromeMessage` for it — and a desk with no `idle.blank_after_seconds` never
@@ -126,9 +139,11 @@ The evidence for each of those is in the doc that made the claim —
    - **A wrong passphrase is answered with silence.** No verdict crosses the
      protocol, so a shell cannot say "that was wrong", cannot count tries and
      cannot rate-limit them; the compositor logs the refusal and the desk stays
-     shut. The field clearing is the only feedback there is. What this wants is a
-     message carrying the refusal — and, once there is a real verifier behind
-     the seam, a delay that grows.
+     shut. The field clearing is the only feedback there is, and with PAM behind
+     the seam the refusal also takes as long as PAM's delay on a failure, which
+     the shell cannot see either. What this wants is a message carrying the
+     verdict — and a "checking" state, since keys sent while one is being
+     checked reach nothing.
    - **A locked desk still answers a launcher.** `search_files` and
      `preview_file` are answered on the chrome connection that asked, off the
      Wayland thread on purpose so that a search never waits on a frame — and
@@ -138,11 +153,11 @@ The evidence for each of those is in the doc that made the claim —
      the lock's state where a connection can read it, and the same decision
      made there for `set_theme`, the one other message answered on the
      connection.
-   - **A reload does not move the lock.** `lock.passphrase` is read at startup
-     and nowhere else, deliberately: rebuilding the verifier under a locked desk
+   - **A reload does not move the lock.** `[lock]` is read at startup and
+     nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left
-     to open it. So a passphrase added, changed or removed is the passphrase of
-     the next run, which is the safe answer rather than the right one.
+     to open it. So a verifier added, changed or removed is the verifier of the
+     next run, which is the safe answer rather than the right one.
    - **A moment before, rather than at the moment.** The shell is told now,
      but `HostMessage::Idle` goes out on the turn the screens are told to go
      dark — ahead of the modeset, not ahead of the timeout — so there is
@@ -255,6 +270,14 @@ these is one run, and each has a line to look for.
   can see it: no runner has a `/dev/dri` at all, so every check this change
   brings is arithmetic over an injected instant. Plug a monitor in while it is
   dark for the second half — the new one must come up dark too.
+- **A desk that locks with PAM.** Declare
+  `security.pam.services.domicile = {};`, set `lock.pam_service = "domicile"`
+  and `idle.blank_after_seconds = 60`, and walk away. Your password should give
+  `the passphrase opened this desktop`; a wrong one should give `a passphrase
+  this desktop did not take` a couple of seconds later — `pam_unix`'s delay —
+  with the desk's clients still drawing throughout. The tests reach real
+  libpam through `pam_exec` and a script standing in for the password check;
+  `pam_unix` against a real password, and its setuid helper, are only here.
 - **The latency run, on the panel.** From a console login, in a checkout, with
   the engine the flake pins:
 

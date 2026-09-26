@@ -20,20 +20,33 @@
 //! click — while the shell goes on drawing a lock screen and collecting what is
 //! typed into it. See `HostMessage::Locked`.
 //!
-//! **THE VERIFIER IS A SEAM AND THE ONE BEHIND IT TODAY IS NOT A SECRET.**
-//! [`Verifier`] is the whole of what "is this the right passphrase" means here.
-//! [`ConfiguredPassphrase`] is the implementation there is: the string
-//! `[lock] passphrase` states, compared. That file is generated into a
-//! world-readable store, so it locks this desk against somebody walking up to
-//! it and against nobody who can read the disk. PAM is what goes behind the
-//! seam next; it needs no engine release, and `ROADMAP.md` carries it.
+//! **THE VERIFIER IS A SEAM, AND A DESK SAYS WHICH ONE IS BEHIND IT.**
+//! [`Verifier`] is the whole of what "is this the right passphrase" means here,
+//! and [`chosen`] reads which from the config: `[lock] pam_service` is PAM, as
+//! the desk's own user — [`crate::pam`] — and `[lock] passphrase` is the string
+//! that file states, compared. That file is generated into a world-readable
+//! store, so the second locks this desk against somebody walking up to it and
+//! against nobody who can read the disk. A desk states one or neither; neither
+//! is a fallback for the other.
+//!
+//! **CHECKED OFF THE THREAD THAT ASKED.** PAM sleeps on a wrong password on
+//! purpose, and the thread a passphrase arrives on is the compositor's loop. So
+//! [`Lock::offered`] starts the check on a thread of its own, the desk stays
+//! shut while it runs, and [`Lock::answered`] takes the verdict when the loop
+//! hears it.
 //!
 //! What locks the desk is the idle edge — see [`crate::idle`], which decides
 //! when nobody is at it. There is no message a page can send to lock one yet;
 //! that is in `ROADMAP.md` too.
 
+use std::path::Path;
+use std::sync::Arc;
+use std::thread;
+
+use domicile_config::LockVerifier;
 use domicile_protocol::{HostMessage, Passphrase};
 
+use crate::pam::{NoPam, Pam};
 use crate::ClientRequest;
 
 /// Whether a passphrase opens this desk.
@@ -41,39 +54,73 @@ use crate::ClientRequest;
 /// **THE SEAM, NAMED SO THAT THE THING BEHIND IT CAN BE REPLACED WITHOUT
 /// MOVING ANYTHING ELSE.** Everything about the lock except this trait's one
 /// method is independent of how a passphrase is checked: the refusal at the
-/// seat, the state a chrome is told, the edge it is told on. PAM goes here, and
-/// so would a smartcard, a fingerprint or a second desk's say-so.
+/// seat, the state a chrome is told, the edge it is told on. PAM is behind it
+/// — [`crate::pam`] — and so could a smartcard, a fingerprint or a second
+/// desk's say-so be.
+///
+/// **IT MAY BLOCK, AND IT IS NEVER CALLED WHERE THAT MATTERS.** PAM sleeps on
+/// a wrong password on purpose, so [`Lock::offered`] runs this on a thread of
+/// its own and the verdict comes back through the answer the lock was built
+/// with. `Send + Sync` is what that thread takes.
 ///
 /// It takes the [`Passphrase`] newtype rather than a `&str` so that the value
 /// arrives at the one place that compares it without having passed through a
 /// type that prints itself.
-pub trait Verifier {
-    fn opens_the_desk(&self, passphrase: &Passphrase) -> bool;
+pub trait Verifier: Send + Sync {
+    fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict;
 }
 
-/// The verifier there is today: the passphrase the config states.
+/// What a verifier says about one passphrase: whether it opens the desk, or
+/// why that could not be found out.
+pub type Verdict = Result<bool, CouldNotCheck>;
+
+/// A verifier that could not say either way.
 ///
-/// See this module's own note for what this is and is not. It is a mechanism
-/// that makes the rest of the lock real and testable, not a secret store.
-pub struct ConfiguredPassphrase {
-    passphrase: String,
+/// **NOT A REFUSAL, AND THE DIFFERENCE IS THE POINT.** A wrong passphrase is a
+/// person who mistyped; this is a desk that cannot be opened by anybody until
+/// something about the machine changes — a module missing, a helper that will
+/// not run. Both leave the desk shut, and only this one is an error in the log.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct CouldNotCheck(pub String);
+
+/// The verifier a desk stated in its config, or `None` for a desk that stated
+/// none.
+///
+/// **`None` IS A DESK WITH NO LOCK, NOT A LOCK THAT NOTHING OPENS.** The second
+/// is what building a verifier anyway and refusing everything would be, and it
+/// is a desk that shuts itself the first time nobody is at it and can then
+/// never be opened from anywhere — a reboot, or another tty. So a desk that
+/// states neither never gets a [`Lock`] for anything to reach, which is also
+/// why it sends no `locked` message at all.
+///
+/// **AN `Err` IS A DESK THAT DOES NOT COME UP.** A desk that asked for PAM and
+/// cannot have it gets neither of the other two answers: not no lock, which is
+/// a desk that stopped locking without a word, and not the passphrase, which a
+/// desk that states `pam_service` does not have. `pam_confdir` is where PAM's
+/// service files are — [`crate::pam::SERVICES`] on a real desk.
+pub fn chosen(
+    stated: Option<LockVerifier<'_>>,
+    pam_confdir: &Path,
+) -> Result<Option<Box<dyn Verifier>>, NoPam> {
+    match stated {
+        None => Ok(None),
+        Some(LockVerifier::Passphrase(passphrase)) => Ok(Some(Box::new(ConfiguredPassphrase {
+            passphrase: passphrase.to_string(),
+        }))),
+        Some(LockVerifier::Pam { service }) => {
+            Ok(Some(Box::new(Pam::for_this_user(service, pam_confdir)?)))
+        }
+    }
 }
 
-impl ConfiguredPassphrase {
-    /// The verifier for a desk that stated a passphrase, and `None` for one
-    /// that did not.
-    ///
-    /// **`None` IS A DESK WITH NO LOCK, NOT A LOCK THAT NOTHING OPENS.** The
-    /// second is what building this anyway and refusing everything would be,
-    /// and it is a desk that shuts itself the first time nobody is at it and
-    /// can then never be opened from anywhere — a reboot, or another tty. So a
-    /// desk that states no passphrase never gets a [`Lock`] for anything to
-    /// reach, which is also why it sends no `locked` message at all.
-    pub fn stated(passphrase: Option<&str>) -> Option<ConfiguredPassphrase> {
-        passphrase.map(|passphrase| ConfiguredPassphrase {
-            passphrase: passphrase.to_string(),
-        })
-    }
+/// The verifier a desk gets from `lock.passphrase`: the string it states.
+///
+/// A mechanism rather than a secret — the file it comes from is generated into
+/// a world-readable store. `lock.pam_service` is the one whose secret is not in
+/// that file.
+struct ConfiguredPassphrase {
+    passphrase: String,
 }
 
 impl Verifier for ConfiguredPassphrase {
@@ -83,20 +130,34 @@ impl Verifier for ConfiguredPassphrase {
     /// of the passphrase a guess got right, to an attacker who can time it. It
     /// is not worth hardening *here*, because the same passphrase is sitting in
     /// a world-readable file that the attacker can simply read — the timing
-    /// channel is the long way round the front door. What closes both is the
-    /// real verifier behind this seam.
-    fn opens_the_desk(&self, passphrase: &Passphrase) -> bool {
-        passphrase.as_str() == self.passphrase
+    /// channel is the long way round the front door. A desk that wants neither
+    /// uses PAM.
+    fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
+        Ok(passphrase.as_str() == self.passphrase)
     }
 }
 
-/// What a passphrase offered at this desk did.
+/// What offering a passphrase at this desk started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Offer {
+    /// It is being checked, off this thread; [`Lock::answered`] is where the
+    /// verdict lands.
+    Checking,
+    /// Another passphrase is being checked, so this one is not — it is dropped
+    /// rather than queued. See [`Lock::offered`].
+    StillChecking,
+    /// The desk was not shut, so there was nothing to open. A page that sent
+    /// one of these is ahead of, or behind, the state it was last told.
+    NothingToOpen,
+}
+
+/// What a checked passphrase did.
 ///
 /// Three answers rather than a boolean, because the compositor says something
 /// different about each and none of them is the other two. None of them carries
 /// what was typed: a refusal is a line in a log, and the redaction is the
 /// type's rather than the log line's.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Unlocking {
     /// It was the passphrase. The desk is open now, and every chrome is told.
     Opened,
@@ -104,33 +165,55 @@ pub enum Unlocking {
     /// `locked: true` again would learn nothing, and a page told anything else
     /// would be wrong.
     Refused,
-    /// The desk was not shut, so there was nothing to open. A page that sent
-    /// one of these is ahead of, or behind, the state it was last told.
-    NothingToOpen,
+    /// The verifier could not say. The desk stays shut, and this is an error
+    /// rather than a refusal — see [`CouldNotCheck`].
+    Unverifiable(CouldNotCheck),
+}
+
+/// Where a desk that can lock stands.
+enum State {
+    Open,
+    Shut,
+    /// Shut, with a passphrase out being checked.
+    Checking,
 }
 
 /// Whether this desk is locked, and what would open it.
 ///
-/// Built only for a desktop that stated a passphrase — see
-/// [`ConfiguredPassphrase::stated`] — so the compositor's `Option<Lock<_>>` is
-/// the same shape, and for the same reason, as its `Option<Idle<_>>`.
-pub struct Lock<V> {
-    verifier: V,
-    locked: bool,
+/// Built only for a desktop that stated a verifier — see [`chosen`] — so the
+/// compositor's `Option<Lock>` is the same shape, and for the same reason, as
+/// its `Option<Idle<_>>`.
+pub struct Lock {
+    verifier: Arc<dyn Verifier>,
+    answer: Arc<dyn Fn(Verdict) + Send + Sync>,
+    state: State,
 }
 
-impl<V: Verifier> Lock<V> {
+impl Lock {
     /// A desk this verifier opens, not locked yet: a desktop comes up open, and
     /// what shuts it is nobody being at it.
-    pub fn held_by(verifier: V) -> Lock<V> {
+    ///
+    /// `answer` is where a verdict goes, from the thread that reached it. In
+    /// the compositor that is a channel into its own loop, which hands the
+    /// verdict back to [`Lock::answered`] on the thread the seat is on.
+    pub fn held_by(
+        verifier: Box<dyn Verifier>,
+        answer: impl Fn(Verdict) + Send + Sync + 'static,
+    ) -> Lock {
         Lock {
-            verifier,
-            locked: false,
+            verifier: Arc::from(verifier),
+            answer: Arc::new(answer),
+            state: State::Open,
         }
     }
 
+    /// Whether this desk is locked, which a desk with a passphrase being
+    /// checked is: nothing is let through until the verdict says so.
     pub fn locked(&self) -> bool {
-        self.locked
+        match self.state {
+            State::Open => false,
+            State::Shut | State::Checking => true,
+        }
     }
 
     /// Lock this desk. `true` only on the edge into a locked one.
@@ -140,26 +223,76 @@ impl<V: Verifier> Lock<V> {
     /// the clock comes round again. A second `locked: true` on the wire would
     /// be a shell told to raise a lock screen it already has up, which is at
     /// best a repaint and at worst a passphrase half typed and thrown away.
+    ///
+    /// A desk being checked stays being checked: it is already shut.
     pub fn shut(&mut self) -> bool {
-        let was_open = !self.locked;
-        self.locked = true;
-        was_open
+        match self.state {
+            State::Open => {
+                self.state = State::Shut;
+                true
+            }
+            State::Shut | State::Checking => false,
+        }
     }
 
-    /// Somebody typed a passphrase. Opens the desk if it is the right one.
+    /// Somebody typed a passphrase. Starts checking it, if the desk is shut and
+    /// nothing else is being checked.
     ///
     /// Written so that it cannot lock anything: the only state it can reach is
-    /// open. A desk shuts because nobody is at it, and never because somebody
-    /// said the wrong word at it — an offer that locked a desk it found open
-    /// would be a lock a page could raise by guessing.
-    pub fn offered(&mut self, passphrase: &Passphrase) -> Unlocking {
-        if !self.locked {
-            Unlocking::NothingToOpen
-        } else if self.verifier.opens_the_desk(passphrase) {
-            self.locked = false;
-            Unlocking::Opened
-        } else {
-            Unlocking::Refused
+    /// one on the way to open. A desk shuts because nobody is at it, and never
+    /// because somebody said the wrong word at it — an offer that locked a desk
+    /// it found open would be a lock a page could raise by guessing.
+    ///
+    /// **ONE AT A TIME, AND THE SECOND IS DROPPED.** Two out at once would be
+    /// two verdicts racing to decide one desk, and a page that sent a hundred
+    /// would be a hundred threads each paying PAM's delay. Not queued either:
+    /// the shell clears its field on every submit, so what was typed while the
+    /// desk was busy is already gone from the screen.
+    pub fn offered(&mut self, passphrase: &Passphrase) -> Offer {
+        match self.state {
+            State::Open => Offer::NothingToOpen,
+            State::Checking => Offer::StillChecking,
+            State::Shut => {
+                self.state = State::Checking;
+                let verifier = Arc::clone(&self.verifier);
+                let answer = Arc::clone(&self.answer);
+                // A copy, moved into the check and dropped the moment it ends:
+                // the one the page sent is dropped by the caller as this
+                // returns, so neither outlives the verdict.
+                let passphrase = passphrase.clone();
+                thread::Builder::new()
+                    .name("lock verifier".into())
+                    .spawn(move || answer(verifier.opens_the_desk(&passphrase)))
+                    .expect("a thread to check a passphrase on");
+                Offer::Checking
+            }
+        }
+    }
+
+    /// The verdict on the passphrase [`Lock::offered`] started checking.
+    ///
+    /// Only reachable from a desk being checked: one check is out at a time and
+    /// this is where it comes back, so a verdict for any other state is two
+    /// checks where the lock allows one.
+    pub fn answered(&mut self, verdict: Verdict) -> Unlocking {
+        match self.state {
+            State::Open | State::Shut => {
+                unreachable!("a verdict arrives only for the one passphrase being checked")
+            }
+            State::Checking => match verdict {
+                Ok(true) => {
+                    self.state = State::Open;
+                    Unlocking::Opened
+                }
+                Ok(false) => {
+                    self.state = State::Shut;
+                    Unlocking::Refused
+                }
+                Err(why) => {
+                    self.state = State::Shut;
+                    Unlocking::Unverifiable(why)
+                }
+            },
         }
     }
 }
@@ -255,7 +388,17 @@ pub fn announced(locked: bool) -> HostMessage {
 mod tests {
     use domicile_protocol::{HostMessage, Passphrase};
 
-    use super::{announced, refused, ConfiguredPassphrase, Lock, Refusal, Unlocking, Verifier};
+    use std::path::Path;
+    use std::sync::mpsc;
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    use domicile_config::LockVerifier;
+
+    use super::{
+        announced, chosen, refused, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
+        Verifier,
+    };
     use crate::engine::Clipboard;
     use crate::ClientRequest;
 
@@ -264,38 +407,179 @@ mod tests {
     struct OnlyTheWord(&'static str);
 
     impl Verifier for OnlyTheWord {
-        fn opens_the_desk(&self, passphrase: &Passphrase) -> bool {
-            passphrase.as_str() == self.0
+        fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
+            Ok(passphrase.as_str() == self.0)
         }
     }
 
-    /// A desk that opens to `"friend"` and is not locked yet.
-    fn desk() -> Lock<OnlyTheWord> {
-        Lock::held_by(OnlyTheWord("friend"))
+    /// A desk that opens to `"friend"` and is not locked yet, and where its
+    /// verdicts arrive.
+    fn desk() -> (Lock, mpsc::Receiver<Verdict>) {
+        held_by(OnlyTheWord("friend"))
+    }
+
+    /// A desk behind `verifier`, whose verdicts come back on a channel the way
+    /// the compositor's come back on its loop.
+    fn held_by(verifier: impl Verifier + 'static) -> (Lock, mpsc::Receiver<Verdict>) {
+        let (told, heard) = mpsc::channel();
+        let lock = Lock::held_by(Box::new(verifier), move |verdict| {
+            told.send(verdict).expect("the test is listening")
+        });
+        (lock, heard)
+    }
+
+    /// Offer `passphrase` at a shut desk and hand it the verdict that comes back.
+    fn offer(lock: &mut Lock, heard: &mpsc::Receiver<Verdict>, passphrase: &str) -> Unlocking {
+        assert_eq!(lock.offered(&Passphrase::from(passphrase)), Offer::Checking);
+        let verdict = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the verifier answers");
+        lock.answered(verdict)
     }
 
     #[test]
-    fn a_desk_that_states_no_passphrase_has_no_lock_at_all() {
+    fn a_desk_that_states_no_verifier_has_no_lock_at_all() {
         // NOT A LOCK THAT NOTHING OPENS, which is the shape this would take if
-        // the verifier were built anyway and refused everything: that desk
-        // locks itself the first time nobody is at it and can then never be
-        // opened, from the page or from anywhere else. So a desk with no
-        // passphrase has no `Lock` for anything to reach.
-        assert!(ConfiguredPassphrase::stated(None).is_none());
-        assert!(ConfiguredPassphrase::stated(Some("open sesame")).is_some());
+        // a verifier were built anyway and refused everything: that desk locks
+        // itself the first time nobody is at it and can then never be opened,
+        // from the page or from anywhere else. So a desk that states neither
+        // verifier has no `Lock` for anything to reach.
+        assert!(chosen(None, Path::new("/nonexistent"))
+            .expect("nothing stated is nothing to fail")
+            .is_none());
     }
 
     #[test]
     fn the_configured_passphrase_is_the_one_that_opens_the_desk() {
-        let verifier =
-            ConfiguredPassphrase::stated(Some("open sesame")).expect("a passphrase was stated");
-        assert!(verifier.opens_the_desk(&Passphrase::from("open sesame")));
-        assert!(!verifier.opens_the_desk(&Passphrase::from("open sesam")));
+        let verifier = chosen(
+            Some(LockVerifier::Passphrase("open sesame")),
+            Path::new("/nonexistent"),
+        )
+        .expect("a passphrase needs nothing from the machine")
+        .expect("a passphrase was stated");
+        assert!(verifier
+            .opens_the_desk(&Passphrase::from("open sesame"))
+            .unwrap());
+        assert!(!verifier
+            .opens_the_desk(&Passphrase::from("open sesam"))
+            .unwrap());
+    }
+
+    #[test]
+    fn a_desk_that_asked_for_a_pam_service_the_machine_lacks_does_not_come_up() {
+        // NOT A DESK WITH NO LOCK, AND NOT ONE BEHIND PAM'S `other`. Linux-PAM
+        // answers a service it has no file for with the `other` stack, which on
+        // one distribution denies everything -- a desk nothing opens -- and on
+        // another is the ordinary login stack. Neither is what was asked for,
+        // and a desk that came up without its lock would be worse. So the
+        // answer is no desk, and a sentence that says what to declare.
+        let confdir = tempfile::tempdir().expect("a directory");
+        let Err(why) = chosen(
+            Some(LockVerifier::Pam {
+                service: "domicile",
+            }),
+            confdir.path(),
+        ) else {
+            panic!("a PAM service with no file behind it is refused");
+        };
+        let said = why.to_string();
+        assert!(
+            said.contains(&confdir.path().join("domicile").display().to_string()),
+            "it names the file it looked for: {said}"
+        );
+        assert!(
+            said.contains("security.pam.services.domicile = {};"),
+            "and what a NixOS machine has to declare: {said}"
+        );
+    }
+
+    #[test]
+    fn a_passphrase_is_checked_off_the_thread_that_offered_it() {
+        // THE THREAD THAT OFFERS IS THE COMPOSITOR'S LOOP, and PAM blocks --
+        // `pam_unix` sleeps a couple of seconds on a wrong password on
+        // purpose. A check on the loop is every client's frame held for as
+        // long as somebody's typo is being punished. So the verifier here does
+        // not answer until the test says so, and the offer has to come back
+        // before it does.
+        struct UntilReleased(Mutex<mpsc::Receiver<()>>);
+        impl Verifier for UntilReleased {
+            fn opens_the_desk(&self, _: &Passphrase) -> Verdict {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(2))
+                    .map(|()| true)
+                    .map_err(|_| CouldNotCheck("nobody released it".into()))
+            }
+        }
+        let (release, released) = mpsc::channel();
+        let (mut lock, heard) = held_by(UntilReleased(Mutex::new(released)));
+        lock.shut();
+
+        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        release
+            .send(())
+            .expect("the verifier is still waiting, so the offer did not wait for it");
+        let verdict = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the verifier answers");
+        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+    }
+
+    #[test]
+    fn a_desk_being_checked_is_shut_and_takes_no_second_passphrase() {
+        // ONE CHECK AT A TIME. A second passphrase while the first is out would
+        // be two verdicts racing to decide one desk, and a page that sent a
+        // hundred would be a hundred threads each costing PAM's delay. It is
+        // not queued either: the shell clears its field on every submit, so
+        // what was typed while the desk was busy is gone from the screen and
+        // should be gone from here.
+        let (mut lock, heard) = desk();
+        lock.shut();
+
+        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert!(lock.locked(), "a desk being checked is still shut");
+        assert!(!lock.shut(), "and shutting it again is no edge");
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend")),
+            Offer::StillChecking
+        );
+
+        let verdict = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the first passphrase is answered");
+        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert!(
+            heard.recv_timeout(Duration::from_millis(100)).is_err(),
+            "and the second was never checked"
+        );
+    }
+
+    #[test]
+    fn a_verifier_that_cannot_check_leaves_the_desk_shut_and_says_why() {
+        // FAIL CLOSED, AND OUT LOUD. PAM with a module missing, a helper it
+        // cannot run, a user it cannot find: none of those is a wrong
+        // passphrase, and reporting one as a refusal would hide a desk that
+        // cannot be opened at all behind a person who thinks they mistyped.
+        struct Broken;
+        impl Verifier for Broken {
+            fn opens_the_desk(&self, _: &Passphrase) -> Verdict {
+                Err(CouldNotCheck("the module is not there".into()))
+            }
+        }
+        let (mut lock, heard) = held_by(Broken);
+        lock.shut();
+
+        assert_eq!(
+            offer(&mut lock, &heard, "friend"),
+            Unlocking::Unverifiable(CouldNotCheck("the module is not there".into()))
+        );
+        assert!(lock.locked());
     }
 
     #[test]
     fn a_desk_shuts_once_and_says_so_once() {
-        let mut lock = desk();
+        let (mut lock, _) = desk();
         assert!(!lock.locked());
 
         assert!(lock.shut(), "the turn a desk shuts on is an edge");
@@ -311,33 +595,35 @@ mod tests {
 
     #[test]
     fn the_passphrase_opens_the_desk_and_nothing_else_does() {
-        let mut lock = desk();
+        let (mut lock, heard) = desk();
         lock.shut();
 
         assert_eq!(
-            lock.offered(&Passphrase::from("enemy")),
+            offer(&mut lock, &heard, "enemy"),
             Unlocking::Refused,
             "a desk that took the wrong passphrase would not be a lock"
         );
         assert!(lock.locked(), "and it stays shut");
 
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Unlocking::Opened);
+        assert_eq!(offer(&mut lock, &heard, "friend"), Unlocking::Opened);
         assert!(!lock.locked());
     }
 
     #[test]
     fn a_passphrase_offered_at_an_open_desk_opens_nothing() {
-        // THREE ANSWERS RATHER THAN TWO, because the compositor says something
-        // different about each: an `Opened` is broadcast, a `Refused` is a line
-        // in the log, and this one is a page that sent an unlock at a desk that
-        // was never shut -- which is neither, and must not be reported as a
-        // desk that has just been opened.
-        let mut lock = desk();
+        // NOT CHECKED AT ALL, and not reported as a desk that has just been
+        // opened: this is a page that sent an unlock at a desk that was never
+        // shut, which the compositor says something different about.
+        let (mut lock, heard) = desk();
         assert_eq!(
             lock.offered(&Passphrase::from("friend")),
-            Unlocking::NothingToOpen
+            Offer::NothingToOpen
         );
         assert!(!lock.locked());
+        assert!(
+            heard.recv_timeout(Duration::from_millis(100)).is_err(),
+            "and nothing was asked of the verifier"
+        );
     }
 
     #[test]

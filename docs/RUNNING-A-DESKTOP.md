@@ -119,17 +119,40 @@ pointer.
   not keep the screens on, and neither does a program that asks on a window it
   never shows.
 
-**Blanking is not by itself a lock, but it is what locks a desk that has a
-passphrase.** `lock.passphrase` is what opens one; a desk that states it locks
-itself on the same edge its screens go dark on, and from then on nothing the
-shell forwards reaches a client until somebody types it. A desk that states no
-passphrase never locks — the screens go dark and anybody can walk up and type.
+**Blanking is not by itself a lock, but it is what locks a desk that says
+what opens it.** A desk that states one locks itself on the same edge its
+screens go dark on, and from then on nothing the shell forwards reaches a client
+until somebody types it. What opens it is your own password:
 
-What has shipped is the mechanism and not yet a secret: that passphrase lives in
-the compositor's config, which on NixOS is generated into a world-readable store,
-so it locks a desk against somebody walking up to it and against nobody who can
-read the machine's disk. PAM is the next step, and it and the rest of what is
-left are in [/ROADMAP.md](/ROADMAP.md).
+```toml
+[lock]
+pam_service = "domicile"
+```
+
+That is PAM, as the user the desktop runs as, through a service **the machine
+has to declare** — a home-manager module cannot, so on NixOS it is a line in the
+system configuration beside the home-manager one:
+
+```nix
+security.pam.services.domicile = {};
+```
+
+- **A service the machine does not have is a desk that does not come up.** The
+  compositor names the file it looked for, `/etc/pam.d/domicile`, and the line
+  above. It does not fall back to anything: coming up with no lock, or behind
+  PAM's catch-all `other` service, would be a desk that is not what you asked
+  for.
+- **`lock.passphrase = "…"` is the other way**, for a machine with no service
+  to name. It is a string in the config, which on NixOS is generated into a
+  world-readable store, so it locks a desk against somebody walking up to it and
+  against nobody who can read the machine's disk.
+- **One or the other.** A desk that states both is refused at startup; a desk
+  that states neither never locks — the screens go dark and anybody can walk up
+  and type.
+- **Read at startup.** A rebuild that changes `[lock]` reaches the next run of
+  the desk, not the one that is up.
+
+What is left is in [/ROADMAP.md](/ROADMAP.md).
 
 ## On NixOS
 
@@ -160,7 +183,9 @@ baked into `domicile` so it is not typed twice:
 ```
 
 It writes the config and installs no session — booting into a desk is a
-machine's decision, not a home directory's. `settings` is freeform and the
+machine's decision, not a home directory's. For the same reason it declares no
+PAM service: a desk locked by `lock.pam_service` needs the system half from
+[The screen going dark](#the-screen-going-dark) as well. `settings` is freeform and the
 fields are the compositor config's, which
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#the-configuration) walks
 through.

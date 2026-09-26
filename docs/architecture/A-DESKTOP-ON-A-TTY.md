@@ -985,8 +985,8 @@ modeset behind them ran.
 
 ### And it locks the desk, which is a refusal at the injection
 
-A desk that states a `lock.passphrase` **locks itself on the same edge its
-screens go dark on**, and what being locked means is one thing: nothing the
+A desk that states what opens it under `[lock]` **locks itself on the same
+edge its screens go dark on**, and what being locked means is one thing: nothing the
 chrome forwards reaches a client, and nothing it asks done to the desktop is
 done. `crate::lock::refused` is the list, and
 `handle_client_request` asks it of every request before any of it reaches
@@ -1034,23 +1034,56 @@ Four orderings are load-bearing, and each is a line in
 | **The shell is told before the modeset, like idle** | A relight is tens of milliseconds against a repaint's one, so a lock screen raised now is up before there is light to read the desktop behind it |
 | **The seat lets go of what it is holding as the desk shuts** | A release is the one thing the refusal cannot drop — it is the end of an event that *did* happen. A Shift held while somebody reads the screen sends nothing for the whole timeout, and its release after the lock would leave that key down in the seat for good. `release_pressed_keys`, which is what a reloaded page already gets |
 
-The verifier is a seam — `crate::lock::Verifier` — and the one behind it today
-compares the passphrase the config states. That file is generated into a
-world-readable store, so what has shipped locks a desk against somebody walking
-up to it and against nobody who can read the disk; PAM is what goes behind the
-seam next, and `ROADMAP.md` carries it.
+What opens it is a seam — `crate::lock::Verifier` — and the config says which
+verifier is behind it:
+
+| `[lock]` states | Verifier | What it costs |
+|---|---|---|
+| `pam_service = "domicile"` | `crate::pam`: `pam_authenticate` as the uid the compositor runs as, through that service | The machine declares the service — `security.pam.services.domicile = {};` on NixOS. A home-manager module cannot |
+| `passphrase = "…"` | The string, compared | It is in a generated, world-readable file, so it locks a desk against somebody walking up to it and against nobody who can read the disk |
+| Neither | None: the desk never locks | A lock with nothing behind it would be a desk nobody could open |
+| Both | Refused at parse | Neither is a fallback for the other |
+
+**The check is off the loop.** `pam_unix` sleeps on a wrong password on
+purpose, and `offered_the_passphrase` runs on the Wayland thread. So
+`Lock::offered` hands the passphrase to a thread of its own and returns; the
+verdict comes back over a calloop channel to `heard_the_verdict`, which calls
+`Lock::answered` on the thread the seat is on. The desk is shut while a check
+is out, so a key sent behind an `unlock` reaches no client until the verdict
+does; a second `unlock` while one is out is dropped rather than queued.
+
+**Every failure to check fails closed, and out loud.** Only `PAM_AUTH_ERR` is a
+wrong passphrase. A missing module, a helper that will not run or anything else
+PAM says is `Unlocking::Unverifiable`: the desk stays shut and the log line is an
+error naming what failed. Before that:
+
+| When | What is missing | What happens |
+|---|---|---|
+| Startup | `/etc/pam.d/<service>` | The compositor does not come up, and says which file and what to declare. Linux-PAM would have answered with its `other` service instead — a deny on NixOS, the login stack on Debian |
+| Startup | `libpam.so.0`, or `pam_start_confdir` in it | The same, naming the library. It is `dlopen`ed, like libEGL, so a desk without PAM needs none |
+| Startup | A user for the uid | The same: there is nobody to authenticate |
+| Each attempt | `/etc/pam.d/<service>`, removed under a running desk | `Unverifiable`, rather than PAM's `other` reporting a right password as a wrong one |
+
+`pam_start_confdir` is handed `/etc/pam.d` explicitly, so the directory checked
+and the directory PAM reads are the same one. A passphrase with a NUL in it is
+refused before PAM sees it: C would read only the part before the NUL, which is
+a second passphrase that opens the desk.
 
 A refused passphrase is a line in the log and no message at all. The line does
 not contain what was typed, and neither does the frame log a few lines above it:
 `domicile_protocol::Passphrase` refuses to print itself, which is what makes that
-structural rather than a rule for the next person adding a `debug!`.
+structural rather than a rule for the next person adding a `debug!`. PAM's copy
+is the one `malloc` the conversation answers with; Linux-PAM overwrites a
+password before it frees it, and nothing on this side makes another.
 
 ```
 nobody is at this desktop; it locks itself
 this desktop is locked; what the shell forwarded reaches no client
 this desktop is locked; what the shell asked for is not done
+checking a passphrase; the desk stays locked meanwhile
 a passphrase this desktop did not take; it stays locked
 the passphrase opened this desktop
+this desktop could not check a passphrase, so it stays locked
 ```
 
 ### Turning a monitor is the engine's job, and it took a window each to get there
@@ -1407,6 +1440,11 @@ of this — both selections land on that card and agree.
   page held would be opened by a reload and a lock the socket held would take the
   shell's own keys with it — leaving nothing to type a passphrase into. The seat
   is this process's, so the refusal is too.
+- **Open the lock with PAM off the loop, and fail closed out loud.** PAM blocks
+  on a wrong password by design, so the check is a thread and the verdict a
+  channel back. A PAM service the machine lacks is a desk that does not come
+  up, rather than one with no lock or one behind PAM's `other`; the passphrase
+  is never a fallback for it.
 - **Let the compositor own the clipboard and push it.** The alternative — the
   browser asking on every paste — buys nothing, because the compositor already
   reads every selection for the history, and costs a round trip inside the

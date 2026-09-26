@@ -45,7 +45,9 @@ domicile-test-client = { path = "../domicile-test-client" }
 # note above makes about linking nothing but libxkbcommon. libudev would not.
 libc = "0.2"
 # Same dlopen crate Smithay uses for EGL, so libEGL can be probed for before
-# Smithay loads it (it treats a missing library as fatal).
+# Smithay loads it (it treats a missing library as fatal). libpam is loaded the
+# same way, and only for a desk whose lock names a PAM service -- see
+# `src/pam.rs` -- so the promise below about linking still holds.
 libloading = "0.9"
 # The events of the watch on the home, which the file index's thread hears on
 # the same channel as a reloaded `[files]` — see `src/file_indexing.rs`.

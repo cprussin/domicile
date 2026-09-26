@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, ThemeMode};
+use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode};
 
 // ---- parsing & defaults ---------------------------------------------------
 
@@ -185,16 +185,16 @@ blank_after_seconds = 0
 // ---- lock -----------------------------------------------------------------
 
 #[test]
-fn a_desk_that_states_no_passphrase_cannot_lock() {
+fn a_desk_that_states_no_verifier_cannot_lock() {
     // SAYING NOTHING MEANS THE DESK NEVER LOCKS, and here that is not merely
     // the conservative default -- it is the only safe reading. A desk that
-    // locked with no passphrase to open it is a desk nobody can get back into,
-    // and the only way out would be another tty.
-    assert_eq!(Config::parse("").unwrap().lock.passphrase(), None);
+    // locked with nothing to open it is a desk nobody can get back into, and
+    // the only way out would be another tty.
+    assert_eq!(Config::parse("").unwrap().lock.verifier(), None);
 }
 
 #[test]
-fn a_desk_that_states_a_passphrase_can_lock() {
+fn a_desk_that_states_a_passphrase_is_opened_by_it() {
     let lock = Config::parse(
         r#"
 [lock]
@@ -203,7 +203,70 @@ passphrase = "open sesame"
     )
     .unwrap()
     .lock;
-    assert_eq!(lock.passphrase(), Some("open sesame"));
+    assert_eq!(
+        lock.verifier(),
+        Some(LockVerifier::Passphrase("open sesame"))
+    );
+}
+
+#[test]
+fn a_desk_that_names_a_pam_service_is_opened_by_pam() {
+    let lock = Config::parse(
+        r#"
+[lock]
+pam_service = "domicile"
+"#,
+    )
+    .unwrap()
+    .lock;
+    assert_eq!(
+        lock.verifier(),
+        Some(LockVerifier::Pam {
+            service: "domicile"
+        })
+    );
+}
+
+#[test]
+fn rejects_a_desk_that_states_both_verifiers() {
+    // NEITHER IS A FALLBACK FOR THE OTHER, and taking both would make one of
+    // them one: whichever this picked, the other would be a line in the file
+    // that did nothing -- or, worse, a passphrase somebody believes stands in
+    // for PAM when PAM cannot run. So a desk says which, and a desk that says
+    // both is refused by name.
+    let err = Config::parse(
+        r#"
+[lock]
+passphrase = "open sesame"
+pam_service = "domicile"
+"#,
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("two verifiers are refused rather than one of them picked: {err:?}");
+    };
+    assert!(
+        message.contains("lock.passphrase") && message.contains("lock.pam_service"),
+        "the message should name both keys: {message}"
+    );
+}
+
+#[test]
+fn rejects_a_pam_service_of_nothing_at_all() {
+    let err = Config::parse(
+        r#"
+[lock]
+pam_service = ""
+"#,
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("an empty service is refused rather than taken: {err:?}");
+    };
+    assert!(
+        message.contains("lock.pam_service"),
+        "the message should name the key: {message}"
+    );
 }
 
 #[test]
@@ -249,9 +312,16 @@ passphrase = "{secret}"
         !format!("{config:?}").contains(secret),
         "the whole config is what a reload would print"
     );
+    assert!(
+        !format!("{:?}", config.lock.verifier()).contains(secret),
+        "and neither is the verifier the compositor chooses from it"
+    );
     // And the value survives, or this would be a lost passphrase rather than a
     // hidden one.
-    assert_eq!(config.lock.passphrase(), Some(secret));
+    assert_eq!(
+        config.lock.verifier(),
+        Some(LockVerifier::Passphrase(secret))
+    );
 }
 
 // ---- theme ----------------------------------------------------------------

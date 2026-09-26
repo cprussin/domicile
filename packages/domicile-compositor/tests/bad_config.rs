@@ -43,6 +43,33 @@ fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     );
 }
 
+/// A desk whose lock is a PAM service the machine does not have is a desk that
+/// does not come up, and the sentence says what the machine has to declare.
+///
+/// **THE SAME FILE PARSES, AND THAT IS WHY THIS IS HERE.** Nothing about the
+/// config is wrong; what is missing is the machine's half, which a home-manager
+/// module cannot declare. Coming up anyway would be one of two quiet failures —
+/// a desk with no lock, or one behind PAM's `other` stack — so it stops, on the
+/// real `/etc/pam.d`, which no machine fills with this name.
+#[test]
+fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let config = directory.path().join("domicile.toml");
+    let service = "domicile-a-service-no-machine-declares";
+    std::fs::write(&config, format!("[lock]\npam_service = \"{service}\"\n")).expect("the config");
+
+    let said = refusal(&config);
+
+    assert!(
+        said.contains(&format!("/etc/pam.d/{service}")),
+        "it should name the file PAM would read: {said}"
+    );
+    assert!(
+        said.contains(&format!("security.pam.services.{service} = {{}};")),
+        "and what a NixOS machine declares to have one: {said}"
+    );
+}
+
 /// Start a compositor on `config`, and take what it said before it stopped.
 ///
 /// The other two flags are required and are not what is under test; they name
