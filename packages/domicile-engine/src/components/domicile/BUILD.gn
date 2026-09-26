@@ -296,6 +296,23 @@ source_set("color_scheme") {
 # Its own target so the slice can meet a compiler before the Blink half exists,
 # and because what it needs is //net, which nothing else here wants. Like
 # :browser, it does not depend on //content.
+# What Chrome offers a profile's user that a desktop has no place for, off.
+# Only the pref names are wanted of the three components, and a pref name is
+# the contract, so it is theirs rather than a string spelled here.
+source_set("desktop_prefs") {
+  sources = [
+    "browser/desktop_prefs.cc",
+    "browser/desktop_prefs.h",
+  ]
+
+  deps = [
+    "//components/autofill/core/common",
+    "//components/password_manager/core/common",
+    "//components/prefs",
+    "//components/translate/core/browser:translate_pref_names",
+  ]
+}
+
 source_set("control_channel") {
   sources = [
     "browser/control_channel.cc",
@@ -322,6 +339,7 @@ source_set("unit_tests") {
   sources = [
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
+    "browser/desktop_prefs_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/line_framer_unittest.cc",
@@ -353,6 +371,7 @@ source_set("unit_tests") {
     ":color_scheme",
     ":command_protocol",
     ":cursor_shape",
+    ":desktop_prefs",
     ":display_transform",
     ":keyboard_layout",
     ":line_framer",
@@ -364,6 +383,10 @@ source_set("unit_tests") {
     ":theme",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
+    "//components/autofill/core/common",
+    "//components/password_manager/core/common",
+    "//components/prefs:test_support",
+    "//components/translate/core/browser:translate_pref_names",
     "//base",
     "//base/test:test_support",
     "//components/domicile/spike:window_diff",
