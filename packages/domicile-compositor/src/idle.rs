@@ -330,6 +330,9 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // right or wrong, which is the only way there is light to read the
         // refusal by.
         ClientRequest::Unlock { .. } => true,
+        // A theme turnover is the desk redrawing itself: the click that
+        // started it was already counted when it landed on the shell.
+        ClientRequest::TurnTheWindows { .. } | ClientRequest::ThemeCaptured { .. } => false,
     }
 }
 
