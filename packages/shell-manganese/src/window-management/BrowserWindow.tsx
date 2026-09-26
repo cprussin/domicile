@@ -1,4 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
@@ -257,6 +258,12 @@ export const BrowserWindow = ({
   // site, and every key they press is delivered to a window they have switched
   // away from.
   //
+  // The SDK's `focusChrome` rather than the client's, because the page routes
+  // keys too: the client's moves the seat and leaves the SDK forwarding every
+  // key this document hears to the client it last named. The guest hides that
+  // — the document hears none of its keys — until something of the page's own
+  // takes typing, like the launcher's box, and every letter goes elsewhere.
+  //
   // THE PAGE IS NOT WHERE IT GOES WHEN THIS WINDOW ALREADY HAS IT. A press in
   // the address bar is a reach like any other — it is what makes this the
   // window being worked in — so this runs on the focus that same press has
@@ -266,7 +273,7 @@ export const BrowserWindow = ({
   // for is already in this window, so there is nothing for this to move.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
-      domicile.focusChrome();
+      focusChrome(domicile);
       if (!holdsFocus(element.current)) {
         focusPage(view);
       }

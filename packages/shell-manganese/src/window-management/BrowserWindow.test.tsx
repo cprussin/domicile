@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { focusApp } from "@domicile/chrome-sdk/focus-app";
+import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
@@ -485,6 +487,47 @@ describe("BrowserWindow", () => {
         />,
       );
       expect(calls).toStrictEqual([]);
+    });
+
+    // AND THE PAGE STOPS FORWARDING KEYS TO THE CLIENT IT LEFT. The SDK sends
+    // every key this document hears to the client it last routed the keyboard
+    // to, and moving the seat does not change that — so a window that moved
+    // only the seat left the terminal before it named there. Nothing showed
+    // while the guest had the focus, because the document hears none of its
+    // keys; the launcher's box was where it showed, empty under every letter.
+    it("stops the page forwarding its keys to the client it took the keyboard from", () => {
+      const forwarded: string[] = [];
+      const domicile = {
+        ...silentDomicile,
+        key: (appId: string) => {
+          forwarded.push(appId);
+        },
+      } as unknown as DomicileClient;
+      registerElements(domicile);
+      render(<app app-id="term" />);
+      focusApp(domicile, "term");
+
+      render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={domicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={noHover}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+      fireEvent.keyDown(document, { code: "KeyA" });
+
+      expect(forwarded).toStrictEqual([]);
     });
 
     // AND THE KEYBOARD IT TAKES IS ITS PAGE'S. Nothing else can put it there:
