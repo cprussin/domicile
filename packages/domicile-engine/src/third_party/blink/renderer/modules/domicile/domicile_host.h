@@ -84,6 +84,11 @@ class MODULES_EXPORT DomicileHost final
   // pointer where the value is smaller. `DomicileAppCursorEvent`'s ctor takes
   // its `V8DomicileCursorShape` the same way.
   void setTheme(ScriptState*, V8DomicileTheme theme, ExceptionState&);
+  // Offer a passphrase at a locked desk. Answered with a `locked` event to
+  // every chrome, and only when the desk actually opened -- see the IDL,
+  // where that is written down as the property it is rather than as a
+  // convenience.
+  void unlock(ScriptState*, const String& passphrase, ExceptionState&);
   void grabShortcut(ScriptState*,
                     const DomicileShortcut* shortcut,
                     ExceptionState&);
@@ -124,6 +129,7 @@ class MODULES_EXPORT DomicileHost final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(clipboard, kClipboard)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(theme, kTheme)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(idle, kIdle)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(locked, kLocked)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focuschanged, kFocuschanged)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(focusrequested, kFocusrequested)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(displayschanged, kDisplayschanged)
@@ -186,6 +192,7 @@ class MODULES_EXPORT DomicileHost final
   void ThemeChanged(domicile::mojom::blink::Theme theme,
                     base::TimeTicks arrival) override;
   void Idle(bool idle, base::TimeTicks arrival) override;
+  void Locked(bool locked, base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

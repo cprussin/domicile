@@ -39,6 +39,7 @@ import type {
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileIdleEvent,
+  DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
@@ -281,9 +282,12 @@ export type ThemeMessage = {
  * screens come *back*, because a relight takes tens of milliseconds and a
  * repaint takes one.
  *
- * **Not a lock.** A dark screen is a screen and anybody can type at one. What
- * stops the keys is the compositor, which holds the seat; nothing a page does
- * with this message makes it the thing that says no.
+ * **Not the lock.** A dark screen is a screen, and going dark is not what stops
+ * a keystroke. What stops one is the compositor, which holds the seat; nothing a
+ * page does with this message makes it the thing that says no. The lock is
+ * {@link LockedMessage}, which is a message of its own because the two are not
+ * the same fact: a desk can be dark and open, and a locked desk somebody has
+ * just wiggled the mouse at is lit and shut.
  *
  * A desktop that never blanks sends none of these, not even a `false` — so a
  * shell that has had no message has a desk with no opinion about who is at it,
@@ -291,6 +295,34 @@ export type ThemeMessage = {
  */
 export type IdleMessage = {
   idle: boolean;
+};
+
+/**
+ * Whether this desk is locked.
+ *
+ * `true` is a desktop that will not deliver a keystroke or a click to any
+ * client until somebody says the passphrase; `false` is one that will.
+ *
+ * **The compositor holds it, and nothing this page does changes that.** Input
+ * does not originate in the compositor — this page owns it and forwards it, and
+ * the compositor injects it into a Wayland seat — so a locked desk is that
+ * injection not happening. A reload does not open the desk, and neither does an
+ * engine that died and came back.
+ *
+ * The page keeps its own keys throughout, which is what makes a lock screen
+ * possible rather than a hole in one: this page is the thing forwarding, so it
+ * can take a passphrase while nothing it forwards arrives anywhere. `unlock` is
+ * how it offers one, and the answer is another one of these.
+ *
+ * A state rather than an edge, and a shell is told it again when its page
+ * connects — which here is the whole point, since the reload is exactly what
+ * must not open the desk.
+ *
+ * A desktop with no passphrase configured sends none of these, not even a
+ * `false`: it cannot lock at all.
+ */
+export type LockedMessage = {
+  locked: boolean;
 };
 
 /** Every message the client delivers, and what each one carries. */
@@ -309,6 +341,7 @@ export type HostMessageMap = {
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
   idle: IdleMessage;
+  locked: LockedMessage;
 };
 
 /** The name of every message this build knows how to deliver. */
@@ -479,6 +512,18 @@ export const theme = (event: DomicileThemeEvent): ThemeMessage => ({
  */
 export const idle = (event: DomicileIdleEvent): IdleMessage => ({
   idle: event.idle,
+});
+
+/**
+ * Whether the desk is locked, with the SDK's own `arrival` left behind.
+ *
+ * A pass-through like {@link idle}: the engine carries one boolean and that
+ * boolean is the message. It exists so `domicile-client.ts` has the same one
+ * call per listener every other event gets — and so that the one way this can be
+ * wrong, which is backward, has somewhere to be asserted.
+ */
+export const locked = (event: DomicileLockedEvent): LockedMessage => ({
+  locked: event.locked,
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

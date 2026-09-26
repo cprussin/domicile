@@ -111,6 +111,9 @@ class FakeHost implements DomicileHost {
   setTheme(theme: Theme): void {
     this.calls.push(["setTheme", theme]);
   }
+  unlock(passphrase: string): void {
+    this.calls.push(["unlock", passphrase]);
+  }
   grabShortcut(shortcut: DomicileShortcut): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
@@ -344,6 +347,25 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ idle: true }]);
     });
 
+    it("delivers whether the desk is locked", () => {
+      // Through the same hold as the rest, and this is the message that hold
+      // was built for: a page that reloaded over a locked desk is told so as it
+      // connects, which lands while React is still on its first render. A shell
+      // that missed it would draw an open desktop over a desk that delivers
+      // nothing.
+      const seen: unknown[] = [];
+      domicile.on("locked", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "locked",
+        Object.assign(new Event("locked"), { arrival: 0, locked: true }),
+      );
+
+      expect(seen).toStrictEqual([{ locked: true }]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
@@ -456,6 +478,16 @@ describe("DomicileClient", () => {
       // message, because every chrome on the desk is told.
       domicile.setTheme("light");
       expect(host.lastCall()).toStrictEqual(["setTheme", "light"]);
+    });
+
+    it("offers a passphrase at a locked desk and applies nothing", () => {
+      // NOTHING IS APPLIED HERE, which is the same property `setTheme` above
+      // has and for a harder reason: a page that cleared its own lock screen
+      // because it believed its own keystrokes would be a lock anybody with the
+      // devtools could open. What opens the desk is the compositor agreeing, and
+      // what this page hears about it is a `locked` message.
+      domicile.unlock("open sesame");
+      expect(host.lastCall()).toStrictEqual(["unlock", "open sesame"]);
 
       domicile.grabShortcut({ altKey: true, keycode: 28 });
       expect(host.lastCall()).toStrictEqual([

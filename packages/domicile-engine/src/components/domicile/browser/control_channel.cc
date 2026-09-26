@@ -318,6 +318,22 @@ void ControlChannel::SetTheme(mojom::Theme theme) {
   SendMessage(std::move(message));
 }
 
+// THE ONE MEMBER HERE THAT CARRIES A SECRET, and the only thing this method
+// does about it is not say it. There is no log line and no error string with the
+// passphrase in it, here or anywhere below the socket: the compositor's own
+// `Passphrase` refuses to print itself, and its frame log names an unlock
+// without its field.
+//
+// Relayed rather than checked. Nothing in this process knows what opens the
+// desk, and it must not: the lock is the compositor refusing to inject input
+// into the seat, so the verdict belongs where the seat is. What comes back up is
+// `locked` to every chrome.
+void ControlChannel::Unlock(const std::string& passphrase) {
+  base::DictValue message = Typed("unlock");
+  message.Set("passphrase", passphrase);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
   // RECORDED HERE RATHER THAN RELAYED, and the compositor no longer has a
   // message for it. It used to hold the claims, and it is the layer that
@@ -853,6 +869,21 @@ void ControlChannel::DispatchLine(const std::string& line,
       return;
     }
     client_->Idle(*idle, arrival);
+    return;
+  }
+
+  if (*type == "locked") {
+    // DROPPED RATHER THAN DEFAULTED, for `idle` above's reason at its sharpest:
+    // a missing field here has no reading that is not a guess about whether this
+    // desk is listening, and a guess that came out false would clear a shell's
+    // lock screen over a desk that has stopped delivering input -- a desktop
+    // that looks open, takes a password into a text field nothing will ever see,
+    // and is not.
+    std::optional<bool> locked = message.FindBool("locked");
+    if (!locked) {
+      return;
+    }
+    client_->Locked(*locked, arrival);
     return;
   }
 

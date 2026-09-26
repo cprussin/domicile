@@ -71,23 +71,71 @@ The evidence for each of those is in the doc that made the claim —
      connectors to it again, so the desk comes back — it just goes dark for the
      second or two it takes.
 
-3. **No lock.** A desktop you walk away from is one anybody can walk up to.
-   The *idle* half of this shipped: `idle.blank_after_seconds` in the config,
-   `crate::idle` in the compositor for the decision and the edge, the
-   connectors going dark and coming back on the next key, click, scroll or
-   pointer movement — with a client playing a film holding them on through all
-   of it, for exactly as long as it is running and the window it is playing in
-   is on the desktop: an inhibitor whose client died holds nothing, and neither
-   does one taken on a surface nobody can see
+3. **The lock has a mechanism and no verifier worth the name.** A desktop you
+   walk away from locks itself, and what opens it is a string in a
+   world-readable file. The *idle* half shipped first:
+   `idle.blank_after_seconds` in the config, `crate::idle` in the compositor for
+   the decision and the edge, the connectors going dark and coming back on the
+   next key, click, scroll or pointer movement — with a client playing a film
+   holding them on through all of it, for exactly as long as it is running and
+   the window it is playing in is on the desktop: an inhibitor whose client died
+   holds nothing, and neither does one taken on a surface nobody can see
    ([how](docs/architecture/A-DESKTOP-ON-A-TTY.md#blanking-is-that-same-layout-with-the-light-taken-out-of-it))
    — and an `idle` message on the host↔chrome protocol that tells the shell
    which of the two a desk is in ([what a shell does with
    it](docs/WRITING-A-SHELL.md#when-nobody-is-at-the-desk)).
-   A blank screen is still a screen: anybody can type at one. What is left is
 
-   - **The lock itself**, which needs the shell, the host↔chrome protocol and a
-     decision about where input stops — the seat holds the keyboard, so
-     refusing to deliver it is this compositor's to do rather than the page's.
+   **And now the lock's mechanism**: a desk that states a `lock.passphrase`
+   locks itself on that same dark edge, `crate::lock` holds whether it is
+   locked, and while it is, every key, click, scroll and pointer movement the
+   shell forwards is dropped before it reaches the seat — so no Wayland client
+   on the desk is given one
+   ([where and why](docs/architecture/A-DESKTOP-ON-A-TTY.md#and-it-locks-the-desk-which-is-a-refusal-at-the-injection)).
+   The compositor holds that state, so a page reload does not open the desk and
+   neither does an engine that died and came back; a `locked` message carries it
+   to every chrome and again to one that has just said hello, and `unlock`
+   carries a passphrase back ([what a shell does with
+   it](docs/WRITING-A-SHELL.md#a-locked-desk)). The page keeps its own keys
+   throughout, which is what lets it draw a lock screen at all, and the seat lets
+   go of whatever it was holding on the turn the desk shuts — a release is the
+   one thing a refusal cannot drop.
+
+   What is left is
+
+   - **The verifier, which today is a passphrase in a generated file.**
+     `crate::lock::Verifier` is the seam and `ConfiguredPassphrase` is what is
+     behind it: the string `[lock] passphrase` states, compared. That file is
+     generated into a world-readable Nix store, so what has shipped locks a desk
+     against somebody walking up to it and against **nobody who can read the
+     machine's disk**. PAM is what belongs there — `pam_authenticate` against
+     the desk's own user, which is what every other lock screen on Linux does —
+     and it needs no engine release, because nothing about the protocol, the
+     refusal or the shell changes when the thing behind the seam does. The
+     comparison is also not constant-time, which is worth exactly nothing to fix
+     while the passphrase is readable anyway.
+   - **Nothing locks a desk on purpose.** The idle edge is the only thing that
+     locks one, so there is no "lock now" — no chord, no menu item, no
+     `ChromeMessage` for it — and a desk with no `idle.blank_after_seconds` never
+     locks however loudly it states a passphrase. A shell wants to be able to
+     ask, which is one message and a `Lock` on `ClientRequest`.
+   - **A wrong passphrase is answered with silence.** No verdict crosses the
+     protocol, so a shell cannot say "that was wrong", cannot count tries and
+     cannot rate-limit them; the compositor logs the refusal and the desk stays
+     shut. The field clearing is the only feedback there is. What this wants is a
+     message carrying the refusal — and, once there is a real verifier behind
+     the seam, a delay that grows.
+   - **A locked desk still answers the rest of the protocol.** The refusal is
+     the input path and only that: a shell over a locked desk could still ask
+     the compositor to close a window, spawn a process or put a row of the
+     clipboard back on the seat. What stops it today is the shell not drawing
+     the panels that ask, which is a shell's decision where it should be the
+     compositor's. The list wants the same treatment `crate::lock::refused`
+     already gives the input requests.
+   - **A reload does not move the lock.** `lock.passphrase` is read at startup
+     and nowhere else, deliberately: rebuilding the verifier under a locked desk
+     would be either an unlock by file edit or a locked desk with nothing left
+     to open it. So a passphrase added, changed or removed is the passphrase of
+     the next run, which is the safe answer rather than the right one.
    - **A moment before, rather than at the moment.** The shell is told now,
      but `HostMessage::Idle` goes out on the turn the screens are told to go
      dark — ahead of the modeset, not ahead of the timeout — so there is
@@ -96,8 +144,10 @@ The evidence for each of those is in the doc that made the claim —
      repaint. A desk that warns wants a lead time, and there are two shapes for
      one: a second timer in `crate::idle` with a config field saying how long
      before the blank to speak, or telling the shell the timeout and letting it
-     count. Neither is written, and which is right depends on the lock, since
-     the lock is the thing that most wants the warning.
+     count. Neither is written, and the lock above is what now wants one: it
+     goes up in the same breath the glass goes out, so a person who was about
+     to reach for the keyboard gets a lock screen rather than a warning they
+     could have answered.
 
 ## In the engine fork — the agent on `crux`
 

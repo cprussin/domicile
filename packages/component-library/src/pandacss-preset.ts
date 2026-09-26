@@ -448,6 +448,11 @@ export const domicilePreset = definePreset({
         sizes: quarterStepSpacing,
         spacing: quarterStepSpacing,
         zIndex: {
+          // Over `modal`, and the only thing that is: a shell's lock screen
+          // covers the whole desktop including whatever panel was open when
+          // nobody was left at it. A lock under an open launcher would be a
+          // locked desk somebody could still type a path into.
+          lock: { value: "202" },
           modal: { value: "201" },
           modalBackdrop: { value: "200" },
         },

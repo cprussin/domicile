@@ -983,6 +983,58 @@ somebody is at this desktop again; its screens come back on
 and, under `--vmodule=drm*=1`, the `configuring N display(s)` that says the
 modeset behind them ran.
 
+### And it locks the desk, which is a refusal at the injection
+
+A desk that states a `lock.passphrase` **locks itself on the same edge its
+screens go dark on**, and what being locked means is one thing: nothing the
+chrome forwards is put into the seat. `crate::lock::refused` is the list — keys,
+pointer motion, buttons, the wheel and a pointer leave — and
+`handle_client_request` drops each of them before it reaches Smithay.
+
+**The injection is the only place a lock could go, and both of the obvious
+alternatives are wrong.** Input does not originate in this compositor: the page
+owns it and forwards it over the chrome socket, which is what makes
+`crate::idle`'s hand count honest and is what decides this too.
+
+| Where a lock could refuse | Why not there |
+|---|---|
+| In the page | A page reload opens the desk, an engine that died and came back opens it, and so does the devtools of the browser drawing it. The state has to outlive the document, and the only process that does is this one |
+| At the chrome socket | It would take the shell's own keys with it, and a shell that cannot hear a keystroke cannot take a passphrase. There would be nothing left to unlock with |
+| At the seat | Which is where it is |
+
+So the page keeps every key it has while the desk is shut. That reads like a hole
+and is the arrangement: what it forwards is dropped, no client sees a keystroke
+or a click, and the shell goes on holding the keyboard over a lock screen.
+
+Three orderings are load-bearing, and each is a line in
+`handle_client_request` or beside it:
+
+| Rule | Why |
+|---|---|
+| **The hand is counted before the refusal** | `keep_the_desktop_awake` runs first, so a key at a locked desk still lights the screens and still reaches no client. Otherwise there is nothing to read the lock screen by |
+| **`ChromeHello` is never refused** | It is how a page that reloaded over a locked desk is told so. A lock that swallowed the hello would be a locked desk with no lock screen on it |
+| **The shell is told before the modeset, like idle** | A relight is tens of milliseconds against a repaint's one, so a lock screen raised now is up before there is light to read the desktop behind it |
+| **The seat lets go of what it is holding as the desk shuts** | A release is the one thing the refusal cannot drop — it is the end of an event that *did* happen. A Shift held while somebody reads the screen sends nothing for the whole timeout, and its release after the lock would leave that key down in the seat for good. `release_pressed_keys`, which is what a reloaded page already gets |
+
+The verifier is a seam — `crate::lock::Verifier` — and the one behind it today
+compares the passphrase the config states. That file is generated into a
+world-readable store, so what has shipped locks a desk against somebody walking
+up to it and against nobody who can read the disk; PAM is what goes behind the
+seam next, and `ROADMAP.md` carries it along with what a locked desk still
+answers on the rest of the protocol.
+
+A refused passphrase is a line in the log and no message at all. The line does
+not contain what was typed, and neither does the frame log a few lines above it:
+`domicile_protocol::Passphrase` refuses to print itself, which is what makes that
+structural rather than a rule for the next person adding a `debug!`.
+
+```
+nobody is at this desktop; it locks itself
+this desktop is locked; what the shell forwarded reaches no client
+a passphrase this desktop did not take; it stays locked
+the passphrase opened this desktop
+```
+
 ### Turning a monitor is the engine's job, and it took a window each to get there
 
 **The modeset does not turn a pixel and never will.**
@@ -1332,6 +1384,11 @@ of this — both selections land on that card and agree.
   branch at all. Every one was silent — nothing failed, so nothing logged. When
   a piece of ozone/drm appears to work and its effect never arrives, look for
   ash supplying the other half before looking for a bug.
+- **Refuse a locked desk's input at the injection, not at the socket or in the
+  page.** The page owns the input on this system and forwards it, so a lock the
+  page held would be opened by a reload and a lock the socket held would take the
+  shell's own keys with it — leaving nothing to type a passphrase into. The seat
+  is this process's, so the refusal is too.
 - **Let the compositor own the clipboard and push it.** The alternative — the
   browser asking on every paste — buys nothing, because the compositor already
   reads every selection for the history, and costs a round trip inside the

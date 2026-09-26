@@ -529,6 +529,40 @@ export type DomicileIdleEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * Whether this desk is locked, pushed when that changes.
+ *
+ * **The compositor holds this, and that is the whole of why it is a message.**
+ * Input on this system does not originate there: your page owns it and forwards
+ * it, and the compositor injects it into a Wayland seat. While `locked` is
+ * `true` that injection does not happen — so no client on the desk sees a
+ * keystroke or a click, and nothing your page does changes that. A reload does
+ * not open the desk, an engine that died and came back does not open it, and
+ * neither does a shell edited in the devtools of the browser drawing it.
+ *
+ * Your page keeps its own keys throughout, which reads like a hole and is the
+ * opposite: you are the thing forwarding, so you can draw a lock screen and
+ * take a passphrase while nothing you forward arrives anywhere. {@link
+ * DomicileHost.unlock} is how you offer one.
+ *
+ * Pushed, like the battery: it arrives on the turn the answer changes and once
+ * more to a page that has just connected — which here is the point rather than a
+ * convenience, because the edge a reloaded page missed is the one that would
+ * have raised its lock screen. A desktop with no passphrase configured sends
+ * none of these at all.
+ */
+export type DomicileLockedEvent = Event & {
+  /** `true` is a desk that delivers nothing to any client. */
+  readonly locked: boolean;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -564,6 +598,12 @@ export type DomicileHostEventMap = {
    * rather than the edge the compositor decided on.
    */
   idle: DomicileIdleEvent;
+  /**
+   * Whether this desk is locked, whenever that changes — and once to a page
+   * that has just connected, which is what makes a reload something the lock
+   * survives rather than something that opens it.
+   */
+  locked: DomicileLockedEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -701,6 +741,26 @@ export type DomicileHost = {
    * is what the desk comes up on, and a toggle lasts as long as the desktop.
    */
   setTheme(theme: Theme): void;
+
+  /**
+   * Offer a passphrase at a locked desk.
+   *
+   * **The only way out of the one desktop state your page cannot change by
+   * drawing.** While the desk is locked the compositor puts nothing you forward
+   * into the seat; this call is what ends that, and only if the compositor
+   * agrees.
+   *
+   * Answered with a `locked` event and not with a return value — to every chrome
+   * on the desk, not just this one, because three monitors are three pages and
+   * the desk they draw has one lock. So clear your lock screen when the event
+   * says the desk opened, never because you believed your own keystrokes: a page
+   * that did the latter would be a lock anybody with the devtools could open.
+   *
+   * A wrong passphrase produces nothing at all. There is no verdict, no count
+   * and no delay on this protocol yet; the desk stays shut and the compositor
+   * says so in its own log, without the passphrase in it.
+   */
+  unlock(passphrase: string): void;
 
   /**
    * Route a key combination to the page rather than to the focused client.

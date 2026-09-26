@@ -119,9 +119,17 @@ pointer.
   not keep the screens on, and neither does a program that asks on a window it
   never shows.
 
-**It is not a lock.** The screens go dark and anybody can still walk up and
-type; nothing asks for a password on the way back. That is open work —
-[/ROADMAP.md](/ROADMAP.md).
+**Blanking is not by itself a lock, but it is what locks a desk that has a
+passphrase.** `lock.passphrase` is what opens one; a desk that states it locks
+itself on the same edge its screens go dark on, and from then on nothing the
+shell forwards reaches a client until somebody types it. A desk that states no
+passphrase never locks — the screens go dark and anybody can walk up and type.
+
+What has shipped is the mechanism and not yet a secret: that passphrase lives in
+the compositor's config, which on NixOS is generated into a world-readable store,
+so it locks a desk against somebody walking up to it and against nobody who can
+read the machine's disk. PAM is the next step, and it and the rest of what is
+left are in [/ROADMAP.md](/ROADMAP.md).
 
 ## On NixOS
 
