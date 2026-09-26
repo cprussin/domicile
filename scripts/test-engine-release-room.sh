@@ -77,7 +77,11 @@ free="$FAKE_FREE_GB"
 [ -d "$FAKE_STAGE" ] || free=$((free + 5))
 [ -d "$FAKE_CHROMIUM/out/Release-staged" ] || free=$((free + 3))
 for tree in "$FAKE_TREES"/*/src; do
-  [ -d "$tree/out/Release" ] || free=$((free + 40))
+  if [ "$tree" = "$FAKE_CHROMIUM" ]; then
+    [ -d "$tree/out/Release" ] || free=$((free + ${FAKE_OWN_GB:-40}))
+  else
+    [ -d "$tree/out/Release" ] || free=$((free + 40))
+  fi
 done
 [ -e "$FAKE_CCACHE/old" ] || free=$((free + 5))
 [ -e "$FAKE_CCACHE/new" ] || free=$((free + 5))
@@ -92,7 +96,16 @@ case "$*" in
   *) echo "unexpected: ccache $*" >&2; exit 1 ;;
 esac
 CCACHE
-chmod +x "$WORK/bin/df" "$WORK/bin/ccache"
+# This tree's build, as big as the scenario says: a warm one is ~40G, one
+# grown past a cold build's size is bigger.
+cat >"$WORK/bin/du" <<'DU'
+#!/usr/bin/env bash
+dir="${*: -1}"
+[ -d "$dir" ] || { echo "du: cannot access '$dir'" >&2; exit 1; }
+[ "$dir" = "$FAKE_CHROMIUM/out/Release" ] || { echo "unexpected: du $*" >&2; exit 1; }
+printf '%s\t%s\n' "${FAKE_OWN_GB:-40}" "$dir"
+DU
+chmod +x "$WORK/bin/df" "$WORK/bin/ccache" "$WORK/bin/du"
 export PATH="$WORK/bin:$PATH"
 export FAKE_CHROMIUM="$CHROMIUM" FAKE_STAGE="$STAGE" FAKE_TREES="$TREES" \
   FAKE_CCACHE="$WORK/ccache"
@@ -152,13 +165,37 @@ expect "and so do the tarballs" yes \
 expect "and so does every other tree's build" yesyes "$(built 1)$(built 2)"
 expect "and the compiler cache" yes "$(there "$WORK/ccache/old")"
 
+# --- short on free space, and this tree's own build is the room -----------
+
+# RUN 36235996990 IS THIS CASE. 41G free beside a warm out/Release, and the
+# step dropped a free tree's build, the whole compiler cache and this run's own
+# build to reach 60G free: a 4h20m clean build for #594 and a cold one for the
+# next run on the other tree. The build writes over its own objects rather
+# than beside them, so a warm tree needs the floor less its build, not the
+# floor on top of it.
+a_pool
+SAID="$(room 41)"
+expect "a warm build with the rest free is room enough" ok "$(status "$SAID")"
+expect "and nothing is dropped: not this run's build" yes "$(built 0)"
+expect "not the litter" yes "$(there "$CHROMIUM/out/Release-staged")"
+expect "not a free tree's build" yesyes "$(built 1)$(built 2)"
+expect "and not the compiler cache" yes "$(there "$WORK/ccache/new")"
+contains "it says what it counted" "writes over" "$SAID"
+
+# A cold tree has nothing to write over, and counts nothing.
+a_pool
+rm -rf "$CHROMIUM/out/Release"
+SAID="$(FAKE_OWN_GB=0 room 41)"
+expect "a cold tree is judged on free space alone" ok "$(status "$SAID")"
+expect "and reclaims for it" no "$(built 1)"
+
 # --- short, and the litter is enough ----------------------------------------
 
 # The cheap reclaim comes first and is measured before the expensive one is
 # reached for: published tarballs and an unpacked copy of one are worth
 # nothing, and `out/Release` is worth four hours.
 a_pool
-SAID="$(room 55)"
+SAID="$(room 15)"
 expect "a tree without room is not refused for what it can reclaim" \
   ok "$(status "$SAID")"
 expect "the tarballs of published releases go" no \
@@ -176,7 +213,7 @@ contains "and what it has now" "free" "$SAID"
 # A free tree's build is the next cheapest thing: it costs a rebuild only if a
 # run wants that tree's pin again, where this run's own costs one now.
 a_pool
-SAID="$(room 45)"
+SAID="$(room 5)"
 expect "a pool that needs one free tree's build gets there" ok "$(status "$SAID")"
 expect "the least recently used free tree's build goes" no "$(built 1)"
 expect "but only one, because one was enough" yes "$(built 2)"
@@ -189,36 +226,32 @@ expect "this run's own build is kept" yes "$(built 0)"
 expect "and so is the compiler cache" yes "$(there "$WORK/ccache/new")"
 contains "it says whose build it dropped" "tree-1" "$SAID"
 
-# --- every free tree reclaimed, so the compiler cache goes ------------------
+# --- every free tree held, so the compiler cache goes -----------------------
 
 a_pool
+held_by_them 1
 held_by_them 2
 SAID="$(room 5)"
 expect "a pool that needs the compiler cache gets there" ok "$(status "$SAID")"
-expect "the free tree's build went first" no "$(built 1)"
-expect "the held one did not" yes "$(built 2)"
+expect "the held trees keep their builds" yesyes "$(built 1)$(built 2)"
 expect "the compiler cache is emptied" no "$(there "$WORK/ccache/new")"
 expect "but this run's own build is kept, because it was not needed" yes \
   "$(built 0)"
 
+# --- a build grown past a clean one's size ----------------------------------
+
+# Dropping this run's own build frees only what it holds beyond the clean
+# build that writes it back, so it goes only when it holds more than that.
 # A machine that names no compiler cache has none to trim, which is not a
-# reason to stop short of the reclaim that is left.
+# reason to stop short of this.
 a_pool
 held_by_them 1
 held_by_them 2
-SAID="$(DOMICILE_CC_WRAPPER='' room 18)"
+SAID="$(DOMICILE_CC_WRAPPER='' FAKE_OWN_GB=50 room 2)"
 expect "no compiler cache is no reason to refuse" ok "$(status "$SAID")"
 expect "and the cache it did not name is not touched" yes \
   "$(there "$WORK/ccache/old")"
-
-# --- short enough that this run's own build directory has to go ------------
-
-a_pool
-held_by_them 1
-held_by_them 2
-SAID="$(room 10)"
-expect "a tree that needs the build directory gets there" ok "$(status "$SAID")"
-expect "the build directory goes" no "$(built 0)"
+expect "a build bigger than a clean one goes" no "$(built 0)"
 # Not the path on its own: `out/Release-staged` has `out/Release` inside it,
 # so a message about only the cheap reclaim matches that and says nothing.
 contains "it says so, and what rebuilding it costs" "four hours" "$SAID"
@@ -237,10 +270,11 @@ held_by_them 2
 SAID="$(room 0)"
 expect "a tree that is still short after reclaiming is refused" \
   refused "$(status "$SAID")"
-contains "the refusal says how much is free after the reclaim" "58G" "$SAID"
+contains "the refusal says how much is free after the reclaim" "18G" "$SAID"
 contains "and that it already reclaimed what it could" "reclaim" "$SAID"
 contains "and names the holders of what it would not take" "$THEM" "$SAID"
 expect "which it did not take" yesyesyes "$(built 1)$(built 2)$(built 3)"
+expect "and a warm build is not dropped for nothing" yes "$(built 0)"
 expect "and the checkout is not a cache" yes "$(there "$CHROMIUM")"
 
 # --- the workflows this exists for ------------------------------------------
