@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
-#include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -348,7 +347,7 @@ void DomicileHost::AppAppeared(const String& app_id, const String& title,
                                bool has_size, double width, double height,
                                base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kAppappeared, app_id, title,
+      domicile_event_names::Appappeared(), app_id, title,
       has_size ? std::make_optional(width) : std::nullopt,
       has_size ? std::make_optional(height) : std::nullopt, Arrival(arrival)));
 }
@@ -356,13 +355,13 @@ void DomicileHost::AppAppeared(const String& app_id, const String& title,
 void DomicileHost::AppResized(const String& app_id, double width, double height,
                               base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kAppresized, app_id, String(), width, height,
+      domicile_event_names::Appresized(), app_id, String(), width, height,
       Arrival(arrival)));
 }
 
 void DomicileHost::AppClosed(const String& app_id, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kAppclosed, app_id, String(), std::nullopt,
+      domicile_event_names::Appclosed(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
 }
 
@@ -390,20 +389,21 @@ void DomicileHost::AppCursor(const String& app_id,
       << "no DomicileCursorShape named '" << name
       << "', so domicile_cursor_shape.idl and cursor_shape.h disagree";
   DispatchEvent(*MakeGarbageCollected<DomicileAppCursorEvent>(
-      event_type_names::kAppcursor, app_id, *shape, Arrival(arrival)));
+      domicile_event_names::Appcursor(), app_id, *shape, Arrival(arrival)));
 }
 
 void DomicileHost::ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
                                    base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileShortcutEvent>(
-      event_type_names::kShortcut, shortcut->keycode, shortcut->alt,
+      domicile_event_names::Shortcut(), shortcut->keycode, shortcut->alt,
       shortcut->ctrl, shortcut->shift, shortcut->meta, Arrival(arrival)));
 }
 
 void DomicileHost::Modifiers(bool alt, bool ctrl, bool shift, bool meta,
                              base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileModifiersEvent>(
-      event_type_names::kModifiers, alt, ctrl, shift, meta, Arrival(arrival)));
+      domicile_event_names::Modifiers(), alt, ctrl, shift, meta,
+      Arrival(arrival)));
 }
 
 // The wire name of a turn, as the page reads it off `DomicileDisplay`.
@@ -437,7 +437,7 @@ void DomicileHost::Displays(
   // The event says the desktop moved; `displays` says what it is. Splitting
   // them is what lets a component that mounted after the description read the
   // desktop at all -- an event carrying the only copy is gone once dispatched.
-  DispatchEvent(*Event::Create(event_type_names::kDisplayschanged));
+  DispatchEvent(*Event::Create(domicile_event_names::Displayschanged()));
 }
 
 // The one message on this channel that answers a question. It is an event
@@ -450,7 +450,7 @@ void DomicileHost::Files(const String& query,
                          bool indexing,
                          base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilesEvent>(
-      event_type_names::kFiles, query, files, matched, indexing,
+      domicile_event_names::Files(), query, files, matched, indexing,
       Arrival(arrival)));
 }
 
@@ -462,7 +462,7 @@ void DomicileHost::FilePreview(const String& path,
                                const Vector<String>& entries,
                                base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilePreviewEvent>(
-      event_type_names::kFilepreview, path, kind, text, entries,
+      domicile_event_names::Filepreview(), path, kind, text, entries,
       Arrival(arrival)));
 }
 
@@ -474,7 +474,7 @@ void DomicileHost::Battery(double charge,
                            bool charging,
                            base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileBatteryEvent>(
-      event_type_names::kBattery, charge, charging, Arrival(arrival)));
+      domicile_event_names::Battery(), charge, charging, Arrival(arrival)));
 }
 
 // Pushed, like Battery and unlike Files: the compositor hears a copy without
@@ -490,7 +490,7 @@ void DomicileHost::Clipboard(
         entry->id, entry->preview));
   }
   DispatchEvent(*MakeGarbageCollected<DomicileClipboardEvent>(
-      event_type_names::kClipboard, std::move(history), Arrival(arrival)));
+      domicile_event_names::Clipboard(), std::move(history), Arrival(arrival)));
 }
 
 // Pushed, like Battery, and the one pushed message this page can cause:
@@ -500,7 +500,7 @@ void DomicileHost::Clipboard(
 void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
                                 base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
-      event_type_names::kTheme, PageTheme(theme), Arrival(arrival)));
+      domicile_event_names::Theme(), PageTheme(theme), Arrival(arrival)));
 }
 
 // The same event interface as `theme`, under its own type: what it carries is
@@ -508,7 +508,7 @@ void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
 void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme,
                                        base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileThemeEvent>(
-      event_type_names::kWindowstheme, PageTheme(theme), Arrival(arrival)));
+      domicile_event_names::Windowstheme(), PageTheme(theme), Arrival(arrival)));
 }
 
 // Pushed like Battery, and a state rather than an edge -- the compositor
@@ -518,7 +518,7 @@ void DomicileHost::WindowsThemeChanged(domicile::mojom::blink::Theme theme,
 // at. See `crate::idle` in the compositor.
 void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileIdleEvent>(
-      event_type_names::kIdle, idle, Arrival(arrival)));
+      domicile_event_names::Idle(), idle, Arrival(arrival)));
 }
 
 // Pushed like Idle above, and a state for its reason with the stakes the other
@@ -528,13 +528,13 @@ void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
 // `crate::lock` in the compositor.
 void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileLockedEvent>(
-      event_type_names::kLocked, locked, Arrival(arrival)));
+      domicile_event_names::Locked(), locked, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,
                                 base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kFocuschanged, app_id, String(), std::nullopt,
+      domicile_event_names::Focuschanged(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
 }
 
@@ -544,14 +544,14 @@ void DomicileHost::FocusChanged(const String& app_id,
 void DomicileHost::FocusRequested(const String& app_id,
                                   base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
-      event_type_names::kFocusrequested, app_id, String(), std::nullopt,
+      domicile_event_names::Focusrequested(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
 }
 
 void DomicileHost::AppTitled(const String& app_id, const String& title,
                              base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppTitledEvent>(
-      event_type_names::kApptitled, app_id, title, Arrival(arrival)));
+      domicile_event_names::Apptitled(), app_id, title, Arrival(arrival)));
 }
 
 // THE BROWSER'S CLOCK, READ ON THIS DOCUMENT'S. `base::TimeTicks` is monotonic

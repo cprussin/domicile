@@ -19,6 +19,8 @@ blink_modules_sources("domicile") {
     "domicile_clipboard_event.h",
     "domicile_display.cc",
     "domicile_display.h",
+    "domicile_event_names.cc",
+    "domicile_event_names.h",
     "domicile_file_preview_event.cc",
     "domicile_file_preview_event.h",
     "domicile_files_event.cc",
