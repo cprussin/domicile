@@ -648,20 +648,38 @@ known and it is a build-system cost, not a language one.
   --ozone-platform=wayland` under `under-wayland.sh` is not a desktop and must
   not swallow the session's keymap.
 
-  **Measured as far as the request.** `guard-shortcuts-inhibitor.sh` runs the
+  **Measured twice, as two claims.** `guard-shortcuts-inhibitor.sh` runs the
   engine nested, with `WAYLAND_DEBUG=1`, and reads
   `zwp_keyboard_shortcuts_inhibit_manager_v1#23.inhibit_shortcuts(…)` off its
   own wire; the control is the same run with the switch left off, where the
-  request must be absent. So what is guarded is that the engine **asked** —
-  not that a key was pressed, and not that the host honored it. Two things had
+  request must be absent. That is the engine having **asked**. Two things had
   to be true before it could ask at all, and both are the guard's setup rather
   than the engine's doing: the host has to advertise
   `zwp_keyboard_shortcuts_inhibit_manager_v1`, which sway does, and the seat
   has to announce a keyboard, which a headless wlroots backend does only while
   an input device backs it — so the guard creates a virtual one on the host's
-  seat first. Pressing a chord through that keyboard and reading which side
-  took it is `ROADMAP.md`'s, and it is the only thing that would measure the
-  inhibitor rather than the request.
+  seat first.
+
+  `guard-shortcuts-inhibitor-chord.sh` is the host having **honored** it. It
+  binds `Mod4+y` in sway over IPC, to a command that appends a line to a log,
+  presses the chord through a `wtype` keyboard with the window focused, and
+  reads both sides:
+
+  | | host (the binding's log) | page (`GUARD keydown key=y`) |
+  |---|---|---|
+  | with the switch | must not fire | must arrive |
+  | without it (the control) | must fire | must not arrive |
+
+  Both claims are an absence on one side, so each observer is shown to see
+  first: the chord is pressed once before the engine starts, at a host with
+  nothing focused, and the binding must fire; a plain `u`, which nothing
+  binds, must reach the page. A chord neither side saw is a failure that says
+  the key went nowhere, not a host that declined it, and an engine that died
+  is a failure that says so ahead of every other gate. A separate guard rather
+  than more of the first, because it needs a sway it can reach and the request
+  guard runs under any host — and because the two disagreeing, the request
+  made and the chord still taken, is the finding a single verdict would hide.
+  What neither reaches: a host other than sway, and a physical keyboard.
 - **Minimize edited files, not added ones.** A fork's carrying cost is conflicts,
   and new files do not conflict. Counted over patches `0001`–`0007`, which are
   this design and nothing else, it is **21 files, 15 of them Blink's** — and
