@@ -40,6 +40,7 @@ in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 # The Domicile-owned half lives in `src/`, never in a patch: a file is in one
 # or the other and never both.
 for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc \
+         drm_input_controller_unittest.cc \
          drm_logind_input.h drm_logind_input.cc; do
   if [ -f "$DOMICILE/$f" ]; then
     ok "domicile/$f exists"
@@ -220,6 +221,34 @@ if grep -qE "^ *DrmInputDevicesTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
 else
   fail "the DRM suite list carries a floor for the suite" \
     "no 'DrmInputDevicesTest:<n>' in scripts/engine-drm-unit-tests.sh, so the suite can stop linking and nothing says so"
+fi
+
+# A REMOVAL IS REPORTED FROM THE EVDEV THREAD AND HANDLED ON THE UI ONE.
+# `InputDeviceFactoryEvdev::DetachInputDevice` calls the controller's
+# `OnInputDeviceRemoved` from the evdev thread, and the controller's settings
+# push then posted a task bound to its UI-sequence WeakPtr onto the evdev
+# thread -- which a console switch, removing every device at once, turned into
+# `DCHECK failed: checker.CalledOnValidSequence` and a dead browser. The
+# controller hops to its own sequence instead, and a case of its own says so.
+if in_patches "remove_device_ = base::BindPostTaskToCurrentDefault("; then
+  ok "a device removal is posted to the input controller's own sequence"
+else
+  fail "a device removal is posted to the input controller's own sequence" \
+    "InputControllerEvdev::OnInputDeviceRemoved runs on the evdev thread and posts a UI-bound WeakPtr task there"
+fi
+
+if in_patches '"domicile/drm_input_controller_unittest.cc"'; then
+  ok "the controller's unit test is in the gbm_unittests target"
+else
+  fail "the controller's unit test is in the gbm_unittests target" \
+    "no patch adds domicile/drm_input_controller_unittest.cc to BUILD.gn"
+fi
+
+if grep -qE "^ *DrmInputControllerTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
+  ok "the DRM suite list carries a floor for the controller's suite"
+else
+  fail "the DRM suite list carries a floor for the controller's suite" \
+    "no 'DrmInputControllerTest:<n>' in scripts/engine-drm-unit-tests.sh"
 fi
 
 # AN INACTIVE TAKE IS A RACE AS OFTEN AS IT IS A BACKGROUND CONSOLE, and
