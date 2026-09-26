@@ -21,7 +21,7 @@
 # is this job.
 #
 # WHAT THIS FILE ASSERTS IS THAT THE JOB IS STILL THE CHEAP ONE. The check it
-# runs is `scripts/engine-guard-client-window.sh`, which is one of the nineteen
+# runs is `scripts/engine-guard-client-window.sh`, which is one of the twenty
 # `check.sh engine` runs against the tree engine.yml builds, and the difference
 # — the only difference that makes this affordable — is where the engine comes
 # from: `nix build .#engine` is a fetch of the pinned tarball and an
