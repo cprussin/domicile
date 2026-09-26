@@ -67,6 +67,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -97,11 +99,6 @@ AFTER_EVDEV=30
 AFTER_CODE="KeyA"
 AFTER_KEY="a"
 AFTER_VKEY=65
-
-# Nobody else's ports: two guards on one port is two guards that cannot run in
-# the same job, and CI runs them in one.
-PORT="${PORT:-8737}"
-DEBUG_PORT="${DEBUG_PORT:-9236}"
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-webview-escape-broker}"
@@ -172,13 +169,17 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The page the browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
 #    Shared with the keyboard and click guards, which need the same thing of it.
-python3 "$SCRIPTS/guard-webview-guest-page.py" --port "$PORT" \
+python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 wait_for_line 240 "serving" "$HTTP_LOG" || {
-  annotate_from "guard-webview-escape: nothing came up on port $PORT" "$HTTP_LOG"
+  annotate_from "guard-webview-escape: its page server never came up" "$HTTP_LOG"
   echo "the server said:" >&2
   tail -20 "$HTTP_LOG" >&2
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-escape: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
 SUBJECT="http://127.0.0.1:$PORT/page"
@@ -199,7 +200,7 @@ echo "serving a browser window's page at $SUBJECT"
   --app="domicile://shell/?src=$SUBJECT" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-escape.js" \
-  --remote-debugging-port="$DEBUG_PORT" \
+  --remote-debugging-port=0 \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
@@ -214,6 +215,10 @@ STARTED+=("$ENGINE")
 TRIES=$((FOR_SECONDS * 4))
 wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
+DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
+  annotate_from "guard-webview-escape: the engine never said which debugging port it took" "$ENGINE_LOG"
+  exit 1
+}
 
 # 4. A key first, so that a run where the keystroke under test went nowhere is
 #    told apart from one where it went in and did no harm.

@@ -23,6 +23,8 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$ROOT/packages/domicile-engine/scripts/lib-ports.sh"
 SERVER="$ROOT/packages/domicile-engine/scripts/guard-webview-framing-server.py"
 [ -f "$SERVER" ] || {
   echo "no server at $SERVER" >&2
@@ -38,9 +40,6 @@ command -v curl >/dev/null || {
   exit 77
 }
 
-# Not the guard's own port. This runs on every pull request and the guard runs
-# on `crux`; sharing a number would make them unable to overlap for no reason.
-PORT="${PORT:-8732}"
 COLOR="D81B60"
 # The framer's own background, which is what the probe looks for to know it
 # measured anything at all. Not the color: a page that painted the subject's
@@ -48,7 +47,7 @@ COLOR="D81B60"
 WITNESS="20304A"
 
 LOG="$(mktemp)"
-python3 "$SERVER" --port "$PORT" --color "$COLOR" --witness "$WITNESS" >"$LOG" 2>&1 &
+python3 "$SERVER" --port 0 --color "$COLOR" --witness "$WITNESS" >"$LOG" 2>&1 &
 SERVER_PID=$!
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null
@@ -61,7 +60,14 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 grep -q "serving" "$LOG" 2>/dev/null || {
-  echo "the fixture never came up on port $PORT. It said:" >&2
+  echo "the fixture never came up. It said:" >&2
+  cat "$LOG" >&2
+  exit 1
+}
+# The port it took, which is the one it says: asked for none in particular, it
+# must name the one it got.
+PORT="$(served_port "$LOG")" || {
+  echo "the fixture never said which port it took. It said:" >&2
   cat "$LOG" >&2
   exit 1
 }
