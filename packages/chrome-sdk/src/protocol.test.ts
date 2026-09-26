@@ -153,6 +153,21 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({ idle: false, type: "idle" });
   });
 
+  it("decodes whether the desk is locked, both ways round", () => {
+    // A state for the reason `idle` above is one, and here it is the whole
+    // point: the compositor holds the lock, so a page reload does not open the
+    // desk — and a reloaded page is told `true` rather than left to have missed
+    // the edge that raised its lock screen. Both directions, because an
+    // inversion is a lock screen that clears when the desk shuts.
+    expect(
+      parseHostMessage(JSON.stringify({ locked: true, type: "locked" })),
+    ).toStrictEqual({ locked: true, type: "locked" });
+
+    expect(
+      parseHostMessage(JSON.stringify({ locked: false, type: "locked" })),
+    ).toStrictEqual({ locked: false, type: "locked" });
+  });
+
   it("decodes the desktop's displays", () => {
     // The shell lays out against these: one page spans every display, and a
     // display is a region of it, so the position is what puts a `<Screen>`

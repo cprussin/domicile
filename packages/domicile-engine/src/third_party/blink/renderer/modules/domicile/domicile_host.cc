@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_file_preview_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_locked_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -144,6 +145,25 @@ void DomicileHost::previewFile(ScriptState*,
                                ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->PreviewFile(path);
+  }
+}
+
+// The whole of what a page may do about the lock, and it is an offer rather
+// than a decision: what opens the desk is the compositor agreeing, and what
+// this page hears about it is a `locked` event like every other chrome on the
+// desk. A wrong passphrase is answered with nothing -- there is no verdict on
+// this channel to leak a guess through, and the compositor's own log says it
+// refused one without saying what it was.
+//
+// No empty-string guard. An empty passphrase is a wrong passphrase, which this
+// call already has an answer for, and the compositor refuses an empty one in
+// its config too -- so there is nothing here for a throw to tell a shell that
+// the refusal does not.
+void DomicileHost::unlock(ScriptState*,
+                          const String& passphrase,
+                          ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->Unlock(passphrase);
   }
 }
 
@@ -474,6 +494,16 @@ void DomicileHost::ThemeChanged(domicile::mojom::blink::Theme theme,
 void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileIdleEvent>(
       event_type_names::kIdle, idle, Arrival(arrival)));
+}
+
+// Pushed like Idle above, and a state for its reason with the stakes the other
+// way up: the edge a reloaded page missed is the one that would have raised its
+// lock screen, and the compositor holding the lock is what makes a reload
+// something the desk survives rather than something that opens it. See
+// `crate::lock` in the compositor.
+void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileLockedEvent>(
+      event_type_names::kLocked, locked, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

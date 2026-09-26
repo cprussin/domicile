@@ -387,7 +387,8 @@ impl Host {
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }
             | ChromeMessage::PointerAxis { .. }
-            | ChromeMessage::Key { .. } => {
+            | ChromeMessage::Key { .. }
+            | ChromeMessage::Unlock { .. } => {
                 // Compositor-level side effects (spawning, input injection). The
                 // compositor intercepts these; the brain ignores them so it stays
                 // pure and testable.
@@ -400,6 +401,13 @@ impl Host {
                 // The compositor calls `Host::set_theme` itself and broadcasts
                 // what comes back, which is the same shape as `Spawn`: the
                 // brain holds the state, the compositor does the deed.
+                //
+                // `Unlock` is here for the same reason as the input forwards
+                // above and not for `SetTheme`'s: the lock is the seat's, and
+                // the seat is the compositor's. Whether this desk is listening
+                // is not scene state and must not become it — see
+                // `crate::lock` over there, which is the only thing that holds
+                // it.
             }
         }
         Ok(())

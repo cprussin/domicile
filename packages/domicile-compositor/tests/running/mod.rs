@@ -423,7 +423,10 @@ impl Compositor {
     /// for it to exit — which on the timeout path is exactly what has not
     /// happened. Reading to EOF here hung the run in place of failing it, and
     /// a hang has no message at all.
-    fn complaint(&self) -> String {
+    /// Public because one claim is about what the compositor did *not* say:
+    /// `tests/lock.rs` reads this to require that a refused passphrase is not
+    /// in it. `wait_for_log` cannot ask that — it waits for a presence.
+    pub fn complaint(&self) -> String {
         let said = self.complaint.lock().expect("nothing panics holding this");
         if said.trim().is_empty() {
             "(it said nothing)".to_string()

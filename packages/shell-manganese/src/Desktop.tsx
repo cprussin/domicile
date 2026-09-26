@@ -9,6 +9,8 @@ import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
+import { Lock } from "./lock/Lock";
+import { useLocked } from "./lock/useLocked";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { Wallpaper } from "./wallpaper/Wallpaper";
@@ -75,6 +77,13 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // the compositor already hears, so the history is here before the panel is
   // opened rather than fetched when it is.
   const clipboard = useClipboard(domicile);
+
+  // And whether the desk is locked, which is pushed for a harder reason: it is
+  // the compositor's state rather than this page's, because the compositor is
+  // what refuses to put a forwarded keystroke into the seat. So there is nothing
+  // here to set — a reload of this page does not open the desk, and this hook is
+  // told where it stands as the page connects.
+  const locked = useLocked(domicile);
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
@@ -172,6 +181,21 @@ export const Desktop = ({ desk, domicile }: Props) => {
           act(WindowAction.ClipboardDismissed());
         }}
         open={windows.clipboardOpen}
+      />
+      {/*
+        Last, and over every panel above it: the launcher and the clipboard are
+        `modal`, and a lock screen underneath an open launcher would be a locked
+        desk somebody could still type a path into.
+
+        It draws over a desktop that has already stopped listening rather than
+        stopping anything itself, and what takes it away is the compositor saying
+        the desk opened — never this page's own click. See `lock/Lock.tsx`.
+      */}
+      <Lock
+        locked={locked}
+        onUnlock={(passphrase) => {
+          domicile.unlock(passphrase);
+        }}
       />
       <NoScreens />
     </>

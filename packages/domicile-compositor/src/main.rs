@@ -109,6 +109,7 @@ mod file_indexing;
 mod idle;
 mod keymap;
 mod latency;
+mod lock;
 mod modifiers;
 mod outbound;
 mod peer_process;
@@ -133,6 +134,7 @@ use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
+use crate::lock::{ConfiguredPassphrase, Lock, Unlocking};
 use crate::modifiers::{Held, Modifiers};
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
@@ -153,7 +155,7 @@ use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Theme};
+use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
@@ -347,6 +349,14 @@ enum ClientRequest {
     /// so a terminal closed an hour ago is still something this can paste.
     CopyClipboardEntry {
         entry: u32,
+    },
+    /// Somebody typed a passphrase at the shell's lock screen.
+    ///
+    /// Here rather than in the brain because the lock is the *seat's*: what
+    /// being locked means is that nothing this compositor is handed is put into
+    /// the seat, and the seat lives on this thread. See [`crate::lock`].
+    Unlock {
+        passphrase: Passphrase,
     },
 }
 
@@ -1012,8 +1022,27 @@ fn read_chrome_messages(
     let mut joined = false;
     for line in reader.lines() {
         let Ok(line) = line else { break };
-        tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
-        let responses = match parse_chrome(line.trim()) {
+        let said = parse_chrome(line.trim());
+        // EVERY FRAME VERBATIM, EXCEPT THE ONE THAT CARRIES A SECRET. This line
+        // is what makes a drift between the two halves of the protocol readable
+        // — the bytes a page actually sent, beside the `Err` arm below that says
+        // what became of them — and it is also the line that would put this
+        // desk's passphrase in the journal. So an `unlock` is logged as the
+        // parsed message instead, whose `Debug` redacts the field by
+        // construction (`domicile_protocol::Passphrase`), and every other
+        // message keeps its bytes.
+        //
+        // Parsed first for that reason alone. A frame that does not parse is
+        // still logged verbatim, which is the one gap and a narrow one: serde
+        // ignores fields it does not know, so a passphrase reaches that arm only
+        // in a frame that misspelled `unlock` itself or sent something that is
+        // not a string.
+        if matches!(said, Ok(ChromeMessage::Unlock { .. })) {
+            tracing::debug!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
+        } else {
+            tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
+        }
+        let responses = match said {
             // Compositor-level side effects: intercept before the (pure) brain.
             // Compositor-level, before the brain: a claim on the keyboard is
             // the compositor's to keep, since it is the only thing that sees a
@@ -1227,6 +1256,17 @@ fn read_chrome_messages(
                 keycode, pressed, ..
             }) => {
                 hub.send_request(ClientRequest::Key { keycode, pressed });
+                Vec::new()
+            }
+            // Answered with nothing on this socket, and that is not silence:
+            // what a correct passphrase produces is `locked: false` to every
+            // chrome, from the Wayland thread that holds the lock. A desk of
+            // three monitors is three of these connections and one lock, so a
+            // reply here would be the one page that believed its own
+            // keystrokes. A refusal is a line in the compositor's log, without
+            // the passphrase in it — see `crate::lock`.
+            Ok(ChromeMessage::Unlock { passphrase }) => {
+                hub.send_request(ClientRequest::Unlock { passphrase });
                 Vec::new()
             }
             // Compositor-level: the chrome's pixel density is the output's
@@ -1753,6 +1793,21 @@ struct DomicileCompositor {
     /// removed by the registration it was inserted under, and by nothing
     /// else.
     idle_clock: Option<RegistrationToken>,
+    /// Whether this desk is locked, for a desktop that can lock.
+    ///
+    /// `None` is one that cannot, which is what a config stating no
+    /// `[lock] passphrase` means — see
+    /// [`ConfiguredPassphrase::stated`](crate::lock::ConfiguredPassphrase::stated)
+    /// for why that is a desk with no lock rather than a lock nothing opens.
+    ///
+    /// **NOT REPLACED BY A RELOAD, which `idle` above is.** Whether this desk is
+    /// locked is not something the config says — the config says only whether it
+    /// *can* lock — and rebuilding this from an edited file would be one of two
+    /// bad things: a desk unlocked by editing a file, or a locked desk whose
+    /// verifier has been taken out from under it and which nothing can now
+    /// open. So a passphrase added, changed or removed is the passphrase of the
+    /// next run. `ROADMAP.md` carries what a reload ought to do instead.
+    lock: Option<Lock<ConfiguredPassphrase>>,
     /// The loop this compositor is dispatched by, so that it can arm a source
     /// of its own after startup.
     ///
@@ -3220,6 +3275,115 @@ impl DomicileCompositor {
         }
     }
 
+    /// Whether this desk is locked, which is the question
+    /// [`handle_client_request`](DomicileCompositor::handle_client_request) asks
+    /// before it puts anything into the seat.
+    ///
+    /// A desk that cannot lock is not locked, which is the reading `None` has
+    /// to have: it is a desktop that stated no passphrase.
+    fn the_desk_is_locked(&self) -> bool {
+        self.lock.as_ref().is_some_and(Lock::locked)
+    }
+
+    /// Tell every chrome whether this desk is locked.
+    ///
+    /// The state rather than the edge, though every caller is an edge — see
+    /// [`crate::lock::announced`]. Read back off this compositor rather than
+    /// taken from the [`Unlocking`] that reached it, so there is one answer
+    /// rather than two that have to agree.
+    fn tell_the_chromes_whether_the_desk_is_locked(&self) {
+        self.hub
+            .broadcast(crate::lock::announced(self.the_desk_is_locked()));
+    }
+
+    /// Tell a chrome that has just said hello whether this desk is locked.
+    ///
+    /// **THE CALL THE WHOLE DESIGN IS FOR.** A page reload is a new page saying
+    /// hello, and the edge that raised its lock screen went out before it
+    /// existed — so without this a shell reloaded over a locked desk comes back
+    /// drawing an open desktop over a desk that has stopped listening, which is
+    /// the most convincing wrong picture this protocol could paint.
+    ///
+    /// Silent on a desktop that cannot lock, which is the difference from the
+    /// edges above and the same difference
+    /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here)
+    /// draws: no passphrase is no lock, and a `false` from a desk that can never
+    /// shut would be a shell holding a lock screen it can never be asked for.
+    fn tell_a_new_chrome_whether_the_desk_is_locked(&self) {
+        if self.lock.is_some() {
+            self.tell_the_chromes_whether_the_desk_is_locked();
+        }
+    }
+
+    /// Lock this desk, because nobody is at it.
+    ///
+    /// On the same edge the screens go dark on, and that is the whole of what
+    /// locks a desk today: there is no message a page can send to lock one and
+    /// no separate clock for it. `ROADMAP.md` carries both.
+    ///
+    /// Only on the edge into a locked desk. A desk nobody has opened blanks
+    /// again and again — dark, a hand, dark — and a second `locked: true` would
+    /// be a shell told to raise a lock screen it already has up, over a
+    /// passphrase somebody may be halfway through typing.
+    fn shut_the_desk(&mut self) {
+        let Some(lock) = self.lock.as_mut() else {
+            return;
+        };
+        if lock.shut() {
+            debug!("nobody is at this desktop; it locks itself");
+            // AND THE SEAT LETS GO OF WHAT IT IS HOLDING, which is the one
+            // thing the refusal at the injection cannot do for itself. What it
+            // drops from here on is an event that never happened as far as a
+            // client is concerned — except a *release*, which is the end of one
+            // that did. A key pressed before the lock and released after it
+            // would be a key down in this seat for good, and on a keymap that
+            // puts `Caps_Lock` on it, xkb clears the lock only on the release
+            // of the press that set it. `release_pressed_keys` is the same
+            // answer `ChromeHello` gives a reloaded page, for the same reason.
+            //
+            // A modifier is how this arrives without contrivance: an ordinary
+            // key repeats, so holding one goes on stirring the desk, where a
+            // Shift held while somebody reads the screen sends nothing at all
+            // for the whole timeout.
+            self.release_pressed_keys();
+            self.tell_the_chromes_whether_the_desk_is_locked();
+        }
+    }
+
+    /// Somebody typed a passphrase at the shell's lock screen.
+    ///
+    /// **NOTHING GOES BACK TO THE PAGE THAT ASKED, AND THAT IS DELIBERATE.**
+    /// What a correct passphrase produces is [`HostMessage::Locked`] to *every*
+    /// chrome — a desk of three monitors is three pages, and the desk they are
+    /// drawing has one lock — so a shell clears its lock screen because the desk
+    /// opened rather than because it believed its own keystrokes. The same
+    /// one-path-that-decides arrangement `SetTheme` has, for a harder reason:
+    /// a page that cleared its own lock would be a lock anybody with the
+    /// devtools could open.
+    ///
+    /// A refusal is a line in the log and no message at all. It says what
+    /// happened and never what was typed — there is nothing in [`Unlocking`] to
+    /// print, which is what makes that structural rather than a rule to
+    /// remember.
+    fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
+        let Some(lock) = self.lock.as_mut() else {
+            warn!("a chrome offered a passphrase to a desktop that has no lock");
+            return;
+        };
+        match lock.offered(passphrase) {
+            Unlocking::Opened => {
+                debug!("the passphrase opened this desktop");
+                self.tell_the_chromes_whether_the_desk_is_locked();
+            }
+            Unlocking::Refused => {
+                warn!("a passphrase this desktop did not take; it stays locked")
+            }
+            Unlocking::NothingToOpen => {
+                warn!("a chrome offered a passphrase to a desktop that is not locked")
+            }
+        }
+    }
+
     /// Keep a blanked desktop blanked through something that lit it.
     ///
     /// A hotplug is the one event that hands this compositor glass it never
@@ -3376,6 +3540,15 @@ impl DomicileCompositor {
                 "nobody is at this desktop; its screens go dark"
             );
             self.tell_the_chromes_whether_anybody_is_here();
+            // AND THE DESK SHUTS, on the same edge and before the modeset for
+            // the same reason the idle message goes out before it: a relight
+            // costs tens of milliseconds and a repaint costs one, so a shell
+            // told now has its lock screen up before there is light to read the
+            // desktop behind it by. The hand that brings the screens back does
+            // not open the desk — only the passphrase does — so what a person
+            // returning sees is a lit lock screen rather than the work they
+            // left.
+            self.shut_the_desk();
             self.state_the_connectors();
         }
         next
@@ -3869,6 +4042,19 @@ impl DomicileCompositor {
         // First, and for every request: this is the whole of what the
         // compositor knows about somebody being at the desk.
         self.keep_the_desktop_awake(&event);
+        // AFTER THE HAND IS COUNTED AND BEFORE ANY OF IT REACHES THE SEAT. The
+        // order is the whole arrangement: a hand on the keyboard of a locked
+        // desk still lights its screens — otherwise there is nothing to read
+        // the lock screen by — and still reaches no client. What stops is the
+        // injection, which is the only place it can stop: the page owns the
+        // input on this system, so a lock that refused at the socket would take
+        // the shell's own keys with it and there would be nothing left to type
+        // a passphrase into. Which requests are a hand is
+        // [`crate::lock::refused`].
+        if self.the_desk_is_locked() && crate::lock::refused(&event) {
+            debug!("this desktop is locked; what the shell forwarded reaches no client");
+            return;
+        }
         match event {
             ClientRequest::PointerMotion { app_id, x, y } => {
                 let Some(surface) = self.surface_for(&app_id) else {
@@ -4022,6 +4208,7 @@ impl DomicileCompositor {
                     "the shell asked for a clipboard entry this desktop no longer holds"
                 ),
             },
+            ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
             ClientRequest::ChromeHello { served_by } => {
                 // A page has started, and whatever the page before it was
                 // holding down is gone along with it: nothing will ever send
@@ -4061,6 +4248,14 @@ impl DomicileCompositor {
                 // the edge that would have said otherwise went out before the
                 // page existed.
                 self.tell_a_new_chrome_whether_anybody_is_here();
+                // And whether the desk is locked, which is the one of these a
+                // page can be told wrong by silence *and* where being told
+                // wrong is the failure the lock exists to prevent: a shell that
+                // reloaded — or an engine that died and came back — would
+                // otherwise draw an open desktop over a desk that has stopped
+                // listening, and the edge that would have said so went out
+                // before this page existed.
+                self.tell_a_new_chrome_whether_the_desk_is_locked();
             }
             ClientRequest::SetOutputScale { ratio, scale } => {
                 // Kept whether or not the scale below is taken up. A described
@@ -5884,6 +6079,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Armed below rather than here, through the one path a reload uses
         // too — see `arm_the_idle_clock`.
         idle_clock: None,
+        // Open, on a desk that can lock at all: a desktop comes up with
+        // somebody at it, and what shuts it is nobody being at it. Built once
+        // and never from a reload — see the field.
+        lock: ConfiguredPassphrase::stated(config.lock.passphrase()).map(Lock::held_by),
         loop_handle: event_loop.handle(),
     };
 
