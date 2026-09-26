@@ -40,8 +40,7 @@ exit 127
 EOF
 chmod +x "$WORK/src/$OUT/chrome" "$WORK/src/$OUT/domicile_color_probe"
 
-PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-OUT="$OUT" PORT="$PORT" BROKER="$WORK/broker" PROFILE="$WORK/profile" \
+OUT="$OUT" BROKER="$WORK/broker" PROFILE="$WORK/profile" \
   HTTP_LOG="$WORK/http.log" "$GUARD" "$WORK/src" >"$WORK/guard.log" 2>&1
 status=$?
 

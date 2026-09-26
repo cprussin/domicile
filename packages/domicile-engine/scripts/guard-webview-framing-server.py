@@ -181,7 +181,12 @@ class RefusesFraming(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=True,
+        help="0 for any free one; the serving line names the one taken",
+    )
     parser.add_argument(
         "--color",
         required=True,
@@ -203,7 +208,7 @@ def main():
     # buffer.
     print(
         "serving %s, %s and %s on 127.0.0.1:%d"
-        % (REFUSES, PERMITS, FRAMES, arguments.port),
+        % (REFUSES, PERMITS, FRAMES, server.server_address[1]),
         flush=True,
     )
     server.serve_forever()

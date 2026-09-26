@@ -17,6 +17,8 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$ROOT/packages/domicile-engine/scripts/lib-ports.sh"
 SERVER="$ROOT/packages/domicile-engine/scripts/guard-webview-history-server.py"
 [ -f "$SERVER" ] || {
   echo "no server at $SERVER" >&2
@@ -32,16 +34,12 @@ command -v curl >/dev/null || {
   exit 77
 }
 
-# Not the guard's own port, and not the framing fixture's test port either:
-# these all run on every pull request and two of them on one number cannot
-# overlap.
-PORT="${PORT:-8734}"
 # Short, because what is asserted is that the wait exists rather than how long
 # it is. The guard runs with a wait long enough to stop a navigation inside.
 SLOW_SECONDS=2
 
 LOG="$(mktemp)"
-python3 "$SERVER" --port "$PORT" --slow-seconds "$SLOW_SECONDS" >"$LOG" 2>&1 &
+python3 "$SERVER" --port 0 --slow-seconds "$SLOW_SECONDS" >"$LOG" 2>&1 &
 SERVER_PID=$!
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null
@@ -54,7 +52,14 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 grep -q "serving" "$LOG" 2>/dev/null || {
-  echo "the fixture never came up on port $PORT. It said:" >&2
+  echo "the fixture never came up. It said:" >&2
+  cat "$LOG" >&2
+  exit 1
+}
+# The port it took, which is the one it says: asked for none in particular, it
+# must name the one it got.
+PORT="$(served_port "$LOG")" || {
+  echo "the fixture never said which port it took. It said:" >&2
   cat "$LOG" >&2
   exit 1
 }

@@ -132,7 +132,12 @@ class HasAHistory(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=True,
+        help="0 for any free one; the serving line names the one taken",
+    )
     parser.add_argument(
         "--slow-seconds",
         type=float,
@@ -149,7 +154,7 @@ def main():
     # buffer.
     print(
         "serving /one /two /slow on 127.0.0.1:%d, %s after %gs"
-        % (arguments.port, SLOW_PATH, arguments.slow_seconds),
+        % (server.server_address[1], SLOW_PATH, arguments.slow_seconds),
         flush=True,
     )
     server.serve_forever()

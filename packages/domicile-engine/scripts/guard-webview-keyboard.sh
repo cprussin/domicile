@@ -74,6 +74,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -106,11 +108,6 @@ PLAIN_EVDEV=30
 PLAIN_CODE="KeyA"
 PLAIN_KEY="a"
 PLAIN_VKEY=65
-
-# Not the framing guard's 8731 and not spike-iframe.sh's 8730: two guards on one
-# port is two guards that cannot run in the same job, and CI runs them in one.
-PORT="${PORT:-8732}"
-DEBUG_PORT="${DEBUG_PORT:-9232}"
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-webview-keyboard-broker}"
@@ -168,13 +165,17 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The page a browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
 #    Shared with guard-webview-click.sh, which needs the same thing of it.
-python3 "$SCRIPTS/guard-webview-guest-page.py" --port "$PORT" \
+python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 wait_for_line 240 "serving" "$HTTP_LOG" || {
-  annotate_from "guard-webview-keyboard: nothing came up on port $PORT" "$HTTP_LOG"
+  annotate_from "guard-webview-keyboard: its page server never came up" "$HTTP_LOG"
   echo "the server said:" >&2
   tail -20 "$HTTP_LOG" >&2
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-keyboard: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
 SUBJECT="http://127.0.0.1:$PORT/page"
@@ -209,7 +210,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-keyboard.js" \
   --domicile-control-socket="$CONTROL" \
-  --remote-debugging-port="$DEBUG_PORT" \
+  --remote-debugging-port=0 \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
@@ -222,6 +223,10 @@ wait_for_line "$TRIES" "GUARD claimed" "$ENGINE_LOG" || {
   annotate_from "guard-webview-keyboard: the shell never claimed a chord, so nothing was asked for" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -40 "$ENGINE_LOG" >&2
+  exit 1
+}
+DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
+  annotate_from "guard-webview-keyboard: the engine never said which debugging port it took" "$ENGINE_LOG"
   exit 1
 }
 echo "the shell claimed Alt+Tab, showing a <$KIND>"

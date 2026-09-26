@@ -116,6 +116,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -127,11 +129,6 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 DRIVE="history"
 [ "$NEGATIVE" = "1" ] && DRIVE="none"
-
-# Not the framing guard's 8731, not the keyboard guard's 8732 and not the port
-# `scripts/test-webview-history-server.sh` takes: two guards on one number is
-# two guards that cannot run in the same job, and CI runs them in one.
-PORT="${PORT:-8733}"
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-webview-history-broker}"
@@ -205,12 +202,16 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The three pages. Their own server rather than real sites, for the reason
 #    the framing guard has one: `crux` reaches no arbitrary host.
 python3 "$SCRIPTS/guard-webview-history-server.py" \
-  --port "$PORT" --slow-seconds "$SLOW_SECONDS" >"$HTTP_LOG" 2>&1 &
+  --port 0 --slow-seconds "$SLOW_SECONDS" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 wait_for_line 240 "serving" "$HTTP_LOG" || {
-  annotate_from "guard-webview-history: nothing came up on port $PORT" "$HTTP_LOG"
+  annotate_from "guard-webview-history: its page server never came up" "$HTTP_LOG"
   echo "the server said:" >&2
   tail -20 "$HTTP_LOG" >&2
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-history: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
 SUBJECT="http://127.0.0.1:$PORT"

@@ -119,7 +119,12 @@ class ShowsWhatItWasGiven(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=True,
+        help="0 for any free one; the serving line names the one taken",
+    )
     arguments = parser.parse_args()
 
     # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
@@ -127,7 +132,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), ShowsWhatItWasGiven)
     # Before serve_forever, so a guard waiting on this line is not waiting on a
     # buffer.
-    print("serving %s on 127.0.0.1:%d" % (PATH, arguments.port), flush=True)
+    print("serving %s on 127.0.0.1:%d" % (PATH, server.server_address[1]), flush=True)
     server.serve_forever()
 
 

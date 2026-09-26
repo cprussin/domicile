@@ -63,6 +63,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
 . "$SCRIPTS/lib-control-budget.sh"
 
@@ -81,10 +83,6 @@ NEGATIVE="${NEGATIVE:-0}"
 # a pixel that matches came from the page it belongs to.
 COLOR="${COLOR:-D81B60}"
 WITNESS="${WITNESS:-20304A}"
-
-# Not spike-iframe.sh's 8730: two guards on one port is two guards that cannot
-# run at the same time, and CI runs them in one job.
-PORT="${PORT:-8731}"
 
 # How long the probe looks. Long enough for a browser to start, load a page,
 # ask for a guest, have one attached and navigated, and paint it.
@@ -200,7 +198,7 @@ measure() { # $1 which run, $2 the URL to open
 #    arbitrary host, and a guard whose subject could change its headers is a
 #    guard that fails for reasons nobody chose.
 python3 "$SCRIPTS/guard-webview-framing-server.py" \
-  --port "$PORT" --color "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
+  --port 0 --color "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 60); do
@@ -208,9 +206,13 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 grep -q "serving" "$HTTP_LOG" 2>/dev/null || {
-  annotate_from "guard-webview-framing: nothing came up on port $PORT" "$HTTP_LOG"
+  annotate_from "guard-webview-framing: its page server never came up" "$HTTP_LOG"
   echo "the server said:" >&2
   tail -20 "$HTTP_LOG" >&2
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-framing: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
 SITE="http://127.0.0.1:$PORT"

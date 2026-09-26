@@ -97,6 +97,8 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -106,14 +108,6 @@ fi
 
 # NEGATIVE=1 clicks the shell's strip instead of the window. See the header.
 NEGATIVE="${NEGATIVE:-0}"
-
-# Not spike-iframe.sh's 8730, the framing guard's 8731, the keyboard guard's
-# 8732 or the history guard's 8733: two guards on one port is two guards that
-# cannot run in the same job, and CI runs them in one. This guard did take 8733
-# while it was written -- the history guard landed on main with the same number
-# in the window between, and a rebase merges two files that never touched.
-PORT="${PORT:-8734}"
-DEBUG_PORT="${DEBUG_PORT:-9233}"
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-webview-click-broker}"
@@ -185,13 +179,17 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # 1. The page a browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
-python3 "$SCRIPTS/guard-webview-guest-page.py" --port "$PORT" \
+python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 wait_for_line 240 "serving" "$HTTP_LOG" || {
-  annotate_from "guard-webview-click: nothing came up on port $PORT" "$HTTP_LOG"
+  annotate_from "guard-webview-click: its page server never came up" "$HTTP_LOG"
   echo "the server said:" >&2
   tail -20 "$HTTP_LOG" >&2
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-click: its page server never said which port it took" "$HTTP_LOG"
   exit 1
 }
 SUBJECT="http://127.0.0.1:$PORT/page"
@@ -211,7 +209,7 @@ echo "serving a browser window's page at $SUBJECT"
   --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SUBJECT" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-click.js" \
-  --remote-debugging-port="$DEBUG_PORT" \
+  --remote-debugging-port=0 \
   --no-sandbox --password-store=basic --no-first-run \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
@@ -224,6 +222,10 @@ wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" || {
   annotate_from "guard-webview-click: the shell page never ran, so nothing here was ever set up" "$ENGINE_LOG"
   echo "the engine said:" >&2
   tail -40 "$ENGINE_LOG" >&2
+  exit 1
+}
+DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
+  annotate_from "guard-webview-click: the engine never said which debugging port it took" "$ENGINE_LOG"
   exit 1
 }
 echo "the shell is up, with a <webview> under a ${STRIP_HEIGHT}px strip"
