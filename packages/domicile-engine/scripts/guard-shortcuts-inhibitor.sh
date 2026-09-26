@@ -15,7 +15,8 @@
 # have matched went unmatched, or that a shell's Meta chord reached the page.
 # Every one of those needs a key put into the nested compositor and an answer
 # about which side took it, and this reads a request rather than a keystroke.
-# `ROADMAP.md` carries that as the work still open here.
+# `guard-shortcuts-inhibitor-chord.sh` is that measurement, and it is a guard of
+# its own so that this one's pass goes on meaning exactly one thing.
 #
 # WHY A REQUEST IS WORTH GUARDING ANYWAY. Patch `0038` is what makes a shell's
 # Meta chords reach a nested desktop at all, and until this ran, nothing in the
