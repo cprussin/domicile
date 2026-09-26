@@ -114,6 +114,9 @@ class FakeHost implements DomicileHost {
   unlock(passphrase: string): void {
     this.calls.push(["unlock", passphrase]);
   }
+  themeCaptured(theme: Theme): void {
+    this.calls.push(["themeCaptured", theme]);
+  }
   grabShortcut(shortcut: DomicileShortcut): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
@@ -329,6 +332,25 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ theme: "light" }]);
     });
 
+    it("delivers the theme the desk's windows are drawn in", () => {
+      // The other half of `theme`: it arrives once the windows have turned,
+      // which a shell holding its wipe waits for.
+      const seen: unknown[] = [];
+      domicile.on("windows_theme", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "windowstheme",
+        Object.assign(new Event("windowstheme"), {
+          arrival: 0,
+          theme: "light" as const,
+        }),
+      );
+
+      expect(seen).toStrictEqual([{ theme: "light" }]);
+    });
+
     it("delivers whether anybody is at the desk", () => {
       // Through the same hold as the rest, and that is what this one is for:
       // the message a page gets on connecting is the one that says the desk
@@ -488,6 +510,9 @@ describe("DomicileClient", () => {
       // what this page hears about it is a `locked` message.
       domicile.unlock("open sesame");
       expect(host.lastCall()).toStrictEqual(["unlock", "open sesame"]);
+
+      domicile.themeCaptured("light");
+      expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);
 
       domicile.grabShortcut({ altKey: true, keycode: 28 });
       expect(host.lastCall()).toStrictEqual([

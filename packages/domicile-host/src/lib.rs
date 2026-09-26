@@ -25,6 +25,7 @@ pub mod home_watch;
 pub mod index_file;
 pub mod index_location;
 pub mod ipc;
+pub mod theme_turnover;
 use domicile_scene::{KeyboardTarget, Scene};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
@@ -91,6 +92,10 @@ pub struct Host {
     /// the answer for a host nobody told is the dark the chrome was drawn
     /// against, which is also what `[theme] mode` defaults to.
     theme: Theme,
+    /// Which way round the desk's windows are drawn. Apart from `theme`
+    /// because the windows turn after the chromes do -- see
+    /// [`theme_turnover`] -- and a chrome connecting in between is told each.
+    windows_theme: Theme,
 }
 
 impl Host {
@@ -175,6 +180,22 @@ impl Host {
     /// broadcasts it when the theme changes under the chromes already there.
     pub fn describe_theme(&self) -> HostMessage {
         HostMessage::Theme { theme: self.theme }
+    }
+
+    /// Remember which way round the desk's windows are now drawn, and say so
+    /// if that moved.
+    pub fn set_windows_theme(&mut self, theme: Theme) -> Option<HostMessage> {
+        (self.windows_theme != theme).then(|| {
+            self.windows_theme = theme;
+            self.describe_windows_theme()
+        })
+    }
+
+    /// The windows' theme, in the message a chrome is told it as.
+    pub fn describe_windows_theme(&self) -> HostMessage {
+        HostMessage::WindowsTheme {
+            theme: self.windows_theme,
+        }
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the
@@ -383,6 +404,7 @@ impl Host {
             | ChromeMessage::PreviewFile { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::SetTheme { .. }
+            | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }
             | ChromeMessage::PointerButton { .. }
