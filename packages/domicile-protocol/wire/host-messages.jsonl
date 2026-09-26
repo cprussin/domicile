@@ -22,6 +22,7 @@
 {"type":"file_preview","path":"gone.txt","kind":"unreadable"}
 {"type":"battery","charge":0.42,"charging":true}
 {"type":"theme","theme":"light"}
+{"type":"windows_theme","theme":"light"}
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}

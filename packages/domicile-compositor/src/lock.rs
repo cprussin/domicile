@@ -445,7 +445,11 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SetOutputSize { .. }
             | ClientRequest::ChromeHello { .. }
             | ClientRequest::ClipboardCopied { .. }
-            | ClientRequest::Unlock { .. },
+            | ClientRequest::Unlock { .. }
+            // The rest of a theme change, which a locked desk takes for the
+            // reason it takes `SetTheme`: see below.
+            | ClientRequest::TurnTheWindows { .. }
+            | ClientRequest::ThemeCaptured { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. }) => None,
     }
@@ -864,6 +868,20 @@ mod tests {
                 ClientRequest::ClipboardCopied {
                     clipboard: Clipboard::Copy,
                     text: "what was copied".into(),
+                },
+            ),
+            (
+                "a theme turning the desk's windows",
+                ClientRequest::TurnTheWindows {
+                    theme: Theme::Dark,
+                    chromes: vec![1],
+                },
+            ),
+            (
+                "a shell holding its old frame for a theme",
+                ClientRequest::ThemeCaptured {
+                    chrome: 1,
+                    theme: Theme::Dark,
                 },
             ),
             (
