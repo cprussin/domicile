@@ -41,7 +41,10 @@ serde_json = "1"
 # the host protocol, which are machine-to-machine; this one a person reads.
 toml = { version = "1.0", default-features = false, features = ["parse", "serde"] }
 thiserror = "2"
-notify = "8"
+# A release candidate, pinned exactly, for `Config::with_event_kinds`: 8 asks the
+# kernel for every open under a watched tree, which overflows its queue on any
+# real home — see `domicile_host::home_watch`. Move to 9.0.0 when it is out.
+notify = "=9.0.0-rc.5"
 # `[files] omit` in the compositor's config: gitignore-shaped globs over paths.
 globset = { version = "0.4", default-features = false }
 tempfile = "3"

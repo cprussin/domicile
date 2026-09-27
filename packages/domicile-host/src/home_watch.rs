@@ -9,6 +9,8 @@
 
 use std::path::Path;
 
+use notify::EventKindMask;
+
 /// A live watch over a home directory, for as long as it is kept.
 ///
 /// **Dropping it ends the watch**, and nothing says so: `heard` is simply not
@@ -42,7 +44,16 @@ pub fn watch_home(
 ) -> notify::Result<HomeWatcher> {
     use notify::Watcher;
 
-    let mut watcher = notify::recommended_watcher(heard)?;
+    // WHAT THE INDEX READS, AND NOTHING ELSE. The kernel queues a bounded
+    // number of events and says it dropped some when that fills, which the
+    // index can only answer with a walk. Asked for everything, the queue was
+    // mostly opens — one per directory from setting this watch up, which
+    // visits every one, and one per directory from the walk — so a home of
+    // more directories than `max_queued_events` overflowed it every time, and
+    // was walked again, forever. A write into a file is no row either.
+    let only = EventKindMask::CREATE | EventKindMask::REMOVE | EventKindMask::MODIFY_NAME;
+    let mut watcher =
+        notify::RecommendedWatcher::new(heard, notify::Config::default().with_event_kinds(only))?;
     watcher.watch(home, notify::RecursiveMode::Recursive)?;
 
     Ok(HomeWatcher { _watcher: watcher })
