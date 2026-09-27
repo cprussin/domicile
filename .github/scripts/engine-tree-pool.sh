@@ -49,7 +49,8 @@
 # costs one run what every run cost before the pool existed, and a wrong
 # *claim* about a tree's contents is a green check over code nothing compiled.
 # This script is not in a position to make the second kind of mistake, and that
-# is deliberate.
+# is deliberate. It reads the series stamp beside a tree only to rank the trees;
+# `carries` still checks the tree the pick names.
 #
 # THE POOL IS THE MACHINE'S, NOT THIS REPOSITORY'S. How many trees fit is a
 # question about a ZFS quota on one machine in a house, so the slots are
@@ -86,6 +87,14 @@ PATH_TO_TREE="$ROOT/chromium"
 # nothing, and it is the cheapest thing in the pool to take.
 slot_pin() { # slot directory
   cat "$1/.domicile-synced-pin" 2>/dev/null | tr -d '[:space:]'
+}
+
+# The series a slot last carried: line one of the stamp
+# `engine-series-stamp.sh record` writes beside the checkout. A preference and
+# never a claim -- whether the tree still carries it is `carries`'s question,
+# asked after the pick, and a stale stamp here costs one ordinary rebuild.
+slot_series() { # slot directory
+  sed -n '1p' "$1/.domicile-series-stamp" 2>/dev/null
 }
 
 # When a slot was last handed out. Not the mtime of the tree — a build writes
@@ -130,9 +139,19 @@ usable() {
   done
 }
 
-# The slot to give this pin, printed as a path. In order: the one that already
-# carries it, then any that carries nothing, then the one no run has asked for
-# in longest.
+# The slot to give this pin, printed as a path. In order: one at the pin whose
+# stamp names this run's series, then the rest at the pin least recently used
+# first, then any that carries nothing, then the one no run has asked for in
+# longest.
+#
+# THE SERIES BEFORE THE PIN, because the pin alone let two pull requests at one
+# pin swap trees: run 36228817911 rebuilt in tree-1 the series 36223658113 had
+# just built in tree-0. A series match skips the reset, the apply and the
+# compile; a pin match skips only the sync. And among trees at the pin, the one
+# evicted is the one asked for longest ago rather than the first by name, which
+# is the series least likely to be wanted next. The stamp holds a hash, so
+# "shares the most" stops at the pin: no branch or pull request is written
+# beside a tree to compare.
 #
 # "CARRIES NOTHING" IS ABOUT THE PIN AND NOT ABOUT THE TREE, and the two were
 # one thing until run 35703990131 showed what that costs. A slot whose sync
@@ -152,12 +171,19 @@ usable() {
 # the first line and `pick` wants the whole list: when the best tree is already
 # held by another run, the next-best is the answer, and a function that
 # returned one slot could not say what it was.
-candidates() { # pin
+candidates() { # pin series
   local slot at
   for slot in $(usable); do
     [ "$(slot_pin "$slot")" = "$1" ] || continue
+    [ "$(slot_series "$slot")" = "$2" ] || continue
     printf '%s\n' "$slot"
   done
+  for slot in $(usable); do
+    [ "$(slot_pin "$slot")" = "$1" ] || continue
+    [ "$(slot_series "$slot")" = "$2" ] && continue
+    at="$(stat -c %Y "$(used_file "$slot")" 2>/dev/null || echo 0)"
+    printf '%s %s\n' "$at" "$slot"
+  done | LC_ALL=C sort -n | cut -d' ' -f2-
   for slot in $(usable); do
     [ "$(slot_pin "$slot")" = "$1" ] && continue
     [ -z "$(slot_pin "$slot")" ] || continue
@@ -173,9 +199,14 @@ candidates() { # pin
   done | LC_ALL=C sort -n | cut -d' ' -f2-
 }
 
-choose() { # pin
-  candidates "$1" | head -1
+choose() { # pin series
+  candidates "$1" "$2" | head -1
 }
+
+# This run's series, from the script whose stamps it is compared against, so
+# the two cannot mean different things. Asked once, outside any `$(...)` loop,
+# so a failure stops the run instead of reading as "no tree matches".
+STAMP_SH="$(cd "$(dirname "$0")" && pwd)/engine-series-stamp.sh"
 
 # THE LOCK IS engine-tree-lock.sh's, NOT A SECOND ONE. That script already
 # names, takes and drops a per-tree lock, and it is what a person and the
@@ -225,7 +256,8 @@ case "$action" in
       exit 1
     fi
 
-    for slot in $(candidates "$pin"); do
+    series="$("$STAMP_SH" identity)" || exit 1
+    for slot in $(candidates "$pin" "$series"); do
       if take_slot "$slot" "$owner"; then
         touch "$(used_file "$slot")"
         printf '%s\n' "$slot/src"
@@ -314,7 +346,8 @@ case "$action" in
       exit 1
     fi
 
-    slot="$(choose "$pin")"
+    series="$("$STAMP_SH" identity)" || exit 1
+    slot="$(choose "$pin" "$series")"
     was="$(slot_pin "$slot")"
 
     # Replaced rather than repointed: `ln -sfn` onto an existing symlink to a

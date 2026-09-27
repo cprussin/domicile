@@ -297,6 +297,54 @@ out="$(pick "$root" bbbbbbb 'warm run')"
 expect "the tree carrying the pin wins even though it is not first" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
+echo
+echo "== a tree already carrying this run's series is the one to take =="
+
+# Run 36228817911 rebuilt in tree-1 the series 36223658113 had just built in
+# tree-0: both trees were at the pin, and the pin was all the pick looked at.
+# The stamp beside a tree names the series it last carried, and a pick that
+# reads it hands the run the tree whose reset, apply and compile are skipped.
+SERIES_ID="$("$ROOT/.github/scripts/engine-series-stamp.sh" identity)"
+stamped() { # root, slot, identity
+  printf '%s\n%s\n' "$3" deadbeef >"$1/trees/tree-$2/.domicile-series-stamp"
+}
+
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+stamped "$root" 0 some-other-series
+used_at "$root" 0 99999
+carrying "$root" 1 aaaaaaa
+stamped "$root" 1 "$SERIES_ID"
+used_at "$root" 1 1
+out="$(pick "$root" aaaaaaa 'same series')"
+expect "the tree carrying this series wins over the least recently used" ok \
+  "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
+
+# Preferred, never taken from under a holder: the lock still decides.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+carrying "$root" 1 aaaaaaa
+stamped "$root" 1 "$SERIES_ID"
+DOMICILE_BUILD_ROOT="$root" "$ROOT/.github/scripts/engine-tree-lock.sh" \
+  take "$root/trees/tree-1/src" 'holder' >/dev/null 2>&1
+out="$(pick "$root" aaaaaaa 'same series, held')"
+expect "a held tree carrying this series is skipped" ok \
+  "$([ "$out" = "$root/trees/tree-0/src" ] && echo ok || echo "said $out")"
+
+# No tree carries the series, so one at the pin loses what it holds. The one
+# to lose is the one no run has asked for in longest -- not the first by name,
+# which is how two pull requests at one pin evicted each other's series.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+stamped "$root" 0 series-x
+used_at "$root" 0 1
+carrying "$root" 1 aaaaaaa
+stamped "$root" 1 series-y
+used_at "$root" 1 99999
+out="$(pick "$root" aaaaaaa 'new series')"
+expect "with no series match, the least recently used tree at the pin is taken" ok \
+  "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
+
 # A run from a workflow older than per-tree locks holds the single lock and
 # repoints /build/chromium into whichever tree it likes, so nothing is free.
 root="$(build_root 2)"
