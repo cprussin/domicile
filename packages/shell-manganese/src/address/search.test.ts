@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Engine, searchUrl, taggedSearch } from "./search";
+import { Engine, searchUrl, taggedSearch, taggedSite } from "./search";
 
 describe("searchUrl", () => {
   it("searches Google for a query with no tag in it", () => {
@@ -30,6 +30,21 @@ describe("searchUrl", () => {
   it("sends an !im query to Google Images", () => {
     expect(searchUrl("!im brutalism")).toBe(
       "https://www.google.com/search?q=brutalism&tbm=isch",
+    );
+  });
+
+  it("sends a !gh query of one word to that user or repository on GitHub", () => {
+    // A name is a place on GitHub before it is a search, so the one word goes
+    // to the page it names; the search is the launcher's second row.
+    expect(searchUrl("!gh cprussin")).toBe("https://github.com/cprussin");
+    expect(searchUrl("!gh cprussin/domicile")).toBe(
+      "https://github.com/cprussin/domicile",
+    );
+  });
+
+  it("searches GitHub for a !gh query that is not one name", () => {
+    expect(searchUrl("!gh wayland compositor")).toBe(
+      "https://github.com/search?q=wayland%20compositor",
     );
   });
 
@@ -79,5 +94,23 @@ describe("taggedSearch", () => {
 
   it("is nothing for a query with no tag in it", () => {
     expect(taggedSearch("kate bush")).toBeUndefined();
+  });
+});
+
+describe("taggedSite", () => {
+  it("names the page a !gh query's one word goes to", () => {
+    expect(taggedSite("cprussin/domicile !gh")).toStrictEqual({
+      engine: Engine.GitHub,
+      path: "cprussin/domicile",
+      url: "https://github.com/cprussin/domicile",
+    });
+  });
+
+  it("is nothing for words that are not a name on the tag's site", () => {
+    // More than a user and a repository is a path GitHub has no page for, and
+    // a site the tag names has no pages to go to at all.
+    expect(taggedSite("!gh kate bush")).toBeUndefined();
+    expect(taggedSite("!gh a/b/c")).toBeUndefined();
+    expect(taggedSite("!wiki mesa")).toBeUndefined();
   });
 });

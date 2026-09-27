@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
+import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import { fireEvent, render, screen, within } from "@testing-library/react";
@@ -174,7 +175,20 @@ describe("Launcher", () => {
     ]);
   });
 
+  it("offers the page a !gh name goes to, then a search for it on GitHub", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "!gh cprussin");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Go to cprussin on GitHub",
+      "Search for cprussin on GitHub",
+      "Search for !gh cprussin",
+    ]);
+  });
+
   it.each([
+    ["!gh", <GithubLogoIcon key="gh" size={16} />],
     ["!im", <GoogleLogoIcon key="im" size={16} />],
     ["!maps", <GoogleLogoIcon key="maps" size={16} />],
     ["!wiki", <WikipediaLogoIcon key="wiki" size={16} />],
@@ -274,6 +288,16 @@ describe("Launcher", () => {
       Launch.Browsed(
         "https://www.youtube.com/results?search_query=kate%20bush",
       ),
+    ]);
+  });
+
+  it("goes to the repository a !gh name is", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "!gh cprussin/domicile{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Browsed("https://github.com/cprussin/domicile"),
     ]);
   });
 

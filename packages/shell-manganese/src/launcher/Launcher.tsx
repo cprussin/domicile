@@ -12,6 +12,7 @@ import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FileXIcon } from "@phosphor-icons/react/dist/ssr/FileX";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { FolderDashedIcon } from "@phosphor-icons/react/dist/ssr/FolderDashed";
+import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
@@ -341,6 +342,17 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
         </>
       );
     }
+    case ChoiceKind.TaggedSite: {
+      return (
+        <>
+          <RowTile icon={logoOf(choice.engine)} />
+          <span className={rowNameStyles}>
+            <span className={rowVerbStyles}>Go to</span> {choice.path}{" "}
+            <span className={rowVerbStyles}>on</span> {nameOf(choice.engine)}
+          </span>
+        </>
+      );
+    }
   }
 };
 
@@ -440,6 +452,15 @@ const Pending = ({ choice }: { choice: Choice }) => {
         />
       );
     }
+    case ChoiceKind.TaggedSite: {
+      return (
+        <Placeholder
+          icon={logoOf(choice.engine)}
+          note={nameOf(choice.engine)}
+          title={choice.path}
+        />
+      );
+    }
   }
 };
 
@@ -500,7 +521,8 @@ const ChoicePreview = ({
     }
     case ChoiceKind.Site:
     case ChoiceKind.Search:
-    case ChoiceKind.TaggedSearch: {
+    case ChoiceKind.TaggedSearch:
+    case ChoiceKind.TaggedSite: {
       return (
         <webview className={viewStyles} src={choice.url} title={choice.url} />
       );
@@ -761,6 +783,9 @@ const keyOf = (choice: Choice): string => {
     case ChoiceKind.TaggedSearch: {
       return `tagged:${choice.url}`;
     }
+    case ChoiceKind.TaggedSite: {
+      return `tagged-site:${choice.url}`;
+    }
   }
 };
 
@@ -770,6 +795,9 @@ const keyOf = (choice: Choice): string => {
  */
 const logoOf = (engine: Engine): typeof FileIcon => {
   switch (engine) {
+    case Engine.GitHub: {
+      return GithubLogoIcon;
+    }
     case Engine.GoogleImages:
     case Engine.GoogleMaps: {
       return GoogleLogoIcon;
@@ -785,6 +813,9 @@ const logoOf = (engine: Engine): typeof FileIcon => {
 
 const nameOf = (engine: Engine): string => {
   switch (engine) {
+    case Engine.GitHub: {
+      return "GitHub";
+    }
     case Engine.GoogleImages: {
       return "Google Images";
     }

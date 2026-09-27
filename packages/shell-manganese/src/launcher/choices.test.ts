@@ -59,6 +59,22 @@ describe("choicesFor", () => {
     ]);
   });
 
+  it("offers the page a !gh name goes to above the search for it", () => {
+    expect(choicesFor("!gh cprussin", [])).toStrictEqual([
+      Choice.TaggedSite({
+        engine: Engine.GitHub,
+        path: "cprussin",
+        url: "https://github.com/cprussin",
+      }),
+      Choice.TaggedSearch({
+        engine: Engine.GitHub,
+        query: "cprussin",
+        url: "https://github.com/search?q=cprussin",
+      }),
+      search("!gh cprussin"),
+    ]);
+  });
+
   it("offers a path spelled like one, whether or not the host found it", () => {
     // The list is what a home has in it, not what exists: `/etc/hosts` is not
     // under home and is still a file. A leading `/`, `./`, `../` or `~/`
@@ -85,10 +101,19 @@ describe("launchOf", () => {
     );
   });
 
-  it("browses a site or either kind of search", () => {
+  it("browses a site, a tagged one, or any kind of search", () => {
     expect(launchOf(Choice.Site("https://example.com"))).toStrictEqual(
       Launch.Browsed("https://example.com"),
     );
+    expect(
+      launchOf(
+        Choice.TaggedSite({
+          engine: Engine.GitHub,
+          path: "cprussin",
+          url: "https://github.com/cprussin",
+        }),
+      ),
+    ).toStrictEqual(Launch.Browsed("https://github.com/cprussin"));
     expect(launchOf(search("kate bush"))).toStrictEqual(
       Launch.Browsed("https://google.com/search?q=kate%20bush"),
     );

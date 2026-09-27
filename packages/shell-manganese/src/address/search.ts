@@ -5,12 +5,17 @@
 // that carries none goes to Google. Anywhere in the query rather than at the
 // front, because that is how a tag actually gets typed — the words go in, the
 // wrong results are imagined, and the tag is appended.
+//
+// A site can also have pages a name goes to: `!gh cprussin/domicile` is a
+// repository before it is a search, so a tagged name goes there, and the
+// search for it is the second answer rather than the first.
 
 /** How a query becomes a URL, with `%QUERY%` standing in for the escaped text. */
 const GOOGLE = "https://google.com/search?q=%QUERY%";
 
 /** The sites a tag can send a query to. */
 export enum Engine {
+  GitHub,
   GoogleImages,
   GoogleMaps,
   Wikipedia,
@@ -25,6 +30,20 @@ export type TaggedSearch = {
   url: string;
 };
 
+/** How a site a tag names turns a name into one of its pages. */
+type Site = {
+  shape: RegExp;
+  url: string;
+};
+
+/** A page on a site a tag named, which the query's one word is the name of. */
+export type TaggedSite = {
+  engine: Engine;
+  /** The word, as the page's path. */
+  path: string;
+  url: string;
+};
+
 /**
  * The tags, and the engine each one picks.
  *
@@ -32,6 +51,7 @@ export type TaggedSearch = {
  * types and because a bare `yt` is a word somebody may be searching for.
  */
 const TAGS: Readonly<Record<string, Engine>> = {
+  "!gh": Engine.GitHub,
   "!im": Engine.GoogleImages,
   "!maps": Engine.GoogleMaps,
   "!wiki": Engine.Wikipedia,
@@ -40,6 +60,7 @@ const TAGS: Readonly<Record<string, Engine>> = {
 
 /** How a query becomes a URL on each engine. */
 const ENGINE_URLS: Readonly<Record<Engine, string>> = {
+  [Engine.GitHub]: "https://github.com/search?q=%QUERY%",
   [Engine.GoogleImages]: "https://www.google.com/search?q=%QUERY%&tbm=isch",
   [Engine.GoogleMaps]: "https://www.google.com/maps/search/%QUERY%",
   [Engine.Wikipedia]:
@@ -47,9 +68,27 @@ const ENGINE_URLS: Readonly<Record<Engine, string>> = {
   [Engine.YouTube]: "https://www.youtube.com/results?search_query=%QUERY%",
 };
 
-/** Where to send `query`: the engine its tag names, or Google. */
+/**
+ * The engines with pages a name goes to: the shape a name there has, and the
+ * URL it makes, with `%PATH%` standing in for the name.
+ *
+ * On GitHub a user or an organization, or one of their repositories: one
+ * segment or two, of the characters GitHub allows in them — none of which a
+ * URL needs escaped. Anything else is words, and words are a search.
+ */
+const SITES: Readonly<Partial<Record<Engine, Site>>> = {
+  [Engine.GitHub]: {
+    shape: /^[\w.-]+(?:\/[\w.-]+)?$/,
+    url: "https://github.com/%PATH%",
+  },
+};
+
+/**
+ * Where to send `query`: the page its tag's site has for it, the engine its
+ * tag names, or Google.
+ */
 export const searchUrl = (query: string): string =>
-  taggedSearch(query)?.url ?? googleUrl(query);
+  taggedSite(query)?.url ?? taggedSearch(query)?.url ?? googleUrl(query);
 
 /** `query` searched on Google as it is, tag and all. */
 export const googleUrl = (query: string): string => urlOf(GOOGLE, query);
@@ -67,6 +106,24 @@ export const taggedSearch = (query: string): TaggedSearch | undefined => {
       query: searched,
       url: urlOf(ENGINE_URLS[engine], searched),
     };
+  }
+};
+
+/**
+ * The page `query`'s tag has for its words, or `undefined` for a query whose
+ * tag names a site without pages or whose words are not one name there.
+ */
+export const taggedSite = (query: string): TaggedSite | undefined => {
+  const tag = tagIn(query);
+  if (tag === undefined) {
+    return undefined;
+  } else {
+    const engine = engineOf(tag);
+    const site = SITES[engine];
+    const path = withoutTag(query, tag);
+    return site === undefined || !site.shape.test(path)
+      ? undefined
+      : { engine, path, url: site.url.replace("%PATH%", path) };
   }
 };
 
