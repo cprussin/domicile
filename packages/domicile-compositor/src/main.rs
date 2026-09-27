@@ -58,7 +58,7 @@ use smithay::wayland::{
     buffer::BufferHandler,
     compositor::{
         with_states, BufferAssignment, CompositorClientState, CompositorHandler, CompositorState,
-        Damage, SurfaceAttributes,
+        Damage, SurfaceAttributes, SurfaceData,
     },
     content_type::ContentTypeState,
     cursor_shape::CursorShapeManagerState,
@@ -77,8 +77,8 @@ use smithay::wayland::{
     },
     selection::{SelectionHandler, SelectionSource, SelectionTarget},
     shell::xdg::{
-        PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
-        XdgToplevelSurfaceData,
+        PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler,
+        XdgShellState, XdgToplevelSurfaceData,
     },
     shm::with_buffer_contents,
     shm::{ShmHandler, ShmState},
@@ -126,6 +126,7 @@ mod uevents;
 mod uploads;
 mod viewport;
 mod which_engine;
+mod window_geometry;
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard};
@@ -2699,7 +2700,12 @@ impl DomicileCompositor {
     /// One path: whatever the client drew reaches the engine as a dmabuf, or
     /// the window does not draw. An shm frame is copied into one of the
     /// compositor's own first — see [`crate::uploads`].
-    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> Published {
+    fn publish_frame(
+        &mut self,
+        app_id: &str,
+        buffer: &wl_buffer::WlBuffer,
+        crop: (i32, i32, i32, i32),
+    ) -> Published {
         let Some(committed) = committed_buffer(buffer) else {
             return Published::NotShown;
         };
@@ -2711,9 +2717,10 @@ impl DomicileCompositor {
                 app_id,
                 Submitted::Client(buffer.clone()),
                 &descriptor_from(dmabuf),
+                crop,
                 Published::Held,
             ),
-            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer),
+            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop),
         };
         if published != Published::NotShown {
             self.frame_shown(app_id);
@@ -2728,6 +2735,7 @@ impl DomicileCompositor {
         app_id: &str,
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
+        crop: (i32, i32, i32, i32),
         shown: Published,
     ) -> Published {
         let Some(session) = self.engine.as_mut() else {
@@ -2736,7 +2744,14 @@ impl DomicileCompositor {
         // Whole-surface damage. The engine takes a rectangle and the client
         // reports one, but mapping between them is its own correctness question
         // — a wrong rectangle leaves stale pixels on screen.
-        match session.submit(app_id, submitted, descriptor, (0, 0, 0, 0), Instant::now()) {
+        match session.submit(
+            app_id,
+            submitted,
+            descriptor,
+            crop,
+            (0, 0, 0, 0),
+            Instant::now(),
+        ) {
             true => shown,
             false => Published::NotShown,
         }
@@ -2750,7 +2765,12 @@ impl DomicileCompositor {
     /// once per client with why, because a blank window with nothing in the
     /// log is the defect ERRORS.md is about and a client commits at its frame
     /// rate.
-    fn publish_shm_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> Published {
+    fn publish_shm_frame(
+        &mut self,
+        app_id: &str,
+        buffer: &wl_buffer::WlBuffer,
+        crop: (i32, i32, i32, i32),
+    ) -> Published {
         let copied = match self.copy_shm_frame(app_id, buffer) {
             Ok(copied) => copied,
             Err(why) => {
@@ -2764,6 +2784,7 @@ impl DomicileCompositor {
             app_id,
             Submitted::Upload(copied.id),
             &copied.descriptor,
+            crop,
             Published::Copied,
         );
         if published == Published::NotShown {
@@ -4403,6 +4424,12 @@ impl DomicileCompositor {
                     tracing::debug!(%app_id, "pointer motion: no surface");
                     return;
                 };
+                // The chrome's box is the window geometry, not the surface, so
+                // a client with a shadow is offset by it.
+                let (x, y) = crate::window_geometry::surface_point(
+                    with_states(&surface, window_geometry),
+                    (x, y),
+                );
                 tracing::debug!(%app_id, x, y, "pointer motion -> client");
                 self.pointer_app = Some(app_id);
                 let pointer = self.seat.get_pointer().unwrap();
@@ -5076,48 +5103,59 @@ impl CompositorHandler for DomicileCompositor {
         // it (rather than borrowing) hands us the release: Smithay would
         // otherwise hold it until the *next* buffer arrives, which is a buffer
         // the client cannot draw without the release it is waiting for.
-        let (attached, callbacks, buffer_scale, viewport) = with_states(surface, |states| {
-            // Beside the buffer and in the same borrow, because a viewport is
-            // double-buffered too: what it says applies to the buffer it was
-            // committed with, and reading it later reads the next frame's.
-            let viewport = {
-                let mut cached = states.cached_state.get::<ViewportCachedState>();
-                let state = cached.current();
-                Viewport {
-                    destination: state.dst.map(|size| (size.w, size.h)),
-                    source: state
-                        .src
-                        .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)),
-                }
-            };
-            let mut guard = states.cached_state.get::<SurfaceAttributes>();
-            let attrs = guard.current();
-            let attached = match attrs.buffer.take() {
-                Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
-                Some(BufferAssignment::Removed) | None => None,
-            };
-            let callbacks = std::mem::take(&mut attrs.frame_callbacks);
-            // Taken, not read. Smithay aggregates damage from commit to commit
-            // until the compositor clears it — `Cacheable for
-            // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
-            // borrowing it gives every rectangle the surface has ever
-            // reported. That is a vector growing for the life of the window,
-            // walked on every commit by the Wayland thread, and a bounding box
-            // that only ever widens until it is the whole window and this
-            // stops saving anything.
-            //
-            // Nothing reads it any more — the engine takes whole-surface
-            // damage — but the call stays, because clearing that vector is
-            // what it was always for and dropping it would leak a rectangle
-            // per commit for the life of every window.
-            take_damage(&mut attrs.damage, attrs.buffer_scale);
-            // How many buffer pixels the client drew per logical unit. Taken
-            // here with the buffer rather than looked up later: it is the
-            // scale *this* buffer was drawn at, and a client that is mid-way
-            // through answering a scale change will commit the next one at a
-            // different number.
-            (attached, callbacks, attrs.buffer_scale, viewport)
-        });
+        let (attached, callbacks, buffer_scale, viewport, geometry) =
+            with_states(surface, |states| {
+                // Beside the buffer and in the same borrow, because a viewport is
+                // double-buffered too: what it says applies to the buffer it was
+                // committed with, and reading it later reads the next frame's.
+                let viewport = {
+                    let mut cached = states.cached_state.get::<ViewportCachedState>();
+                    let state = cached.current();
+                    Viewport {
+                        destination: state.dst.map(|size| (size.w, size.h)),
+                        source: state
+                            .src
+                            .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)),
+                    }
+                };
+                let mut guard = states.cached_state.get::<SurfaceAttributes>();
+                let attrs = guard.current();
+                let attached = match attrs.buffer.take() {
+                    Some(BufferAssignment::NewBuffer(buffer)) => Some(buffer),
+                    Some(BufferAssignment::Removed) | None => None,
+                };
+                let callbacks = std::mem::take(&mut attrs.frame_callbacks);
+                // Taken, not read. Smithay aggregates damage from commit to commit
+                // until the compositor clears it — `Cacheable for
+                // SurfaceAttributes` does `into.damage.extend(self.damage)` — so
+                // borrowing it gives every rectangle the surface has ever
+                // reported. That is a vector growing for the life of the window,
+                // walked on every commit by the Wayland thread, and a bounding box
+                // that only ever widens until it is the whole window and this
+                // stops saving anything.
+                //
+                // Nothing reads it any more — the engine takes whole-surface
+                // damage — but the call stays, because clearing that vector is
+                // what it was always for and dropping it would leak a rectangle
+                // per commit for the life of every window.
+                take_damage(&mut attrs.damage, attrs.buffer_scale);
+                // How many buffer pixels the client drew per logical unit. Taken
+                // here with the buffer rather than looked up later: it is the
+                // scale *this* buffer was drawn at, and a client that is mid-way
+                // through answering a scale change will commit the next one at a
+                // different number.
+                let scale = attrs.buffer_scale;
+                drop(guard);
+                // Double-buffered like the rest, so read beside the buffer it
+                // describes — see `crate::window_geometry`.
+                (
+                    attached,
+                    callbacks,
+                    scale,
+                    viewport,
+                    window_geometry(states),
+                )
+            });
 
         // Ask the client to draw its next frame (keeps it animating).
         let time = self.start.elapsed().as_millis() as u32;
@@ -5157,7 +5195,15 @@ impl CompositorHandler for DomicileCompositor {
             }
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
-                    let published = self.publish_frame(app_id, &buffer);
+                    let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
+                        let size = committed.size();
+                        crate::window_geometry::crop(
+                            geometry,
+                            surface_size(size, buffer_scale, viewport.destination),
+                            size,
+                        )
+                    });
+                    let published = self.publish_frame(app_id, &buffer, crop);
                     // Driven after the submit, because the polling needs
                     // something submitted to find — but timed from `started`,
                     // which is before it. The import and the submit are ours,
@@ -6079,6 +6125,17 @@ fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
             None
         }
     }
+}
+
+/// The window geometry a surface last committed, as `(x, y, width, height)`
+/// in its logical units — `xdg_surface.set_window_geometry`.
+fn window_geometry(states: &SurfaceData) -> Option<(i32, i32, i32, i32)> {
+    states
+        .cached_state
+        .get::<SurfaceCachedState>()
+        .current()
+        .geometry
+        .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h))
 }
 
 fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {

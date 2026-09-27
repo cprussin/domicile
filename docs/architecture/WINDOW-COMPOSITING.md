@@ -113,7 +113,7 @@ layer, so there is no list of supported properties to keep in step with CSS.
   llvmpipe; the allocation and the browser's import of it are not, because no
   check here has a render node — `ENGINE-FORK.md`, phase 2.
 - **Damage.** The seam carries a rectangle —
-  `domicile_surface_submit(surface, buffer, damage)`, where an empty one means
+  `domicile_surface_submit_crop(surface, buffer, crop, damage)`, where an empty one means
   the whole surface — and `publish_frame` passes an empty one for every commit,
   so every client frame damages its window entire. Mapping a client's reported
   damage onto it is its own correctness question: a wrong rectangle leaves

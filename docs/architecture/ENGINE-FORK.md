@@ -891,7 +891,7 @@ the loop the compositor already runs.
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing — the browser holds the page's embed until this is called |
 | `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` — the fds the client already sent |
-| `domicile_surface_submit(surface, buffer, damage)` | `wl_surface.commit` — an empty rectangle means the whole surface |
+| `domicile_surface_submit_crop(surface, buffer, crop, damage)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` — only `crop` of the buffer fills the box, so a client's own shadow is not drawn into it; an empty rectangle means the whole buffer or surface. `domicile_surface_submit` is the same with no crop |
 | `released(surface, buffer)` | **`wl_buffer.release`** — viz returning a `TransferableResource` is exactly the client's cue to reuse |
 | `frame(surface, deadline_us)` | **`wl_surface.frame`** — a viz `BeginFrame` is the callback the client is waiting on |
 | `configure(surface, width, height)` | **`xdg_toplevel.configure`** — the page bumped `parent_sequence_number` because its layout box changed |
