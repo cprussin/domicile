@@ -4,23 +4,24 @@
 #
 #   curl ... /actions/runs?branch=<ref> | .github/scripts/crux-stale-runs.sh <ref> [<keep-sha>]
 #
-# Prints one run id per line: the runs that are waiting for `crux` and will
-# never be worth what they cost. Everything else it stays away from. Without a
-# <keep-sha> that is every waiting run of the branch (it closed); with one it
-# is every waiting run for any other commit (the branch moved on to that one).
+# Prints one run id per line: the runs of `crux` that will never be worth what
+# they cost. Everything else it stays away from. Without a <keep-sha> that is
+# every waiting run of the branch (it closed); with one it is every run for any
+# other commit (the branch moved on to that one), started or not.
 #
 # WHY THIS IS A FILTER AND NOT A SCRIPT THAT CANCELS. The decision is the whole
 # of the risk here and the API call is not, so the decision is a pure function
-# of a listing and `scripts/test-crux-stale-runs.sh` feeds it the cases —
-# including the one that matters, which is a run that has already started.
+# of a listing and `scripts/test-crux-stale-runs.sh` feeds it the cases.
 #
-# THE RUN THAT HAS STARTED IS OFF LIMITS. A killed `autoninja` leaves a
-# half-linked out/Domicile that the next run inherits, and the failure reads as
-# a code error rather than an interrupted build. That is why every crux
-# workflow sets `cancel-in-progress: false`, and this must not become the thing
-# that reintroduces it by another route. Only `queued` (no runner yet) and
-# `pending` (held by a concurrency group) are cancelable: neither has a machine
-# and neither has compiled anything.
+# A STARTED RUN IS TAKEN ONLY FOR A REPLACED COMMIT, and only a pull request's
+# from this repository: never a push, so never main's. A 24h sample found about
+# 5h/day of builds for commits already replaced. Canceling one mid-build is
+# safe for the tree: lld and clang write through a temp file and rename, so
+# nothing is left half-written, and the next run resumes incrementally from the
+# series stamp and out/Release. The workflow still asks, per run, whether its
+# commit is the head right now (crux-still-head.sh) and whether it is in a
+# step that may be stopped (crux-cancelable-step.sh). On a close only `queued`
+# and `pending` runs are taken, as before.
 #
 # NOT NAMED `engine-*.sh`, AND THAT IS LOAD-BEARING RATHER THAN TASTE.
 # `engine.yml` fires on `.github/scripts/engine-*.sh` because, as
@@ -67,8 +68,11 @@ crux_workflows="$(
 jq -r --arg branch "$BRANCH" --arg keep "$KEEP" --arg paths "$crux_workflows" '
   ($paths | split("\n")) as $crux
   | .workflow_runs[]
-  # Never started: no runner, nothing compiled, nothing to leave half-linked.
-  | select(.status == "queued" or .status == "pending")
+  # Never started; or, once the branch has moved on, started by this
+  # pull request from this repository -- never a push, so never main.
+  | select(.status == "queued" or .status == "pending"
+      or ($keep != "" and .status == "in_progress" and .event == "pull_request"
+          and .head_repository.full_name == .repository.full_name))
   | select(.head_branch == $branch)
   # The commit the branch is at now is the one run worth having.
   | select($keep == "" or .head_sha != $keep)

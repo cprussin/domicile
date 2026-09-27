@@ -16,15 +16,20 @@ name: Cancel a pull request's stale queued engine runs
 # has the machine and is waiting for the compile slot is engine.yml's to end:
 # see its "Take the compile slot" step.
 #
-# IT CANCELS ONLY RUNS THAT NEVER STARTED, and that restriction is the whole
-# design rather than a detail. A killed `autoninja` leaves a half-linked
-# out/Domicile that the next run inherits, and the failure reads as a code
-# error rather than an interrupted build -- which is why every crux workflow
-# carries `cancel-in-progress: false` and why scripts/test-engine-concurrency.sh
-# asserts it. This must not put that failure back by another door, so the
-# decision lives in .github/scripts/crux-stale-runs.sh, where
-# scripts/test-crux-stale-runs.sh can feed it a started run and watch it
-# refuse.
+# AND ITS STARTED ONES, ONCE THEY ARE BUILDING OR CHECKING. Holding the slot, a
+# run never looks back, so a 24h sample found about 5h/day of builds for
+# replaced commits (runs 36190376822, 36201672013, 36208702812, 36217378847),
+# and the new head's run waits behind each in engine.yml's per-ref group. Only
+# on a push, only a same-repository pull request's run, only while its commit
+# is not the head (asked again right before the cancel), and only in "Build"
+# or "The engine's checks". Safe for the tree: lld and clang write through a
+# temp file and rename, so a killed build leaves nothing half-written, the next
+# run resumes incrementally from the series stamp and out/Release, and the
+# `if: always()` drops still give back the tree and the compile slot. Never
+# later: the write-back of engine-release.nix is itself a push to the branch.
+# The decisions live in .github/scripts/crux-stale-runs.sh and
+# .github/scripts/crux-cancelable-step.sh, where scripts/test-crux-stale-runs.sh
+# feeds them the cases. Close still takes only runs that never started.
 #
 # THE RACE IS REAL AND IT IS NARROW, and it is worth writing down rather than
 # discovering. A run this reads as `queued` can be handed a runner in the
@@ -69,6 +74,7 @@ jobs:
           BRANCH: ${{ github.event.pull_request.head.ref }}
           # The commit to keep: the new head on a push, none on a close.
           KEEP: ${{ github.event.action == 'synchronize' && github.event.pull_request.head.sha || '' }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           set -euo pipefail
 
@@ -89,41 +95,73 @@ jobs:
           # described in engine.yml. So this returns before the token matters.
           [ -n "$stale" ] || { echo "nothing of $BRANCH's is waiting for crux"; exit 0; }
 
-          echo "$BRANCH ${KEEP:+moved on to $KEEP}${KEEP:-is closed}; these of its runs never started:"
+          [ -n "$KEEP" ] && moved="moved on to $KEEP" || moved="is closed"
+          echo "$BRANCH $moved; these of its runs are stale:"
           printf '%s\n' "$stale" | sed 's/^/  run /'
+
+          # BY STATUS CODE, NOT BY SUCCESS OR FAILURE. 409 is the one refusal
+          # that is not a problem -- it means the run resolved itself while
+          # this was deciding, which is the outcome this wanted anyway.
+          # Everything else is: a 403 is a token without `actions: write`, and
+          # a version of this that treated every refusal as "already ended"
+          # would report that as a clean run forever while canceling nothing.
+          # The `if: always()` drops in engine.yml run on a canceled job too.
+          cancel() {
+            code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                      -H "Authorization: Bearer $GH_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "$API/actions/runs/$1/cancel")"
+            case "$code" in
+              (202) echo "canceled run $1" ;;
+              (409) echo "run $1 ended on its own while this decided" ;;
+              (*)
+                echo "::error::canceling run $1 answered HTTP $code" >&2
+                exit 1
+                ;;
+            esac
+          }
 
           printf '%s\n' "$stale" | while IFS= read -r id; do
             [ -n "$id" ] || continue
 
             # READ THE STATUS AGAIN, IMMEDIATELY BEFORE CANCELING. The listing
-            # above is a snapshot, and the one transition that matters --
-            # queued to in_progress -- can happen inside it. This is what keeps
-            # a cancel off a job that has since been handed the machine.
-            now="$(api "$API/actions/runs/$id" | jq -r '.status')"
+            # above is a snapshot, and queued to in_progress can happen inside
+            # it; a run that has since been handed the machine gets the started
+            # run's questions below instead.
+            run="$(api "$API/actions/runs/$id")"
+            now="$(printf '%s' "$run" | jq -r '.status')"
+            sha="$(printf '%s' "$run" | jq -r '.head_sha')"
             case "$now" in
-              (queued|pending)
-                # BY STATUS CODE, NOT BY SUCCESS OR FAILURE. 409 is the one
-                # refusal that is not a problem -- it means the run resolved
-                # itself while this was deciding, which is the outcome this
-                # wanted anyway. Everything else is: a 403 is a token without
-                # `actions: write`, and a version of this that treated every
-                # refusal as "already ended" would report that as a clean run
-                # forever while canceling nothing.
-                code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-                          -H "Authorization: Bearer $GH_TOKEN" \
-                          -H "Accept: application/vnd.github+json" \
-                          "$API/actions/runs/$id/cancel")"
-                case "$code" in
-                  (202) echo "canceled run $id" ;;
-                  (409) echo "run $id ended on its own while this decided" ;;
-                  (*)
-                    echo "::error::canceling run $id answered HTTP $code" >&2
-                    exit 1
-                    ;;
-                esac
+              (queued|pending) cancel "$id" ;;
+              (in_progress)
+                # A started run only for a push to a branch here: a close keeps
+                # the old rule, and a fork's token could not cancel anyway.
+                if [ -z "$KEEP" ] || [ "$SAME_REPO" != true ]; then
+                  echo "run $id has started — left alone"
+                  continue
+                fi
+                # ITS COMMIT MAY BE THE HEAD AGAIN: a revert push, or this pass
+                # running after a later one. Asked now, not at the event.
+                if head="$(.github/scripts/crux-still-head.sh "$BRANCH" "$sha")"; then
+                  echo "run $id: $head — left alone"
+                  continue
+                elif [ $? -ne 1 ]; then
+                  echo "::error::run $id: $head" >&2
+                  exit 1
+                fi
+                jobs="$(api "$API/actions/runs/$id/jobs")"
+                if where="$(printf '%s' "$jobs" | .github/scripts/crux-cancelable-step.sh)"; then
+                  echo "run $id is for replaced $sha and $where"
+                  cancel "$id"
+                elif [ $? -eq 1 ]; then
+                  echo "run $id is for replaced $sha but $where"
+                else
+                  echo "::error::run $id: could not read which step it is in" >&2
+                  exit 1
+                fi
                 ;;
               (*)
-                echo "run $id is '$now' now, not waiting any more — left alone"
+                echo "run $id is '$now' now — left alone"
                 ;;
             esac
           done
