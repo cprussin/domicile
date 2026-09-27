@@ -7,6 +7,8 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { FormEvent } from "react";
 import { useState } from "react";
@@ -20,6 +22,13 @@ import {
 import type { ConnectionSafety } from "../../address/connection-safety";
 import { typedAddress } from "../../address/typed-address";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { ZoomIndicator } from "./ZoomIndicator";
+import {
+  isFullyZoomedIn,
+  isFullyZoomedOut,
+  isUnzoomed,
+  zoomPercent,
+} from "./zoom-steps";
 
 type Props = {
   /**
@@ -42,10 +51,20 @@ type Props = {
   onNavigate: (url: string) => void;
   onReload: () => void;
   onStop: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
   /** The browser's verdict on the connection behind {@link Props.address}. */
   security: ConnectionSafety;
   /** Everywhere the window has been sent, oldest first. */
   visited: readonly string[];
+  /** The page's zoom, as a factor: 1 is 100%. */
+  zoom: number;
+  /**
+   * How many times the user has zoomed this window. Each one shows the zoom
+   * indicator afresh; 0 is a window nobody has zoomed, which shows none.
+   */
+  zoomsAnnounced: number;
 };
 
 /**
@@ -54,7 +73,7 @@ type Props = {
  *
  * The shape is Chromium's, because it is the one the user already knows —
  * history controls and a single reload/stop at the inline start, then the
- * address as a pill with its connection indicator inside it.
+ * address as a pill with its connection indicator inside it, then the zoom.
  */
 export const AddressBar = ({
   address,
@@ -66,8 +85,13 @@ export const AddressBar = ({
   onNavigate,
   onReload,
   onStop,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
   security,
   visited,
+  zoom,
+  zoomsAnnounced,
 }: Props) => {
   // The bar shows the address until the user starts typing, and goes back to
   // showing it the moment the window is sent somewhere else. Adjusted during
@@ -163,6 +187,45 @@ export const AddressBar = ({
         suggestions={suggestionsFor(typed, visited)}
         value={typed}
       />
+      {/* AT THE INLINE END, where Chrome puts its own zoom: the address is
+          what the eye lands on, and these are read once and left alone. */}
+      <div aria-label="Zoom" className={zoomStyles} role="group">
+        <Button
+          disabled={isFullyZoomedOut(zoom)}
+          label="Zoom out"
+          onClick={onZoomOut}
+          rounded
+          size="sm"
+          variant="ghost"
+        >
+          <MinusIcon size={16} />
+        </Button>
+        {/* The zoom, and pressing it puts the page back to 100% — which is
+            why it is dead at 100%, like any control with nothing to do. */}
+        <Button
+          disabled={isUnzoomed(zoom)}
+          onClick={onZoomReset}
+          rounded
+          size="sm"
+          title="Reset zoom"
+          variant="ghost"
+        >
+          {zoomPercent(zoom)}
+        </Button>
+        <Button
+          disabled={isFullyZoomedIn(zoom)}
+          label="Zoom in"
+          onClick={onZoomIn}
+          rounded
+          size="sm"
+          variant="ghost"
+        >
+          <PlusIcon size={16} />
+        </Button>
+      </div>
+      {zoomsAnnounced === 0 ? undefined : (
+        <ZoomIndicator key={zoomsAnnounced} zoom={zoom} />
+      )}
     </form>
   );
 };
@@ -225,12 +288,21 @@ const barStyles = hstack({
   gap: 2,
   paddingBlock: 1.5,
   paddingInline: 2,
+  // What the zoom indicator hangs from.
+  position: "relative",
 });
 
 // Tighter than the bar's own gap: the three of them are one group of
 // controls, and reading as one is what keeps the address the thing the eye
 // lands on.
 const historyStyles = hstack({
+  flex: "none",
+  gap: 0.5,
+});
+
+// Tight for the reason the history controls are: out, the zoom and in are one
+// control in three parts.
+const zoomStyles = hstack({
   flex: "none",
   gap: 0.5,
 });
