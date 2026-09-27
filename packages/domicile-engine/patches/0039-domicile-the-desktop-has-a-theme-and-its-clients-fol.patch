@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
-Date: Mon, 22 Sep 2026 09:12:03 -0700
+Date: Tue, 22 Sep 2026 09:12:03 -0700
 Subject: [PATCH] domicile: the desktop has a theme, and its clients follow it
 
 Registers the fourth member of the control protocol that crosses in BOTH
@@ -42,14 +42,15 @@ mojom::Theme -- for membership and order without building anything.
 Adding a member costs a near-full Blink rebuild, because a new inbound message
 needs a new event type and that invalidates the generated bindings.
 ---
- .../bindings/generated_in_modules.gni         |  6 ++++++
- .../renderer/bindings/idl_in_modules.gni      |  3 +++
+ .../blink/renderer/bindings/generated_in_modules.gni        | 6 ++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni      | 3 +++
  2 files changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index eca3ad717c..f7d8dc3bce 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -329,6 +329,8 @@ generated_dictionary_sources_in_modules = [
+@@ -331,6 +331,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.h",
@@ -58,7 +59,7 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_color_selection_options.h",
-@@ -1622,5 +1624,7 @@ generated_enumeration_sources_in_modules = [
+@@ -1624,6 +1626,8 @@ generated_enumeration_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_distance_model_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h",
@@ -66,7 +67,8 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
 +  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
-@@ -2402,6 +2406,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
+@@ -2406,6 +2410,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
@@ -76,9 +78,10 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 208c5931df..5a92af859e 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -299,6 +299,9 @@ static_idl_files_in_modules = [
+@@ -301,6 +301,9 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",

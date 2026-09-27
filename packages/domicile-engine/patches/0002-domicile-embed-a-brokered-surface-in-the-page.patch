@@ -43,7 +43,7 @@ Edits seven files Chromium owns, five of them Blink's. The design doc's
  7 files changed, 128 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 29ff2d8a82..6cd09d437b 100644
+index e0f9cc6164..0329c8dacc 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -150,8 +150,9 @@ source_set("browser") {
@@ -94,7 +94,7 @@ index eab79a9dd6..18abeac9f1 100644
        registry.get(),
        base::BindRepeating(&RenderProcessHostImpl::BindCompositingModeReporter,
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index b1eb2fd87e..19ee8374b7 100644
+index 2a5404e4cf..0d0dbb2a6a 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 @@ -27,6 +27,8 @@
@@ -106,7 +106,7 @@ index b1eb2fd87e..19ee8374b7 100644
  #include <math.h>
  
  #include <limits>
-@@ -2131,6 +2133,68 @@ bool HTMLCanvasElement::CreateLayer() {
+@@ -2129,6 +2131,68 @@ bool HTMLCanvasElement::CreateLayer() {
    return true;
  }
  
@@ -285,10 +285,10 @@ index 6101076273..e7e70897c9 100644
      "graphics/filters/distant_light_source.h",
      "graphics/filters/fe_blend.cc",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 2efe04d824..3273f91cfa 100644
+index 4e5c398621..b7b27c29b5 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2559,6 +2559,16 @@
+@@ -2575,6 +2575,16 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },

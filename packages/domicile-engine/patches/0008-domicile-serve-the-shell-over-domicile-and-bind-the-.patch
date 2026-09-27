@@ -87,10 +87,10 @@ protocol members, and shellDocument still lives in TypeScript.
  14 files changed, 209 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 25a8547a34..944111328f 100644
+index 6cb81ce448..4aaa7b5244 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2382,6 +2382,14 @@ source_set("browser") {
+@@ -2391,6 +2391,14 @@ source_set("browser") {
      "//components/device_event_log",
      "//components/dom_distiller/content/browser",
      "//components/domain_reliability",
@@ -194,7 +194,7 @@ index b2619baa8f..7c1796ae73 100644
      chrome_extra_part->PostBrowserStart();
    }
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 7dad4155af..0f7e122b59 100644
+index ca531223b0..2297e171f2 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,10 @@
@@ -208,7 +208,7 @@ index 7dad4155af..0f7e122b59 100644
  #include <algorithm>
  #include <iterator>
  #include <map>
-@@ -2579,6 +2583,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+@@ -2583,6 +2587,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
  
    const GURL& site_url =
        site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
@@ -234,7 +234,7 @@ index 7dad4155af..0f7e122b59 100644
    if (search::IsNTPURL(site_url)) {
      site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
                                               std::make_unique<NTPUserData>());
-@@ -6217,10 +6240,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+@@ -6245,10 +6268,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
    return result;
  }
  
@@ -274,7 +274,7 @@ index 7dad4155af..0f7e122b59 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6636,6 +6688,18 @@ void ChromeContentBrowserClient::
+@@ -6664,6 +6716,18 @@ void ChromeContentBrowserClient::
          int render_frame_id,
          const std::optional<url::Origin>& request_initiator_origin,
          NonNetworkURLLoaderFactoryMap* factories) {
@@ -460,7 +460,7 @@ index 6d5b9b4eb4..0e992091ba 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_eye_dropper.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_face_detector.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index c0f9f669bb..10082ed9b8 100644
+index 7e5ae95533..ceda0a59e2 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -278,6 +278,10 @@ static_idl_files_in_modules = [
@@ -475,7 +475,7 @@ index c0f9f669bb..10082ed9b8 100644
    "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
    "//third_party/blink/renderer/modules/eyedropper/eye_dropper.idl",
 diff --git a/third_party/blink/renderer/core/events/event_target_names.json5 b/third_party/blink/renderer/core/events/event_target_names.json5
-index d15ba88112..6827dea86d 100644
+index a0e2048bea..4dbab4b6e7 100644
 --- a/third_party/blink/renderer/core/events/event_target_names.json5
 +++ b/third_party/blink/renderer/core/events/event_target_names.json5
 @@ -12,6 +12,8 @@
@@ -488,7 +488,7 @@ index d15ba88112..6827dea86d 100644
      "ContainerQueryList",
      "BroadcastChannel",
 diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
-index 5ad3c764ea..2817d32f4a 100644
+index 57908c79e9..a051c25da1 100644
 --- a/third_party/blink/renderer/modules/BUILD.gn
 +++ b/third_party/blink/renderer/modules/BUILD.gn
 @@ -88,6 +88,7 @@ component("modules") {
@@ -500,10 +500,10 @@ index 5ad3c764ea..2817d32f4a 100644
      "//third_party/blink/renderer/modules/document_metadata",
      "//third_party/blink/renderer/modules/document_picture_in_picture",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index fd74f34cbf..b70537c327 100644
+index 3b13209a4c..a703d80ec3 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2576,6 +2576,24 @@
+@@ -2592,6 +2592,24 @@
        name: "DomicileExternalSurface",
        status: "stable",
      },
