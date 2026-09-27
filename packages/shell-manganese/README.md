@@ -31,7 +31,8 @@ a hidden workspace belongs to the screen it was last on, which shows it again
 and is the only bar that lists it; an empty one comes to the screen the keyboard
 is on; and a window opens where the keyboard is. Only the screen the keyboard is
 on fills its workspace on the bar. The keyboard follows the pointer across
-monitors, so moving your hand to the other screen is how you get there.
+monitors, empty ones included, so moving your hand to the other screen is how
+you get there.
 
 **A desk of several monitors is several pages of this shell**, because one
 browser window cannot span two CRTCs — the engine opens one per display and
@@ -332,6 +333,12 @@ on its way anywhere. A click is still what raises — so every click is reported
 including one in the window the pointer has already made the active one. What
 keeps that from re-rendering the desktop on every press is the reduction, where
 a reach that moves nothing returns the state it was given.
+
+**The screen under the pointer is the screen the keyboard is on**, window or
+none — sway's focus following the mouse from one output to the next. A monitor
+with nothing on it has no window to cross into, so each page watches its own
+pointer (`src/screens/useScreenFollowsPointer.ts`) and moves the keyboard there
+when it is somewhere else; the next window opens where the hand is.
 
 **The chrome is not a window.** The top bar, the wallpaper, a float's title bar
 and the sheet a Mod+drag is caught on leave the keyboard where it was: there is

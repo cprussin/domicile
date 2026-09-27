@@ -1,0 +1,47 @@
+import type { Display } from "@domicile/component-library/display-source";
+import { useEffect } from "react";
+
+import { WindowAction } from "../window-management/window-state";
+import { screenUnder } from "./screen-under";
+
+type Options = {
+  act: (action: WindowAction) => void;
+  /** The desk the host described, or `undefined` before it has. */
+  displays: readonly Display[] | undefined;
+  /** The screen the keyboard is on. */
+  focused: string;
+};
+
+/**
+ * Put the keyboard on the screen the pointer moves on — sway's
+ * `focus_follows_mouse` from one output to the next.
+ *
+ * **A SCREEN, NOT A WINDOW.** Crossing into a window already moves the
+ * keyboard to its screen, but a monitor with nothing on it has no window to
+ * cross into, and the pointer could arrive there and leave the keyboard — and
+ * so the next window to open — on the monitor it came from.
+ *
+ * Asked only when the keyboard is somewhere else. Every move of the hand is a
+ * `pointermove`, and on a page that does not reduce the desk every `act` is a
+ * message to the page that does.
+ */
+export const useScreenFollowsPointer = ({
+  act,
+  displays,
+  focused,
+}: Options): void => {
+  useEffect(() => {
+    const moved = (event: PointerEvent) => {
+      const name = screenUnder(displays ?? [], [event.clientX, event.clientY]);
+      if (name !== undefined && name !== focused) {
+        act(WindowAction.ScreenHovered(name));
+      }
+    };
+    // On the document, like `usePointerWarp`'s: a pointer over a window is
+    // this page's pointer on its way to the client under it.
+    document.addEventListener("pointermove", moved);
+    return () => {
+      document.removeEventListener("pointermove", moved);
+    };
+  }, [act, displays, focused]);
+};

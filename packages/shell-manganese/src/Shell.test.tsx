@@ -15,7 +15,11 @@ import { hostDisplays } from "./screens/host-displays";
 import type { DeskChannel } from "./window-management/desk-channel";
 import { DeskMessage } from "./window-management/desk-channel";
 import { TITLE_BAR } from "./window-management/rect";
-import { WindowAction } from "./window-management/window-state";
+import {
+  NO_WINDOWS,
+  reduceWindows,
+  WindowAction,
+} from "./window-management/window-state";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
 // numbers, which `screens/host-displays.ts` is what regroups into the rectangle
@@ -214,20 +218,28 @@ const alone = (): DeskChannel => ({
 
 /**
  * What the other pages of the desk say to this one, for the cases about a
- * page that did not hear the press. Nothing this page says goes anywhere.
+ * page that is not the one the desk is reduced on.
  */
 let heard: (message: DeskMessage) => void = () => undefined;
 
-/** The other pages of a desk, which can speak but hear nothing. */
-const overheard = (): DeskChannel => ({
-  listen: (listener) => {
-    heard = listener;
-    return () => {
-      heard = () => undefined;
-    };
-  },
-  post: () => undefined,
-});
+/** What this page has said to the other pages, in order. */
+let said: DeskMessage[] = [];
+
+/** The other pages of a desk, which speak and write down what they hear. */
+const overheard = (): DeskChannel => {
+  said = [];
+  return {
+    listen: (listener) => {
+      heard = listener;
+      return () => {
+        heard = () => undefined;
+      };
+    },
+    post: (message) => {
+      said.push(message);
+    },
+  };
+};
 
 /**
  * Renders the chrome on a desktop of `desktop`.
@@ -1587,6 +1599,71 @@ describe("Shell", () => {
         "aria-current",
         "true",
       );
+    });
+
+    it("moves the keyboard to the screen the pointer moves onto", () => {
+      // An empty screen as much as one with a window on it, which is sway's
+      // focus following the mouse from one output to the next: the next
+      // window opens where the hand is.
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      pointerAt(2000, 500);
+      clientAppears("term");
+
+      // Drawn there rather than only kept there: every screen holds every
+      // window, and hides the ones its workspace does not have.
+      expect(
+        screenNamed(container, "right")?.querySelector(
+          `${APP_TAG_NAME}:not([hidden])`,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("asks the page that reduces the desk to move the keyboard here", () => {
+      // A desk of several monitors is a page each, and a page that is one
+      // monitor hears the pointer only while it is on that monitor.
+      renderingShell(
+        [
+          { ...LEFT, x: -1920 },
+          { ...RIGHT, fillsTheWindow: true, x: 0 },
+        ],
+        overheard(),
+      );
+
+      pointerAt(10, 10);
+
+      expect(said).toContainEqual(
+        DeskMessage.Acted(WindowAction.ScreenHovered("right")),
+      );
+    });
+
+    it("asks nothing while the keyboard is already on this page's screen", () => {
+      // Said on every move of the hand otherwise, which is a message across
+      // the desk sixty times a second for nothing.
+      renderingShell(
+        [
+          { ...LEFT, x: -1920 },
+          { ...RIGHT, fillsTheWindow: true, x: 0 },
+        ],
+        overheard(),
+      );
+      act(() => {
+        heard(
+          DeskMessage.Desk(
+            reduceWindows(
+              reduceWindows(
+                NO_WINDOWS,
+                WindowAction.ScreensDescribed(["left", "right"]),
+              ),
+              WindowAction.ScreenHovered("right"),
+            ),
+          ),
+        );
+      });
+
+      pointerAt(10, 10);
+
+      expect(said.filter(({ type }) => type === "acted")).toEqual([]);
     });
 
     it("follows the seat when the compositor moves the keyboard itself", () => {

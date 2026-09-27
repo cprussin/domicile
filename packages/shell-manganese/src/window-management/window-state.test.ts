@@ -620,6 +620,46 @@ describe("the pointer", () => {
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
+  it("moves the keyboard to a screen it crossed onto with no window under it", () => {
+    // sway's focus follows the pointer onto an empty output too: a workspace
+    // with nothing on it is still where the next window should open.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.AppAppeared("kitty", "kitty"),
+      WindowAction.ScreenHovered("right"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBeUndefined();
+  });
+
+  it("answers a pointer on the screen the keyboard is on with the same state", () => {
+    // Said on every move of the hand, so a move that changed nothing must
+    // cost the desktop nothing.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(["left", "right"]),
+    );
+
+    expect(reduceWindows(state, WindowAction.ScreenHovered("left"))).toBe(
+      state,
+    );
+  });
+
+  it("leaves the keyboard where it is for a screen the desk has not taken up", () => {
+    // A monitor just plugged in is a page that can see the pointer a beat
+    // before the page that reduces has been told the screen is there.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(["left", "right"]),
+    );
+
+    expect(reduceWindows(state, WindowAction.ScreenHovered("docked"))).toBe(
+      state,
+    );
+  });
+
   it("raises and holds the window a drag takes hold of", () => {
     const state = reduce(
       desktop("kitty", "editor"),
