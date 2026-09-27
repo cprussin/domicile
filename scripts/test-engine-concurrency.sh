@@ -27,17 +27,19 @@
 #
 #   - the group varies with the ref, so two branches cannot evict each other
 #     and only a superseded push to the SAME ref does;
-#   - a workflow that resets the shared checkout never cancels a run in flight,
-#     because a killed `autoninja` leaves a half-linked out/Domicile the next
-#     run inherits;
+#   - a workflow that resets the shared checkout never cancels a run in flight
+#     on a push: a killed build is safe (lld and clang write through a temp
+#     file and rename, so the next run resumes incrementally), but what comes
+#     after it -- publishing, the write-back push, the proof -- is not, and
+#     engine-cancel-stale.yml stops a replaced run only in the steps that are;
 #   - no two of these workflows share a group expression, because two different
 #     jobs that both need to run are not supersessions of one another.
 #
 # THE CANCEL RULE IS NOT THE BLANKET IT USED TO BE, and the narrowing is the
 # point rather than a relaxation. It was "no crux workflow cancels", which read
-# as a fact about the machine and was really a fact about `autoninja`: the
-# thing a cancel damages is a half-written output directory, and a job that
-# never opens that directory has nothing to leave behind. `pinned-engine.yml`
+# as a fact about the machine and was really a fact about the tree: what a
+# cancel can damage is a job that publishes or pushes from it, and a job that
+# never opens it has nothing to leave behind. `pinned-engine.yml`
 # is that job -- a `fetchurl` of a published tarball, a cargo build in its own
 # work directory, one guard -- and while it shared the one slot, making it wait
 # rather than cancel was still right, because the run behind it in the queue
@@ -143,7 +145,7 @@ for workflow in "$WORKFLOWS"/*.yml; do
     case "$cancel" in
       (false) ok "$name resets the tree and never cancels a build in flight" ;;
       (*) fail "$name resets the tree and never cancels a build in flight" \
-            "cancel-in-progress is '$cancel'; a killed autoninja leaves a half-linked out/Domicile behind" ;;
+            "cancel-in-progress is '$cancel'; a cancel can land after the build, mid-publish or mid-push" ;;
     esac
   else
     leaves_tree_alone=$((leaves_tree_alone + 1))

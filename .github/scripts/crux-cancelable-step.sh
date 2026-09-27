@@ -4,7 +4,9 @@
 #   curl ... /actions/runs/<id>/jobs | .github/scripts/crux-cancelable-step.sh
 #                                       0 yes, 1 no, else could not read it
 #
-# Only engine.yml's long, repeatable steps. A canceled build resumes
+# A run with no job started -- queued on GitHub for the compile slot or for a
+# runner -- holds nothing, so it may be stopped. Otherwise only engine.yml's
+# long, repeatable steps. A canceled build resumes
 # incrementally: lld and clang write through a temp file and rename, so nothing
 # is left half-written, and the series stamp and out/Release stay. What comes
 # after them -- publishing a release, writing engine-release.nix back onto the
@@ -14,7 +16,12 @@
 # Not named `engine-*.sh`, for crux-stale-runs.sh's reason.
 set -euo pipefail
 
-step="$(jq -r '[.jobs[] | select(.status == "in_progress") | .steps[]
+jobs="$(cat)"
+if [ "$(printf '%s' "$jobs" | jq '[.jobs[] | select(.status == "in_progress")] | length')" = 0 ]; then
+  echo "in no job, so it holds nothing and may be stopped"
+  exit 0
+fi
+step="$(printf '%s' "$jobs" | jq -r '[.jobs[] | select(.status == "in_progress") | .steps[]
                 | select(.status == "in_progress") | .name] | first // ""')"
 case "$step" in
   ("Build"|"The engine's checks") echo "in '$step', which may be stopped" ;;

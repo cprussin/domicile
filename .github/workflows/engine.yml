@@ -109,15 +109,17 @@ on:
 
 # Per ref, and never canceled mid-flight.
 #
-# THE LOCKS ARE THE QUEUE, NOT THIS. Two runs of this workflow can run at
-# once now — `crux` has two heavy runners and a pool of trees — and what keeps
-# them apart is per-tree: `engine-tree-pool.sh pick` hands each run a tree
-# nothing else holds, and `engine-compile-slot.sh` keeps the cold builds among
-# them down to one. The queue in front of those is GitHub's runner queue:
-# unbounded, FIFO, and it never throws a run away.
+# THE LOCKS AND THE COMPILE QUEUE ARE THE QUEUE, NOT THIS. Two runs of this
+# workflow can run at once now — `crux` has two heavy runners and a pool of
+# trees — and what keeps them apart is per-tree: `engine-tree-pool.sh pick`
+# hands each run a tree nothing else holds, and `engine-compile-slot.sh` keeps
+# the cold builds among them down to one. The queue in front of those is GitHub's runner queue:
+# unbounded, FIFO, and it never throws a run away -- and, for a run that will
+# compile, the engine job's own `crux-compile` group, below.
 #
 # A CONCURRENCY GROUP IS NOT THAT QUEUE, WHICH IS WHY THIS IS KEYED BY REF. A
-# group holds exactly ONE pending run and evicts it when a newer run arrives.
+# group holds exactly ONE pending run and evicts it when a newer run arrives,
+# unless it says `queue: max` as the engine job's does.
 # Shared across refs — as this was, with `group: engine`, together with
 # engine-release.yml — that makes every branch able to discard every other
 # branch's queued run: runs 176 and 177 were each canceled seconds after they
@@ -126,9 +128,13 @@ on:
 # pending run for the same ref, which is the one it supersedes.
 #
 # `cancel-in-progress: false` stays, and is the half that group name never
-# provided: a canceled `autoninja` leaves a half-linked `out/Release` that
-# the next run inherits, and the failure it produces looks like a code error
-# rather than an interrupted build. Waiting is cheaper than that.
+# provided. Not for the build: lld and clang write through a temp file and
+# rename, so a canceled one leaves nothing half-written and the next run
+# resumes incrementally. For what comes after it: publishing a release,
+# writing engine-release.nix back onto the branch and recording the proof are
+# not repeatable that way, and the write-back is itself a push to the branch.
+# A replaced commit's run is stopped only in the steps that are:
+# engine-cancel-stale.yml and .github/scripts/crux-cancelable-step.sh.
 #
 # What still keeps CI out of a person's build in that tree is
 # .github/scripts/engine-tree-lock.sh, and it refuses rather than waits — it
@@ -149,7 +155,7 @@ concurrency:
 # token needs `contents: write` for. See `.github/scripts/engine-release-needed.sh`.
 #
 # `actions: write` is for one thing: a run whose commit its branch has moved
-# past, found while waiting for the compile slot, cancels itself.
+# past, found when it comes to take the compile slot, cancels itself.
 permissions:
   contents: write
   actions: write
@@ -167,10 +173,57 @@ jobs:
       - id: proof
         run: .github/scripts/engine-proof.sh gate
 
-  engine:
+  # WHETHER THIS RUN WILL COMPILE, asked before the engine job takes a runner.
+  #
+  # `crux` and `crux-two` share one compile slot. A job that took a runner and
+  # then waited for the slot held that runner idle for the whole of another
+  # run's compile: 22.8 runner-hours in 24h, while runs that compile nothing
+  # queued behind it for a runner -- 36194734502 queued 200 minutes for a
+  # 6-minute run, 36205015099 187, 36209486241 152.
+  #
+  # So a run that will compile waits on GitHub instead: the engine job's
+  # concurrency group is `crux-compile` unless this said `compile=false`, and
+  # a job pending in a group holds no runner. `queue: max` keeps every pending
+  # run, up to 100, in order -- the default keeps one and cancels the rest,
+  # which is what threw away runs 176 and 177 (see the top-level group).
+  #
+  # IT IS A GUESS ABOUT THE TREE `pick` WOULD TAKE NOW, and both ways of it
+  # going stale are safe. A run guessed warm that finds itself cold still
+  # takes the slot, and waits for it on its runner as every run used to. A
+  # run guessed cold waits in the group for nothing and then goes straight
+  # through. It locks nothing. See `engine-tree-pool.sh compiles`.
+  #
+  # WHAT IT COSTS: the group is held for the whole engine job, so a second
+  # compiling run starts once the first run's checks end rather than once
+  # its build does. That is the other runner doing warm runs instead of
+  # sitting idle, which is the trade.
+  plan:
     needs: gate
+    if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
+    runs-on: [self-hosted, crux]
+    # A checkout and a few stamp reads.
+    timeout-minutes: 10
+    outputs:
+      compile: ${{ steps.pool.outputs.compile }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Would this run compile?
+        id: pool
+        run: |
+          .github/scripts/engine-tree-pool.sh compiles \
+            "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
+
+  engine:
+    needs: [gate, plan]
     # `!cancelled()`, so a gate that errors runs the engine rather than skipping it.
     if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
+    # The compile queue, unless the plan positively said this run compiles
+    # nothing: a plan that failed answers nothing, and queueing is the safe
+    # side of that. Otherwise a group of this run's own, which is no queue.
+    concurrency:
+      group: ${{ needs.plan.outputs.compile == 'false' && format('crux-warm-{0}-{1}', github.run_id, github.run_attempt) || 'crux-compile' }}
+      queue: max
+      cancel-in-progress: false
     # `crux` is a label, not the runner's name. Both are set in
     # cprussin/dotfiles: config/machines/crux/domicile-ci.nix.
     #
@@ -431,27 +484,27 @@ jobs:
         id: warm
         run: .github/scripts/engine-compile-slot.sh warm "$CHROMIUM"
 
-      # IT WAITS OUT A COLD REPIN rather than going red behind one. What the
-      # wait holds is this runner and this tree. The tree costs nobody: while
-      # `crux` has two heavy runners, a run waiting here and the run it waits
-      # on are both of them, so no third job exists to want it. The runner is
-      # the cost: a warm run queued behind it waits for the holder to finish,
-      # where a refusal freed the runner after 30 minutes. Taken, because a
-      # refused run had to be noticed and re-run by hand.
+      # THE QUEUE FOR THIS IS THE JOB'S `crux-compile` GROUP NOW, which holds
+      # no runner; see the plan job. What waits here is the backstop: a run
+      # the plan guessed warm that found its tree cold or owes a release, or
+      # a compile from engine-release.yml in the other tree. That wait holds this runner, so
+      # it is the rare case rather than the queue. It waits out a cold repin
+      # rather than going red behind one, because a refused run had to be
+      # noticed and re-run by hand.
       #
-      # AND IT STOPS WAITING WHEN ITS COMMIT IS REPLACED. A push to the branch
-      # makes this run's answer one nobody will read, and the concurrency group
-      # never cancels a run in progress, so without this it held the runner
-      # until the slot came round and then built the old commit. Checked once
-      # a minute while waiting, never once the slot is held, and not for a fork's
-      # pull request: its branch is not on origin to ask about. See
-      # .github/scripts/crux-still-head.sh.
+      # AND IT STOPS WHEN ITS COMMIT IS REPLACED. A push to the branch makes
+      # this run's answer one nobody will read, and the concurrency group
+      # never cancels a run in progress, so without this it built the old
+      # commit. Asked before taking the slot -- the group's wait can end with
+      # it free -- and once a minute while waiting, never once it is held, and
+      # not for a fork's pull request: its branch is not on origin to ask
+      # about. See .github/scripts/crux-still-head.sh.
       #
       # A push run asks a different question, because main's run for 13cc49a
-      # waited over six hours here while main moved four commits past it. Most
-      # of main's commits start no engine run, so it gives up only once main
-      # has changed something the path filter covers: that push started a run
-      # of its own. See .github/scripts/crux-still-latest.sh.
+      # waited over six hours for the slot while main moved four commits past
+      # it. Most of main's commits start no engine run, so it gives up only
+      # once main has changed something the path filter covers: that push
+      # started a run of its own. See .github/scripts/crux-still-latest.sh.
       - name: Take the compile slot
         id: slot
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}

@@ -74,13 +74,13 @@ fail() {
 # reading.
 commands() { grep -v '^[[:space:]]*#' "$1"; }
 
-# The job's `timeout-minutes` as the file writes it, empty if it writes none.
-# The first match: these workflows have one job each, and a second one
-# appearing is a file this rule would want to be told about rather than one it
-# should quietly average.
+# The building job's `timeout-minutes` as the file writes it, empty if it
+# writes none. The largest: engine.yml also has a short `plan` job on crux,
+# and the budget these rules are about is the job that compiles.
 declared() { # workflow
   commands "$1" |
-    sed -n 's/^[[:space:]]*timeout-minutes:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1
+    sed -n 's/^[[:space:]]*timeout-minutes:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
+    sort -n | tail -1
 }
 
 # And the budget the job actually runs under, which is not the same question:
@@ -170,7 +170,7 @@ done
 # can be a cold repin -- run 36064386536 refused after 30 minutes behind one
 # that had held the slot for 2h18m. So the wait has to outlast a cold repin,
 # and whatever it spent, the run still has to fit its own cold repin after it:
-# a job killed mid-compile leaves a half-linked out/Release for the next run.
+# a job killed mid-compile has spent its whole budget and published nothing.
 #
 # AND THE BUDGET HAS A CEILING OF ITS OWN. The last thing a repin run does is
 # push `engine-release.nix` back with GITHUB_TOKEN, which GitHub expires after
