@@ -471,6 +471,15 @@ costs nothing.
   shared between the trees (#611), and a job now drops the temp files nix
   leaks and never reclaims its own build (#612): 82G had leaked, which is the
   room earlier runs found by deleting builds and the compiler cache.
+
+  **The shipped engine is not optimized, and making it so is next.** It is a
+  non-official build with DCHECKs on, EXPENSIVE_DCHECKs included, because it is
+  the same `out/Release` every pull request's checks run against. The plan is
+  two builds: pull requests keep that one, and an official build (PGO, ThinLTO,
+  no DCHECKs) runs after merge, always of the newest `main`, and publishes what
+  users get. It is hours long, so it must never hold the slot against a pull
+  request: a waiter now leaves a note beside the slot, and a holder can ask
+  whether anybody is `wanted` and `yield` to them, resuming its build after.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
   `domicile load-shell` is what asks for one, so a shell that keeps state in
