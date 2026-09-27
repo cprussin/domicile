@@ -458,6 +458,11 @@ mod tests {
     /// is four paths, so this is orders of magnitude more than the work.
     const ANNOUNCED_WITHIN: Duration = Duration::from_secs(10);
 
+    /// How long an index nobody is writing into stays quiet before it is
+    /// believed to have settled: past [`super::SETTLE`], and past a walk of the
+    /// largest home below.
+    const SETTLED: Duration = Duration::from_secs(3);
+
     /// More rows than any home below has, so nothing is truncated.
     const EVERY_ROW: usize = 100;
 
@@ -525,6 +530,35 @@ mod tests {
         while last != expected {
             last = next(&announcements).0;
             let _ = go_on.send(());
+        }
+    }
+
+    #[test]
+    fn a_home_of_more_directories_than_the_kernel_queues_events_for_is_indexed_once() {
+        // WATCHING A DIRECTORY IS OPENING IT, AND AN OPEN WAS AN EVENT. The
+        // watch asked the kernel for every open under the home, so setting it
+        // up reported one per directory it visited, and so did the walk. A
+        // home of more directories than `max_queued_events` overflowed the
+        // queue before anybody read it, the overflow is the kernel saying
+        // events were lost, and lost events are a walk again — which overflowed
+        // again. The index was rebuilt forever and the launcher said "still
+        // finding your files" for as long as the session lasted.
+        let queued: usize = fs::read_to_string("/proc/sys/fs/inotify/max_queued_events")
+            .expect("the kernel's bound on queued inotify events")
+            .trim()
+            .parse()
+            .expect("a count");
+        let home = tempfile::tempdir().expect("a home to lay out");
+        for directory in 0..=queued {
+            fs::create_dir(home.path().join(directory.to_string())).expect("the directory");
+        }
+        let (announcements, go_on) = keeping(home.path());
+
+        walked(&announcements, &go_on);
+        go_on.send(()).expect("the index goes on");
+
+        if let Ok((_, indexing)) = announcements.recv_timeout(SETTLED) {
+            panic!("the index announced again after its walk ended (indexing: {indexing})");
         }
     }
 
