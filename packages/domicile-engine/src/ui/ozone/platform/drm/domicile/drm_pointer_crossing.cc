@@ -57,38 +57,101 @@ gfx::PointF ToPanel(const PointerScreen& screen, const gfx::PointF& upright) {
   }
 }
 
+// Where a screen is on the desktop a shell lays out in, in logical pixels.
+struct Desk {
+  float x;
+  float y;
+  float width;
+  float height;
+
+  // Whether `point` is on this screen, or within `seam` of it.
+  bool Holds(const gfx::PointF& point, float seam) const {
+    return point.x() >= x - seam && point.x() < x + width + seam &&
+           point.y() >= y - seam && point.y() < y + height + seam;
+  }
+
+  gfx::PointF Clamped(const gfx::PointF& point) const {
+    return gfx::PointF(std::clamp(point.x(), x, x + width),
+                       std::clamp(point.y(), y, y + height));
+  }
+
+  // An upright point on a screen of `size` pixels, onto the desk, and back.
+  gfx::PointF ToDesk(const gfx::PointF& upright, const gfx::Size& size) const {
+    return gfx::PointF(
+        x + upright.x() * width / static_cast<float>(size.width()),
+        y + upright.y() * height / static_cast<float>(size.height()));
+  }
+  gfx::PointF FromDesk(const gfx::PointF& point, const gfx::Size& size) const {
+    return gfx::PointF(
+        (point.x() - x) * static_cast<float>(size.width()) / width,
+        (point.y() - y) * static_cast<float>(size.height()) / height);
+  }
+};
+
+// How far apart two screens a profile meant to touch can be: its positions
+// are rounded outward, so by up to a logical pixel.
+constexpr float kSeam = 1.f;
+
+// Where `screen` is on the desk, or nothing for one the layout leaves dark.
+// With no layout at all the hardware decides, and the engine's own desktop is
+// the desk.
+std::optional<Desk> DeskOf(const PointerScreen& screen,
+                           const std::vector<DomicileDisplayLayout>& layout) {
+  if (layout.empty()) {
+    const gfx::Size size = UprightSize(screen);
+    return Desk{static_cast<float>(screen.bounds_in_screen.x()),
+                static_cast<float>(screen.bounds_in_screen.y()),
+                static_cast<float>(size.width()),
+                static_cast<float>(size.height())};
+  }
+  const auto wanted =
+      std::ranges::find_if(layout, [&](const DomicileDisplayLayout& display) {
+        return display.enabled &&
+               display.origin == screen.bounds_in_screen.origin();
+      });
+  if (wanted == layout.end() || wanted->desk.IsEmpty()) {
+    return std::nullopt;
+  }
+  return Desk{static_cast<float>(wanted->desk.x()),
+              static_cast<float>(wanted->desk.y()),
+              static_cast<float>(wanted->desk.width()),
+              static_cast<float>(wanted->desk.height())};
+}
+
 }  // namespace
 
 std::optional<PointerCrossing> PointerCrossingFor(
     const std::vector<PointerScreen>& screens,
+    const std::vector<DomicileDisplayLayout>& layout,
     gfx::AcceleratedWidget from,
     const gfx::PointF& location) {
   const auto on = std::ranges::find(screens, from, &PointerScreen::window);
   CHECK(on != screens.end());
+  const std::optional<Desk> here = DeskOf(*on, layout);
   const gfx::PointF upright = ToUpright(*on, location);
-  const float width = static_cast<float>(UprightSize(*on).width());
-  const bool rightward = upright.x() >= width;
-  if (!rightward && upright.x() >= 0) {
+  const gfx::Size size = UprightSize(*on);
+  const bool inside = upright.x() >= 0 && upright.y() >= 0 &&
+                      upright.x() < static_cast<float>(size.width()) &&
+                      upright.y() < static_cast<float>(size.height());
+  if (inside || !here.has_value()) {
     return std::nullopt;
   }
 
-  const auto beside =
-      std::ranges::find_if(screens, [&](const PointerScreen& screen) {
-        return rightward
-                   ? screen.bounds_in_screen.x() == on->bounds_in_screen.right()
-                   : screen.bounds_in_screen.right() ==
-                         on->bounds_in_screen.x();
-      });
-  if (beside == screens.end()) {
-    return std::nullopt;
+  const gfx::PointF on_the_desk = here->ToDesk(upright, size);
+  std::optional<PointerCrossing> crossing;
+  for (const float seam : {0.f, kSeam}) {
+    for (const PointerScreen& screen : screens) {
+      const std::optional<Desk> there = DeskOf(screen, layout);
+      if (!crossing.has_value() && screen.window != from && there.has_value() &&
+          there->Holds(on_the_desk, seam)) {
+        crossing = PointerCrossing{
+            screen.window,
+            ToPanel(screen, there->FromDesk(there->Clamped(on_the_desk),
+                                            UprightSize(screen)))};
+      }
+    }
   }
-
-  const float across =
-      rightward
-          ? upright.x() - width
-          : static_cast<float>(UprightSize(*beside).width()) + upright.x();
-  return PointerCrossing{beside->window,
-                         ToPanel(*beside, gfx::PointF(across, upright.y()))};
+  return crossing;
 }
 
 bool HasTheKeyboard(const gfx::Rect& bounds_in_screen,

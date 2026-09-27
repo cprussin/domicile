@@ -578,9 +578,11 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
 
   std::vector<mojom::DisplayLayoutPtr> layout;
   layout.push_back(mojom::DisplayLayout::New(
-      7, true, gfx::Point(1920, 0), mojom::DisplayTransform::kRotate270, 1.2));
+      7, true, gfx::Point(1920, 0), mojom::DisplayTransform::kRotate270, 1.2,
+      gfx::Rect(1920, 0, 1800, 3200)));
   layout.push_back(mojom::DisplayLayout::New(
-      9, false, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0));
+      9, false, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0,
+      gfx::Rect()));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 
@@ -593,6 +595,8 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {
   // the page in it lays out upright and logical.
   EXPECT_EQ(layouts_[0][0]->transform, mojom::DisplayTransform::kRotate270);
   EXPECT_EQ(layouts_[0][0]->scale, 1.2);
+  // Where the profile placed it, which is what the pointer crosses by.
+  EXPECT_EQ(layouts_[0][0]->desk, gfx::Rect(1920, 0, 1800, 3200));
   EXPECT_EQ(layouts_[0][1]->id, 9);
   EXPECT_FALSE(layouts_[0][1]->enabled);
 }
@@ -630,7 +634,8 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
 
   std::vector<mojom::DisplayLayoutPtr> layout;
   layout.push_back(mojom::DisplayLayout::New(
-      7, true, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0));
+      7, true, gfx::Point(), mojom::DisplayTransform::kNormal, 1.0,
+      gfx::Rect()));
   remote->ConfigureDisplays(std::move(layout));
   RunUntilIdle();
 
