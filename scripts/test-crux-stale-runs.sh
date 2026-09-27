@@ -9,17 +9,13 @@
 # waited behind them. That is an hour of the only machine that can build the
 # fork, spent on answers nobody can act on.
 #
-# THE DANGEROUS HALF IS THE ONE THAT MUST NOT BE CANCELED. A killed `autoninja`
-# leaves a half-linked out/Domicile that the next run inherits, and the failure
-# it produces reads as a code error rather than an interrupted build — which is
-# why every crux workflow carries `cancel-in-progress: false` and why
-# `test-engine-concurrency.sh` asserts it. A run that has STARTED is therefore
-# off limits no matter whose it was. What this cancels is only runs that never
-# started: `queued` (waiting for the runner) and `pending` (held by a
-# concurrency group).
+# THE DANGEROUS HALF IS THE ONE THAT MUST NOT BE CANCELED. On a close that is
+# every run that has started. On a push it is the head's run, main's runs,
+# other branches' and forks' runs: a started run for a commit the branch moved
+# past is taken, in the steps crux-cancelable-step.sh allows.
 #
-# So the filter has two jobs and this asserts both: take every stale run that
-# is only waiting, and leave everything else alone.
+# So the filter has two jobs and this asserts both: take every stale run, and
+# leave everything else alone.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,9 +57,10 @@ grep -q 'self-hosted, *crux' "$ROOT/$CRUX_WORKFLOW" ||
 ! grep -q 'self-hosted, *crux' "$ROOT/$HOSTED_WORKFLOW" ||
   { echo "fixture is stale: $HOSTED_WORKFLOW now runs on crux" >&2; exit 1; }
 
-run() { # id, status, branch, workflow path, head sha
-  printf '{"id":%s,"status":"%s","head_branch":"%s","path":"%s","head_sha":"%s"}' \
-    "$1" "$2" "$3" "$4" "${5:-old}"
+REPO="cprussin/domicile"
+run() { # id, status, branch, workflow path, head sha, event, head repository
+  printf '{"id":%s,"status":"%s","head_branch":"%s","path":"%s","head_sha":"%s","event":"%s","head_repository":{"full_name":"%s"},"repository":{"full_name":"%s"}}' \
+    "$1" "$2" "$3" "$4" "${5:-old}" "${6:-pull_request}" "${7:-$REPO}" "$REPO"
 }
 runs_json() { printf '{"workflow_runs":[%s]}' "$(printf '%s,' "$@" | sed 's/,$//')"; }
 
@@ -86,11 +83,9 @@ expect "both, when both are there" "$(printf '101\n102')" \
 
 # ---- what must survive ---------------------------------------------------
 
-# THE ASSERTION THIS FILE EXISTS FOR. Canceling this is a half-linked
-# out/Domicile for whoever runs next, and it is the exact failure
-# `cancel-in-progress: false` is set to avoid.
+# A close takes only runs that never started.
 building="$(run 103 in_progress "$BRANCH" "$CRUX_WORKFLOW")"
-expect "a run that has STARTED is never canceled, whosever branch it is" "" \
+expect "a closed branch's run that has STARTED is left alone" "" \
   "$(filter "$(runs_json "$building")")"
 
 finished="$(run 104 completed "$BRANCH" "$CRUX_WORKFLOW")"
@@ -127,10 +122,58 @@ expect "a run for a commit the branch has moved past is canceled" "201" \
   "$(moved "$(runs_json "$old_queued")")"
 expect "the run for the commit it is at now is kept" "" \
   "$(moved "$(runs_json "$new_pending")")"
-expect "and a run that has started is still never canceled" "" \
+# A STARTED RUN FOR A REPLACED COMMIT IS CANCELED TOO, once the branch has
+# moved on: a 24h sample found about 5h/day of `crux` building commits already
+# replaced (runs 36190376822, 36201672013, 36208702812, 36217378847). Safe for
+# the tree: lld and clang write to a temp file and rename, so a killed build
+# leaves no half-written output, and the next run resumes incrementally. Which
+# step it may be stopped in is crux-cancelable-step.sh's call, below.
+expect "a started run for a commit the branch moved past is canceled too" "203" \
   "$(moved "$(runs_json "$old_building")")"
-expect "all three at once" "201" \
+expect "all three at once" "$(printf '201\n203')" \
   "$(moved "$(runs_json "$old_queued" "$new_pending" "$old_building")")"
+
+new_building="$(run 204 in_progress "$BRANCH" "$CRUX_WORKFLOW" new)"
+expect "the started run for the commit it is at now is kept" "" \
+  "$(moved "$(runs_json "$new_building")")"
+
+other_building="$(run 205 in_progress "claude/still-open" "$CRUX_WORKFLOW" old)"
+expect "another branch's started run is left alone" "" \
+  "$(moved "$(runs_json "$other_building")")"
+
+# Main's runs are pushes, and a push run is never this workflow's to stop: a
+# pull request whose head is `main` must not reach them.
+main_building="$(run 206 in_progress main "$CRUX_WORKFLOW" old push)"
+expect "a started push run on main is left alone" "" \
+  "$(printf '%s' "$(runs_json "$main_building")" | "$FILTER" main new 2>&1)"
+
+# Same name, somebody else's repository: its branch is not on origin to ask.
+fork_building="$(run 207 in_progress "$BRANCH" "$CRUX_WORKFLOW" old pull_request someone/domicile)"
+expect "a started run from a fork is left alone" "" \
+  "$(moved "$(runs_json "$fork_building")")"
+
+# ---- which step a started run may be stopped in ---------------------------
+
+# ONLY THE LONG, REPEATABLE STEPS. After them come publishing a release and
+# writing engine-release.nix back onto the branch -- a push that fires
+# `synchronize` itself, and would otherwise cancel the run that made it before
+# it recorded its proof.
+STEP="$ROOT/.github/scripts/crux-cancelable-step.sh"
+jobs_json() { # the step in progress in the engine job
+  printf '{"jobs":[{"name":"gate","status":"completed","steps":[{"name":"Prove","status":"completed"}]},{"name":"engine","status":"in_progress","steps":[{"name":"Take a tree","status":"completed"},{"name":"%s","status":"in_progress"}]}]}' "$1"
+}
+step() { printf '%s' "$(jobs_json "$1")" | "$STEP" >/dev/null 2>&1; echo $?; }
+for name in "Build" "The engine's checks"; do
+  grep -q "^      - name: $name\$" "$ROOT/$CRUX_WORKFLOW" ||
+    { echo "fixture is stale: $CRUX_WORKFLOW has no step '$name'" >&2; exit 1; }
+  expect "a run in '$name' may be stopped" 0 "$(step "$name")"
+done
+for name in "Take a tree" "Publish the release" "Write engine-release.nix back onto this branch" "Record the proof"; do
+  expect "a run in '$name' is left alone" 1 "$(step "$name")"
+done
+expect "a run between steps is left alone" 1 \
+  "$(printf '{"jobs":[{"name":"engine","status":"in_progress","steps":[{"name":"Build","status":"completed"}]}]}' |
+       "$STEP" >/dev/null 2>&1; echo $?)"
 
 # And the workflow that runs it does so on a push to the branch as well as on
 # a close, handing it the new head on a push and nothing on a close.
@@ -143,6 +186,10 @@ grep -q "crux-stale-runs.sh \"\$BRANCH\" \"\$KEEP\"" "$CANCELER"
 expect "and hands the filter the commit to keep" 0 "$?"
 grep -q "KEEP: \${{ github.event.action == 'synchronize' && github.event.pull_request.head.sha || '' }}" "$CANCELER"
 expect "which is the new head on a push and nothing on a close" 0 "$?"
+grep -q 'crux-still-head.sh "$BRANCH" "$sha"' "$CANCELER"
+expect "a started run is canceled only once its commit is not the branch's head" 0 "$?"
+grep -q 'crux-cancelable-step.sh' "$CANCELER"
+expect "and only in a step it may be stopped in" 0 "$?"
 
 # ---- the silent-no-op cases ----------------------------------------------
 
