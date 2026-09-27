@@ -2,6 +2,7 @@
 # Which of `crux`'s Chromium trees this run builds in.
 #
 #   .github/scripts/engine-tree-pool.sh pick <pin> <owner>
+#   .github/scripts/engine-tree-pool.sh compiles <pin>
 #   .github/scripts/engine-tree-pool.sh use  <pin>
 #   .github/scripts/engine-tree-pool.sh list
 #
@@ -49,8 +50,9 @@
 # costs one run what every run cost before the pool existed, and a wrong
 # *claim* about a tree's contents is a green check over code nothing compiled.
 # This script is not in a position to make the second kind of mistake, and that
-# is deliberate. It reads the series stamp beside a tree only to rank the trees;
-# `carries` still checks the tree the pick names.
+# is deliberate. It reads the series stamp beside a tree only to rank the trees,
+# and `compiles` reads it with the built stamp only to guess whether a run will
+# compile; `carries` and `warm` still check the tree the pick names.
 #
 # THE POOL IS THE MACHINE'S, NOT THIS REPOSITORY'S. How many trees fit is a
 # question about a ZFS quota on one machine in a house, so the slots are
@@ -62,7 +64,7 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <pick|use|list> [pin] [owner]" >&2
+  echo "usage: $(basename "$0") <pick|compiles|use|list> [pin] [owner]" >&2
   exit 2
 }
 
@@ -219,6 +221,10 @@ STAMP_SH="$(cd "$(dirname "$0")" && pwd)/engine-series-stamp.sh"
 # nowhere left to go. This one says that itself, once, at the end.
 LOCK_SH="$(cd "$(dirname "$0")" && pwd)/engine-tree-lock.sh"
 
+# Whether a tree's out/Release is built from what it carries: the compile
+# slot's own `warm`, so the two cannot disagree.
+SLOT_SH="$(cd "$(dirname "$0")" && pwd)/engine-compile-slot.sh"
+
 take_slot() { # slot owner
   "$LOCK_SH" take "$1/src" "$2" >/dev/null 2>&1
 }
@@ -280,6 +286,33 @@ case "$action" in
       echo "  rm -rf $("$LOCK_SH" path "$(usable | head -1)/src")"
     } >&2
     exit 1
+    ;;
+
+  compiles)
+    # WHETHER THE TREE `pick` WOULD TAKE NOW NEEDS A COMPILE, asked before the
+    # engine job takes a runner: engine.yml queues a run that compiles on
+    # GitHub for the compile slot, where waiting holds no runner. Writes
+    # `compile=false` only for a free tree whose stamp names this series and
+    # whose out/Release was built from it -- the two answers the job's own
+    # `carries` and `warm` steps give before skipping the slot. Anything else
+    # is `compile=true`, and so is a plan that fails, in engine.yml: that
+    # queues the run, which costs it a wait and nobody else a runner. A guess that
+    # goes stale before the job runs is caught by the job, which still takes
+    # the slot. It locks nothing.
+    pin="${2:-}"
+    [ -n "$pin" ] || usage
+    series="$("$STAMP_SH" identity)" || exit 1
+    compile=true
+    for slot in $(candidates "$pin" "$series"); do
+      [ -d "$("$LOCK_SH" path "$slot/src")" ] && continue
+      if [ "$(slot_series "$slot")" = "$series" ] &&
+         [ "$(GITHUB_OUTPUT=/dev/stdout "$SLOT_SH" warm "$slot/src")" = "warm=true" ]; then
+        compile=false
+      fi
+      echo "the pick would take ${slot##*/}: compile=$compile"
+      break
+    done
+    echo "compile=$compile" >>"${GITHUB_OUTPUT:-/dev/stdout}"
     ;;
 
   use)

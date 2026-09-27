@@ -345,6 +345,52 @@ out="$(pick "$root" aaaaaaa 'new series')"
 expect "with no series match, the least recently used tree at the pin is taken" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
+echo
+echo "== whether the tree pick would take needs a compile =="
+
+# engine.yml asks this before the engine job takes a runner, so a run that
+# will compile queues on GitHub for the compile slot holding no runner, and a
+# run that will not goes straight through. It asks about the tree `pick`
+# would take now, because that is the tree the job will build in.
+compiles() { # root pin
+  : >"$WORK/output"
+  DOMICILE_BUILD_ROOT="$1" GITHUB_OUTPUT="$WORK/output" \
+    "$POOL_SH" compiles "$2" >/dev/null 2>&1
+  sed -n 's/^compile=//p' "$WORK/output"
+}
+built() { # root slot
+  mkdir -p "$1/trees/tree-$2/src/out/Release"
+  : >"$1/trees/tree-$2/src/out/Release/args.gn"
+  "$ROOT/.github/scripts/engine-compile-slot.sh" built "$1/trees/tree-$2/src"
+}
+
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+carrying "$root" 1 aaaaaaa
+stamped "$root" 1 "$SERIES_ID"
+built "$root" 1
+expect "a free tree carrying this series, built from it, compiles nothing" \
+  false "$(compiles "$root" aaaaaaa)"
+expect "and asking takes no lock" ok \
+  "$([ ! -d "$(lock_of "$root" tree-1)" ] && echo ok || echo "locked it")"
+
+rm -f "$root/trees/tree-1/.domicile-built"
+expect "the same tree never built from it compiles" \
+  true "$(compiles "$root" aaaaaaa)"
+
+built "$root" 1
+DOMICILE_BUILD_ROOT="$root" "$ROOT/.github/scripts/engine-tree-lock.sh" \
+  take "$root/trees/tree-1/src" 'holder' >/dev/null 2>&1
+expect "held, so the pick would take the cold tree beside it, which compiles" \
+  true "$(compiles "$root" aaaaaaa)"
+
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+stamped "$root" 0 some-other-series
+built "$root" 0
+expect "a warm tree carrying another series compiles" \
+  true "$(compiles "$root" aaaaaaa)"
+
 # A run from a workflow older than per-tree locks holds the single lock and
 # repoints /build/chromium into whichever tree it likes, so nothing is free.
 root="$(build_root 2)"

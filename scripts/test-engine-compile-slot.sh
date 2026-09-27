@@ -152,6 +152,21 @@ kept="$(DOMICILE_COMPILE_SLOT_WAIT=1 \
 contains "a check that errors does not end the wait" "waited 1s" "$kept"
 contains "but says it could not ask" "no route to origin" "$kept"
 
+# AND ONCE BEFORE TAKING A FREE SLOT. engine.yml queues a compiling run on
+# GitHub rather than here, so the long wait can end with the slot free and the
+# commit replaced; the question is asked where that wait ends.
+free="$WORK/free-slot"
+: >"$WORK/output"
+gone="$(DOMICILE_COMPILE_SLOT="$free" GITHUB_OUTPUT="$WORK/output" \
+  DOMICILE_COMPILE_SLOT_STILL_WANTED='echo "replaced by def"; exit 1' slot take trent)"
+expect "a run no longer wanted does not take a free slot" refused "$(status "$gone")"
+expect "and tells the workflow it was superseded" "superseded=true" "$(cat "$WORK/output")"
+expect "and leaves the slot free" free "$([ -d "$free" ] && echo held || echo free)"
+expect "a check that cannot answer still takes a free slot" ok \
+  "$(status "$(DOMICILE_COMPILE_SLOT="$free" \
+    DOMICILE_COMPILE_SLOT_STILL_WANTED='exit 3' slot take ursula)")"
+rm -rf "$free"
+
 ( sleep 0.5; slot drop oscar >/dev/null ) &
 expect "a waiter that is still wanted takes the slot when it frees" ok \
   "$(status "$(DOMICILE_COMPILE_SLOT_WAIT=5 DOMICILE_COMPILE_SLOT_STILL_WANTED=true slot take rupert)")"

@@ -83,13 +83,13 @@ case "$action" in
     took=""
     asked=0
     while :; do
-      mkdir "$LOCK" 2>/dev/null && { took=1; break; }
-      [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
       # Whether this run is still worth waiting for, when the workflow says
       # how to tell: exit 0 yes, 1 no, anything else could not ask. A wait
       # can outlast a cold repin, and a run for a commit its branch has moved
       # past holds a runner that whole time for nothing. A check that cannot
       # answer is not a no, so a flaky network never ends a wanted run's wait.
+      # Asked before the first take too: engine.yml queues a compiling run on
+      # GitHub, so its long wait can end with this slot free.
       if [ -n "${DOMICILE_COMPILE_SLOT_STILL_WANTED:-}" ] &&
          [ $(($(date +%s) - asked)) -ge "${DOMICILE_COMPILE_SLOT_RECHECK:-60}" ]; then
         asked="$(date +%s)"
@@ -101,9 +101,11 @@ case "$action" in
             [ -z "${GITHUB_OUTPUT:-}" ] || echo "superseded=true" >>"$GITHUB_OUTPUT"
             exit 1
             ;;
-          *) echo "could not ask whether this run is still wanted, so still waiting: $why" ;;
+          *) echo "could not ask whether this run is still wanted, so it carries on: $why" ;;
         esac
       fi
+      mkdir "$LOCK" 2>/dev/null && { took=1; break; }
+      [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
       # Once per holder, not once: a wait can outlast a cold repin, and hours
       # of one line cannot say whether the slot has changed hands since.
       now_held="$(holder)"
