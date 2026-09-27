@@ -52,9 +52,10 @@ const ICON_SIZE = 16;
 
 type Props = {
   /**
-   * Whether the keyboard is on this page's monitor. A desk of several monitors
-   * is several pages, all told the launcher is up: the panel goes on the one
-   * the keyboard is on, and the rest draw only the backdrop it is up over.
+   * Whether the press that put it up was heard on this page. A desk of several
+   * monitors is several pages, all told the launcher is up: the panel goes on
+   * the one the keys are arriving at, and the rest draw only the backdrop it
+   * is up over.
    */
   here: boolean;
   /** Escape, or a click on the backdrop. The desktop decides what that means. */

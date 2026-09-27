@@ -577,6 +577,10 @@ fn placed(
 /// but they are still connectors the engine has to put somewhere, and the one
 /// place they must not be is on top of a monitor that is on.
 ///
+/// A PIXEL PAST THE END, not touching it. The engine carries a pointer off a
+/// screen's edge only onto one that starts where that screen ends, so the gap
+/// is what keeps a pointer from wandering onto a panel that is off.
+///
 /// Returned in the order the profile WROTE its entries, which is
 /// [`Layout::placed`]'s own order with the dropped ones back in their places.
 /// What is ordered by position is where the lit ones land, not the list.
@@ -589,19 +593,21 @@ fn scanout(
     across.sort_by_key(|display| (display.position.0, display.position.1));
     let lit = across
         .into_iter()
-        .map(|display| (display.name.as_str(), display.mode.0));
+        .map(|display| (display.name.as_str(), display.mode.0, false));
     let dark = profile
         .displays
         .iter()
         .filter(|placement| !placement.enabled)
-        .map(|placement| {
+        .enumerate()
+        .map(|(index, placement)| {
             let display = found(placement, connected);
-            (display.name.as_str(), display.mode.0)
+            (display.name.as_str(), display.mode.0, index == 0)
         });
 
     let mut origins: Vec<(&str, (i32, i32))> = Vec::with_capacity(profile.displays.len());
     let mut edge: i64 = 0;
-    for (name, width) in lit.chain(dark) {
+    for (name, width, past_a_gap) in lit.chain(dark) {
+        edge += i64::from(past_a_gap);
         // `i64` for the reason `extent` widens: each mode fits a `u32` and a
         // row of them need not fit the `i32` a corner is. Refused rather than
         // saturated, which would put two connectors on top of each other.
