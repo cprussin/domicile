@@ -207,27 +207,16 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           setStepped(undefined);
         }}
         onKeyDown={(event) => {
-          switch (event.key) {
-            case "ArrowDown": {
-              // Taken from the box, which would otherwise put the caret at the
-              // end of the query on the way past.
-              event.preventDefault();
-              setStepped(steppedTo(highlighted, 1, choices.length));
-              break;
-            }
-            case "ArrowUp": {
-              event.preventDefault();
-              setStepped(steppedTo(highlighted, -1, choices.length));
-              break;
-            }
-            case "Enter": {
-              // Nothing highlighted is an empty box, which is Enter on a
-              // keystroke nobody meant as a command.
-              if (chosen !== undefined) {
-                onLaunch(launchOf(chosen));
-              }
-              break;
-            }
+          const step = stepOf(event);
+          if (step !== undefined) {
+            // Taken from the box, which would otherwise put the caret at the
+            // end of the query on the way past.
+            event.preventDefault();
+            setStepped(steppedTo(highlighted, step, choices.length));
+          } else if (event.key === "Enter" && chosen !== undefined) {
+            // Nothing highlighted is an empty box, which is Enter on a
+            // keystroke nobody meant as a command.
+            onLaunch(launchOf(chosen));
           }
         }}
         placeholder={PROMPT}
@@ -730,6 +719,36 @@ const Keys = () => (
     </span>
   </div>
 );
+
+/**
+ * How far a key press walks the highlight, or `undefined` for one that does
+ * not walk it: the arrows, and the `ctrl+n` / `ctrl+p` of Emacs and readline.
+ */
+const stepOf = ({
+  ctrlKey,
+  key,
+}: {
+  ctrlKey: boolean;
+  key: string;
+}): number | undefined => {
+  switch (key) {
+    case "ArrowDown": {
+      return 1;
+    }
+    case "ArrowUp": {
+      return -1;
+    }
+    case "n": {
+      return ctrlKey ? 1 : undefined;
+    }
+    case "p": {
+      return ctrlKey ? -1 : undefined;
+    }
+    default: {
+      return undefined;
+    }
+  }
+};
 
 /**
  * Which of `count` rows is highlighted: the one walked to, the first, or none.
