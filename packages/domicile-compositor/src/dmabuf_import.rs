@@ -18,6 +18,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
 
 use std::os::unix::fs::MetadataExt as _;
+use std::path::{Path, PathBuf};
 
 /// The EGL entry point Smithay itself loads. Probing it first is what turns
 /// "this machine has no GPU stack" from a crash into an answer.
@@ -32,6 +33,7 @@ const EGL_LIBRARY: &str = "libEGL.so.1";
 /// same code serve a headless compositor and a presenting one.
 pub struct DmabufImporter {
     main_device: Option<u64>,
+    node: Option<PathBuf>,
 }
 
 /// Why the GPU path is unavailable, or why a particular frame could not be read.
@@ -62,11 +64,11 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     let devices = EGLDevice::enumerate()?;
     let device = preferred_device(devices, EGLDevice::is_software).ok_or(ImportError::NoDevice)?;
     let main_device = drm_node(&device);
-    tracing::debug!(
-        device = ?device.render_device_path().or_else(|_| device.drm_device_path()),
-        main_device,
-        "dmabuf import device"
-    );
+    let node = device
+        .render_device_path()
+        .or_else(|_| device.drm_device_path())
+        .ok();
+    tracing::debug!(device = ?node, main_device, "dmabuf import device");
     // SAFETY: the device handle comes straight out of EGL's own enumeration
     // and outlives the display, which owns it from here on.
     let display = unsafe { EGLDisplay::new(device) }?;
@@ -74,7 +76,7 @@ pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError
     // SAFETY: the renderer is created, used and dropped on the Wayland
     // thread, which is where the context is made current.
     let renderer = unsafe { GlesRenderer::new(context) }?;
-    Ok((renderer, DmabufImporter { main_device }))
+    Ok((renderer, DmabufImporter { main_device, node }))
 }
 
 impl DmabufImporter {
@@ -86,6 +88,12 @@ impl DmabufImporter {
     /// list it cannot act on.
     pub fn main_device(&self) -> Option<u64> {
         self.main_device
+    }
+
+    /// The DRM node's path, where the compositor allocates GPU buffers of its
+    /// own. `None` for a software rasterizer, which has none.
+    pub fn node(&self) -> Option<&Path> {
+        self.node.as_deref()
     }
 
     /// The formats to advertise on `zwp_linux_dmabuf_v1` — exactly the ones

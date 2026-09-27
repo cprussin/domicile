@@ -166,10 +166,10 @@ The evidence for each of those is in the doc that made the claim —
 
 ## In the engine fork — the agent on `crux`
 
-1. **An shm→dmabuf upload.** `publish_frame` submits only
-   `CommittedBuffer::Gpu`, so a client that draws into shared memory has no
-   window and the compositor says so once per client. Deferred deliberately, so
-   there is one path to write the upload against rather than an interim tree.
+1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
+   buffer of the compositor's and submitted like a client's dmabuf. The copy
+   is tested on llvmpipe; the allocation and the browser's import of it have
+   never run, because no check has a render node.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md), phase 2.
 
 2. **Presentation, measured.** Every number in the fork's docs comes from a
@@ -329,7 +329,6 @@ these is one run, and each has a line to look for.
 True, understood, and not scheduled. Each is here so that finding it again
 costs nothing.
 
-- **A `wl_shm` client's window is blank** — the upload above.
 - **A frame in which the chrome repainted reports the whole output damaged.**
   The chrome is one layer covering the desktop, and it repaints for a clock, a
   caret, a hover.

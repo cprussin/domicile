@@ -28,9 +28,9 @@
 //!
 //! What is left unguarded is a client that renders in place into a single
 //! dmabuf and never submits a second one: its sole hold is its newest, so it
-//! is never taken back. Nothing here has ever seen one — only dmabuf
-//! submissions are held at all (`publish_frame` returns early for anything
-//! else), and a GL client's swapchain is at least double-buffered. A frame
+//! is never taken back. Nothing here has ever seen one — a client's buffer is
+//! held only when it is a dmabuf (an shm frame is copied and its buffer
+//! released at once), and a GL client's swapchain is at least double-buffered. A frame
 //! that tears once is worse than a frame that does not; a client that never
 //! draws again is worse than both; a compositor that hands out the buffer
 //! being scanned out is worse still.

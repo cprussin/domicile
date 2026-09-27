@@ -17,12 +17,42 @@ use crate::engine::{
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_surfaces::Surfaces;
+use crate::uploads::UploadId;
 
-/// A buffer going back to the client, and why. Every one of these is a
-/// `wl_buffer.release` the caller owes.
+/// A buffer the engine was handed: a client's own dmabuf, or one of the
+/// compositor's that an shm client's frame was copied into.
+///
+/// Both are held until viz releases them, for the same reason. What differs is
+/// who is owed the release — a `wl_buffer.release` for the first, a buffer
+/// going back to [`crate::uploads::Uploads`] for the second.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Submitted {
+    Client(wl_buffer::WlBuffer),
+    Upload(UploadId),
+}
+
+/// What an import is recorded against: the object for a client's buffer, the
+/// id for one of the compositor's.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ImportKey {
+    Client(ObjectId),
+    Upload(UploadId),
+}
+
+impl Submitted {
+    fn key(&self) -> ImportKey {
+        match self {
+            Submitted::Client(buffer) => ImportKey::Client(buffer.id()),
+            Submitted::Upload(id) => ImportKey::Upload(*id),
+        }
+    }
+}
+
+/// A buffer coming back from the engine, and why. Every one of these is a
+/// `wl_buffer.release` the caller owes, or a buffer of its own that is free.
 #[derive(Debug)]
 pub struct Release {
-    pub buffer: wl_buffer::WlBuffer,
+    pub buffer: Submitted,
     /// Which window's it was. Carried rather than looked up by the caller
     /// because by the time an expiry is reported the only thing that knows is
     /// the hold it came out of — and "a buffer was never released" says
@@ -31,13 +61,13 @@ pub struct Release {
     pub why: Returned,
 }
 
-/// A client's committed dmabuf, asked for again.
+/// A submitted buffer's dmabuf, asked for again.
 ///
 /// The caller's, because turning a `wl_buffer` back into one is Smithay's job
-/// and this module carries no Smithay buffer types — and because the answer is
-/// `None` for an `shm` client, which is the compositor's rule rather than this
-/// one's. `None` here is a window that cannot be shown to the new engine.
-pub type Describe<'a> = dyn Fn(&wl_buffer::WlBuffer) -> Option<DmabufDescriptor> + 'a;
+/// and this module carries no Smithay buffer types — and because the
+/// compositor's own buffers are the caller's too. `None` here is a window that
+/// cannot be shown to the new engine.
+pub type Describe<'a> = dyn Fn(&Submitted) -> Option<DmabufDescriptor> + 'a;
 
 /// What a reconnect gave back and what it could not put back.
 #[derive(Debug)]
@@ -72,8 +102,8 @@ pub struct EngineSession {
     /// Which imported buffer each `wl_buffer` is. A client commits the same
     /// buffer over and over; importing per commit would hand the browser
     /// another set of fds every frame for the same pixmap.
-    imports: HashMap<ObjectId, (SurfaceId, BufferId)>,
-    held: HeldBuffers<wl_buffer::WlBuffer>,
+    imports: HashMap<ImportKey, (SurfaceId, BufferId)>,
+    held: HeldBuffers<Submitted>,
 }
 
 impl EngineSession {
@@ -204,14 +234,14 @@ impl EngineSession {
     fn show_again(
         &mut self,
         app_id: &str,
-        buffer: &wl_buffer::WlBuffer,
+        buffer: &Submitted,
         describe: &Describe,
         now: Instant,
     ) -> bool {
         let Some(descriptor) = describe(buffer) else {
             return false;
         };
-        self.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), now)
+        self.submit(app_id, buffer.clone(), &descriptor, (0, 0, 0, 0), now)
     }
 
     /// The fd to add to the compositor's loop.
@@ -235,7 +265,7 @@ impl EngineSession {
         self.engine.set_clipboard(clipboard, text);
     }
 
-    /// Submits a client's buffer as `app_id`'s window.
+    /// Submits a buffer as `app_id`'s window.
     ///
     /// `true` means the engine has the buffer and **the caller must not release
     /// it**. `false` means nothing was submitted and the buffer is the caller's
@@ -244,7 +274,7 @@ impl EngineSession {
     pub fn submit(
         &mut self,
         app_id: &str,
-        buffer: &wl_buffer::WlBuffer,
+        buffer: Submitted,
         descriptor: &DmabufDescriptor,
         damage: (i32, i32, i32, i32),
         now: Instant,
@@ -259,17 +289,17 @@ impl EngineSession {
         if !self.surfaces.takes_frames(surface) {
             return false;
         }
-        let Some(id) = self.import(surface, buffer, descriptor) else {
+        let Some(id) = self.import(surface, &buffer, descriptor) else {
             return false;
         };
         self.engine.submit(surface, id, damage);
-        // A hold this replaced is the *same* `wl_buffer` — ids come from
+        // A hold this replaced is the *same* buffer — ids come from
         // `imports`, which is keyed on the object — so it is dropped and not
         // released. Releasing it would tell the client it may draw into the
         // buffer viz has only just been handed, which is the tear this whole
         // path exists to avoid. The one release the client is owed arrives when
         // viz is done with the submission it actually has.
-        drop(self.held.hold(surface, id, buffer.clone(), now));
+        drop(self.held.hold(surface, id, buffer, now));
         true
     }
 
@@ -327,13 +357,22 @@ impl EngineSession {
     /// hands back the hold if the engine still had it — no release will arrive
     /// for a buffer whose object is gone.
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
-        let (surface, id) = self.imports.remove(&buffer.id())?;
+        let (surface, id) = self.imports.remove(&ImportKey::Client(buffer.id()))?;
         self.engine.forget(surface, id);
         self.held.release(surface, id).map(|buffer| Release {
             buffer,
             surface,
             why: Returned::Abandoned,
         })
+    }
+
+    /// The compositor dropped one of its own buffers. Drops the import so the
+    /// browser lets go of its fds. Only a buffer viz is not holding is ever
+    /// dropped — see [`crate::uploads`] — so there is no hold to hand back.
+    pub fn upload_dropped(&mut self, upload: UploadId) {
+        if let Some((surface, id)) = self.imports.remove(&ImportKey::Upload(upload)) {
+            self.engine.forget(surface, id);
+        }
     }
 
     /// THROWAWAY. See [`crate::engine::Engine::spike_window_center`].
@@ -380,10 +419,10 @@ impl EngineSession {
     fn import(
         &mut self,
         surface: SurfaceId,
-        buffer: &wl_buffer::WlBuffer,
+        buffer: &Submitted,
         descriptor: &DmabufDescriptor,
     ) -> Option<BufferId> {
-        if let Some((_, id)) = self.imports.get(&buffer.id()) {
+        if let Some((_, id)) = self.imports.get(&buffer.key()) {
             return Some(*id);
         }
         let dmabuf = Dmabuf::from_descriptor(descriptor).or_else(|| {
@@ -401,7 +440,7 @@ impl EngineSession {
             );
             None
         })?;
-        self.imports.insert(buffer.id(), (surface, id));
+        self.imports.insert(buffer.key(), (surface, id));
         Some(id)
     }
 }
@@ -411,10 +450,7 @@ impl EngineSession {
 /// The id goes and the surface stays, because a `wl_buffer.release` names the
 /// buffer the client already has and the surface is what a caller needs to say
 /// WHOSE window it was — see [`Release::surface`].
-fn returned(
-    holds: Vec<((SurfaceId, BufferId), wl_buffer::WlBuffer)>,
-    why: Returned,
-) -> Vec<Release> {
+fn returned(holds: Vec<((SurfaceId, BufferId), Submitted)>, why: Returned) -> Vec<Release> {
     holds
         .into_iter()
         .map(|((surface, _), buffer)| Release {

@@ -502,8 +502,8 @@
           "-p" "domicile-launch" "--bin" "domicile"
         ];
 
-        # Not because they would fail — the ones needing a GPU are `#[ignore]`d
-        # and CI runs the rest with no GL stack at all — but because a package
+        # Not because they would fail — none needs a GPU, and CI runs them on
+        # Mesa's software EGL — but because a package
         # build is not where this workspace's tests are paid for. `cargo-test`
         # runs them on every push, against the same lockfile, and running them
         # again per install buys nothing but minutes.
