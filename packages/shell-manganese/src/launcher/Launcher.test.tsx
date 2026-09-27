@@ -66,6 +66,7 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
   render(
     <Launcher
       here
+      onClosed={() => undefined}
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -102,6 +103,7 @@ describe("Launcher", () => {
     render(
       <Launcher
         here
+        onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}

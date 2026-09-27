@@ -67,12 +67,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // monitor the pointer is on, and that need not be the monitor the
   // desktop's focus is on: a key can move the focus to another screen and
   // leave the pointer — and so the keyboard — where it was.
+  //
+  // Forgotten once the panel has finished closing rather than as it starts
+  // to: the panel is only drawn while this holds, and one taken away with the
+  // press that closed it would never get to transition out.
   const [launchedHere, setLaunchedHere] = useState(false);
-  useEffect(() => {
-    if (!windows.launcherOpen) {
-      setLaunchedHere(false);
-    }
-  }, [windows.launcherOpen]);
 
   // The launcher's rows are the host's answer to what is in its box: the
   // compositor keeps an index of the home and searches it, and all that
@@ -175,6 +174,9 @@ export const Desktop = ({ desk, domicile }: Props) => {
       */}
       <Launcher
         here={launchedHere}
+        onClosed={() => {
+          setLaunchedHere(false);
+        }}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}
