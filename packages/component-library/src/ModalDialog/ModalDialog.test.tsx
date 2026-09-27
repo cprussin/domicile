@@ -107,6 +107,27 @@ describe(ModalDialog, () => {
       ).toBeInTheDocument();
     });
 
+    it("takes the backdrop away when a dialog drawn without its popup closes", async () => {
+      // A modal finishes closing when its popup has, so one that has no popup
+      // has to have something to finish on -- or its backdrop is never taken
+      // away, and goes on taking every click on the page.
+      const { baseElement, rerender } = render(
+        <ModalDialog open popup={false}>
+          Body
+        </ModalDialog>,
+      );
+
+      rerender(
+        <ModalDialog open={false} popup={false}>
+          Body
+        </ModalDialog>,
+      );
+
+      await waitFor(() => {
+        expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
+      });
+    });
+
     it("renders the trigger when provided and keeps the dialog closed", () => {
       render(
         <ModalDialog trigger={<Button>Open me</Button>}>Body</ModalDialog>,

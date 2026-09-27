@@ -90,6 +90,13 @@ const ModalDialogComponent = ({
         data-backdrop=""
         data-surface={surface}
       />
+      {/*
+        Without its popup, a dialog still gets one to close on, drawn as
+        nothing. The dialog finishes closing when its popup has, so one with
+        none would never finish, and its backdrop would go on taking every
+        click on the page.
+      */}
+      {!popup && <BaseDialog.Popup hidden />}
       {popup && (
         <BaseDialog.Viewport className={viewportStyles}>
           {/* The placement, the size and the surface are written on the popup rather than
