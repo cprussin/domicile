@@ -407,6 +407,22 @@ describe("Launcher", () => {
     );
   });
 
+  it("says so under the last row, not under the panel", async () => {
+    // It is about the rows, so it sits where the rows run out: the end of the
+    // list is where a person looking for a file that is not there yet looks.
+    const panel = launcher(["src", "Notes/today.org"], true);
+    await panel.rows();
+
+    const status = await screen.findByRole("status");
+
+    expect(
+      screen.getAllByRole("option").at(-1)?.compareDocumentPosition(status),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(status.compareDocumentPosition(previewPane())).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("says nothing about an index that is not being built", async () => {
     // Which is every launcher after the first seconds of a session. A notice
     // that stayed up would be a panel that never stops apologizing.

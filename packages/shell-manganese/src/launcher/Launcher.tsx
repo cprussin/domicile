@@ -278,6 +278,14 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
               </div>
             ))}
           </div>
+          {/*
+            After the last row and inside the box they scroll in, because it is
+            about the list rather than about any row in it: the end of the rows
+            is where somebody looking for a file that is not there yet looks.
+            Beside the listbox rather than in it, which holds options and
+            nothing else.
+          */}
+          {found.indexing && <StillIndexing />}
         </div>
         <section aria-label="Preview" className={previewStyles}>
           <PreviewOf
@@ -287,13 +295,6 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           />
         </section>
       </div>
-      {/*
-        Under the rows rather than among them, because it is about the list
-        rather than about any row in it — and the rows above are a box of one
-        size, so a line that appears and vanishes here moves nothing a person
-        is reading.
-      */}
-      {found.indexing && <StillIndexing />}
     </div>
   );
 };
@@ -991,16 +992,15 @@ const countStyles = css({
   whiteSpace: "nowrap",
 });
 
-// Beside the keys and at the other end of the footer, in the color the panel
-// says everything provisional in. Pushed left of them by `marginInlineEnd`,
-// because the footer lays its children out to the right and this is the half
-// that is news.
+// A row's inset, so its glyph lines up under the tiles above it, in the color
+// the panel says everything provisional in.
 const indexingStyles = hstack({
   color: "muted",
   fontSize: "xs",
   gap: 1.5,
   margin: 0,
-  marginInlineEnd: "auto",
+  paddingBlock: 1.5,
+  paddingInline: 2,
 });
 
 // A full turn, for the one thing on this panel that is still happening. On the
