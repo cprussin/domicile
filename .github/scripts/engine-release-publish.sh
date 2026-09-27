@@ -12,7 +12,21 @@
 # name always means the newest build rather than the first one anybody made —
 # the assets carry the commit in their filename, so nothing is ambiguous about
 # which build a downloaded file is.
+#
+# DOMICILE_ENGINE_BUILD=official publishes the production build, under
+# `engine-official-` rather than `engine-`: it is of the same series as the
+# checked build engine.yml publishes, so a shared name would have each replace
+# the other's engine under one tag.
 set -euo pipefail
+
+case "${DOMICILE_ENGINE_BUILD:-checked}" in
+  (checked) PREFIX=engine ;;
+  (official) PREFIX=engine-official ;;
+  (*)
+    echo "DOMICILE_ENGINE_BUILD is '$DOMICILE_ENGINE_BUILD'; the builds are 'checked' and 'official'." >&2
+    exit 1
+    ;;
+esac
 
 STAGE="${1:-}"
 TARBALL="${2:-}"
@@ -46,7 +60,7 @@ if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   # two names for one build with nothing to choose between them.
   PINNABLE=""
 else
-  TAG="engine-nightly"
+  TAG="$PREFIX-nightly"
   PRERELEASE=true
   # THE ROLLING TAG CANNOT BE PINNED, and that is what the second release is
   # for. `engine-nightly` is deleted and recreated on every run, so the asset
@@ -82,7 +96,7 @@ else
   #
   # The same twelve characters the tarball is named after, so the tag and the
   # filename cannot drift apart.
-  PINNABLE="engine-s${IDENTITY:0:12}"
+  PINNABLE="$PREFIX-s${IDENTITY:0:12}"
 fi
 
 # A release for this tag may exist: the nightly always does after the first
@@ -96,7 +110,7 @@ if existing=$(api "$API/releases/tags/$TAG" 2>/dev/null); then
   api -X DELETE "$API/releases/$id" >/dev/null
   # Only the nightly's tag is ours to move. A pushed tag is a fact about the
   # history and deleting it would rewrite what somebody else is pointing at.
-  if [ "$TAG" = "engine-nightly" ]; then
+  if [ "$TAG" = "$PREFIX-nightly" ]; then
     api -X DELETE "$API/git/refs/tags/$TAG" >/dev/null 2>&1 || true
   fi
 fi
@@ -109,6 +123,7 @@ engine without anybody building one.
 - series identity: \`$IDENTITY\`
 - domicile commit: \`$GITHUB_SHA\`
 - chromium pin: \`$PIN\`
+- build: \`${DOMICILE_ENGINE_BUILD:-checked}\`
 - gn args: \`.github/scripts/engine-release-build.sh\` at that commit${PINNABLE:+
 - immutable release: \`$PINNABLE\`}
 

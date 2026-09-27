@@ -280,6 +280,23 @@ esac
 grep -q . "$tagged/deleted" 2>/dev/null &&
   fail "a pushed tag's release was deleted: $(cat "$tagged/deleted")"
 
+echo "the official build publishes beside the checked one, not over it"
+# Both builds are of the same series, so a shared name would have each replace
+# the other's engine under one tag.
+official="$WORK/official"
+publish "$official" DOMICILE_ENGINE_BUILD=official ||
+  { cat "$official/out" >&2; fail "publisher exited nonzero"; }
+for release in engine-official-nightly "engine-official-s${IDENTITY:0:12}"; do
+  [ -f "$official/created-$release.json" ] ||
+    fail "the official build did not publish $release"
+done
+for release in engine-nightly "$PINNABLE"; do
+  [ -f "$official/created-$release.json" ] &&
+    fail "the official build published over the checked build's $release"
+  grep -qx "$release" "$official/deleted" 2>/dev/null &&
+    fail "the official build deleted the checked build's $release"
+done
+
 echo "an upload GitHub drops is tried again"
 # Run 35252793831 built the engine, packaged it and passed the pixel guard, and
 # then lost all 27 minutes of it to `curl: (22) The requested URL returned
