@@ -6,6 +6,7 @@ import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
 import { FloatGrab } from "./floating/FloatGrab";
+import { FloatShadow } from "./floating/FloatShadow";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import { GroupOutline } from "./GroupOutline";
@@ -146,6 +147,24 @@ export const Stage = ({
   const targets = tiledTargets(placements);
   return (
     <main>
+      {/*
+        Before every window, so each float covers its own shadow on document
+        order — see `FloatShadow`. Not for a float filling the screen, whose
+        shadow would fall off the edge of it and onto the next display.
+      */}
+      {motions.drawn.map(({ motion, placement, window }) =>
+        placement !== undefined &&
+        window.id !== fullscreenId &&
+        floats.some((float) => float.id === window.id) ? (
+          <FloatShadow
+            depth={placement.depth}
+            dragging={window.id === draggingId}
+            frame={placement.frame}
+            key={window.id}
+            motion={motion}
+          />
+        ) : undefined,
+      )}
       {motions.drawn.map(({ focused, motion, placement, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         // While the desktop's modifier is held the pointer belongs to the shell

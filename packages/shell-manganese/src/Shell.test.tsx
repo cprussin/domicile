@@ -447,6 +447,25 @@ const grabSheets = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>("[data-window][aria-hidden]"),
 ];
 
+/** The shadows cast under the floating windows on screen. */
+const shadows = (container: HTMLElement): HTMLElement[] => [
+  ...container.querySelectorAll<HTMLElement>("[data-shadow]"),
+];
+
+/**
+ * The shadow under the one floating window on screen.
+ *
+ * Throws where there is none, for the reason {@link groupOutline} does.
+ */
+const floatShadow = (container: HTMLElement): HTMLElement => {
+  const [shadow] = shadows(container);
+  if (shadow === undefined) {
+    throw new Error("test: no shadow under a floating window");
+  } else {
+    return shadow;
+  }
+};
+
 const appElement = (container: HTMLElement, appId: string): HTMLElement => {
   const element = container.querySelector<HTMLElement>(
     `${APP_TAG_NAME}[app-id="${appId}"]`,
@@ -1462,6 +1481,50 @@ describe("Shell", () => {
       expect(
         Number.parseFloat(appElement(container, "term").style.insetInlineStart),
       ).toBeGreaterThan(was);
+    });
+
+    it("casts a shadow under a floating window and not under a tiled one", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      expect(shadows(container)).toHaveLength(0);
+
+      press("Tab", true);
+
+      // Around the whole frame — the bar and the contents under it — at the
+      // window's own depth, and before the window in the document, so the
+      // window paints over its own shadow and over nothing else's.
+      const shadow = floatShadow(container);
+      const app = appElement(container, "term");
+      const bar = barFor(container, "app:term");
+      const top = Number.parseFloat(bar.style.insetBlockStart);
+      const bottom =
+        Number.parseFloat(app.style.insetBlockStart) +
+        Number.parseFloat(app.style.blockSize);
+      expect(boxOf(shadow)).toEqual({
+        height: `${(bottom - top).toString()}px`,
+        width: app.style.inlineSize,
+        x: app.style.insetInlineStart,
+        y: bar.style.insetBlockStart,
+      });
+      expect(shadow.style.zIndex).toBe(app.style.zIndex);
+      expect(shadow.compareDocumentPosition(app)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+      press("Tab", true);
+      expect(shadows(container)).toHaveLength(0);
+    });
+
+    it("casts no shadow from a float that fills the screen", () => {
+      // Its shadow would fall off the edge of the screen — onto the next
+      // display, on a desk of more than one.
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+
+      press("f");
+
+      expect(shadows(container)).toHaveLength(0);
     });
 
     it("stacks each float over the one behind it", () => {

@@ -209,6 +209,12 @@ compositor applies it to the client's buffer the way it would to a
 hardware-composited `<video>`, and what shows through a dragged window is the
 desktop behind it. The shell writes the CSS and stops.
 
+A float **casts a shadow** on whatever is under it — one element around the
+whole frame, at the window's depth and before it in the document, rather than
+a `box-shadow` on the bar and one on the contents, which would throw the bar's
+across the client's pixels. It moves with the window, and a float filling the
+screen casts none, since it would fall onto the next display.
+
 The float order is the stacking order, and the shell writes it as the
 `z-index` of the window's *own* element — which is what stacks the window, for
 the same reason: it is a layer in this page's layer tree, and it is the
@@ -739,6 +745,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/useWindowMotion.ts` | Which windows are drawn and what each of them is doing, worked out from the difference between two renders. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
 | `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, the pointer's travel read in the pixels the window was laid out in, and the furniture that offers it. |
+| `src/window-management/floating/FloatShadow.tsx` | The shadow a floating window casts, drawn under the whole frame and moving with it. |
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
 | `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |
 | `src/global.css`, `src/css.d.ts` | The document-level styling, and the type for importing it. |
