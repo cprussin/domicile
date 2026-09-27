@@ -65,22 +65,22 @@ Either alone compiles and does nothing.
  4 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/ui/views/exclusive_access/BUILD.gn b/chrome/browser/ui/views/exclusive_access/BUILD.gn
-index b03ae97f28..35f0b535de 100644
+index 5b69746515..97a35222f2 100644
 --- a/chrome/browser/ui/views/exclusive_access/BUILD.gn
 +++ b/chrome/browser/ui/views/exclusive_access/BUILD.gn
 @@ -40,6 +40,12 @@ source_set("impl") {
+     "//ui/strings:ui_strings_grit",
      "//ui/views",
    ]
- 
++
 +  # The presentation watchdog asks the platform whether a window that is not
 +  # the screen is ever presented, which only Ozone can answer.
 +  if (use_ozone) {
 +    deps += [ "//ui/ozone" ]
 +  }
-+
-   # exclusive_access_bubble_views.cc includes views/frame/top_container_view.h,
-   # which is still compiled in //chrome/browser/ui:ui. Reach it via
-   # browser_public_dependencies; the reverse edge is the
+ }
+ 
+ source_set("browser_tests") {
 diff --git a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
 index 3df24594f6..e4d6b3fe2e 100644
 --- a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc

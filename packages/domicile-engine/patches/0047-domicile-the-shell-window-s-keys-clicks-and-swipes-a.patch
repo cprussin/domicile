@@ -29,10 +29,10 @@ windows are <webview> guests, whose delegate is WebViewGuest.
  2 files changed, 22 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index b752684b16..0252da10aa 100644
+index 3bc40bcc91..f756d5628e 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -317,23 +317,29 @@ content::KeyboardEventProcessingResult
+@@ -312,23 +312,29 @@ content::KeyboardEventProcessingResult
  BrowserWebContentsDelegate::PreHandleKeyboardEvent(
      content::WebContents* source,
      const input::NativeWebKeyboardEvent& event) {
@@ -74,7 +74,7 @@ index b752684b16..0252da10aa 100644
  }
  
  void BrowserWebContentsDelegate::RequestPointerLock(
-@@ -403,11 +409,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
+@@ -398,11 +404,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
  }
  
  bool BrowserWebContentsDelegate::CanOverscrollContent() {
@@ -87,7 +87,7 @@ index b752684b16..0252da10aa 100644
  }
  
  bool BrowserWebContentsDelegate::ShouldPreserveAbortedURLs(
-@@ -849,7 +852,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
+@@ -842,7 +845,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
  }
  
  void BrowserWebContentsDelegate::ContentsZoomChange(bool zoom_in) {
