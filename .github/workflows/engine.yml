@@ -559,6 +559,19 @@ jobs:
       - name: Write down what out/Release was built from
         run: .github/scripts/engine-compile-slot.sh built "$CHROMIUM"
 
+      # THE SLOT IS FOR THE COMPILE, AND THE COMPILE IS DONE. Nothing below
+      # builds Chromium: packaging is a copy and a tar, and the packaged guard's
+      # `cargo build` is the compositor. Held to the end of the job, the slot
+      # was busy 97% of a day, ~3.5h of it on the checks, while the other
+      # runner's compile waited. The latency guard does not need it either: a
+      # compile runs `noisy` and that guard waits for `quiet` -- see
+      # .github/scripts/engine-render-node-lock.sh. The `always()` drop at the
+      # end still covers a run that fails before here, and `drop` is a no-op
+      # on a slot already dropped or somebody else's.
+      # See scripts/test-the-compile-slot-covers-only-the-compile.sh.
+      - name: Drop the compile slot, the compile is done
+        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
+
       # EVERY ASSERTION THIS JOB MAKES, IN ONE COMMAND, and none of them
       # defined here. `scripts/check.sh engine` runs the artifact check, the two
       # gtest suites and the fourteen guard checks with their twelve controls,
