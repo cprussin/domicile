@@ -174,6 +174,15 @@ typedef struct DomicileDisplayLayout {
   // outlives the dark.
   DomicileDisplayTransform transform;
   double scale;
+  // Where the profile put this display on the desktop the compositor lays
+  // out, in its logical pixels -- what a pointer crosses between monitors by,
+  // because the row x and y are in says nothing about which monitor is above
+  // or beside which. Zeros where `enabled` is zero: a dark display has no
+  // place there.
+  int32_t desk_x;
+  int32_t desk_y;
+  int32_t desk_width;
+  int32_t desk_height;
 } DomicileDisplayLayout;
 
 // What the browser has to tell the compositor. Each maps onto a Wayland request
