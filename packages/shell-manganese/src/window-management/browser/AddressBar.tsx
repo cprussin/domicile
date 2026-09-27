@@ -13,6 +13,7 @@ import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { FormEvent } from "react";
 import { useState } from "react";
 
+import { css } from "../../../styled-system/css";
 import { hstack } from "../../../styled-system/patterns";
 import type { AddressSuggestion } from "../../address/address-suggestions";
 import {
@@ -188,39 +189,46 @@ export const AddressBar = ({
         value={typed}
       />
       {/* AT THE INLINE END, where Chrome puts its own zoom: the address is
-          what the eye lands on, and these are read once and left alone. */}
+          what the eye lands on, and these are read once and left alone. One
+          capsule drawn like the field beside it, so the bar reads as two
+          pills rather than a pill and three loose controls. */}
       <div aria-label="Zoom" className={zoomStyles} role="group">
         <Button
           disabled={isFullyZoomedOut(zoom)}
           label="Zoom out"
           onClick={onZoomOut}
           rounded
-          size="sm"
+          size="xs"
           variant="ghost"
         >
-          <MinusIcon size={16} />
+          <MinusIcon size={12} weight="bold" />
         </Button>
+        <span aria-hidden className={dividerStyles} />
         {/* The zoom, and pressing it puts the page back to 100% — which is
-            why it is dead at 100%, like any control with nothing to do. */}
-        <Button
-          disabled={isUnzoomed(zoom)}
-          onClick={onZoomReset}
-          rounded
-          size="sm"
-          title="Reset zoom"
-          variant="ghost"
-        >
-          {zoomPercent(zoom)}
-        </Button>
+            why it is dead at 100%, like any control with nothing to do. A
+            fixed width, so the bar does not shift as the number does. */}
+        <span className={readoutStyles}>
+          <Button
+            disabled={isUnzoomed(zoom)}
+            onClick={onZoomReset}
+            rounded
+            size="xs"
+            title="Reset zoom"
+            variant="ghost"
+          >
+            {zoomPercent(zoom)}
+          </Button>
+        </span>
+        <span aria-hidden className={dividerStyles} />
         <Button
           disabled={isFullyZoomedIn(zoom)}
           label="Zoom in"
           onClick={onZoomIn}
           rounded
-          size="sm"
+          size="xs"
           variant="ghost"
         >
-          <PlusIcon size={16} />
+          <PlusIcon size={12} weight="bold" />
         </Button>
       </div>
       {zoomsAnnounced === 0 ? undefined : (
@@ -300,9 +308,30 @@ const historyStyles = hstack({
   gap: 0.5,
 });
 
-// Tight for the reason the history controls are: out, the zoom and in are one
-// control in three parts.
+// The field's own shape — its height, its border and its ground — so the two
+// read as a pair. The buttons inside are a size down, which leaves the
+// capsule's edge as a ring around them rather than a second outline.
 const zoomStyles = hstack({
+  backgroundColor: "background",
+  blockSize: 6,
+  border: "1px solid {colors.border}",
+  borderRadius: "full",
   flex: "none",
-  gap: 0.5,
+  gap: 1,
+  paddingInline: 0.5,
+});
+
+// Room for the widest reading, 500%, in figures that do not change width.
+const readoutStyles = css({
+  display: "inline-flex",
+  fontVariantNumeric: "tabular-nums",
+  justifyContent: "center",
+  minInlineSize: 14,
+});
+
+const dividerStyles = css({
+  backgroundColor: "border",
+  blockSize: 3,
+  flex: "none",
+  inlineSize: "1px",
 });
