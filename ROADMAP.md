@@ -15,7 +15,8 @@ Chromium the flake pins. A client's window is an `<app>` element in the shell's
 page, composited at native cost, and seven CSS properties are bit-exact against
 an ordinary element beside it. `<webview>` is a browser window the shell lays
 out, with history, loading and new-window reported to the page. Keys, the
-trackpad and a click reach the page on real hardware.
+trackpad and a click reach the page on real hardware. A desk left alone goes
+dark and locks, and opens to its user's own password through PAM.
 
 The evidence for each of those is in the doc that made the claim —
 [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
@@ -24,10 +25,12 @@ The evidence for each of those is in the doc that made the claim —
 
 ## In this repository
 
-1. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 28–29 ms
-   commit to pixel against a 16.67 ms display frame on every run so far — but in
-   a nested compositor with nothing presenting, and with the probe's own round
-   trip inside every figure.
+1. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 19–29 ms
+   commit to pixel against a 16.67 ms display frame on `crux` — but in a nested
+   compositor with nothing presenting, and with the probe's own round trip
+   inside every figure. It reads that only on a quiet machine: beside another
+   run's compile it read 36–49 ms, so the guard now waits until nothing else on
+   `crux` is compiling or running guards before it takes the card (#601).
 
    **The probe is arranged now**: `PLATFORM=drm` takes the same run on the
    scanout platform, with the window the CRTC's rectangle rather than a size,
@@ -54,7 +57,7 @@ The evidence for each of those is in the doc that made the claim —
      page re-reach a compositor that replaced the one it had is a C++ change in
      `control_channel.cc`, which is the fork.
    - **Nothing in the C ABI says the engine went away.** `domicile_engine.h`
-     carries four callbacks and none of them is a disconnect, so the compositor
+     carries six callbacks and none of them is a disconnect, so the compositor
      recognizes a new engine by the process serving the page that says hello —
      `SO_PEERCRED`, the kernel's word, in
      `packages/domicile-compositor/src/which_engine.rs`. It works and it is a
@@ -201,7 +204,10 @@ The evidence for each of those is in the doc that made the claim —
    the attack surface, and a desktop can reach none of them. Measure per
    subsystem before patching — nobody knows whether it saves 5% or 40%. PDFium
    stays: a desktop should render a PDF in a window. The viewer UI is a separate
-   question.
+   question. What a desktop's page could *trigger* is off already (#608): Chrome's
+   accelerators, the context menu, zoom, overscroll navigation, the password
+   manager, autofill, translate and WebAuthn's UI — but all of it is still
+   built and shipped.
 
 6. **The shortcuts inhibitor is measured against sway and a virtual keyboard,
    and nowhere else.** Patch `0038` asks the host compositor to stop matching
@@ -456,6 +462,15 @@ costs nothing.
   zero for both, which is what `wl_output` says a screen with no such number
   advertises. On a tty they are the panel's own, off the `DisplaySnapshot` the
   CRTCs are configured from.
+- **Engine CI is one machine, and a cold build is four and a half hours.**
+  `crux` has two runners, two Chromium trees and one compile slot, so an
+  engine-moving pull request waits behind whichever one holds the slot, and a
+  release built from nothing takes ~4h30m (#604's run, after its tree's build was
+  reclaimed). A run that only needs guards can also wait: the latency guard
+  holds out for a quiet machine for up to ten hours. The compiler cache is now
+  shared between the trees (#611), and a job now drops the temp files nix
+  leaks and never reclaims its own build (#612): 82G had leaked, which is the
+  room earlier runs found by deleting builds and the compiler cache.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
   `domicile load-shell` is what asks for one, so a shell that keeps state in
