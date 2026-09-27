@@ -17,6 +17,7 @@
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
+import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
 import type { ClientWindow, ShellWindow } from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
@@ -42,6 +43,8 @@ import {
   reached,
   shown,
   splitFlipped,
+  tiledDropped,
+  tiledStretched,
   windowGrown,
   windowMoved,
   windowsOn,
@@ -297,6 +300,7 @@ export enum WindowActionKind {
   TerminalLaunched,
   WindowClosed,
   WindowDropped,
+  WindowDroppedOn,
   WindowFullscreened,
   WindowGrabbed,
   WindowGrown,
@@ -309,6 +313,7 @@ export enum WindowActionKind {
   WindowSentToScratchpad,
   WindowSentToWorkspace,
   WindowStepped,
+  WindowStretched,
   WorkspaceSelected,
 }
 
@@ -548,6 +553,24 @@ export const WindowAction = {
   WindowDropped: () => ({ kind: WindowActionKind.WindowDropped as const }),
 
   /**
+   * The user let go of a tiled window they were dragging over another: onto
+   * `target`'s `edge`, or its middle where that is `undefined`.
+   *
+   * Beside {@link WindowAction.WindowDropped} rather than instead of it: that
+   * one ends the drag, whether or not it ended over anything.
+   */
+  WindowDroppedOn: (
+    id: string,
+    target: string,
+    edge: Direction | undefined,
+  ) => ({
+    edge,
+    id,
+    kind: WindowActionKind.WindowDroppedOn as const,
+    target,
+  }),
+
+  /**
    * The user asked for a window to fill the screen, from the button on its
    * own title bar.
    *
@@ -644,6 +667,22 @@ export const WindowAction = {
   WindowStepped: (direction: Direction) => ({
     direction,
     kind: WindowActionKind.WindowStepped as const,
+  }),
+
+  /**
+   * The user dragged a tiled window's `edge` `by` pixels, rightwards or
+   * downwards where positive.
+   *
+   * With the box the workspace is laid out in, which only the monitor
+   * showing it knows: the tree holds shares rather than lengths, and what a
+   * pixel is a share of is a question about the screen.
+   */
+  WindowStretched: (id: string, edge: Direction, by: number, area: Rect) => ({
+    area,
+    by,
+    edge,
+    id,
+    kind: WindowActionKind.WindowStretched as const,
   }),
 
   /** `workspace <name>`. */
@@ -778,6 +817,11 @@ const reduceAction = (
     case WindowActionKind.WindowDropped: {
       return { ...state, draggingId: undefined };
     }
+    case WindowActionKind.WindowDroppedOn: {
+      return onWorkspaceWith(state, action.id, (workspace) =>
+        tiledDropped(workspace, action.id, action.target, action.edge),
+      );
+    }
     case WindowActionKind.WindowFullscreened: {
       // Reached first, because `fullscreenToggled` is `mod+f` — it acts on the
       // window the workspace has the focus in, and the window this names is
@@ -831,6 +875,17 @@ const reduceAction = (
     case WindowActionKind.WindowStepped: {
       return onCurrent(state, (workspace) =>
         windowMoved(workspace, action.direction),
+      );
+    }
+    case WindowActionKind.WindowStretched: {
+      return onWorkspaceWith(state, action.id, (workspace) =>
+        tiledStretched(
+          workspace,
+          action.id,
+          action.edge,
+          action.by,
+          action.area,
+        ),
       );
     }
     case WindowActionKind.ScreenHovered: {

@@ -16,6 +16,9 @@
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
 import { floatFor, grown, movedTo, shifted, sizedTo } from "./floating/float";
+import { gapOf } from "./gaps";
+import type { Rect } from "./rect";
+import { droppedOn } from "./tree/drop";
 import { focusMoved } from "./tree/focus-direction";
 import { inserted } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
@@ -23,6 +26,7 @@ import { movedBy } from "./tree/move";
 import type { Layout } from "./tree/node";
 import { removed } from "./tree/remove";
 import { resized } from "./tree/resize";
+import { stretched } from "./tree/stretch";
 import type { Tiling } from "./tree/tiling";
 import {
   focusedChild,
@@ -296,6 +300,43 @@ export const floatSized = (
   height: number,
 ): Workspace =>
   withFloat(workspace, id, (float) => sizedTo(float, width, height));
+
+/**
+ * A tiled window dragged onto another and let go: onto its `edge`, or its
+ * middle where that is `undefined` — see `tree/drop.ts`.
+ */
+export const tiledDropped = (
+  workspace: Workspace,
+  id: string,
+  target: string,
+  edge: Direction | undefined,
+): Workspace => ({
+  ...workspace,
+  floatFocus: undefined,
+  tiling: droppedOn(workspace.tiling, id, target, edge),
+});
+
+/**
+ * A tiled window's `edge` dragged `by` pixels, on a workspace laid out in
+ * `area` — see `tree/stretch.ts`.
+ */
+export const tiledStretched = (
+  workspace: Workspace,
+  id: string,
+  edge: Direction,
+  by: number,
+  area: Rect,
+): Workspace => ({
+  ...workspace,
+  tiling: stretched(
+    workspace.tiling,
+    id,
+    edge,
+    by,
+    area,
+    gapOf(workspace.tiling),
+  ),
+});
 
 // A floating window taking the keyboard, which is the keyboard out of the
 // tree: whatever `focus parent` had selected in there goes with it, so coming

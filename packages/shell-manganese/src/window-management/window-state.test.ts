@@ -673,6 +673,38 @@ describe("the pointer", () => {
     ).toBeUndefined();
   });
 
+  it("retiles a tiled window where it was dropped on another", () => {
+    const state = reduce(
+      desktop("kitty", "editor", "browser"),
+      WindowAction.WindowDroppedOn(APP("kitty"), APP("browser"), undefined),
+    );
+
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([
+      APP("browser"),
+      APP("editor"),
+      APP("kitty"),
+    ]);
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("drags a tiled window's edge by a share of the screen it is on", () => {
+    // Two windows split a 1020-pixel screen across a 20-pixel gap, so a
+    // hundred pixels is a tenth of what they share.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowStretched(APP("kitty"), Direction.Right, 100, {
+        height: 800,
+        width: 1020,
+        x: 0,
+        y: 0,
+      }),
+    );
+
+    expect(workspaceHere(state).tiling.root).toMatchObject({
+      fractions: [0.6, 0.4],
+    });
+  });
+
   it("puts a dragged window where it was dropped", () => {
     const state = reduce(
       desktop("kitty"),

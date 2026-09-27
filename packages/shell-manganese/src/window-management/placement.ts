@@ -7,11 +7,11 @@
 // knows, so it is an argument rather than a field.
 
 import { rectOf } from "./floating/float";
+import { gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { Frame, Tab } from "./tree/frames";
 import { framesOf } from "./tree/frames";
-import { windowsOf } from "./tree/tiling";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
@@ -69,14 +69,6 @@ export type Screenful = {
   selection: Rect | undefined;
   tabs: readonly Tab[];
 };
-
-/**
- * How far apart neighboring windows are — `gaps.inner` from the config.
- *
- * With `gaps.smartGaps`, which is what the caller below applies: a workspace
- * showing one window has nothing to space it away from, so it gets the screen.
- */
-const INNER_GAP = 20;
 
 /** The `z-index` the tiled windows share: the bottom of the page's stack. */
 export const TILED = 0;
@@ -136,12 +128,10 @@ export const placementsOf = (
   geometry: Geometry,
 ): Screenful => {
   const workspace = workspaceOn(state, geometry.name);
-  // `gaps.smartGaps`: a workspace showing one window gets the whole screen.
-  const gap = windowsOf(workspace.tiling).length > 1 ? INNER_GAP : 0;
   const { frames, selection, tabs } = framesOf(
     workspace.tiling,
     geometry.workspace,
-    gap,
+    gapOf(workspace.tiling),
   );
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),

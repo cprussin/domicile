@@ -1,0 +1,180 @@
+import { describe, expect, it, mock } from "bun:test";
+import { act, fireEvent, renderHook } from "@testing-library/react";
+
+import { Direction } from "../direction";
+import type { Aim } from "./aim";
+import { useTileDrag } from "./useTileDrag";
+
+const DRAGGED = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
+const OTHER = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
+
+/** A press, carrying what the hook actually reads off a pointer event. */
+const press = (x: number, y: number, button = 0) =>
+  ({
+    button,
+    clientX: x,
+    clientY: y,
+    currentTarget: { setPointerCapture: () => undefined },
+    pointerId: 1,
+    // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
+  }) as any;
+
+/** The secondary button, which resizes whatever it takes hold of. */
+const SECONDARY = 2;
+
+const moveTo = (x: number, y: number): void => {
+  fireEvent.pointerMove(window, { clientX: x, clientY: y, pointerId: 1 });
+};
+const release = (): void => {
+  fireEvent.pointerUp(window, { pointerId: 1 });
+};
+const cancel = (): void => {
+  fireEvent.pointerCancel(window, { pointerId: 1 });
+};
+
+const dragging = (resizes = false) => {
+  const calls = {
+    onAim: mock((_aim: Aim | undefined) => undefined),
+    onDrop: mock(() => undefined),
+    onDropOn: mock(
+      (_target: string, _edge: Direction | undefined) => undefined,
+    ),
+    onGrab: mock(() => undefined),
+    onStretch: mock((_edge: Direction, _by: number) => undefined),
+  };
+  const { result } = renderHook(() =>
+    useTileDrag({
+      frame: DRAGGED.frame,
+      id: DRAGGED.id,
+      resizes,
+      targets: [DRAGGED, OTHER],
+      ...calls,
+    }),
+  );
+  const grab = (x: number, y: number, button = 0) => {
+    act(() => {
+      result.current.onPointerDown(press(x, y, button));
+    });
+  };
+  return { calls, grab, result };
+};
+
+describe("useTileDrag", () => {
+  describe("moving", () => {
+    it("grabs the window as soon as it is pressed", () => {
+      const { calls, grab } = dragging();
+      grab(100, 100);
+      expect(calls.onGrab).toHaveBeenCalledTimes(1);
+    });
+
+    it("aims at the window under the pointer, and drops it there", () => {
+      const { calls, grab } = dragging();
+      grab(100, 100);
+      act(() => {
+        moveTo(520, 200);
+      });
+      expect(calls.onAim).toHaveBeenLastCalledWith({
+        edge: Direction.Left,
+        id: OTHER.id,
+        rect: { height: 400, width: 250, x: 500, y: 0 },
+      });
+      act(() => {
+        release();
+      });
+      expect(calls.onDropOn).toHaveBeenCalledWith(OTHER.id, Direction.Left);
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+      expect(calls.onAim).toHaveBeenLastCalledWith(undefined);
+    });
+
+    it("says where it would land only when that changes", () => {
+      // Every move would otherwise redraw the desktop to say the same thing.
+      const { calls, grab } = dragging();
+      grab(100, 100);
+      act(() => {
+        moveTo(750, 200);
+        moveTo(760, 210);
+        moveTo(200, 200);
+        moveTo(210, 210);
+      });
+      expect(calls.onAim.mock.calls).toEqual([
+        [{ edge: undefined, id: OTHER.id, rect: OTHER.frame }],
+        [undefined],
+      ]);
+    });
+
+    it("drops it nowhere when let go of over nothing to drop it on", () => {
+      const { calls, grab } = dragging();
+      grab(100, 100);
+      act(() => {
+        moveTo(200, 200);
+        release();
+      });
+      expect(calls.onDropOn).not.toHaveBeenCalled();
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops only once when a release and a cancel both arrive", () => {
+      const { calls, grab } = dragging();
+      grab(100, 100);
+      act(() => {
+        moveTo(750, 200);
+        release();
+        cancel();
+      });
+      expect(calls.onDropOn).toHaveBeenCalledTimes(1);
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("resizing", () => {
+    it("drags the edges of the quarter it took hold of, move by move", () => {
+      // Each move by what it moved since the last one: the tree holds shares,
+      // and a share taken from the tree as it was at the press would be
+      // applied to one that has been stretched since.
+      const { calls, grab } = dragging(true);
+      grab(400, 300);
+      act(() => {
+        moveTo(430, 320);
+      });
+      act(() => {
+        moveTo(440, 320);
+      });
+      expect(calls.onStretch.mock.calls).toEqual([
+        [Direction.Right, 30],
+        [Direction.Down, 20],
+        [Direction.Right, 10],
+      ]);
+      expect(calls.onAim).not.toHaveBeenCalled();
+    });
+
+    it("resizes when taken hold of with the secondary button", () => {
+      const { calls, grab } = dragging();
+      grab(100, 100, SECONDARY);
+      act(() => {
+        moveTo(90, 100);
+      });
+      expect(calls.onStretch).toHaveBeenCalledWith(Direction.Left, -10);
+    });
+
+    it("drops nothing on the window it ends over", () => {
+      const { calls, grab } = dragging(true);
+      grab(400, 300);
+      act(() => {
+        moveTo(750, 200);
+        release();
+      });
+      expect(calls.onDropOn).not.toHaveBeenCalled();
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("ignores a move that follows no grab", () => {
+    const { calls } = dragging();
+    act(() => {
+      moveTo(750, 200);
+      release();
+    });
+    expect(calls.onAim).not.toHaveBeenCalled();
+    expect(calls.onDrop).not.toHaveBeenCalled();
+  });
+});

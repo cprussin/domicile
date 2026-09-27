@@ -71,6 +71,35 @@ export const framesOf = (tiling: Tiling, area: Rect, gap: number): Tiled => {
 };
 
 /**
+ * The box the node at `path` is laid out in, by the same arithmetic
+ * {@link framesOf} places it with.
+ *
+ * What a drag on a window's edge is measured against: the tree holds shares
+ * of a container rather than lengths, so a pointer's pixels become a share by
+ * how big that container is on screen.
+ */
+export const areaOf = (
+  root: LayoutNode,
+  path: Path,
+  area: Rect,
+  gap: number,
+): Rect => {
+  const [index, ...rest] = path;
+  if (index === undefined) {
+    return area;
+  } else if (root.kind === NodeKind.Window) {
+    throw new Error(`layout tree: path ${path.join(".")} runs into a window`);
+  } else {
+    const child = root.children[index];
+    if (child === undefined) {
+      throw new Error(`layout tree: path ${path.join(".")} leaves the tree`);
+    } else {
+      return areaOf(child, rest, childArea(root, area, gap, index), gap);
+    }
+  }
+};
+
+/**
  * One node laid out in `area`, and everything inside it.
  *
  * `pointed` is where the commands are, from this node down — the rest of the
@@ -117,6 +146,25 @@ const placed = (
           return titled(node, area, gap, pointed, selection);
         }
       }
+    }
+  }
+};
+
+/** The box the child at `at` of `container` is laid out in. */
+const childArea = (
+  container: Container,
+  area: Rect,
+  gap: number,
+  at: number,
+): Rect => {
+  switch (container.layout) {
+    case Layout.SplitH:
+    case Layout.SplitV: {
+      return sliceOf(container, area, gap, at);
+    }
+    case Layout.Stacking:
+    case Layout.Tabbed: {
+      return contentsOf(container, area);
     }
   }
 };
