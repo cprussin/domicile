@@ -598,7 +598,9 @@ struct DomicileEngine {
     for (const DomicileDisplayLayout& display : records) {
       wanted.push_back(domicile::mojom::DisplayLayout::New(
           display.id, display.enabled != 0, gfx::Point(display.x, display.y),
-          domicile::TransformOf(display.transform), display.scale));
+          domicile::TransformOf(display.transform), display.scale,
+          gfx::Rect(display.desk_x, display.desk_y, display.desk_width,
+                    display.desk_height)));
     }
     thread_.task_runner()->PostTask(
         FROM_HERE,

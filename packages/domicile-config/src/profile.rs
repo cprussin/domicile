@@ -499,6 +499,21 @@ pub struct Scanout {
     /// connector's window at -- so a page lays out in the logical pixels the
     /// desktop is described in rather than in the mode's.
     pub scale: f64,
+    /// Where the profile put this display on the desktop, or `None` for a
+    /// dark one, which has no place there.
+    ///
+    /// The row [`origin`](Self::origin) is in says nothing about which monitor
+    /// is above or beside which, and the engine carries a pointer between
+    /// monitors by exactly that.
+    pub desk: Option<Desk>,
+}
+
+/// Where a display is on the desktop a shell lays out in, in logical pixels:
+/// [`Placed`]'s position and size, for the engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Desk {
+    pub position: (i32, i32),
+    pub size: (u32, u32),
 }
 
 /// One display of an applied profile, placed in the desktop's own coordinates.
@@ -557,29 +572,22 @@ fn placed(
 /// STEPPED ACROSS IN THE ORDER THE DISPLAYS ARE PLACED, each starting where
 /// the last one's mode ended. The engine lays its own desktop out in the order
 /// the card enumerated the connectors, which is the card's business and says
-/// nothing about which monitor is on which side of a desk — so a pointer
-/// leaving one screen arrives on whichever connector happened to be numbered
-/// next. The profile is the only thing that knows, and this is it saying so.
+/// nothing about which monitor is on which side of a desk. The profile is the
+/// only thing that knows, and this is it saying so.
 ///
 /// The mode rather than the logical size, because this is the engine's
 /// desktop: a connector occupies what it scans out there, whatever the scale
 /// divides it into on ours.
 ///
 /// ALL ON ONE ROW, whatever the desktop above does with the second axis.
-/// Nothing is ever drawn across two connectors, so the only thing this
-/// arrangement decides is which screen a pointer leaving one arrives on — and
-/// a row answers that for every desk anyone puts monitors side by side on.
-/// Two monitors stacked vertically is the one thing a profile can say that
-/// this does not carry.
+/// Nothing is ever drawn across two connectors, and the pointer crosses
+/// between monitors by [`Scanout::desk`] — where the profile placed them —
+/// rather than by this row, so the row decides nothing a person can see.
 ///
 /// THE DARK ONES ARE IN THE ROW TOO, past the end of the lit ones. They have
 /// no place on the desktop to be ordered by — the profile turned them off —
 /// but they are still connectors the engine has to put somewhere, and the one
 /// place they must not be is on top of a monitor that is on.
-///
-/// A PIXEL PAST THE END, not touching it. The engine carries a pointer off a
-/// screen's edge only onto one that starts where that screen ends, so the gap
-/// is what keeps a pointer from wandering onto a panel that is off.
 ///
 /// Returned in the order the profile WROTE its entries, which is
 /// [`Layout::placed`]'s own order with the dropped ones back in their places.
@@ -593,21 +601,19 @@ fn scanout(
     across.sort_by_key(|display| (display.position.0, display.position.1));
     let lit = across
         .into_iter()
-        .map(|display| (display.name.as_str(), display.mode.0, false));
+        .map(|display| (display.name.as_str(), display.mode.0));
     let dark = profile
         .displays
         .iter()
         .filter(|placement| !placement.enabled)
-        .enumerate()
-        .map(|(index, placement)| {
+        .map(|placement| {
             let display = found(placement, connected);
-            (display.name.as_str(), display.mode.0, index == 0)
+            (display.name.as_str(), display.mode.0)
         });
 
     let mut origins: Vec<(&str, (i32, i32))> = Vec::with_capacity(profile.displays.len());
     let mut edge: i64 = 0;
-    for (name, width, past_a_gap) in lit.chain(dark) {
-        edge += i64::from(past_a_gap);
+    for (name, width) in lit.chain(dark) {
         // `i64` for the reason `extent` widens: each mode fits a `u32` and a
         // row of them need not fit the `i32` a corner is. Refused rather than
         // saturated, which would put two connectors on top of each other.
@@ -634,6 +640,13 @@ fn scanout(
                     .expect("every display the profile names is in the row"),
                 transform: placement.transform,
                 scale: placement.scale,
+                desk: placed
+                    .iter()
+                    .find(|placed| placed.name == display.name)
+                    .map(|placed| Desk {
+                        position: placed.position,
+                        size: placed.logical,
+                    }),
             }
         })
         .collect())
