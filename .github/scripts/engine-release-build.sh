@@ -103,12 +103,16 @@ if [ -n "$WRAPPER" ]; then
   export CCACHE_NOHASHDIR=1
 fi
 
-# The profile the official build's `chrome_pgo_phase = 2` reads. The same
-# command Chromium's DEPS runs when `checkout_pgo_profiles` is set; a no-op when
-# the profile for this revision is already here.
+# The profiles an official build reads: Chrome's, for `chrome_pgo_phase = 2`,
+# and V8's builtins', which `gen/v8/embedded.S` depends on outright -- run
+# 36339801978 stopped there without it. The same two commands Chromium's DEPS
+# runs when `checkout_pgo_profiles` is set; each a no-op when the profile for
+# this revision is already here.
 if [ "$OFFICIAL" = true ]; then
   python3 tools/update_pgo_profiles.py --target=linux update \
     --gs-url-base=chromium-optimization-profiles/pgo_profiles || exit 1
+  python3 v8/tools/builtins-pgo/download_profiles.py download \
+    --depot-tools "$TOOLS" --check-v8-revision --quiet || exit 1
 fi
 
 # Regenerated whenever the arguments here change, which `gn gen` decides for
