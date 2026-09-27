@@ -291,6 +291,7 @@ export enum WindowActionKind {
   ModeSwapped,
   ParentFocused,
   ScratchpadShown,
+  ScreenHovered,
   ScreensDescribed,
   SplitToggled,
   TerminalLaunched,
@@ -497,6 +498,17 @@ export const WindowAction = {
 
   /** `scratchpad show`. */
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
+
+  /**
+   * The pointer moved on a screen, which is what puts the keyboard there:
+   * focus follows the cursor from one monitor to the next, whether or not
+   * there is a window under it — see {@link WindowAction.WindowHovered} for
+   * the window it is over.
+   */
+  ScreenHovered: (name: string) => ({
+    kind: WindowActionKind.ScreenHovered as const,
+    name,
+  }),
 
   /**
    * The host described the desk: these screens, in this order.
@@ -821,6 +833,9 @@ const reduceAction = (
         windowMoved(workspace, action.direction),
       );
     }
+    case WindowActionKind.ScreenHovered: {
+      return pointAtScreen(state, action.name);
+    }
     case WindowActionKind.ScreensDescribed: {
       return describeScreens(state, action.names);
     }
@@ -1034,6 +1049,16 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
     );
   }
 };
+
+// The screen under the pointer is the screen the keyboard is on. The same
+// object for a screen that already has it, because this is said on every move
+// of the hand; and for one the desk has not taken up yet, which is a monitor
+// plugged in whose page saw the pointer before this page was told of it.
+const pointAtScreen = (state: WindowState, name: string): WindowState =>
+  state.focused === name ||
+  !state.screens.some((screen) => screen.name === name)
+    ? state
+    : { ...state, focused: name };
 
 // A fact the client reported about its own window, written onto the shell's
 // record of it. A message naming a client the shell has no window for leaves

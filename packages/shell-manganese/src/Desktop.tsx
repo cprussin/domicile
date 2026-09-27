@@ -12,6 +12,7 @@ import { Lock } from "./lock/Lock";
 import { useLocked } from "./lock/useLocked";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
+import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
@@ -121,6 +122,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
   );
 
   useShortcuts({ domicile, mode: windows.mode, onAction });
+
+  // The pointer carries the keyboard from one monitor to the next, windows or
+  // none: the engine hands the keys to the monitor the pointer is on, and the
+  // desktop's focus goes with them.
+  useScreenFollowsPointer({ act, displays, focused: windows.focused });
 
   // And the press is spent here rather than in the monitor that answered it.
   // A parent's effect runs after its children's, so by the time this one does
