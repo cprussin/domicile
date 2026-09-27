@@ -182,14 +182,14 @@ export const TitleBar = ({
 /**
  * sway's three client colors, in the one place a window says which it is.
  *
- * **What says where the keystrokes are going is the top of the frame**: a rule
- * of accent three pixels deep, across a bar washed with enough of the same
- * accent to find in the corner of your eye. A border a pixel wide is not
- * enough to find at a glance, and a bar *filled* with the accent is a desktop
- * of windows shouting one color — the wash carries the window without taking
+ * **What finds the window at a glance is the ring around it** — see
+ * `SelectionRing`. The bar only has to agree with it, and to go on saying
+ * where the keyboard is once the ring has grown out to a group: a wash of the
+ * accent and a heavier face. A bar *filled* with the accent is a desktop of
+ * windows shouting one color — the wash carries the window without taking
  * the screen over.
  *
- * Every state names every one of the five rather than overriding one of them.
+ * Every state names every one of the four rather than overriding one of them.
  * Two rules setting `border-color` on one element are decided by the order
  * Panda happens to emit them in, which is not a thing to make a desktop's
  * focus indicator depend on.
@@ -224,18 +224,6 @@ const barStyles = cva({
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 16%, {colors.card})",
         borderColor: "accent",
-        // And the rule across the top, which is what carries across a room.
-        //
-        // Drawn inside the bar rather than as a deeper border, because the box
-        // is a fixed thirty pixels: a top border that grew would take those
-        // pixels off the content and nudge the name down by one. Focus follows
-        // the cursor here, so that is a jiggle on every window the pointer
-        // crosses. An inset shadow moves nothing, and eases — see
-        // `settlingStyles`.
-        //
-        // Three pixels off the spacing scale rather than written as `3px`: a
-        // shadow is not a border width, so it has no literal to claim.
-        boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}",
         color: "foreground",
         // Set in a heavier face as well, which is the half of standing out
         // that survives a user who cannot tell the accent from the card.
@@ -246,7 +234,6 @@ const barStyles = cva({
       resting: {
         backgroundColor: "card",
         borderColor: "borderStrong",
-        boxShadow: "none",
         color: "muted",
         fontWeight: "normal",
       },
@@ -255,7 +242,6 @@ const barStyles = cva({
       selected: {
         backgroundColor: "card",
         borderColor: "accent",
-        boxShadow: "none",
         color: "foreground",
         fontWeight: "medium",
       },
