@@ -2,7 +2,8 @@
 //
 // Every row is a thing Enter can do, so the list is the whole answer to "what
 // will this do" — there is no second line under it saying so. In order: the
-// search a `!` tag names, if the box carries one; a site, if the box holds
+// page a `!` tag's site has for the words, if it has one; the search the tag
+// names, if the box carries one; a site, if the box holds
 // one; a path, if it is spelled like one; the files the host found; and a
 // search on Google for the line as typed, always. A URL typed whole is a URL
 // meant, so it goes on top; the search goes last, because it is what is left
@@ -13,18 +14,19 @@
 // disagree about `localhost:5173` is one where the user has to remember which
 // box they are in.
 
-import type { TaggedSearch } from "../address/search";
-import { googleUrl, taggedSearch } from "../address/search";
+import type { TaggedSearch, TaggedSite } from "../address/search";
+import { googleUrl, taggedSearch, taggedSite } from "../address/search";
 import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
-/** Which of the four kinds of row a choice is. */
+/** Which of the five kinds of row a choice is. */
 export enum ChoiceKind {
   File,
   Site,
   Search,
   TaggedSearch,
+  TaggedSite,
 }
 
 export const Choice = {
@@ -49,6 +51,11 @@ export const Choice = {
     kind: ChoiceKind.TaggedSearch as const,
     ...search,
   }),
+  /** The page on the site a tag named that the words are the name of. */
+  TaggedSite: (site: TaggedSite) => ({
+    kind: ChoiceKind.TaggedSite as const,
+    ...site,
+  }),
 };
 
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
@@ -57,17 +64,21 @@ export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
  * The rows for `query`, given what the host found for it.
  *
  * A tagged query gets its tagged search on top — the tag is the user saying
- * where they meant to go — and below it the rows the line gets as typed, its
- * search on Google rather than a second row for the tag's engine.
+ * where they meant to go — with the page the words name there above it, if
+ * they name one. Below them are the rows the line gets as typed, its search
+ * on Google rather than a second row for the tag's engine.
  */
 export const choicesFor = (
   query: string,
   found: readonly string[],
 ): Choice[] => {
+  const site = taggedSite(query);
   const tagged = taggedSearch(query);
-  return tagged === undefined
-    ? plainChoicesFor(query, found)
-    : [Choice.TaggedSearch(tagged), ...plainChoicesFor(query, found)];
+  return [
+    ...(site === undefined ? [] : [Choice.TaggedSite(site)]),
+    ...(tagged === undefined ? [] : [Choice.TaggedSearch(tagged)]),
+    ...plainChoicesFor(query, found),
+  ];
 };
 
 /** What choosing `choice` launches. */
@@ -78,7 +89,8 @@ export const launchOf = (choice: Choice): Launch => {
     }
     case ChoiceKind.Site:
     case ChoiceKind.Search:
-    case ChoiceKind.TaggedSearch: {
+    case ChoiceKind.TaggedSearch:
+    case ChoiceKind.TaggedSite: {
       return Launch.Browsed(choice.url);
     }
   }
