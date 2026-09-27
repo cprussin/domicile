@@ -116,6 +116,17 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
                               const viz::LocalSurfaceId& local_surface_id,
                               const gfx::Size& size,
                               double scale) {
+  // Late, and dropped rather than passed on. Several <app> elements showing
+  // one window share its allocator but ask over pipes of their own, so an
+  // older id can land after a newer one. A producer told to submit to it would
+  // be refused by viz as a decrease, and viz answers a decrease by closing the
+  // sink -- which freezes the window for good. The newer embed already said
+  // everything this one would.
+  if (local_surface_id_.is_valid() &&
+      local_surface_id_.IsNewerThan(local_surface_id)) {
+    return;
+  }
+
   // A page that navigates or reloads embeds again under a different frame
   // sink, so the old edge has to go before the new one is added.
   if (parent_frame_sink_id_.is_valid()) {

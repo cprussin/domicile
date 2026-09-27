@@ -18,11 +18,13 @@
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/test/compositor_frame_helpers.h"
 #include "components/viz/test/fake_host_frame_sink_client.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -62,7 +64,10 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
   void OnSurfaceEmbedded(const viz::LocalSurfaceId& local_surface_id,
                          const gfx::Size& size,
                          double scale) override {
-    embedded_.SetValue(local_surface_id, size, scale);
+    told_.push_back(local_surface_id);
+    if (!embedded_.IsReady()) {
+      embedded_.SetValue(local_surface_id, size, scale);
+    }
   }
 
   // Only sent to a producer whose sink the browser owns, which these tests
@@ -73,7 +78,11 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
     released_.push_back(buffer_id);
   }
 
+  // The first embed, for the tests that are about one.
   base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double> embedded_;
+  // Every LocalSurfaceId the producer was told, in order. The last is the one
+  // it submits to.
+  std::vector<viz::LocalSurfaceId> told_;
   int frames_ = 0;
   std::vector<uint64_t> released_;
 
@@ -500,6 +509,47 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
   // And the scale that box is in, which is what the producer divides it by:
   // each monitor's page is at its own.
   EXPECT_EQ(kEmbeddedScale, observer.embedded_.Get<double>());
+}
+
+// Two <app> elements showing one window share its allocator, and each asks
+// the browser over its own pipe, so an older LocalSurfaceId can arrive after a
+// newer one. Passed on, the producer submits to it, viz calls that a decrease
+// and closes the sink -- and the window never draws again.
+TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  FakeSurfaceObserver observer;
+  testing::NiceMock<viz::MockCompositorFrameSinkClient> sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  RunUntilIdle();
+
+  const viz::LocalSurfaceId older = AllocateLocalSurfaceId();
+  const viz::LocalSurfaceId newer = AllocateLocalSurfaceId();
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_newer;
+  broker()->Embed(kTestApp, kPageFrameSinkId, newer, kEmbeddedSize,
+                  kEmbeddedScale, for_newer.GetCallback());
+  ASSERT_TRUE(for_newer.Wait());
+  RunUntilIdle();
+  sink->SubmitCompositorFrame(observer.told_.back(),
+                              viz::MakeDefaultCompositorFrame(), std::nullopt,
+                              0);
+
+  // The late one is still answered: the element needs a FrameSinkId either way.
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_older;
+  broker()->Embed(kTestApp, kPageFrameSinkId, older, kEmbeddedSize,
+                  kEmbeddedScale, for_older.GetCallback());
+  ASSERT_TRUE(for_older.Wait());
+  RunUntilIdle();
+  sink->SubmitCompositorFrame(observer.told_.back(),
+                              viz::MakeDefaultCompositorFrame(), std::nullopt,
+                              0);
+  RunUntilIdle();
+
+  EXPECT_EQ(newer, observer.told_.back());
+  EXPECT_TRUE(sink.is_connected());
 }
 
 // Embedding is also what puts the producer under the page in the frame sink
