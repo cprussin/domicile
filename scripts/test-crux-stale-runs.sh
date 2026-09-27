@@ -171,6 +171,11 @@ done
 for name in "Take a tree" "Publish the release" "Write engine-release.nix back onto this branch" "Record the proof"; do
   expect "a run in '$name' is left alone" 1 "$(step "$name")"
 done
+# A run with no job started -- its engine job queued on GitHub for the compile
+# slot, or for a runner -- holds nothing on crux, so stopping it is free.
+expect "a run whose jobs are all waiting or done may be stopped" 0 \
+  "$(printf '{"jobs":[{"name":"plan","status":"completed","steps":[{"name":"Would this run compile?","status":"completed"}]},{"name":"engine","status":"waiting","steps":[]}]}' |
+       "$STEP" >/dev/null 2>&1; echo $?)"
 expect "a run between steps is left alone" 1 \
   "$(printf '{"jobs":[{"name":"engine","status":"in_progress","steps":[{"name":"Build","status":"completed"}]}]}' |
        "$STEP" >/dev/null 2>&1; echo $?)"

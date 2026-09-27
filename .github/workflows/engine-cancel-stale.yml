@@ -12,9 +12,10 @@ name: Cancel a pull request's stale queued engine runs
 # A PUSH LEAVES THE SAME WASTE BEHIND. On 2026-09-25 #578 and #579 each had a
 # run queued for a commit they had already pushed past, ahead of the run for
 # the commit that mattered. So on `synchronize` this cancels the branch's
-# waiting runs for every commit but the new head. A stale run that already
-# has the machine and is waiting for the compile slot is engine.yml's to end:
-# see its "Take the compile slot" step.
+# waiting runs for every commit but the new head, including a started run
+# with no job running -- its engine job queued in engine.yml's `crux-compile`
+# group. A stale run that already has the machine is engine.yml's to end when
+# it comes to take the compile slot: see its "Take the compile slot" step.
 #
 # AND ITS STARTED ONES, ONCE THEY ARE BUILDING OR CHECKING. Holding the slot, a
 # run never looks back, so a 24h sample found about 5h/day of builds for
