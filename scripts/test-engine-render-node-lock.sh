@@ -260,6 +260,28 @@ expect "a measurement does not take a card somebody holds" 77 "$(status_of "$r")
 contains "and names who holds it" "pinned-1" "$(output_of "$r")"
 "$LOCK_SH" drop pinned-1 >/dev/null 2>&1
 
+# --- noise that steps aside --------------------------------------------------
+
+# The production build is noise for hours, and a measurement waiting on it
+# would wait for hours. So a measurement waiting on noise says so, and noise
+# that can stop and resume -- engine-yielding-build.sh -- asks.
+r="$(run wanted build-6)"
+expect "nobody waiting for quiet is not wanted" 1 "$(status_of "$r")"
+DOMICILE_RENDER_NODE_NOISE_BEAT=1 "$LOCK_SH" noisy build-6 -- sleep 4 \
+  >/dev/null 2>&1 &
+noisy_pid=$!
+until_noise
+DOMICILE_RENDER_NODE_QUIET_WAIT=2 "$LOCK_SH" quiet latency-6 >/dev/null 2>&1 &
+quiet_pid=$!
+sleep 1.5
+r="$(run wanted build-6)"
+expect "a measurement waiting on noise makes the machine wanted" 0 "$(status_of "$r")"
+contains "and is named" "latency-6" "$(output_of "$r")"
+wait "$quiet_pid"
+r="$(run wanted build-6)"
+expect "a measurement that gave up no longer wants it" 1 "$(status_of "$r")"
+wait "$noisy_pid"
+
 # --- noise nothing is keeping alive ------------------------------------------
 
 # A registration whose heartbeat stopped is a run that was killed. Waiting on it

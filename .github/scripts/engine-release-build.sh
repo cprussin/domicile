@@ -2,6 +2,7 @@
 # The shippable configuration of the engine.
 #
 #   .github/scripts/engine-release-build.sh /build/chromium/src out/Release
+#   DOMICILE_ENGINE_BUILD=official .github/scripts/engine-release-build.sh ...
 #
 # Run inside Chromium's toolchain shell, which is what supplies the host tools
 # gn probes for. Extra arguments are extra targets: engine.yml builds its
@@ -17,14 +18,18 @@
 #   is_component_build = false  one `chrome` binary instead of a directory of
 #                               libraries. This is the whole reason for a
 #                               second output directory
-#   is_official_build           deliberately NOT set. It turns on PGO and LTO
-#                               and takes the build from four hours to most of
-#                               a day, for a speed difference that does not
-#                               change whether the seam works. Revisit when
-#                               somebody is measuring the shipped thing
-#   dcheck_always_on = true     CI's checks run against this build, and they
-#                               had DCHECKs when they ran against build.sh's.
-#                               So the release aborts on one too
+#   is_official_build = false   by default. It turns on PGO and ThinLTO, which
+#                               a pull request's checks do not need and would
+#                               pay for on every link
+#   dcheck_always_on = true     by default: CI's checks run against this
+#                               build, and they had DCHECKs when they ran
+#                               against build.sh's
+#
+# DOMICILE_ENGINE_BUILD=official is the production build, the one users run,
+# into an out directory of its own: official, so PGO and ThinLTO as in Chrome,
+# and no DCHECKs, which in a non-official build come with EXPENSIVE_DCHECKs in
+# every process on the desktop. PGO needs Google's profile for this revision,
+# which a checkout has only if something fetched it, so this fetches it.
 #
 # The ozone arguments are copied from build.sh rather than shared, because they
 # are the same for a reason that could stop being true: this is the build a
@@ -38,6 +43,17 @@ if [ -z "$CHROMIUM" ]; then
   echo "usage: engine-release-build.sh <path to chromium/src> [out dir] [targets...]" >&2
   exit 1
 fi
+
+# Before anything is touched: a build nobody defined is a typo, and falling
+# back to either real one would publish the wrong engine under the right name.
+case "${DOMICILE_ENGINE_BUILD:-checked}" in
+  (checked) OFFICIAL=false; DCHECKS=true ;;
+  (official) OFFICIAL=true; DCHECKS=false ;;
+  (*)
+    echo "DOMICILE_ENGINE_BUILD is '$DOMICILE_ENGINE_BUILD'; the builds are 'checked' and 'official'." >&2
+    exit 1
+    ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -87,6 +103,14 @@ if [ -n "$WRAPPER" ]; then
   export CCACHE_NOHASHDIR=1
 fi
 
+# The profile the official build's `chrome_pgo_phase = 2` reads. The same
+# command Chromium's DEPS runs when `checkout_pgo_profiles` is set; a no-op when
+# the profile for this revision is already here.
+if [ "$OFFICIAL" = true ]; then
+  python3 tools/update_pgo_profiles.py --target=linux update \
+    --gs-url-base=chromium-optimization-profiles/pgo_profiles || exit 1
+fi
+
 # Regenerated whenever the arguments here change, which `gn gen` decides for
 # itself by comparing them: passing --args every time is what makes editing
 # this file take effect without anybody remembering to delete the directory.
@@ -113,8 +137,8 @@ fi
 gn gen "$OUT" --args="
   is_debug = false
   is_component_build = false
-  is_official_build = false
-  dcheck_always_on = true
+  is_official_build = $OFFICIAL
+  dcheck_always_on = $DCHECKS
   symbol_level = 0
   blink_symbol_level = 0
   use_ozone = true
