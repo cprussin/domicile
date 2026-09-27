@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { Engine } from "../address/search";
 import { Choice, choicesFor, launchOf } from "./choices";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
@@ -43,12 +44,29 @@ describe("choicesFor", () => {
     ]);
   });
 
-  it("sends a tagged query to the engine the tag names", () => {
-    expect(choicesFor("!wiki mesa", [])).toStrictEqual([
-      Choice.Search(
-        "!wiki mesa",
-        "https://en.wikipedia.org/wiki/Special:Search?search=mesa",
-      ),
+  it("offers a tagged query on its engine first, then the rows its words would get", () => {
+    // The tag says where the search was meant to go, so that row is on top;
+    // everything below it is what the words would have got untagged.
+    expect(choicesFor("!wiki notes.org", ["notes.org"])).toStrictEqual([
+      Choice.TaggedSearch({
+        engine: Engine.Wikipedia,
+        query: "notes.org",
+        url: "https://en.wikipedia.org/wiki/Special:Search?search=notes.org",
+      }),
+      Choice.Site("https://notes.org"),
+      Choice.File("notes.org"),
+      search("notes.org"),
+    ]);
+  });
+
+  it("offers only the tagged search and the files for a tag on its own", () => {
+    // A tag alone is not yet a search for anything on Google.
+    expect(choicesFor("!yt", [])).toStrictEqual([
+      Choice.TaggedSearch({
+        engine: Engine.YouTube,
+        query: "",
+        url: "https://www.youtube.com/results?search_query=",
+      }),
     ]);
   });
 
@@ -78,12 +96,25 @@ describe("launchOf", () => {
     );
   });
 
-  it("browses a site or a search", () => {
+  it("browses a site or either kind of search", () => {
     expect(launchOf(Choice.Site("https://example.com"))).toStrictEqual(
       Launch.Browsed("https://example.com"),
     );
     expect(launchOf(search("kate bush"))).toStrictEqual(
       Launch.Browsed("https://google.com/search?q=kate%20bush"),
+    );
+    expect(
+      launchOf(
+        Choice.TaggedSearch({
+          engine: Engine.YouTube,
+          query: "kate bush",
+          url: "https://www.youtube.com/results?search_query=kate%20bush",
+        }),
+      ),
+    ).toStrictEqual(
+      Launch.Browsed(
+        "https://www.youtube.com/results?search_query=kate%20bush",
+      ),
     );
   });
 });

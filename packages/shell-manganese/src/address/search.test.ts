@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { searchUrl } from "./search";
+import { Engine, searchUrl, taggedSearch } from "./search";
 
 describe("searchUrl", () => {
   it("searches Google for a query with no tag in it", () => {
@@ -65,5 +65,19 @@ describe("searchUrl", () => {
     expect(searchUrl("!yt")).toBe(
       "https://www.youtube.com/results?search_query=",
     );
+  });
+});
+
+describe("taggedSearch", () => {
+  it("names the engine a tag picks, and the words without the tag", () => {
+    expect(taggedSearch("kate bush !yt")).toStrictEqual({
+      engine: Engine.YouTube,
+      query: "kate bush",
+      url: "https://www.youtube.com/results?search_query=kate%20bush",
+    });
+  });
+
+  it("is nothing for a query with no tag in it", () => {
+    expect(taggedSearch("kate bush")).toBeUndefined();
   });
 });
