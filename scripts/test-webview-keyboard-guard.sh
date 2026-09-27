@@ -74,6 +74,10 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
     SAW_SHELL_KEY=1
     SAW_DOCUMENT_KEY=0
     SAW_GUEST_KEY=0
+    SAW_GUEST_CHORD=1
+    SAW_PLAIN_CHORD=0
+    SAW_ZOOM=1
+    SAW_ZOOM_DRAWN=1
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -105,6 +109,10 @@ reason() { # $1 NEGATIVE, then NAME=value overrides
     SAW_SHELL_KEY=1
     SAW_DOCUMENT_KEY=0
     SAW_GUEST_KEY=0
+    SAW_GUEST_CHORD=1
+    SAW_PLAIN_CHORD=0
+    SAW_ZOOM=1
+    SAW_ZOOM_DRAWN=1
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -183,6 +191,33 @@ expect "no key before focus is still a pass" "pass" \
   "$(verdict 0 SAW_SHELL_KEY=0)"
 expect "no key before focus is checked after the readings it cannot excuse" \
   "fail" "$(verdict 0 SAW_SHELL_KEY=0 SAW_SHORTCUT=0)"
+
+echo
+echo "a chord the page left alone — what a browser window's Ctrl+R is"
+expect "a chord never handed back is a failure" "fail" \
+  "$(verdict 0 SAW_GUEST_CHORD=0)"
+expect "a chord never handed back blames the guest's delegate" "yes" \
+  "$(blames "HandleKeyboardEvent" 0 SAW_GUEST_CHORD=0)"
+# THE PRIVACY HALF. A plain key handed back is every keystroke the page is
+# typed — a password's included — copied into the shell's document.
+expect "a plain key handed back is a failure" "fail" \
+  "$(verdict 0 SAW_PLAIN_CHORD=1)"
+expect "a plain key handed back names what it copies" "yes" \
+  "$(blames "keystroke" 0 SAW_PLAIN_CHORD=1)"
+
+echo
+echo "the zoom the first handed-back chord asks for"
+expect "no zoom reported is a failure" "fail" "$(verdict 0 SAW_ZOOM=0)"
+expect "no zoom reported blames the report" "yes" \
+  "$(blames "ReportZoom" 0 SAW_ZOOM=0)"
+# A zoom the element reports and the page never draws is HostZoomMap holding a
+# level the guest's widget did not pick up: a number, not a zoom.
+expect "a zoom the page never drew is a failure" "fail" \
+  "$(verdict 0 SAW_ZOOM_DRAWN=0)"
+expect "a zoom the page never drew names the widget" "yes" \
+  "$(blames "widget" 0 SAW_ZOOM_DRAWN=0)"
+expect "no zoom is not the control's business" "pass" \
+  "$(verdict 1 SAW_SHORTCUT=0 SAW_GUEST_CHORD=0 SAW_ZOOM=0 SAW_ZOOM_DRAWN=0)"
 
 echo
 echo "the negative run — an <iframe>, over which nothing may fire"

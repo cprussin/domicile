@@ -5,15 +5,19 @@
 
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -53,6 +57,18 @@ constexpr char kNewWindowEvent[] = "domicile-new-window";
 // that mounted mid-load needs, and a detail here would be a second copy right
 // only at the instant it was made.
 constexpr char kPageChangeEvent[] = "domicile-page-change";
+
+// And what it says about the keyboard and the zoom. A chord the page left alone
+// arrives as a KeyboardEvent of its own type -- not `keydown`, which would
+// reach every keydown listener in the shell as a key pressed in the shell's
+// own document. The zoom change carries nothing, like the other state events:
+// `zoom` is readable on the element. The two requests carry their direction in
+// their names, which keeps them plain Events rather than an event type of the
+// fork's own.
+constexpr char kGuestKeydownEvent[] = "domicile-guest-keydown";
+constexpr char kZoomChangeEvent[] = "domicile-zoom-change";
+constexpr char kZoomInRequestEvent[] = "domicile-zoom-in-request";
+constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
@@ -278,6 +294,23 @@ void HTMLWebViewElement::reload() {
   }
 }
 
+// NOT STORED HERE, unlike every other value the element holds: `zoom` is the
+// browser's answer, and the browser may not give the one asked for -- a site
+// zoomed by another window a moment later, say. So it changes when
+// ZoomChanged says so and not before.
+void HTMLWebViewElement::setZoom(double factor,
+                                 ExceptionState& exception_state) {
+  if (factor < kMinimumBrowserZoomFactor ||
+      factor > kMaximumBrowserZoomFactor) {
+    exception_state.ThrowRangeError(
+        "The zoom factor must be between 0.25 and 5.");
+    return;
+  }
+  if (guest_.is_bound()) {
+    guest_->SetZoom(factor);
+  }
+}
+
 // The browser's answer arriving, which is the only way this element has one.
 //
 // STORED FIRST AND ANNOUNCED SECOND, because the announcement is what makes a
@@ -331,6 +364,38 @@ void HTMLWebViewElement::PageChanged(
   security_ = String(SecurityName(security));
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kPageChangeEvent)));
+}
+
+void HTMLWebViewElement::UnhandledKeyDown(const String& key,
+                                          const String& code,
+                                          bool alt_key,
+                                          bool ctrl_key,
+                                          bool shift_key,
+                                          bool meta_key,
+                                          bool repeat) {
+  KeyboardEventInit* init = KeyboardEventInit::Create();
+  init->setBubbles(true);
+  init->setKey(key);
+  init->setCode(code);
+  init->setAltKey(alt_key);
+  init->setCtrlKey(ctrl_key);
+  init->setShiftKey(shift_key);
+  init->setMetaKey(meta_key);
+  init->setRepeat(repeat);
+  DispatchEvent(*MakeGarbageCollected<KeyboardEvent>(
+      AtomicString(kGuestKeydownEvent), init));
+}
+
+// Stored before it is announced, for the reason every state here is.
+void HTMLWebViewElement::ZoomChanged(double factor) {
+  zoom_ = factor;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kZoomChangeEvent)));
+}
+
+void HTMLWebViewElement::ZoomRequested(bool zoom_in) {
+  DispatchEvent(*Event::CreateBubble(
+      AtomicString(zoom_in ? kZoomInRequestEvent : kZoomOutRequestEvent)));
 }
 
 }  // namespace blink

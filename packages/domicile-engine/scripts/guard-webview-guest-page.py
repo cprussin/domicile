@@ -85,6 +85,14 @@ PAGE = """<!doctype html>
         say("guest-window-focus");
       });
 
+      // The page's own width in CSS pixels, whenever it changes. Zooming a page
+      // is what changes it with the window standing still, which is how the
+      // keyboard guard tells a zoom the page drew from one the element only
+      // reported.
+      addEventListener("resize", () => {
+        say(`guest-resized width=${innerWidth}`);
+      });
+
       say("guest-loaded");
     </script>
   </body>

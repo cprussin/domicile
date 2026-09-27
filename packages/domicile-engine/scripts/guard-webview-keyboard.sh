@@ -41,6 +41,13 @@
 #   an ungrabbed key reached the guest  measured on the browser side, by the
 #     and not the shell's document      modifiers it changed: only the guest's
 #                                        own hook can report that
+#   an unclaimed chord came back        Ctrl+R, which the page leaves alone,
+#     and a plain key did not           handed back to the shell as
+#                                        `domicile-guest-keydown` — how a
+#                                        browser window's chrome binds it
+#   the zoom it asks for arrives        the shell answers that chord with
+#                                        setZoom(1.5): the element reports the
+#                                        factor, and the page's own width moves
 #
 # BEFORE AND AFTER, WHICH IS WHAT MAKES THE LAST ONE A MEASUREMENT. "The shell's
 # document did not see the key" is worth nothing on its own — a page that never
@@ -108,6 +115,13 @@ PLAIN_EVDEV=30
 PLAIN_CODE="KeyA"
 PLAIN_KEY="a"
 PLAIN_VKEY=65
+
+# And a chord nobody claimed and the page does not take, which the guest's
+# delegate must hand back to the shell: Ctrl+R, a browser window's reload.
+UNCLAIMED_EVDEV=19
+UNCLAIMED_CODE="KeyR"
+UNCLAIMED_KEY="r"
+UNCLAIMED_VKEY=82
 
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-webview-keyboard-broker}"
@@ -283,6 +297,12 @@ python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
   >>"$KEY_LOG" 2>&1 ||
   echo "the ungrabbed key could not be driven; see $KEY_LOG" >&2
 
+python3 "$SCRIPTS/guard-webview-keyboard-key.py" \
+  --port "$DEBUG_PORT" --code "$UNCLAIMED_CODE" --key "$UNCLAIMED_KEY" \
+  --evdev "$UNCLAIMED_EVDEV" --windows-key-code "$UNCLAIMED_VKEY" --ctrl \
+  >>"$KEY_LOG" 2>&1 ||
+  echo "the unclaimed chord could not be driven; see $KEY_LOG" >&2
+
 # The press is answered before it is handled: `Input.dispatchKeyEvent` comes
 # back when the event has been forwarded, and what this reads is what the page
 # logged afterward. A fixed wait rather than a poll on the line that must
@@ -307,12 +327,17 @@ SAW_SHELL_KEY=$(saw "GUARD document-keydown code=$BEFORE_CODE")
 SAW_DOCUMENT_KEY=$(saw "GUARD document-keydown code=$PLAIN_CODE")
 SAW_GUEST_KEY=$(saw "GUARD guest-keydown code=$PLAIN_CODE")
 SAW_RELAY=$(grep -qF "grab_shortcut" "$SOCKET_LOG" && echo 1 || echo 0)
+SAW_GUEST_CHORD=$(saw "GUARD guest-chord key=$UNCLAIMED_KEY code=$UNCLAIMED_CODE alt=false ctrl=true")
+SAW_PLAIN_CHORD=$(saw "GUARD guest-chord key=$PLAIN_KEY")
+SAW_ZOOM=$(saw "GUARD zoom factor=1.5")
+SAW_ZOOM_DRAWN=$(saw "GUARD guest-resized")
 
 echo
 echo "claimed=$SAW_CLAIM loaded=$SAW_PAGE focused=$SAW_FOCUS relayed=$SAW_RELAY"
 echo "shortcut=$SAW_SHORTCUT modifiers=$SAW_MODIFIERS hook-ran-unmatched=$SAW_HOOK"
 echo "the shell's document saw: before=$SAW_SHELL_KEY after=$SAW_DOCUMENT_KEY"
 echo "the page in the window saw: after=$SAW_GUEST_KEY"
+echo "handed back: chord=$SAW_GUEST_CHORD plain=$SAW_PLAIN_CHORD; zoom=$SAW_ZOOM drawn=$SAW_ZOOM_DRAWN"
 echo
 
 # WHICH END TO BLAME, and it is the whole of this script's judgment. Nine
@@ -369,6 +394,23 @@ elif [ "$SAW_HOOK" != "1" ]; then
 reported no modifier change for it, and nothing else in the process reports \
 one. So the key went somewhere else, or nowhere, and where an unhandled key \
 ends up is not decided by this run"
+elif [ "$SAW_GUEST_CHORD" != "1" ]; then
+  FAILURE="Ctrl+R, which nobody claimed and the page does not take, never came \
+back to the shell as domicile-guest-keydown. So a browser window's chrome \
+cannot bind it: WebViewGuest::HandleKeyboardEvent did not run, did not send \
+UnhandledKeyDown, or the element did not dispatch it"
+elif [ "$SAW_PLAIN_CHORD" = "1" ]; then
+  FAILURE="a plain key was handed back to the shell as domicile-guest-keydown. \
+Only chords may be: this is every keystroke typed into a page, a password's \
+included, copied into the shell's document"
+elif [ "$SAW_ZOOM" != "1" ]; then
+  FAILURE="the shell asked for 150% and the element never reported it. \
+Either SetZoom never reached the browser, or HostZoomMap set it and ReportZoom \
+did not send ZoomChanged"
+elif [ "$SAW_ZOOM_DRAWN" != "1" ]; then
+  FAILURE="the element reported 150% and the page's width never moved. \
+HostZoomMap holds a level the guest's widget did not pick up, which is a \
+number rather than a zoom"
 elif [ "$SAW_DOCUMENT_KEY" = "1" ]; then
   FAILURE="an ungrabbed key reached BOTH the guest's delegate and the shell's \
 document. That is not the answer WebViewGuest::PreHandleKeyboardEvent records \
@@ -384,14 +426,16 @@ elif [ "$SAW_SHELL_KEY" != "1" ]; then
   # is the *shell's* half of the last reading: with nothing arriving here
   # before focus moved, nothing arriving after it is not a measurement.
   PASSED="a desktop chord reached the shell while a browser window held the \
-keyboard, the modifiers came with it, and an ungrabbed key reached the guest's \
+keyboard, the modifiers came with it, Ctrl+R came back to the shell with the \
+zoom it asked for drawn, and an ungrabbed key reached the guest's \
 delegate and not the shell. WITH ONE READING SHORT: no key reached the shell's \
 document even before the window took focus, so this run cannot tell that \
 absence from a page that receives no key events at all, and does not decide \
 where an unhandled key ends up"
 else
   PASSED="a desktop chord reached the shell while a browser window held the \
-keyboard, the modifiers came with it, and an ungrabbed key reached the guest's \
+keyboard, the modifiers came with it, Ctrl+R came back to the shell with the \
+zoom it asked for drawn, and an ungrabbed key reached the guest's \
 delegate and not the shell's document — which the same document DID receive \
 before the window took focus, so that absence is a measurement. That is the \
 recorded answer to whether a guest's unhandled keys reach the embedder: they \

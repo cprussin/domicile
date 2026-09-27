@@ -1,11 +1,11 @@
 // The fork's `<webview>`: web content in a browsing context of its own.
 //
 // There is no code here, and that is the point. The element belongs to the
-// engine — `src`, the four history controls and the three state properties are
+// engine — `src`, the history controls, the zoom and the state properties are
 // all `HTMLWebViewElement`'s, and the events below are dispatched by the
 // browser process rather than by anything in this package. What is left for the
 // SDK to say is the part TypeScript cannot read off the fork: what the tag is,
-// and what the engine calls the three events it fires on it.
+// and what the engine calls the events it fires on it.
 //
 // It used to be a `<domicile-webview>` custom element wrapping one of these,
 // because a custom element's name must contain a hyphen and the SDK predates
@@ -160,6 +160,55 @@ export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
 
 /**
+ * Fired when the page inside the view leaves a chord alone: a key pressed with
+ * Ctrl, Alt or Meta held that the page did not `preventDefault`.
+ *
+ * A `KeyboardEvent`, with the `key`, `code`, modifiers and `repeat` a `keydown`
+ * carries, so a chrome binds Ctrl+R over its page and in its own address bar
+ * with one handler. A type of its own rather than `keydown` because the key was
+ * not pressed in the shell's document, and every `keydown` listener there would
+ * otherwise hear it as though it had been.
+ *
+ * THE ONLY WAY A SHELL HEARS ONE. A key pressed in a guest never reaches the
+ * shell's document — see `WEBVIEW_GUEST_FOCUS_EVENT` for why nothing crosses
+ * out — so the engine hands it back once the page has had its turn, which is
+ * Chrome's own order: a site that binds a chord keeps it.
+ *
+ * CHORDS ONLY. A plain key the page did not consume is most of typing, a
+ * password's included, and is not copied out of it.
+ *
+ * It bubbles, so a chrome can listen on the window it drew.
+ */
+export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
+
+/**
+ * Fired when the page's zoom changes, which is readable on the element as
+ * {@link HTMLWebViewElement.zoom}. Carries nothing, like the other state
+ * events.
+ *
+ * The zoom is the SITE's, keyed by host the way Chrome keys it, so this fires
+ * when the shell sets it, when another window on the same site does, and when
+ * the page navigates to a site zoomed differently.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
+
+/**
+ * Fired when the user asks the page to zoom in or out — Ctrl and the wheel,
+ * over a page that did not take the wheel for itself.
+ *
+ * A REQUEST, NOT A ZOOM: the engine changes nothing, and what the step is is
+ * the shell's, so the wheel and Ctrl+plus take one path through it. A shell
+ * that ignores these is a browser window where Ctrl+wheel does nothing.
+ *
+ * Two names rather than one event with a direction on it, so both stay plain
+ * `Event`s. They bubble.
+ */
+export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
+export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
+
+/**
  * What a `<webview>` is, to everything holding one.
  *
  * Global rather than exported, and merged rather than defined, because the name
@@ -214,6 +263,18 @@ declare global {
      * a chrome gets after parsing it at that boundary.
      */
     readonly security: string;
+    /**
+     * The page's zoom as a factor, where 1 is 100%. The browser's answer, so
+     * it is 1 until the browser says otherwise and changes only when
+     * {@link WEBVIEW_ZOOM_CHANGE_EVENT} says so.
+     */
+    readonly zoom: number;
+    /**
+     * Ask the browser to zoom the page. Throws a `RangeError` outside 0.25 to
+     * 5, the browser's own limits; the answer arrives as
+     * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
+     */
+    setZoom(factor: number): void;
     goBack(): void;
     goForward(): void;
     stop(): void;
@@ -250,11 +311,13 @@ declare global {
    * `HTMLElementEventMap` rather than an interface of this element's own:
    * `addEventListener`'s overloads are resolved through that map for every
    * element, and `HTMLWebViewElement` is declared above as an `HTMLElement`
-   * with four methods rather than as an element with an event map of its own.
-   * The name is this fork's and cannot collide with anything the platform adds.
+   * with a handful of methods rather than as an element with an event map of
+   * its own. The names are this fork's and cannot collide with anything the
+   * platform adds.
    */
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementEventMap {
     "domicile-new-window": DomicileNewWindowEvent;
+    "domicile-guest-keydown": KeyboardEvent;
   }
 }

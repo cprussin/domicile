@@ -925,9 +925,16 @@ client — its page is inside your own. Three things follow, none optional:
 - **Nothing else takes a key.** Chrome's own shortcuts — Ctrl+R, Alt+Left,
   F11, Ctrl+W and the rest — are not bound, in the shell or in a browser
   window, and neither is a right click: the page's `contextmenu` event is all
-  there is, so a menu is yours to draw. Ctrl+wheel does not zoom and a swipe
-  does not go back. The browser offers no password saving, autofill,
-  translation or passkeys either.
+  there is, so a menu is yours to draw. A swipe does not go back. The browser
+  offers no password saving, autofill, translation or passkeys either.
+- **Bind a browser's keys yourself.** A chord the page left alone — Ctrl, Alt
+  or Meta held, and not `preventDefault`ed — comes back on the element as a
+  `KeyboardEvent` of type `domicile-guest-keydown`; a plain key never does.
+  Ctrl+wheel over the page arrives as `domicile-zoom-in-request` or
+  `domicile-zoom-out-request` and zooms nothing by itself. `view.setZoom(factor)`
+  zooms, and `view.zoom` with `domicile-zoom-change` says where it landed — the
+  site's zoom, keyed by host the way Chrome keys it. Manganese's
+  `BrowserWindow.tsx` binds Chrome's defaults.
 - **Claim your desktop chords** with `domicile.grabShortcut`. The browser
   process is the only layer above a focused guest: a key pressed on a site
   reaches neither this page nor the compositor. A claimed chord comes back as a
