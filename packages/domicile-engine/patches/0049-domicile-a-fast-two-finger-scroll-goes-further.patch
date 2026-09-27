@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 27 Sep 2026 12:00:00 +0000
+Subject: [PATCH] domicile: a fast two-finger scroll goes further
+
+libinput accelerates pointer motion and never scroll. A touchpad's scroll
+is the fingers' distance times a constant, so a long page is a dozen
+swipes however fast they are. `ScrollAccelerator`
+(`ui/events/ozone/evdev/domicile/`) applies a pointer-style curve to the
+finger source: one to one below about 5 cm/s, rising to four times at a
+brisk flick, starting over at libinput's scroll stop or after a 100 ms
+pause.
+
+It also carries the fraction `HandlePointerAxis` used to truncate. A
+slow finger moves less than a unit per event, and `gfx::Vector2d(h, v)`
+turned each of those into zero.
+
+Wheels and a trackpoint's button scroll are untouched: only
+`LIBINPUT_POINTER_AXIS_SOURCE_FINGER` goes through the curve.
+
+The test is listed in ozone_unittests rather than evdev's own
+`unittests`, which only `events_unittests` links and no job builds.
+---
+ ui/events/ozone/evdev/BUILD.gn                    |  2 ++
+ ui/events/ozone/evdev/libinput_event_converter.cc | 12 +++++++++++-
+ ui/events/ozone/evdev/libinput_event_converter.h  |  3 +++
+ ui/ozone/platform/drm/BUILD.gn                    |  5 +++++
+ 4 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index 00bc1e7f84..473ab91e15 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -49,6 +49,8 @@ component("evdev") {
+   sources = [
+     "device_event_dispatcher_evdev.cc",
+     "device_event_dispatcher_evdev.h",
++    "domicile/scroll_accelerator.cc",
++    "domicile/scroll_accelerator.h",
+     "event_converter_evdev.cc",
+     "event_converter_evdev.h",
+     "event_converter_evdev_impl.cc",
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index d92469b05c..0e6712ce21 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -18,6 +18,7 @@
+ #include "base/strings/stringprintf.h"
+ #include "ui/events/ozone/evdev/cursor_delegate_evdev.h"
+ #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
++#include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
+ #include "ui/events/ozone/evdev/event_device_info.h"
+ #include "ui/events/ozone/evdev/input_device_settings_evdev.h"
+ 
+@@ -445,7 +446,16 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+   libinput_event_pointer* event = evt.PointerEvent();
+   const auto h = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL);
+   const auto v = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
+-  const gfx::Vector2d delta(h, v);
++  // Two fingers on the pad go through the accelerator, which also carries
++  // the fraction this used to truncate away. Anything else -- a wheel, a
++  // trackpoint's scroll button -- is dispatched as libinput reports it.
++  const gfx::Vector2d delta =
++      libinput_event_pointer_get_axis_source(event) ==
++              LIBINPUT_POINTER_AXIS_SOURCE_FINGER
++          ? scroll_accelerator_.Scroll(
++                gfx::Vector2dF(static_cast<float>(h), static_cast<float>(v)),
++                Timestamp(evt))
++          : gfx::Vector2d(h, v);
+ 
+   DVLOG(3) << "Pointer axis h:" << h << ", v:" << v;
+ 
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index 175b49024a..54ffd05d38 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -13,6 +13,7 @@
+ 
+ #include "base/files/scoped_file.h"
+ #include "base/memory/raw_ptr.h"
++#include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev.h"
+ 
+ namespace ui {
+@@ -168,6 +169,8 @@ class LibInputEventConverter : public EventConverterEvdev {
+ 
+   const LibInputContext context_;
+   const std::optional<LibInputDevice> device_;
++
++  ScrollAccelerator scroll_accelerator_;
+ };
+ 
+ }  // namespace ui
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index b0fdbe5d91..9a2db883fe 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -269,6 +269,11 @@ source_set("gbm_unittests") {
+     "domicile/drm_sleep_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
+     "domicile/edid_name_unittest.cc",
++
++    # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
++    # linked only into `events_unittests`, which no job here builds, and the
++    # console is the one platform whose touchpad goes through libinput.
++    "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
+   ]
+ 
+   # `ui/display/manager/test/fake_display_snapshot.h` is the one thing this
