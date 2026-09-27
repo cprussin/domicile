@@ -536,6 +536,18 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([Launch.Edited("file-199")]);
   });
 
+  it("walks the rows with ctrl+n and ctrl+p as well as the arrow keys", async () => {
+    // The Emacs and readline walk, for hands that never leave the home row.
+    const panel = launcher();
+
+    await panel.rows();
+    await panel.user.keyboard(
+      "{Control>}n{/Control}{Control>}n{/Control}{Control>}n{/Control}{Control>}p{/Control}{Enter}",
+    );
+
+    expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
+  });
+
   it("says it was dismissed when Escape closes it", async () => {
     // The panel does not close itself: what is open is desktop state, so the
     // dialog reports the press and the desktop decides. A panel that closed
