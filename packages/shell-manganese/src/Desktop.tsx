@@ -1,7 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
-import type { Display } from "@domicile/component-library/display-source";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
@@ -16,7 +15,10 @@ import { NoScreens } from "./screens/NoScreens";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
-import { WindowAction } from "./window-management/window-state";
+import {
+  WindowAction,
+  WindowActionKind,
+} from "./window-management/window-state";
 
 type Props = {
   /** The other pages of this desk — see `desk-channel.ts`. */
@@ -59,6 +61,18 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // it.
   const keyed = useRef(false);
 
+  // Whether the press that put the launcher up was heard on this page, which
+  // is the page its box can be typed into. The engine hands the keys to the
+  // monitor the pointer is on, and that need not be the monitor the
+  // desktop's focus is on: a key can move the focus to another screen and
+  // leave the pointer — and so the keyboard — where it was.
+  const [launchedHere, setLaunchedHere] = useState(false);
+  useEffect(() => {
+    if (!windows.launcherOpen) {
+      setLaunchedHere(false);
+    }
+  }, [windows.launcherOpen]);
+
   // The launcher's rows are the host's answer to what is in its box: the
   // compositor keeps an index of the home and searches it, and all that
   // crosses into this page is what matched. One function for the life of the
@@ -98,6 +112,9 @@ export const Desktop = ({ desk, domicile }: Props) => {
       // in the middle of an event handler.
       keyed.current = true;
       spendShift();
+      if (action.kind === WindowActionKind.LauncherToggled) {
+        setLaunchedHere(true);
+      }
       act(action);
     },
     [act, spendShift],
@@ -151,7 +168,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
         viewport is this monitor, and the panel is over the whole of it.
       */}
       <Launcher
-        here={keyboardIsHere(displays, windows.focused)}
+        here={launchedHere}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}
@@ -200,16 +217,4 @@ export const Desktop = ({ desk, domicile }: Props) => {
       <NoScreens />
     </>
   );
-};
-
-/**
- * Whether the keyboard is on the monitor this page covers — or, on a page that
- * covers none because it is the whole desk, on this page at all.
- */
-const keyboardIsHere = (
-  displays: readonly Display[] | undefined,
-  focused: string,
-): boolean => {
-  const own = displays?.find((display) => display.scanout !== undefined);
-  return own === undefined || own.name === focused;
 };

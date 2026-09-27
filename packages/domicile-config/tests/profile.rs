@@ -423,13 +423,16 @@ fn a_disabled_display_is_a_connector_to_leave_dark() {
             // corner anyway, past the three that are lit. The engine's display
             // list carries a dark connector as much as a lit one, and two
             // displays claiming one rectangle is worse than one that is off.
-            (LAPTOP, false, (11520, 0)),
+            // A pixel past them rather than touching: the engine carries a
+            // pointer only onto a screen that starts where its own ends, and
+            // one that wandered onto a panel that is off would be lost.
+            (LAPTOP, false, (11521, 0)),
             (LEFT, true, (0, 0)),
             (CENTER, true, (3840, 0)),
             (RIGHT, true, (7680, 0)),
         ],
         "the three lit ones are stepped across by the mode each of them scans \
-         out, and the dark one is put past the end of them"
+         out, and the dark one is put a pixel past the end of them"
     );
 }
 
