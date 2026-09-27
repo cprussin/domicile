@@ -190,7 +190,7 @@ knowing about:
 
 - **The pointer over a window belongs to the client behind it.** That is the
   point of Domicile, and it means the shell cannot handle a drag on the window
-  itself. While the modifier is held a floating window is given
+  itself. While the modifier is held a window is given
   `pointer-events: none` — the compositor reports it as taking no pointer and
   routes to the chrome instead — and a transparent sheet over the window
   catches what falls through. The same mechanism that stops a window
@@ -213,6 +213,25 @@ The float order is the stacking order, and the shell writes it as the
 the same reason: it is a layer in this page's layer tree, and it is the
 element the pointer hit-tests against, so the order it draws in and the order
 it is hit in are one fact rather than two that have to be kept in step.
+
+### Tiled windows drag too
+
+**Mod+drag** picks a tiled window up and **Mod+right-drag** (or
+Mod+Shift+drag) resizes it — the same `floating_modifier`, which sway reads
+on a tiled window as well.
+
+- **A move retiles nothing until it is let go of.** A box over the window
+  under the pointer says where it would land: half of that window puts the
+  dragged one on that side of it — beside it in its row or column, or in a new
+  split of the two where the container runs the other way — and the whole of
+  it means the two trade places, keeping both boxes. Let go of over nothing
+  and nothing moves. See `tree/drop.ts`.
+- **A resize drags the two edges of the quarter it took hold of**, each
+  between the window and its neighbor in the nearest container that runs that
+  way, and the tree follows the pointer as it goes. An edge against the side
+  of the workspace has nothing to move. See `tree/stretch.ts`.
+
+A fullscreen window, and one a tab is hiding, is not picked up.
 
 ### Every window has a title bar
 

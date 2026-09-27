@@ -1,16 +1,21 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 
 import type { Modifiers } from "../keyboard/useModifiers";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
+import type { Direction } from "./direction";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import { GroupOutline } from "./GroupOutline";
 import type { Screenful } from "./placement";
+import { TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
 import { TitleBar } from "./TitleBar";
+import type { Aim, Target } from "./tiled/aim";
+import { DropIndicator } from "./tiled/DropIndicator";
+import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import { useWindowMotion } from "./useWindowMotion";
 import type { ShellWindow } from "./window";
@@ -48,6 +53,11 @@ type Props = {
   modifiers: Modifiers;
   onClose: (id: string) => void;
   onDrop: () => void;
+  /**
+   * A tiled window let go of over another: onto its `edge`, or its middle
+   * where that is `undefined`.
+   */
+  onDropOn: (id: string, target: string, edge: Direction | undefined) => void;
   /** The screen, asked for from a window's own bar — `fullscreen`. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
@@ -73,6 +83,8 @@ type Props = {
   onResize: (id: string, width: number, height: number) => void;
   /** The user reached a window, by clicking into it or into its chrome. */
   onSelect: (id: string) => void;
+  /** A tiled window's `edge` dragged `by` pixels, rightwards or downwards. */
+  onStretch: (id: string, edge: Direction, by: number) => void;
   /** Where every window on screen goes, and the tabs of any container. */
   screenful: Screenful;
   windows: readonly ShellWindow[];
@@ -108,6 +120,7 @@ export const Stage = ({
   modifiers: { meta, shift },
   onClose,
   onDrop,
+  onDropOn,
   onFullscreen,
   onGrab,
   onHover,
@@ -116,6 +129,7 @@ export const Stage = ({
   onRename,
   onResize,
   onSelect,
+  onStretch,
   screenful: { placements, selection, tabs },
   windows,
 }: Props) => {
@@ -126,14 +140,18 @@ export const Stage = ({
     tabs,
     windows,
   });
+  // Where a tiled window being moved would land, which is drawn over every
+  // window rather than by the one being dragged — see `DropIndicator`.
+  const [aim, setAim] = useState<Aim | undefined>(undefined);
+  const targets = tiledTargets(placements);
   return (
     <main>
       {motions.drawn.map(({ focused, motion, placement, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         // While the desktop's modifier is held the pointer belongs to the shell
-        // rather than to the client, so a drag can be caught in the page. Only
-        // a floating window for that: nothing drags a tiled one, and taking the
-        // pointer off it would cost a click.
+        // rather than to the client, so a drag can be caught in the page: over
+        // every window there is a grab for — a floating one, and a tiled one on
+        // screen. Not a fullscreen one, which has nowhere to be dragged to.
         //
         // While a drag runs it is every window, the tiled ones included. The
         // compositor hands the pointer to whichever window is under it, and the
@@ -142,7 +160,10 @@ export const Stage = ({
         // release that should have ended the drag, leaving the window grabbed
         // with the mouse already let go.
         const clickThrough =
-          draggingId !== undefined || (floating !== undefined && meta);
+          draggingId !== undefined ||
+          (meta &&
+            (floating !== undefined ||
+              targets.some(({ id }) => id === window.id)));
         // A window with no placement is not on screen, so what it would stack
         // against is not a question: it is rendered hidden, which is what keeps
         // its portal and its page alive across a workspace switch.
@@ -248,25 +269,45 @@ export const Stage = ({
         if (placement === undefined) {
           return undefined;
         } else if (floating === undefined) {
+          const grabbable = targets.some(({ id }) => id === window.id);
           return (
-            <TitleBar
-              depth={placement.depth}
-              // Nothing drags a tiled window: the bar a window is dragged by
-              // is the floating one below.
-              dragging={false}
-              focus={focus}
-              frame={placement.frame}
-              fullscreen={window.id === fullscreenId}
-              key={window.id}
-              motion={motion}
-              onClose={onCloseThis}
-              onFullscreen={onFullscreenThis}
-              onMotionEnded={onMotionEnded}
-              onReach={onReachThis}
-              rect={placement.bar}
-              title={window.title}
-              window={window.id}
-            />
+            <Fragment key={window.id}>
+              <TitleBar
+                depth={placement.depth}
+                // A tiled window is dragged by the sheet below rather than by
+                // its bar: an ordinary drag on a bar is a click on it, and
+                // only the desktop's modifier picks a tiled window up.
+                dragging={window.id === draggingId}
+                focus={focus}
+                frame={placement.frame}
+                fullscreen={window.id === fullscreenId}
+                motion={motion}
+                onClose={onCloseThis}
+                onFullscreen={onFullscreenThis}
+                onMotionEnded={onMotionEnded}
+                onReach={onReachThis}
+                rect={placement.bar}
+                title={window.title}
+                window={window.id}
+              />
+              {grabbable && (meta || window.id === draggingId) && (
+                <TileGrab
+                  frame={placement.frame}
+                  id={window.id}
+                  onAim={setAim}
+                  onDrop={onDrop}
+                  onDropOn={(target, edge) => {
+                    onDropOn(window.id, target, edge);
+                  }}
+                  onGrab={onGrabThis}
+                  onStretch={(edge, by) => {
+                    onStretch(window.id, edge, by);
+                  }}
+                  resizes={shift}
+                  targets={targets}
+                />
+              )}
+            </Fragment>
           );
         } else {
           return (
@@ -355,9 +396,20 @@ export const Stage = ({
         `z-index` are decided by the order they come in the document.
       */}
       {selection !== undefined && <GroupOutline rect={selection} />}
+      {aim !== undefined && <DropIndicator rect={aim.rect} />}
     </main>
   );
 };
+
+/**
+ * The tiled windows on screen, which are what a tiled window can be picked up
+ * from and dropped on: not one a tab is hiding, which has only its tab on
+ * screen, and not one filling the screen, which has left the tiling's depth.
+ */
+const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
+  placements
+    .filter(({ depth, surface }) => depth === TILED && surface !== undefined)
+    .map(({ frame, id }) => ({ frame, id }));
 
 /**
  * What a window is called.

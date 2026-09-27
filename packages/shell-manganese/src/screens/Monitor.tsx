@@ -128,6 +128,9 @@ export const Monitor = ({
         onDrop={() => {
           act(WindowAction.WindowDropped());
         }}
+        onDropOn={(id, target, edge) => {
+          act(WindowAction.WindowDroppedOn(id, target, edge));
+        }}
         onFullscreen={(id) => {
           act(WindowAction.WindowFullscreened(id));
         }}
@@ -158,6 +161,11 @@ export const Monitor = ({
         }}
         onSelect={(id) => {
           act(WindowAction.WindowSelected(id));
+        }}
+        // With this monitor's own workspace box, which is what the tiling on
+        // it is laid out in and so what a dragged pixel is a share of.
+        onStretch={(id, edge, by) => {
+          act(WindowAction.WindowStretched(id, edge, by, geometry.workspace));
         }}
         screenful={screenful}
         windows={windows.windows}

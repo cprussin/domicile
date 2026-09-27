@@ -25,7 +25,7 @@ export const RESIZE_STEP = 0.02;
  * Not a taste: a window squeezed to nothing has no title bar to grab and no
  * surface to point at, so it cannot be resized back.
  */
-const SMALLEST = 0.05;
+export const SMALLEST = 0.05;
 
 /**
  * The tiling with the focused window grown or shrunk one step `direction`.

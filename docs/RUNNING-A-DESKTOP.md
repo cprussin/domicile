@@ -68,6 +68,13 @@ side, and then a nested desktop has no Meta key again. Compositors that do not
 implement the protocol never had one to give: the engine logs that and carries
 on.
 
+**The pointer is not a shortcut.** The request covers keys, and a Meta+drag
+is the host's before it is the desktop's: sway matches its own
+`floating_modifier` drag on the window under the pointer whatever the window
+asked for, so Meta+drag and Meta+right-drag move and resize the desktop's own
+window rather than one inside it. Give sway another modifier —
+`floating_modifier Mod1 normal` — to drag windows inside the desktop.
+
 **On a bare tty none of this happens** — there is no host compositor, the
 desktop *is* the compositor, and the request is not made.
 
