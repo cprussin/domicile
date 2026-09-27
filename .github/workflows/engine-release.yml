@@ -197,6 +197,11 @@ jobs:
             exit 1
           }
 
+      # The slot is for the compile, and nothing below compiles Chromium; see
+      # the same step in engine.yml.
+      - name: Drop the compile slot, the compile is done
+        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
+
       - name: Package
         id: package
         run: |
