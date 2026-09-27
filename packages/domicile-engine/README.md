@@ -501,8 +501,8 @@ and the lesson.
 The spike in `ENGINE-FORK.md` is finished and **phase 1 is done**: the C ABI
 library, the brokered frame sink, the dmabuf import ported from `exo::Buffer`,
 `released` → `wl_buffer.release`, and the compositor submitting a client's
-buffer. Phase 2 has two boxes left — an shm→dmabuf upload, and the latency
-measurement rebuilt in the compositor — and phase 3 is the DRM work below.
+buffer. Phase 2 is done, with its last box — the shm upload — not yet seen
+on a GPU, and phase 3 is the DRM work below.
 `ENGINE-FORK.md`'s *Plan* is the current list; this section is what the fork
 knows about the machine it runs on.
 

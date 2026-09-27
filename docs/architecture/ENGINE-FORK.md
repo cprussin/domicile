@@ -1213,20 +1213,17 @@ copy path before the compositor can submit leaves nothing drawing at all.
       resize row became layout-driven. See *What CSS does to an `<app>`*.
       `scripts/test-parity-page-uses-the-native-tag.sh` is the guard, in the
       shell group because drift here fails nothing on its own
-- [ ] **an shm→dmabuf upload.** `publish_frame` submits only
-      `CommittedBuffer::Gpu`, so a client that draws into shared memory — most
-      toolkits that do not render with GL — has no window.
+- [x] **an shm→dmabuf upload.** In the compositor, not the fork: each shm
+      frame is drawn on the compositor's GL renderer into a GBM buffer of its
+      own (`uploads.rs`), the client's buffer is released at once, and the copy
+      goes down the same `submit` a client's dmabuf does. A draw rather than a
+      `memcpy` because NVIDIA's gbm will not allocate a buffer both
+      CPU-writable and renderable (`spike-dmabuf.sh`).
 
-      **Settled by the project owner, against the recommendation:** the upload
-      is not a prerequisite, the copy path went first, and shm clients are
-      broken in the interim. Nothing is released, so the regression costs
-      nothing real, and one path to write the upload against is worth more than
-      an interim tree that works.
+      **Not yet seen on a GPU.** The copy is tested on llvmpipe; the GBM
+      allocation and the browser's import of it need a render node, which no
+      check here has.
 
-      Deliberate and time-boxed rather than a change of mind: a shipped desktop
-      that silently shows no window is still the defect ERRORS.md is about.
-      `publish_frame` refuses a non-dmabuf buffer once per client and says so.
-      The box closes when the upload exists, not when the message does.
 - [x] **an arrival stamp on the control channel's events.** Every
       `ControlChannelClient` method carries a `mojo_base.mojom.TimeTicks
       arrival`, taken in `ControlChannel::OnRead` — once per read, not per

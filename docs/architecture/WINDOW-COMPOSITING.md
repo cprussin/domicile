@@ -107,9 +107,11 @@ layer, so there is no list of supported properties to keep in step with CSS.
   all, so a pass there is the filter reading a window's quads out of a render
   pass and nothing about the decline. Promotion wants a lit CRTC, which is the
   same thing presentation wants — `ENGINE-FORK.md`, phase 3.
-- **`wl_shm` clients.** A client that draws into shared memory has no dmabuf to
-  import, so its window is blank and the compositor says so once per client.
-  The upload that would give it one does not exist — `ENGINE-FORK.md`, phase 2.
+- **`wl_shm` clients, on a GPU.** A client that draws into shared memory has
+  no dmabuf, so the compositor draws each frame into a GBM buffer of its own
+  and submits that (`uploads.rs`, `shm_upload.rs`). The copy is tested on
+  llvmpipe; the allocation and the browser's import of it are not, because no
+  check here has a render node — `ENGINE-FORK.md`, phase 2.
 - **Damage.** The seam carries a rectangle —
   `domicile_surface_submit(surface, buffer, damage)`, where an empty one means
   the whole surface — and `publish_frame` passes an empty one for every commit,

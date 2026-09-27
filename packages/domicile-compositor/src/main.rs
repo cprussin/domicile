@@ -10,8 +10,8 @@
 //!
 //! GPU clients get a `zwp_linux_dmabuf_v1` global. Their buffer is submitted
 //! to the engine as a viz surface, which the page embeds in its `<app>`
-//! element — see `engine_session`. A `wl_shm` client has no dmabuf to submit
-//! and its window stays blank, which `publish_frame` says once per client.
+//! element — see `engine_session`. A `wl_shm` client's frame is drawn into a
+//! GPU buffer of the compositor's and submitted in its place — see `uploads`.
 //!
 //! What is intentionally missing here (it needs a GPU and a display): anything
 //! about what the engine draws.
@@ -107,6 +107,7 @@ mod engine_buffers;
 mod engine_session;
 mod engine_surfaces;
 mod file_indexing;
+mod gbm;
 mod idle;
 mod keymap;
 mod latency;
@@ -119,15 +120,21 @@ mod pnp_ids;
 mod restatement;
 mod scale;
 mod screens;
+mod shm_upload;
 mod timing_window;
 mod uevents;
+mod uploads;
 mod viewport;
 mod which_engine;
 
+use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard};
 use crate::engine_buffers::Returned;
-use crate::engine_session::EngineSession;
+use crate::engine_session::{EngineSession, Submitted};
+use crate::gbm::Gbm;
 use crate::latency::{Latency, Step as LatencyStep};
+use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
+use crate::uploads::{UploadId, Uploads};
 
 use crate::appearance::{Appearance, CURRENT_DESKTOP};
 use crate::coalesce::last_of_burst;
@@ -160,6 +167,7 @@ use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::renderer::ImportMemWl as _;
 
 /// The log messages *this change's* scripts and tests grep for, pinned to them.
 ///
@@ -255,6 +263,9 @@ mod grepped {
 struct Gpu {
     renderer: Box<GlesRenderer>,
     importer: DmabufImporter,
+    /// Where the buffers shm frames are copied into come from. `None` is a
+    /// desktop whose shm clients are blank, which startup says once.
+    gbm: Option<Gbm>,
 }
 
 impl Gpu {
@@ -1785,10 +1796,13 @@ struct DomicileCompositor {
     /// placed by a portal. It is the window the desktop is, and the keyboard
     /// falls back to it.
     chrome_toplevel: Option<ToplevelSurface>,
-    /// Clients already told their shm buffer cannot be shown. A client commits
+    /// Clients whose shm frame could not be copied, already said. A client commits
     /// at its frame rate and the refusal does not change, so it is said once
     /// each rather than once a frame.
     shm_refused: HashSet<String>,
+    /// The GPU buffers shm clients' frames are copied into, so the engine has
+    /// a dmabuf to take — see [`crate::uploads`].
+    uploads: Uploads<Dmabuf>,
 
     /// Apps whose first frame the engine has taken. A window that maps, is
     /// brokered a sink and is configured has still shown nothing until it
@@ -2178,6 +2192,15 @@ impl DomicileCompositor {
             .map(|(app_id, _)| app_id.clone())
     }
 
+    /// A buffer the engine let go of goes back to whoever owns it: the client,
+    /// as a `wl_buffer.release`, or the pool of the compositor's own.
+    fn returned(&mut self, buffer: Submitted) {
+        match buffer {
+            Submitted::Client(buffer) => buffer.release(),
+            Submitted::Upload(id) => self.uploads.give_back(id),
+        }
+    }
+
     /// Turn a client's newly-attached buffer into pixels for the chrome,
     /// throttled to ~30fps per app.
     /// Runs the engine's pending work and acts on what it said.
@@ -2234,7 +2257,7 @@ impl DomicileCompositor {
                     tracing::debug!("a held buffer came back because its window went away")
                 }
             }
-            release.buffer.release();
+            self.returned(release.buffer);
         }
 
         for event in events {
@@ -2667,46 +2690,135 @@ impl DomicileCompositor {
         }
     }
 
-    /// Show this app's frame, and say whether the engine took the buffer.
+    /// Show this app's frame, and say what became of the client's buffer.
     ///
-    /// `true` means viz is sampling the client's dmabuf and the caller must not
-    /// release it — see the commit path, which is the only caller.
+    /// [`Published::Held`] means viz is sampling the client's dmabuf and the
+    /// caller must not release it — see the commit path, which is the only
+    /// caller. Every other answer leaves the buffer the caller's to release.
     ///
-    /// One path: the buffer goes to the engine or the window does not draw.
-    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> bool {
+    /// One path: whatever the client drew reaches the engine as a dmabuf, or
+    /// the window does not draw. An shm frame is copied into one of the
+    /// compositor's own first — see [`crate::uploads`].
+    fn publish_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> Published {
         let Some(committed) = committed_buffer(buffer) else {
-            return false;
+            return Published::NotShown;
         };
+        if self.engine.is_none() {
+            return Published::NotShown;
+        }
+        let published = match &committed {
+            CommittedBuffer::Gpu(dmabuf) => self.submit_to_the_engine(
+                app_id,
+                Submitted::Client(buffer.clone()),
+                &descriptor_from(dmabuf),
+                Published::Held,
+            ),
+            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer),
+        };
+        if published != Published::NotShown {
+            self.frame_shown(app_id);
+        }
+        published
+    }
+
+    /// Hand `submitted` to the engine as `app_id`'s window: `shown` if it
+    /// took it, [`Published::NotShown`] if it did not.
+    fn submit_to_the_engine(
+        &mut self,
+        app_id: &str,
+        submitted: Submitted,
+        descriptor: &DmabufDescriptor,
+        shown: Published,
+    ) -> Published {
         let Some(session) = self.engine.as_mut() else {
-            return false;
+            return Published::NotShown;
         };
-        // Only a dmabuf can go. An shm client draws with the CPU into shared
-        // memory and has no dmabuf to import, and the upload that would give it
-        // one does not exist yet — see ENGINE-FORK.md, phase 2.
-        //
-        // It is said rather than shown, once per client. A blank window with
-        // nothing in the log is the defect ERRORS.md is about; the regression
-        // was accepted on the condition that it announces itself, and a client
-        // commits at its frame rate, so once each is the difference between a
-        // line and a flood.
-        let CommittedBuffer::Gpu(dmabuf) = &committed else {
-            if self.shm_refused.insert(app_id.to_string()) {
-                warn!(
-                    app_id,
-                    "this client drew into shared memory rather than a dmabuf, and the engine \
-                     can only take a dmabuf. Its window will be blank until the shm upload \
-                     exists — see docs/architecture/ENGINE-FORK.md, phase 2"
-                );
-            }
-            return false;
-        };
-        let descriptor = descriptor_from(dmabuf);
         // Whole-surface damage. The engine takes a rectangle and the client
         // reports one, but mapping between them is its own correctness question
         // — a wrong rectangle leaves stale pixels on screen.
-        if !session.submit(app_id, buffer, &descriptor, (0, 0, 0, 0), Instant::now()) {
-            return false;
+        match session.submit(app_id, submitted, descriptor, (0, 0, 0, 0), Instant::now()) {
+            true => shown,
+            false => Published::NotShown,
         }
+    }
+
+    /// An shm client's frame, copied into a buffer of the compositor's and
+    /// submitted in its place.
+    ///
+    /// The client's buffer is free the moment the copy lands, so the answer
+    /// is never [`Published::Held`]. A frame that cannot be copied is said
+    /// once per client with why, because a blank window with nothing in the
+    /// log is the defect ERRORS.md is about and a client commits at its frame
+    /// rate.
+    fn publish_shm_frame(&mut self, app_id: &str, buffer: &wl_buffer::WlBuffer) -> Published {
+        let copied = match self.copy_shm_frame(app_id, buffer) {
+            Ok(copied) => copied,
+            Err(why) => {
+                if self.shm_refused.insert(app_id.to_string()) {
+                    warn!(app_id, %why, "this client's window will be blank");
+                }
+                return Published::NotShown;
+            }
+        };
+        let published = self.submit_to_the_engine(
+            app_id,
+            Submitted::Upload(copied.id),
+            &copied.descriptor,
+            Published::Copied,
+        );
+        if published == Published::NotShown {
+            // Never reached viz, so nothing will release it.
+            self.uploads.give_back(copied.id);
+        }
+        published
+    }
+
+    /// Copy `buffer` into a free buffer of `app_id`'s.
+    ///
+    /// The buffer comes back taken; the caller gives it back if the engine
+    /// does not take it.
+    fn copy_shm_frame(
+        &mut self,
+        app_id: &str,
+        buffer: &wl_buffer::WlBuffer,
+    ) -> Result<CopiedFrame, ShmRefused> {
+        let gpu = self.gpu.as_mut().ok_or(ShmRefused::NoRenderer)?;
+        let gbm = gpu.gbm.as_ref().ok_or(ShmRefused::NoAllocator)?;
+        let shape = shm_shape(buffer).ok_or(ShmRefused::Unreadable)?;
+        let modifiers = render_modifiers(&gpu.renderer, shape.fourcc);
+        let taken = self
+            .uploads
+            .take(app_id, shape, |shape| gbm.allocate(shape, &modifiers))?;
+        if let Some(session) = self.engine.as_mut() {
+            for dropped in &taken.dropped {
+                session.upload_dropped(*dropped);
+            }
+        }
+        let target = self
+            .uploads
+            .get_mut(taken.id)
+            .expect("a buffer just taken is there");
+        let size = (shape.width as i32, shape.height as i32).into();
+        let copied = gpu
+            .renderer
+            .import_shm_buffer(buffer, None, &[])
+            .map_err(CopyError::from)
+            .and_then(|texture| shm_upload::copy(&mut gpu.renderer, &texture, target, size));
+        match copied {
+            Ok(()) => Ok(CopiedFrame {
+                id: taken.id,
+                descriptor: descriptor_from(target),
+            }),
+            Err(err) => {
+                self.uploads.give_back(taken.id);
+                Err(ShmRefused::Copy(err))
+            }
+        }
+    }
+
+    /// What follows the engine taking a frame: the first-frame line, and the
+    /// spikes' probes, which ask what viz drew.
+    fn frame_shown(&mut self, app_id: &str) {
         // Tested before inserting: this is the submit path, at the client's
         // frame rate, and `insert` would allocate a String for every frame of
         // every window to answer a question it has already answered.
@@ -2728,11 +2840,11 @@ impl DomicileCompositor {
             Some(at) => at.elapsed() >= PROBE_EVERY,
         };
         if !due {
-            return true;
+            return;
         }
         self.last_probe = Some(Instant::now());
         let Some(session) = self.engine.as_ref() else {
-            return true;
+            return;
         };
         // Colors to find anywhere in the window, for a guard that cannot name
         // a point because the shell decides where its windows go — and, as it
@@ -2937,7 +3049,6 @@ impl DomicileCompositor {
                 }
             }
         }
-        true
     }
 
     /// Advertise a new output scale, so clients redraw at the resolution the
@@ -3258,10 +3369,17 @@ impl DomicileCompositor {
         // `Dmabuf` is reference-counted and the client's buffer holds the
         // original, which the session holds for as long as it holds the
         // buffer. Same reading `publish_frame` takes of the same buffer.
+        //
+        // An shm window's frame is in one of the compositor's own buffers,
+        // which is as good as it was, so it goes back up the same way.
+        let uploads = &self.uploads;
         let rejoined = session.reconnect(
-            &|buffer| match committed_buffer(buffer) {
-                Some(CommittedBuffer::Gpu(dmabuf)) => Some(descriptor_from(&dmabuf)),
-                Some(CommittedBuffer::Pixels { .. }) | None => None,
+            &|submitted| match submitted {
+                Submitted::Client(buffer) => match committed_buffer(buffer) {
+                    Some(CommittedBuffer::Gpu(dmabuf)) => Some(descriptor_from(&dmabuf)),
+                    Some(CommittedBuffer::Pixels { .. }) | None => None,
+                },
+                Submitted::Upload(id) => uploads.get(*id).map(descriptor_from),
             },
             Instant::now(),
         );
@@ -3305,7 +3423,7 @@ impl DomicileCompositor {
         // was joined. A release that cannot arrive is a client that never
         // draws again.
         for release in rejoined.releases {
-            release.buffer.release();
+            self.returned(release.buffer);
         }
     }
 
@@ -4863,6 +4981,50 @@ enum CommittedBuffer {
     Gpu(Dmabuf),
 }
 
+/// What became of a committed app frame. See
+/// [`DomicileCompositor::publish_frame`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Published {
+    /// The engine did not take it; the window shows what it showed before.
+    NotShown,
+    /// The engine is sampling the client's own dmabuf, so the client's buffer
+    /// is viz's until viz releases it.
+    Held,
+    /// The engine took a copy, so the client's buffer is free already.
+    Copied,
+}
+
+/// An shm frame in one of the compositor's buffers, ready to submit.
+struct CopiedFrame {
+    id: UploadId,
+    descriptor: DmabufDescriptor,
+}
+
+/// Why an shm client's frame could not be shown. Each is said once per
+/// client, and says what would fix it.
+#[derive(Debug, thiserror::Error)]
+enum ShmRefused {
+    #[error(
+        "this client drew into shared memory, and there is no EGL renderer to copy its \
+         frames to the GPU with"
+    )]
+    NoRenderer,
+    #[error(
+        "this client drew into shared memory, and there is no libgbm device to allocate the \
+         GPU buffers its frames are copied into — the startup log says why"
+    )]
+    NoAllocator,
+    #[error(
+        "this client's shared-memory buffer could not be read, or is in a format with no DRM \
+         equivalent"
+    )]
+    Unreadable,
+    #[error("could not allocate a GPU buffer to copy this client's frame into: {0}")]
+    Allocation(#[from] gbm::AllocationError),
+    #[error("could not copy this client's frame to the GPU: {0}")]
+    Copy(#[from] CopyError),
+}
+
 impl CommittedBuffer {
     /// The client's content size, known before any pixels are read — which is
     /// what lets the frame throttle run ahead of the GPU import.
@@ -4995,13 +5157,13 @@ impl CompositorHandler for DomicileCompositor {
             }
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
-                    let held = self.publish_frame(app_id, &buffer);
+                    let published = self.publish_frame(app_id, &buffer);
                     // Driven after the submit, because the polling needs
                     // something submitted to find — but timed from `started`,
                     // which is before it. The import and the submit are ours,
                     // and a round's second half is meant to contain them.
-                    self.drive_latency(app_id, started, held);
-                    held
+                    self.drive_latency(app_id, started, published != Published::NotShown);
+                    published == Published::Held
                 }
                 Committer::Chrome => {
                     self.publish_chrome_frame(&buffer, buffer_scale, viewport);
@@ -5464,8 +5626,11 @@ impl XdgShellHandler for DomicileCompositor {
                 .map(|session| session.window_gone(&app_id))
                 .unwrap_or_default();
             for release in abandoned {
-                release.buffer.release();
+                self.returned(release.buffer);
             }
+            // Its buffers go too. Every one viz had came back just above, and
+            // the session dropped their imports with the surface.
+            self.uploads.forget(&app_id);
             self.last_frame.remove(&app_id);
             // The commit counter too, which was the one sibling map this
             // forgot. A stale entry could never be *read* — host ids are
@@ -5894,6 +6059,28 @@ fn poll_the_engine(
     )?)
 }
 
+/// The libgbm device shm clients' frames are copied onto, on the GPU the
+/// renderer draws with.
+///
+/// `None` is said here, once, rather than per client: every shm window on the
+/// desktop will be blank, and the reason is a fact about the machine.
+fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
+    let Some(node) = importer.node() else {
+        warn!(
+            "EGL renders on no DRM node — a software rasterizer — so there is no GPU to copy \
+             shared-memory clients' frames onto; their windows will be blank"
+        );
+        return None;
+    };
+    match Gbm::open(gbm::LIBRARY, node) {
+        Ok(gbm) => Some(gbm),
+        Err(err) => {
+            warn!(%err, "shared-memory clients' windows will be blank");
+            None
+        }
+    }
+}
+
 fn committed_buffer(buffer: &wl_buffer::WlBuffer) -> Option<CommittedBuffer> {
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(CommittedBuffer::Gpu(dmabuf.clone())),
@@ -6208,6 +6395,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // engine at all.
     let mut gpu = match headless_renderer() {
         Ok((renderer, importer)) => Some(Gpu {
+            gbm: shm_allocator(&importer),
             importer,
             renderer: Box::new(renderer),
         }),
@@ -6333,6 +6521,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         latency_app: None,
         latency_reported: false,
         shm_refused: HashSet::new(),
+        uploads: Uploads::default(),
         first_frame_logged: HashSet::new(),
         last_probe: None,
         probe_refused: HashSet::new(),
