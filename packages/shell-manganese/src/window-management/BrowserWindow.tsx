@@ -24,6 +24,7 @@ import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
+  bottomCornerStyles,
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
@@ -464,6 +465,7 @@ export const BrowserWindow = ({
         browserStyles,
         // The bar above carries the top edge; this picks up the other three.
         edgeStyles,
+        bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
@@ -596,6 +598,9 @@ const browserStyles = flex({
   // rather than standing in for a client's surface, so it wants a ground.
   backgroundColor: "background",
   direction: "column",
+  // So the page in the view is clipped to the frame's rounded bottom rather
+  // than drawn square over it.
+  overflow: "hidden",
 });
 
 // The view takes whatever height the address bar leaves, which it has to be

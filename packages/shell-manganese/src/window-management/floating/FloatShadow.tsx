@@ -55,13 +55,12 @@ export const FloatShadow = ({ depth, dragging, frame, motion }: Props) => (
  * its own box, so a window dragged see-through shows the desktop behind it
  * rather than its own shadow.
  *
- * Rounded where the frame is — see `TitleBar` — so the shadow's silhouette is
- * the window's. And the pointer goes straight through: the window covers the
+ * Rounded where the frame is — its bar at the top, its contents at the bottom —
+ * so the shadow's silhouette is the window's. And the pointer goes straight through: the window covers the
  * box, and a shadow is not something to click.
  */
 const shadowStyles = css({
-  borderStartEndRadius: "lg",
-  borderStartStartRadius: "lg",
+  borderRadius: "lg",
   boxShadow: "lifted",
   pointerEvents: "none",
 });

@@ -199,11 +199,10 @@ const barStyles = cva({
     // The frame's line is one line: the bar carries the top and the sides down
     // to where the window picks them up, and the seam between them is not one.
     borderBlockEndWidth: 0,
-    // Rounded at the top and square at the bottom, because the top two corners
-    // are the only ones the page draws: the bottom of a frame is the window's
-    // contents, and those are a client's own pixels laid into the page — see
-    // `AppWindow`. A radius on the underside of this would cut a notch out of
-    // the seam between the two rather than rounding anything.
+    // Rounded at the top and square at the bottom, because the bottom of a
+    // frame is the window's contents, which round their own — see
+    // `bottomCornerStyles`. A radius on the underside of this would cut a
+    // notch out of the seam between the two rather than rounding anything.
     borderStartEndRadius: "lg",
     borderStartStartRadius: "lg",
     borderStyle: "solid",
