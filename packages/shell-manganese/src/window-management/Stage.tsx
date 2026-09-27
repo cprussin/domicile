@@ -327,6 +327,7 @@ export const Stage = ({
                 onMotionEnded={onMotionEnded}
                 onMove={onMoveThis}
                 onReach={onReachThis}
+                rect={placement.bar}
                 title={window.title}
               />
               {(meta || window.id === draggingId) && (

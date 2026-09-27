@@ -1,10 +1,8 @@
 import type { Rect } from "../rect";
-import { barOf } from "../rect";
 import { TitleBar } from "../TitleBar";
 import type { TitleFocus } from "../title-focus";
 import type { WindowMotion } from "../window-motion";
 import type { Float } from "./float";
-import { rectOf } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 type Props = {
@@ -28,6 +26,11 @@ type Props = {
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
   onReach: () => void;
+  /**
+   * Where the bar is drawn: the placement's rather than the float's own, which
+   * a fullscreen window has left for the whole screen.
+   */
+  rect: Rect;
   title: string;
 };
 
@@ -60,6 +63,7 @@ export const FloatTitleBar = ({
   onMotionEnded,
   onMove,
   onReach,
+  rect,
   title,
 }: Props) => {
   const { drag: _drag, ...handlers } = useFloatDrag({
@@ -82,7 +86,7 @@ export const FloatTitleBar = ({
       onFullscreen={onFullscreen}
       onMotionEnded={onMotionEnded}
       onReach={onReach}
-      rect={barOf(rectOf(float))}
+      rect={rect}
       title={title}
       window={float.id}
       {...handlers}

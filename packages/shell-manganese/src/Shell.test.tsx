@@ -1470,6 +1470,21 @@ describe("Shell", () => {
       ).toBe(was + 80);
     });
 
+    it("draws a fullscreen float's bar at the top of the screen", async () => {
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+
+      await user.click(screen.getByRole("button", { name: "Maximize" }));
+
+      expect(boxOf(barFor(container, "app:term"))).toMatchObject({
+        width: "1920px",
+        x: "0px",
+        y: "0px",
+      });
+    });
+
     it("keys a floating window around the desktop instead of retiling it", () => {
       const { container } = renderShell();
       clientAppears("term");
