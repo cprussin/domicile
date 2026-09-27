@@ -11,6 +11,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
+#include "ui/ozone/public/ozone_platform.h"
 
 namespace ui {
 
@@ -43,20 +44,22 @@ struct PointerCrossing {
 // `from` is the window the pointer is on, and `location` is where the hand's
 // motion took it in that window's panel pixels, before it is clamped in.
 //
-// ACROSS THE ROW, AND ONLY TO A SCREEN THAT TOUCHES IT. The compositor steps
-// connectors across one row in the order a profile places the displays
-// (`Layout::scanout`), so the screen to the right is the one that starts
-// where this one ends. A screen past a gap is not beside it -- which is where
-// the compositor puts the connectors a profile turned off -- and the top and
-// bottom edges cross nothing, because a row has no second axis.
+// ACROSS THE DESKTOP A PROFILE PLACES, NOT THE ENGINE'S. The compositor steps
+// the CRTCs across one row whatever the profile says, so the row knows
+// nothing about a laptop at the bottom-left or centered under a monitor.
+// `layout` is what does: each lit connector's rectangle on the desktop a
+// shell lays out in. The pointer leaves by any edge, onto whichever screen is
+// placed there, at the place it is placed there -- sway's rule. A connector
+// the layout leaves dark has no place and is never entered, and a layout that
+// says nothing (the hardware decides) is the engine's own desktop.
 //
 // BY THE UPRIGHT EDGE, NOT THE PANEL'S. A monitor stood on its side still has
-// a landscape CRTC in the row, and a hand moving right on it moves along the
-// panel's y. So the edge a pointer leaves by and the height it arrives at are
-// read the way the person sees the screen, and turned back onto the panel it
-// lands on.
+// a landscape CRTC, and a hand moving right on it moves along the panel's y.
+// So a pointer is read the way the person sees the screen, and turned back
+// onto the panel it lands on.
 std::optional<PointerCrossing> PointerCrossingFor(
     const std::vector<PointerScreen>& screens,
+    const std::vector<DomicileDisplayLayout>& layout,
     gfx::AcceleratedWidget from,
     const gfx::PointF& location);
 

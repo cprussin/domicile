@@ -372,6 +372,9 @@ pub fn darkened(displays: &[Display], scanout: &[Connector]) -> Vec<Connector> {
                 origin: display.position,
                 transform: drawn.map_or(Transform::Normal, |connector| connector.transform),
                 scale: drawn.map_or(1.0, |connector| connector.scale),
+                // Nowhere on the desk: a dark screen is not somewhere a
+                // pointer can go.
+                desk: None,
             }
         })
         .collect()
@@ -806,6 +809,7 @@ mod tests {
                     origin: (0, 0),
                     transform: Transform::Normal,
                     scale: 1.0,
+                    desk: None,
                 },
                 Connector {
                     id: 7,
@@ -813,6 +817,7 @@ mod tests {
                     origin: (1920, 0),
                     transform: Transform::Normal,
                     scale: 1.0,
+                    desk: None,
                 },
             ]
         );
@@ -830,6 +835,7 @@ mod tests {
             origin: (1920, 0),
             transform: Transform::Rotate270,
             scale: 1.2,
+            desk: None,
         };
         assert_eq!(
             darkened(&[monitor(7, (1920, 0))], &[lit]),
