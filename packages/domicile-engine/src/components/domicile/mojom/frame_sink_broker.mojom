@@ -143,6 +143,12 @@ struct DisplayLayout {
   // Read for a dark connector too, because its window outlives the dark.
   DisplayTransform transform;
   double scale;
+
+  // Where the profile put this display on the desktop a shell lays out in, in
+  // its logical pixels. Empty where `enabled` is false: a dark display has no
+  // place there. What a pointer crosses between monitors by, because the row
+  // `origin` is in says nothing about which monitor is above or beside which.
+  gfx.mojom.Rect desk;
 };
 
 // Tells a producer what the screens are.
