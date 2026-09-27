@@ -506,18 +506,17 @@ const addressesShowing = (): string[] =>
     .map((field) => field.value);
 
 /**
- * The line around the container `focus parent` selected.
+ * The ring around what the commands are pointed at: the window being worked
+ * in, or the container `focus parent` selected.
  *
- * Throws where there is none: a case that asks for its box is one that has
- * just selected a container, and the absence is what the cases about nothing
- * being selected assert for themselves.
+ * Throws where there is none: every case that asks has a window open.
  */
-const groupOutline = (container: HTMLElement): HTMLElement => {
-  const outline = container.querySelector<HTMLElement>("[data-selection]");
-  if (outline === null) {
-    throw new Error("test: nothing on screen marks out a selected container");
+const selectionRing = (container: HTMLElement): HTMLElement => {
+  const ring = container.querySelector<HTMLElement>("[data-selection]");
+  if (ring === null) {
+    throw new Error("test: nothing on screen marks out the selection");
   } else {
-    return outline;
+    return ring;
   }
 };
 
@@ -1071,16 +1070,6 @@ describe("Shell", () => {
 
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
       expect(barFor(container, "app:one").dataset.focus).toBe("resting");
-      // And the mark is a rule of accent across the top of the frame, not a
-      // hairline: a border a pixel wide is not enough to find at a glance on a
-      // desktop of identical frames. Declarations rather than class names,
-      // because Panda hashes them.
-      expect(barFor(container, "app:two").className).toContain(
-        css({ boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}" }),
-      );
-      expect(barFor(container, "app:one").className).not.toContain(
-        css({ boxShadow: "inset 0 {spacing.0.75} 0 {colors.accent}" }),
-      );
     });
 
     it("moves the mark with the focus", () => {
@@ -1213,29 +1202,34 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
-    it("draws a line around the group `focus parent` selects", () => {
+    it("grows the ring out to the group `focus parent` selects, and back", () => {
       // The whole of what `mod+a` does on screen. What it points the commands
       // at is the container around the focus rather than the window in it, and
       // nothing else on the desktop says which container that is.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      const ring = selectionRing(container);
+      const around = boxOf(ring);
 
-      expect(container.querySelector("[data-selection]")).toBeNull();
+      expect(ring.dataset.selection).toBe("window");
       press("a");
 
-      // The container holding both windows, which is the whole workspace
-      // under the top bar.
-      expect(boxOf(groupOutline(container))).toEqual({
+      // The same element, so it eases from one box to the other rather than
+      // one line vanishing as another appears. The container holding both
+      // windows is the whole workspace under the top bar.
+      expect(selectionRing(container)).toBe(ring);
+      expect(ring.dataset.selection).toBe("group");
+      expect(boxOf(ring)).toEqual({
         height: `${(1080 - TOP_BAR).toString()}px`,
         width: "1920px",
         x: "0px",
         y: `${TOP_BAR.toString()}px`,
       });
-      // And `mod+Shift+a` points them back at the window, which is nothing to
-      // draw.
+      // And `mod+Shift+a` points them back at the window.
       press("a", true);
-      expect(container.querySelector("[data-selection]")).toBeNull();
+      expect(selectionRing(container)).toBe(ring);
+      expect(boxOf(ring)).toEqual(around);
     });
 
     it("keeps the group when the layout slides a window under the pointer", () => {
@@ -1255,7 +1249,7 @@ describe("Shell", () => {
       press("h", true);
 
       crossInto(appElement(container, "one"), 1440, 800);
-      expect(container.querySelector("[data-selection]")).not.toBeNull();
+      expect(selectionRing(container).dataset.selection).toBe("group");
     });
 
     it("knows its own warp, at a place that is not a whole pixel", () => {
@@ -1286,7 +1280,7 @@ describe("Shell", () => {
       const [x, y] = warpedTo();
       crossInto(appElement(container, "two"), Math.round(x), Math.round(y));
 
-      expect(container.querySelector("[data-selection]")).not.toBeNull();
+      expect(selectionRing(container).dataset.selection).toBe("group");
     });
 
     it("and hands it over to a pointer that really crossed into one", () => {
@@ -1308,7 +1302,7 @@ describe("Shell", () => {
 
       crossInto(appElement(container, "one"), 300, 500);
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(container.querySelector("[data-selection]")).toBeNull();
+      expect(selectionRing(container).dataset.selection).toBe("window");
     });
 
     it("fills the screen with the window being worked in", () => {

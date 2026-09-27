@@ -1,0 +1,37 @@
+import type { Screenful } from "./placement";
+import { TILED } from "./placement";
+import type { Rect } from "./rect";
+
+/** What the commands are pointed at, and where to draw it. */
+export type Selection = {
+  depth: number;
+  /** A container `focus parent` selected, rather than a window. */
+  group: boolean;
+  rect: Rect;
+};
+
+/**
+ * What the commands are pointed at: the group `focus parent` selected, or
+ * else the window being worked in.
+ *
+ * **One answer for both**, because they are drawn as one ring: a ring that is
+ * the same element whichever it is around eases from a window out to its
+ * group and back rather than one line vanishing as another appears.
+ *
+ * Nothing around a window filling the screen: a line around the screen's
+ * edge says nothing the fullscreen window does not already.
+ */
+export const selectionOf = (
+  { placements, selection }: Screenful,
+  activeId: string | undefined,
+  fullscreenId: string | undefined,
+): Selection | undefined => {
+  const active = placements.find(({ id }) => id === activeId);
+  if (selection !== undefined) {
+    return { depth: TILED, group: true, rect: selection };
+  } else if (active === undefined || active.id === fullscreenId) {
+    return undefined;
+  } else {
+    return { depth: active.depth, group: false, rect: active.frame };
+  }
+};

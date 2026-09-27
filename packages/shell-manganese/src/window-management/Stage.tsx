@@ -9,10 +9,11 @@ import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
-import { GroupOutline } from "./GroupOutline";
 import type { Screenful } from "./placement";
 import { TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
+import { SelectionRing } from "./SelectionRing";
+import { selectionOf } from "./selection";
 import { TitleBar } from "./TitleBar";
 import type { Aim, Target } from "./tiled/aim";
 import { DropIndicator } from "./tiled/DropIndicator";
@@ -131,9 +132,11 @@ export const Stage = ({
   onResize,
   onSelect,
   onStretch,
-  screenful: { placements, selection, tabs },
+  screenful,
   windows,
 }: Props) => {
+  const { placements, tabs } = screenful;
+  const selection = selectionOf(screenful, activeId, fullscreenId);
   const motions = useWindowMotion({
     activeId,
     current,
@@ -411,11 +414,11 @@ export const Stage = ({
         />
       ))}
       {/*
-        And over all of it, the group `focus parent` selected — after the
+        And over all of it, what the commands are pointed at — after the
         windows and their bars, because it rings them: two elements at one
         `z-index` are decided by the order they come in the document.
       */}
-      {selection !== undefined && <GroupOutline rect={selection} />}
+      {selection !== undefined && <SelectionRing selection={selection} />}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
     </main>
   );
