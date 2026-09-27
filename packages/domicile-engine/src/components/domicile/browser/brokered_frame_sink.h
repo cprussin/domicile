@@ -117,6 +117,9 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // `scale` is how many of the page's device pixels `size` counts per CSS
   // pixel, which the producer needs to turn the box back into the logical
   // pixels a client is configured in: each monitor's page is at its own.
+  //
+  // A `local_surface_id` older than the one already embedded is ignored: it is
+  // a late arrival, and passing it on would get the sink closed by viz.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
