@@ -343,6 +343,15 @@ import os, sys
 open(os.environ["PGO_ARGS_FILE"], "w").write(" ".join(sys.argv[1:]))
 PGO
 export PGO_ARGS_FILE="$WORK/pgo-args"
+# V8's builtins have a profile of their own, fetched by a DEPS hook of their
+# own; an official build without it stops at `gen/v8/embedded.S`, which is how
+# the first production run ended (36339801978).
+mkdir -p "$SRC/v8/tools/builtins-pgo"
+cat >"$SRC/v8/tools/builtins-pgo/download_profiles.py" <<'V8PGO'
+import os, sys
+open(os.environ["V8_PGO_ARGS_FILE"], "w").write(" ".join(sys.argv[1:]))
+V8PGO
+export V8_PGO_ARGS_FILE="$WORK/v8-pgo-args"
 echo "the official build"
 rm -f "$PGO_ARGS_FILE"
 if DOMICILE_ENGINE_BUILD=official run_build "$RELEASE"; then
@@ -359,13 +368,19 @@ if DOMICILE_ENGINE_BUILD=official run_build "$RELEASE"; then
     fail "and fetches the PGO profile first" \
       "the fetcher was run with: $(cat "$PGO_ARGS_FILE" 2>/dev/null)"
   fi
+  if grep -q -- '^download .*--depot-tools ' "$V8_PGO_ARGS_FILE" 2>/dev/null; then
+    ok "and V8's builtins profile"
+  else
+    fail "and V8's builtins profile" \
+      "V8's fetcher was run with: $(cat "$V8_PGO_ARGS_FILE" 2>/dev/null)"
+  fi
 else
   fail "the official build runs" "it exited $STATUS: $(cat "$WORK/out")"
 fi
-rm -f "$PGO_ARGS_FILE"
+rm -f "$PGO_ARGS_FILE" "$V8_PGO_ARGS_FILE"
 run_build "$RELEASE"
 if grep -qx '  is_official_build = false' "$WORK/gn-args" &&
-  [ ! -e "$PGO_ARGS_FILE" ]; then
+  [ ! -e "$PGO_ARGS_FILE" ] && [ ! -e "$V8_PGO_ARGS_FILE" ]; then
   ok "and the checked build is not official, and fetches no profile"
 else
   fail "and the checked build is not official, and fetches no profile" \
@@ -378,7 +393,7 @@ elif [ -e "$WORK/gn-args" ]; then
 else
   ok "a build nobody defined is refused"
 fi
-unset PGO_ARGS_FILE
+unset PGO_ARGS_FILE V8_PGO_ARGS_FILE
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
