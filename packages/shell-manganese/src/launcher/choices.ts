@@ -2,11 +2,11 @@
 //
 // Every row is a thing Enter can do, so the list is the whole answer to "what
 // will this do" — there is no second line under it saying so. In order: the
-// search a `!` tag names, if the box carries one; then, for the words without
-// the tag, a site, if the box holds one; a path, if it is spelled like one;
-// the files the host found; and a search, always. A URL typed whole is a URL meant, so it
-// goes on top; the search goes last, because it is what is left when nothing
-// above it was.
+// search a `!` tag names, if the box carries one; a site, if the box holds
+// one; a path, if it is spelled like one; the files the host found; and a
+// search on Google for the line as typed, always. A URL typed whole is a URL
+// meant, so it goes on top; the search goes last, because it is what is left
+// when nothing above it was.
 //
 // `typedAddress` is the one place that decides whether a line is a site or a
 // search: a desktop where this box and a browser window's address bar
@@ -14,7 +14,7 @@
 // box they are in.
 
 import type { TaggedSearch } from "../address/search";
-import { searchUrl, taggedSearch } from "../address/search";
+import { googleUrl, taggedSearch } from "../address/search";
 import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
@@ -57,8 +57,8 @@ export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
  * The rows for `query`, given what the host found for it.
  *
  * A tagged query gets its tagged search on top — the tag is the user saying
- * where they meant to go — and below it the rows its words would get with no
- * tag at all.
+ * where they meant to go — and below it the rows the line gets as typed, its
+ * search on Google rather than a second row for the tag's engine.
  */
 export const choicesFor = (
   query: string,
@@ -66,8 +66,8 @@ export const choicesFor = (
 ): Choice[] => {
   const tagged = taggedSearch(query);
   return tagged === undefined
-    ? untaggedChoicesFor(query, found)
-    : [Choice.TaggedSearch(tagged), ...untaggedChoicesFor(tagged.query, found)];
+    ? plainChoicesFor(query, found)
+    : [Choice.TaggedSearch(tagged), ...plainChoicesFor(query, found)];
 };
 
 /** What choosing `choice` launches. */
@@ -84,10 +84,7 @@ export const launchOf = (choice: Choice): Launch => {
   }
 };
 
-const untaggedChoicesFor = (
-  query: string,
-  found: readonly string[],
-): Choice[] => {
+const plainChoicesFor = (query: string, found: readonly string[]): Choice[] => {
   const typed = query.trim();
   const address = typedAddress(typed);
   const files = found.map((path) => Choice.File(path));
@@ -99,7 +96,7 @@ const untaggedChoicesFor = (
           : []),
         ...typedPath(typed, found),
         ...files,
-        Choice.Search(typed, searchUrl(typed)),
+        Choice.Search(typed, googleUrl(typed)),
       ];
 };
 
