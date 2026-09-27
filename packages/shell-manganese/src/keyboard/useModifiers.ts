@@ -110,7 +110,7 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
 
   useEffect(() => {
     const follow = (event: KeyboardEvent) => {
-      settle({ meta: event.metaKey, shift: event.shiftKey });
+      settle({ meta: metaHeld(event), shift: event.shiftKey });
     };
     document.addEventListener("keydown", follow);
     document.addEventListener("keyup", follow);
@@ -140,6 +140,17 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
     [held, spendShift],
   );
 };
+
+/**
+ * Whether Meta is down once this event has happened.
+ *
+ * Off the event's type when Meta is the key that moved, because Chromium on
+ * Wayland reports the release of Meta with `metaKey` still set — the state
+ * from before the key came up. Read off the flag, a nested desktop never lets
+ * go of Meta, and every floating window keeps its grab sheet over it for good.
+ */
+const metaHeld = (event: KeyboardEvent): boolean =>
+  event.key === "Meta" ? event.type === "keydown" : event.metaKey;
 
 /** Whether these are the same keys down, which is all a re-render turns on. */
 const same = (held: Modifiers, next: Modifiers): boolean =>
