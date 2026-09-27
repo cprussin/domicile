@@ -2,19 +2,25 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
+  WEBVIEW_ZOOM_IN_REQUEST_EVENT,
+  WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
+import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
+import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useShownPage } from "./useShownPage";
+import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -190,6 +196,10 @@ export const BrowserWindow = ({
   const shown = useShownPage(view);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
+  const zoom = useZoom(view);
+  // How many times the user has zoomed this window, which is what puts the
+  // zoom indicator up afresh each time — see `ZoomIndicator`.
+  const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
   // Whether the focus arriving in the page is the focus this window is putting
   // there, which is the one thing about it the announcements cannot say: the
   // element says a guest took focus whichever route the focus came by, and
@@ -246,6 +256,84 @@ export const BrowserWindow = ({
       };
     }
   }, [onOpenWindow, view]);
+
+  // WHAT A BROWSER'S KEYS AND ITS ZOOM DO, in one place, because three
+  // different things ask for them: a chord pressed in the address bar, a chord
+  // the page left alone and the engine handed back, and the buttons.
+  //
+  // A zoom is a step from wherever the element says the page IS, read at the
+  // moment of the press rather than from a render: the zoom is the site's, so
+  // another window on the same site can have moved it since.
+  const run = useCallback(
+    (command: BrowserCommand) => {
+      if (view === null) {
+        throw new Error("browser window: no view to drive");
+      } else {
+        switch (command) {
+          case BrowserCommand.Back: {
+            view.goBack();
+            break;
+          }
+          case BrowserCommand.Forward: {
+            view.goForward();
+            break;
+          }
+          case BrowserCommand.Reload: {
+            view.reload();
+            break;
+          }
+          case BrowserCommand.ZoomIn: {
+            view.setZoom(zoomedIn(view.zoom));
+            setZoomsAnnounced((count) => count + 1);
+            break;
+          }
+          case BrowserCommand.ZoomOut: {
+            view.setZoom(zoomedOut(view.zoom));
+            setZoomsAnnounced((count) => count + 1);
+            break;
+          }
+          case BrowserCommand.ZoomReset: {
+            view.setZoom(1);
+            setZoomsAnnounced((count) => count + 1);
+            break;
+          }
+        }
+      }
+    },
+    [view],
+  );
+
+  // THE PAGE'S HALF OF THE KEYBOARD, which sends nothing out on its own: a key
+  // pressed in a guest never reaches this document. The engine hands back the
+  // chords the page left alone, and Ctrl and the wheel over the page as a
+  // request, so a site that binds a chord for itself keeps it — Chrome's
+  // order. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const pressed = (event: KeyboardEvent) => {
+        const command = browserCommandFor(event);
+        if (command !== undefined) {
+          run(command);
+        }
+      };
+      const zoomIn = () => {
+        run(BrowserCommand.ZoomIn);
+      };
+      const zoomOut = () => {
+        run(BrowserCommand.ZoomOut);
+      };
+      view.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      view.addEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
+      view.addEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
+      return () => {
+        view.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        view.removeEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
+        view.removeEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
+      };
+    }
+  }, [run, view]);
 
   // The window the user is working in takes the keyboard, and a browser
   // window's belongs to its page rather than to the chrome around it.
@@ -406,6 +494,16 @@ export const BrowserWindow = ({
       // is not. What happens in the page arrives on the element instead — see
       // `onReach`, and the effect above.
       onFocus={reach}
+      // The chrome's half of the keyboard: the same chords, pressed in the
+      // address bar. Taken from the field once answered, so Ctrl+R in the bar
+      // is a reload and not a keystroke the field goes on to do something with.
+      onKeyDown={(event) => {
+        const command = browserCommandFor(event);
+        if (command !== undefined) {
+          event.preventDefault();
+          run(command);
+        }
+      }}
       onPointerDown={reach}
       // Focus follows the cursor: arriving anywhere in this window is the user
       // starting to work in it — the page excepted, because a pointer in there
@@ -441,8 +539,19 @@ export const BrowserWindow = ({
         onStop={drive((loaded) => {
           loaded.stop();
         })}
+        onZoomIn={() => {
+          run(BrowserCommand.ZoomIn);
+        }}
+        onZoomOut={() => {
+          run(BrowserCommand.ZoomOut);
+        }}
+        onZoomReset={() => {
+          run(BrowserCommand.ZoomReset);
+        }}
         security={shown.security}
         visited={shown.visited}
+        zoom={zoom}
+        zoomsAnnounced={zoomsAnnounced}
       />
       <webview className={viewStyles} ref={setView} src={src} />
     </section>

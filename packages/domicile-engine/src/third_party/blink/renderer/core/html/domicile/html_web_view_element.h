@@ -13,6 +13,8 @@
 
 namespace blink {
 
+class ExceptionState;
+
 // <webview> — web content in a browsing context of its own.
 //
 // The tag exists because Domicile's shells are written against it: a browser
@@ -150,6 +152,9 @@ class CORE_EXPORT HTMLWebViewElement final
   const String& url() const { return url_; }
   const String& security() const { return security_; }
 
+  double zoom() const { return zoom_; }
+  void setZoom(double factor, ExceptionState&);
+
   void Trace(Visitor*) const override;
 
  private:
@@ -265,6 +270,21 @@ class CORE_EXPORT HTMLWebViewElement final
   void PageChanged(const KURL& url,
                    domicile::mojom::blink::WebViewSecurity security) override;
 
+  // A chord the guest's page left alone, dispatched here as a KeyboardEvent a
+  // chrome handles the way it handles a key pressed in its own document. See
+  // UnhandledKeyDown in components/domicile/mojom/web_view_guest.mojom.
+  void UnhandledKeyDown(const String& key,
+                        const String& code,
+                        bool alt_key,
+                        bool ctrl_key,
+                        bool shift_key,
+                        bool meta_key,
+                        bool repeat) override;
+
+  void ZoomChanged(double factor) override;
+
+  void ZoomRequested(bool zoom_in) override;
+
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the
   // placeholder frame does, and the browser holds it on this pipe until the
@@ -303,6 +323,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // element answering a question the browser has not been asked yet.
   String url_;
   String security_;
+
+  // 100% until the browser says otherwise, which is what a fresh guest is.
+  double zoom_ = 1.0;
 };
 
 }  // namespace blink

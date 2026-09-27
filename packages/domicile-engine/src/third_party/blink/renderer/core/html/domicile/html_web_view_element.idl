@@ -87,4 +87,16 @@
   // `scripts/test-the-blink-module-declares-its-files.sh` for what a generated
   // file costs to register in the fork.
   readonly attribute DOMString security;
+
+  // The page's zoom, as a factor: 1 is 100%. The browser's answer, read off
+  // the guest's site the way Chrome keys it, and announced in
+  // `domicile-zoom-change` -- a readonly property for the reason the others
+  // are, with setZoom beside it because the answer is not this element's to
+  // write.
+  readonly attribute double zoom;
+
+  // Ask the browser to zoom the page. A factor outside the browser's own
+  // range -- 0.25 to 5 -- is a RangeError rather than a zoom clamped into it,
+  // because a shell that computed one has a bug worth hearing about.
+  [RaisesException] undefined setZoom(double factor);
 };

@@ -206,6 +206,49 @@ interface WebViewGuestClient {
   // heard nothing holds exactly that: no address, and a security nobody has
   // stated.
   PageChanged(url.mojom.Url url, WebViewSecurity security);
+
+  // A key the page was sent and left alone, pressed with Ctrl, Alt or Meta
+  // held -- the chords a browser binds its own commands to.
+  //
+  // THE ONLY WAY A SHELL HEARS ONE. A key pressed in a guest is delivered to
+  // the guest's own widget, and an unhandled one comes back to the guest's
+  // WebContentsDelegate and stops there: there is no path from it into the
+  // embedder's renderer. So a browser window whose chrome binds Ctrl+R or
+  // Alt+Left has to be sent the press. The page had its turn first -- this is
+  // WebContentsDelegate::HandleKeyboardEvent, which content calls only for an
+  // event the page did not preventDefault -- so a site that binds a chord for
+  // itself keeps it, the way it does in Chrome.
+  //
+  // CHORDS ONLY, and that is a decision about what the shell's document is
+  // shown. A plain key the page did not consume is most of what typing is, and
+  // forwarding it would copy every keystroke -- a password's included -- into
+  // a DOM event in another document for no command that needs it.
+  //
+  // `key` and `code` are the DOM's own spellings, the values a KeyboardEvent
+  // carries, so a shell matches this and a key pressed in its own chrome with
+  // one function.
+  UnhandledKeyDown(string key, string code, bool alt_key, bool ctrl_key,
+                   bool shift_key, bool meta_key, bool repeat);
+
+  // The page's zoom, as a factor: 1 is 100%.
+  //
+  // THE BROWSER'S ANSWER, from HostZoomMap, which keys it by host the way
+  // Chrome does -- so it moves when the shell sets it, when another window on
+  // the same site does, and when the page navigates to a site zoomed
+  // differently. SENT ONLY WHEN IT CHANGES, like the reports above, and a
+  // fresh guest sends nothing: it is at 100%, and so is an element that has
+  // heard nothing.
+  ZoomChanged(double factor);
+
+  // The user asked the page to zoom -- Ctrl and the wheel, over the page --
+  // and the page did not take the wheel for itself.
+  //
+  // A REQUEST RATHER THAN A ZOOM, which is where this differs from Chrome:
+  // content hands Ctrl+wheel to WebContentsDelegate::ContentsZoomChange and
+  // the browser steps the zoom there. Here the step is the shell's, because
+  // the shell is what shows the user what it did -- so the wheel and Ctrl+plus
+  // take one path, and the indicator a shell draws for one it draws for both.
+  ZoomRequested(bool zoom_in);
 };
 
 // One guest, for as long as the element that asked for it lives.
@@ -255,4 +298,14 @@ interface WebViewGuest {
   // has no dialog behind it yet: a guest refuses everything an embedder is
   // asked for, which ROADMAP.md carries as its own gap.
   Reload();
+
+  // Zoom the page to `factor`, where 1 is 100%. Applied through HostZoomMap,
+  // so it is the site's zoom rather than this window's -- Chrome's rule -- and
+  // it comes back as WebViewGuestClient.ZoomChanged.
+  //
+  // WITHIN blink::kMinimumBrowserZoomFactor and kMaximumBrowserZoomFactor, and
+  // the element refuses anything else with a RangeError before it is sent. One
+  // that arrives here anyway did not come from the element, and is a bad
+  // message.
+  SetZoom(double factor);
 };

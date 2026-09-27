@@ -5,10 +5,13 @@ import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
+  WEBVIEW_ZOOM_CHANGE_EVENT,
+  WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -123,6 +126,39 @@ const shows = (
     url: { configurable: true, value: url },
   });
   fireEvent(element, new Event(WEBVIEW_PAGE_CHANGE_EVENT));
+};
+
+/**
+ * A view whose zoom works the way the engine's does: `setZoom` is a request,
+ * and the answer arrives on the element with the event that says to read it.
+ * Every factor asked for is kept, in order.
+ */
+const zoomable = (element: HTMLWebViewElement, factor: number): number[] => {
+  const asked: number[] = [];
+  const answer = (next: number) => {
+    Object.defineProperty(element, "zoom", { configurable: true, value: next });
+    fireEvent(element, new Event(WEBVIEW_ZOOM_CHANGE_EVENT));
+  };
+  element.setZoom = (next: number) => {
+    asked.push(next);
+    answer(next);
+  };
+  answer(factor);
+  return asked;
+};
+
+/**
+ * A chord the page in the view left alone, handed back by the engine. A
+ * `KeyboardEvent` of the engine's own type, because that is what arrives.
+ */
+const guestPresses = (
+  element: HTMLWebViewElement,
+  init: KeyboardEventInit,
+): void => {
+  fireEvent(
+    element,
+    new KeyboardEvent(WEBVIEW_GUEST_KEYDOWN_EVENT, { bubbles: true, ...init }),
+  );
 };
 
 // What a window's box resolves to is decided by the emitted stylesheet, not by
@@ -1046,6 +1082,117 @@ describe("BrowserWindow", () => {
       await userEvent.click(control("Stop"));
 
       expect(driven).toStrictEqual(["reload", "stop"]);
+    });
+  });
+
+  describe("a browser's keys", () => {
+    const renderWindow = () =>
+      render(
+        <BrowserWindow
+          clickThrough={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          motion="resting"
+          onHover={noHover}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+
+    /** A view whose history controls say what they were asked to do. */
+    const driven = (element: HTMLWebViewElement): string[] => {
+      const calls: string[] = [];
+      element.goBack = () => {
+        calls.push("back");
+      };
+      element.goForward = () => {
+        calls.push("forward");
+      };
+      element.reload = () => {
+        calls.push("reload");
+      };
+      return calls;
+    };
+
+    // THE PAGE'S HALF OF THE WINDOW SENDS NO KEYS OUT, so this is the only
+    // way a chord pressed there arrives: the engine hands back the ones the
+    // page left alone.
+    it("answers a chord the page left alone", () => {
+      const { container } = renderWindow();
+      const calls = driven(view(container));
+
+      guestPresses(view(container), { altKey: true, key: "ArrowLeft" });
+      guestPresses(view(container), { altKey: true, key: "ArrowRight" });
+      guestPresses(view(container), { ctrlKey: true, key: "r" });
+
+      expect(calls).toStrictEqual(["back", "forward", "reload"]);
+    });
+
+    it("answers the same chord pressed in its own address bar", () => {
+      const { container } = renderWindow();
+      const calls = driven(view(container));
+
+      fireEvent.keyDown(address(), { ctrlKey: true, key: "R", shiftKey: true });
+
+      expect(calls).toStrictEqual(["reload"]);
+    });
+
+    it("leaves a chord that is not a browser's alone", () => {
+      const { container } = renderWindow();
+      const calls = driven(view(container));
+      const asked = zoomable(view(container), 1);
+
+      guestPresses(view(container), { ctrlKey: true, key: "q" });
+
+      expect(calls).toStrictEqual([]);
+      expect(asked).toStrictEqual([]);
+    });
+
+    it("zooms a step from wherever the page is", () => {
+      const { container } = renderWindow();
+      const asked = zoomable(view(container), 1.25);
+
+      guestPresses(view(container), { ctrlKey: true, key: "=" });
+      guestPresses(view(container), { ctrlKey: true, key: "-" });
+      guestPresses(view(container), { ctrlKey: true, key: "0" });
+
+      expect(asked).toStrictEqual([1.5, 1.25, 1]);
+    });
+
+    // Ctrl and the wheel over the page, which the engine turns into a request
+    // rather than a zoom, so it takes the same steps a key does.
+    it("zooms when the wheel asks it to", () => {
+      const { container } = renderWindow();
+      const asked = zoomable(view(container), 1);
+
+      fireEvent(view(container), new Event(WEBVIEW_ZOOM_OUT_REQUEST_EVENT));
+
+      expect(asked).toStrictEqual([0.9]);
+    });
+
+    it("zooms from the buttons in its bar", async () => {
+      const { container } = renderWindow();
+      const asked = zoomable(view(container), 1);
+
+      await userEvent.click(control("Zoom in"));
+
+      expect(asked).toStrictEqual([1.1]);
+    });
+
+    it("says what it zoomed to", () => {
+      const { container } = renderWindow();
+      zoomable(view(container), 1);
+
+      guestPresses(view(container), { ctrlKey: true, key: "+" });
+
+      expect(screen.getByRole("status")).toHaveTextContent("110%");
     });
   });
 
