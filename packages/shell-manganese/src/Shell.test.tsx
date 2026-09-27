@@ -1865,6 +1865,18 @@ describe("the launcher", () => {
     expect(baseElement.querySelector("[data-backdrop]")).toBeInTheDocument();
   });
 
+  it("keeps the panel up while it closes", () => {
+    // The panel is only drawn on the page that heard the press, and it has to
+    // stay drawn until the dialog has finished closing: a panel taken away
+    // with the press that closed it is one that never gets to leave.
+    renderShell();
+    press("space");
+
+    press("space");
+
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-ending-style");
+  });
+
   it("answers the same key handed back by the host", () => {
     // A browser window has the keyboard, so `mod+space` never reaches this
     // document. The launcher is the one thing on the desktop you most want to
