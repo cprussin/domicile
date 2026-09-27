@@ -1232,6 +1232,15 @@ describe("Shell", () => {
       expect(boxOf(ring)).toEqual(around);
     });
 
+    it("rounds the ring at all four corners, as a window's frame is", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+
+      expect(selectionRing(container).className).toContain(
+        css({ borderRadius: "lg" }),
+      );
+    });
+
     it("keeps the group when the layout slides a window under the pointer", () => {
       // What moving a group looks like from the desktop's side: the windows
       // trade places under a hand that has not moved, and the `pointerover`
@@ -1543,6 +1552,16 @@ describe("Shell", () => {
 
       press("Tab", true);
       expect(shadows(container)).toHaveLength(0);
+    });
+
+    it("rounds its shadow at all four corners, as the frame is", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+
+      expect(floatShadow(container).className).toContain(
+        css({ borderRadius: "lg" }),
+      );
     });
 
     it("casts no shadow from a float that fills the screen", () => {

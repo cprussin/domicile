@@ -124,6 +124,19 @@ beforeEach(() => {
 });
 
 describe("AppWindow", () => {
+  it("rounds its bottom corners, and leaves its top ones to the bar", () => {
+    const { container } = render(
+      <AppWindow {...windowProps} focused onReach={noReach} />,
+    );
+    const style = globalThis.getComputedStyle(portal(container));
+
+    expect(style.borderEndStartRadius).not.toBe("");
+    expect(style.borderEndEndRadius).not.toBe("");
+    // Under the bar, where a radius would cut a notch out of the seam.
+    expect(style.borderStartStartRadius).toBe("");
+    expect(style.borderStartEndRadius).toBe("");
+  });
+
   it("mounts an element carrying the host's app id", () => {
     const { container } = render(
       <AppWindow {...windowProps} focused onReach={noReach} />,

@@ -82,6 +82,21 @@ export const edgeStyles = css({
 });
 
 /**
+ * The rounded bottom of a window's frame, which is the other half of the
+ * corners its bar rounds at the top.
+ *
+ * The bottom two only: the top of a window meets its bar, and a radius there
+ * would cut a notch out of the seam between the two. On the `<app>` itself
+ * rather than on anything around it, because the element is a layer and
+ * `border-radius` on a layer is a rounded clip of what is drawn in it — the
+ * client's own pixels included. See `WINDOW-COMPOSITING.md`.
+ */
+export const bottomCornerStyles = css({
+  borderEndEndRadius: "lg",
+  borderEndStartRadius: "lg",
+});
+
+/**
  * What color that line is, which is the window's share of saying where the
  * keyboard is: the accent for the window being worked in, and the resting
  * line for every other one.

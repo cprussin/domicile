@@ -16,6 +16,7 @@ import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
+  bottomCornerStyles,
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
@@ -279,6 +280,7 @@ export const AppWindow = ({
         windowStyles,
         appStyles,
         edgeStyles,
+        bottomCornerStyles,
         movingStyles({ motion }),
         // The frame says what the bar above it says: this is the window the
         // keyboard is in.
@@ -327,9 +329,5 @@ export const AppWindow = ({
   );
 };
 
-// Every window's corners are its frame's rather than its own, and square: the
-// compositor's shader takes one radius for all four — it is the element's
-// `border-top-left-radius` the SDK reports — so a window cannot be square
-// under its bar and round at the bottom. The bar carries the edge above it,
-// and the surface meets it flush.
+// The bar carries the edge above it, and the surface meets it flush.
 const appStyles = css({ borderBlockStartWidth: 0 });

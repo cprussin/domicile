@@ -192,6 +192,33 @@ const nothingEnded = () => {
 };
 
 describe("BrowserWindow", () => {
+  it("rounds its bottom corners, and clips the page to them", () => {
+    render(
+      <BrowserWindow
+        clickThrough={false}
+        depth={0}
+        domicile={silentDomicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        motion="resting"
+        onHover={() => undefined}
+        onMotionEnded={nothingEnded}
+        onNavigate={() => undefined}
+        onOpenWindow={noWindows}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        src="https://example.com"
+      />,
+    );
+    const style = globalThis.getComputedStyle(browser());
+
+    expect(style.borderEndStartRadius).not.toBe("");
+    expect(style.borderEndEndRadius).not.toBe("");
+    // A radius clips the page in the view only if its overflow is clipped.
+    expect(style.overflow).toBe("hidden");
+  });
+
   it("reports where the pointer crossed into it", async () => {
     // The place is the whole of what says whether the pointer went to the
     // window or the window came to the pointer — see `usePointerWarp` — so

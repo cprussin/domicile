@@ -50,11 +50,9 @@ const ringStyles = css({
   // written as a length: a line that has to be found at a glance is not the
   // one-pixel edge that STYLING's literal is for.
   border: "{spacing.0.5} solid {colors.accent}",
-  // Rounded at the top and square at the bottom, which is a window's own
-  // silhouette and a group's: the top corners are the bars', the only corners
-  // the page draws, and the bottom is where a client's pixels end squarely —
-  // see `TitleBar`.
-  borderStartEndRadius: "lg",
-  borderStartStartRadius: "lg",
+  // Rounded all round, which is a window's own silhouette and a group's: the
+  // top corners are the bars' and the bottom ones the windows' own — see
+  // `TitleBar` and `bottomCornerStyles`.
+  borderRadius: "lg",
   pointerEvents: "none",
 });
