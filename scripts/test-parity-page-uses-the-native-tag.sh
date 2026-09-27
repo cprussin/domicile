@@ -103,6 +103,26 @@ for page in $PAGES; do
   fi
 done
 
+# THE RESIZE PAGE'S FIRST BOX IS ITS FIRST SIZE. The producer takes the first
+# embed as the size it was configured at. Sized by script alone, the <app> was
+# sometimes laid out before the script ran — at a replaced element's default
+# 300x150 — and embedded at that, so the guard read 300x150 -> 180x130 and
+# failed on a run whose pixels all passed. The stylesheet has to give it FROM
+# before any layout can happen.
+RESIZE="$SCRIPTS/spike-resize-page.html"
+if awk '
+  /^[[:space:]]*#app[[:space:]]*,?[^{]*\{/ { in_rule = 1 }
+  in_rule && /width:[[:space:]]*120px/ { width = 1 }
+  in_rule && /height:[[:space:]]*90px/ { height = 1 }
+  in_rule && /\}/ { in_rule = 0 }
+  END { exit (width && height ? 0 : 1) }
+' "$RESIZE"; then
+  ok "the resize page lays its <app> out at 120x90 before its script runs"
+else
+  fail "the resize page lays its <app> out at 120x90 before its script runs" \
+    "no #app rule in spike-resize-page.html's stylesheet sets width: 120px and height: 90px, so the first layout can embed at 300x150"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
