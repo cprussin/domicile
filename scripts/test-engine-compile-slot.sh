@@ -173,6 +173,43 @@ expect "a waiter that is still wanted takes the slot when it frees" ok \
 wait
 slot drop rupert >/dev/null
 
+# A HOLDER CAN SEE SOMEBODY WAITING, AND STEP ASIDE FOR THEM. The production
+# build holds the slot for hours; a pull request's minute-long compile should
+# not queue behind it. So a waiter says it is waiting, and a holder that is
+# willing to be interrupted asks.
+rm -rf "$WORK/slot" "$WORK/slot.waiting"
+slot take victor >/dev/null
+expect "nobody waiting is not wanted" refused "$(status "$(slot wanted victor)")"
+( DOMICILE_COMPILE_SLOT_WAIT=2 slot take walter >/dev/null ) &
+sleep 0.5
+wanted="$(slot wanted victor)"
+expect "a waiter makes the slot wanted" ok "$(status "$wanted")"
+contains "and is named" "'walter'" "$wanted"
+wait
+expect "a waiter that gave up no longer wants it" refused \
+  "$(status "$(slot wanted victor)")"
+
+# A WAITER THAT DIED leaves its note behind, and a holder that yields to a
+# ghost yields for ever. Only a note refreshed recently counts.
+mkdir -p "$WORK/slot.waiting"
+echo "a run that was killed" >"$WORK/slot.waiting/ghost"
+touch -d '10 minutes ago' "$WORK/slot.waiting/ghost"
+expect "a waiter that stopped refreshing is not wanted" refused \
+  "$(status "$(slot wanted victor)")"
+
+# Yielding hands the slot to the waiter rather than racing it for the slot.
+( DOMICILE_COMPILE_SLOT_WAIT=5 slot take wendy >/dev/null; sleep 1 ) &
+sleep 0.5
+expect "the holder yields" ok "$(status "$(slot yield victor)")"
+contains "and the waiter has it when the yield returns" "'wendy'" "$(slot who)"
+wait
+slot drop wendy >/dev/null
+slot take victor >/dev/null
+expect "a yield with nobody waiting just drops" ok \
+  "$(status "$(slot yield victor)")"
+contains "and leaves it free" "nobody is compiling" "$(slot who)"
+expect "only the holder can yield" refused "$(status "$(slot yield xavier)")"
+
 # WHETHER A RUN WILL COMPILE. A tree can carry the series while its
 # out/Release is cold -- built under other args, or never -- and a cold build
 # without the slot is the OOM. Only a build of exactly these inputs is warm.
