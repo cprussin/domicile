@@ -1367,6 +1367,12 @@ and stops it in `OnFirstPresentation`; the bubble is a top-level window of its
 own, on ozone/drm it binds to no CRTC, so the presentation callbacks stay pending,
 the timer cannot be stopped, and it fires on a healthy machine. Patch `0023`.
 
+**The same is true of every popup.** A `<select>`'s list, a date picker and a
+context menu are each a top-level window of their own on desktop Linux, so on
+a tty they opened, took the capture, and were never drawn. Patch `0051` keeps
+them inside the window they opened over, as ash does, wherever
+`presents_every_window` is false.
+
 ### How to see a modeset
 
 `DRM configuring:` and `Modeset succeeded.` are `VLOG(1)` in
