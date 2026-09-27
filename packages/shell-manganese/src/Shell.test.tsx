@@ -13,7 +13,9 @@ import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import type { DeskChannel } from "./window-management/desk-channel";
+import { DeskMessage } from "./window-management/desk-channel";
 import { TITLE_BAR } from "./window-management/rect";
+import { WindowAction } from "./window-management/window-state";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
 // numbers, which `screens/host-displays.ts` is what regroups into the rectangle
@@ -211,6 +213,23 @@ const alone = (): DeskChannel => ({
 });
 
 /**
+ * What the other pages of the desk say to this one, for the cases about a
+ * page that did not hear the press. Nothing this page says goes anywhere.
+ */
+let heard: (message: DeskMessage) => void = () => undefined;
+
+/** The other pages of a desk, which can speak but hear nothing. */
+const overheard = (): DeskChannel => ({
+  listen: (listener) => {
+    heard = listener;
+    return () => {
+      heard = () => undefined;
+    };
+  },
+  post: () => undefined,
+});
+
+/**
  * Renders the chrome on a desktop of `desktop`.
  *
  * Described *before* the first render by default, the way a shell that has
@@ -218,7 +237,10 @@ const alone = (): DeskChannel => ({
  * desktop to put it on. The tests that care about the gap pass `undefined` and
  * describe one themselves.
  */
-const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
+const renderingShell = (
+  desktop: readonly DomicileDisplay[] | undefined,
+  desk: DeskChannel = alone(),
+) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
@@ -228,7 +250,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   // to answer `theme` as well would make every test here depend on it.
   return render(
     <Shell
-      desk={alone()}
+      desk={desk}
       displays={hostDisplays(client)}
       domicile={client}
       theme={standaloneThemeSource()}
@@ -1737,18 +1759,30 @@ describe("the launcher", () => {
     expect(launcherBox()).toHaveFocus();
   });
 
-  it("dims a monitor the keyboard is not on and puts the panel on the one it is", () => {
-    // A desk of several monitors is several pages, all told the launcher is
-    // up. This one covers the left monitor and the keyboard is on the right,
-    // so the panel is the right page's to draw: here there is only the
-    // backdrop it is up over.
-    const { baseElement } = renderShell([
-      { ...LEFT, fillsTheWindow: true },
-      RIGHT,
-    ]);
+  it("puts the panel on the page that heard the press", () => {
+    // A desk of several monitors is several pages, and the engine hands the
+    // keys to the one the pointer is on. That is the page a box can be typed
+    // into, wherever the desktop's own focus has gone -- here to the right
+    // monitor, which is a page that will hear none of what is typed.
+    renderShell([{ ...LEFT, fillsTheWindow: true }, RIGHT]);
     press("parenright");
 
     press("space");
+
+    expect(launcherBox()).toBeVisible();
+  });
+
+  it("dims a monitor whose page did not hear the press", () => {
+    // All the pages are told the launcher is up. The ones the press was not
+    // heard on draw only the backdrop it is up over.
+    const { baseElement } = renderingShell(
+      [{ ...LEFT, fillsTheWindow: true }, RIGHT],
+      overheard(),
+    );
+
+    act(() => {
+      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
+    });
 
     expect(launcherBox()).toBeNull();
     expect(baseElement.querySelector("[data-backdrop]")).toBeInTheDocument();

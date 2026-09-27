@@ -1,0 +1,268 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 27 Sep 2026 18:00:00 +0000
+Subject: [PATCH] domicile: a pointer crosses monitors, and the keys go with it
+
+A desk of several monitors is a browser window per CRTC, and the
+pointer could not leave the one it started on. Upstream `DrmCursor`
+clamps the cursor into the window it is on; moving it to the next
+display is ash's `ExtendedMouseWarpController`, and a views browser has
+no ash.
+
+So `DrmCursor::MoveCursor` asks `PointerCrossingFor` where a move that
+left its window lands, and carries the cursor there: hidden on the old
+CRTC, shown on the new one, exactly as `MoveCursorTo(window, ...)` does
+from the UI thread. The next located event is at a screen point inside
+the new window, so `CanDispatchEvent` routes it there with no further
+change. The windows are kept on the cursor, under its lock, because a
+hand's motion arrives on the evdev thread and the window manager is the
+UI thread's.
+
+Across the row, and only to a screen that touches it: the compositor
+steps connectors across one row in the order a profile places them, and
+puts the dark ones a pixel past the end so a pointer cannot wander onto
+a panel that is off. By the upright edge rather than the panel's: a
+monitor stood on its side is still a landscape CRTC, so the edge and the
+height are read turned, with the rotation `FollowDisplayTurn` already
+hands `CursorController`.
+
+AND THE KEYS. Every `DrmWindowHost` answered yes to every key event --
+"For non-ash builds we would need smarter keyboard focus" -- so the
+first window added took every key, and a page on any other monitor could
+put up a focused box it would never hear a key in. The keyboard is now
+on the monitor the pointer is on (`HasTheKeyboard`), which is the one
+thing a page and the engine agree about without a shell saying so.
+
+Nothing here is seen by a shell: it is the pointer and the keys arriving
+at the page on the screen they are on.
+---
+ ui/ozone/platform/drm/BUILD.gn                |  3 +
+ ui/ozone/platform/drm/host/drm_cursor.cc      | 57 ++++++++++++++++++-
+ ui/ozone/platform/drm/host/drm_cursor.h       | 14 +++++
+ ui/ozone/platform/drm/host/drm_window_host.cc | 18 ++++--
+ 4 files changed, 86 insertions(+), 6 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 9a2db88..1bff144 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -132,6 +132,8 @@ source_set("gbm") {
+     "domicile/drm_master.h",
+     "domicile/drm_modeset.cc",
+     "domicile/drm_modeset.h",
++    "domicile/drm_pointer_crossing.cc",
++    "domicile/drm_pointer_crossing.h",
+     "domicile/drm_clipboard.cc",
+     "domicile/drm_clipboard.h",
+     "domicile/drm_screen.cc",
+@@ -264,6 +266,7 @@ source_set("gbm_unittests") {
+     "domicile/drm_input_devices_unittest.cc",
+     "domicile/drm_master_unittest.cc",
+     "domicile/drm_modeset_unittest.cc",
++    "domicile/drm_pointer_crossing_unittest.cc",
+     "domicile/drm_clipboard_unittest.cc",
+     "domicile/drm_screen_unittest.cc",
+     "domicile/drm_sleep_unittest.cc",
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index b5f65e7..070825a 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -4,8 +4,11 @@
+ 
+ #include "ui/ozone/platform/drm/host/drm_cursor.h"
+ 
++#include <algorithm>
+ #include <memory>
++#include <optional>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/memory/scoped_refptr.h"
+ #include "base/task/current_thread.h"
+@@ -102,6 +105,8 @@ void DrmCursor::OnWindowAdded(gfx::AcceleratedWidget window,
+   DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
+   base::AutoLock lock(lock_);
+ 
++  screens_.push_back({window, bounds_in_screen, display::Display::ROTATE_0});
++
+   if (window_ == gfx::kNullAcceleratedWidget) {
+     // First window added & cursor is not placed. Place it.
+     window_ = window;
+@@ -116,6 +121,10 @@ void DrmCursor::OnWindowRemoved(gfx::AcceleratedWidget window) {
+   DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
+   base::AutoLock lock(lock_);
+ 
++  std::erase_if(screens_, [window](const PointerScreen& screen) {
++    return screen.window == window;
++  });
++
+   if (window_ == window) {
+     // Try to find a new location for the cursor.
+     DrmWindowHost* dest_window = window_manager_->GetPrimaryWindow();
+@@ -144,6 +153,11 @@ void DrmCursor::CommitBoundsChange(
+   DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
+   base::AutoLock lock(lock_);
+ 
++  // Every window's, not only the one under the cursor: a hotplug moves the
++  // screens beside it too, and a stale rectangle is a pointer that crosses
++  // onto nothing or cannot cross at all.
++  ScreenLocked(window).bounds_in_screen = new_display_bounds_in_screen;
++
+   if (window_ == window) {
+     display_bounds_in_screen_ = new_display_bounds_in_screen;
+     confined_bounds_ = new_confined_bounds;
+@@ -154,6 +168,13 @@ void DrmCursor::CommitBoundsChange(
+   }
+ }
+ 
++void DrmCursor::OnWindowTurned(gfx::AcceleratedWidget window,
++                               display::Display::Rotation rotation) {
++  DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
++  base::AutoLock lock(lock_);
++  ScreenLocked(window).rotation = rotation;
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+@@ -238,8 +259,18 @@ void DrmCursor::MoveCursor(const gfx::Vector2dF& delta) {
+   gfx::Vector2dF transformed_delta = delta;
+   ui::CursorController::GetInstance()->ApplyCursorConfigForWindow(
+       window_, &transformed_delta);
+-  SetCursorLocationLocked(location_ + transformed_delta);
+-  SendCursorMoveLocked();
++  // DOMICILE: a pointer at the edge of one monitor goes on to the next.
++  // Upstream this is ash's `ExtendedMouseWarpController`, and without ash
++  // the clamp below holds the pointer on whichever monitor it started on.
++  const gfx::PointF moved = location_ + transformed_delta;
++  const std::optional<PointerCrossing> crossing =
++      PointerCrossingFor(screens_, window_, moved);
++  if (crossing.has_value()) {
++    CrossLocked(*crossing);
++  } else {
++    SetCursorLocationLocked(moved);
++    SendCursorMoveLocked();
++  }
+ }
+ 
+ bool DrmCursor::IsCursorVisible() {
+@@ -274,6 +305,28 @@ void DrmCursor::SetCursorLocationLocked(const gfx::PointF& location)
+   location_ = clamped_location;
+ }
+ 
++PointerScreen& DrmCursor::ScreenLocked(gfx::AcceleratedWidget window)
++    EXCLUSIVE_LOCKS_REQUIRED(lock_) {
++  const auto screen =
++      std::ranges::find(screens_, window, &PointerScreen::window);
++  CHECK(screen != screens_.end());
++  return *screen;
++}
++
++// What `MoveCursorTo(window, location)` does for a window it moves onto, from
++// the thread a hand's motion arrives on. The window's own confinement is the
++// UI thread's to read, so it gets the whole window, which is what
++// `DrmWindowHost::GetCursorConfinedBounds` answers when nothing confined it.
++void DrmCursor::CrossLocked(const PointerCrossing& crossing)
++    EXCLUSIVE_LOCKS_REQUIRED(lock_) {
++  SendCursorHideLocked();
++  window_ = crossing.window;
++  display_bounds_in_screen_ = ScreenLocked(crossing.window).bounds_in_screen;
++  confined_bounds_ = gfx::Rect(display_bounds_in_screen_.size());
++  SetCursorLocationLocked(crossing.location);
++  SendCursorShowLocked();
++}
++
+ void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
+   if (!cursor_ || cursor_->type() == CursorType::kNone) {
+     SendCursorHideLocked();
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index 9728701..c683d4a 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -13,8 +13,10 @@
+ #include "base/synchronization/lock.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/threading/thread_checker.h"
++#include "ui/display/display.h"
+ #include "ui/events/ozone/evdev/cursor_delegate_evdev.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
+ 
+ class SkBitmap;
+ 
+@@ -76,6 +78,11 @@ class DrmCursor : public CursorDelegateEvdev {
+                           const gfx::Rect& new_display_bounds_in_screen,
+                           const gfx::Rect& new_confined_bounds);
+ 
++  // DOMICILE: which way the display under `window` is turned, so a pointer
++  // leaves it by the edge a hand was moving toward. See `PointerCrossingFor`.
++  void OnWindowTurned(gfx::AcceleratedWidget window,
++                      display::Display::Rotation rotation);
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+@@ -91,6 +98,8 @@ class DrmCursor : public CursorDelegateEvdev {
+   void SendCursorShowLocked();
+   void SendCursorHideLocked();
+   void SendCursorMoveLocked();
++  PointerScreen& ScreenLocked(gfx::AcceleratedWidget window);
++  void CrossLocked(const PointerCrossing& crossing);
+ 
+   void MoveCursorToOnEvdevThread(const gfx::PointF& screen_location);
+   void MoveCursorToOnUiThread(const gfx::PointF& screen_location);
+@@ -131,6 +140,11 @@ class DrmCursor : public CursorDelegateEvdev {
+   // The bounds that the cursor is confined to in |window|.
+   gfx::Rect confined_bounds_ GUARDED_BY(lock_);
+ 
++  // DOMICILE: every window the cursor could move onto. Kept here rather than
++  // asked of `window_manager_` because a hand's motion arrives on the evdev
++  // thread and the window manager is the UI thread's.
++  std::vector<PointerScreen> screens_ GUARDED_BY(lock_);
++
+   const raw_ptr<DrmWindowHostManager> window_manager_
+       GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
+ 
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index 25da446..1d1808c 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -22,6 +22,7 @@
+ #include "ui/events/platform/platform_event_source.h"
+ #include "ui/ozone/common/bitmap_cursor.h"
+ #include "ui/ozone/platform/drm/domicile/drm_fullscreen.h"
++#include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
+ #include "ui/ozone/platform/drm/host/drm_cursor.h"
+ #include "ui/ozone/platform/drm/host/drm_display_host.h"
+ #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
+@@ -417,6 +418,13 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+   }
+ 
+   // TODO(spang): For non-ash builds we would need smarter keyboard focus.
++  //
++  // DOMICILE: a desk of several monitors is a window each, and every one of
++  // them said yes here, so the first window added took every key. The
++  // keyboard is on the monitor the pointer is on; see `HasTheKeyboard`.
++  if (event->IsKeyEvent()) {
++    return HasTheKeyboard(bounds_, cursor_->GetLocation());
++  }
+   return true;
+ }
+ 
+@@ -524,10 +532,12 @@ void DrmWindowHost::FollowDisplayTurn() {
+   // `panel_rotation`, which is what ash hands CursorController too, and the
+   // scale left at one: the pointer is tracked in the panel's own pixels, and
+   // a monitor's density is no reason for a hand to move it faster.
+-  CursorController::GetInstance()->SetCursorConfigForWindow(
+-      widget_,
+-      display::Screen::Get()->GetDisplayMatching(bounds_).panel_rotation(),
+-      /*scale=*/1.f);
++  const display::Display::Rotation turn =
++      display::Screen::Get()->GetDisplayMatching(bounds_).panel_rotation();
++  CursorController::GetInstance()->SetCursorConfigForWindow(widget_, turn,
++                                                            /*scale=*/1.f);
++  // And the cursor, which reads the turn to carry a pointer across monitors.
++  cursor_->OnWindowTurned(widget_, turn);
+ }
+ 
+ }  // namespace ui

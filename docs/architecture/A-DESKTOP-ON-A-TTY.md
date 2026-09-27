@@ -895,11 +895,29 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 |---|---|
 | **An empty layout means the hardware decides** | What every desktop but a matched profile's says, and what this did before a layout could be stated. It is also what *undoes* one: a profile that turned a panel off stops matching the moment a monitor is unplugged, and something has to say the panel comes back on |
 | **A non-empty layout is the whole truth** | A connector it does not name is left dark rather than lit where the card put it. An origin nothing chose can land on top of one that was, and two controllers claiming one rectangle is the exact-rect mismatch `FindWindowAt` answers by binding no window at all. That case is a monitor plugged in between the reading the compositor answered and this one, and it lights on the next round trip |
-| **A dark connector still gets a corner** | It is in the browser's display list whether or not it is lit, and one left where the card stacked it lands on top of a monitor that is on. The compositor puts the dark ones past the end of the row |
+| **A dark connector still gets a corner** | It is in the browser's display list whether or not it is lit, and one left where the card stacked it lands on top of a monitor that is on. The compositor puts the dark ones a pixel past the end of the row |
 | **Primary is the first display the layout lights** | The difference between a desktop and a black screen. A views browser going fullscreen is sized from the display it is on, and the window it starts at is on whichever display holds `(10, 10)`. A profile that turns the laptop panel off is the ordinary case on a full desk, and a primary that is dark is a browser drawing correctly onto a screen nobody can see — with every log line saying the modeset succeeded |
 | **The connectors are stepped across in the order the displays are placed** | Ozone lays its own desktop out in connector order, which is the card's business and says nothing about which monitor is on which side of a desk — so a pointer leaving one screen arrived on whichever connector was numbered next |
 | **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
 | **All on one row** | Nothing is ever drawn across two connectors, so the only thing this arrangement decides is where a pointer crosses. Two monitors stacked vertically is the one thing a profile can say that this does not carry |
+
+### The pointer crosses that row, and the keys go with it
+
+Upstream `DrmCursor` clamps the pointer into the window it is on; ash moves it
+to the next display (`ExtendedMouseWarpController`), and a views browser has no
+ash. Patch `0050` does it in `DrmCursor::MoveCursor`, below every page, so no
+shell knows there is more than one monitor under it.
+
+| Rule | Why |
+|---|---|
+| **Only onto a screen that starts where this one ends** | The row above. The dark connectors go a pixel past the end of it, so a pointer cannot wander onto a panel that is off |
+| **By the upright edge** | A monitor on its side is a landscape CRTC, and a hand moving right on it moves along the panel's y. The edge and the height are read turned, with the rotation `CursorController` already has |
+| **The keys are on the monitor the pointer is on** | Every `DrmWindowHost` accepted every key, so the first window took them all and a launcher on another monitor could never be typed into. The pointer is the one thing the engine and a page agree on without a shell saying so |
+
+`ui/ozone/platform/drm/domicile/drm_pointer_crossing.h` is the arithmetic, with
+its tests. What a shell draws a panel by is therefore the page that heard the
+press, not which monitor its own focus is on: `shell-manganese`'s launcher
+does exactly that.
 
 ### Blanking is that same layout with the light taken out of it
 
