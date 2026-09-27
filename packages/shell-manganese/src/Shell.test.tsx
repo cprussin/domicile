@@ -374,12 +374,16 @@ const warpedTo = (): readonly [x: number, y: number] => {
   }
 };
 
-/** What the page holds down, which is what hands the shell the pointer. */
+/**
+ * What the page holds down, which is what hands the shell the pointer: Meta
+ * pressed, or Meta let go of when it is not held.
+ */
 const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
-  fireEvent.keyDown(document, {
+  const meta = held.meta ?? false;
+  (meta ? fireEvent.keyDown : fireEvent.keyUp)(document, {
     code: "MetaLeft",
     key: "Meta",
-    metaKey: held.meta ?? false,
+    metaKey: meta,
     shiftKey: held.shift ?? false,
   });
 };
@@ -1411,6 +1415,23 @@ describe("Shell", () => {
 
       pageHolds({ meta: true });
       expect(grabSheets(container)).toHaveLength(1);
+    });
+
+    it("takes the sheet down when Meta comes up", () => {
+      // Chromium on Wayland reports the release of Meta with `metaKey` still
+      // set — the state from before the key came up — so the flag alone
+      // leaves the modifier held for good.
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+
+      fireEvent.keyUp(document, {
+        code: "MetaLeft",
+        key: "Meta",
+        metaKey: true,
+      });
+
+      expect(grabSheets(container)).toHaveLength(0);
     });
 
     it("moves a floating window by its title bar, with no modifier held", () => {
