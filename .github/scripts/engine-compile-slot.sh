@@ -3,6 +3,8 @@
 #
 #   .github/scripts/engine-compile-slot.sh take <owner>
 #   .github/scripts/engine-compile-slot.sh drop <owner>
+#   .github/scripts/engine-compile-slot.sh wanted <owner>
+#   .github/scripts/engine-compile-slot.sh yield <owner>
 #   .github/scripts/engine-compile-slot.sh warm <chromium/src>
 #   .github/scripts/engine-compile-slot.sh built <chromium/src>
 #
@@ -29,10 +31,19 @@
 #
 # AND NOTHING STEALS IT ON AGE. A cold build is up to five hours, and clearing
 # this while its holder is linking is the OOM it exists to prevent.
+#
+# A HOLDER CAN STEP ASIDE INSTEAD. A waiter leaves a note beside the slot and
+# refreshes it every poll; `wanted` says whether a fresh one names anybody else,
+# and `yield` drops the slot and returns once a waiter has it. That is for the
+# production build, which is hours long and can stop and resume, so that a pull
+# request's minute of compiling never queues behind it. Only a note refreshed
+# in the last DOMICILE_COMPILE_SLOT_FRESH seconds counts: a waiter that was
+# killed cannot write that it stopped waiting, and a holder that yields to it
+# would yield for ever.
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <take|drop|who> [owner]" >&2
+  echo "usage: $(basename "$0") <take|drop|who|wanted|yield> [owner]" >&2
   echo "       $(basename "$0") <warm|built> <chromium/src>" >&2
   exit 2
 }
@@ -44,6 +55,9 @@ owner="${2:-}"
 # Under /build, because `PrivateTmp` gives each runner unit its own /tmp and a
 # lock between two runners cannot be in one of them. Override for tests.
 LOCK="${DOMICILE_COMPILE_SLOT:-/build/.domicile-compile-slot}"
+# Beside the slot rather than in it, because the slot is removed on every drop
+# and a waiter's note has to outlive the holder it is waiting on.
+WAITING="$LOCK.waiting"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 built_stamp() { echo "${DOMICILE_BUILT_STAMP:-$(dirname "$owner")/.domicile-built}"; }
@@ -75,6 +89,18 @@ holder() {
   cat "$LOCK/owner" 2>/dev/null || echo "someone who did not write their name in it"
 }
 
+# The note a waiter leaves, named by a hash because an owner is a sentence.
+note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
+
+# Every fresh note that is not <owner>'s, one owner per line.
+waiters() {
+  [ -d "$WAITING" ] || return 0
+  find "$WAITING" -type f -newermt "-${DOMICILE_COMPILE_SLOT_FRESH:-60} seconds" |
+    while IFS= read -r waiter; do
+      [ "$waiter" = "$(note "$1")" ] || cat "$waiter"
+    done
+}
+
 case "$action" in
   take)
     [ -n "$owner" ] || usage
@@ -82,6 +108,9 @@ case "$action" in
     started="$(date +%s)"
     took=""
     asked=0
+    mkdir -p "$WAITING"
+    waiting="$(note "$owner")"
+    trap 'rm -f "$waiting"' EXIT
     while :; do
       # Whether this run is still worth waiting for, when the workflow says
       # how to tell: exit 0 yes, 1 no, anything else could not ask. A wait
@@ -106,6 +135,7 @@ case "$action" in
       fi
       mkdir "$LOCK" 2>/dev/null && { took=1; break; }
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
+      echo "$owner" >"$waiting"
       # Once per holder, not once: a wait can outlast a cold repin, and hours
       # of one line cannot say whether the slot has changed hands since.
       now_held="$(holder)"
@@ -153,6 +183,30 @@ case "$action" in
     fi
     rm -rf "$LOCK"
     echo "dropped the compile slot"
+    ;;
+
+  wanted)
+    [ -n "$owner" ] || usage
+    others="$(waiters "$owner")"
+    [ -n "$others" ] || { echo "nobody is waiting for the compile slot"; exit 1; }
+    printf '%s\n' "$others" | sed "s/.*/waiting for the compile slot: '&'/"
+    ;;
+
+  yield)
+    [ -n "$owner" ] || usage
+    if [ ! -d "$LOCK" ] || [ "$(holder)" != "$owner" ]; then
+      echo "::error::'$owner' cannot yield a compile slot it does not hold" >&2
+      exit 1
+    fi
+    rm -rf "$LOCK"
+    # Until a waiter has it, so that the caller's next `take` queues behind
+    # them rather than winning the race for a slot it has just given up. A
+    # waiter polls, so the handover takes up to one of its polls; one that
+    # stopped wanting it in the meantime leaves the slot free.
+    while [ ! -d "$LOCK" ] && [ -n "$(waiters "$owner")" ]; do
+      sleep "${DOMICILE_COMPILE_SLOT_POLL:-10}"
+    done
+    echo "yielded the compile slot"
     ;;
 
   who)
