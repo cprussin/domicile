@@ -41,10 +41,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
  2 files changed, 40 insertions(+), 6 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 19ee8374b7..501590f7ec 100644
+index 0d0dbb2a6a..a2bfba2008 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -2134,8 +2134,8 @@ bool HTMLCanvasElement::CreateLayer() {
+@@ -2132,8 +2132,8 @@ bool HTMLCanvasElement::CreateLayer() {
  }
  
  ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
@@ -54,7 +54,7 @@ index 19ee8374b7..501590f7ec 100644
      ExceptionState& exception_state) {
    LocalFrame* frame = GetDocument().GetFrame();
    if (!frame || !frame->GetPage()) {
-@@ -2149,14 +2149,15 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2147,14 +2147,15 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
    // transferControlToOffscreen() and a desynchronized context both build one.
    // Embedding then would point that layer somewhere else and strand whatever
    // was submitting to it, which is a mistake worth refusing rather than
@@ -73,7 +73,7 @@ index 19ee8374b7..501590f7ec 100644
      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                        "Could not create a layer.");
      return EmptyPromise();
-@@ -2166,15 +2167,39 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2164,15 +2165,39 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
        MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
    auto promise = resolver->Promise();
  

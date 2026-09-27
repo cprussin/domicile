@@ -23,7 +23,7 @@ Everything below is written to be pasted into https://issues.chromium.org
 (component: Internals>GuestView).
 
 Read at `fa0ce55e9639`, fetched 2026-09-22, and byte-for-byte the same file at
-`ecb0ced00f29`, the revision this fork pins now.
+`cffcd2bf5a88`, the revision this fork pins now.
 **Re-read `content/browser/browser_plugin/browser_plugin_embedder.cc` at trunk
 before filing** — the file is small and quiet, but the body below quotes it
 line for line.

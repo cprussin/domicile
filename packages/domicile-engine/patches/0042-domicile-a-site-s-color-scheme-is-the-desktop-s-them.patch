@@ -17,10 +17,10 @@ thread and the control channel is read on the IO thread.
  2 files changed, 12 insertions(+), 2 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 620549168a..ab055bd15a 100644
+index b6704b087d..7fa3deed6c 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2384,9 +2384,11 @@ source_set("browser") {
+@@ -2393,9 +2393,11 @@ source_set("browser") {
      "//components/domain_reliability",
  
      # Domicile's engine fork: serving the shell over domicile://, the

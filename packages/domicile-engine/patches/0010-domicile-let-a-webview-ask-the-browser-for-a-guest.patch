@@ -52,10 +52,10 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 944111328f..ec8baa3dc2 100644
+index 4aaa7b5244..c6c101c954 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2389,6 +2389,7 @@ source_set("browser") {
+@@ -2398,6 +2398,7 @@ source_set("browser") {
      "//chrome/browser/domicile",
      "//components/domicile:control_channel",
      "//components/domicile:shell_scheme",
@@ -107,7 +107,7 @@ index 00a24775a6..99aa96e5ca 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 383115087f..9b28e72b1d 100644
+index 056bd22809..a20b9993e3 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -408,6 +408,11 @@ component("core") {
