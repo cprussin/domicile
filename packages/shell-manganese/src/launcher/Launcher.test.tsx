@@ -163,14 +163,14 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("offers a tagged search on its engine above the rows the words get", async () => {
+  it("offers a tagged search on its engine above the rows the line gets", async () => {
     const panel = launcher();
 
     await panel.user.type(panel.box(), "!wiki notes");
 
     expect(await panel.rows()).toStrictEqual([
       "Search for notes on Wikipedia",
-      "Search for notes",
+      "Search for !wiki notes",
     ]);
   });
 

@@ -49,7 +49,10 @@ const ENGINE_URLS: Readonly<Record<Engine, string>> = {
 
 /** Where to send `query`: the engine its tag names, or Google. */
 export const searchUrl = (query: string): string =>
-  taggedSearch(query)?.url ?? urlOf(GOOGLE, query);
+  taggedSearch(query)?.url ?? googleUrl(query);
+
+/** `query` searched on Google as it is, tag and all. */
+export const googleUrl = (query: string): string => urlOf(GOOGLE, query);
 
 /** The search `query`'s tag names, or `undefined` for one that carries none. */
 export const taggedSearch = (query: string): TaggedSearch | undefined => {
