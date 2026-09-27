@@ -13,12 +13,15 @@ import { FileXIcon } from "@phosphor-icons/react/dist/ssr/FileX";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { FolderDashedIcon } from "@phosphor-icons/react/dist/ssr/FolderDashed";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
+import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import type { ReactNode } from "react";
 import { Fragment, useId, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
+import { Engine } from "../address/search";
 import type { Choice } from "./choices";
 import { ChoiceKind, choicesFor, launchOf } from "./choices";
 import type { FileRow } from "./file-row";
@@ -29,6 +32,7 @@ import { homeUrl, MediaKind, mediaOf } from "./media";
 import { useFound } from "./useFound";
 import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
+import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
 const PROMPT = "Open a file, a URL, or search";
@@ -325,6 +329,17 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
         </>
       );
     }
+    case ChoiceKind.TaggedSearch: {
+      return (
+        <>
+          <RowTile icon={logoOf(choice.engine)} />
+          <span className={rowNameStyles}>
+            <span className={rowVerbStyles}>Search for</span> {choice.query}{" "}
+            <span className={rowVerbStyles}>on</span> {nameOf(choice.engine)}
+          </span>
+        </>
+      );
+    }
   }
 };
 
@@ -415,6 +430,15 @@ const Pending = ({ choice }: { choice: Choice }) => {
         />
       );
     }
+    case ChoiceKind.TaggedSearch: {
+      return (
+        <Placeholder
+          icon={logoOf(choice.engine)}
+          note={`Search ${nameOf(choice.engine)}`}
+          title={choice.query}
+        />
+      );
+    }
   }
 };
 
@@ -474,7 +498,8 @@ const ChoicePreview = ({
       );
     }
     case ChoiceKind.Site:
-    case ChoiceKind.Search: {
+    case ChoiceKind.Search:
+    case ChoiceKind.TaggedSearch: {
       return (
         <webview className={viewStyles} src={choice.url} title={choice.url} />
       );
@@ -731,6 +756,45 @@ const keyOf = (choice: Choice): string => {
     }
     case ChoiceKind.Search: {
       return `search:${choice.url}`;
+    }
+    case ChoiceKind.TaggedSearch: {
+      return `tagged:${choice.url}`;
+    }
+  }
+};
+
+/**
+ * The logo of the site a tagged search goes to: the row says where the words
+ * are going before its text is read. Images and Maps are Google's.
+ */
+const logoOf = (engine: Engine): typeof FileIcon => {
+  switch (engine) {
+    case Engine.GoogleImages:
+    case Engine.GoogleMaps: {
+      return GoogleLogoIcon;
+    }
+    case Engine.Wikipedia: {
+      return WikipediaLogoIcon;
+    }
+    case Engine.YouTube: {
+      return YoutubeLogoIcon;
+    }
+  }
+};
+
+const nameOf = (engine: Engine): string => {
+  switch (engine) {
+    case Engine.GoogleImages: {
+      return "Google Images";
+    }
+    case Engine.GoogleMaps: {
+      return "Google Maps";
+    }
+    case Engine.Wikipedia: {
+      return "Wikipedia";
+    }
+    case Engine.YouTube: {
+      return "YouTube";
     }
   }
 };

@@ -1,9 +1,14 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
+import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
+import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
+import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
 
@@ -84,6 +89,11 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
   };
 };
 
+/** What `icon` draws, without the `<svg>` around it that sizes it. */
+const glyphOf = (icon: ReactElement): string =>
+  new DOMParser().parseFromString(renderToStaticMarkup(icon), "image/svg+xml")
+    .documentElement.innerHTML;
+
 /** The pane showing what the highlighted row is. */
 const previewPane = () => screen.getByRole("region", { name: "Preview" });
 
@@ -152,6 +162,34 @@ describe("Launcher", () => {
       "Search for example.com",
     ]);
   });
+
+  it("offers a tagged search on its engine above the rows the words get", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "!wiki notes");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Search for notes on Wikipedia",
+      "Search for notes",
+    ]);
+  });
+
+  it.each([
+    ["!im", <GoogleLogoIcon key="im" size={16} />],
+    ["!maps", <GoogleLogoIcon key="maps" size={16} />],
+    ["!wiki", <WikipediaLogoIcon key="wiki" size={16} />],
+    ["!yt", <YoutubeLogoIcon key="yt" size={16} />],
+  ])(
+    "draws a %s search with the logo of the site it searches",
+    async (tag, logo) => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), `${tag} kate bush`);
+      const [tagged] = await screen.findAllByRole("option");
+
+      expect(tagged?.querySelector("svg")?.innerHTML).toBe(glyphOf(logo));
+    },
+  );
 
   it("searches for a name that matched a file, when that row is chosen", async () => {
     const panel = launcher();

@@ -1,9 +1,10 @@
 // The rows the launcher offers for what was typed into it.
 //
 // Every row is a thing Enter can do, so the list is the whole answer to "what
-// will this do" — there is no second line under it saying so. In order: a
-// site, if the box holds one; a path, if it is spelled like one; the files the
-// host found; and a search, always. A URL typed whole is a URL meant, so it
+// will this do" — there is no second line under it saying so. In order: the
+// search a `!` tag names, if the box carries one; then, for the words without
+// the tag, a site, if the box holds one; a path, if it is spelled like one;
+// the files the host found; and a search, always. A URL typed whole is a URL meant, so it
 // goes on top; the search goes last, because it is what is left when nothing
 // above it was.
 //
@@ -12,16 +13,18 @@
 // disagree about `localhost:5173` is one where the user has to remember which
 // box they are in.
 
-import { searchUrl } from "../address/search";
+import type { TaggedSearch } from "../address/search";
+import { searchUrl, taggedSearch } from "../address/search";
 import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
-/** Which of the three kinds of row a choice is. */
+/** Which of the four kinds of row a choice is. */
 export enum ChoiceKind {
   File,
   Site,
   Search,
+  TaggedSearch,
 }
 
 export const Choice = {
@@ -41,12 +44,47 @@ export const Choice = {
     url,
   }),
   Site: (url: string) => ({ kind: ChoiceKind.Site as const, url }),
+  /** The words, on the site their tag named. */
+  TaggedSearch: (search: TaggedSearch) => ({
+    kind: ChoiceKind.TaggedSearch as const,
+    ...search,
+  }),
 };
 
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
 
-/** The rows for `query`, given what the host found for it. */
+/**
+ * The rows for `query`, given what the host found for it.
+ *
+ * A tagged query gets its tagged search on top — the tag is the user saying
+ * where they meant to go — and below it the rows its words would get with no
+ * tag at all.
+ */
 export const choicesFor = (
+  query: string,
+  found: readonly string[],
+): Choice[] => {
+  const tagged = taggedSearch(query);
+  return tagged === undefined
+    ? untaggedChoicesFor(query, found)
+    : [Choice.TaggedSearch(tagged), ...untaggedChoicesFor(tagged.query, found)];
+};
+
+/** What choosing `choice` launches. */
+export const launchOf = (choice: Choice): Launch => {
+  switch (choice.kind) {
+    case ChoiceKind.File: {
+      return Launch.Edited(choice.row.path);
+    }
+    case ChoiceKind.Site:
+    case ChoiceKind.Search:
+    case ChoiceKind.TaggedSearch: {
+      return Launch.Browsed(choice.url);
+    }
+  }
+};
+
+const untaggedChoicesFor = (
   query: string,
   found: readonly string[],
 ): Choice[] => {
@@ -63,19 +101,6 @@ export const choicesFor = (
         ...files,
         Choice.Search(typed, searchUrl(typed)),
       ];
-};
-
-/** What choosing `choice` launches. */
-export const launchOf = (choice: Choice): Launch => {
-  switch (choice.kind) {
-    case ChoiceKind.File: {
-      return Launch.Edited(choice.row.path);
-    }
-    case ChoiceKind.Site:
-    case ChoiceKind.Search: {
-      return Launch.Browsed(choice.url);
-    }
-  }
 };
 
 /**

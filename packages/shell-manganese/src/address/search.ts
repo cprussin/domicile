@@ -9,31 +9,75 @@
 /** How a query becomes a URL, with `%QUERY%` standing in for the escaped text. */
 const GOOGLE = "https://google.com/search?q=%QUERY%";
 
+/** The sites a tag can send a query to. */
+export enum Engine {
+  GoogleImages,
+  GoogleMaps,
+  Wikipedia,
+  YouTube,
+}
+
+/** A query a tag sent somewhere other than Google. */
+export type TaggedSearch = {
+  engine: Engine;
+  /** The words, with the tag taken out. */
+  query: string;
+  url: string;
+};
+
 /**
- * The tags, and what each one searches.
+ * The tags, and the engine each one picks.
  *
- * A plain table rather than a `Map`, so adding an engine is one line and the
- * tag is spelled once. The keys carry their `!` because that is what the user
+ * A plain table rather than a `Map`, so the tag is spelled once. The keys carry their `!` because that is what the user
  * types and because a bare `yt` is a word somebody may be searching for.
  */
-const ENGINES: Readonly<Record<string, string>> = {
-  "!im": "https://www.google.com/search?q=%QUERY%&tbm=isch",
-  "!maps": "https://www.google.com/maps/search/%QUERY%",
-  "!wiki": "https://en.wikipedia.org/wiki/Special:Search?search=%QUERY%",
-  "!yt": "https://www.youtube.com/results?search_query=%QUERY%",
+const TAGS: Readonly<Record<string, Engine>> = {
+  "!im": Engine.GoogleImages,
+  "!maps": Engine.GoogleMaps,
+  "!wiki": Engine.Wikipedia,
+  "!yt": Engine.YouTube,
+};
+
+/** How a query becomes a URL on each engine. */
+const ENGINE_URLS: Readonly<Record<Engine, string>> = {
+  [Engine.GoogleImages]: "https://www.google.com/search?q=%QUERY%&tbm=isch",
+  [Engine.GoogleMaps]: "https://www.google.com/maps/search/%QUERY%",
+  [Engine.Wikipedia]:
+    "https://en.wikipedia.org/wiki/Special:Search?search=%QUERY%",
+  [Engine.YouTube]: "https://www.youtube.com/results?search_query=%QUERY%",
 };
 
 /** Where to send `query`: the engine its tag names, or Google. */
-export const searchUrl = (query: string): string => {
+export const searchUrl = (query: string): string =>
+  taggedSearch(query)?.url ?? urlOf(GOOGLE, query);
+
+/** The search `query`'s tag names, or `undefined` for one that carries none. */
+export const taggedSearch = (query: string): TaggedSearch | undefined => {
   const tag = tagIn(query);
-  const searched = tag === undefined ? query : withoutTag(query, tag);
-  const engine = tag === undefined ? GOOGLE : ENGINES[tag];
+  if (tag === undefined) {
+    return undefined;
+  } else {
+    const engine = engineOf(tag);
+    const searched = withoutTag(query, tag);
+    return {
+      engine,
+      query: searched,
+      url: urlOf(ENGINE_URLS[engine], searched),
+    };
+  }
+};
+
+const engineOf = (tag: string): Engine => {
+  const engine = TAGS[tag];
   if (engine === undefined) {
     throw new Error(`launcher: no engine for the tag ${tag}`);
   } else {
-    return engine.replace("%QUERY%", encodeURIComponent(searched.trim()));
+    return engine;
   }
 };
+
+const urlOf = (template: string, query: string): string =>
+  template.replace("%QUERY%", encodeURIComponent(query.trim()));
 
 /**
  * The tag `query` carries, or `undefined` for one that carries none.
@@ -44,7 +88,7 @@ export const searchUrl = (query: string): string => {
  * running a query with both taken out.
  */
 const tagIn = (query: string): string | undefined =>
-  words(query).find((word) => word in ENGINES);
+  words(query).find((word) => word in TAGS);
 
 /** `query` with the tag taken out, and the gap it left closed up. */
 const withoutTag = (query: string, tag: string): string =>
