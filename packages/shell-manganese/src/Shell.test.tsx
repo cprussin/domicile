@@ -5,7 +5,13 @@ import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
@@ -1863,6 +1869,40 @@ describe("the launcher", () => {
 
     expect(launcherBox()).toBeNull();
     expect(baseElement.querySelector("[data-backdrop]")).toBeInTheDocument();
+  });
+
+  it("takes the backdrop away on a page that did not hear the press", async () => {
+    // Drawn without its panel, the dialog still has to finish closing. Before
+    // the pointer could leave its first monitor nobody could click on these
+    // pages, so a backdrop left behind on them went unnoticed.
+    const { baseElement } = renderingShell(
+      [{ ...LEFT, fillsTheWindow: true }, RIGHT],
+      overheard(),
+    );
+    act(() => {
+      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
+    });
+
+    act(() => {
+      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
+    });
+
+    await waitFor(() => {
+      expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
+    });
+  });
+
+  it("leaves nothing over the desktop once a launch puts it away", async () => {
+    // The panel closes as the window it opened arrives, and its backdrop has
+    // to go with it: one left behind takes every click on the page.
+    const { baseElement } = renderShell([{ ...LEFT, fillsTheWindow: true }]);
+    press("space");
+
+    await typeIntoLauncher("example.com{Enter}");
+
+    await waitFor(() => {
+      expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
+    });
   });
 
   it("keeps the panel up while it closes", () => {
