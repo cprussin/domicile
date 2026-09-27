@@ -1,3 +1,5 @@
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { HostMessageOf } from "@domicile/chrome-sdk/host-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -69,6 +71,15 @@ type HeldModifiers = {
  * knows and the `modifiers` message is how it will say so; it does not know
  * today.
  *
+ * **Except while a browser window's page has the keyboard**, when this page
+ * hears nothing at all: the page is a guest with a document of its own, and
+ * its keys never reach this one. So Meta held over a focused browser window
+ * was never held as far as the desktop knew, and the window would not drag.
+ * The engine reads the guest's keys itself and sends what they hold as that
+ * same `modifiers` message — and the compositor's copy says nothing then,
+ * because this page forwards no keys to it to be short of. So the message is
+ * taken exactly while a `<webview>` is where this document's focus is.
+ *
  * **Held is not the same question as meant, and only for Shift.**
  * Meta+Shift+Tab floats a window and Shift over a floating one resizes it, so
  * the half-second after the chord — Meta still down because the shell needs it
@@ -76,7 +87,7 @@ type HeldModifiers = {
  * window with the keys for resizing it already held.
  * {@link HeldModifiers.spendShift} is what the chord says so with.
  */
-export const useModifiers = (): HeldModifiers => {
+export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
   // The same object when nothing moved, so a page that holds Meta through a
@@ -109,6 +120,18 @@ export const useModifiers = (): HeldModifiers => {
     };
   }, [settle]);
 
+  useEffect(() => {
+    const reported = (held: HostMessageOf<"modifiers">) => {
+      if (guestHasKeyboard()) {
+        settle({ meta: held.metaKey, shift: held.shiftKey });
+      }
+    };
+    domicile.on("modifiers", reported);
+    return () => {
+      domicile.off("modifiers", reported);
+    };
+  }, [domicile, settle]);
+
   return useMemo(
     () => ({
       modifiers: { ...held.down, shift: held.down.shift && !held.spent },
@@ -121,3 +144,11 @@ export const useModifiers = (): HeldModifiers => {
 /** Whether these are the same keys down, which is all a re-render turns on. */
 const same = (held: Modifiers, next: Modifiers): boolean =>
   held.meta === next.meta && held.shift === next.shift;
+
+/**
+ * Whether a browser window's page has the keyboard: its `<webview>` is this
+ * document's `activeElement` while the guest inside it is focused — see
+ * `BrowserWindow`.
+ */
+const guestHasKeyboard = (): boolean =>
+  document.activeElement?.localName === "webview";

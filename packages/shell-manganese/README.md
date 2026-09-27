@@ -195,11 +195,12 @@ knowing about:
   routes to the chrome instead — and a transparent sheet over the window
   catches what falls through. The same mechanism that stops a window
   swallowing the clicks meant for a menu drawn over it.
-- **The page cannot see the modifier while a window has the keyboard.**
-  `wl_keyboard.modifiers` goes to the focused surface, so the compositor
-  broadcasts the held set instead and the shell listens (`modifiers`). The
-  page's own keyboard events are the fallback for a shell opened in a plain
-  browser with no host to ask.
+- **The modifier is read wherever the keyboard is.** Over a Wayland window
+  the page still hears every key, because it is what forwards them, so its
+  own keyboard events say what is held. A browser window's page is a guest
+  whose keys never reach the shell's document, so while one has the keyboard
+  the shell takes the engine's `modifiers` message instead — see
+  `keyboard/useModifiers.ts`.
 
 The window is **half transparent while it is being dragged**, and nothing
 here arranges that. `opacity` on the element is `opacity` on a layer, because
