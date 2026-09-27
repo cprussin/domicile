@@ -103,6 +103,32 @@ expect "a control whose browser stopped answering is a failure" "fail" \
   "$(verdict 1 LOADS=2 PRESSED_AFTER=0)"
 
 echo
+echo "what counts as moved — read off the engine log by the guard's own line"
+# A headless window settles its viewport once as the shell loads, before any
+# key: engine run 36366384052 read that `resized` as Ctrl+= and failed a
+# shell nothing had touched. Only what follows the first key is the keys'.
+MOVED_LINE="$(grep -E '^MOVED=' "$GUARD")"
+[ -n "$MOVED_LINE" ] || {
+  echo "no MOVED= line in $GUARD — its reading moved. Fix this test with it." >&2
+  exit 1
+}
+moved() { # engine log lines, one per argument
+  (
+    ENGINE_LOG="$(mktemp)"
+    printf '%s\n' "$@" >"$ENGINE_LOG"
+    eval "$MOVED_LINE"
+    rm -f "$ENGINE_LOG"
+    echo "$MOVED"
+  )
+}
+expect "a resize before the first key is the shell settling, not a key" "0" \
+  "$(moved '"GUARD loaded"' '"GUARD resized"' '"GUARD keydown code=Equal"')"
+expect "a resize after a key is the key's" "1" \
+  "$(moved '"GUARD loaded"' '"GUARD keydown code=Equal"' '"GUARD resized"')"
+expect "a popstate after a key is the key's" "1" \
+  "$(moved '"GUARD loaded"' '"GUARD keydown code=ArrowLeft"' '"GUARD popstate"')"
+
+echo
 if [ "$FAILED" -eq 0 ]; then
   echo "the shell-shortcuts guard's verdict names the right end in every case"
   exit 0
