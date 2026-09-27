@@ -480,6 +480,8 @@ costs nothing.
   users get. It is hours long, so it must never hold the slot against a pull
   request: a waiter now leaves a note beside the slot, and a holder can ask
   whether anybody is `wanted` and `yield` to them, resuming its build after.
+  `engine-release.yml` is that build now, publishing as `engine-official-`;
+  what is left is its measured cost and then pinning users to it.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
   `domicile load-shell` is what asks for one, so a shell that keeps state in

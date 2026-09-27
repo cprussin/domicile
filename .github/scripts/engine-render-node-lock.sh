@@ -6,6 +6,7 @@
 #   .github/scripts/engine-render-node-lock.sh quiet <owner>
 #   .github/scripts/engine-render-node-lock.sh noisy <owner> -- <command...>
 #   .github/scripts/engine-render-node-lock.sh drop <owner>
+#   .github/scripts/engine-render-node-lock.sh wanted <owner>
 #
 # `quiet` is `take` for a guard that times something, and `noisy` is how a
 # compile or a guard says it is loading the machine; see them below.
@@ -52,7 +53,7 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <take|quiet|drop|who> <owner>" >&2
+  echo "usage: $(basename "$0") <take|quiet|drop|who|wanted> <owner>" >&2
   echo "       $(basename "$0") noisy <owner> -- <command...>" >&2
   exit 2
 }
@@ -87,8 +88,27 @@ NOISE_STALE="${DOMICILE_RENDER_NODE_NOISE_STALE:-120}"
 # How long a measurement waits for quiet before saying it did not run.
 QUIET_WAIT="${DOMICILE_RENDER_NODE_QUIET_WAIT:-1800}"
 POLL="${DOMICILE_RENDER_NODE_POLL:-5}"
+# Measurements waiting for quiet: a note each, refreshed every poll, so that
+# noise which can stop and resume -- the production build, under
+# engine-yielding-build.sh -- can ask whether anybody is waiting on it with
+# `wanted`. Only a note refreshed in the last FRESH seconds counts, because a
+# killed waiter cannot say it stopped waiting.
+WAITING="$LOCK.waiting"
+FRESH="${DOMICILE_RENDER_NODE_FRESH:-60}"
 
 now() { date +%s; }
+
+# The note a waiter leaves, named by a hash because an owner is a sentence.
+note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
+
+# Every fresh note that is not <owner>'s, one owner per line.
+waiters() {
+  [ -d "$WAITING" ] || return 0
+  find "$WAITING" -type f -newermt "-$FRESH seconds" |
+    while IFS= read -r waiter; do
+      [ "$waiter" = "$(note "$1")" ] || cat "$waiter"
+    done
+}
 
 held_since() {
   local since
@@ -221,6 +241,9 @@ case "$action" in
     waited=0
     stole=0
     said=""
+    mkdir -p "$WAITING"
+    waiting="$(note "$owner")"
+    trap 'rm -f "$waiting"' EXIT
     while :; do
       noise="$(live_noise)"
       if [ -z "$noise" ]; then
@@ -236,6 +259,7 @@ case "$action" in
         fi
       fi
       what="${noise:-the render node, held by '$(holder)'}"
+      echo "$owner" >"$waiting"
       what="$(printf '%s\n' "$what" | paste -sd, - | sed 's/,/, /g')"
       [ "$what" = "$said" ] || {
         echo "waiting up to ${QUIET_WAIT}s for a quiet machine: $what"
@@ -300,6 +324,13 @@ case "$action" in
     trap 'exit 130' INT
     "$@"
     exit
+    ;;
+
+  wanted)
+    [ -n "$owner" ] || usage
+    others="$(waiters "$owner")"
+    [ -n "$others" ] || { echo "nobody is waiting for a quiet machine"; exit 1; }
+    printf '%s\n' "$others" | sed "s/.*/waiting for a quiet machine: '&'/"
     ;;
 
   drop)

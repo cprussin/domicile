@@ -2,6 +2,25 @@ name: Engine release
 
 # A patched Chromium somebody can run without building one.
 #
+# THE PRODUCTION BUILD: official, so PGO and ThinLTO as in Chrome, and no
+# DCHECKs (`DOMICILE_ENGINE_BUILD=official`, see engine-release-build.sh). It
+# runs after a merge to main rather than on a pull request, because it is hours
+# long and a pull request's checks are the checked build's in engine.yml.
+#
+# ALWAYS THE NEWEST MAIN. The concurrency group below holds one run and one
+# pending, and a newer pending run replaces an older one, so five merges during
+# a build are one build after it, of the fifth. Every merge ships in the next
+# release rather than each in its own.
+#
+# IT NEVER HOLDS THE COMPILE SLOT AGAINST A PULL REQUEST. The build runs under
+# engine-yielding-build.sh, which stops it whenever somebody is waiting for the
+# slot, hands it over and resumes after; the build is incremental, so resuming
+# loses only the steps that were running.
+#
+# It publishes as `engine-official-`, beside what engine.yml publishes rather
+# than over it, and nothing pins it yet: this is how long it takes, measured,
+# before anything depends on it.
+#
 # The engine workflow proves a change; this publishes the result of it. They
 # are separate because they want different builds: that one is a component
 # build with no symbols, which is small and fast and links to several hundred
@@ -21,6 +40,15 @@ name: Engine release
 on:
   push:
     tags: [engine-v*]
+    branches: [main]
+    # engine.yml's filter, which is what decides whether a merge moved the
+    # engine; GitHub does not apply it to a tag push.
+    paths:
+      - packages/domicile-engine/**
+      - "!packages/domicile-engine/**/*.md"
+      - "!packages/domicile-engine/engine-release.nix"
+      - .github/workflows/engine-release.yml
+      - .github/scripts/engine-*.sh
   workflow_dispatch:
 
 concurrency:
@@ -34,7 +62,9 @@ permissions:
 jobs:
   release:
     runs-on: [self-hosted, crux]
-    timeout-minutes: 600
+    # engine.yml's, which is the most a build here can be given. The official
+    # build's cold time is what this workflow exists to measure.
+    timeout-minutes: 1200
 
     env:
       # Who holds the tree lock, in words a person reading a held-lock message
@@ -54,7 +84,15 @@ jobs:
       # second one on a 200G quota whose first is already 97G, hence the space
       # check below — an overrun should fail this job with a sentence, not fill
       # the dataset the machine's other work lives on.
-      OUT: out/Release
+      #
+      # Not out/Release: that is the checked build engine.yml keeps warm in
+      # the same trees, and building this one over it would make each cold
+      # for the other.
+      OUT: out/Official
+      DOMICILE_ENGINE_BUILD: official
+      # Ten hours: this waits behind whatever it yielded to, which can be a
+      # pull request's cold repin.
+      DOMICILE_COMPILE_SLOT_WAIT: 36000
 
     steps:
       - uses: actions/checkout@v7
@@ -170,8 +208,11 @@ jobs:
           EOF
           chmod +x /tmp/domicile-release-build
 
-          # As noise: a latency guard on the other runner waits it out.
+          # As noise: a latency guard on the other runner waits it out. And
+          # stepping aside for any run that wants the compile slot; see the
+          # header.
           if NIX_SHELL_RUN=/tmp/domicile-release-build \
+               "$GITHUB_WORKSPACE/.github/scripts/engine-yielding-build.sh" "$LOCK_OWNER" -- \
                "$GITHUB_WORKSPACE/.github/scripts/engine-render-node-lock.sh" noisy "$LOCK_OWNER" -- \
                nix-shell "$CHROMIUM/tools/nix/shell.nix" >/tmp/domicile-shell.log 2>&1; then
             echo "the shell exited 0"
@@ -216,17 +257,17 @@ jobs:
       - name: The packaged build passes the guard
         run: |
           set -euo pipefail
-          rm -rf "$CHROMIUM/out/Release-staged"
-          mkdir -p "$CHROMIUM/out/Release-staged"
+          rm -rf "$CHROMIUM/$OUT-staged"
+          mkdir -p "$CHROMIUM/$OUT-staged"
           tar -xf "$STAGE/${{ steps.package.outputs.tarball }}" \
-            -C "$CHROMIUM/out/Release-staged" --strip-components=1
+            -C "$CHROMIUM/$OUT-staged" --strip-components=1
           .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
             nix develop .#full --command cargo build -p domicile-compositor
           # `DOMICILE_GUARD_CONTROL=0` for the reason pinned-engine.yml sets
           # it: the check runs its control by default and this caller does not
           # want the second run. engine.yml is where that guard is shown to be
           # able to fail.
-          DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
+          DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT="$OUT-staged" \
             DOMICILE_GUARD_CONTROL=0 \
             .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
             nix develop .#full --command ./scripts/engine-guard-client-window.sh

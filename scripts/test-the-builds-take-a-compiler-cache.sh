@@ -332,6 +332,54 @@ else
 fi
 unset DOMICILE_CC_WRAPPER
 
+# THE PRODUCTION BUILD IS THE SAME SCRIPT, OFFICIAL. It is what users run, so
+# it is optimized as Chrome is -- PGO and ThinLTO -- and carries no DCHECKs.
+# PGO needs Google's profile for this revision, which a checkout only has if
+# something fetched it, so the script does. Recorded by a stand-in for the
+# fetcher rather than by reaching Google Cloud Storage.
+mkdir -p "$SRC/tools"
+cat >"$SRC/tools/update_pgo_profiles.py" <<'PGO'
+import os, sys
+open(os.environ["PGO_ARGS_FILE"], "w").write(" ".join(sys.argv[1:]))
+PGO
+export PGO_ARGS_FILE="$WORK/pgo-args"
+echo "the official build"
+rm -f "$PGO_ARGS_FILE"
+if DOMICILE_ENGINE_BUILD=official run_build "$RELEASE"; then
+  for arg in 'is_official_build = true' 'dcheck_always_on = false'; do
+    if grep -qx "  $arg" "$WORK/gn-args"; then
+      ok "is built with $arg"
+    else
+      fail "is built with $arg" "gn was given: $(cat "$WORK/gn-args")"
+    fi
+  done
+  if grep -q -- '--target=linux update' "$PGO_ARGS_FILE" 2>/dev/null; then
+    ok "and fetches the PGO profile first"
+  else
+    fail "and fetches the PGO profile first" \
+      "the fetcher was run with: $(cat "$PGO_ARGS_FILE" 2>/dev/null)"
+  fi
+else
+  fail "the official build runs" "it exited $STATUS: $(cat "$WORK/out")"
+fi
+rm -f "$PGO_ARGS_FILE"
+run_build "$RELEASE"
+if grep -qx '  is_official_build = false' "$WORK/gn-args" &&
+  [ ! -e "$PGO_ARGS_FILE" ]; then
+  ok "and the checked build is not official, and fetches no profile"
+else
+  fail "and the checked build is not official, and fetches no profile" \
+    "gn was given: $(cat "$WORK/gn-args"); the fetcher ran: $(cat "$PGO_ARGS_FILE" 2>/dev/null)"
+fi
+if DOMICILE_ENGINE_BUILD=fast run_build "$RELEASE"; then
+  fail "a build nobody defined is refused" "it exited 0"
+elif [ -e "$WORK/gn-args" ]; then
+  fail "a build nobody defined is refused" "only after gn: $(cat "$WORK/gn-args")"
+else
+  ok "a build nobody defined is refused"
+fi
+unset PGO_ARGS_FILE
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
