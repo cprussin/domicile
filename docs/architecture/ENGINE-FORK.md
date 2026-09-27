@@ -640,7 +640,8 @@ known and it is a build-system cost, not a language one.
   unhandled (no reload, back, F11, zoom, close or quit), a right click is the
   page's `contextmenu` event and nothing else, and neither Ctrl+wheel nor a
   swipe past the edge acts. `WebViewGuest` claims a browser window's context
-  menu the same way. Patch `0048` turns off the password manager, autofill and
+  menu the same way, and hands a chord its page left alone — and Ctrl+wheel,
+  as a request — back to the shell, which binds a browser's keys itself. Patch `0048` turns off the password manager, autofill and
   translate in the profile's prefs and refuses WebAuthn with no UI, with
   Blink's `WebAuth` off so sites do not offer a passkey. Unconditional: every
   `Browser` this engine opens is a shell window. `guard-shell-shortcuts.sh` is

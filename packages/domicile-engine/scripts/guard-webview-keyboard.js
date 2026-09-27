@@ -33,6 +33,13 @@
 //                                 absence beside the guest page's own
 //                                 `guest-keydown` is what says an unhandled
 //                                 key stops at the window
+//   GUARD guest-chord key=…       a chord the guest's page left alone, handed
+//                                 back to this document on the element as
+//                                 `domicile-guest-keydown` — the only way a
+//                                 browser window's Ctrl+R reaches its chrome.
+//                                 A plain key must never produce one
+//   GUARD zoom factor=…           the zoom the browser reports after the first
+//                                 guest chord asked for 150%
 
 /**
  * A query parameter this cannot run without. Missing means the guard invoked
@@ -132,6 +139,25 @@ host.addEventListener("modifiers", (event) => {
     `modifiers alt=${event.altKey} ctrl=${event.ctrlKey}` +
       ` shift=${event.shiftKey} meta=${event.metaKey}`,
   );
+});
+
+// A chord the page did not take for itself, handed back by the guest's
+// delegate. The first one also zooms the page, so the run can read whether the
+// zoom arrives — on the element, and as the page's own width changing.
+let zoomed = false;
+view.addEventListener("domicile-guest-keydown", (event) => {
+  say(
+    `guest-chord key=${event.key} code=${event.code} alt=${event.altKey}` +
+      ` ctrl=${event.ctrlKey} shift=${event.shiftKey} meta=${event.metaKey}`,
+  );
+  if (!zoomed) {
+    zoomed = true;
+    view.setZoom(1.5);
+  }
+});
+
+view.addEventListener("domicile-zoom-change", () => {
+  say(`zoom factor=${view.zoom}`);
 });
 
 host.grabShortcut(ALT_TAB);

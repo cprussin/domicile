@@ -19,6 +19,7 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/document_service.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -27,9 +28,11 @@
 #include "content/public/browser/render_process_host.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace domicile {
@@ -239,6 +242,17 @@ void WebViewGuest::CreateAndAttach(
   guest->Observe(guest->guest_contents_);
   guest->guest_contents_->SetDelegate(guest.get());
 
+  // Unretained because the subscription is a member: it is dropped with this
+  // object, and before that with the WebContents -- see WebContentsDestroyed.
+  guest->zoom_subscription_ =
+      content::HostZoomMap::GetForWebContents(guest->guest_contents_)
+          ->AddZoomLevelChangedCallback(base::BindRepeating(
+              [](WebViewGuest* guest,
+                 const content::HostZoomMap::ZoomLevelChange& change) {
+                guest->ReportZoom();
+              },
+              base::Unretained(guest.get())));
+
   // Asynchronous, and the API says why: the placeholder is about to be swapped
   // out, so every beforeunload handler under it has to answer first, and a
   // cross-process placeholder has to be replaced by a same-process one. What
@@ -361,6 +375,30 @@ void WebViewGuest::Reload() {
                                           /*check_for_repost=*/true);
 }
 
+void WebViewGuest::SetZoom(double factor) {
+  CHECK(guest_contents_);
+
+  // The element throws a RangeError for this before sending it, so a factor
+  // out of range here is a renderer that is not running the element's code.
+  if (!(factor >= blink::kMinimumBrowserZoomFactor &&
+        factor <= blink::kMaximumBrowserZoomFactor)) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> asked for a zoom outside the browser's range.");
+    return;
+  }
+
+  // The site's zoom rather than this window's, which is Chrome's rule and what
+  // HostZoomMap::SetZoomLevel does for a WebContents with no temporary level.
+  content::HostZoomMap::SetZoomLevel(guest_contents_,
+                                     blink::ZoomFactorToZoomLevel(factor));
+
+  // HostZoomMap has already said so through the subscription, for a site that
+  // has an address. This is the answer for one that does not -- an error page,
+  // a guest that has not committed -- and the comparison makes it free when
+  // the answer was already sent.
+  ReportZoom();
+}
+
 content::WebContents* WebViewGuest::GetOwnerWebContents() {
   content::RenderFrameHost* owner =
       content::RenderFrameHost::FromID(owner_rfh_id_);
@@ -426,6 +464,40 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
              : content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
+bool WebViewGuest::HandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  const int modifiers = event.GetModifiers();
+
+  // Presses, as PreHandleKeyboardEvent counts them, and auto-repeats among
+  // them: Ctrl held on the plus key zooms the whole way in Chrome, one step a
+  // repeat, and `repeat` on the event is how a shell tells them apart.
+  const bool pressed =
+      event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::Type::kKeyDown;
+  const bool chord =
+      (modifiers & (blink::WebInputEvent::kAltKey |
+                    blink::WebInputEvent::kControlKey |
+                    blink::WebInputEvent::kMetaKey)) != 0;
+
+  if (pressed && chord) {
+    client_->UnhandledKeyDown(
+        ui::KeycodeConverter::DomKeyToKeyString(ui::DomKey(event.dom_key)),
+        ui::KeycodeConverter::DomCodeToCodeString(
+            static_cast<ui::DomCode>(event.dom_code)),
+        (modifiers & blink::WebInputEvent::kAltKey) != 0,
+        (modifiers & blink::WebInputEvent::kControlKey) != 0,
+        (modifiers & blink::WebInputEvent::kShiftKey) != 0,
+        (modifiers & blink::WebInputEvent::kMetaKey) != 0,
+        (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0);
+  }
+  return false;
+}
+
+void WebViewGuest::ContentsZoomChange(bool zoom_in) {
+  client_->ZoomRequested(zoom_in);
+}
+
 bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
@@ -441,6 +513,9 @@ void WebViewGuest::NavigationStateChanged(
   // reason the header gives -- what decides whether anything moved is the
   // comparison inside, not a flag meaning "some browser UI is stale".
   ReportPage();
+  // And the zoom, which is the site's: a page that moved to a site zoomed
+  // differently has changed zoom without anybody setting it.
+  ReportZoom();
 }
 
 void WebViewGuest::DidChangeVisibleSecurityState() {
@@ -530,6 +605,23 @@ void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
   if (loading != reported_loading_) {
     reported_loading_ = loading;
     client_->LoadingChanged(loading);
+  }
+}
+
+void WebViewGuest::ReportZoom() {
+  // The same CHECK ReportHistory makes, and for the same reason.
+  CHECK(guest_contents_);
+
+  const double zoom = blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(guest_contents_));
+
+  // ZoomValuesEqual rather than `!=`, because a factor has been through a
+  // logarithm and back by the time it is read here: 1/3 set is not exactly
+  // 1/3 read, and a message for the difference would be a DOM event for
+  // nothing.
+  if (!blink::ZoomValuesEqual(zoom, reported_zoom_)) {
+    reported_zoom_ = zoom;
+    client_->ZoomChanged(zoom);
   }
 }
 
@@ -686,6 +778,7 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
 }
 
 void WebViewGuest::WebContentsDestroyed() {
+  zoom_subscription_ = {};
   guest_contents_ = nullptr;
   if (self_owned_) {
     delete this;

@@ -6,12 +6,14 @@
 
 #include <memory>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_frame_host.h"
@@ -117,6 +119,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   void GoForward() override;
   void Stop() override;
   void Reload() override;
+  void SetZoom(double factor) override;
 
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
@@ -145,11 +148,28 @@ class WebViewGuest : public mojom::WebViewGuest,
   // not the second. It is what content does with an unhandled key -- it comes
   // back to *this* WebContents' delegate in
   // WebContentsImpl::HandleKeyboardEvent, and there is no path from there into
-  // the embedder's renderer. So this hook is not one of two ways a chord
-  // reaches the shell over a browser window. It is the only one.
+  // the embedder's renderer. So this hook is not one of two ways a claimed
+  // chord reaches the shell over a browser window. It is the only one. An
+  // UNCLAIMED chord the page left alone comes back too, later and by another
+  // door -- HandleKeyboardEvent below -- which is how a browser window's
+  // chrome binds Ctrl+R.
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const input::NativeWebKeyboardEvent& event) override;
+
+  // AND WHERE A KEY THE PAGE LEFT ALONE GOES NEXT, which is the shell. Content
+  // calls this only for a press the page did not preventDefault, which is
+  // Chrome's own order: a site binds a chord first, and the browser's command
+  // runs only if it did not. Chords only -- see UnhandledKeyDown in
+  // components/domicile/mojom/web_view_guest.mojom for why a plain key is not
+  // sent. Returns false, because this process did nothing with the key: what
+  // the shell does is its own, and asynchronous.
+  bool HandleKeyboardEvent(content::WebContents* source,
+                           const input::NativeWebKeyboardEvent& event) override;
+
+  // Ctrl and the wheel over the page, which the page did not take. Reported
+  // rather than applied -- see ZoomRequested in the mojom.
+  void ContentsZoomChange(bool zoom_in) override;
 
   // A RIGHT CLICK IS THE PAGE'S AND THE SHELL'S, NEVER THE BROWSER'S. The
   // page's own `contextmenu` event has already fired by the time this runs,
@@ -317,6 +337,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // them.
   void ReportLoading(bool should_show_loading_ui);
 
+  // Tell the element the page's zoom, if it has changed.
+  //
+  // THREE THINGS MOVE IT and all three land here: the shell setting it, the
+  // site's zoom changing under another window -- HostZoomMap keys it by host,
+  // so a second window on the same site moves this one -- and a navigation to
+  // a site zoomed differently. The comparison is what keeps that to one
+  // message per real change.
+  void ReportZoom();
+
   // The second half of CreateAndAttach, once content has produced a frame that
   // is safe to swap. `outer_contents_frame` is null when the frame went away
   // or a beforeunload handler under it said no, and dropping `guest` is then
@@ -364,6 +393,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   GURL reported_url_;
   mojom::WebViewSecurity reported_security_ =
       mojom::WebViewSecurity::kNeutral;
+
+  // And the last zoom sent, as a factor. 100%, because that is where a fresh
+  // guest is and what the element starts out holding.
+  double reported_zoom_ = 1.0;
+
+  // HostZoomMap's word that a site's zoom changed, which is how a second
+  // window on the same site moves this one. Dropped with the guest's
+  // WebContents, because a report is read off that.
+  base::CallbackListSubscription zoom_subscription_;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };
