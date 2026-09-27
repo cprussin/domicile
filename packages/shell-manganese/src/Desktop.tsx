@@ -50,10 +50,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
   const { act } = windows;
 
   // Super is what hands the pointer back to the page, and Shift is what makes
-  // a drag a resize. Both come off this page's own keyboard events, which is
-  // the only place either can be read: the desktop is the chrome's window, so
-  // the compositor's own answer is these keystrokes handed back short.
-  const { modifiers, spendShift } = useModifiers();
+  // a drag a resize. Both come off this page's own keyboard events — the
+  // desktop is the chrome's window, so the compositor's own answer is these
+  // keystrokes handed back short — and off the engine's word for a browser
+  // window's page, whose keys this page never hears.
+  const { modifiers, spendShift } = useModifiers(domicile);
 
   // A key ran the last command, which is what takes the pointer with the
   // keyboard — see `usePointerWarp`, which spends it. Here rather than in a
