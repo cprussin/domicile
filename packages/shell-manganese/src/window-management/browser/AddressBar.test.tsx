@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ConnectionSafety } from "../../address/connection-safety";
@@ -16,8 +16,13 @@ const BAR = {
   onNavigate: () => undefined,
   onReload: () => undefined,
   onStop: () => undefined,
+  onZoomIn: () => undefined,
+  onZoomOut: () => undefined,
+  onZoomReset: () => undefined,
   security: ConnectionSafety.Secure,
   visited: ["https://example.com"],
+  zoom: 1,
+  zoomsAnnounced: 0,
 } as const;
 
 const address = (): HTMLInputElement =>
@@ -212,5 +217,79 @@ describe("AddressBar", () => {
     );
 
     expect(control("Connection is not private")).toBeVisible();
+  });
+
+  describe("the zoom controls", () => {
+    it("drives the zoom with each of its three", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          onZoomIn={() => {
+            calls.push("in");
+          }}
+          onZoomOut={() => {
+            calls.push("out");
+          }}
+          onZoomReset={() => {
+            calls.push("reset");
+          }}
+          zoom={1.25}
+        />,
+      );
+
+      await userEvent.click(control("Zoom in"));
+      await userEvent.click(control("Zoom out"));
+      await userEvent.click(control("125%"));
+
+      expect(calls).toStrictEqual(["in", "out", "reset"]);
+    });
+
+    // A CONTROL THAT WOULD DO NOTHING SAYS SO, the way Back does with nowhere
+    // to go back to.
+    it("grays out what would do nothing at 100%", () => {
+      render(<AddressBar {...BAR} zoom={1} />);
+
+      expect(control("100%")).toBeDisabled();
+      expect(control("Zoom in")).toBeEnabled();
+      expect(control("Zoom out")).toBeEnabled();
+    });
+
+    it("grays out zooming past either end", () => {
+      const { rerender } = render(<AddressBar {...BAR} zoom={5} />);
+      expect(control("Zoom in")).toBeDisabled();
+
+      rerender(<AddressBar {...BAR} zoom={0.25} />);
+      expect(control("Zoom out")).toBeDisabled();
+    });
+  });
+
+  describe("the zoom indicator", () => {
+    it("says nothing until the user zooms", () => {
+      render(<AddressBar {...BAR} zoom={1.5} />);
+
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("shows the zoom the user zoomed to", () => {
+      render(<AddressBar {...BAR} zoom={1.5} zoomsAnnounced={1} />);
+
+      expect(screen.getByRole("status")).toHaveTextContent("150%");
+    });
+
+    // ITS OWN ANIMATION ENDING IS WHAT PUTS IT AWAY, rather than a timer
+    // beside the stylesheet's duration: how long it shows is the
+    // stylesheet's, and a second copy of it here would drift.
+    it("goes away when it has faded out, and comes back for the next zoom", () => {
+      const { rerender } = render(
+        <AddressBar {...BAR} zoom={1.1} zoomsAnnounced={1} />,
+      );
+
+      fireEvent.animationEnd(screen.getByRole("status"));
+      expect(screen.queryByRole("status")).toBeNull();
+
+      rerender(<AddressBar {...BAR} zoom={1.25} zoomsAnnounced={2} />);
+      expect(screen.getByRole("status")).toHaveTextContent("125%");
+    });
   });
 });

@@ -124,6 +124,27 @@ export default defineConfig({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // A browser window's zoom, said for a moment and put away: in quickly
+        // enough to answer the key that asked, held long enough to be read,
+        // and out without anybody dismissing it.
+        zoomAnnounced: {
+          "0%": {
+            opacity: "0",
+            transform: "translateY(calc(-1 * {spacing.1}))",
+          },
+          "10%": { opacity: "1", transform: "translateY(0)" },
+          "75%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+      },
+      tokens: {
+        durations: {
+          // How long a notice that nobody dismisses stays up — the zoom
+          // indicator's whole life. Far longer than the preset's scale, which
+          // measures how long a control takes to answer rather than how long
+          // a sentence takes to read.
+          notice: { value: "1.5s" },
+        },
       },
     },
   },
