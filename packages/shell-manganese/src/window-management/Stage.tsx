@@ -155,7 +155,7 @@ export const Stage = ({
         order — see `FloatShadow`. Not for a float filling the screen, whose
         shadow would fall off the edge of it and onto the next display.
       */}
-      {motions.drawn.map(({ motion, placement, window }) =>
+      {motions.drawn.map(({ motion, placement, restack, window }) =>
         placement !== undefined &&
         window.id !== fullscreenId &&
         floats.some((float) => float.id === window.id) ? (
@@ -165,10 +165,11 @@ export const Stage = ({
             frame={placement.frame}
             key={window.id}
             motion={motion}
+            restack={restack}
           />
         ) : undefined,
       )}
-      {motions.drawn.map(({ focused, motion, placement, window }) => {
+      {motions.drawn.map(({ focused, motion, placement, restack, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         // While the desktop's modifier is held the pointer belongs to the shell
         // rather than to the client, so a drag can be caught in the page: over
@@ -218,6 +219,7 @@ export const Stage = ({
                   onSelect(window.id);
                 }}
                 rect={placement?.surface}
+                restack={restack}
               />
             );
           }
@@ -245,6 +247,7 @@ export const Stage = ({
                   onSelect(window.id);
                 }}
                 rect={placement?.surface}
+                restack={restack}
                 src={window.src}
               />
             );
@@ -263,7 +266,7 @@ export const Stage = ({
         capture when the capturing element is moved in the document, and taking
         hold of a window raises it.
       */}
-      {motions.drawn.map(({ focused, motion, placement, window }) => {
+      {motions.drawn.map(({ focused, motion, placement, restack, window }) => {
         const floating = floats.find((float) => float.id === window.id);
         const onCloseThis = () => {
           onClose(window.id);
@@ -352,6 +355,7 @@ export const Stage = ({
                 onMove={onMoveThis}
                 onReach={onReachThis}
                 rect={placement.bar}
+                restack={restack}
                 title={window.title}
               />
               {(meta || window.id === draggingId) && (
@@ -420,7 +424,16 @@ export const Stage = ({
         windows and their bars, because it rings them: two elements at one
         `z-index` are decided by the order they come in the document.
       */}
-      {selection !== undefined && <SelectionRing selection={selection} />}
+      {selection !== undefined && (
+        <SelectionRing
+          // Around the window being worked in, which is the one a raise
+          // shuffles over the others — so the ring shuffles with it.
+          restack={
+            motions.drawn.find(({ window }) => window.id === activeId)?.restack
+          }
+          selection={selection}
+        />
+      )}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
     </main>
   );

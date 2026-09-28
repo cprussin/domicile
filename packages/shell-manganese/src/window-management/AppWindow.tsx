@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
+import type { Restack } from "./restacking";
 import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
@@ -26,6 +27,7 @@ import {
   restingEdgeStyles,
   scaledAbout,
   settlingStyles,
+  shuffledBy,
   windowStyles,
 } from "./window-styles";
 
@@ -126,6 +128,11 @@ type Props = {
    * at all — on another workspace, or behind another window's tab.
    */
   rect: Rect | undefined;
+  /**
+   * The shuffle it is playing while it trades places with another float in
+   * the stack — see `shuffledBy` — or `undefined` while it is not.
+   */
+  restack?: Restack | undefined;
 };
 
 /**
@@ -165,6 +172,7 @@ export const AppWindow = ({
   onMotionEnded,
   onReach,
   rect,
+  restack,
 }: Props) => {
   // A window the desktop no longer has is being drawn and nothing else.
   const leaving = isLeaving(motion);
@@ -329,7 +337,11 @@ export const AppWindow = ({
         cursor,
         ...(rect === undefined || frame === undefined
           ? undefined
-          : { ...placedAt(rect, depth), ...scaledAbout(frame, rect) }),
+          : {
+              ...placedAt(rect, depth),
+              ...scaledAbout(frame, rect),
+              ...shuffledBy(restack),
+            }),
       }}
     />
   );

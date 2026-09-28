@@ -7,6 +7,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
+import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
@@ -16,6 +17,7 @@ import {
   placedAt,
   scaledAbout,
   settlingStyles,
+  shuffledBy,
 } from "./window-styles";
 
 type Props = {
@@ -70,6 +72,11 @@ type Props = {
   /** The user reached for this window by pressing its bar. */
   onReach: () => void;
   rect: Rect;
+  /**
+   * The shuffle the window it names is playing while it trades places with another float in
+   * the stack — see `shuffledBy` — or `undefined` while it is not.
+   */
+  restack?: Restack | undefined;
   title: string;
   /** The window this bar names, which the SDK asks about on a press. */
   window: string;
@@ -108,6 +115,7 @@ export const TitleBar = ({
   onPointerDown,
   onReach,
   rect,
+  restack,
   title,
   window,
 }: Props) => (
@@ -147,7 +155,11 @@ export const TitleBar = ({
       onReach();
       onPointerDown?.(event);
     }}
-    style={{ ...placedAt(rect, depth), ...scaledAbout(frame, rect) }}
+    style={{
+      ...placedAt(rect, depth),
+      ...scaledAbout(frame, rect),
+      ...shuffledBy(restack),
+    }}
   >
     <span className={titleStyles}>{title}</span>
     {/*

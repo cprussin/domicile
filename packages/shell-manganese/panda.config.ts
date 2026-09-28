@@ -124,20 +124,29 @@ export default defineConfig({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
-        // A float raised over one it overlaps, and the one it covered: a
-        // swell towards the user and a dip away, over within a blink. Small,
-        // because the window has not gone anywhere — it is the stack that
-        // moved, and the scale is only there to say which way. About the
-        // middle of the frame, as everything here is — see `scaledAbout`.
-        windowSinking: {
-          "0%": { transform: "scale(1)" },
-          "40%": { transform: "scale(0.97)" },
-          "100%": { transform: "scale(1)" },
-        },
-        windowSurfacing: {
-          "0%": { transform: "scale(1)" },
-          "40%": { transform: "scale(1.03)" },
-          "100%": { transform: "scale(1)" },
+        // A float trading places with one it overlaps: it parts from the
+        // other, trades depths with it at the furthest point, and comes back.
+        // See `shuffledBy` for the custom properties, and `restacking.ts` for
+        // why a shuffle.
+        //
+        // The new depth is written at 51% as well as at the end, so it lands
+        // in the frame after the furthest point: left to interpolate from 50%
+        // to 100%, a step of one would round over three quarters of the way
+        // back, with the two windows already on top of each other again.
+        windowRestacking: {
+          "0%": {
+            transform: "translate(0, 0)",
+            zIndex: "var(--restack-from)",
+          },
+          "50%": {
+            transform: "translate(var(--restack-x), var(--restack-y))",
+            zIndex: "var(--restack-from)",
+          },
+          "51%": { zIndex: "var(--restack-to)" },
+          "100%": {
+            transform: "translate(0, 0)",
+            zIndex: "var(--restack-to)",
+          },
         },
         // A browser window's zoom, said for a moment and put away: in quickly
         // enough to answer the key that asked, held long enough to be read,

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import type { Rect } from "./rect";
+import type { Restack } from "./restacking";
 
 /**
  * What every window shares, which is almost nothing.
@@ -146,6 +147,30 @@ export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
 });
 
 /**
+ * The shuffle a window plays when it trades places with another in the stack,
+ * as the inline custom properties the `windowRestacking` keyframes read.
+ *
+ * Custom properties because both halves are runtime numbers — which way this
+ * window parts, and the two depths it trades — and a keyframe is a literal.
+ * The depths go through the animation rather than straight to `z-index`,
+ * because the whole point is *when* they change: at the furthest point apart,
+ * so the one going over is seen to come out from under the other first.
+ *
+ * Nothing for a window that is not shuffling.
+ */
+export const shuffledBy = (
+  restack: Restack | undefined,
+): Record<`--${string}`, number | string> =>
+  restack === undefined
+    ? {}
+    : {
+        "--restack-from": restack.from,
+        "--restack-to": restack.to,
+        "--restack-x": `${restack.away.x.toString()}px`,
+        "--restack-y": `${restack.away.y.toString()}px`,
+      };
+
+/**
  * What a window is doing over time, drawn.
  *
  * Every one of these is a transform and an opacity, which is what makes them
@@ -199,22 +224,18 @@ export const movingStyles = cva({
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",
       },
+      // A float trading places with one it overlaps, shuffled like a card: the
+      // two part, trade depths while apart, and come back together the other
+      // way up. Which way and which depths are the window's own, handed to the
+      // keyframes by {@link shuffledBy}. `in-out` on each half, so the pair
+      // hang apart for a moment at the point where they trade.
+      restacking: {
+        animation: "windowRestacking {durations.slower} {easings.in-out}",
+      },
       // A window that is simply on the desktop, which is most of them most of
       // the time. Revealed by a workspace switch, a tab, a fullscreen let go
       // of: it is there, and a window that is there has nothing to play.
       resting: {},
-      // A float trading places with one it overlaps: the one raised lifts
-      // towards the user as it comes over and the one it covered sinks back,
-      // and both settle where they were. A raise is otherwise a `z-index` that
-      // changes between two frames, which says nothing about which of the two
-      // moved. Back to where they started rather than `forwards`, because
-      // where they started is where they stay.
-      sinking: {
-        animation: "windowSinking {durations.normal} {easings.out}",
-      },
-      surfacing: {
-        animation: "windowSurfacing {durations.normal} {easings.out}",
-      },
     },
   },
 });

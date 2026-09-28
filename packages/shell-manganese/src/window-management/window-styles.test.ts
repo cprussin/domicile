@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { placedAt, scaledAbout } from "./window-styles";
+import { placedAt, scaledAbout, shuffledBy } from "./window-styles";
 
 const RECT = { height: 200, width: 300, x: 10, y: 20 };
 
@@ -53,5 +53,22 @@ describe("scaledAbout", () => {
     // A window a tab is hiding has nothing but its tab on screen, so the tab
     // is the frame and the shared point is the ordinary one.
     expect(scaledAbout(BAR, BAR).transformOrigin).toBe("960px 15px");
+  });
+});
+
+describe("shuffledBy", () => {
+  it("hands the shuffle to the keyframes as custom properties", () => {
+    expect(
+      shuffledBy({ away: { x: -48, y: 12 }, from: 1, id: "a", to: 2 }),
+    ).toStrictEqual({
+      "--restack-from": 1,
+      "--restack-to": 2,
+      "--restack-x": "-48px",
+      "--restack-y": "12px",
+    });
+  });
+
+  it("is nothing for a window that is not shuffling", () => {
+    expect(shuffledBy(undefined)).toStrictEqual({});
   });
 });

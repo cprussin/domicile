@@ -128,29 +128,38 @@ describe("useWindowMotion", () => {
       ],
     });
 
-    it("surfaces, and the one it covered sinks", () => {
+    it("shuffles over the one it covered, which shuffles under it", () => {
       const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
 
       act(() => {
         rerender(floating(EDITOR.id, TERMINAL.id));
       });
 
-      expect(motionOf(result, EDITOR.id)).toBe("surfacing");
-      expect(motionOf(result, TERMINAL.id)).toBe("sinking");
+      expect(
+        result.current.drawn.map(({ motion, restack, window }) => [
+          window.id,
+          motion,
+          restack?.from,
+          restack?.to,
+        ]),
+      ).toStrictEqual([
+        [TERMINAL.id, "restacking", 2, 1],
+        [EDITOR.id, "restacking", 1, 2],
+      ]);
     });
 
-    it("is done when it says it has surfaced", () => {
+    it("is done when it says it has shuffled", () => {
       const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
       act(() => {
         rerender(floating(EDITOR.id, TERMINAL.id));
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "surfacing");
+        result.current.onPlayedOut(EDITOR.id, "restacking");
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
-      expect(motionOf(result, TERMINAL.id)).toBe("sinking");
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking");
     });
   });
 

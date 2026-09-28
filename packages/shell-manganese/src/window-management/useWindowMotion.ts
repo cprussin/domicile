@@ -28,6 +28,11 @@ export type DrawnWindow = {
   motion: WindowMotion;
   /** Where it goes, or `undefined` when it is not on screen at all. */
   placement: Placement | undefined;
+  /**
+   * The shuffle it is playing — which way it parts, and the depths it trades —
+   * or `undefined` unless its motion is `restacking`.
+   */
+  restack: Restack | undefined;
   window: ShellWindow;
 };
 
@@ -52,7 +57,7 @@ type Playing = {
   closing: readonly Closing[];
   /** The windows that have just opened and are still growing in. */
   opening: readonly string[];
-  /** The floats still lifting over, or sinking under, one another. */
+  /** The floats still shuffling over, or under, one another. */
   restacking: readonly Restack[];
   switching: WorkspaceSwitch | undefined;
 };
@@ -86,16 +91,24 @@ const NOTHING_PLAYING: Playing = {
  * of it to keep in step.
  */
 export const useWindowMotion = (shown: Shown): WindowMotions => {
-  const [before, setBefore] = useState(shown);
-  const [playing, setPlaying] = useState(NOTHING_PLAYING);
+  // One state rather than two, so that what was last drawn and what is
+  // playing because of it are never out of step: two updates made while
+  // rendering are two updates React can keep one of — the desktop the raise
+  // was read from kept, and the shuffle it started dropped.
+  const [{ before, playing }, setState] = useState({
+    before: shown,
+    playing: NOTHING_PLAYING,
+  });
 
   if (moved(before, shown)) {
-    setBefore(shown);
-    setPlaying(advanced(playing, before, shown));
+    setState({ before: shown, playing: advanced(playing, before, shown) });
   }
 
   const onPlayedOut = useCallback((id: string, motion: WindowMotion) => {
-    setPlaying((playingNow) => played(playingNow, id, motion));
+    setState((now) => {
+      const next = played(now.playing, id, motion);
+      return next === now.playing ? now : { ...now, playing: next };
+    });
   }, []);
 
   return {
@@ -183,8 +196,7 @@ const played = (
         ? playing
         : { ...playing, opening };
     }
-    case "sinking":
-    case "surfacing": {
+    case "restacking": {
       const restacking = playing.restacking.filter(
         (restack) => restack.id !== id,
       );
@@ -213,15 +225,21 @@ const drawnWindow = (
       focused: closing.focused,
       motion: "closing",
       placement: closing.placement,
+      restack: undefined,
       window,
     };
   } else if (placement === undefined) {
     return leavingWindow(playing.switching, window);
   } else {
+    const motion = arriving(playing, window.id);
     return {
       focused: shown.activeId === window.id,
-      motion: arriving(playing, window.id),
+      motion,
       placement,
+      restack:
+        motion === "restacking"
+          ? playing.restacking.find(({ id }) => id === window.id)
+          : undefined,
       window,
     };
   }
@@ -234,15 +252,14 @@ const drawnWindow = (
  * is not done arriving because something was put over it.
  */
 const arriving = (playing: Playing, id: string): WindowMotion => {
-  const restack = playing.restacking.find((restacking) => restacking.id === id);
   if (playing.switching !== undefined) {
     return arrivalFrom(playing.switching.towards);
   } else if (playing.opening.includes(id)) {
     return "opening";
-  } else if (restack === undefined) {
-    return "resting";
   } else {
-    return restack.motion;
+    return playing.restacking.some((restack) => restack.id === id)
+      ? "restacking"
+      : "resting";
   }
 };
 
@@ -264,12 +281,19 @@ const leavingWindow = (
 ): DrawnWindow => {
   const placement = switching?.placements.find(({ id }) => id === window.id);
   if (switching === undefined || placement === undefined) {
-    return { focused: false, motion: "resting", placement: undefined, window };
+    return {
+      focused: false,
+      motion: "resting",
+      placement: undefined,
+      restack: undefined,
+      window,
+    };
   } else {
     return {
       focused: switching.activeId === window.id,
       motion: departureFor(switching.towards),
       placement,
+      restack: undefined,
       window,
     };
   }

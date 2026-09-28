@@ -221,11 +221,13 @@ the same reason: it is a layer in this page's layer tree, and it is the
 element the pointer hit-tests against, so the order it draws in and the order
 it is hit in are one fact rather than two that have to be kept in step.
 
-**Raising a float over one it overlaps is a movement**, not just a new
-`z-index`: the window raised swells towards the user as it comes over and the
-one it covered dips away, both settling back where they were. Only between
-floats that overlap — a raise nobody can see plays nothing — and never on a
-workspace switch or a fullscreen, which have movements of their own.
+**Raising a float over one it overlaps is a shuffle**, not just a new
+`z-index`: the two part, trade depths at the furthest point apart, and come
+back together the other way up — so the one raised is seen to come out from
+under the other and go over it. Its bar, its shadow and the ring go with it.
+Only between floats that overlap — a raise nobody can see plays nothing — and
+never on a workspace switch or a fullscreen, which have movements of their
+own.
 
 ### Tiled windows drag too
 
@@ -747,7 +749,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/window-motion.ts` | What a window is doing that the page has to draw over time, and which way a workspace switch went. |
 | `src/window-management/shown.ts` | The desktop as the page last drew it, which is the only place a close or a switch survives. |
 | `src/window-management/closing.ts` | A window that has closed: the box, the name and the keyboard it had, and where in the list it goes on being drawn. |
-| `src/window-management/restacking.ts` | Two overlapping floats trading places in the stack, and which of them surfaced. |
+| `src/window-management/restacking.ts` | Two overlapping floats trading places in the stack, and which way each parts from the other to shuffle. |
 | `src/window-management/workspace-switch.ts` | The workspace that has just left the screen, with the screenful it had and the way it went. |
 | `src/window-management/useWindowMotion.ts` | Which windows are drawn and what each of them is doing, worked out from the difference between two renders. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |

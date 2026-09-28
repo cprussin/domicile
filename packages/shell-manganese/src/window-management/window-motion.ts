@@ -30,9 +30,8 @@ export type WindowMotion =
   | "leaving-to-end"
   | "leaving-to-start"
   | "opening"
-  | "resting"
-  | "sinking"
-  | "surfacing";
+  | "restacking"
+  | "resting";
 
 /** How a window of the workspace being switched to comes on screen. */
 export const arrivalFrom = (towards: Towards): WindowMotion =>
@@ -63,9 +62,8 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "arriving-from-end":
     case "arriving-from-start":
     case "opening":
-    case "resting":
-    case "sinking":
-    case "surfacing": {
+    case "restacking":
+    case "resting": {
       return false;
     }
   }
