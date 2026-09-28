@@ -311,6 +311,29 @@ fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
 }
 
 #[test]
+fn a_client_can_be_given_limits_on_its_size() {
+    // What Electron says for an app with a minimum window size — Bitwarden's,
+    // here — and what a shell has to hear to stop squeezing it.
+    let asked = given(&["--min-size", "680x500", "--max-size", "1920x0"])
+        .expect("a client that will only be so small or so big");
+
+    assert_eq!(asked.min_size, Some((680, 500)));
+    assert_eq!(asked.max_size, Some((1920, 0)));
+    assert_eq!(given(&[]).unwrap().min_size, None, "and none unless asked");
+}
+
+#[test]
+fn a_size_that_is_not_two_numbers_is_refused() {
+    assert_eq!(
+        given(&["--min-size", "680"]),
+        Err(ArgumentError::NotASize {
+            flag: "--min-size".to_string(),
+            value: "680".to_string(),
+        })
+    );
+}
+
+#[test]
 fn an_argument_this_does_not_know_is_named_rather_than_ignored() {
     // An argument that goes nowhere is a request that silently did not
     // happen, which is the failure the compositor's own command line refuses

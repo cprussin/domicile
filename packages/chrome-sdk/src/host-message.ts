@@ -94,6 +94,19 @@ export type AppResizedMessage = {
   size: readonly [width: number, height: number];
 };
 
+/**
+ * The smallest or the largest a client will draw its window, per axis, and
+ * `undefined` on an axis it does not limit.
+ *
+ * A box outside it gets a frame that does not fill it: cut off at the box's
+ * edge when the window will not shrink, stretched when it will not grow. A
+ * shell that sizes windows keeps each inside its own.
+ */
+export type AppSizeLimitMessage = {
+  app_id: string;
+  size: readonly [width: number | undefined, height: number | undefined];
+};
+
 export type AppClosedMessage = {
   app_id: string;
 };
@@ -330,6 +343,8 @@ export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
   app_titled: AppTitledMessage;
   app_resized: AppResizedMessage;
+  app_min_size: AppSizeLimitMessage;
+  app_max_size: AppSizeLimitMessage;
   app_closed: AppClosedMessage;
   app_cursor: AppCursorMessage;
   focus_changed: FocusChangedMessage;
@@ -387,6 +402,12 @@ export const appResized = (event: DomicileAppEvent): AppResizedMessage => ({
   // compositor telling the page nothing. Doubles, because this is a layout box
   // and a CSS pixel is fractional.
   size: [event.width, event.height],
+});
+
+export const appSizeLimit = (event: DomicileAppEvent): AppSizeLimitMessage => ({
+  app_id: event.appId,
+  // xdg-shell's zero, which is no limit rather than a limit of nothing.
+  size: [limit(event.width), limit(event.height)],
 });
 
 export const appClosed = (event: DomicileAppEvent): AppClosedMessage => ({
@@ -549,3 +570,7 @@ export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({
  */
 const named = (value: string): string | undefined =>
   value === "" ? undefined : value;
+
+/** One axis of a size limit, where xdg-shell's `0` is none. */
+const limit = (pixels: number): number | undefined =>
+  pixels === 0 ? undefined : pixels;

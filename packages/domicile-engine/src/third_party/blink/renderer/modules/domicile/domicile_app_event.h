@@ -14,8 +14,9 @@ namespace blink {
 
 class DomicileAppEventInit;
 
-// Something happened to a window: it appeared, resized or closed, or the
-// keyboard moved to it or was asked for by it. One type for the five because
+// Something happened to a window: it appeared, resized or closed, said how
+// small or big it will be, or the keyboard moved to it or was asked for by it.
+// One type for the seven because
 // they carry the same thing -- which window -- and differ only in what else
 // they carry.
 //

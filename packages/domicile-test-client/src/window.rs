@@ -211,6 +211,10 @@ struct Client {
     /// Whether it grabs — see [`crate::arguments::Arguments::popup_grab`].
     popup_grab: bool,
     popup: Option<Popup>,
+    /// What to tell the compositor about its size — see
+    /// [`crate::arguments::Arguments::min_size`].
+    min_size: Option<(i32, i32)>,
+    max_size: Option<(i32, i32)>,
     /// Whether this client's window is see-through — see
     /// [`crate::arguments::Arguments::translucent`]. Held here rather than
     /// passed down because the buffers are remade whenever the window changes
@@ -421,6 +425,8 @@ impl Client {
             wants_popup: asked.popup,
             popup_grab: asked.popup_grab,
             popup: None,
+            min_size: asked.min_size,
+            max_size: asked.max_size,
             translucent: asked.translucent,
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
@@ -552,6 +558,12 @@ impl Client {
         // is one a shell cannot address. The title is the human name; this is
         // the one programs match on.
         toplevel.set_app_id("dev.domicile.test-client".to_string());
+        if let Some((width, height)) = self.min_size {
+            toplevel.set_min_size(width, height);
+        }
+        if let Some((width, height)) = self.max_size {
+            toplevel.set_max_size(width, height);
+        }
         // Asking to draw its own frame, which is what a client with
         // decorations of its own asks — and so the request whose answer
         // `tests/decorations.rs` reads. Before the first commit, as the

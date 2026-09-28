@@ -12,6 +12,9 @@ describe("ShellWindow", () => {
         cursor: undefined,
         id: "app:term",
         kind: WindowKind.App,
+        // Nor any limit on its size, until the client says one.
+        maxSize: [undefined, undefined],
+        minSize: [undefined, undefined],
         title: "Terminal",
       });
     });
