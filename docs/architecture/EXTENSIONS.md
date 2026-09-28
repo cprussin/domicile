@@ -120,7 +120,7 @@ Mutations go where the thing they change lives:
 
 Slice 1: extensions run, and show in a tray.
 
-- [ ] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
+- [x] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
 - [ ] `[extensions]` in `domicile-config`
 - [ ] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
 - [ ] `extension_installer` in the fork, and the control channel handing it the list
