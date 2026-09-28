@@ -88,6 +88,18 @@ const appResizedSchema = z.looseObject({
   type: z.literal("app_resized"),
 });
 
+// A popup a client opened over one of its windows: an `<app>` of its own,
+// placed at `position` from `parent`'s box rather than laid out. Sent again
+// when the client moves it; it goes with `app_closed`, like a window.
+const popupPlacedSchema = z.looseObject({
+  app_id: z.string(),
+  grab: z.boolean(),
+  parent: z.string(),
+  position: sizeSchema,
+  size: sizeSchema,
+  type: z.literal("popup_placed"),
+});
+
 const appClosedSchema = z.looseObject({
   app_id: z.string(),
   type: z.literal("app_closed"),
@@ -420,6 +432,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appAppearedSchema,
   appTitledSchema,
   appResizedSchema,
+  popupPlacedSchema,
   appClosedSchema,
   appCursorSchema,
   displaysSchema,
@@ -453,6 +466,7 @@ export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
+export type PopupPlacedMessage = z.infer<typeof popupPlacedSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;

@@ -17,6 +17,7 @@ use crate::engine::{
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_surfaces::Surfaces;
+use crate::engine_waiting::Waiting;
 use crate::uploads::UploadId;
 
 /// A buffer the engine was handed: a client's own dmabuf, or one of the
@@ -50,6 +51,27 @@ impl Submitted {
 
 /// A buffer coming back from the engine, and why. Every one of these is a
 /// `wl_buffer.release` the caller owes, or a buffer of its own that is free.
+/// What became of a frame handed to [`EngineSession::submit`].
+#[derive(Debug, PartialEq)]
+pub enum Submission {
+    /// Viz has it. The caller must not release the buffer.
+    Taken,
+    /// No page has embedded the surface yet, so it waits to go up when one
+    /// does — see `engine_waiting`. The caller must not release the buffer;
+    /// the frame it replaced, if any, is the caller's to give back.
+    Waiting { replaced: Option<Submitted> },
+    /// Nothing was submitted; the buffer is the caller's exactly as before.
+    Refused,
+}
+
+/// A frame as it will be submitted, once there is somewhere to submit it.
+#[derive(Debug)]
+struct Frame {
+    buffer: Submitted,
+    descriptor: DmabufDescriptor,
+    crop: (i32, i32, i32, i32),
+}
+
 #[derive(Debug)]
 pub struct Release {
     pub buffer: Submitted,
@@ -107,6 +129,9 @@ pub struct EngineSession {
     /// The part of its buffer each app's last frame showed, so the frame a
     /// reconnect puts back up is cropped the way it was.
     crops: HashMap<String, (i32, i32, i32, i32)>,
+    /// The frame each surface committed before a page embedded it — see
+    /// `engine_waiting`.
+    waiting: Waiting<Frame>,
 }
 
 impl EngineSession {
@@ -122,6 +147,7 @@ impl EngineSession {
             imports: HashMap::new(),
             held: HeldBuffers::default(),
             crops: HashMap::new(),
+            waiting: Waiting::default(),
         })
     }
 
@@ -193,8 +219,22 @@ impl EngineSession {
             }
         }
 
+        let mut releases = returned(taken.superseded, Returned::Abandoned);
+        // A frame waiting for an embed on the old engine waits no longer: the
+        // surface it names is gone, and the client draws again when the new
+        // one is embedded and it is configured.
+        releases.extend(
+            self.waiting
+                .take_all()
+                .into_iter()
+                .map(|(surface, frame)| Release {
+                    buffer: frame.buffer,
+                    surface,
+                    why: Returned::Abandoned,
+                }),
+        );
         let mut session = Reconnected {
-            releases: returned(taken.superseded, Returned::Abandoned),
+            releases,
             dialed,
             shown: Vec::new(),
             blank: Vec::new(),
@@ -213,8 +253,12 @@ impl EngineSession {
                 continue;
             };
             match self.show_again(app_id, &buffer, describe, now) {
-                true => session.shown.push(app_id.clone()),
-                false => {
+                Submission::Taken => session.shown.push(app_id.clone()),
+                // Not shown, but held: it goes up when the page embeds the
+                // surface again, and it replaced nothing — it is the only
+                // frame the surface has on the new engine.
+                Submission::Waiting { .. } => session.blank.push(app_id.clone()),
+                Submission::Refused => {
                     session.blank.push(app_id.clone());
                     session.releases.push(Release {
                         buffer,
@@ -241,9 +285,9 @@ impl EngineSession {
         buffer: &Submitted,
         describe: &Describe,
         now: Instant,
-    ) -> bool {
+    ) -> Submission {
         let Some(descriptor) = describe(buffer) else {
-            return false;
+            return Submission::Refused;
         };
         let crop = self.crops.get(app_id).copied().unwrap_or_default();
         self.submit(app_id, buffer.clone(), &descriptor, crop, (0, 0, 0, 0), now)
@@ -270,12 +314,8 @@ impl EngineSession {
         self.engine.set_clipboard(clipboard, text);
     }
 
-    /// Submits a buffer as `app_id`'s window.
-    ///
-    /// `true` means the engine has the buffer and **the caller must not release
-    /// it**. `false` means nothing was submitted and the buffer is the caller's
-    /// exactly as before — which is what every path that is not a submitted app
-    /// frame relies on.
+    /// Submits a buffer as `app_id`'s window. See [`Submission`] for whose
+    /// the buffer is afterward.
     pub fn submit(
         &mut self,
         app_id: &str,
@@ -284,17 +324,80 @@ impl EngineSession {
         crop: (i32, i32, i32, i32),
         damage: (i32, i32, i32, i32),
         now: Instant,
-    ) -> bool {
+    ) -> Submission {
         let Some(surface) = self.surface_for(app_id) else {
-            return false;
+            return Submission::Refused;
         };
-        // A frame the engine would drop is not a frame it is holding. Its
-        // buffer goes back to the client the ordinary way, because the one
-        // release that would ever have come for it is viz's, and viz was never
-        // given it -- see `engine_surfaces`.
+        // A frame the engine would drop is not a frame viz is holding — the
+        // one release that would ever have come for it is viz's, and viz was
+        // never given it -- see `engine_surfaces`. It waits instead, and goes
+        // up on the embed: see `engine_waiting`.
         if !self.surfaces.takes_frames(surface) {
-            return false;
+            let frame = Frame {
+                buffer,
+                descriptor: descriptor.clone(),
+                crop,
+            };
+            return Submission::Waiting {
+                replaced: self
+                    .waiting
+                    .wait(surface, frame)
+                    .map(|replaced| replaced.buffer),
+            };
         }
+        match self.put_up(app_id, surface, buffer, descriptor, crop, damage, now) {
+            true => Submission::Taken,
+            false => Submission::Refused,
+        }
+    }
+
+    /// Put the frame that was waiting for `surface` up, now that a page has
+    /// embedded it. `Ok(true)` is a frame shown; `Ok(false)` is none waiting;
+    /// an `Err` is one the engine would not take, whose buffer goes back.
+    pub fn show_what_was_waiting(
+        &mut self,
+        surface: SurfaceId,
+        now: Instant,
+    ) -> Result<bool, Release> {
+        let Some(frame) = self.waiting.take(surface) else {
+            return Ok(false);
+        };
+        let refused = |buffer| Release {
+            buffer,
+            surface,
+            why: Returned::Abandoned,
+        };
+        let Some(app_id) = self.surfaces.app_for(surface).map(str::to_owned) else {
+            return Err(refused(frame.buffer));
+        };
+        let buffer = frame.buffer.clone();
+        match self.put_up(
+            &app_id,
+            surface,
+            frame.buffer,
+            &frame.descriptor,
+            frame.crop,
+            (0, 0, 0, 0),
+            now,
+        ) {
+            true => Ok(true),
+            false => Err(refused(buffer)),
+        }
+    }
+
+    /// Import and submit a frame for a surface a page has embedded, and hold
+    /// its buffer. `false` is a buffer the engine would not import.
+    #[allow(clippy::too_many_arguments)] // One frame's worth, as `submit` takes it.
+    fn put_up(
+        &mut self,
+        app_id: &str,
+        surface: SurfaceId,
+        buffer: Submitted,
+        descriptor: &DmabufDescriptor,
+        crop: (i32, i32, i32, i32),
+        damage: (i32, i32, i32, i32),
+        now: Instant,
+    ) -> bool {
         let Some(id) = self.import(surface, &buffer, descriptor) else {
             return false;
         };
@@ -358,14 +461,32 @@ impl EngineSession {
             return Vec::new();
         };
         self.imports.retain(|_, (held, _)| *held != surface);
+        let waited = self.waiting.take(surface).map(|frame| Release {
+            buffer: frame.buffer,
+            surface,
+            why: Returned::Abandoned,
+        });
         returned(self.held.abandon(surface), Returned::Abandoned)
+            .into_iter()
+            .chain(waited)
+            .collect()
     }
 
     /// The client destroyed a `wl_buffer`. Drops the import so its fds go, and
     /// hands back the hold if the engine still had it — no release will arrive
     /// for a buffer whose object is gone.
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
-        let (surface, id) = self.imports.remove(&ImportKey::Client(buffer.id()))?;
+        // A frame waiting for an embed whose buffer is gone has nothing left
+        // to put up. It was never imported, so there is nothing else to drop.
+        let key = ImportKey::Client(buffer.id());
+        if let Some((surface, frame)) = self.waiting.take_where(|frame| frame.buffer.key() == key) {
+            return Some(Release {
+                buffer: frame.buffer,
+                surface,
+                why: Returned::Abandoned,
+            });
+        }
+        let (surface, id) = self.imports.remove(&key)?;
         self.engine.forget(surface, id);
         self.held.release(surface, id).map(|buffer| Release {
             buffer,

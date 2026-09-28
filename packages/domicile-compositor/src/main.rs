@@ -113,6 +113,7 @@ mod engine;
 mod engine_buffers;
 mod engine_session;
 mod engine_surfaces;
+mod engine_waiting;
 mod file_indexing;
 mod gbm;
 mod idle;
@@ -138,7 +139,7 @@ mod window_geometry;
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard};
 use crate::engine_buffers::Returned;
-use crate::engine_session::{EngineSession, Submitted};
+use crate::engine_session::{EngineSession, Submission, Submitted};
 use crate::gbm::Gbm;
 use crate::latency::{Latency, Step as LatencyStep};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
@@ -1779,6 +1780,16 @@ struct DomicileCompositor {
     content: HashMap<String, u64>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
+    /// Every popup a window has open — its menus — by the id the host gave
+    /// it. An app of its own to the engine and the page, placed rather than
+    /// laid out: see `HostMessage::PopupPlaced`. Only those announced, which
+    /// is once one has a buffer.
+    popups: Vec<(String, PopupSurface)>,
+    /// The popups holding a grab — a menu, and the submenus opened from it —
+    /// outermost first. They have the keyboard while they are open, and the
+    /// keyboard going anywhere but their window dismisses every one of them:
+    /// see `ClientRequest::KeyboardFocus`.
+    grabbing: Vec<PopupSurface>,
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
@@ -2026,27 +2037,101 @@ impl DomicileCompositor {
             .map(|(_, toplevel)| toplevel.clone())
     }
 
+    /// The surface an app id names: a window, or a popup over one.
     fn surface_for(&self, app_id: &str) -> Option<WlSurface> {
         self.toplevel_for(app_id)
             .map(|toplevel| toplevel.wl_surface().clone())
+            .or_else(|| {
+                self.popups
+                    .iter()
+                    .find(|(id, _)| id == app_id)
+                    .map(|(_, popup)| popup.wl_surface().clone())
+            })
     }
 
     fn now_ms(&self) -> u32 {
         self.start.elapsed().as_millis() as u32
     }
 
-    /// Who committed `surface`, and the toplevel to configure — the two roles
-    /// share every step of a commit except what becomes of the buffer.
-    fn committer(&self, surface: &WlSurface) -> Option<(Committer, ToplevelSurface)> {
+    /// Who committed `surface`, and the role it committed in — every role
+    /// shares every step of a commit except what becomes of the buffer and
+    /// how big it was asked to be.
+    fn committer(&self, surface: &WlSurface) -> Option<(Committer, Role)> {
         if let Some(chrome) = &self.chrome_toplevel {
             if chrome.wl_surface() == surface {
-                return Some((Committer::Chrome, chrome.clone()));
+                return Some((Committer::Chrome, Role::Toplevel(chrome.clone())));
             }
         }
         self.toplevels
             .iter()
             .find(|(_, toplevel)| toplevel.wl_surface() == surface)
-            .map(|(app_id, toplevel)| (Committer::App(app_id.clone()), toplevel.clone()))
+            .map(|(app_id, toplevel)| {
+                (
+                    Committer::App(app_id.clone()),
+                    Role::Toplevel(toplevel.clone()),
+                )
+            })
+            .or_else(|| {
+                self.popups
+                    .iter()
+                    .find(|(_, popup)| popup.wl_surface() == surface)
+                    .map(|(app_id, popup)| {
+                        (Committer::App(app_id.clone()), Role::Popup(popup.clone()))
+                    })
+            })
+    }
+
+    /// Announce a window's popup, the first time it commits a buffer.
+    ///
+    /// Not when the client makes it: a popup is configured before it draws,
+    /// and one that never draws is a menu nobody asked the shell to place.
+    /// A popup over the chrome's own window is the engine's and not a
+    /// window's — it has no app to be placed over — and is left alone.
+    fn announce_a_new_popup(&mut self, surface: &WlSurface) {
+        if self
+            .popups
+            .iter()
+            .any(|(_, popup)| popup.wl_surface() == surface)
+        {
+            return;
+        }
+        let Some(popup) = self
+            .xdg_shell_state
+            .popup_surfaces()
+            .iter()
+            .find(|popup| popup.wl_surface() == surface)
+            .cloned()
+        else {
+            return;
+        };
+        let has_a_buffer = with_states(surface, |states| {
+            let mut attributes = states.cached_state.get::<SurfaceAttributes>();
+            matches!(
+                attributes.current().buffer,
+                Some(BufferAssignment::NewBuffer(_))
+            )
+        });
+        let Some(parent) = popup
+            .get_parent_surface()
+            .and_then(|parent| self.app_id_of(&parent))
+        else {
+            return;
+        };
+        if !has_a_buffer {
+            return;
+        }
+        let geometry = popup.with_pending_state(|state| state.geometry);
+        let placed = self.hub.host.lock().unwrap().popup_placed(
+            &parent,
+            (f64::from(geometry.loc.x), f64::from(geometry.loc.y)),
+            (f64::from(geometry.size.w), f64::from(geometry.size.h)),
+            self.grabbing.contains(&popup),
+        );
+        if let Some((app_id, message)) = placed {
+            debug!(%app_id, %parent, "popup mapped -> Host::popup_placed");
+            self.popups.push((app_id, popup));
+            self.hub.broadcast(message);
+        }
     }
 
     /// Say what shape the chrome's frame is, when it changes.
@@ -2202,6 +2287,68 @@ impl DomicileCompositor {
             .iter()
             .find(|(_, toplevel)| toplevel.wl_surface() == surface)
             .map(|(app_id, _)| app_id.clone())
+            .or_else(|| {
+                self.popups
+                    .iter()
+                    .find(|(_, popup)| popup.wl_surface() == surface)
+                    .map(|(app_id, _)| app_id.clone())
+            })
+    }
+
+    /// Everything held for an app — a window or a popup — let go of, and the
+    /// chromes told it is gone.
+    fn forget(&mut self, app_id: &str) {
+        // Anything the engine was holding for this window comes back now.
+        // No release will ever arrive for a surface that is gone, and the
+        // client may still be running.
+        let abandoned = self
+            .engine
+            .as_mut()
+            .map(|session| session.window_gone(app_id))
+            .unwrap_or_default();
+        for release in abandoned {
+            self.returned(release.buffer);
+        }
+        // Its buffers go too. Every one viz had came back just above, and
+        // the session dropped their imports with the surface.
+        self.uploads.forget(app_id);
+        self.last_frame.remove(app_id);
+        // The commit counter too, which was the one sibling map this
+        // forgot. A stale entry could never be *read* — host ids are
+        // monotonic, so no later window takes this name — but it would sit
+        // there for the life of the process.
+        self.content.remove(app_id);
+        // And nothing is owed to a canvas that no longer exists.
+        // An app id can come back — a client that reconnects, a portal
+        // re-created — and the window it names then is a different one.
+        if self.pointer_app.as_deref() == Some(app_id) {
+            self.pointer_app = None;
+        }
+        debug!(%app_id, "gone -> Host::app_closed");
+        broadcast_closed(&self.hub, app_id);
+    }
+
+    /// The window a popup is over, however many popups deep: the app id of
+    /// the toplevel at the bottom of its chain.
+    fn window_under(&self, popup: &PopupSurface) -> Option<String> {
+        let mut parent = popup.get_parent_surface()?;
+        loop {
+            match self
+                .popups
+                .iter()
+                .find(|(_, popup)| *popup.wl_surface() == parent)
+            {
+                Some((_, popup)) => parent = popup.get_parent_surface()?,
+                None => return self.app_id_of(&parent),
+            }
+        }
+    }
+
+    /// Every grabbing popup dismissed, innermost first, as xdg-shell wants.
+    fn dismiss_the_menus(&mut self) {
+        for menu in self.grabbing.drain(..).rev() {
+            menu.send_popup_done();
+        }
     }
 
     /// A buffer the engine let go of goes back to whoever owns it: the client,
@@ -2290,6 +2437,24 @@ impl DomicileCompositor {
                     let Some(app_id) = app_id else {
                         continue;
                     };
+                    // A page embedded it, so a frame committed before that has
+                    // somewhere to go — a popup's only frame, often.
+                    let waited = self
+                        .engine
+                        .as_mut()
+                        .map(|session| session.show_what_was_waiting(surface, Instant::now()));
+                    match waited {
+                        Some(Ok(true)) => self.frame_shown(&app_id),
+                        Some(Err(refused)) => {
+                            warn!(%app_id, "the engine would not take the frame that waited for this window");
+                            self.returned(refused.buffer);
+                        }
+                        Some(Ok(false)) | None => {}
+                    }
+                    // A popup's size is its positioner's, not the page's box.
+                    if self.popups.iter().any(|(id, _)| *id == app_id) {
+                        continue;
+                    }
                     let Some(toplevel) = self.toplevel_for(&app_id) else {
                         tracing::debug!(%app_id, "the engine configured an app with no toplevel");
                         continue;
@@ -2733,7 +2898,7 @@ impl DomicileCompositor {
             ),
             CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop),
         };
-        if published != Published::NotShown {
+        if matches!(published, Published::Held | Published::Copied) {
             self.frame_shown(app_id);
         }
         published
@@ -2763,8 +2928,16 @@ impl DomicileCompositor {
             (0, 0, 0, 0),
             Instant::now(),
         ) {
-            true => shown,
-            false => Published::NotShown,
+            Submission::Taken => shown,
+            Submission::Waiting { replaced } => {
+                if let Some(buffer) = replaced {
+                    self.returned(buffer);
+                }
+                Published::Waiting {
+                    held: shown == Published::Held,
+                }
+            }
+            Submission::Refused => Published::NotShown,
         }
     }
 
@@ -4527,6 +4700,19 @@ impl DomicileCompositor {
                 self.tell_the_chromes_the_modifiers();
             }
             ClientRequest::KeyboardFocus { app_id } => {
+                // A menu open over the window the keyboard is going to keeps
+                // it: a press on the menu reaches a shell as a press on that
+                // window. Anywhere else and the menu is dismissed, as a click
+                // elsewhere does on any desktop.
+                if let Some(menu) = self.grabbing.last().cloned() {
+                    if app_id.is_some() && app_id == self.window_under(&menu) {
+                        let keyboard = self.seat.get_keyboard().unwrap();
+                        let serial = SERIAL_COUNTER.next_serial();
+                        keyboard.set_focus(self, Some(menu.wl_surface().clone()), serial);
+                        return;
+                    }
+                    self.dismiss_the_menus();
+                }
                 let requested = match &app_id {
                     Some(id) => self.surface_for(id),
                     None => None,
@@ -4667,10 +4853,20 @@ impl DomicileCompositor {
                     debug!(%app_id, "close -> client");
                     toplevel.send_close();
                 }
-                // The window went away while the message was in flight, which
-                // is the outcome that was asked for. Still said, because the
-                // other way to reach this line is an id the chrome invented.
-                None => debug!(%app_id, "close: a window with no toplevel"),
+                // A popup is dismissed rather than closed, which is how a
+                // shell takes a menu down when a press lands elsewhere. The
+                // client destroys it in answer, and that is `popup_destroyed`.
+                None => match self.popups.iter().find(|(id, _)| *id == app_id) {
+                    Some((_, popup)) => {
+                        debug!(%app_id, "dismiss -> client");
+                        popup.send_popup_done();
+                    }
+                    // The window went away while the message was in flight,
+                    // which is the outcome that was asked for. Still said,
+                    // because the other way to reach this line is an id the
+                    // chrome invented.
+                    None => debug!(%app_id, "close: a window with no toplevel"),
+                },
             },
         }
     }
@@ -4773,6 +4969,13 @@ const CHROME_LAYER: &str = "<the chrome>";
 /// apart by. Only compared, never followed.
 fn chrome_key(writer: &Arc<Mutex<UnixStream>>) -> usize {
     Arc::as_ptr(writer) as usize
+}
+
+/// The role a surface committed in, for the steps of a commit that differ.
+#[derive(Clone)]
+enum Role {
+    Toplevel(ToplevelSurface),
+    Popup(PopupSurface),
 }
 
 /// Which of the two kinds of client committed a buffer.
@@ -5030,6 +5233,10 @@ enum Published {
     Held,
     /// The engine took a copy, so the client's buffer is free already.
     Copied,
+    /// No page has embedded the window yet, so the frame waits to go up when
+    /// one does — see `engine_waiting`. `held` as in [`Published::Held`]: the
+    /// client's own buffer is the one waiting.
+    Waiting { held: bool },
 }
 
 /// An shm frame in one of the compositor's buffers, ready to submit.
@@ -5084,7 +5291,8 @@ impl CompositorHandler for DomicileCompositor {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
-        let Some((committer, toplevel)) = self.committer(surface) else {
+        self.announce_a_new_popup(surface);
+        let Some((committer, role)) = self.committer(surface) else {
             return;
         };
         // Before anything below can return early, which is deliberately the
@@ -5097,17 +5305,20 @@ impl CompositorHandler for DomicileCompositor {
         *self.content.entry(painted_key(&committer)).or_default() += 1;
 
         // Send the initial configure once, so the client can map its buffer.
-        let initial_configure_sent = with_states(surface, |states| {
-            states
-                .data_map
-                .get::<XdgToplevelSurfaceData>()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .initial_configure_sent
-        });
-        if !initial_configure_sent {
-            toplevel.send_configure();
+        // A popup's went out when it was made — see `new_popup`.
+        if let Role::Toplevel(toplevel) = &role {
+            let initial_configure_sent = with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .initial_configure_sent
+            });
+            if !initial_configure_sent {
+                toplevel.send_configure();
+            }
         }
 
         // Take the newly-attached buffer and drain the frame callbacks. Taking
@@ -5208,8 +5419,15 @@ impl CompositorHandler for DomicileCompositor {
                 Committer::App(app_id) => {
                     // The size the page's box last asked for, which a
                     // client need not have drawn at — see `crop`.
-                    let configured = toplevel
-                        .with_pending_state(|state| state.size.map(|size| (size.w, size.h)));
+                    let configured = match &role {
+                        Role::Toplevel(toplevel) => toplevel
+                            .with_pending_state(|state| state.size.map(|size| (size.w, size.h))),
+                        // Its positioner's size, which is the box the shell
+                        // is told to place.
+                        Role::Popup(popup) => popup.with_pending_state(|state| {
+                            Some((state.geometry.size.w, state.geometry.size.h))
+                        }),
+                    };
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
                         let size = committed.size();
                         crate::window_geometry::crop(
@@ -5224,8 +5442,15 @@ impl CompositorHandler for DomicileCompositor {
                     // something submitted to find — but timed from `started`,
                     // which is before it. The import and the submit are ours,
                     // and a round's second half is meant to contain them.
-                    self.drive_latency(app_id, started, published != Published::NotShown);
-                    published == Published::Held
+                    self.drive_latency(
+                        app_id,
+                        started,
+                        matches!(published, Published::Held | Published::Copied),
+                    );
+                    matches!(
+                        published,
+                        Published::Held | Published::Waiting { held: true }
+                    )
                 }
                 Committer::Chrome => {
                     self.publish_chrome_frame(&buffer, buffer_scale, viewport);
@@ -5679,34 +5904,7 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, t)| t.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.toplevels.remove(pos);
-            // Anything the engine was holding for this window comes back now.
-            // No release will ever arrive for a surface that is gone, and the
-            // client may still be running.
-            let abandoned = self
-                .engine
-                .as_mut()
-                .map(|session| session.window_gone(&app_id))
-                .unwrap_or_default();
-            for release in abandoned {
-                self.returned(release.buffer);
-            }
-            // Its buffers go too. Every one viz had came back just above, and
-            // the session dropped their imports with the surface.
-            self.uploads.forget(&app_id);
-            self.last_frame.remove(&app_id);
-            // The commit counter too, which was the one sibling map this
-            // forgot. A stale entry could never be *read* — host ids are
-            // monotonic, so no later window takes this name — but it would sit
-            // there for the life of the process.
-            self.content.remove(&app_id);
-            // And nothing is owed to a canvas that no longer exists.
-            // An app id can come back — a client that reconnects, a portal
-            // re-created — and the window it names then is a different one.
-            if self.pointer_app.as_deref() == Some(app_id.as_str()) {
-                self.pointer_app = None;
-            }
-            debug!(%app_id, "toplevel destroyed -> Host::app_closed");
-            broadcast_closed(&self.hub, &app_id);
+            self.forget(&app_id);
             // The window that had the keyboard has gone, and a keyboard with
             // nowhere to go is a desktop that has stopped listening. The chrome
             // will usually ask for it back — but it does not have to, and a
@@ -5718,6 +5916,34 @@ impl XdgShellHandler for DomicileCompositor {
             // is no longer anything on this desktop for a person to be
             // watching.
             self.the_windows_changed("the window holding this desktop awake is gone");
+        }
+    }
+
+    /// A popup went: the client destroyed it, usually because it was
+    /// dismissed. The keyboard stays where it is — on the window it was over.
+    fn popup_destroyed(&mut self, surface: PopupSurface) {
+        if let Some(pos) = self
+            .popups
+            .iter()
+            .position(|(_, popup)| popup.wl_surface() == surface.wl_surface())
+        {
+            let (app_id, _) = self.popups.remove(pos);
+            debug!(%app_id, "popup destroyed -> Host::app_closed");
+            self.forget(&app_id);
+        }
+        // A menu that had the keyboard hands it down: to the menu it was
+        // opened from, or to its window once the last one is gone.
+        if let Some(at) = self.grabbing.iter().position(|popup| *popup == surface) {
+            let root = self.window_under(&surface);
+            self.grabbing.remove(at);
+            let next = self
+                .grabbing
+                .last()
+                .map(|popup| popup.wl_surface().clone())
+                .or_else(|| root.and_then(|app_id| self.surface_for(&app_id)));
+            let keyboard = self.seat.get_keyboard().unwrap();
+            let serial = SERIAL_COUNTER.next_serial();
+            keyboard.set_focus(self, next, serial);
         }
     }
 
@@ -5779,7 +6005,19 @@ impl XdgShellHandler for DomicileCompositor {
     ) {
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
+    /// A menu asking for the keyboard and for every press, until it goes.
+    ///
+    /// The serial is not checked against the press that opened it: the only
+    /// presses are the ones the chrome forwards, and a menu refused over a
+    /// serial would be one that never opened, with nothing to say why.
+    fn grab(&mut self, surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+        if !self.grabbing.contains(&surface) {
+            self.grabbing.push(surface.clone());
+        }
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+        keyboard.set_focus(self, Some(surface.wl_surface().clone()), serial);
+    }
 }
 
 delegate_xdg_shell!(DomicileCompositor);
@@ -6643,6 +6881,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hub,
         content: HashMap::new(),
         toplevels: Vec::new(),
+        popups: Vec::new(),
+        grabbing: Vec::new(),
         pointer_app: None,
         start: Instant::now(),
         last_frame: HashMap::new(),

@@ -36,7 +36,9 @@ use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xd
 use wayland_protocols::xdg::decoration::zv1::client::{
     zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
-use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
+use wayland_protocols::xdg::shell::client::{
+    xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
+};
 
 use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
@@ -72,6 +74,15 @@ pub enum ClientError {
 /// `--follow-configure`; without that flag it is the size for the client's
 /// whole life. See [`crate::arguments::Arguments::follow_configure`].
 const SIZE: (u32, u32) = (320, 240);
+
+/// Where `--popup` opens its menu against the window, and how big: `(x, y,
+/// width, height)` in the window's surface pixels. Public because that is what
+/// a check expects the compositor to say the popup is.
+pub const POPUP: (i32, i32, i32, i32) = (10, 20, 120, 80);
+
+/// The one color a popup draws, which is neither of [`COLORS`] — so a popup
+/// found on screen is the popup and not the window under it.
+pub const POPUP_COLOR: u32 = 0x00_c0_40_20;
 
 /// The two colors a frame alternates between.
 ///
@@ -194,6 +205,12 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
 /// The globals a window needs, and the window once it has them.
 struct Client {
     title: String,
+    /// Whether to open a popup once the window is up — see
+    /// [`crate::arguments::Arguments::popup`] — and the popup, while it is.
+    wants_popup: bool,
+    /// Whether it grabs — see [`crate::arguments::Arguments::popup_grab`].
+    popup_grab: bool,
+    popup: Option<Popup>,
     /// Whether this client's window is see-through — see
     /// [`crate::arguments::Arguments::translucent`]. Held here rather than
     /// passed down because the buffers are remade whenever the window changes
@@ -305,9 +322,25 @@ struct Selections {
     copied: bool,
 }
 
+/// What marks a popup's objects, so that their events are not taken for the
+/// window's: the same interfaces arrive for both, and the window's handlers
+/// are keyed on `()`.
+struct PopupRole;
+
+/// A `--popup`, once it is open: one surface drawn once, in [`POPUP_COLOR`].
+struct Popup {
+    surface: wl_surface::WlSurface,
+    xdg: xdg_surface::XdgSurface,
+    popup: xdg_popup::XdgPopup,
+    /// Its one buffer, made at its first configure, and the file behind it.
+    drawn: Option<(wl_buffer::WlBuffer, std::fs::File)>,
+}
+
 /// The surface and the pixels behind it, which exist together or not at all.
 struct Window {
     surface: wl_surface::WlSurface,
+    /// What a popup is placed against.
+    xdg: xdg_surface::XdgSurface,
     pixels: Pixels,
     /// The surface's size, in surface-local pixels.
     ///
@@ -385,6 +418,9 @@ impl Client {
     fn new(asked: &Arguments) -> Client {
         Client {
             title: asked.title.clone(),
+            wants_popup: asked.popup,
+            popup_grab: asked.popup_grab,
+            popup: None,
             translucent: asked.translucent,
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
@@ -542,6 +578,7 @@ impl Client {
         }
         self.window = Some(Window {
             surface,
+            xdg,
             pixels,
             size: SIZE,
             scale: 1,
@@ -952,6 +989,102 @@ fn ask_for_focus_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     }
 }
 
+/// Open the `--popup` over the window, once and only if asked.
+///
+/// A menu as a toolkit makes one: a positioner that anchors it to a point in
+/// the window, a surface of its own, and a first commit with no buffer, which
+/// the compositor answers with where it put it.
+fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
+    if !client.wants_popup {
+        return;
+    }
+    client.wants_popup = false;
+    let (Some(compositor), Some(wm_base), Some(window)) = (
+        client.globals.compositor.as_ref(),
+        client.globals.wm_base.as_ref(),
+        client.window.as_ref(),
+    ) else {
+        unreachable!("open() refuses a compositor without these, and made the window");
+    };
+    let (x, y, width, height) = POPUP;
+    let positioner = wm_base.create_positioner(handle, ());
+    positioner.set_size(width, height);
+    positioner.set_anchor_rect(x, y, 1, 1);
+    positioner.set_anchor(xdg_positioner::Anchor::TopLeft);
+    positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
+    let surface = compositor.create_surface(handle, PopupRole);
+    let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
+    let popup = xdg.get_popup(Some(&window.xdg), &positioner, handle, PopupRole);
+    positioner.destroy();
+    // Before the first commit, as xdg-shell wants. The serial is meant to be
+    // the press that opened the menu, and this client opens it unprompted:
+    // a compositor that checked it would dismiss this one, which a check
+    // about grabs would see as the popup going.
+    if client.popup_grab {
+        if let Some(seat) = &client.globals.seat {
+            popup.grab(seat, 0);
+            crate::say!(popup.id(), "grab()");
+        }
+    }
+    // With its surface, which is what input to it names.
+    crate::say!(popup.id(), "opened({})", surface.id());
+    surface.commit();
+    client.popup = Some(Popup {
+        surface,
+        xdg,
+        popup,
+        drawn: None,
+    });
+}
+
+/// Draw the popup's one frame, or end the process saying why.
+fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
+    let shm = client
+        .globals
+        .shm
+        .as_ref()
+        .expect("open() refuses a compositor without wl_shm");
+    let popup = client
+        .popup
+        .as_mut()
+        .expect("only a popup this client opened is configured");
+    if popup.drawn.is_some() {
+        return;
+    }
+    let (_, _, width, height) = POPUP;
+    let bytes = (width * height * 4) as usize;
+    let pixels: Vec<u8> = POPUP_COLOR
+        .to_ne_bytes()
+        .iter()
+        .copied()
+        .cycle()
+        .take(bytes)
+        .collect();
+    let file = anonymous(bytes).and_then(|file| file.write_all_at(&pixels, 0).map(|()| file));
+    let file = match file {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("domicile-test-client: could not draw the popup: {err}");
+            std::process::exit(1);
+        }
+    };
+    let pool = shm.create_pool(file.as_fd(), bytes as i32, handle, ());
+    let buffer = pool.create_buffer(
+        0,
+        width,
+        height,
+        width * 4,
+        shm_format(false),
+        handle,
+        PopupRole,
+    );
+    pool.destroy();
+    popup.surface.attach(Some(&buffer), 0, 0);
+    popup.surface.damage(0, 0, width, height);
+    popup.surface.commit();
+    popup.drawn = Some((buffer, file));
+}
+
 fn draw_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     // A window that has been closed on a client that outlives it has nothing
     // to draw into: the frame callback asked for before the close still
@@ -1114,7 +1247,60 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 // and a surface nothing has mapped is not a window any shell
                 // could be asked about.
                 ask_for_focus_or_stop(client, handle);
+                // And a popup is placed against a window that is mapped.
+                open_popup(client, handle);
             }
+        }
+    }
+}
+
+impl Dispatch<xdg_surface::XdgSurface, PopupRole> for Client {
+    fn event(
+        client: &mut Client,
+        xdg: &xdg_surface::XdgSurface,
+        event: xdg_surface::Event,
+        _: &PopupRole,
+        _: &Connection,
+        handle: &QueueHandle<Client>,
+    ) {
+        if let xdg_surface::Event::Configure { serial } = event {
+            xdg.ack_configure(serial);
+            draw_popup_or_stop(client, handle);
+        }
+    }
+}
+
+impl Dispatch<xdg_popup::XdgPopup, PopupRole> for Client {
+    fn event(
+        client: &mut Client,
+        popup: &xdg_popup::XdgPopup,
+        event: xdg_popup::Event,
+        _: &PopupRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            // Where the compositor put it, relative to the window: what a
+            // check compares against what the chrome was told.
+            xdg_popup::Event::Configure {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                crate::say!(popup.id(), "configure({x}, {y}, {width}, {height})");
+            }
+            // Dismissed, which a toolkit answers by destroying the popup: a
+            // menu that was dismissed and stayed would be a menu still open.
+            xdg_popup::Event::PopupDone => {
+                crate::say!(popup.id(), "popup_done()");
+                if let Some(open) = client.popup.take() {
+                    open.popup.destroy();
+                    open.xdg.destroy();
+                    open.surface.destroy();
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -1501,6 +1687,33 @@ delegate_noop!(Client: ignore zwp_primary_selection_offer_v1::ZwpPrimarySelectio
 delegate_noop!(Client: ignore wl_compositor::WlCompositor);
 delegate_noop!(Client: ignore wl_shm::WlShm);
 delegate_noop!(Client: ignore wl_shm_pool::WlShmPool);
+delegate_noop!(Client: ignore xdg_positioner::XdgPositioner);
+
+// Nothing about a popup's surface or its buffer is read: it is drawn once and
+// left, and which screens it is on is the window's to say.
+impl Dispatch<wl_surface::WlSurface, PopupRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_surface::WlSurface,
+        _: wl_surface::Event,
+        _: &PopupRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_buffer::WlBuffer, PopupRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_buffer::WlBuffer,
+        _: wl_buffer::Event,
+        _: &PopupRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
 delegate_noop!(Client: ignore wp_cursor_shape_manager_v1::WpCursorShapeManagerV1);
 delegate_noop!(Client: ignore wp_cursor_shape_device_v1::WpCursorShapeDeviceV1);
 
@@ -1642,7 +1855,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
             // The one moment this client may copy — see
             // `Client::copy_what_was_asked_for`, which says why the protocol
             // makes that the rule.
-            wl_keyboard::Event::Enter { .. } => {
+            wl_keyboard::Event::Enter { surface, .. } => {
+                // Which surface: the window's, or a menu's that grabbed.
+                crate::say!(keyboard.id(), "enter({})", surface.id());
                 client.copy_what_was_asked_for(handle);
             }
             wl_keyboard::Event::Key {

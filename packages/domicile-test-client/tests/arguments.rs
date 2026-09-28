@@ -294,6 +294,23 @@ fn a_client_can_be_asked_to_read_what_is_offered() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_open_a_menu_over_its_window() {
+    // An `xdg_popup`, which is what a menu bar's menu is on Wayland — and
+    // none unless asked, because most checks want a window and nothing else.
+    assert!(given(&["--popup"]).expect("a client with a menu").popup);
+    assert!(!given(&[]).unwrap().popup);
+}
+
+#[test]
+fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
+    // A grab, which is what a menu opened from a menu bar asks for — and a
+    // grabbing popup is still a popup.
+    let asked = given(&["--popup-grab"]).expect("a client with a grabbing menu");
+    assert!(asked.popup && asked.popup_grab);
+    assert!(!given(&["--popup"]).unwrap().popup_grab);
+}
+
+#[test]
 fn an_argument_this_does_not_know_is_named_rather_than_ignored() {
     // An argument that goes nowhere is a request that silently did not
     // happen, which is the failure the compositor's own command line refuses
