@@ -206,6 +206,7 @@ export const Stage = ({
                 dragging={window.id === draggingId}
                 focused={focused}
                 frame={placement?.frame}
+                fullscreen={window.id === fullscreenId}
                 hasKeyboard={window.id === focusedId}
                 key={window.id}
                 motion={motion}
@@ -229,6 +230,7 @@ export const Stage = ({
                 dragging={window.id === draggingId}
                 focused={focused}
                 frame={placement?.frame}
+                fullscreen={window.id === fullscreenId}
                 key={window.id}
                 motion={motion}
                 onHover={(at) => {

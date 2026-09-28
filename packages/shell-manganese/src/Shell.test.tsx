@@ -1327,6 +1327,20 @@ describe("Shell", () => {
       });
     });
 
+    it("squares the corners of the window filling the screen", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+
+      press("f");
+
+      expect(appElement(container, "term").className).not.toContain(
+        css({ borderEndEndRadius: "lg" }),
+      );
+      expect(barFor(container, "app:term").className).not.toContain(
+        css({ borderStartStartRadius: "lg" }),
+      );
+    });
+
     it("spreads a global fullscreen across every screen", () => {
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("term");
