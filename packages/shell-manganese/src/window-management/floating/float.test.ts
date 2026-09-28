@@ -58,21 +58,12 @@ describe("movedTo", () => {
     expect(movedTo(AT, 300, 200)).toStrictEqual({ ...AT, x: 300, y: 200 });
   });
 
-  it("keeps a window dragged off the top edge in reach", () => {
-    // The top and the left are the two edges a window dragged past cannot be
-    // dragged back from: the corner you would reach for is off the screen.
-    expect(movedTo(AT, 300, -50).y).toBe(0);
-  });
-
-  it("keeps a window dragged off the left edge in reach", () => {
-    expect(movedTo(AT, -120, 200).x).toBe(0);
-  });
-
-  it("lets a window go off the right and the bottom", () => {
-    // Its top-left corner is still there to grab, so nothing is lost.
-    const far = movedTo(AT, 99_999, 99_999);
-    expect(far.x).toBe(99_999);
-    expect(far.y).toBe(99_999);
+  it("lets a window go off any edge", () => {
+    expect(movedTo(AT, -120, -50)).toMatchObject({ x: -120, y: -50 });
+    expect(movedTo(AT, 99_999, 99_999)).toMatchObject({
+      x: 99_999,
+      y: 99_999,
+    });
   });
 
   it("leaves the window's size alone", () => {
@@ -132,8 +123,8 @@ describe("shifted", () => {
     });
   });
 
-  it("keeps the window in reach, the way a drag does", () => {
-    expect(shifted({ ...AT, y: 0 }, Direction.Up).y).toBe(0);
+  it("moves the window past the top and the left edges", () => {
+    expect(shifted({ ...AT, y: 0 }, Direction.Up).y).toBe(-FLOAT_STEP);
   });
 });
 

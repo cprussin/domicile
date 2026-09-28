@@ -76,19 +76,11 @@ export const floatFor = (
  */
 const SMALLEST = { height: 120, width: 240 };
 
-/**
- * The same box, moved.
- *
- * Kept on the desktop at the top and the left, which are the two edges a
- * window dragged past cannot be dragged back from — the corner you would
- * reach for is off the screen. The right and the bottom are left alone: a
- * window dragged most of the way off those still has its top-left corner in
- * reach.
- */
+/** The same box, moved — off any edge of the desktop, if that is where it went. */
 export const movedTo = (float: Float, x: number, y: number): Float => ({
   ...float,
-  x: Math.max(0, x),
-  y: Math.max(0, y),
+  x,
+  y,
 });
 
 /** The same box, resized, never below what is left to grab. */
