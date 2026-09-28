@@ -260,4 +260,24 @@ describe("useFloatDrag", () => {
       expect(result.current.drag).toBeUndefined();
     });
   });
+
+  describe("with no floating window", () => {
+    // A tiled window's bar calls this too, so its element outlives the window
+    // being floated — and it has nothing to take hold of.
+    it("throws when pressed", () => {
+      const { result } = renderHook(() =>
+        useFloatDrag({
+          float: undefined,
+          onDrop: () => undefined,
+          onGrab: () => undefined,
+          onMove: () => undefined,
+          onResize: () => undefined,
+          resizes: false,
+        }),
+      );
+      expect(() => {
+        result.current.onPointerDown(press());
+      }).toThrow("no floating window");
+    });
+  });
 });

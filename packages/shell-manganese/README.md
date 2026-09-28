@@ -735,6 +735,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
 | `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
+| `src/window-management/WindowTitleBar.tsx` | A window's own bar, tiled or floating: one component for both, so floating a window keeps its bar's element and the bar eases with the window. Draggable while it floats. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
 | `src/window-management/pointer-warp.ts` | Where the pointer goes when the desktop moves the focus, the two questions that decide whether it goes anywhere at all, and a window's box in the page's own coordinates rather than the layout's. |
 | `src/window-management/usePointerWarp.ts` | The half of that a page has to do: which focus changes were the desktop's own — a keyed press, and a window that has only just opened — where the pointer is, and the render that is late enough to know the window's new box. |

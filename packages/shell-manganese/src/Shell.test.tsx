@@ -1443,6 +1443,20 @@ describe("Shell", () => {
       });
     });
 
+    it("keeps a window's bar across floating it and back", () => {
+      // The window under it is the same element either way and eases to its
+      // new box; a bar made anew would jump there and leave the window behind.
+      const { container } = renderShell();
+      clientAppears("term");
+      const tiled = barFor(container, "app:term");
+
+      press("Tab", true);
+      expect(barFor(container, "app:term")).toBe(tiled);
+
+      press("Tab", true);
+      expect(barFor(container, "app:term")).toBe(tiled);
+    });
+
     it("swaps the keyboard between the floating window and the tiling", () => {
       renderShell();
       clientAppears("one");
