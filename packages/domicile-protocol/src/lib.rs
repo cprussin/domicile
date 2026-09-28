@@ -285,6 +285,14 @@ pub enum ChromeMessage {
     /// have named — and it can already `spawn`.
     PreviewFile { path: String },
 
+    /// What applications does `query` name? Answered with
+    /// [`HostMessage::FoundApps`].
+    ///
+    /// Words, like [`ChromeMessage::SearchFiles`]: which directories hold the
+    /// desktop entries is the XDG base directory spec's to say and the
+    /// compositor's to read — see `domicile_host::desktop_entries`.
+    SearchApps { query: String },
+
     /// Somebody typed a passphrase at the lock screen. Let this desk go if it
     /// is the right one.
     ///
@@ -551,6 +559,16 @@ pub enum HostMessage {
         preview: FilePreview,
     },
 
+    /// The applications a [`ChromeMessage::SearchApps`] matched, best first.
+    ///
+    /// `query` is the one this answers, for [`HostMessage::FoundFiles`]'s
+    /// reason. Each entry carries the argv it runs, so a shell launches one
+    /// with `spawn` and nothing on the page parses an `Exec` line.
+    FoundApps {
+        query: String,
+        apps: Vec<DesktopEntry>,
+    },
+
     /// The machine's battery: how full, and whether a lead is in.
     ///
     /// **Pushed, and only pushed.** There is no `ListBattery`: a charge is
@@ -731,6 +749,19 @@ pub enum HostMessage {
     /// [`HostMessage::Theme`], because the browser has no other way to learn
     /// what its pages should be drawn in.
     WindowsTheme { theme: Theme },
+}
+
+/// An application a desktop entry offers, as a launcher is told about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesktopEntry {
+    /// The desktop file ID: its path under `applications/`, `/` read as `-`.
+    pub id: String,
+    /// `Name`, unlocalized.
+    pub name: String,
+    /// `Comment`, or empty for an entry that has none.
+    pub comment: String,
+    /// `Exec`, unquoted and with its field codes dropped.
+    pub command: Vec<String>,
 }
 
 /// One thing that was copied, as the shell is told about it.

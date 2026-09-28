@@ -167,6 +167,7 @@ use domicile_config::{
 };
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
+use domicile_host::desktop_entries::{application_dirs, find, installed};
 use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
@@ -414,6 +415,7 @@ enum ClientRequest {
 enum ConnectionRequest {
     SearchFiles { query: String },
     PreviewFile { path: String },
+    SearchApps { query: String },
     SetTheme { theme: Theme },
 }
 
@@ -1251,6 +1253,9 @@ fn read_chrome_messages(
             Ok(ChromeMessage::PreviewFile { path }) => {
                 answer_on_the_connection(hub, ConnectionRequest::PreviewFile { path })
             }
+            Ok(ChromeMessage::SearchApps { query }) => {
+                answer_on_the_connection(hub, ConnectionRequest::SearchApps { query })
+            }
             Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
                 hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
                 Vec::new()
@@ -1568,6 +1573,22 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                 // index is answered with nothing above.
                 .into_iter()
                 .collect()
+        }
+        // Read from the disk on every ask rather than indexed: a machine's
+        // desktop entries are hundreds of small files, and an application
+        // installed a moment ago is offered on the next keystroke. Answered
+        // even when nothing matched, because no application is an ordinary
+        // answer where no home is not.
+        ConnectionRequest::SearchApps { query } => {
+            let dirs = application_dirs(
+                std::env::var_os("XDG_DATA_HOME"),
+                std::env::var_os("XDG_DATA_DIRS"),
+                home_directory().as_deref(),
+            );
+            vec![HostMessage::FoundApps {
+                apps: find(&installed(&dirs), &query, FOUND),
+                query,
+            }]
         }
     }
 }

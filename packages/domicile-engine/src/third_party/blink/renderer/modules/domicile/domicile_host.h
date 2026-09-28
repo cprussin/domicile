@@ -63,6 +63,9 @@ class MODULES_EXPORT DomicileHost final
   // The path is one a `files` event named -- see the IDL for why that is the
   // whole of what it may name.
   void previewFile(ScriptState*, const String& path, ExceptionState&);
+  // Ask which installed applications match `query`; the answer arrives as an
+  // `apps` event.
+  void searchApps(ScriptState*, const String& query, ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
@@ -184,6 +187,9 @@ class MODULES_EXPORT DomicileHost final
                    const String& text,
                    const Vector<String>& entries,
                    base::TimeTicks arrival) override;
+  void Apps(const String& query,
+            Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
+            base::TimeTicks arrival) override;
   void Battery(double charge,
                bool charging,
                base::TimeTicks arrival) override;

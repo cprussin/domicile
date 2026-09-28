@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type {
   DomicileAppCursorEvent,
   DomicileAppEvent,
+  DomicileAppsEvent,
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
   DomicileClipboardEvent,
@@ -23,6 +24,7 @@ import {
   clipboard,
   filePreview,
   focusChanged,
+  foundApps,
   foundFiles,
   idle,
   locked,
@@ -236,6 +238,31 @@ describe("what a search found", () => {
           arrival: 0,
           ...fields,
         }) as DomicileFilesEvent,
+      ),
+    ).toStrictEqual(fields);
+  });
+});
+
+describe("what applications matched", () => {
+  it("arrives as the query it answers and the entries", () => {
+    const fields = {
+      apps: [
+        {
+          command: ["firefox", "--new-window"],
+          comment: "Browse the web",
+          id: "firefox.desktop",
+          name: "Firefox",
+        },
+      ],
+      query: "fire",
+    };
+
+    expect(
+      foundApps(
+        Object.assign(new Event("apps"), {
+          arrival: 0,
+          ...fields,
+        }) as DomicileAppsEvent,
       ),
     ).toStrictEqual(fields);
   });

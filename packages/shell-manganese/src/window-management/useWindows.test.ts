@@ -251,6 +251,16 @@ describe("a command on a desk of several pages", () => {
     expect(host.spawned).toEqual([["kitty"]]);
   });
 
+  it("runs the command of an application the launcher chose", () => {
+    const { desk, host } = desktop([covering(LEFT), RIGHT]);
+
+    desk.say(
+      Message.Acted(WindowAction.AppLaunched(["gedit", "--new-window"])),
+    );
+
+    expect(host.spawned).toEqual([["gedit", "--new-window"]]);
+  });
+
   it("opens a window on the screen the keyboard is on", () => {
     // The whole of what a desk of several monitors is for, end to end: the
     // keyboard is moved to the second screen and the client that appears is
