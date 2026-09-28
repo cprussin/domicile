@@ -638,12 +638,14 @@ export const WindowAction = {
     title,
   }),
 
-  /** The user dragged a floating window's corner to a new size. */
-  WindowResized: (id: string, width: number, height: number) => ({
-    height,
+  /**
+   * The user dragged a floating window's corner to a new size — and, from the
+   * top or the left, to a new place.
+   */
+  WindowResized: (id: string, box: Rect) => ({
+    box,
     id,
     kind: WindowActionKind.WindowResized as const,
-    width,
   }),
 
   /** The user reached for a window — a click in it, or on its title bar. */
@@ -860,7 +862,7 @@ const reduceAction = (
     }
     case WindowActionKind.WindowResized: {
       return onWorkspaceWith(state, action.id, (workspace) =>
-        floatSized(workspace, action.id, action.width, action.height),
+        floatSized(workspace, action.id, action.box),
       );
     }
     case WindowActionKind.WindowSelected: {

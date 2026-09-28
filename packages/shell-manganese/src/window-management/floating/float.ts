@@ -10,6 +10,7 @@ import type { Direction } from "../direction";
 import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
 import { TITLE_BAR } from "../rect";
+import type { Corner } from "../tiled/aim";
 
 /** Where a floating window sits, in the desktop's own pixels. */
 export type Float = {
@@ -102,6 +103,41 @@ export const sizedTo = (
   width: Math.max(SMALLEST.width, width),
 });
 
+/**
+ * The same box with its `corner` dragged `dx`, `dy`: the two edges on that
+ * corner move and the two across from it stay put.
+ *
+ * Stopped where {@link sizedTo} and {@link movedTo} would stop it, but by the
+ * dragged edge: a window dragged from the left to its smallest must not start
+ * sliding right instead.
+ */
+export const stretched = (
+  float: Float,
+  corner: Corner,
+  dx: number,
+  dy: number,
+): Float => {
+  const across = spanStretched(
+    { size: float.width, start: float.x },
+    isForward(corner.horizontal),
+    dx,
+    SMALLEST.width,
+  );
+  const down = spanStretched(
+    { size: float.height, start: float.y },
+    isForward(corner.vertical),
+    dy,
+    SMALLEST.height,
+  );
+  return {
+    ...float,
+    height: down.size,
+    width: across.size,
+    x: across.start,
+    y: down.start,
+  };
+};
+
 /** The same box, shifted one step `direction` — what a keyed `move` does. */
 export const shifted = (float: Float, direction: Direction): Float => {
   const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
@@ -125,3 +161,23 @@ export const rectOf = ({ height, width, x, y }: Float): Rect => ({
   x,
   y,
 });
+
+/** Where a box starts along one axis, and how far it goes. */
+type Span = { size: number; start: number };
+
+/**
+ * One axis of {@link stretched}: its far edge dragged `by` if `atEnd`, else
+ * its near one, which stops at the desktop's edge.
+ */
+const spanStretched = (
+  { size, start }: Span,
+  atEnd: boolean,
+  by: number,
+  smallest: number,
+): Span => {
+  const end = start + size;
+  const moved = Math.min(Math.max(0, start + by), end - smallest);
+  return atEnd
+    ? { size: Math.max(smallest, size + by), start }
+    : { size: end - moved, start: moved };
+};

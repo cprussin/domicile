@@ -11,6 +11,7 @@ import type { Float } from "./floating/float";
 import type { Screenful } from "./placement";
 import { TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
+import type { Rect } from "./rect";
 import { SelectionRing } from "./SelectionRing";
 import { selectionOf } from "./selection";
 import { TitleBar } from "./TitleBar";
@@ -82,7 +83,7 @@ type Props = {
   onOpenWindow: (url: string) => void;
   /** A browser window's page navigated, so its title says somewhere new. */
   onRename: (id: string, url: string) => void;
-  onResize: (id: string, width: number, height: number) => void;
+  onResize: (id: string, box: Rect) => void;
   /** The user reached a window, by clicking into it or into its chrome. */
   onSelect: (id: string) => void;
   /** A tiled window's `edge` dragged `by` pixels, rightwards or downwards. */
@@ -352,8 +353,8 @@ export const Stage = ({
                   onDrop={onDrop}
                   onGrab={onGrabThis}
                   onMove={onMoveThis}
-                  onResize={(width, height) => {
-                    onResize(window.id, width, height);
+                  onResize={(box) => {
+                    onResize(window.id, box);
                   }}
                   resizes={shift}
                 />

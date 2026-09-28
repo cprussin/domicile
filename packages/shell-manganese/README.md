@@ -177,8 +177,9 @@ let go of Shift and press it again, a Mod+drag moves the window rather than
 driving its corner.
 
 **Mod+drag** moves a floating window and **Mod+Shift+drag** (or Mod+right-drag)
-resizes it from the bottom-right corner — sway's `floating_modifier $mod`, and
-the same key as the bindings, so it is Meta as well.
+resizes it from the corner of whichever quarter of the window the drag starts
+in — sway's `floating_modifier $mod`, and the same key as the bindings, so it
+is Meta as well.
 Which of the two a drag is, is read when it starts and then kept, so letting go
 of Shift half way through does not turn a resize into a move with the window
 jumping to wherever the pointer got to. A window is never dragged smaller than

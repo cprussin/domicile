@@ -292,14 +292,15 @@ export const floatMoved = (
   y: number,
 ): Workspace => withFloat(workspace, id, (float) => movedTo(float, x, y));
 
-/** A floating window dragged to a new size. */
+/** A floating window dragged by a corner to a new box. */
 export const floatSized = (
   workspace: Workspace,
   id: string,
-  width: number,
-  height: number,
+  { height, width, x, y }: Rect,
 ): Workspace =>
-  withFloat(workspace, id, (float) => sizedTo(float, width, height));
+  withFloat(workspace, id, (float) =>
+    sizedTo(movedTo(float, x, y), width, height),
+  );
 
 /**
  * A tiled window dragged onto another and let go: onto its `edge`, or its

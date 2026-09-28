@@ -1,7 +1,11 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import type { Rect } from "../rect";
+import type { Corner } from "../tiled/aim";
+import { cornerOf } from "../tiled/aim";
 import type { Float } from "./float";
+import { rectOf, stretched } from "./float";
 
 /**
  * A drag in progress: everything about it that was settled when the window was
@@ -15,18 +19,19 @@ import type { Float } from "./float";
 type Drag = {
   /** The window's box when it was taken hold of, which the delta is from. */
   box: Float;
+  /** The corner being dragged, or `undefined` for a move. */
+  corner: Corner | undefined;
   from: { x: number; y: number };
   onDrop: () => void;
   onMove: (x: number, y: number) => void;
-  onResize: (width: number, height: number) => void;
-  resizes: boolean;
+  onResize: (box: Rect) => void;
 };
 
 /**
  * The secondary button, which resizes whatever it takes hold of.
  *
  * The other way to a resize, and the one that needs no second modifier held:
- * whatever handed the pointer to the shell, the right button means the corner
+ * whatever handed the pointer to the shell, the right button means a corner
  * rather than the whole window.
  */
 const SECONDARY_BUTTON = 2;
@@ -55,7 +60,8 @@ type Options = {
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
-  onResize: (width: number, height: number) => void;
+  /** The whole box, since a corner at the top or the left moves it too. */
+  onResize: (box: Rect) => void;
   /**
    * Whether taking hold now would resize the window rather than move it.
    *
@@ -110,10 +116,12 @@ export const useFloatDrag = ({
       if (started !== undefined) {
         const dx = event.clientX - started.from.x;
         const dy = event.clientY - started.from.y;
-        if (started.resizes) {
-          started.onResize(started.box.width + dx, started.box.height + dy);
-        } else {
+        if (started.corner === undefined) {
           started.onMove(started.box.x + dx, started.box.y + dy);
+        } else {
+          started.onResize(
+            rectOf(stretched(started.box, started.corner, dx, dy)),
+          );
         }
       }
     };
@@ -154,11 +162,13 @@ export const useFloatDrag = ({
         const resizing = resizes || event.button === SECONDARY_BUTTON;
         running.current = {
           box: float,
+          corner: resizing
+            ? cornerOf(rectOf(float), event.clientX, event.clientY)
+            : undefined,
           from: { x: event.clientX, y: event.clientY },
           onDrop,
           onMove,
           onResize,
-          resizes: resizing,
         };
         setDrag({ resizes: resizing });
         onGrab();
