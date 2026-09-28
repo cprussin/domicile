@@ -7,7 +7,6 @@ import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
-import { FloatTitleBar } from "./floating/FloatTitleBar";
 import type { Float } from "./floating/float";
 import type { Screenful } from "./placement";
 import { TILED } from "./placement";
@@ -20,6 +19,7 @@ import { DropIndicator } from "./tiled/DropIndicator";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import { useWindowMotion } from "./useWindowMotion";
+import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
 
@@ -297,51 +297,16 @@ export const Stage = ({
         });
         if (placement === undefined) {
           return undefined;
-        } else if (floating === undefined) {
+        } else {
           const grabbable = targets.some(({ id }) => id === window.id);
           return (
             <Fragment key={window.id}>
-              <TitleBar
-                depth={placement.depth}
-                // A tiled window is dragged by the sheet below rather than by
-                // its bar: an ordinary drag on a bar is a click on it, and
-                // only the desktop's modifier picks a tiled window up.
-                dragging={window.id === draggingId}
-                focus={focus}
-                frame={placement.frame}
-                fullscreen={window.id === fullscreenId}
-                motion={motion}
-                onClose={onCloseThis}
-                onFullscreen={onFullscreenThis}
-                onMotionEnded={onMotionEnded}
-                onReach={onReachThis}
-                rect={placement.bar}
-                title={window.title}
-                window={window.id}
-              />
-              {grabbable && (meta || window.id === draggingId) && (
-                <TileGrab
-                  frame={placement.frame}
-                  id={window.id}
-                  onAim={setAim}
-                  onDrop={onDrop}
-                  onDropOn={(target, edge) => {
-                    onDropOn(window.id, target, edge);
-                  }}
-                  onGrab={onGrabThis}
-                  onStretch={(edge, by) => {
-                    onStretch(window.id, edge, by);
-                  }}
-                  resizes={shift}
-                  targets={targets}
-                />
-              )}
-            </Fragment>
-          );
-        } else {
-          return (
-            <Fragment key={window.id}>
-              <FloatTitleBar
+              {/*
+                One bar for a tiled window and a floating one, so floating it
+                keeps its bar rather than making a new one — see
+                `WindowTitleBar`.
+              */}
+              <WindowTitleBar
                 depth={placement.depth}
                 dragging={window.id === draggingId}
                 float={floating}
@@ -359,8 +324,28 @@ export const Stage = ({
                 rect={placement.bar}
                 restack={restack}
                 title={window.title}
+                window={window.id}
               />
-              {(meta || window.id === draggingId) && (
+              {floating === undefined &&
+                grabbable &&
+                (meta || window.id === draggingId) && (
+                  <TileGrab
+                    frame={placement.frame}
+                    id={window.id}
+                    onAim={setAim}
+                    onDrop={onDrop}
+                    onDropOn={(target, edge) => {
+                      onDropOn(window.id, target, edge);
+                    }}
+                    onGrab={onGrabThis}
+                    onStretch={(edge, by) => {
+                      onStretch(window.id, edge, by);
+                    }}
+                    resizes={shift}
+                    targets={targets}
+                  />
+                )}
+              {floating !== undefined && (meta || window.id === draggingId) && (
                 <FloatGrab
                   depth={placement.depth}
                   float={floating}

@@ -45,7 +45,13 @@ export type FloatDrag = {
 };
 
 type Options = {
-  float: Float;
+  /**
+   * The window taken hold of, or `undefined` for a tiled window's bar: that
+   * bar calls this too, so its element is the same one before and after the
+   * window floats — see `WindowTitleBar` — and it must never be pressed into
+   * a drag.
+   */
+  float: Float | undefined;
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
@@ -138,21 +144,25 @@ export const useFloatDrag = ({
       event.preventDefault();
     },
     onPointerDown: (event) => {
-      // Still captured, which costs nothing beside the listeners above and
-      // covers the one thing they cannot see: a pointer that has moved over a
-      // browsing context of its own, where the events are that document's.
-      event.currentTarget.setPointerCapture(event.pointerId);
-      const resizing = resizes || event.button === SECONDARY_BUTTON;
-      running.current = {
-        box: float,
-        from: { x: event.clientX, y: event.clientY },
-        onDrop,
-        onMove,
-        onResize,
-        resizes: resizing,
-      };
-      setDrag({ resizes: resizing });
-      onGrab();
+      if (float === undefined) {
+        throw new Error("float drag: no floating window to take hold of");
+      } else {
+        // Still captured, which costs nothing beside the listeners above and
+        // covers the one thing they cannot see: a pointer that has moved over a
+        // browsing context of its own, where the events are that document's.
+        event.currentTarget.setPointerCapture(event.pointerId);
+        const resizing = resizes || event.button === SECONDARY_BUTTON;
+        running.current = {
+          box: float,
+          from: { x: event.clientX, y: event.clientY },
+          onDrop,
+          onMove,
+          onResize,
+          resizes: resizing,
+        };
+        setDrag({ resizes: resizing });
+        onGrab();
+      }
     },
   };
 };
