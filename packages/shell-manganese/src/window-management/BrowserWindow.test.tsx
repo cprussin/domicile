@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
@@ -16,6 +15,7 @@ import {
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
 
 const silentDomicile = {
@@ -161,25 +161,7 @@ const guestPresses = (
   );
 };
 
-// What a window's box resolves to is decided by the emitted stylesheet, not by
-// any one `css(...)` call: Panda's atomic classes all carry the same
-// specificity, so a window's own `display` survives only if nothing later in
-// the bundle declares one for the same element. Loading the real sheet is what
-// makes that observable — a className on its own says nothing about which of
-// two competing declarations wins.
-//
-// The layers come off first: happy-dom drops `@layer` blocks whole, and Panda
-// emits everything inside them. `@media all` keeps the braces balanced and
-// matches unconditionally, and the layers are emitted weakest-first, so plain
-// source order lands on the same winner the cascade would.
-const stylesheet = document.createElement("style");
-stylesheet.textContent = readFileSync(
-  new URL("../../styled-system/styles.css", import.meta.url),
-  "utf8",
-)
-  .replaceAll(/@layer [^;{]+;/g, "")
-  .replaceAll(/@layer [^{]+\{/g, "@media all{");
-document.head.append(stylesheet);
+loadEmittedStylesheet(document);
 
 /** Where a window on screen is, which no case here is about. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };

@@ -7,6 +7,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
@@ -97,6 +98,8 @@ const glyphOf = (icon: ReactElement): string =>
     .documentElement.innerHTML;
 
 /** The pane showing what the highlighted row is. */
+loadEmittedStylesheet(document);
+
 const previewPane = () => screen.getByRole("region", { name: "Preview" });
 
 describe("Launcher", () => {
@@ -322,6 +325,19 @@ describe("Launcher", () => {
       expect(
         await within(previewPane()).findByText("contents of Notes/today.org"),
       ).toBeInTheDocument();
+    });
+
+    it("lets what the highlighted file holds be selected", async () => {
+      // The one text in the shell that is somebody's content rather than the
+      // shell's own, and the reason to look at it may be to copy a line of it.
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "today");
+      const text = await within(previewPane()).findByText(
+        "contents of Notes/today.org",
+      );
+
+      expect(globalThis.getComputedStyle(text).userSelect).toBe("text");
     });
 
     it("waits for the typing to settle before it asks", async () => {

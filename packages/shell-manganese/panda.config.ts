@@ -19,9 +19,21 @@ export default defineConfig({
   globalCss: {
     html: {
       overflow: "clip",
+      // And none of it is text to select: the shell is a desktop rather than
+      // a document, so a drag across the bar or a title that paints a
+      // selection is a drag that went wrong. Said once at the root rather than
+      // on each piece of chrome, so a piece added later is covered without
+      // anybody remembering. A window's page is its own document, so this
+      // does not reach it.
+      userSelect: "none",
     },
     "html, body, #root": {
       blockSize: "100%",
+    },
+    // A field is the exception: what is in it is what somebody typed, and
+    // selecting it is how it is edited.
+    "input, textarea": {
+      userSelect: "text",
     },
   },
   hash: true,
