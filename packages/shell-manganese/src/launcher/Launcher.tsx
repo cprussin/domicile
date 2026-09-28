@@ -585,7 +585,15 @@ const MediaPreview = ({ kind, row }: { kind: MediaKind; row: FileRow }) => {
         );
       }
       case MediaKind.Pdf: {
-        return <iframe className={viewStyles} src={url} title={row.name} />;
+        // The viewer's open parameters: no toolbar, no page sidebar — the
+        // page is all a pane this size has room for.
+        return (
+          <iframe
+            className={viewStyles}
+            src={`${url}#toolbar=0&navpanes=0`}
+            title={row.name}
+          />
+        );
       }
     }
   }

@@ -347,6 +347,20 @@ describe("Launcher", () => {
       ).toBe("domicile://home/Pictures/cat.png");
     });
 
+    it("shows the highlighted PDF bare, without the viewer's toolbar or sidebar", async () => {
+      // A preview is a glance at the page, and the viewer's chrome is most of
+      // a pane this size.
+      const panel = launcher(["Scratch/DS11_Complete.pdf"]);
+
+      await panel.user.type(panel.box(), "DS11");
+
+      expect(
+        (
+          await within(previewPane()).findByTitle("DS11_Complete.pdf")
+        ).getAttribute("src"),
+      ).toBe("domicile://home/Scratch/DS11_Complete.pdf#toolbar=0&navpanes=0");
+    });
+
     it("shows what the highlighted directory holds", async () => {
       const panel = launcher();
 
