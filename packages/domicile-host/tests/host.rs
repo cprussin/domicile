@@ -375,6 +375,80 @@ fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
 }
 
 #[test]
+fn a_windows_size_limits_are_reported_when_they_change() {
+    let mut host = Host::new();
+    let (id, _) = host.app_appeared(None, None);
+
+    assert_eq!(
+        host.app_min_size(&id, (680.0, 500.0)),
+        Some(HostMessage::AppMinSize {
+            app_id: id.clone(),
+            size: [680.0, 500.0],
+        })
+    );
+    // A client restates its limits with every commit that changes anything
+    // else about its state; the chromes hear a change once.
+    assert_eq!(host.app_min_size(&id, (680.0, 500.0)), None);
+    assert_eq!(
+        host.app_max_size(&id, (1920.0, 0.0)),
+        Some(HostMessage::AppMaxSize {
+            app_id: id.clone(),
+            size: [1920.0, 0.0],
+        })
+    );
+    assert_eq!(host.app_max_size(&id, (1920.0, 0.0)), None);
+    // And none is no limit, which is what an app starts with.
+    let (fresh, _) = host.app_appeared(None, None);
+    assert_eq!(host.app_min_size(&fresh, (0.0, 0.0)), None);
+    assert_eq!(host.app_min_size("app-nowhere", (1.0, 1.0)), None);
+}
+
+#[test]
+fn a_reloaded_chrome_is_told_every_windows_size_limits() {
+    let mut host = Host::new();
+    let (limited, _) = host.app_appeared(None, None);
+    let (free, _) = host.app_appeared(None, None);
+    host.app_min_size(&limited, (680.0, 500.0));
+    host.app_max_size(&limited, (1000.0, 800.0));
+
+    let replayed = host.open_apps();
+
+    let limits: Vec<&HostMessage> = replayed
+        .iter()
+        .filter(|message| {
+            matches!(
+                message,
+                HostMessage::AppMinSize { .. } | HostMessage::AppMaxSize { .. }
+            )
+        })
+        .collect();
+    assert_eq!(
+        limits,
+        vec![
+            &HostMessage::AppMinSize {
+                app_id: limited.clone(),
+                size: [680.0, 500.0],
+            },
+            &HostMessage::AppMaxSize {
+                app_id: limited.clone(),
+                size: [1000.0, 800.0],
+            },
+        ],
+        "{free} has no limits, so nothing is said about it"
+    );
+    // After the window they are about, which the chrome has to know first.
+    let appeared = replayed
+        .iter()
+        .position(|message| matches!(message, HostMessage::AppAppeared { app_id, .. } if *app_id == limited))
+        .unwrap();
+    let limited_at = replayed
+        .iter()
+        .position(|message| matches!(message, HostMessage::AppMinSize { .. }))
+        .unwrap();
+    assert!(appeared < limited_at);
+}
+
+#[test]
 fn resizing_and_closing_report_to_chrome() {
     let mut host = Host::new();
     let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));

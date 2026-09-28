@@ -2176,6 +2176,28 @@ impl DomicileCompositor {
         }
     }
 
+    /// Tell the chromes how small and how big a window will draw, if that
+    /// changed. Read at every commit because xdg-shell double-buffers both:
+    /// they take effect on the commit that carries them, which is usually the
+    /// first and has no buffer.
+    fn tell_the_size_limits(&mut self, app_id: &str, surface: &WlSurface) {
+        let (min, max) = with_states(surface, |states| {
+            let mut cached = states.cached_state.get::<SurfaceCachedState>();
+            let state = cached.current();
+            (
+                (f64::from(state.min_size.w), f64::from(state.min_size.h)),
+                (f64::from(state.max_size.w), f64::from(state.max_size.h)),
+            )
+        });
+        // Bound by `let` statements, so the host is unlocked for the
+        // broadcasts — see `title_changed`.
+        let smallest = self.hub.host.lock().unwrap().app_min_size(app_id, min);
+        let largest = self.hub.host.lock().unwrap().app_max_size(app_id, max);
+        for told in smallest.into_iter().chain(largest) {
+            self.hub.broadcast(told);
+        }
+    }
+
     /// A committed buffer as a texture to draw, whichever kind it is.
     ///
     /// A dmabuf costs nothing — it *is* the client's buffer. Shared memory
@@ -5319,6 +5341,10 @@ impl CompositorHandler for DomicileCompositor {
             if !initial_configure_sent {
                 toplevel.send_configure();
             }
+        }
+
+        if let Committer::App(app_id) = &committer {
+            self.tell_the_size_limits(app_id, surface);
         }
 
         // Take the newly-attached buffer and drain the frame callbacks. Taking

@@ -346,6 +346,20 @@ interface ControlChannelClient {
 
   AppResized(string app_id, double width, double height,
              mojo_base.mojom.TimeTicks arrival);
+
+  // The smallest and largest a client will draw its window, in logical units,
+  // with 0 on an axis for no limit -- xdg-shell's own spelling.
+  AppMinSize(string app_id, double width, double height,
+             mojo_base.mojom.TimeTicks arrival);
+  AppMaxSize(string app_id, double width, double height,
+             mojo_base.mojom.TimeTicks arrival);
+
+  // A popup over the window or popup `parent_app_id`: its box is `width` by
+  // `height` at (`x`, `y`) from that one's, in logical units. Sent again when
+  // the client moves it; it goes with AppClosed.
+  PopupPlaced(string app_id, string parent_app_id, double x, double y,
+              double width, double height, bool grab,
+              mojo_base.mojom.TimeTicks arrival);
   AppClosed(string app_id, mojo_base.mojom.TimeTicks arrival);
 
   // The cursor a client asked for over its own surface.

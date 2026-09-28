@@ -350,3 +350,36 @@ fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
 
     compositor.wait_for_log(&format!("app client connected pid=Some({})", client.pid()));
 }
+
+/// A client that will only be so small or so big has the chrome told.
+///
+/// Electron says both for any app with a minimum window size, and a shell that
+/// never hears it opens Bitwarden in a box it will not draw at. Both limits,
+/// because they are read by separate lines and a compositor that forwarded one
+/// would pass a test of the other.
+#[test]
+fn a_client_that_limits_its_size_has_the_chrome_told() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with(
+        "a window with limits",
+        &["--min-size", "680x500", "--max-size", "1920x0"],
+    );
+
+    let smallest = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppMinSize { .. }))
+        .expect("a client with a minimum size has the chrome told");
+    let HostMessage::AppMinSize { size, .. } = smallest else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(size, [680.0, 500.0]);
+
+    let largest = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppMaxSize { .. }))
+        .expect("a client with a maximum size has the chrome told");
+    let HostMessage::AppMaxSize { size, .. } = largest else {
+        unreachable!("the wait matched on this variant")
+    };
+    // A `0` is no limit on that axis, and is passed on as one.
+    assert_eq!(size, [1920.0, 0.0]);
+}

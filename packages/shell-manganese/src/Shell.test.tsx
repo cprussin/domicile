@@ -206,6 +206,10 @@ class FakeDomicile {
   surfaceSizeOf(): undefined {
     return undefined;
   }
+  // No popup here is clicked, so every client is its own window.
+  windowOf(appId: string): string {
+    return appId;
+  }
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
@@ -871,6 +875,38 @@ describe("Shell", () => {
       });
     });
 
+    it("draws a client's menu over its window, and takes it down when it goes", () => {
+      // The workspace starts under the top bar, and a lone window's contents
+      // start under its own title bar.
+      const { container } = renderShell();
+      clientAppears("term");
+      const window = boxOf(appElement(container, "term"));
+
+      domicile.emit("popup_placed", {
+        app_id: "menu",
+        grab: true,
+        parent: "term",
+        position: [12, 30],
+        size: [180, 240],
+      });
+
+      const menu = appElement(container, "menu");
+      expect(boxOf(menu)).toMatchObject({
+        height: "240px",
+        width: "180px",
+        x: `${(Number.parseFloat(window.x) + 12).toString()}px`,
+        y: `${(Number.parseFloat(window.y) + 30).toString()}px`,
+      });
+      // Over its window, not in a frame of its own.
+      expect(container.querySelectorAll("[data-window]").length).toBe(
+        container.querySelectorAll('[data-window="app:term"]').length,
+      );
+
+      domicile.emit("app_closed", { app_id: "menu" });
+      expect(() => appElement(container, "menu")).toThrow();
+      expect(appElement(container, "term")).toBeDefined();
+    });
+
     it("renames the bar when the client renames its window", () => {
       const { container } = renderShell();
       clientAppears("term", "Terminal");
@@ -1510,6 +1546,22 @@ describe("Shell", () => {
       press("Tab", true);
       expect(boxOf(appElement(container, "term"))).toMatchObject({
         width: "1920px",
+      });
+    });
+
+    it("floats a window no smaller than its client will draw", () => {
+      // Wider than the 640 a float opens at, and shorter than its 390: the
+      // client's frame would be cut off across and stretched down.
+      const { container } = renderShell();
+      clientAppears("vault");
+      domicile.emit("app_min_size", { app_id: "vault", size: [680, 300] });
+      domicile.emit("app_max_size", { app_id: "vault", size: [700, 350] });
+
+      press("Tab", true);
+
+      expect(boxOf(appElement(container, "vault"))).toMatchObject({
+        height: "350px",
+        width: "680px",
       });
     });
 

@@ -11,6 +11,7 @@ import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
 import { TITLE_BAR } from "../rect";
 import type { Corner } from "../tiled/aim";
+import type { SizeLimit } from "../window";
 
 /** Where a floating window sits, in the desktop's own pixels. */
 export type Float = {
@@ -76,6 +77,47 @@ export const floatFor = (
  * with nothing left to grab.
  */
 const SMALLEST = { height: 120, width: 240 };
+
+/**
+ * The same box, sized to what its client will draw: its contents no smaller
+ * than `min` and no larger than `max`, with the bar on top.
+ *
+ * A box outside them gets a frame that does not fill it — cut off at the
+ * box's edge, or stretched across it. An edge the box had `before` stays
+ * where it was, so a window dragged in from the left stops at its smallest
+ * rather than sliding right.
+ */
+export const limitedTo = (
+  float: Float,
+  before: Float | undefined,
+  [minWidth, minHeight]: SizeLimit,
+  [maxWidth, maxHeight]: SizeLimit,
+): Float => {
+  const across = spanLimited(
+    { size: float.width, start: float.x },
+    before === undefined ? undefined : { size: before.width, start: before.x },
+    minWidth,
+    maxWidth,
+  );
+  const down = spanLimited(
+    { size: float.height, start: float.y },
+    before === undefined ? undefined : { size: before.height, start: before.y },
+    minHeight === undefined ? undefined : minHeight + TITLE_BAR,
+    maxHeight === undefined ? undefined : maxHeight + TITLE_BAR,
+  );
+  return across.size === float.width &&
+    across.start === float.x &&
+    down.size === float.height &&
+    down.start === float.y
+    ? float
+    : {
+        ...float,
+        height: down.size,
+        width: across.size,
+        x: across.start,
+        y: down.start,
+      };
+};
 
 /** The same box, moved — off any edge of the desktop, if that is where it went. */
 export const movedTo = (float: Float, x: number, y: number): Float => ({
@@ -172,4 +214,28 @@ const spanStretched = (
   return atEnd
     ? { size: Math.max(smallest, size + by), start }
     : { size: end - moved, start: moved };
+};
+
+/**
+ * One axis of {@link limitedTo}: the size held between `min` and `max`, from
+ * the far edge where only the near one moved since `before`.
+ */
+const spanLimited = (
+  { size, start }: Span,
+  before: Span | undefined,
+  min: number | undefined,
+  max: number | undefined,
+): Span => {
+  const limited = Math.min(
+    max ?? Number.POSITIVE_INFINITY,
+    Math.max(min ?? 0, size),
+  );
+  const end = start + size;
+  const nearEdgeDragged =
+    before !== undefined &&
+    before.start !== start &&
+    before.start + before.size === end;
+  return nearEdgeDragged
+    ? { size: limited, start: end - limited }
+    : { size: limited, start };
 };

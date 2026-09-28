@@ -38,6 +38,9 @@ pub enum HostError {
     UnknownApp(AppId),
 }
 
+/// A window's size limit on neither axis, as xdg-shell spells it.
+const NO_LIMIT: (f64, f64) = (0.0, 0.0);
+
 /// A connected app the host knows about (independent of whether the chrome has
 /// given it an on-screen portal yet).
 #[derive(Debug, Clone)]
@@ -52,6 +55,11 @@ pub struct App {
     /// The client's own content size, as of its latest committed buffer, and
     /// `None` until it has committed one.
     pub size: Option<(f64, f64)>,
+    /// The smallest and largest the client will draw its window, in logical
+    /// units, with `0` on an axis for no limit — which is what every window
+    /// starts with.
+    pub min_size: (f64, f64),
+    pub max_size: (f64, f64),
 }
 
 /// A popup a client opened over one of its windows — see
@@ -231,6 +239,8 @@ impl Host {
                 arrival: self.next_id,
                 title: title.clone(),
                 size,
+                min_size: NO_LIMIT,
+                max_size: NO_LIMIT,
             },
         );
         let message = HostMessage::AppAppeared {
@@ -258,28 +268,19 @@ impl Host {
         // Popups among the windows, by the one counter both are numbered
         // from: a popup is always newer than what it is over, so this is also
         // what puts every parent before its popups.
-        let mut open: Vec<(u64, HostMessage)> = self
+        let mut open: Vec<(u64, Vec<HostMessage>)> = self
             .apps
             .values()
-            .map(|app| {
-                (
-                    app.arrival,
-                    HostMessage::AppAppeared {
-                        app_id: app.app_id.clone(),
-                        title: app.title.clone(),
-                        size: app.size.map(wire_size),
-                    },
-                )
-            })
+            .map(|app| (app.arrival, announced(app)))
             .chain(
                 self.popups
                     .values()
-                    .map(|popup| (popup.arrival, placed(popup))),
+                    .map(|popup| (popup.arrival, vec![placed(popup)])),
             )
             .collect();
         open.sort_by_key(|(arrival, _)| *arrival);
         open.into_iter()
-            .map(|(_, message)| message)
+            .flat_map(|(_, messages)| messages)
             // And who has the keyboard, which a page that has just loaded has
             // no other way to learn. After the windows: it names one of them.
             //
@@ -343,6 +344,36 @@ impl Host {
         }
         self.told_focus = holder.clone();
         Some(HostMessage::FocusChanged { app_id: holder })
+    }
+
+    /// Record the smallest a client will draw its window. Returns the chrome
+    /// notification, or `None` if the app is unknown or nothing changed.
+    pub fn app_min_size(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.min_size == size {
+            None
+        } else {
+            app.min_size = size;
+            Some(HostMessage::AppMinSize {
+                app_id: app_id.to_string(),
+                size: wire_size(size),
+            })
+        }
+    }
+
+    /// Record the largest a client will draw its window, as
+    /// [`Host::app_min_size`] does the smallest.
+    pub fn app_max_size(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.max_size == size {
+            None
+        } else {
+            app.max_size = size;
+            Some(HostMessage::AppMaxSize {
+                app_id: app_id.to_string(),
+                size: wire_size(size),
+            })
+        }
     }
 
     /// Record a client's new content size. Returns the chrome notification, or
@@ -543,6 +574,25 @@ fn placed(popup: &Popup) -> HostMessage {
         size: wire_size(popup.size),
         grab: popup.grab,
     }
+}
+
+/// One window as a chrome that has just connected needs it: that it exists,
+/// then any limit on its size, which a chrome cannot place before the window.
+fn announced(app: &App) -> Vec<HostMessage> {
+    let appeared = HostMessage::AppAppeared {
+        app_id: app.app_id.clone(),
+        title: app.title.clone(),
+        size: app.size.map(wire_size),
+    };
+    let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
+        app_id: app.app_id.clone(),
+        size: wire_size(app.min_size),
+    });
+    let max = (app.max_size != NO_LIMIT).then(|| HostMessage::AppMaxSize {
+        app_id: app.app_id.clone(),
+        size: wire_size(app.max_size),
+    });
+    std::iter::once(appeared).chain(min).chain(max).collect()
 }
 
 fn wire_size((width, height): (f64, f64)) -> [f64; 2] {

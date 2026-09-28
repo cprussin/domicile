@@ -94,6 +94,39 @@ export type AppResizedMessage = {
   size: readonly [width: number, height: number];
 };
 
+/**
+ * The smallest or the largest a client will draw its window, per axis, and
+ * `undefined` on an axis it does not limit.
+ *
+ * A box outside it gets a frame that does not fill it: cut off at the box's
+ * edge when the window will not shrink, stretched when it will not grow. A
+ * shell that sizes windows keeps each inside its own.
+ */
+export type AppSizeLimitMessage = {
+  app_id: string;
+  size: readonly [width: number | undefined, height: number | undefined];
+};
+
+/**
+ * A popup a client opened over one of its windows — a menu, a tooltip — or
+ * moved. An `<app>` of its own for the shell to place rather than lay out: its
+ * box is `size`, at `position` from the top-left of `parent`'s box, which is a
+ * window or another popup and was always announced first. It goes with
+ * `app_closed`, as a window does.
+ *
+ * Never a window: it has no title and is not tiled, and a click on it is a
+ * click on its window as far as the keyboard goes — see
+ * {@link DomicileClient.windowOf}. `grab` is a menu, which the compositor
+ * dismisses when the keyboard leaves its window.
+ */
+export type PopupPlacedMessage = {
+  app_id: string;
+  grab: boolean;
+  parent: string;
+  position: readonly [x: number, y: number];
+  size: readonly [width: number, height: number];
+};
+
 export type AppClosedMessage = {
   app_id: string;
 };
@@ -330,6 +363,9 @@ export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
   app_titled: AppTitledMessage;
   app_resized: AppResizedMessage;
+  app_min_size: AppSizeLimitMessage;
+  app_max_size: AppSizeLimitMessage;
+  popup_placed: PopupPlacedMessage;
   app_closed: AppClosedMessage;
   app_cursor: AppCursorMessage;
   focus_changed: FocusChangedMessage;
@@ -386,6 +422,20 @@ export const appResized = (event: DomicileAppEvent): AppResizedMessage => ({
   // No `hasSize` test: a resize is the size, and one without it would be the
   // compositor telling the page nothing. Doubles, because this is a layout box
   // and a CSS pixel is fractional.
+  size: [event.width, event.height],
+});
+
+export const appSizeLimit = (event: DomicileAppEvent): AppSizeLimitMessage => ({
+  app_id: event.appId,
+  // xdg-shell's zero, which is no limit rather than a limit of nothing.
+  size: [limit(event.width), limit(event.height)],
+});
+
+export const popupPlaced = (event: DomicileAppEvent): PopupPlacedMessage => ({
+  app_id: event.appId,
+  grab: event.grab,
+  parent: event.parentAppId,
+  position: [event.x, event.y],
   size: [event.width, event.height],
 });
 
@@ -549,3 +599,7 @@ export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({
  */
 const named = (value: string): string | undefined =>
   value === "" ? undefined : value;
+
+/** One axis of a size limit, where xdg-shell's `0` is none. */
+const limit = (pixels: number): number | undefined =>
+  pixels === 0 ? undefined : pixels;

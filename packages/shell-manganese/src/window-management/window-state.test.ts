@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
+import { TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
 import { appWindowId } from "./window";
@@ -848,5 +849,121 @@ describe("the launcher", () => {
 
     expect(launched.launcherOpen).toBe(false);
     expect(launched.windows).toStrictEqual([]);
+  });
+});
+
+describe("a client's limits on its size", () => {
+  /** The one float on the workspace on screen. */
+  const floatOf = (state: WindowState) => {
+    const [float] = workspaceHere(state).floats;
+    if (float === undefined) {
+      throw new Error("nothing is floating");
+    } else {
+      return float;
+    }
+  };
+
+  it("float a window no smaller than its client will draw", () => {
+    // Bitwarden's: a 680x500 minimum, over the 640x420 a float opens at.
+    // Smaller, its frame is cut off at the box's edge. Its bar comes on top.
+    const state = reduce(
+      desktop("vault"),
+      WindowAction.AppMinSize("vault", [680, 500]),
+      WindowAction.FloatToggled(),
+    );
+
+    expect(floatOf(state)).toMatchObject({
+      height: 500 + TITLE_BAR,
+      width: 680,
+    });
+  });
+
+  it("grow a float when the limit arrives after it", () => {
+    // A client says its limits on a commit of its own, which can come after
+    // the user floated it.
+    const state = reduce(
+      desktop("vault"),
+      WindowAction.FloatToggled(),
+      WindowAction.AppMinSize("vault", [680, undefined]),
+    );
+
+    expect(floatOf(state).width).toBe(680);
+  });
+
+  it("stop a float being dragged past the largest its client will draw", () => {
+    const floated = reduce(
+      desktop("dialog"),
+      WindowAction.AppMaxSize("dialog", [700, undefined]),
+      WindowAction.FloatToggled(),
+    );
+    const { x, y } = floatOf(floated);
+
+    const state = reduce(
+      floated,
+      WindowAction.WindowResized(APP("dialog"), {
+        height: 900,
+        width: 1200,
+        x,
+        y,
+      }),
+    );
+
+    expect(floatOf(state)).toMatchObject({ height: 900, width: 700, x, y });
+  });
+
+  it("keep the edge nobody dragged where it was", () => {
+    // Dragged in from the left, the right edge stays put — so a window held
+    // at its smallest stops rather than sliding right.
+    const floated = reduce(
+      desktop("vault"),
+      WindowAction.AppMinSize("vault", [680, undefined]),
+      WindowAction.FloatToggled(),
+    );
+    const before = floatOf(floated);
+    const right = before.x + before.width;
+
+    const state = reduce(
+      floated,
+      WindowAction.WindowResized(APP("vault"), {
+        height: before.height,
+        width: before.width - 100,
+        x: before.x + 100,
+        y: before.y,
+      }),
+    );
+
+    expect(floatOf(state)).toMatchObject({ width: 680, x: right - 680 });
+  });
+});
+
+describe("a client's popups", () => {
+  const MENU = {
+    appId: "menu",
+    parent: "term",
+    position: [12, 30],
+    size: [180, 240],
+  } as const;
+
+  it("are held as they are placed, and moved in place", () => {
+    const state = reduce(
+      desktop("term"),
+      WindowAction.PopupPlaced(MENU),
+      WindowAction.PopupPlaced({ ...MENU, position: [40, 30] }),
+    );
+
+    expect(state.popups).toEqual([{ ...MENU, position: [40, 30] }]);
+    // And never as windows: a menu in a frame of its own is the bug.
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
+  });
+
+  it("go when the client closes them, and leave the window alone", () => {
+    const state = reduce(
+      desktop("term"),
+      WindowAction.PopupPlaced(MENU),
+      WindowAction.AppClosed("menu"),
+    );
+
+    expect(state.popups).toEqual([]);
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
   });
 });

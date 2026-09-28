@@ -612,6 +612,36 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "app_min_size" || *type == "app_max_size") {
+    const std::string* app_id = message.FindString("app_id");
+    const base::ListValue* size = message.FindList("size");
+    if (app_id && size && size->size() == 2u) {
+      if (*type == "app_min_size") {
+        client_->AppMinSize(*app_id, Number((*size)[0]), Number((*size)[1]),
+                            arrival);
+      } else {
+        client_->AppMaxSize(*app_id, Number((*size)[0]), Number((*size)[1]),
+                            arrival);
+      }
+    }
+    return;
+  }
+
+  if (*type == "popup_placed") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::string* parent = message.FindString("parent");
+    const base::ListValue* position = message.FindList("position");
+    const base::ListValue* size = message.FindList("size");
+    const std::optional<bool> grab = message.FindBool("grab");
+    if (app_id && parent && position && position->size() == 2u && size &&
+        size->size() == 2u && grab) {
+      client_->PopupPlaced(*app_id, *parent, Number((*position)[0]),
+                           Number((*position)[1]), Number((*size)[0]),
+                           Number((*size)[1]), *grab, arrival);
+    }
+    return;
+  }
+
   if (*type == "app_resized") {
     const std::string* app_id = message.FindString("app_id");
     const base::ListValue* size = message.FindList("size");

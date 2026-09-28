@@ -17,9 +17,11 @@
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
+import { limitedTo } from "./floating/float";
+import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
-import type { ClientWindow, ShellWindow } from "./window";
+import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
 import {
@@ -179,6 +181,11 @@ export type WindowState = {
    * back to (`workspaceAutoBackAndForth`).
    */
   previous: string | undefined;
+  /**
+   * The popups — menus, tooltips — clients have open over their windows,
+   * oldest first. Not windows: see `popup.ts`.
+   */
+  popups: readonly Popup[];
   /** The windows in the scratchpad, the most recently hidden last. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
@@ -195,6 +202,7 @@ export const NO_WINDOWS: WindowState = {
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: BindingMode.Default,
+  popups: [],
   previous: undefined,
   scratchpad: [],
   screens: [{ current: "1", name: UNDESCRIBED_SCREEN }],
@@ -274,6 +282,8 @@ export enum WindowActionKind {
   AppAppeared,
   AppClosed,
   AppCursorChanged,
+  AppMaxSize,
+  AppMinSize,
   AppTitled,
   BrowserOpened,
   ChildFocused,
@@ -293,6 +303,7 @@ export enum WindowActionKind {
   ModeSet,
   ModeSwapped,
   ParentFocused,
+  PopupPlaced,
   ScratchpadShown,
   ScreenHovered,
   ScreensDescribed,
@@ -336,6 +347,20 @@ export const WindowAction = {
     appId,
     cursor,
     kind: WindowActionKind.AppCursorChanged as const,
+  }),
+
+  /** The client said the largest it will draw its window. */
+  AppMaxSize: (appId: string, size: SizeLimit) => ({
+    appId,
+    kind: WindowActionKind.AppMaxSize as const,
+    size,
+  }),
+
+  /** The client said the smallest it will draw its window. */
+  AppMinSize: (appId: string, size: SizeLimit) => ({
+    appId,
+    kind: WindowActionKind.AppMinSize as const,
+    size,
   }),
 
   /**
@@ -500,6 +525,12 @@ export const WindowAction = {
 
   /** `focus parent`. */
   ParentFocused: () => ({ kind: WindowActionKind.ParentFocused as const }),
+
+  /** A client opened a popup over one of its windows, or moved one. */
+  PopupPlaced: (popup: Popup) => ({
+    kind: WindowActionKind.PopupPlaced as const,
+    popup,
+  }),
 
   /** `scratchpad show`. */
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
@@ -701,7 +732,7 @@ export type WindowAction = ReturnType<
 export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
-): WindowState => rehomed(reduceAction(state, action));
+): WindowState => rehomed(limited(state, reduceAction(state, action)));
 
 const reduceAction = (
   state: WindowState,
@@ -712,12 +743,31 @@ const reduceAction = (
       return openApp(state, action.appId, action.title);
     }
     case WindowActionKind.AppClosed: {
-      return closeWindow(state, appWindowId(action.appId));
+      // A popup, or a window: the ids are one space, and a popup's is never
+      // a window's.
+      return state.popups.some(({ appId }) => appId === action.appId)
+        ? {
+            ...state,
+            popups: state.popups.filter(({ appId }) => appId !== action.appId),
+          }
+        : closeWindow(state, appWindowId(action.appId));
     }
     case WindowActionKind.AppCursorChanged: {
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
+      }));
+    }
+    case WindowActionKind.AppMaxSize: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        maxSize: action.size,
+      }));
+    }
+    case WindowActionKind.AppMinSize: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        minSize: action.size,
       }));
     }
     case WindowActionKind.AppTitled: {
@@ -799,6 +849,18 @@ const reduceAction = (
     }
     case WindowActionKind.ModeSwapped: {
       return onCurrent(state, modeToggled);
+    }
+    case WindowActionKind.PopupPlaced: {
+      // Moved in place rather than appended, so a menu keeps its order.
+      const placed = action.popup;
+      return {
+        ...state,
+        popups: state.popups.some(({ appId }) => appId === placed.appId)
+          ? state.popups.map((popup) =>
+              popup.appId === placed.appId ? placed : popup,
+            )
+          : [...state.popups, placed],
+      };
     }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);
@@ -1338,3 +1400,47 @@ const homeOf = (
     return state.focused;
   }
 };
+
+/**
+ * `after`, with every floating window held to what its client will draw —
+ * see `limitedTo`. After every action rather than in each that moves a float,
+ * because a client can say its limits after it was floated, and every way a
+ * float is sized would otherwise have to remember to ask.
+ */
+const limited = (before: WindowState, after: WindowState): WindowState => {
+  const workspaces = after.workspaces.map((workspace) =>
+    limitedFloats(before, after, workspace),
+  );
+  return workspaces.every(
+    (workspace, index) => workspace === after.workspaces[index],
+  )
+    ? after
+    : { ...after, workspaces };
+};
+
+const limitedFloats = (
+  before: WindowState,
+  after: WindowState,
+  workspace: Workspace,
+): Workspace => {
+  const floats = workspace.floats.map((float) => {
+    const window = after.windows.find(({ id }) => id === float.id);
+    return window?.kind === WindowKind.App
+      ? limitedTo(
+          float,
+          floatBefore(before, float.id),
+          window.minSize,
+          window.maxSize,
+        )
+      : float;
+  });
+  return floats.every((float, index) => float === workspace.floats[index])
+    ? workspace
+    : { ...workspace, floats };
+};
+
+/** Where the float `id` was before the action, if it was floating then. */
+const floatBefore = (state: WindowState, id: string) =>
+  state.workspaces
+    .flatMap(({ floats }) => floats)
+    .find((float) => float.id === id);
