@@ -439,6 +439,7 @@ impl Screens {
                     origin: display.origin,
                     transform: display.transform,
                     scale: display.scale,
+                    desk: display.desk,
                 })
                 .collect(),
             outputs: layout
@@ -781,7 +782,7 @@ fn as_measure(coordinate: i32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_config::Config;
+    use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
         Config::parse(text)
@@ -1371,6 +1372,13 @@ size = [800, 600]
                     // which is what lets a page lay out logical and upright.
                     transform: Transform::Rotate270,
                     scale: 1.2,
+                    // Where the profile put it, which is what the engine
+                    // carries a pointer between monitors by: the row above
+                    // puts the laptop beside it, and the profile below.
+                    desk: Some(Desk {
+                        position: (0, 0),
+                        size: (900, 1600),
+                    }),
                 },
                 Connector {
                     id: 1,
@@ -1382,6 +1390,10 @@ size = [800, 600]
                     origin: (1920, 0),
                     transform: Transform::Normal,
                     scale: 1.5,
+                    desk: Some(Desk {
+                        position: (0, 1920),
+                        size: (1920, 1280),
+                    }),
                 },
             ]
         );

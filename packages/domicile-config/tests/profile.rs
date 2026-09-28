@@ -8,7 +8,7 @@
 //! monitors come and go. That is the whole point of it: the config is matched
 //! against what is connected and applied again on every hotplug.
 
-use domicile_config::{Config, Connected, Layout, Transform};
+use domicile_config::{Config, Connected, Desk, Layout, Transform};
 
 /// The layout `text`'s profiles make of `connected`, or a panic naming which
 /// of the two ways it failed to produce one.
@@ -423,16 +423,61 @@ fn a_disabled_display_is_a_connector_to_leave_dark() {
             // corner anyway, past the three that are lit. The engine's display
             // list carries a dark connector as much as a lit one, and two
             // displays claiming one rectangle is worse than one that is off.
-            // A pixel past them rather than touching: the engine carries a
-            // pointer only onto a screen that starts where its own ends, and
-            // one that wandered onto a panel that is off would be lost.
-            (LAPTOP, false, (11521, 0)),
+            (LAPTOP, false, (11520, 0)),
             (LEFT, true, (0, 0)),
             (CENTER, true, (3840, 0)),
             (RIGHT, true, (7680, 0)),
         ],
         "the three lit ones are stepped across by the mode each of them scans \
-         out, and the dark one is put a pixel past the end of them"
+         out, and the dark one is put past the end of them"
+    );
+}
+
+#[test]
+fn a_connector_says_where_the_profile_placed_it() {
+    // The engine's desktop is a row of CRTCs, which says nothing about which
+    // monitor is above or beside which. The pointer crosses between monitors
+    // by where the profile put them, so that goes to the engine too -- and a
+    // dark one has nowhere to be.
+    let layout = layout(
+        HOME_OFFICE_FULL,
+        &[
+            connected(LAPTOP, PANEL_MODE),
+            connected(LEFT, DESK_MODE),
+            connected(CENTER, DESK_MODE),
+            connected(RIGHT, DESK_MODE),
+        ],
+    );
+    assert_eq!(
+        layout
+            .scanout()
+            .iter()
+            .map(|display| (display.name.as_str(), display.desk))
+            .collect::<Vec<_>>(),
+        vec![
+            (LAPTOP, None),
+            (
+                LEFT,
+                Some(Desk {
+                    position: (0, 0),
+                    size: (1800, 3200)
+                })
+            ),
+            (
+                CENTER,
+                Some(Desk {
+                    position: (1800, 0),
+                    size: (1800, 3200)
+                })
+            ),
+            (
+                RIGHT,
+                Some(Desk {
+                    position: (3600, 0),
+                    size: (1800, 3200)
+                })
+            ),
+        ]
     );
 }
 
