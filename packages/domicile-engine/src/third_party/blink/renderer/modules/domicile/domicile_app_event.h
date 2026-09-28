@@ -15,7 +15,8 @@ namespace blink {
 class DomicileAppEventInit;
 
 // Something happened to a window: it appeared, resized or closed, or the
-// keyboard moved to it or was asked for by it. One type for the five because
+// keyboard moved to it or was asked for by it -- or a popup was placed over
+// one. One type for the six because
 // they carry the same thing -- which window -- and differ only in what else
 // they carry.
 //
@@ -42,6 +43,17 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
                    std::optional<double> width,
                    std::optional<double> height,
                    DOMHighResTimeStamp arrival);
+  // A popup, placed at (x, y) from `parent_app_id`'s box, `width` by
+  // `height`, which always has a size: it is announced once it has drawn.
+  DomicileAppEvent(const AtomicString& type,
+                   const String& app_id,
+                   const String& parent_app_id,
+                   double x,
+                   double y,
+                   double width,
+                   double height,
+                   bool grab,
+                   DOMHighResTimeStamp arrival);
   ~DomicileAppEvent() override;
 
   const String& appId() const { return app_id_; }
@@ -56,6 +68,11 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   double width() const { return width_.value_or(0); }
   double height() const { return height_.value_or(0); }
 
+  const String& parentAppId() const { return parent_app_id_; }
+  double x() const { return x_; }
+  double y() const { return y_; }
+  bool grab() const { return grab_; }
+
   const AtomicString& InterfaceName() const override;
   void Trace(Visitor*) const override;
 
@@ -64,6 +81,10 @@ class MODULES_EXPORT DomicileAppEvent final : public Event {
   String title_;
   std::optional<double> width_;
   std::optional<double> height_;
+  String parent_app_id_;
+  double x_ = 0;
+  double y_ = 0;
+  bool grab_ = false;
   DOMHighResTimeStamp arrival_ = 0;
 };
 

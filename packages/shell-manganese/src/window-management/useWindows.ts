@@ -171,6 +171,9 @@ export const useWindows = (
     domicile.on("app_titled", ({ app_id, title }) => {
       told(Action.AppTitled(app_id, title));
     });
+    domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
+      told(Action.PopupPlaced({ appId: app_id, parent, position, size }));
+    });
     domicile.on("app_closed", ({ app_id }) => {
       told(Action.AppClosed(app_id));
     });

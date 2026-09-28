@@ -27,6 +27,7 @@ import {
   idle,
   locked,
   modifiers,
+  popupPlaced,
   shortcut,
 } from "./host-message";
 
@@ -46,10 +47,14 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
     arrival: 0,
+    grab: false,
     hasSize: false,
     height: 0,
+    parentAppId: "",
     title: "",
     width: 0,
+    x: 0,
+    y: 0,
     ...fields,
   });
 
@@ -132,6 +137,31 @@ describe("a resize", () => {
         }),
       ),
     ).toStrictEqual({ app_id: "term", size: [800.5, 600.25] });
+  });
+});
+
+describe("a popup", () => {
+  it("is placed against what it is over, and knows whether it grabbed", () => {
+    expect(
+      popupPlaced(
+        appEvent("popupplaced", {
+          appId: "menu",
+          grab: true,
+          hasSize: true,
+          height: 240,
+          parentAppId: "term",
+          width: 180,
+          x: 12,
+          y: 30,
+        }),
+      ),
+    ).toStrictEqual({
+      app_id: "menu",
+      grab: true,
+      parent: "term",
+      position: [12, 30],
+      size: [180, 240],
+    });
   });
 });
 

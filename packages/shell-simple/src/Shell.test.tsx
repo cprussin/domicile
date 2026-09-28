@@ -187,6 +187,39 @@ describe("Shell", () => {
       expect(windowFor("term")).toHaveAttribute("data-drawn");
     });
 
+    it("draws a client's menu over its window, and takes it down when it goes", () => {
+      const host = shell();
+      host.emit("app_appeared", {
+        app_id: "term",
+        size: [640, 480],
+        title: undefined,
+      });
+      const window = windowFor("term");
+
+      host.emit("popup_placed", {
+        app_id: "menu",
+        grab: true,
+        parent: "term",
+        position: [12, 30],
+        size: [180, 240],
+      });
+
+      const menu = windowFor("menu");
+      expect(menu.style.left).toBe(
+        `${(Number.parseFloat(window.style.left) + 12).toString()}px`,
+      );
+      expect(menu.style.top).toBe(
+        `${(Number.parseFloat(window.style.top) + 30).toString()}px`,
+      );
+      expect(menu.style.width).toBe("180px");
+      expect(menu.style.height).toBe("240px");
+      expect(menu.style.zIndex).toBe(window.style.zIndex);
+
+      host.emit("app_closed", { app_id: "menu" });
+      expect(document.querySelector('[app-id="menu"]')).toBeNull();
+      expect(windowFor("term")).toBeDefined();
+    });
+
     it("marks a window that arrives already drawn", () => {
       // A size on the announcement is the replay a reconnecting chrome gets,
       // and no frame is coming to say so: the hand-over skips a natively-drawn
