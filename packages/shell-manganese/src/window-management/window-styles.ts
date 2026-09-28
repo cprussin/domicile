@@ -210,7 +210,7 @@ export const movingStyles = cva({
 /**
  * How a window gets from one look to the next rather than snapping to it.
  *
- * Three things move, and only the first of them is ever held back.
+ * Four things move, and only the first of them is ever held back.
  *
  * **The box.** Every rectangle on this desktop is arithmetic — see
  * `tree/frames.ts` — so a window whose neighbor opened, closed, split or grew
@@ -254,21 +254,26 @@ export const movingStyles = cva({
  * on the way to anywhere. A drag is when the pointer crosses the most windows
  * of all.
  *
- * **One declaration for all three**, which is why the box, the depth and the
- * colors are one recipe rather than a class each: two rules setting
- * `transition` on one element are decided by the order Panda happens to emit
- * them in, and the loser is simply not applied.
+ * **The opacity**, which is {@link draggingStyles} coming and going: the
+ * window fades as it is taken hold of and fades back as it is let go, rather
+ * than blinking at both ends of the drag. Dragged or not, because those are
+ * the two ends.
+ *
+ * **One declaration for all four**, which is why the box, the depth, the
+ * colors and the opacity are one recipe rather than a class each: two rules
+ * setting `transition` on one element are decided by the order Panda happens
+ * to emit them in, and the loser is simply not applied.
  */
 export const settlingStyles = cva({
   variants: {
     dragging: {
       false: {
         transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
       },
       true: {
         transition:
-          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
       },
     },
   },

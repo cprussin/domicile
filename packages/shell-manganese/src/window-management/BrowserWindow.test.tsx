@@ -1301,6 +1301,25 @@ describe("BrowserWindow", () => {
       );
     });
 
+    // A WINDOW FADES AS IT IS TAKEN HOLD OF AND AS IT IS LET GO. Both ends of
+    // a drag change its opacity, and a window that snapped between the two
+    // blinked.
+    it("fades to see-through as it is taken hold of", () => {
+      render(<BrowserWindow {...windowProps} dragging />);
+
+      expect(globalThis.getComputedStyle(browser()).transition).toContain(
+        "opacity",
+      );
+    });
+
+    it("fades back to solid as it is let go", () => {
+      render(<BrowserWindow {...windowProps} />);
+
+      expect(globalThis.getComputedStyle(browser()).transition).toContain(
+        "opacity",
+      );
+    });
+
     // A WINDOW ON ITS WAY OUT ASKS FOR NOTHING AND ANSWERS NOTHING. Its page
     // goes on being drawn — that is the whole point of drawing it rather than
     // something standing in for it — but the keyboard has moved on to whatever

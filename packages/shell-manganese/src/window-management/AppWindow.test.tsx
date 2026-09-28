@@ -379,6 +379,34 @@ describe("AppWindow", () => {
       ).not.toContain("inline-size");
     });
 
+    // A WINDOW FADES AS IT IS TAKEN HOLD OF AND AS IT IS LET GO. Both ends of
+    // a drag change its opacity, and a window that snapped between the two
+    // blinked.
+    it("fades to see-through as it is taken hold of", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          dragging
+          focused={false}
+          onReach={noReach}
+        />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(portal(container)).transition,
+      ).toContain("opacity");
+    });
+
+    it("fades back to solid as it is let go", () => {
+      const { container } = render(
+        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(portal(container)).transition,
+      ).toContain("opacity");
+    });
+
     it("says when it has played its motion out", async () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
