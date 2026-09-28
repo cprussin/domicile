@@ -32,6 +32,12 @@
 # AND NOTHING STEALS IT ON AGE. A cold build is up to five hours, and clearing
 # this while its holder is linking is the OOM it exists to prevent.
 #
+# ONLY ON WHERE IT WAS TAKEN. A runner runs one job at a time and kills what
+# that job left running before it starts the next, so a runner that finds the
+# slot held by an earlier job on itself is looking at a job that is over. That
+# is how a runner restart leaves it: the `always()` drop never runs. A person's
+# build records no runner, and is never cleared.
+#
 # A HOLDER CAN STEP ASIDE INSTEAD. A waiter leaves a note beside the slot and
 # refreshes it every poll; `wanted` says whether a fresh one names anybody else,
 # and `yield` drops the slot and returns once a waiter has it. That is for the
@@ -134,6 +140,12 @@ case "$action" in
         esac
       fi
       mkdir "$LOCK" 2>/dev/null && { took=1; break; }
+      if [ -n "${RUNNER_NAME:-}" ] &&
+         [ "$(cat "$LOCK/runner" 2>/dev/null)" = "$RUNNER_NAME" ]; then
+        echo "cleared the compile slot '$(holder)' left on this runner ($RUNNER_NAME), which runs one job at a time"
+        rm -rf "$LOCK"
+        continue
+      fi
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
       echo "$owner" >"$waiting"
       # Once per holder, not once: a wait can outlast a cold repin, and hours
@@ -147,6 +159,7 @@ case "$action" in
     done
     if [ -n "$took" ]; then
       echo "$owner" >"$LOCK/owner"
+      echo "${RUNNER_NAME:-}" >"$LOCK/runner"
       date +%s >"$LOCK/since"
       date -Is >"$LOCK/since-human"
       echo "took the compile slot as '$owner'"
@@ -161,7 +174,8 @@ case "$action" in
       echo
       echo "Once that build is done, re-run this job."
       echo
-      echo "If the holder is a run that died, nothing clears this but a person:"
+      echo "If the holder is a run that died, its runner clears this the next"
+      echo "time it takes the slot. Anything else only a person can clear:"
       echo
       echo "  rm -rf $LOCK"
     } >&2
