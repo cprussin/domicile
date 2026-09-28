@@ -1,7 +1,9 @@
 import { css, cx } from "../../../styled-system/css";
 import type { Direction } from "../direction";
+import { grabCursorStyles } from "../grab-cursor-styles";
 import { TILED } from "../placement";
 import type { Rect } from "../rect";
+import { useGrabCursor } from "../useGrabCursor";
 import { placedAt } from "../window-styles";
 import type { Aim, Target } from "./aim";
 import { useTileDrag } from "./useTileDrag";
@@ -31,17 +33,16 @@ type Props = {
  */
 export const TileGrab = ({ frame, id, resizes, ...handlers }: Props) => {
   const { drag, ...events } = useTileDrag({ frame, id, resizes, ...handlers });
+  const { cursor, onPointerMove } = useGrabCursor({ drag, frame, resizes });
   return (
     // Presentational, and `aria-hidden` for `FloatGrab`'s reason: everything
     // this offers the keyboard offers as well.
     <div
       aria-hidden
-      className={cx(
-        grabStyles,
-        (drag?.resizes ?? resizes) ? resizeStyles : moveStyles,
-      )}
+      className={cx(grabStyles, grabCursorStyles[cursor])}
       // Which window this sheet belongs to — see `FloatGrab`.
       data-window={id}
+      onPointerMove={onPointerMove}
       style={placedAt(frame, TILED)}
       {...events}
     />
@@ -49,7 +50,3 @@ export const TileGrab = ({ frame, id, resizes, ...handlers }: Props) => {
 };
 
 const grabStyles = css({ position: "absolute" });
-
-const moveStyles = css({ cursor: "move" });
-
-const resizeStyles = css({ cursor: "nwse-resize" });

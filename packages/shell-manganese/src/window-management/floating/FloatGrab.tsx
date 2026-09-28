@@ -1,5 +1,7 @@
 import { css, cx } from "../../../styled-system/css";
+import { grabCursorStyles } from "../grab-cursor-styles";
 import type { Rect } from "../rect";
+import { useGrabCursor } from "../useGrabCursor";
 import { placedAt } from "../window-styles";
 import type { Float } from "./float";
 import { rectOf } from "./float";
@@ -38,21 +40,24 @@ export const FloatGrab = ({ depth, float, resizes, ...moves }: Props) => {
     resizes,
     ...moves,
   });
+  const { cursor, onPointerMove } = useGrabCursor({
+    drag,
+    frame: rectOf(float),
+    resizes,
+  });
   return (
     // Presentational, and `aria-hidden` for that reason: everything this
     // offers is offered by the keyboard as well, so there is nothing here a
     // keyboard cannot reach elsewhere.
     <div
       aria-hidden
-      className={cx(
-        grabStyles,
-        (drag?.resizes ?? resizes) ? resizeStyles : moveStyles,
-      )}
+      className={cx(grabStyles, grabCursorStyles[cursor])}
       // Which window this sheet belongs to, which is a fact the SDK asks for
       // rather than a styling hook: a press here lands off every `<app>`, and
       // left unanswered that is the chrome taking the keyboard off the window
       // the user has just taken hold of. See `AppWindow`.
       data-window={float.id}
+      onPointerMove={onPointerMove}
       style={placedAt(rectOf(float), depth)}
       {...handlers}
     />
@@ -60,7 +65,3 @@ export const FloatGrab = ({ depth, float, resizes, ...moves }: Props) => {
 };
 
 const grabStyles = css({ position: "absolute" });
-
-const moveStyles = css({ cursor: "move" });
-
-const resizeStyles = css({ cursor: "nwse-resize" });
