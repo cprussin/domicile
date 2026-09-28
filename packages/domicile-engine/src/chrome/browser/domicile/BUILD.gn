@@ -17,6 +17,8 @@ source_set("domicile") {
   sources = [
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
+    "domicile_extension_installer.cc",
+    "domicile_extension_installer.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
     "domicile_shell_windows.cc",
@@ -35,6 +37,18 @@ source_set("domicile") {
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
+    # The extensions a desk's config names, installed into a profile: the
+    # ExtensionService, the pending and unpacked installers, and the profile
+    # pref holding what was installed. //chrome for the same reason as the
+    # rest of this directory -- a Profile is nothing below it.
+    "//chrome/browser/extensions",
+    "//chrome/browser/profiles:profile",
+    "//chrome/common:constants",
+    "//components/domicile:extension_installer",
+    "//components/prefs",
+    "//extensions/browser",
+    "//extensions/common",
+    "//extensions/common:mojom",
     # The window a page's view is in, and the host that owns its cursor. Here
     # and not in //components/domicile for the reason the whole of this
     # directory is here: a cursor is moved through an aura WindowTreeHost, and

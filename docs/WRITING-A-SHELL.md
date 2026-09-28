@@ -236,8 +236,8 @@ reload, so a new `xkb_layout` retypes the desktop, a new `output.max_scale`
 re-advertises it, a new `idle.blank_after_seconds` restarts the clock its
 screens go dark on, a new `theme.mode` repaints the shell and every window that
 follows the portal, a new `files.omit` walks the home again for the launcher's
-index, a new `[extensions]` list is handed to the engine (which does not
-install from it yet — see [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
+index, a new `[extensions]` list installs and uninstalls what it names (see
+[EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
 and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
 edit replaced. One section is read at startup and not on a reload:
