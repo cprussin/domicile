@@ -193,6 +193,7 @@ const isArrival = (motion: WindowMotion): boolean => {
       return true;
     }
     case "closing":
+    case "closing-tab":
     case "leaving-to-end":
     case "leaving-to-start":
     case "opening":

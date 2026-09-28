@@ -131,6 +131,21 @@ export default defineConfig({
           "0%": { opacity: "1", transform: "scale(1)" },
           "100%": { opacity: "0", transform: "scale(0.85)" },
         },
+        // A tab closing: it closes up along the strip it was in while the tabs
+        // beside it grow over the gap — `--collapse-x` for a tabbed
+        // container's, `--collapse-y` for a stack's, see `collapsedAlong`.
+        //
+        // The contents of a tab that was shown are given neither, so they
+        // only fade: the tab taking its place is already drawn under them at
+        // the same box, and contents shrinking off it would show its edges
+        // coming out from behind them.
+        windowClosingTab: {
+          "0%": { opacity: "1", transform: "scale(1, 1)" },
+          "100%": {
+            opacity: "0",
+            transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
+          },
+        },
         // And the workspace being left goes the other way, a screen's width
         // too, so it is pushed off by the one coming on.
         windowLeavingToEnd: {

@@ -10,7 +10,7 @@ import { rectOf } from "./floating/float";
 import { gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
-import type { Frame, Tab } from "./tree/frames";
+import type { Frame, Tab, TabLayout } from "./tree/frames";
 import { framesOf } from "./tree/frames";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
@@ -51,6 +51,8 @@ export type Placement = {
    * not showing: the tab is on screen and the window behind it is not.
    */
   surface: Rect | undefined;
+  /** Which way the tabs its bar is one of run — see `Frame.tabbed`. */
+  tabbed: TabLayout | undefined;
 };
 
 /** The rectangles one screen of the desk has to offer. */
@@ -159,6 +161,7 @@ export const placementsOf = (
           behind: undefined,
           id: float.id,
           surface: surfaceOf(rectOf(float)),
+          tabbed: undefined,
         },
         FLOATING + at,
       ),
@@ -210,6 +213,7 @@ const fullscreen = (
         behind: undefined,
         id: full.id,
         surface: surfaceOf(area),
+        tabbed: undefined,
       },
       FULLSCREEN,
     );
@@ -224,7 +228,7 @@ const fullscreen = (
  * window reaches the screen.
  */
 const placed = (
-  { bar, behind, id, surface }: Frame,
+  { bar, behind, id, surface, tabbed }: Frame,
   depth: number,
 ): Placement => ({
   bar,
@@ -233,6 +237,7 @@ const placed = (
   frame: surface === undefined ? bar : spanning(bar, surface),
   id,
   surface,
+  tabbed,
 });
 
 /** The smallest box holding both of them. */

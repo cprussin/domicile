@@ -9,10 +9,12 @@ import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
+import type { TabLayout } from "./tree/frames";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
   clickThroughStyles,
+  collapsedAlong,
   edgeStyles,
   movingStyles,
   placedAt,
@@ -78,6 +80,11 @@ type Props = {
    * the stack — see `shuffledBy` — or `undefined` while it is not.
    */
   restack?: Restack | undefined;
+  /**
+   * Which way the tabs this bar is one of run, which is the way it closes up
+   * — see `collapsedAlong` — or `undefined` for a bar of a window's own.
+   */
+  tabbed?: TabLayout | undefined;
   title: string;
   /** The window this bar names, which the SDK asks about on a press. */
   window: string;
@@ -117,6 +124,7 @@ export const TitleBar = ({
   onReach,
   rect,
   restack,
+  tabbed,
   title,
   window,
 }: Props) => (
@@ -162,6 +170,7 @@ export const TitleBar = ({
       ...placedAt(rect, depth),
       ...scaledAbout(frame, rect),
       ...shuffledBy(restack),
+      ...collapsedAlong(tabbed),
     }}
   >
     <span className={titleStyles}>{title}</span>

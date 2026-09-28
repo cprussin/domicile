@@ -4,6 +4,7 @@ import { departed, withClosing } from "./closing";
 import type { Placement } from "./placement";
 import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
+import { Layout } from "./tree/node";
 import { ShellWindow } from "./window";
 
 const TERMINAL = ShellWindow.App("term", "kitty");
@@ -17,6 +18,7 @@ const placementOf = (id: string): Placement => ({
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,
   surface: { height: 770, width: 1200, x: 0, y: 62 },
+  tabbed: undefined,
 });
 
 const shown = (windows: readonly ShellWindow[], activeId?: string): Shown => ({
@@ -77,6 +79,23 @@ describe("departed", () => {
         ({ placement }) => [placement.behind, placement.surface],
       ),
     ).toStrictEqual([[undefined, undefined]]);
+  });
+
+  // A TAB CLOSES UP ABOUT ITS OWN MIDDLE. The tabs beside it close over the
+  // gap it leaves, so the middle of the whole window — somewhere down in its
+  // contents — is not where it goes.
+  it("turns a closing tab about the tab itself", () => {
+    const before = shown([TERMINAL, EDITOR]);
+    const tab: Placement = {
+      ...placementOf(TERMINAL.id),
+      tabbed: Layout.Tabbed,
+    };
+
+    expect(
+      departed({ ...before, placements: [tab] }, [EDITOR]).map(
+        ({ placement }) => [placement.frame, placement.surface],
+      ),
+    ).toStrictEqual([[tab.bar, tab.surface]]);
   });
 
   it("remembers where it was in the list", () => {

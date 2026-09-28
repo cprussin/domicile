@@ -27,6 +27,7 @@ export type WindowMotion =
   | "arriving-from-end"
   | "arriving-from-start"
   | "closing"
+  | "closing-tab"
   | "leaving-to-end"
   | "leaving-to-start"
   | "opening"
@@ -61,6 +62,7 @@ export const departureFor = (towards: Towards): WindowMotion =>
 export const isLeaving = (motion: WindowMotion): boolean => {
   switch (motion) {
     case "closing":
+    case "closing-tab":
     case "leaving-to-end":
     case "leaving-to-start": {
       return true;

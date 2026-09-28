@@ -4,6 +4,7 @@ import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
+import { Layout } from "./tree/node";
 
 // The real stylesheet, because what a bar's arrival and its settling resolve
 // to is decided by the emitted CSS rather than by any one `css(...)` call: a
@@ -77,7 +78,19 @@ describe("TitleBar", () => {
     expect(bar(container)).toHaveStyle({ transformOrigin: "600px 415px" });
   });
 
-  // The window it names is going, and its Close does nothing now: a control
+  // A tab closes up along the strip it is in, which is the bar's to say: the
+  // contents under a shown tab play the same keyframes and only fade.
+  it("closes up across a tabbed container's strip", () => {
+    const { container } = render(
+      <TitleBar {...barProps} motion="closing-tab" tabbed={Layout.Tabbed} />,
+    );
+
+    expect(globalThis.getComputedStyle(bar(container)).animation).toContain(
+      "windowClosingTab",
+    );
+    expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
+  });
+
   // the keyboard can still reach for a moment is not one.
   it("is nothing a pointer or a keyboard can reach while it leaves", () => {
     const { container } = render(<TitleBar {...barProps} motion="closing" />);

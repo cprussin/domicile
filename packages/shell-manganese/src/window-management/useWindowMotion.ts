@@ -219,7 +219,8 @@ const played = (
         ? playing
         : { ...playing, switching: undefined };
     }
-    case "closing": {
+    case "closing":
+    case "closing-tab": {
       const closing = playing.closing.filter(({ window }) => window.id !== id);
       return closing.length === playing.closing.length
         ? playing
@@ -261,7 +262,10 @@ const drawnWindow = (
   if (closing !== undefined) {
     return {
       focused: closing.focused,
-      motion: "closing",
+      // A tab closes up in its strip rather than shrinking away with its
+      // window, and one that was shown fades to the tab taking its place.
+      motion:
+        closing.placement.tabbed === undefined ? "closing" : "closing-tab",
       placement: closing.placement,
       restack: undefined,
       window,

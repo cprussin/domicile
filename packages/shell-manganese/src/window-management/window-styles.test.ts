@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { placedAt, scaledAbout, shuffledBy } from "./window-styles";
+import { Layout } from "./tree/node";
+import {
+  collapsedAlong,
+  placedAt,
+  scaledAbout,
+  shuffledBy,
+} from "./window-styles";
 
 const RECT = { height: 200, width: 300, x: 10, y: 20 };
 
@@ -70,5 +76,22 @@ describe("shuffledBy", () => {
 
   it("is nothing for a window that is not shuffling", () => {
     expect(shuffledBy(undefined)).toStrictEqual({});
+  });
+});
+
+describe("collapsedAlong", () => {
+  // A tab closes up the way its neighbors close over it: across for a tabbed
+  // container's, down for a stack's.
+  it("hands the way a tab closes up to the keyframes", () => {
+    expect(collapsedAlong(Layout.Tabbed)).toStrictEqual({
+      "--collapse-x": 0,
+    });
+    expect(collapsedAlong(Layout.Stacking)).toStrictEqual({
+      "--collapse-y": 0,
+    });
+  });
+
+  it("is nothing for a bar that is not a tab", () => {
+    expect(collapsedAlong(undefined)).toStrictEqual({});
   });
 });

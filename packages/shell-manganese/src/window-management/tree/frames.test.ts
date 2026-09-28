@@ -57,6 +57,7 @@ describe("framesOf", () => {
         x: 0,
         y: TITLE_BAR,
       },
+      tabbed: undefined,
     });
   });
 
@@ -188,6 +189,47 @@ describe("framesOf", () => {
       y: TITLE_BAR,
     });
     expect(frameFor(tiled, "a").surface).toMatchObject({ y: TITLE_BAR * 2 });
+  });
+
+  // What a tab closing plays out along: a tabbed container's tabs close up
+  // across the gap one leaves, and a stack's close up down it.
+  it("says which way the tabs a window's bar is one of run", () => {
+    const tabbed = (layout: Layout.Stacking | Layout.Tabbed) =>
+      framesOf(
+        {
+          depth: 1,
+          root: LayoutNode.Container(layout, [
+            LayoutNode.Window("a"),
+            LayoutNode.Window("b"),
+          ]),
+        },
+        AREA,
+        0,
+      ).frames.map((frame) => frame.tabbed);
+
+    expect(tabbed(Layout.Tabbed)).toStrictEqual([Layout.Tabbed, Layout.Tabbed]);
+    expect(tabbed(Layout.Stacking)).toStrictEqual([
+      Layout.Stacking,
+      Layout.Stacking,
+    ]);
+  });
+
+  // Closing a container's only tab closes the container with it, which is a
+  // window going rather than a tab.
+  it("says nothing of a container's only tab, or a bar of a window's own", () => {
+    const only = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+      },
+      AREA,
+      0,
+    );
+
+    expect(frameFor(only, "a").tabbed).toBeUndefined();
+    expect(
+      frameFor(framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0), "b").tabbed,
+    ).toBeUndefined();
   });
 
   it("titles a tab that holds a container by the window in it", () => {

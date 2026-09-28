@@ -3,6 +3,8 @@ import type { CSSProperties } from "react";
 import { css, cva } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import type { TabLayout } from "./tree/frames";
+import { Layout } from "./tree/node";
 
 /**
  * What every window shares, which is almost nothing.
@@ -171,6 +173,33 @@ export const shuffledBy = (
       };
 
 /**
+ * Which way a tab closes up, as the inline custom property the
+ * `windowClosingTab` keyframes read: across for a tabbed container's tab, down
+ * for a stack's.
+ *
+ * Written on the bar alone. The contents of a window that was its container's
+ * shown tab play the same keyframes without it, which is a fade and nothing
+ * else — see `panda.config.ts`.
+ *
+ * Nothing for a bar that is not a tab.
+ */
+export const collapsedAlong = (
+  tabbed: TabLayout | undefined,
+): Record<`--${string}`, number> => {
+  switch (tabbed) {
+    case Layout.Stacking: {
+      return { "--collapse-y": 0 };
+    }
+    case Layout.Tabbed: {
+      return { "--collapse-x": 0 };
+    }
+    case undefined: {
+      return {};
+    }
+  }
+};
+
+/**
  * How far a workspace slides when it is switched to or away from, as the
  * inline custom property the switch keyframes read: the width of its screen,
  * so the two workspaces are side by side the whole way across.
@@ -233,6 +262,11 @@ export const movingStyles = cva({
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
+      },
+      // On the curve the tabs beside it ease their boxes over the gap on —
+      // see {@link settlingStyles} — so its edges and theirs move together.
+      "closing-tab": {
+        animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
       "leaving-to-end": {
         animation:
