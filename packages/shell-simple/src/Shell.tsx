@@ -69,6 +69,18 @@ type ShellWindow = {
   z: number;
 };
 
+/**
+ * A popup a client opened over one of its windows — a menu, a tooltip. Not a
+ * window: it is drawn at its offset from what it is over, and is never dragged,
+ * raised or given the keyboard by this shell.
+ */
+type Popup = {
+  appId: string;
+  parent: string;
+  position: readonly [x: number, y: number];
+  size: readonly [width: number, height: number];
+};
+
 /** A drag in progress, measured from the grab so small steps cannot drift. */
 type Drag = {
   appId: string;
@@ -88,6 +100,7 @@ type Drag = {
  */
 export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
+  const [popups, setPopups] = useState<readonly Popup[]>([]);
   // Which ids are open, kept in step synchronously: two announcements in one
   // tick would otherwise both find the state empty and open the same window.
   const open = useRef(new Set<string>());
@@ -106,9 +119,16 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
         }
       }
     });
+    domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
+      setPopups((all) => [
+        ...all.filter((popup) => popup.appId !== app_id),
+        { appId: app_id, parent, position, size },
+      ]);
+    });
     domicile.on("app_closed", ({ app_id }) => {
       open.current.delete(app_id);
       setWindows((all) => all.filter((window) => window.appId !== app_id));
+      setPopups((all) => all.filter((popup) => popup.appId !== app_id));
     });
     // The size is the SDK's, recorded as the message goes past; what reaches
     // here is that the window has stopped being empty.
@@ -213,6 +233,12 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
           style={styleOf(window)}
         />
       ))}
+      {popups.map((popup) => {
+        const style = popupStyleOf(popup, popups, windows);
+        return style === undefined ? undefined : (
+          <app app-id={popup.appId} key={popup.appId} style={style} />
+        );
+      })}
     </div>
   );
 };
@@ -317,6 +343,52 @@ const styleOf = ({
   width,
   zIndex: z,
 });
+
+/**
+ * Where a popup goes: its offset from what it is over, added up to a window,
+ * at that window's depth — and after every window in the document, so it wins
+ * the tie. `undefined` while its window is not open here.
+ */
+const popupStyleOf = (
+  popup: Popup,
+  popups: readonly Popup[],
+  windows: readonly ShellWindow[],
+): CSSProperties | undefined => {
+  const over = originOf(popup.parent, popups, windows);
+  return over === undefined
+    ? undefined
+    : {
+        height: popup.size[1],
+        left: over.left + popup.position[0],
+        top: over.top + popup.position[1],
+        width: popup.size[0],
+        zIndex: over.z,
+      };
+};
+
+/** The top-left of `appId`'s box, and the depth of its window. */
+const originOf = (
+  appId: string,
+  popups: readonly Popup[],
+  windows: readonly ShellWindow[],
+): { left: number; top: number; z: number } | undefined => {
+  const popup = popups.find((candidate) => candidate.appId === appId);
+  if (popup === undefined) {
+    const window = windows.find((candidate) => candidate.appId === appId);
+    return window === undefined
+      ? undefined
+      : { left: window.left, top: window.top, z: window.z };
+  } else {
+    const over = originOf(popup.parent, popups, windows);
+    return over === undefined
+      ? undefined
+      : {
+          left: over.left + popup.position[0],
+          top: over.top + popup.position[1],
+          z: over.z,
+        };
+  }
+};
 
 const take = (event: PointerEvent<HTMLDivElement>): void => {
   event.preventDefault();

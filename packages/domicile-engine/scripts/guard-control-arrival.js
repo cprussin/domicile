@@ -104,6 +104,7 @@ const EVENT_NAMES = [
   "apptitled",
   "appappeared",
   "appresized",
+  "popupplaced",
   "appclosed",
   "appcursor",
   "shortcut",

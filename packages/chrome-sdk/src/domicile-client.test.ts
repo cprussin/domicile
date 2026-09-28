@@ -33,10 +33,14 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
     appId: "",
     arrival: 0,
+    grab: false,
     hasSize: false,
     height: 0,
+    parentAppId: "",
     title: "",
     width: 0,
+    x: 0,
+    y: 0,
     ...fields,
   });
 
@@ -388,6 +392,55 @@ describe("DomicileClient", () => {
       );
 
       expect(seen).toStrictEqual([{ locked: true }]);
+    });
+
+    it("delivers a popup, and knows which window it is over", () => {
+      const placed: unknown[] = [];
+      domicile.on("popup_placed", (message) => {
+        placed.push(message);
+      });
+
+      host.dispatch(
+        "popupplaced",
+        appEvent("popupplaced", {
+          appId: "menu",
+          grab: true,
+          hasSize: true,
+          height: 240,
+          parentAppId: "term",
+          width: 180,
+          x: 12,
+          y: 30,
+        }),
+      );
+      // A submenu, which is over the menu and so over the same window.
+      host.dispatch(
+        "popupplaced",
+        appEvent("popupplaced", {
+          appId: "submenu",
+          hasSize: true,
+          height: 100,
+          parentAppId: "menu",
+          width: 100,
+          x: 180,
+        }),
+      );
+
+      expect(placed).toHaveLength(2);
+      expect(placed[0]).toStrictEqual({
+        app_id: "menu",
+        grab: true,
+        parent: "term",
+        position: [12, 30],
+        size: [180, 240],
+      });
+      expect(domicile.windowOf("submenu")).toBe("term");
+      expect(domicile.windowOf("term")).toBe("term");
+      // A popup's box is its buffer, which is what the pointer maps through.
+      expect(domicile.surfaceSizeOf("menu")).toStrictEqual([180, 240]);
+
+      host.dispatch("appclosed", appEvent("appclosed", { appId: "menu" }));
+      expect(domicile.windowOf("menu")).toBe("menu");
     });
 
     it("delivers a client's request for the keyboard without moving it", () => {

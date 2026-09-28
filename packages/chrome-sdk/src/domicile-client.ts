@@ -94,6 +94,7 @@ import {
   idle,
   locked,
   modifiers,
+  popupPlaced,
   shortcut,
   theme,
 } from "./host-message";
@@ -171,6 +172,12 @@ export class DomicileClient {
   readonly #surfaceSizes = new Map<string, SurfaceSize>();
 
   /**
+   * What each open popup is over, by the popup — see {@link windowOf}.
+   * Recorded as the message goes past, like the sizes above.
+   */
+  readonly #popupParents = new Map<string, string>();
+
+  /**
    * The searches waiting on an answer, by the query each asked.
    *
    * By query rather than in order, because the compositor answers each one
@@ -215,11 +222,18 @@ export class DomicileClient {
       this.#surfaceSizes.set(message.app_id, message.size);
       this.#deliver("app_resized", message);
     });
+    host.addEventListener("popupplaced", (event) => {
+      const message = popupPlaced(event);
+      this.#surfaceSizes.set(message.app_id, message.size);
+      this.#popupParents.set(message.app_id, message.parent);
+      this.#deliver("popup_placed", message);
+    });
     host.addEventListener("appclosed", (event) => {
       const message = appClosed(event);
       // The size is the client's, so it ends with the client rather than with
       // whatever element happened to be showing it.
       this.#surfaceSizes.delete(message.app_id);
+      this.#popupParents.delete(message.app_id);
       this.#deliver("app_closed", message);
     });
     host.addEventListener("appcursor", (event) => {
@@ -340,6 +354,16 @@ export class DomicileClient {
    */
   surfaceSizeOf(appId: string): SurfaceSize | undefined {
     return this.#surfaceSizes.get(appId);
+  }
+
+  /**
+   * The window `appId` belongs to: itself for a window, and for a popup the
+   * window at the bottom of the popups it is over. What a click on a popup
+   * focuses, because a menu is not a window a shell knows about.
+   */
+  windowOf(appId: string): string {
+    const parent = this.#popupParents.get(appId);
+    return parent === undefined ? appId : this.windowOf(parent);
   }
 
   /**

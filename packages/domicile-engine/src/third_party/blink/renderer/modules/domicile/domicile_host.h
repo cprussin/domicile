@@ -163,6 +163,14 @@ class MODULES_EXPORT DomicileHost final
                   double width,
                   double height,
                   base::TimeTicks arrival) override;
+  void PopupPlaced(const String& app_id,
+                   const String& parent_app_id,
+                   double x,
+                   double y,
+                   double width,
+                   double height,
+                   bool grab,
+                   base::TimeTicks arrival) override;
   void AppClosed(const String& app_id, base::TimeTicks arrival) override;
   void AppCursor(const String& app_id,
                  domicile::mojom::blink::CursorShape cursor,

@@ -335,6 +335,13 @@ these is one run, and each has a line to look for.
 True, understood, and not scheduled. Each is here so that finding it again
 costs nothing.
 
+- **A popup near a screen's edge is not moved back onto it.** A client's
+  menu is placed where its positioner asks, relative to its window, because
+  the compositor does not know where the page put the window — so the
+  positioner's `constraint_adjustment` (flip, slide, resize) is never applied
+  and a menu opened near an edge can hang off it. Fixing it wants the page to
+  say where a window's box is on screen, or the positioner handed to the
+  shell to solve. `popup_placed` in `domicile-protocol`.
 - **A client is offered 8-bit formats only.** The engine imports four
   fourccs (`FOURCCS` in `engine.rs`), so a client that would draw in 10 bits
   draws in 8. Widening it is a `FormatFromFourcc` case in the fork and an entry
