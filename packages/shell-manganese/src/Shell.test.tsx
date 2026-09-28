@@ -1341,6 +1341,17 @@ describe("Shell", () => {
       expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 
+    it("grows the ring in with the first window of a workspace", () => {
+      // There is no last window to slide across from, and a ring drawn at
+      // full size around a window still growing in is a line ahead of it.
+      const { container } = renderShell();
+      clientAppears("one");
+
+      expect(selectionRing(container).className).toContain(
+        movingStyles({ motion: "opening" }),
+      );
+    });
+
     it("keeps the group when the layout slides a window under the pointer", () => {
       // What moving a group looks like from the desktop's side: the windows
       // trade places under a hand that has not moved, and the `pointerover`
