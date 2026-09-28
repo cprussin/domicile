@@ -232,6 +232,11 @@ export const movingStyles = cva({
       restacking: {
         animation: "windowRestacking {durations.slower} {easings.in-out}",
       },
+      // The same shuffle under another name, so a window shuffled again
+      // straight away starts over rather than going on with the last one.
+      "restacking-again": {
+        animation: "windowRestackingAgain {durations.slower} {easings.in-out}",
+      },
       // A window that is simply on the desktop, which is most of them most of
       // the time. Revealed by a workspace switch, a tab, a fullscreen let go
       // of: it is there, and a window that is there has nothing to play.

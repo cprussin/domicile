@@ -30,8 +30,14 @@ export type WindowMotion =
   | "leaving-to-end"
   | "leaving-to-start"
   | "opening"
-  | "restacking"
+  | Shuffle
   | "resting";
+
+/**
+ * A float trading places with another in the stack, which is one movement
+ * drawn as either of two identical animations — see `nextShuffle`.
+ */
+export type Shuffle = "restacking" | "restacking-again";
 
 /** How a window of the workspace being switched to comes on screen. */
 export const arrivalFrom = (towards: Towards): WindowMotion =>
@@ -63,6 +69,7 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "arriving-from-start":
     case "opening":
     case "restacking":
+    case "restacking-again":
     case "resting": {
       return false;
     }

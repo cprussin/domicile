@@ -417,6 +417,7 @@ export const Stage = ({
           // shuffles over the others and the one that has just opened — so
           // the ring plays either with it. Not around a group, which is not
           // the window growing in.
+          motion={active?.motion}
           opening={!selection.group && active?.motion === "opening"}
           restack={active?.restack}
           selection={selection}

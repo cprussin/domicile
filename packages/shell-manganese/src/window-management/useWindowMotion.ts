@@ -8,7 +8,7 @@ import { restacked } from "./restacking";
 import type { Shown } from "./shown";
 import type { Tab } from "./tree/frames";
 import type { ShellWindow } from "./window";
-import type { WindowMotion } from "./window-motion";
+import type { Shuffle, WindowMotion } from "./window-motion";
 import { arrivalFrom, departureFor } from "./window-motion";
 import type { WorkspaceSwitch } from "./workspace-switch";
 import { switchedTo } from "./workspace-switch";
@@ -30,7 +30,7 @@ export type DrawnWindow = {
   placement: Placement | undefined;
   /**
    * The shuffle it is playing — which way it parts, and the depths it trades —
-   * or `undefined` unless its motion is `restacking`.
+   * or `undefined` unless its motion is one of the two shuffles.
    */
   restack: Restack | undefined;
   window: ShellWindow;
@@ -52,13 +52,21 @@ export type WindowMotions = {
   tabs: readonly DrawnTab[];
 };
 
+/** A shuffle playing, and which of the two animations it is playing as. */
+type Shuffling = { motion: Shuffle; restack: Restack };
+
 /** What is still playing out, and so still being drawn. */
 type Playing = {
   closing: readonly Closing[];
   /** The windows that have just opened and are still growing in. */
   opening: readonly string[];
   /** The floats still shuffling over, or under, one another. */
-  restacking: readonly Restack[];
+  restacking: readonly Shuffling[];
+  /**
+   * Which of the two shuffles each window was last given, kept after it has
+   * played: the next one it is given is the other — see {@link nextShuffle}.
+   */
+  shuffled: readonly { id: string; motion: Shuffle }[];
   switching: WorkspaceSwitch | undefined;
 };
 
@@ -66,6 +74,7 @@ const NOTHING_PLAYING: Playing = {
   closing: [],
   opening: [],
   restacking: [],
+  shuffled: [],
   switching: undefined,
 };
 
@@ -130,7 +139,10 @@ const moved = (before: Shown, shown: Shown): boolean =>
 
 /** What is playing once the desktop has moved from `before` to `shown`. */
 const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
-  const restacks = restacked(before, shown);
+  const shuffles = restacked(before, shown).map((restack) => ({
+    motion: nextShuffle(playing, restack.id),
+    restack,
+  }));
   return {
     closing: [...playing.closing, ...departed(before, shown.windows)],
     // The ones still open, and the ones that have just appeared. A window that
@@ -147,11 +159,16 @@ const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
     // rather than both.
     restacking: [
       ...playing.restacking.filter(
-        ({ id }) =>
-          holds(shown.windows, id) &&
-          !restacks.some((restack) => restack.id === id),
+        ({ restack }) =>
+          holds(shown.windows, restack.id) && !shuffling(shuffles, restack.id),
       ),
-      ...restacks,
+      ...shuffles,
+    ],
+    shuffled: [
+      ...playing.shuffled.filter(
+        ({ id }) => holds(shown.windows, id) && !shuffling(shuffles, id),
+      ),
+      ...shuffles.map(({ motion, restack }) => ({ id: restack.id, motion })),
     ],
     switching: switchedTo(before, shown) ?? playing.switching,
   };
@@ -159,6 +176,24 @@ const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
 
 const holds = (windows: readonly ShellWindow[], id: string): boolean =>
   windows.some((window) => window.id === id);
+
+const shuffling = (shuffles: readonly Shuffling[], id: string): boolean =>
+  shuffles.some(({ restack }) => restack.id === id);
+
+/**
+ * Which of the two shuffles a window is given next: the one it was not given
+ * last.
+ *
+ * Because a browser starts an animation over only when its name changes. A
+ * window raised back while it is still shuffling, or in the frame it finished,
+ * would otherwise keep the name it had — and play nothing, and never say it
+ * had finished, and be stuck shuffling from then on.
+ */
+const nextShuffle = (playing: Playing, id: string): Shuffle =>
+  playing.shuffled.find((shuffled) => shuffled.id === id)?.motion ===
+  "restacking"
+    ? "restacking-again"
+    : "restacking";
 
 /**
  * What is left playing once `id` says it has finished `motion`.
@@ -196,9 +231,12 @@ const played = (
         ? playing
         : { ...playing, opening };
     }
-    case "restacking": {
+    case "restacking":
+    case "restacking-again": {
+      // Only the shuffle it is playing now: one it was raised out of is not
+      // the one that finished.
       const restacking = playing.restacking.filter(
-        (restack) => restack.id !== id,
+        (shuffle) => shuffle.restack.id !== id || shuffle.motion !== motion,
       );
       return restacking.length === playing.restacking.length
         ? playing
@@ -236,10 +274,10 @@ const drawnWindow = (
       focused: shown.activeId === window.id,
       motion,
       placement,
-      restack:
-        motion === "restacking"
-          ? playing.restacking.find(({ id }) => id === window.id)
-          : undefined,
+      restack: playing.restacking.find(
+        (shuffle) =>
+          shuffle.restack.id === window.id && shuffle.motion === motion,
+      )?.restack,
       window,
     };
   }
@@ -257,9 +295,10 @@ const arriving = (playing: Playing, id: string): WindowMotion => {
   } else if (playing.opening.includes(id)) {
     return "opening";
   } else {
-    return playing.restacking.some((restack) => restack.id === id)
-      ? "restacking"
-      : "resting";
+    return (
+      playing.restacking.find((shuffle) => shuffle.restack.id === id)?.motion ??
+      "resting"
+    );
   }
 };
 
