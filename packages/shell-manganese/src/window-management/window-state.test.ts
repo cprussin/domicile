@@ -828,14 +828,15 @@ describe("the launcher", () => {
     expect(launched.windows).toHaveLength(1);
   });
 
-  it("shuts behind the editor it launched, and opens no window itself", () => {
-    // The editor is a Wayland client the compositor spawns, so its window
-    // arrives as an `app_appeared` like any other client's. Nothing here has a
-    // window to add, which is the same shape `TerminalLaunched` has.
+  it("shuts behind the file it opened, and opens no window itself", () => {
+    // What opens the file is a Wayland client the compositor spawns, so its
+    // window arrives as an `app_appeared` like any other client's. Nothing
+    // here has a window to add, which is the same shape `TerminalLaunched`
+    // has.
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),
-      WindowAction.EditorLaunched("Notes/today.org"),
+      WindowAction.FileOpened("Notes/today.org"),
     );
 
     expect(launched.launcherOpen).toBe(false);

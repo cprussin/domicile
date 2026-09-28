@@ -229,7 +229,7 @@ describe("Launcher", () => {
       await screen.findByRole("option", { name: "todo.txt" }),
     );
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("todo.txt")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("todo.txt")]);
   });
 
   it("edits a directory without the slash the host marked it with", async () => {
@@ -237,7 +237,7 @@ describe("Launcher", () => {
 
     await panel.user.click(await screen.findByRole("option", { name: "src" }));
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("src")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("src")]);
   });
 
   it("edits the first match on Enter, which is what typing a name is for", async () => {
@@ -250,7 +250,7 @@ describe("Launcher", () => {
     await panel.rows();
     await panel.user.keyboard("{Enter}");
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
   it("edits the row the arrow keys walked to instead", async () => {
@@ -260,7 +260,7 @@ describe("Launcher", () => {
     await panel.rows();
     await panel.user.keyboard("{ArrowDown}{Enter}");
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
   it("launches nothing on Enter over an empty box", async () => {
@@ -536,7 +536,7 @@ describe("Launcher", () => {
 
     await panel.user.type(panel.box(), "~/Scratch{Enter}");
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("Scratch")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("Scratch")]);
   });
 
   it("draws what the host sent and counts everything it matched", async () => {
@@ -563,7 +563,7 @@ describe("Launcher", () => {
     await panel.rows();
     await panel.user.keyboard("{ArrowUp}{Enter}");
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("file-199")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("file-199")]);
   });
 
   it("walks the rows with ctrl+n and ctrl+p as well as the arrow keys", async () => {
@@ -575,7 +575,7 @@ describe("Launcher", () => {
       "{Control>}n{/Control}{Control>}n{/Control}{Control>}n{/Control}{Control>}p{/Control}{Enter}",
     );
 
-    expect(panel.launched).toStrictEqual([Launch.Edited("Notes/today.org")]);
+    expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
   it("says it was dismissed when Escape closes it", async () => {

@@ -1890,9 +1890,9 @@ describe("the launcher", () => {
     ).toStrictEqual(["Notestoday.org", "todo.txt"]);
   });
 
-  it("opens a file in the user's editor and puts the panel away", async () => {
-    // `$EDITOR` and `$HOME` are read by the spawned shell, because they exist
-    // there and nowhere this page can see. See `launcher/editor-command.ts`.
+  it("opens a file with the user's default application and puts the panel away", async () => {
+    // `$HOME` is read by the spawned shell, because it exists there and
+    // nowhere this page can see. See `launcher/open-command.ts`.
     renderShell();
     press("space");
     await homeHolds("Notes/today.org");
@@ -1904,7 +1904,7 @@ describe("the launcher", () => {
       [
         "sh",
         "-c",
-        'case $1 in /*) exec "$EDITOR" "$1" ;; *) exec "$EDITOR" "$HOME/$1" ;; esac',
+        'case $1 in /*) exec xdg-open "$1" ;; *) exec xdg-open "$HOME/$1" ;; esac',
         "domicile-launcher",
         "Notes/today.org",
       ],

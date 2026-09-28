@@ -2,16 +2,15 @@
 //
 // # Why there is a shell in here
 //
-// `$EDITOR` and `$HOME` exist in the process the compositor spawns and nowhere
-// this page can reach: a shell served over `domicile://` has an origin, not an
+// `$HOME` exists in the process the compositor spawns and nowhere this page
+// can reach: a shell served over `domicile://` has an origin, not an
 // environment, and the host answers `search_files` in paths relative to a home
-// directory it never names. So the two are read where they are, by the one
-// thing in this path that can read them.
+// directory it never names. So it is read where it is, by the one thing in
+// this path that can read it.
 //
-// `exec` is what keeps it from being a process tree: the `sh` is replaced by
-// the editor rather than sitting above it as a parent, so what the compositor
-// started and what maps a window are the same process. Nothing waits on
-// anything, and a `kill` from the desktop reaches the editor.
+// Which application opens the file is `xdg-open`'s to decide, from the user's
+// MIME associations, rather than this page's. `exec` keeps the `sh` from
+// sitting above it as a parent; what `xdg-open` itself starts is its business.
 //
 // # Why the path is an argument
 //
@@ -20,7 +19,7 @@
 // with a semicolon in it. The quoting around `$1` is what keeps it one word.
 
 /**
- * The script the two environment variables are read by.
+ * The script `$HOME` is read by.
  *
  * The `case` is the only branch: a path the host offered is relative to the
  * home directory and an absolute one is already where it says. Deciding that
@@ -28,13 +27,13 @@
  * `$HOME` is, which is exactly why the protocol answers in relative paths.
  */
 const SCRIPT =
-  'case $1 in /*) exec "$EDITOR" "$1" ;; *) exec "$EDITOR" "$HOME/$1" ;; esac';
+  'case $1 in /*) exec xdg-open "$1" ;; *) exec xdg-open "$HOME/$1" ;; esac';
 
 /** `$0` for the script, which is what a diagnostic from `sh` is prefixed with. */
 const NAME = "domicile-launcher";
 
-/** The argv that opens `path` in the user's editor. */
-export const editorCommand = (path: string): readonly string[] => [
+/** The argv that opens `path` with the user's default application. */
+export const openCommand = (path: string): readonly string[] => [
   "sh",
   "-c",
   SCRIPT,

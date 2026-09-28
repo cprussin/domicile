@@ -281,7 +281,7 @@ export enum WindowActionKind {
   ClipboardToggled,
   ContainerSplit,
   DeskAdopted,
-  EditorLaunched,
+  FileOpened,
   FloatToggled,
   FocusChanged,
   FocusRequested,
@@ -408,18 +408,18 @@ export const WindowAction = {
   }),
 
   /**
-   * The user picked a file in the launcher, which the compositor opens in
-   * their editor.
+   * The user picked a file in the launcher, which the compositor opens with
+   * their default application.
    *
-   * Nothing in the state moves but the panel: the editor is a Wayland client
-   * and its window arrives as an announcement from the host, exactly as
+   * Nothing in the state moves but the panel: that application is a Wayland
+   * client and its window arrives as an announcement from the host, exactly as
    * {@link WindowAction.TerminalLaunched}'s does. `path` is relative to the
    * home directory, or absolute for a file outside it — see
-   * `launcher/editor-command.ts`, which resolves the difference in the one
+   * `launcher/open-command.ts`, which resolves the difference in the one
    * process that can.
    */
-  EditorLaunched: (path: string) => ({
-    kind: WindowActionKind.EditorLaunched as const,
+  FileOpened: (path: string) => ({
+    kind: WindowActionKind.FileOpened as const,
     path,
   }),
 
@@ -748,7 +748,7 @@ const reduceAction = (
     case WindowActionKind.DeskAdopted: {
       return action.desk;
     }
-    case WindowActionKind.EditorLaunched: {
+    case WindowActionKind.FileOpened: {
       // The compositor spawns it and the host announces the window it opens,
       // the same way a terminal's arrives. The panel goes, because the panel
       // is how the file was asked for.
@@ -945,7 +945,7 @@ const openApp = (
     : state;
 };
 
-// The launcher shuts here as well as on `EditorLaunched`, because those are
+// The launcher shuts here as well as on `FileOpened`, because those are
 // the two answers it has and a panel left up over its own answer is one the
 // user has to dismiss after every URL they type. Harmless on the bar's `+`,
 // where it is already shut.

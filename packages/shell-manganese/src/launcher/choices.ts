@@ -85,7 +85,7 @@ export const choicesFor = (
 export const launchOf = (choice: Choice): Launch => {
   switch (choice.kind) {
     case ChoiceKind.File: {
-      return Launch.Edited(choice.row.path);
+      return Launch.Opened(choice.row.path);
     }
     case ChoiceKind.Site:
     case ChoiceKind.Search:
