@@ -265,8 +265,10 @@ const movedOut = (
  * The workspace split the other way, with the window on that side of
  * everything else.
  *
- * `undefined` where the root already runs the way the window is being pushed:
- * that is the edge of the workspace, and there is nowhere further to go.
+ * `undefined` where the root is already a split the way the window is being
+ * pushed: that is the edge of the workspace, and there is nowhere further to
+ * go. A tabbed or stacking root is not that edge — its end tab pushed past the
+ * end splits out beside the rest.
  */
 const acrossWorkspace = (
   root: LayoutNode,
@@ -278,7 +280,7 @@ const acrossWorkspace = (
   const rest = withoutAt(root, path);
   if (
     rest === undefined ||
-    (root.kind === NodeKind.Container && axisOf(root.layout) === axis)
+    (root.kind === NodeKind.Container && root.layout === splitFor(axis))
   ) {
     return undefined;
   } else {
