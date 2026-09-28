@@ -5206,10 +5206,15 @@ impl CompositorHandler for DomicileCompositor {
             }
             let engine_holds = match &committer {
                 Committer::App(app_id) => {
+                    // The size the page's box last asked for, which a
+                    // client need not have drawn at — see `crop`.
+                    let configured = toplevel
+                        .with_pending_state(|state| state.size.map(|size| (size.w, size.h)));
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
                         let size = committed.size();
                         crate::window_geometry::crop(
                             geometry,
+                            configured,
                             surface_size(size, buffer_scale, viewport.destination),
                             size,
                         )
