@@ -171,6 +171,19 @@ export const shuffledBy = (
       };
 
 /**
+ * How far a workspace slides when it is switched to or away from, as the
+ * inline custom property the switch keyframes read: the width of its screen,
+ * so the two workspaces are side by side the whole way across.
+ *
+ * On the stage rather than on each window, because a custom property is
+ * inherited: every window, bar and ring on it reads the one value. A runtime
+ * number for the reason {@link shuffledBy}'s are.
+ */
+export const slidAcross = (width: number): Record<`--${string}`, string> => ({
+  "--workspace-width": `${width.toString()}px`,
+});
+
+/**
  * What a window is doing over time, drawn.
  *
  * Every one of these is a transform and an opacity, which is what makes them
@@ -197,37 +210,37 @@ export const shuffledBy = (
  * and at this length it reads as a window sitting still and then being
  * snatched.
  *
- * The two departures end `forwards`, so the last frame is what the window is
- * left at. Without it a window would snap back to full size and full opacity
- * for however long it takes the desktop to hear that the animation has ended
- * and take the element off the page.
+ * The departures end `forwards`, so the last frame is what the window is
+ * left at. Without it a window would snap back to how it started for however
+ * long it takes the desktop to hear that the animation has ended and take the
+ * element off the page.
  */
 export const movingStyles = cva({
   variants: {
     motion: {
       // The two workspaces of a switch move as one strip: the same distance,
-      // the same length and the same curve, so the gap between them holds
-      // while they cross. A curve each — out for the arrival, in for the
-      // departure — had the one being left hang while the other was already
-      // most of the way on, which is two movements rather than one.
+      // the same length and the same curve, so they stay side by side while
+      // they cross. `emphasized` rather than the openings' `outQuart`: this
+      // one crosses a whole screen, and a curve that starts at full speed
+      // moves it a tenth of the way in the first frame.
       "arriving-from-end": {
         animation:
-          "windowArrivingFromEnd {durations.slower} {easings.outQuart}",
+          "windowArrivingFromEnd {durations.slower} {easings.emphasized}",
       },
       "arriving-from-start": {
         animation:
-          "windowArrivingFromStart {durations.slower} {easings.outQuart}",
+          "windowArrivingFromStart {durations.slower} {easings.emphasized}",
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
       },
       "leaving-to-end": {
         animation:
-          "windowLeavingToEnd {durations.slower} {easings.outQuart} forwards",
+          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
       },
       "leaving-to-start": {
         animation:
-          "windowLeavingToStart {durations.slower} {easings.outQuart} forwards",
+          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards",
       },
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",
