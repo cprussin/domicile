@@ -15,7 +15,9 @@ import { SelectionRing } from "./SelectionRing";
 import { selectionOf } from "./selection";
 import { TitleBar } from "./TitleBar";
 import type { Aim, Target } from "./tiled/aim";
+import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
+import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import { useWindowMotion } from "./useWindowMotion";
@@ -256,6 +258,27 @@ export const Stage = ({
           }
         }
       })}
+      {/*
+        The tiled windows' borders, which resize them with no modifier held.
+        After the windows, so a border wins the pointer over the edge of the
+        window it overlaps; before their chrome, so a bar keeps its own pixels
+        and a held modifier's grab covers everything but the gaps.
+      */}
+      {bordersOf(targets).map(({ edge, id, rect }) => (
+        <TileBorder
+          edge={edge}
+          id={id}
+          key={`${id}-${edge.toString()}`}
+          onDrop={onDrop}
+          onGrab={() => {
+            onGrab(id);
+          }}
+          onStretch={(stretched, by) => {
+            onStretch(id, stretched, by);
+          }}
+          rect={rect}
+        />
+      ))}
       {/*
         After every window, so that a window's chrome and the window itself tie
         on `z-index` and the chrome wins on document order — while a window one
