@@ -13,7 +13,8 @@
 //! defect `ERRORS.md` exists to prevent. So a hold has a deadline: past it the
 //! buffer is released anyway and the caller is told, loud enough to debug.
 //!
-//! **The deadline applies only to a hold something newer replaced.** Viz hands
+//! **The deadline applies only to a hold something newer replaced, and runs
+//! from the replacement.** Viz hands
 //! a resource back when a later frame supersedes it, which means the newest
 //! hold for a surface is held *because it is the frame on screen* — and stays
 //! held for as long as the client is idle, which is as long as nobody touches
@@ -52,7 +53,9 @@ pub const HOLD_DEADLINE: Duration = Duration::from_millis(500);
 #[derive(Debug)]
 struct Held<B> {
     buffer: B,
-    since: Instant,
+    /// When a newer submission for the same surface replaced this one, which
+    /// is when its deadline starts. `None` while it is the frame on screen.
+    superseded: Option<Instant>,
 }
 
 /// Why a buffer came back.
@@ -120,18 +123,32 @@ impl<B> HeldBuffers<B> {
         self.held.is_empty()
     }
 
-    /// Records that `buffer` was submitted and must not be released yet.
+    /// Records that `buffer` was submitted and must not be released yet, and
+    /// that every other hold on `surface` was replaced at `now`, which is when
+    /// their deadlines start.
     ///
     /// Submitting the same id on the same surface again — a client committing
-    /// one buffer twice — replaces the hold and restarts its deadline, and
+    /// one buffer twice — replaces the hold, making it the frame on screen
+    /// again, and
     /// hands back the previous entry. That entry is the *same* buffer, because
     /// a surface and an id together name one buffer, so it is the caller's to
     /// **drop and not release**: viz has just been handed it, and the client is
     /// owed exactly one release, when viz is done with the submission it
     /// actually has.
     pub fn hold(&mut self, surface: SurfaceId, id: BufferId, buffer: B, now: Instant) -> Option<B> {
+        for ((held_surface, _), held) in &mut self.held {
+            if *held_surface == surface && held.superseded.is_none() {
+                held.superseded = Some(now);
+            }
+        }
         self.held
-            .insert((surface, id), Held { buffer, since: now })
+            .insert(
+                (surface, id),
+                Held {
+                    buffer,
+                    superseded: None,
+                },
+            )
             .map(|previous| previous.buffer)
     }
 
@@ -155,31 +172,18 @@ impl<B> HeldBuffers<B> {
     /// floor phase holds the screen still for sixty samples by design.
     ///
     /// A buffer a *newer* submission replaced is a different thing. Nothing is
-    /// drawing it, nothing will release it, and the client is owed it back.
-    fn latest_for_each_surface(&self) -> HashMap<SurfaceId, Instant> {
-        let mut newest: HashMap<SurfaceId, Instant> = HashMap::new();
-        for ((surface, _), held) in &self.held {
-            newest
-                .entry(*surface)
-                .and_modify(|since| *since = (*since).max(held.since))
-                .or_insert(held.since);
-        }
-        newest
-    }
-
+    /// drawing it, nothing will release it, and the client is owed it back —
+    /// but only once viz has had the deadline to draw its replacement, so the
+    /// clock starts when it was replaced, not when it was submitted. Timed from
+    /// its submission, an idle window's first new frame expired the one it
+    /// replaced on the very next pump.
     pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
-        let newest = self.latest_for_each_surface();
         let overdue: Vec<(SurfaceId, BufferId)> = self
             .held
             .iter()
-            .filter(|((surface, _), held)| {
-                // Ties go to the buffer, not to the deadline: two holds
-                // stamped the same instant means neither can be shown to be
-                // the superseded one.
-                newest
-                    .get(surface)
-                    .is_some_and(|latest| held.since < *latest)
-                    && now.duration_since(held.since) >= self.deadline
+            .filter(|(_, held)| {
+                held.superseded
+                    .is_some_and(|superseded| now.duration_since(superseded) >= self.deadline)
             })
             .map(|(key, _)| *key)
             .collect();
@@ -203,11 +207,10 @@ impl<B> HeldBuffers<B> {
     ///
     /// [`expired`]: HeldBuffers::expired
     pub fn take_all(&mut self) -> Taken<B> {
-        let on_screen = self.newest_of_each_surface();
         let (kept, returned) = self
             .held
             .drain()
-            .partition::<Vec<_>, _>(|(key, _)| on_screen.get(&key.0) == Some(&key.1));
+            .partition::<Vec<_>, _>(|(_, held)| held.superseded.is_none());
         Taken {
             on_screen: kept
                 .into_iter()
@@ -218,25 +221,6 @@ impl<B> HeldBuffers<B> {
                 .map(|(key, held)| (key, held.buffer))
                 .collect(),
         }
-    }
-
-    /// Which buffer each surface had on screen: the newest submission, with
-    /// the higher id breaking a tie so that exactly one comes back per
-    /// surface. Ties go the other way in [`HeldBuffers::expired`], and for the
-    /// opposite reason — there an unresolved tie means holding a buffer that
-    /// may be on screen, and here it would mean showing a frame that is not.
-    fn newest_of_each_surface(&self) -> HashMap<SurfaceId, BufferId> {
-        let mut newest: HashMap<SurfaceId, (Instant, BufferId)> = HashMap::new();
-        for ((surface, id), held) in &self.held {
-            newest
-                .entry(*surface)
-                .and_modify(|best| *best = (*best).max((held.since, *id)))
-                .or_insert((held.since, *id));
-        }
-        newest
-            .into_iter()
-            .map(|(surface, (_, id))| (surface, id))
-            .collect()
     }
 
     /// Everything held for `surface`, because the surface is gone and no
@@ -308,19 +292,26 @@ mod tests {
     // And the leak it was written for still is one: viz was handed something
     // newer, so nothing is drawing the old one and nothing ever will release
     // it.
+    //
+    // THE DEADLINE RUNS FROM THE REPLACEMENT, NOT THE SUBMISSION. Until the
+    // newer frame arrives the old one is on screen, and viz cannot hand it
+    // back before it has drawn what replaced it. Timed from its own submission,
+    // an idle window's first frame expired the one it replaced on the very next
+    // pump: seen on an AMD desktop as this error ~30 ms after a window idle for
+    // 2.6 s was resized, twice in one session, and never mid-animation.
     #[test]
     fn a_superseded_buffer_viz_never_releases_is_taken_back() {
         let now = Instant::now();
         let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
         held.hold(SURFACE, 1, "old", now);
-        held.hold(SURFACE, 2, "new", at(now, 400));
+        held.hold(SURFACE, 2, "new", at(now, 2_600));
 
         assert!(
-            held.expired(at(now, 499)).is_empty(),
-            "the old one is inside its own deadline, which runs from its own \
-             submission rather than from the one that replaced it"
+            held.expired(at(now, 3_099)).is_empty(),
+            "the old one was on screen until 2600, so viz has had 499 ms to \
+             hand it back, not 3099"
         );
-        assert_eq!(held.expired(at(now, 500)), vec![((SURFACE, 1), "old")]);
+        assert_eq!(held.expired(at(now, 3_100)), vec![((SURFACE, 1), "old")]);
         assert_eq!(
             held.release(SURFACE, 2),
             Some("new"),
@@ -410,9 +401,8 @@ mod tests {
     // A SURFACE HAS ONE FRAME ON SCREEN, and two holds stamped the same
     // instant must not make it two: the caller re-submits what comes back
     // under `on_screen`, and submitting two buffers for one window would put
-    // the older of them up. `expired` breaks that tie the other way — towards
-    // holding both — because there the cost of guessing is handing out a
-    // buffer viz is reading, and here it is showing the wrong frame.
+    // the older of them up. The order they were submitted in decides, not the
+    // clock.
     #[test]
     fn two_frames_stamped_the_same_instant_leave_one_on_screen() {
         let now = Instant::now();
