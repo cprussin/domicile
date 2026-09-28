@@ -100,6 +100,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
   fi
   rm -f "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
+  rm -rf "$PROFILE"
 }
 trap cleanup EXIT
 

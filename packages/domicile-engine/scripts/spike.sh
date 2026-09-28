@@ -93,6 +93,9 @@ PROFILE="${PROFILE:-/tmp/domicile-spike-profile}"
 # that failed is then diagnosed from the half that did not, and the message
 # above pointing at this file points at the wrong run.
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-spike-engine.log}"
+# Gone on the way out, because on crux /tmp is RAM that nothing else clears.
+# See scripts/test-the-guards-take-their-profiles-with-them.sh.
+trap 'rm -rf "$PROFILE"' EXIT
 
 ENGINE_FLAGS=()
 PRODUCER_FLAGS=()
