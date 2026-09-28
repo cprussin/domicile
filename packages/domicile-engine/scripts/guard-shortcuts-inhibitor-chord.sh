@@ -157,6 +157,7 @@ cleanup() {
   fi
   kill_compositors "$(compositor_owner)"
   wait
+  rm -rf "$PROFILE"
 }
 trap cleanup EXIT
 
