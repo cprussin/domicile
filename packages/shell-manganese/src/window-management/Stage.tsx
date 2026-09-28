@@ -136,7 +136,7 @@ export const Stage = ({
   windows,
 }: Props) => {
   const { placements, tabs } = screenful;
-  const selection = selectionOf(screenful, activeId, fullscreenId);
+  const selection = selectionOf(screenful, activeId, fullscreenId, draggingId);
   const motions = useWindowMotion({
     activeId,
     current,

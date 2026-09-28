@@ -13,8 +13,10 @@ type Props = {
  * commands from the window the keyboard is in out to the container around it,
  * and this is the same element either way, so it eases from the one box to
  * the other — see `settlingStyles` — rather than one line vanishing as another
- * appears. The window's own frame goes on saying where the keyboard is inside
- * a group, because that is still where it is.
+ * appears. Not while its window is dragged, though: a ring easing after each
+ * step of a drag trails behind the window it rings. The window's own frame
+ * goes on saying where the keyboard is inside a group, because that is still
+ * where it is.
  *
  * At the depth of what it rings and after every window in the document, which
  * puts it over that window's bar and the client surface along all four sides
@@ -23,7 +25,7 @@ type Props = {
  */
 export const SelectionRing = ({ selection }: Props) => (
   <div
-    className={cx(ringStyles, settlingStyles({ dragging: false }))}
+    className={cx(ringStyles, settlingStyles({ dragging: selection.dragging }))}
     // What is selected, as an attribute as well as a line: the desktop's own
     // state is worth being able to read off the element, in devtools and in a
     // test, rather than only off a hashed class name.

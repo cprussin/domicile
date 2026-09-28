@@ -32,8 +32,17 @@ const desktop = (...actions: readonly WindowAction[]): WindowState =>
     ...actions,
   );
 
-const selected = (state: WindowState, fullscreenId?: string) =>
-  selectionOf(placementsOf(state, GEOMETRY), activeIdOf(state), fullscreenId);
+const selected = (
+  state: WindowState,
+  fullscreenId?: string,
+  draggingId?: string,
+) =>
+  selectionOf(
+    placementsOf(state, GEOMETRY),
+    activeIdOf(state),
+    fullscreenId,
+    draggingId,
+  );
 
 describe("selectionOf", () => {
   it("rings the window being worked in, at its whole frame", () => {
@@ -41,6 +50,7 @@ describe("selectionOf", () => {
 
     expect(selected(state)).toEqual({
       depth: TILED,
+      dragging: false,
       group: false,
       rect: placementOf(state, "two").frame,
     });
@@ -49,6 +59,7 @@ describe("selectionOf", () => {
   it("rings the group `focus parent` selected instead", () => {
     expect(selected(desktop(WindowAction.ParentFocused()))).toEqual({
       depth: TILED,
+      dragging: false,
       group: true,
       rect: GEOMETRY.workspace,
     });
@@ -58,6 +69,12 @@ describe("selectionOf", () => {
     const state = desktop(WindowAction.FloatToggled());
 
     expect(selected(state)?.depth).toBe(placementOf(state, "two").depth);
+  });
+
+  it("keeps to the window being dragged rather than easing after it", () => {
+    const state = desktop(WindowAction.FloatToggled());
+
+    expect(selected(state, undefined, appWindowId("two"))?.dragging).toBe(true);
   });
 
   it("rings nothing around a window filling the screen", () => {

@@ -26,6 +26,7 @@ import {
   reduceWindows,
   WindowAction,
 } from "./window-management/window-state";
+import { settlingStyles } from "./window-management/window-styles";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
 // numbers, which `screens/host-displays.ts` is what regroups into the rectangle
@@ -1484,6 +1485,22 @@ describe("Shell", () => {
       expect(
         Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
       ).toBe(was + 40);
+    });
+
+    it("keeps the ring on a float being dragged rather than easing after it", () => {
+      // The ring eases between boxes, which is right for `focus parent` and a
+      // retile — and a ring trailing every step of a drag behind the window.
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      const bar = barFor(container, "app:term");
+
+      fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
+
+      expect(selectionRing(container).className).toContain(
+        settlingStyles({ dragging: true }),
+      );
     });
 
     it("moves it by what the hand crossed, on a page that is one monitor too", () => {
