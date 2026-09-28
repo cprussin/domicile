@@ -70,8 +70,8 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
-   * Whether this window fills the screen, which squares its corners: the
-   * screen's own are the only ones it has.
+   * Whether this window fills the screen, which squares its corners and drops
+   * its edge: the screen's own are the only ones it has.
    */
   fullscreen: boolean;
   /**
@@ -293,7 +293,8 @@ export const AppWindow = ({
       className={cx(
         windowStyles,
         appStyles,
-        edgeStyles,
+        // Neither a line nor rounded corners around the screen's own edge.
+        !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         movingStyles({ motion }),
         // The frame says what the bar above it says: this is the window the

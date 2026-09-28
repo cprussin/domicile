@@ -202,7 +202,7 @@ describe("BrowserWindow", () => {
     expect(style.overflow).toBe("hidden");
   });
 
-  it("squares its corners while it fills the screen", () => {
+  it("squares its corners and drops its edge while it fills the screen", () => {
     render(
       <BrowserWindow
         clickThrough={false}
@@ -226,6 +226,8 @@ describe("BrowserWindow", () => {
 
     expect(style.borderEndStartRadius).toBe("");
     expect(style.borderEndEndRadius).toBe("");
+    // A line around the edge of the screen says nothing the window does not.
+    expect(style.borderTopWidth).not.toBe("1px");
   });
 
   it("reports where the pointer crossed into it", async () => {
