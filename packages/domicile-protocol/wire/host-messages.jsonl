@@ -12,6 +12,7 @@
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1,"mode":[1280,800],"transform":"normal","fills_the_window":false}]}
 {"type":"displays","displays":[{"name":"drm-3","position":[0,0],"size":[1800,3200],"scale":2,"mode":[3840,2160],"transform":"rotate-270","fills_the_window":true}]}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
+{"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"]}
 {"type":"focus_changed","app_id":"app-2"}
 {"type":"focus_changed","app_id":null}
 {"type":"focus_requested","app_id":"app-2"}

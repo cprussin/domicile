@@ -120,6 +120,7 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
 # `input.keyboard` and `output` are plain attrsets in the settings tree, so
 # their options are one level in. The three submodules bound in the `let` hold
 # theirs inside an `options = {`, which is one level deeper again.
+compare "extensions" "$LIB" ExtensionsConfig '^          extensions = \{$' '            '
 compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
 compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
 compare "input.keyboard" "$LIB" KeyboardConfig '^          input\.keyboard = \{$' '            '

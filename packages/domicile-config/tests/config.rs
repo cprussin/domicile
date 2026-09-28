@@ -4,6 +4,7 @@
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode};
@@ -427,6 +428,65 @@ omit = ["Library/[unclosed"]
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
+// ---- extensions -----------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_extensions_names_none() {
+    let extensions = Config::parse("").unwrap().extensions;
+    assert!(extensions.web_store.is_empty());
+    assert!(extensions.unpacked.is_empty());
+}
+
+#[test]
+fn a_desk_that_names_extensions_gets_them() {
+    let extensions = Config::parse(
+        r#"
+[extensions]
+web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
+unpacked = ["/home/you/src/my-extension"]
+"#,
+    )
+    .unwrap()
+    .extensions;
+    assert_eq!(extensions.web_store, ["ddkjiahejlhfcafbddmgiahcphecmpfh"]);
+    assert_eq!(
+        extensions.unpacked,
+        [PathBuf::from("/home/you/src/my-extension")]
+    );
+}
+
+#[test]
+fn rejects_a_web_store_id_that_is_not_one() {
+    // Thirty-two letters from `a` to `p` is what an id is. Anything else is
+    // one the Store has no extension under, and the engine would find that
+    // out a network round trip later with nobody reading its log.
+    for id in [
+        "ddkjiahejlhfcafbddmgiahcphecmpf",  // one short
+        "ddkjiahejlhfcafbddmgiahcphecmpfz", // a letter past `p`
+        "DDKJIAHEJLHFCAFBDDMGIAHCPHECMPFH", // shouted
+    ] {
+        let err = Config::parse(&format!("[extensions]\nweb_store = [{id:?}]\n")).unwrap_err();
+        let ConfigError::Validation(message) = &err else {
+            panic!("{id}: got {err:?}");
+        };
+        assert!(message.contains(id), "{id}: {message}");
+    }
+}
+
+#[test]
+fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
+    // This file is generated, and nothing here expands a `~` or knows what a
+    // relative path would be relative to -- so a path that is not absolute
+    // is refused at load rather than handed to an engine that cannot find it.
+    for path in ["~/src/my-extension", "src/my-extension"] {
+        let err = Config::parse(&format!("[extensions]\nunpacked = [{path:?}]\n")).unwrap_err();
+        let ConfigError::Validation(message) = &err else {
+            panic!("{path}: got {err:?}");
+        };
+        assert!(message.contains(path), "{path}: {message}");
+    }
 }
 
 #[test]

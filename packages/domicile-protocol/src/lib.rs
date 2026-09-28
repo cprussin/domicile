@@ -470,6 +470,24 @@ pub enum HostMessage {
     /// again rather than having had to be listening.
     Keymap { keymap: String },
 
+    /// The Chrome extensions the desk's config names, for the browser process
+    /// to install into the profile its browser windows use — see
+    /// `docs/architecture/EXTENSIONS.md`.
+    ///
+    /// `web_store` is Chrome Web Store ids; `unpacked` is absolute paths to
+    /// directories holding an unpacked extension. The whole list every time,
+    /// and the browser reconciles against it: what it added and the list no
+    /// longer names goes.
+    ///
+    /// A fact and not a stream, like [`HostMessage::Keymap`]: it rides with
+    /// the handshake and again whenever a reload changes it. Absent from a
+    /// host nobody has handed one, which is not the same as an empty list —
+    /// an empty list uninstalls everything the browser added.
+    Extensions {
+        web_store: Vec<String>,
+        unpacked: Vec<String>,
+    },
+
     /// Who holds the keyboard now: an app, or the chrome itself (`None`).
     ///
     /// The chrome asks for focus with `focus_app`, but it is not the only
