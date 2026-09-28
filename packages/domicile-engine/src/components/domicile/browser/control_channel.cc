@@ -627,6 +627,21 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "popup_placed") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::string* parent = message.FindString("parent");
+    const base::ListValue* position = message.FindList("position");
+    const base::ListValue* size = message.FindList("size");
+    const std::optional<bool> grab = message.FindBool("grab");
+    if (app_id && parent && position && position->size() == 2u && size &&
+        size->size() == 2u && grab) {
+      client_->PopupPlaced(*app_id, *parent, Number((*position)[0]),
+                           Number((*position)[1]), Number((*size)[0]),
+                           Number((*size)[1]), *grab, arrival);
+    }
+    return;
+  }
+
   if (*type == "app_resized") {
     const std::string* app_id = message.FindString("app_id");
     const base::ListValue* size = message.FindList("size");

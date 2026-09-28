@@ -34,7 +34,35 @@ domicile.on("app_appeared", ({ app_id }) => {
   mounted.set(app_id, element);
 });
 
+/**
+ * Where each popup's box starts, by its id: a client's menus and tooltips are
+ * `<app>` elements of their own, placed at an offset from what they are over
+ * rather than laid out. Every window here fills the screen, so a window's box
+ * starts at the corner and a popup's is its offset added up to one.
+ */
+const origins = new Map<string, readonly [x: number, y: number]>();
+
+domicile.on("popup_placed", ({ app_id, parent, position, size }) => {
+  const [parentX, parentY] = origins.get(parent) ?? [0, 0];
+  const [x, y] = [parentX + position[0], parentY + position[1]];
+  origins.set(app_id, [x, y]);
+  // Mounted once and moved after: a popup the client repositions is placed
+  // again under the same id.
+  const element = mounted.get(app_id) ?? document.createElement("app");
+  element.setAttribute("app-id", app_id);
+  Object.assign(element.style, {
+    height: `${size[1].toString()}px`,
+    left: `${x.toString()}px`,
+    top: `${y.toString()}px`,
+    width: `${size[0].toString()}px`,
+  });
+  // After its window, which is what puts it on top of it.
+  document.body.append(element);
+  mounted.set(app_id, element);
+});
+
 domicile.on("app_closed", ({ app_id }) => {
+  origins.delete(app_id);
   const element = mounted.get(app_id);
   if (element === undefined) {
     // Not a case to shrug off: the host announces every app before it closes

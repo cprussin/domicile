@@ -26,4 +26,13 @@
   readonly attribute boolean hasSize;
   readonly attribute double width;
   readonly attribute double height;
+
+  // `popupplaced` only: the window or popup this popup is over, and where its
+  // box goes from that one's top-left, in CSS pixels; and whether it grabbed,
+  // which a menu does and a tooltip does not. Empty, zero and false on every
+  // other event.
+  readonly attribute DOMString parentAppId;
+  readonly attribute double x;
+  readonly attribute double y;
+  readonly attribute boolean grab;
 };

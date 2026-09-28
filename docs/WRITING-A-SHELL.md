@@ -452,6 +452,18 @@ domicile.on("app_closed", ({ app_id }) => {
 That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
+**A window's menus are `<app>` elements too.** A client's popup — a menu, a
+tooltip — arrives as `popup_placed`: its own `app_id`, the `parent` it is over
+(a window, or another popup for a submenu), and a `position` and `size` in CSS
+pixels from the top-left of that parent's box. Mount an `<app>` for it there,
+above its window, and take it down on `app_closed` like any other. It is not a
+window: give it no frame, do not tile it, and draw it only where its window is
+drawn — an `<app>` embedded on two pages takes its pixels from the first. The
+SDK already routes a click on one to its window's keyboard
+(`DomicileClient.windowOf`), and the compositor dismisses a menu when the
+keyboard leaves its window. The example does it in a dozen lines; a popup the
+compositor placed near a screen edge is not moved back onto the screen.
+
 `app_closed` is in there rather than left out because without it every window
 leaks an element. Two things the snippet leaves out and the example does in
 full:
