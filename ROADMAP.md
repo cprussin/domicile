@@ -167,6 +167,12 @@ The evidence for each of those is in the doc that made the claim —
      to reach for the keyboard gets a lock screen rather than a warning they
      could have answered.
 
+4. **Chrome extensions.** Installed from `[extensions]` in the config, their
+   actions in the shell's tray with popups in a `<webview>`, and every
+   `<webview>` a tab to `chrome.tabs`. Designed, not started; the first step is
+   a guard proving a content script reaches a `<webview>` at all.
+   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
