@@ -524,6 +524,18 @@ const selectionRing = (container: HTMLElement): HTMLElement => {
   }
 };
 
+/** One of the pieces the selection ring is drawn in — see `SelectionRing`. */
+const ringPart = (container: HTMLElement, part: string): HTMLElement => {
+  const element = selectionRing(container).querySelector<HTMLElement>(
+    `[data-part="${part}"]`,
+  );
+  if (element === null) {
+    throw new Error(`test: the selection ring has no ${part}`);
+  } else {
+    return element;
+  }
+};
+
 /** Where an element was placed, as the numbers the layout worked out. */
 const boxOf = (element: HTMLElement) => ({
   height: element.style.blockSize,
@@ -1240,9 +1252,40 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
 
-      expect(selectionRing(container).className).toContain(
-        css({ borderRadius: "lg" }),
-      );
+      for (const corner of [
+        css({ borderStartStartRadius: "lg" }),
+        css({ borderStartEndRadius: "lg" }),
+      ]) {
+        expect(ringPart(container, "tab").className).toContain(corner);
+      }
+      for (const corner of [
+        css({ borderEndStartRadius: "lg" }),
+        css({ borderEndEndRadius: "lg" }),
+      ]) {
+        expect(ringPart(container, "body").className).toContain(corner);
+      }
+    });
+
+    it("rises around the open tab alone, and runs under the ones beside it", () => {
+      // A ring around the whole of a tabbed container is drawn across every
+      // tab, and says nothing about which of them is open.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("w");
+
+      // The second of two tabs, in the ring's own coordinates.
+      expect(boxOf(ringPart(container, "tab"))).toMatchObject({
+        width: "960px",
+        x: "960px",
+      });
+      expect(boxOf(ringPart(container, "before"))).toMatchObject({
+        width: "960px",
+      });
+      expect(boxOf(ringPart(container, "after"))).toMatchObject({
+        width: "0px",
+      });
     });
 
     it("grows the ring in with a window that has just opened", () => {

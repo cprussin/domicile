@@ -55,24 +55,56 @@ export const SelectionRing = ({
   opening,
   restack,
   selection,
-}: Props) => (
-  <div
-    className={cx(
-      ringStyles,
-      opening && movingStyles({ motion: "opening" }),
-      restack !== undefined && movingStyles({ motion }),
-      settlingStyles({ dragging: selection.dragging || opening }),
-    )}
-    // What is selected, as an attribute as well as a line: the desktop's own
-    // state is worth being able to read off the element, in devtools and in a
-    // test, rather than only off a hashed class name.
-    data-selection={selection.group ? "group" : "window"}
-    style={{
-      ...placedAt(selection.rect, selection.depth),
-      ...shuffledBy(restack),
-    }}
-  />
-);
+}: Props) => {
+  const { bar, dragging, rect } = selection;
+  // The tab's place along the top, in the ring's own coordinates.
+  const before = bar.x - rect.x;
+  const after = rect.x + rect.width - (bar.x + bar.width);
+  const parts = settlingStyles({ dragging: dragging || opening });
+  return (
+    <div
+      className={cx(
+        ringStyles,
+        opening && movingStyles({ motion: "opening" }),
+        restack !== undefined && movingStyles({ motion }),
+        parts,
+      )}
+      // What is selected, as an attribute as well as a line: the desktop's own
+      // state is worth being able to read off the element, in devtools and in
+      // a test, rather than only off a hashed class name.
+      data-selection={selection.group ? "group" : "window"}
+      style={{
+        ...placedAt(rect, selection.depth),
+        ...shuffledBy(restack),
+      }}
+    >
+      <div
+        className={cx(partStyles, tabStyles, parts)}
+        data-part="tab"
+        style={{
+          blockSize: px(bar.height),
+          inlineSize: px(bar.width),
+          insetInlineStart: px(before),
+        }}
+      />
+      <div
+        className={cx(partStyles, seamStyles, beforeStyles, parts)}
+        data-part="before"
+        style={{ blockSize: px(bar.height), inlineSize: px(before) }}
+      />
+      <div
+        className={cx(partStyles, seamStyles, afterStyles, parts)}
+        data-part="after"
+        style={{ blockSize: px(bar.height), inlineSize: px(after) }}
+      />
+      <div
+        className={cx(partStyles, bodyStyles, parts)}
+        data-part="body"
+        style={{ insetBlockStart: px(bar.height) }}
+      />
+    </div>
+  );
+};
 
 /**
  * A border rather than an `outline`, so the line falls *inside* the box.
@@ -87,14 +119,59 @@ export const SelectionRing = ({
  * that took the pointer would take it off all of them at once — which is
  * focus-follows-cursor and every client's clicks.
  */
-const ringStyles = css({
+const ringStyles = css({ pointerEvents: "none" });
+
+/**
+ * **Drawn in four pieces rather than as one border**, so the line can rise
+ * around the open tab of a tabbed container and run under the tabs beside it:
+ * the tab, a seam either side of it along the bottom of the bar, and the body
+ * under the bar. A ring around the whole box was drawn across every tab and
+ * said nothing about which of them was open.
+ *
+ * Every piece is a box the ring's own transition eases, so the tab slides
+ * along the bar from one tab to the next rather than jumping — the pieces are
+ * sized in the same pixels as the ring, over the same curve, so they meet
+ * wherever the movement is. Around a window or a group the tab is the whole
+ * width, both seams are nothing, and it is the one rounded box it always was.
+ */
+const partStyles = css({
+  borderColor: "accent",
+  borderStyle: "solid",
   // Solid, and twice a window's own edge, off the spacing scale rather than
   // written as a length: a line that has to be found at a glance is not the
   // one-pixel edge that STYLING's literal is for.
-  border: "{spacing.0.5} solid {colors.accent}",
-  // Rounded all round, which is a window's own silhouette and a group's: the
-  // top corners are the bars' and the bottom ones the windows' own — see
-  // `TitleBar` and `bottomCornerStyles`.
-  borderRadius: "lg",
-  pointerEvents: "none",
+  borderWidth: "{spacing.0.5}",
+  position: "absolute",
 });
+
+// Rounded at the top as the bars are — see `TitleBar` — and open at the
+// bottom into the body.
+const tabStyles = css({
+  borderBlockEndWidth: 0,
+  borderStartEndRadius: "lg",
+  borderStartStartRadius: "lg",
+  insetBlockStart: 0,
+});
+
+// The line along the bottom of the tabs beside the open one.
+const seamStyles = css({
+  borderBlockStartWidth: 0,
+  borderInlineWidth: 0,
+  insetBlockStart: 0,
+});
+
+const beforeStyles = css({ insetInlineStart: 0 });
+
+const afterStyles = css({ insetInlineEnd: 0 });
+
+// Open at the top into the tab and the seams, and rounded at the bottom as the
+// windows are — see `bottomCornerStyles`.
+const bodyStyles = css({
+  borderBlockStartWidth: 0,
+  borderEndEndRadius: "lg",
+  borderEndStartRadius: "lg",
+  insetBlockEnd: 0,
+  insetInline: 0,
+});
+
+const px = (length: number): string => `${length.toString()}px`;
