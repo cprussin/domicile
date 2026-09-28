@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 28 Sep 2026 22:00:00 +0000
+Subject: [PATCH] domicile: the extensions a desk names are installed into
+ its profile
+
+The compositor sends the extensions a desk's config names as
+`extensions` on the control socket. The channel stops it in the browser
+process, as it does `keymap`, and hands it to an ExtensionsSink; this
+binds that sink to `domicile::InstallExtensionsInto` with the page's
+profile, on the UI thread, for the keymap's reason.
+
+`InstallExtensionsInto` reconciles the profile: a Web Store id goes to
+PendingExtensionManager with the Store's update URL, a directory to
+UnpackedInstaller, and an id it added that the list no longer names is
+uninstalled. What it added is a profile pref, registered here.
+
+The decision is `ReconcileExtensions` in
+//components/domicile:extension_installer, where its tests are; the
+half that needs a profile is //chrome/browser/domicile.
+
+WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT: the
+file each hunk applies to was rebuilt from the pin and the patches
+before it, and both blobs are that file's.
+---
+ chrome/browser/chrome_browser_interface_binders.cc | 13 +++++++++++++
+ chrome/browser/prefs/browser_prefs.cc              | 6 ++++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 255979b041..59ff02e6c5 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/chrome_browser_interface_binders.h"
+ 
+ #include "base/task/bind_post_task.h"
++#include "chrome/browser/domicile/domicile_extension_installer.h"
+ #include "chrome/browser/domicile/domicile_pointer_warp.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/color_scheme.h"
+@@ -528,6 +529,18 @@
+                 base::BindPostTask(
+                     content::GetUIThreadTaskRunner({}),
+                     base::BindRepeating(&domicile::SetProcessColorScheme)),
++                // AND WHICH EXTENSIONS THE PROFILE HOLDS. The desk's config
++                // names them, and they are installed into this page's
++                // profile, which is the one every browser window uses. Bound
++                // here for the keymap's reason above: a Profile belongs to
++                // the UI thread. By weak pointer, because the profile may be
++                // gone by the time a message crosses.
++                base::BindPostTask(
++                    content::GetUIThreadTaskRunner({}),
++                    base::BindRepeating(
++                        &domicile::InstallExtensionsInto,
++                        Profile::FromBrowserContext(frame->GetBrowserContext())
++                            ->GetWeakPtr())),
+                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
+                 // several windows, each loading the same shell, and the only
+                 // thing that differs between them is the display they cover.
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 35b02686a1..c84607a977 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/prefs/browser_prefs.h"
++
++#include "chrome/browser/domicile/domicile_extension_installer.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -2036,6 +2038,10 @@
+   extensions::RegisterSettingsOverriddenUiPrefs(registry);
+   ExtensionSettingsOverriddenDialog::RegisterProfilePrefs(registry);
+ 
++  // Domicile's engine fork: which extensions the desk's config installed, so
++  // that one it stops naming is uninstalled and nothing else is.
++  domicile::RegisterExtensionInstallerPrefs(registry);
++
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
