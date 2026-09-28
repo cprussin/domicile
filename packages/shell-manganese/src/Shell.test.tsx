@@ -456,8 +456,31 @@ const motionsPlayOut = (container: HTMLElement): void => {
 
 /** The sheet a drag is caught on, over one floating window. */
 const grabSheets = (container: HTMLElement): HTMLElement[] => [
-  ...container.querySelectorAll<HTMLElement>("[data-window][aria-hidden]"),
+  ...container.querySelectorAll<HTMLElement>(
+    "[data-window][aria-hidden]:not([data-border])",
+  ),
 ];
+
+/** The border along the right edge of a floating window: its rightmost upright strip. */
+const rightBorder = (container: HTMLElement): HTMLElement => {
+  const upright = [
+    ...container.querySelectorAll<HTMLElement>("[data-border]"),
+  ].filter(
+    (border) =>
+      Number.parseFloat(border.style.blockSize) >
+      Number.parseFloat(border.style.inlineSize),
+  );
+  const [right] = upright.toSorted(
+    (a, b) =>
+      Number.parseFloat(b.style.insetInlineStart) -
+      Number.parseFloat(a.style.insetInlineStart),
+  );
+  if (right === undefined) {
+    throw new Error("test: no floating window's border on screen");
+  } else {
+    return right;
+  }
+};
 
 /** The shadows cast under the floating windows on screen. */
 const shadows = (container: HTMLElement): HTMLElement[] => [
@@ -1684,6 +1707,27 @@ describe("Shell", () => {
 
       expect(
         Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
+      ).toBe(was + 40);
+    });
+
+    it("resizes a floating window by its edge, with no modifier held", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      pageHolds({});
+      const was = Number.parseFloat(
+        barFor(container, "app:term").style.inlineSize,
+      );
+
+      fireEvent.pointerDown(rightBorder(container), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+      fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
+
+      expect(
+        Number.parseFloat(barFor(container, "app:term").style.inlineSize),
       ).toBe(was + 40);
     });
 

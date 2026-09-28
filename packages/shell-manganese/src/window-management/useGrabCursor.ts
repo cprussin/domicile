@@ -1,5 +1,6 @@
 // The cursor over a window the desktop's modifier has taken hold of: the
-// diagonal of the corner a resize drives, or a move.
+// diagonal of the corner a resize drives, or a move. And the cursors over a
+// floating window's borders — see `floating/float-borders.ts`.
 
 import { useState } from "react";
 
@@ -10,8 +11,12 @@ import { cornerOf } from "./tiled/aim";
 
 export enum GrabCursor {
   Move,
+  /** The left or right edge. */
+  ResizeEw,
   /** The top-right or bottom-left corner. */
   ResizeNesw,
+  /** The top or bottom edge. */
+  ResizeNs,
   /** The top-left or bottom-right corner. */
   ResizeNwse,
 }
