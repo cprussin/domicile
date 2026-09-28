@@ -6,6 +6,7 @@
 #include <cmath>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 #include "base/check.h"
 #include "components/domicile/common/cursor_shape.h"
@@ -23,9 +24,11 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_apps_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_desktop_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_file_preview_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
@@ -144,6 +147,14 @@ void DomicileHost::previewFile(ScriptState*,
                                ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->PreviewFile(path);
+  }
+}
+
+void DomicileHost::searchApps(ScriptState*,
+                              const String& query,
+                              ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SearchApps(query);
   }
 }
 
@@ -490,6 +501,23 @@ void DomicileHost::FilePreview(const String& path,
                                base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilePreviewEvent>(
       domicile_event_names::Filepreview(), path, kind, text, entries,
+      Arrival(arrival)));
+}
+
+// An answer, like Files. The entries are built here rather than carried as
+// parallel arrays because what a launcher draws and runs is an entry -- see
+// `domicile_desktop_entry.h`.
+void DomicileHost::Apps(const String& query,
+                        Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
+                        base::TimeTicks arrival) {
+  HeapVector<Member<DomicileDesktopEntry>> entries;
+  entries.reserve(apps.size());
+  for (auto& app : apps) {
+    entries.push_back(MakeGarbageCollected<DomicileDesktopEntry>(
+        app->id, app->name, app->comment, std::move(app->command)));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
+      domicile_event_names::Apps(), query, std::move(entries),
       Arrival(arrival)));
 }
 

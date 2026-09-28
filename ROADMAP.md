@@ -103,8 +103,8 @@ The evidence for each of those is in the doc that made the claim —
    go of whatever it was holding on the turn the desk shuts — a release is the
    one thing a refusal cannot drop. The same refusal covers what a shell asks
    done to the desktop: a locked desk closes no window, starts no program and
-   puts no clipboard row back, and a launcher's `search_files` and
-   `preview_file` are answered with nothing, whatever panel the shell left up to
+   puts no clipboard row back, and a launcher's `search_files`,
+   `preview_file` and `search_apps` are answered with nothing, whatever panel the shell left up to
    ask with — and it says so in its log. The list is a `match` with no
    wildcard, over what the Wayland thread is asked and what a chrome connection
    answers itself, so a request added to either does not compile until somebody
