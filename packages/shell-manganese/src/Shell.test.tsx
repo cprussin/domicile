@@ -1056,6 +1056,18 @@ describe("Shell", () => {
       );
     });
 
+    // A WORKSPACE IS A SCREENFUL, SO IT SLIDES ONE. The two are side by side
+    // in the row, so the one arriving starts a whole screen over and the one
+    // leaving ends a whole screen over — the keyframes read the width off the
+    // stage.
+    it("slides a workspace the width of its screen", () => {
+      renderShell();
+
+      expect(
+        screen.getByRole("main").style.getPropertyValue("--workspace-width"),
+      ).toBe("1920px");
+    });
+
     it("and the other way when the switch goes the other way", () => {
       const { container } = renderShell();
       clientAppears("term");

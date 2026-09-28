@@ -168,6 +168,7 @@ export const Monitor = ({
           act(WindowAction.WindowStretched(id, edge, by, geometry.workspace));
         }}
         screenful={screenful}
+        width={geometry.screen.width}
         windows={windows.windows}
       />
     </Screen>

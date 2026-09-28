@@ -27,6 +27,7 @@ import { useWindowMotion } from "./useWindowMotion";
 import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
+import { slidAcross } from "./window-styles";
 
 type Props = {
   /** The window the user is working in, which every bar is drawn against. */
@@ -94,6 +95,11 @@ type Props = {
   onStretch: (id: string, edge: Direction, by: number) => void;
   /** Where every window on screen goes, and the tabs of any container. */
   screenful: Screenful;
+  /**
+   * How wide the screen is, which is how far a workspace slides: the one
+   * arriving comes in from a whole screen over, next to the one leaving.
+   */
+  width: number;
   windows: readonly ShellWindow[];
 };
 
@@ -138,6 +144,7 @@ export const Stage = ({
   onSelect,
   onStretch,
   screenful,
+  width,
   windows,
 }: Props) => {
   const { placements, tabs } = screenful;
@@ -160,7 +167,11 @@ export const Stage = ({
   const [stretching, setStretching] = useState(false);
   const targets = tiledTargets(placements);
   return (
-    <main className={stageStyles} data-stretching={stretching || undefined}>
+    <main
+      className={stageStyles}
+      data-stretching={stretching || undefined}
+      style={slidAcross(width)}
+    >
       {/*
         Before every window, so each float covers its own shadow on document
         order — see `FloatShadow`. Not for a float filling the screen, whose

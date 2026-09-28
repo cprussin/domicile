@@ -99,26 +99,26 @@ export default defineConfig({
           "50%": { opacity: "{opacity.pulseMin}" },
           "100%": { opacity: "1" },
         },
-        // A workspace slides in from the side it was on. The distance is the
-        // same for every window on it rather than a share of each one's own
-        // box, because what is moving is the workspace: windows that traveled
-        // different distances would scatter rather than arrive together.
+        // A workspace slides in from the side it was on, and it is the whole
+        // workspace that moves: every window on it goes the same distance, so
+        // they arrive together rather than scatter.
         //
-        // Far enough to read as a direction and no further. The two workspaces
-        // are on the screen together while this runs, so a slide the width of
-        // a screen would need the screen's width — a runtime number no
-        // stylesheet has — and one that crossed the whole desktop would spend
-        // most of its time off the edge of it.
+        // A screen's width, which is `--workspace-width` — see `slidAcross`.
+        // The two workspaces are side by side in the row, so the one arriving
+        // starts exactly where the one leaving ends up: the screen is a window
+        // onto a strip that moves under it, and nothing needs to fade to hide
+        // the two drawn through each other, because they never are. What
+        // goes past the edge is off the page — every page on a tty is one
+        // screen.
         windowArrivingFromEnd: {
-          "0%": { opacity: "0", transform: "translateX({spacing.40})" },
-          "100%": { opacity: "1", transform: "translateX(0)" },
+          "0%": { transform: "translateX(var(--workspace-width))" },
+          "100%": { transform: "translateX(0)" },
         },
         windowArrivingFromStart: {
           "0%": {
-            opacity: "0",
-            transform: "translateX(calc(-1 * {spacing.40}))",
+            transform: "translateX(calc(-1 * var(--workspace-width)))",
           },
-          "100%": { opacity: "1", transform: "translateX(0)" },
+          "100%": { transform: "translateX(0)" },
         },
         // A window leaving: the reverse of the arrival below, and the same
         // length, so closing one reads as the undoing of opening it.
@@ -131,25 +131,16 @@ export default defineConfig({
           "0%": { opacity: "1", transform: "scale(1)" },
           "100%": { opacity: "0", transform: "scale(0.85)" },
         },
-        // And the workspace being left goes the other way, so the two pass
-        // each other.
-        //
-        // Gone before it has finished moving: faded out by 60% rather than at
-        // the end, so the two workspaces spend as little of the switch as
-        // possible drawn through each other. The slide still runs the whole
-        // length — a property's keyframes are its own — so the two go on
-        // moving together.
+        // And the workspace being left goes the other way, a screen's width
+        // too, so it is pushed off by the one coming on.
         windowLeavingToEnd: {
-          "0%": { opacity: "1", transform: "translateX(0)" },
-          "60%": { opacity: "0" },
-          "100%": { opacity: "0", transform: "translateX({spacing.40})" },
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(var(--workspace-width))" },
         },
         windowLeavingToStart: {
-          "0%": { opacity: "1", transform: "translateX(0)" },
-          "60%": { opacity: "0" },
+          "0%": { transform: "translateX(0)" },
           "100%": {
-            opacity: "0",
-            transform: "translateX(calc(-1 * {spacing.40}))",
+            transform: "translateX(calc(-1 * var(--workspace-width)))",
           },
         },
         // A window arriving: up from nothing, and out to the box the layout
@@ -194,6 +185,13 @@ export default defineConfig({
           // measures how long a control takes to answer rather than how long
           // a sentence takes to read.
           notice: { value: "1.5s" },
+        },
+        easings: {
+          // A long movement: eased into rather than started at full speed,
+          // then a long settle. `outQuart` starts at speed, which over a
+          // screen's width is a jump in the first frame rather than a slide —
+          // see the workspace switch in `movingStyles`.
+          emphasized: { value: "cubic-bezier(0.2, 0, 0, 1)" },
         },
       },
     },
