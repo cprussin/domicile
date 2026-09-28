@@ -21,7 +21,7 @@ mod profile;
 
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
-pub use profile::{Connected, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
+pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
