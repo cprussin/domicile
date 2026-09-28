@@ -2,7 +2,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Display } from "@domicile/component-library/display-source";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
-import { editorCommand } from "../launcher/editor-command";
+import { openCommand } from "../launcher/open-command";
 import type { DeskChannel } from "./desk-channel";
 import { DeskMessage } from "./desk-channel";
 import { appIdOf } from "./window";
@@ -123,12 +123,11 @@ export const useWindows = (
       if (action.kind === WindowActionKind.TerminalLaunched) {
         domicile.spawn(TERMINAL_COMMAND);
       }
-      // The launcher's other half. `editorCommand` is where the argv is built
-      // and why it has a shell in it: `$EDITOR` and `$HOME` live in the
-      // process the compositor starts, not in a page served over
-      // `domicile://`.
-      if (action.kind === WindowActionKind.EditorLaunched) {
-        domicile.spawn(editorCommand(action.path));
+      // The launcher's other half. `openCommand` is where the argv is built
+      // and why it has a shell in it: `$HOME` lives in the process the
+      // compositor starts, not in a page served over `domicile://`.
+      if (action.kind === WindowActionKind.FileOpened) {
+        domicile.spawn(openCommand(action.path));
       }
       if (
         action.kind === WindowActionKind.WindowKilled ||

@@ -183,8 +183,8 @@ export const Desktop = ({ desk, domicile }: Props) => {
         }}
         onLaunch={(launch) => {
           switch (launch.kind) {
-            case LaunchKind.Edited: {
-              act(WindowAction.EditorLaunched(launch.path));
+            case LaunchKind.Opened: {
+              act(WindowAction.FileOpened(launch.path));
               break;
             }
             case LaunchKind.Browsed: {

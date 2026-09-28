@@ -97,7 +97,7 @@ describe("choicesFor", () => {
 describe("launchOf", () => {
   it("edits a file, without the slash the host marks a directory with", () => {
     expect(launchOf(Choice.File("Notes/"))).toStrictEqual(
-      Launch.Edited("Notes"),
+      Launch.Opened("Notes"),
     );
   });
 
