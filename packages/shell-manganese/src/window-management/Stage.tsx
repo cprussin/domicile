@@ -375,6 +375,7 @@ export const Stage = ({
                 onReach={onReachThis}
                 rect={placement.bar}
                 restack={restack}
+                tabbed={placement.tabbed}
                 title={window.title}
                 window={window.id}
               />

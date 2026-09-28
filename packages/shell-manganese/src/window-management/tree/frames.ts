@@ -38,7 +38,19 @@ export type Frame = {
    * behind it is not.
    */
   surface: Rect | undefined;
+  /**
+   * The layout of the container its bar is one of the tabs of, which is which
+   * way those tabs run: across for a tabbed one, down for a stack.
+   *
+   * `undefined` for a window whose bar is its own, and for a container's only
+   * tab: closing that closes the container with it, which is a window going
+   * rather than a tab.
+   */
+  tabbed: TabLayout | undefined;
 };
+
+/** The layouts that give each child a tab rather than a share of the area. */
+export type TabLayout = Layout.Stacking | Layout.Tabbed;
 
 /** A tab standing for a whole container, named after the window inside it. */
 export type Tab = {
@@ -134,6 +146,7 @@ const placed = (
             behind: undefined,
             id: node.id,
             surface: surfaceOf(area),
+            tabbed: undefined,
           },
         ],
         selection: undefined,
@@ -161,7 +174,7 @@ const placed = (
         }
         case Layout.Stacking:
         case Layout.Tabbed: {
-          return titled(node, area, gap, pointed, selection);
+          return titled(node, node.layout, area, gap, pointed, selection);
         }
       }
     }
@@ -238,6 +251,7 @@ const sliceOf = (
  */
 const titled = (
   container: Container,
+  layout: TabLayout,
   area: Rect,
   gap: number,
   pointed: Path | undefined,
@@ -257,6 +271,7 @@ const titled = (
                 behind: showing ? undefined : contents,
                 id: child.id,
                 surface: showing ? contents : undefined,
+                tabbed: container.children.length > 1 ? layout : undefined,
               },
             ],
             selection: undefined,

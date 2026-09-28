@@ -69,6 +69,7 @@ describe("placementsOf", () => {
         x: 0,
         y: 32 + TITLE_BAR,
       },
+      tabbed: undefined,
     });
   });
 
@@ -232,6 +233,15 @@ describe("placementsOf", () => {
 
     expect(hidden?.surface).toBeUndefined();
     expect(hidden?.frame).toEqual(hidden?.bar ?? GEOMETRY.screen);
+  });
+
+  it("carries which way a tiled window's tabs run through to its placement", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+
+    expect(placementFor(state, "kitty")?.tabbed).toBe(Layout.Tabbed);
   });
 
   // Under the tab it shows rather than taken off the screen, so that it is

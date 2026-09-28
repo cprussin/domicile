@@ -73,9 +73,20 @@ export const departed = (
           {
             at,
             focused: before.activeId === window.id,
-            // Only the tab of a window a tab was hiding: raised, its
-            // contents would be drawn over the window the tab is showing.
-            placement: { ...placement, behind: undefined, depth: LEAVING },
+            placement: {
+              ...placement,
+              // Only the tab of a window a tab was hiding: raised, its
+              // contents would be drawn over the window the tab is showing.
+              behind: undefined,
+              depth: LEAVING,
+              // A tab closes up about its own middle, where the tabs beside
+              // it close over it — not about the middle of the whole window,
+              // somewhere down in contents that only fade.
+              frame:
+                placement.tabbed === undefined
+                  ? placement.frame
+                  : placement.bar,
+            },
             window,
           },
         ];

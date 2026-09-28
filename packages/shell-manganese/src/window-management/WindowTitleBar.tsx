@@ -4,6 +4,7 @@ import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { TitleBar } from "./TitleBar";
 import type { TitleFocus } from "./title-focus";
+import type { TabLayout } from "./tree/frames";
 import type { WindowMotion } from "./window-motion";
 
 type Props = {
@@ -35,6 +36,8 @@ type Props = {
   rect: Rect;
   /** What that window is shuffling, which its bar does with it. */
   restack?: Restack | undefined;
+  /** Which way the tabs it is one of run — see {@link TitleBar}. */
+  tabbed: TabLayout | undefined;
   title: string;
   /** The window this bar names — see {@link TitleBar}. */
   window: string;
@@ -75,6 +78,7 @@ export const WindowTitleBar = ({
   onReach,
   rect,
   restack,
+  tabbed,
   title,
   window,
 }: Props) => {
@@ -102,6 +106,7 @@ export const WindowTitleBar = ({
       onReach={onReach}
       rect={rect}
       restack={restack}
+      tabbed={tabbed}
       title={title}
       window={window}
       {...(float === undefined ? {} : handlers)}

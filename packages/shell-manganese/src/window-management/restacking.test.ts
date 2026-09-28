@@ -18,6 +18,7 @@ const placed = (id: string, frame: Rect, depth: number): Placement => ({
   frame,
   id,
   surface: { ...frame, height: frame.height - 30, y: frame.y + 30 },
+  tabbed: undefined,
 });
 
 const desktop = (placements: readonly Placement[], current = "1"): Shown => ({

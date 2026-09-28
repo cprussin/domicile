@@ -999,6 +999,29 @@ describe("Shell", () => {
       expect(boxOf(appElement(container, "term"))).toEqual(was);
     });
 
+    // A TAB IS NOT A WINDOW. Closing the tab a tabbed workspace is showing
+    // closes it up across the strip and fades its contents, rather than
+    // shrinking the whole window away over the tab taking its place.
+    it("closes a closed tab up along the strip it was in", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      clientAppears("editor");
+
+      domicile.emit("app_closed", { app_id: "editor" });
+
+      expect(appElement(container, "editor")).toHaveAttribute(
+        "data-motion",
+        "closing-tab",
+      );
+      expect(
+        barFor(container, "app:editor").style.getPropertyValue("--collapse-x"),
+      ).toBe("0");
+      // Its contents only fade, to the tab taking its place under them.
+      expect(
+        appElement(container, "editor").style.getPropertyValue("--collapse-x"),
+      ).toBe("");
+    });
+
     // AND GOES ON SAYING WHAT IT SAID. Closing a window moves the keyboard to
     // whatever is left, so a bar drawn from the desktop as it now is would
     // lose its fill half way through the window's own departure.

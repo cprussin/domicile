@@ -4,6 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { Placement } from "./placement";
 import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
+import { Layout } from "./tree/node";
 import { useWindowMotion } from "./useWindowMotion";
 import { ShellWindow } from "./window";
 import type { WindowMotion } from "./window-motion";
@@ -18,6 +19,7 @@ const placementOf = (id: string): Placement => ({
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,
   surface: { height: 770, width: 1200, x: 0, y: 62 },
+  tabbed: undefined,
 });
 
 /**
@@ -114,6 +116,43 @@ describe("useWindowMotion", () => {
 
       act(() => {
         result.current.onPlayedOut(EDITOR.id, "closing");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+  });
+
+  // A TAB CLOSING IS NOT A WINDOW SHRINKING AWAY. Its tab closes up in the
+  // strip its neighbors close over, and when it was the one shown, its
+  // contents fade to the tab that takes its place rather than shrinking off
+  // it.
+  describe("a tab that has closed", () => {
+    const tabs = (windows: readonly ShellWindow[]): Shown => ({
+      ...desktop("1", windows),
+      placements: windows.map(({ id }) => ({
+        ...placementOf(id),
+        tabbed: Layout.Tabbed,
+      })),
+    });
+
+    it("closes up rather than shrinking away", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("closing-tab");
+    });
+
+    it("is let go of when it says it has closed up", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing-tab");
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
