@@ -932,12 +932,17 @@ const resultsStyles = css({
 // Its own color, because the pane is a region of its own: text in it is drawn
 // in the panel's foreground rather than whatever the document defaults to,
 // which over the glass was a dark gray on dark glass.
+//
+// Scrolled when a file's text or a folder's entries run past it, with the same
+// hairline bar as the rows.
 const previewStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
   blockSize: 120,
   borderRadius: "md",
   color: "foreground",
-  overflow: "hidden",
+  overflowY: "auto",
+  scrollbarColor: "{colors.border} transparent",
+  scrollbarWidth: "thin",
 });
 
 // A picture or a video the size of the pane at most, and never cropped.
@@ -986,11 +991,9 @@ const viewStyles = css({
 // Selectable where nothing else in the shell is: this is somebody's file
 // rather than the shell's own words, and a line of it may be why they looked.
 const textPreviewStyles = css({
-  blockSize: "100%",
   fontFamily: "mono",
   fontSize: "sm",
   margin: 0,
-  overflow: "hidden",
   padding: 3,
   userSelect: "text",
   whiteSpace: "pre-wrap",
