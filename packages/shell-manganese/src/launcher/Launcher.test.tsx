@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
@@ -338,17 +339,40 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
     });
 
-    it("lets what the highlighted file holds be selected", async () => {
-      // The one text in the shell that is somebody's content rather than the
-      // shell's own, and the reason to look at it may be to copy a line of it.
+    it("scrolls with the wheel", async () => {
       const panel = launcher();
 
       await panel.user.type(panel.box(), "today");
-      const text = await within(previewPane()).findByText(
-        "contents of Notes/today.org",
+      await within(previewPane()).findByText("contents of Notes/today.org");
+      fireEvent.wheel(previewPane(), { deltaY: 120 });
+
+      expect(previewPane().scrollTop).toBe(120);
+    });
+
+    it("lets the pointer into a site, so it can be scrolled", async () => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "example.com");
+      const view = await within(previewPane()).findByTitle(
+        "https://example.com",
       );
 
-      expect(globalThis.getComputedStyle(text).userSelect).toBe("text");
+      expect(globalThis.getComputedStyle(view).pointerEvents).not.toBe("none");
+    });
+
+    it("gives the keyboard back to the box when a site takes it", async () => {
+      const panel = launcher();
+
+      await panel.user.type(panel.box(), "example.com");
+      const view = await within(previewPane()).findByTitle(
+        "https://example.com",
+      );
+      panel.box().blur();
+      view.dispatchEvent(
+        new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }),
+      );
+
+      expect(panel.box()).toHaveFocus();
     });
 
     it("waits for the typing to settle before it asks", async () => {
@@ -587,6 +611,28 @@ describe("Launcher", () => {
     );
 
     expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
+  });
+
+  it("keeps the keyboard in the box on Tab", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "today");
+    await within(previewPane()).findByText("contents of Notes/today.org");
+    await panel.user.tab();
+    await panel.user.tab({ shift: true });
+
+    expect(panel.box()).toHaveFocus();
+  });
+
+  it("keeps the keyboard in the box when the panel is clicked", async () => {
+    const panel = launcher();
+
+    await panel.user.type(panel.box(), "today");
+    await panel.user.click(
+      await within(previewPane()).findByText("contents of Notes/today.org"),
+    );
+
+    expect(panel.box()).toHaveFocus();
   });
 
   it("says it was dismissed when Escape closes it", async () => {

@@ -3,6 +3,7 @@ import type {
   FilePreviewMessage,
   FoundFilesMessage,
 } from "@domicile/chrome-sdk/host-message";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
@@ -17,8 +18,8 @@ import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
-import type { ReactNode } from "react";
-import { Fragment, useId, useState } from "react";
+import type { ReactNode, RefObject } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
@@ -44,6 +45,9 @@ const PROMPT = "Open a file, a URL, or search";
  * stopping on a row is not waiting for one.
  */
 const PREVIEW_SETTLE_MS = 200;
+
+/** `WheelEvent.DOM_DELTA_PIXEL`: a wheel's deltas in pixels. */
+const DOM_DELTA_PIXEL = 0;
 
 /** How big the glyph for a pane with no picture of its own is drawn. */
 const EMPTY_ICON_SIZE = 64;
@@ -182,6 +186,11 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
   // every render and would never be seen to settle.
   const chosenKey = chosen === undefined ? undefined : keyOf(chosen);
   const settledKey = useSettled(chosenKey, PREVIEW_SETTLE_MS);
+  const box = useRef<HTMLInputElement>(null);
+  const pane = useRef<HTMLElement>(null);
+
+  useEffect(() => keepKeyboardIn(mounted(box)), []);
+  useEffect(() => scrollOnWheel(mounted(pane)), []);
 
   return (
     <div className={panelStyles}>
@@ -219,12 +228,16 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           } else if (event.key === "Enter" && chosen !== undefined) {
             // Nothing highlighted is an empty list, which has nothing to open.
             onLaunch(launchOf(chosen));
+          } else if (event.key === "Tab") {
+            // The keyboard never leaves the box: see `keepKeyboardIn`.
+            event.preventDefault();
           }
         }}
         placeholder={PROMPT}
         // The glyph the whole panel is about, at the head of the one thing in
         // it that takes typing.
         prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
+        ref={box}
         role="combobox"
         size="lg"
         // A home full of file names is not prose, and a list of them underlined
@@ -303,7 +316,7 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           */}
           {found.indexing && <StillIndexing />}
         </div>
-        <section aria-label="Preview" className={previewStyles}>
+        <section aria-label="Preview" className={previewStyles} ref={pane}>
           <PreviewOf
             choice={chosen}
             preview={preview}
@@ -313,6 +326,66 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
       </div>
     </div>
   );
+};
+
+/** What `ref` holds once its element is mounted, which an effect runs after. */
+const mounted = <T,>(ref: RefObject<T | null>): T => {
+  if (ref.current === null) {
+    throw new Error("An effect ran before its element was mounted");
+  }
+  return ref.current;
+};
+
+/**
+ * Keep the keyboard in `box` for as long as the panel is up: a press anywhere
+ * in the document does not move the focus, and a site in the preview that
+ * takes it on a click gives it straight back. Tab is refused in the box
+ * itself. Returns what undoes it.
+ *
+ * The whole document rather than the panel, because the dialog's title and
+ * footer are outside it and are just as able to take the focus.
+ */
+const keepKeyboardIn = (box: HTMLInputElement): (() => void) => {
+  const document = box.ownerDocument;
+  const stayPut = (event: MouseEvent) => {
+    if (event.target !== box) {
+      event.preventDefault();
+    }
+  };
+  const takeBack = () => {
+    box.focus();
+  };
+  document.addEventListener("mousedown", stayPut);
+  document.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, takeBack);
+  return () => {
+    document.removeEventListener("mousedown", stayPut);
+    document.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, takeBack);
+  };
+};
+
+/**
+ * Scroll `pane` by the wheel ourselves rather than leaving it to the engine,
+ * which in Domicile scrolls a keyboard-focused pane but not one under the
+ * pointer. Returns what undoes it.
+ *
+ * Pixels only, which is all Chromium sends.
+ */
+const scrollOnWheel = (pane: HTMLElement): (() => void) => {
+  const scroll = (event: WheelEvent) => {
+    if (event.deltaMode !== DOM_DELTA_PIXEL) {
+      throw new RangeError(
+        `unexpected WheelEvent.deltaMode: ${event.deltaMode.toString()}`,
+      );
+    }
+    event.preventDefault();
+    pane.scrollBy(event.deltaX, event.deltaY);
+  };
+  // Not passive, so the engine's own scroll is canceled rather than doubled
+  // wherever it does work.
+  pane.addEventListener("wheel", scroll, { passive: false });
+  return () => {
+    pane.removeEventListener("wheel", scroll);
+  };
 };
 
 /** What one row says, by the kind of thing Enter on it would do. */
@@ -506,10 +579,11 @@ const Placeholder = ({
  * What the highlighted row is: a file's front, the file itself, or the page a
  * URL is.
  *
- * A site in a `<webview>` of its own, which the pointer passes through: a
- * click in it would take the keyboard into the page, and the keyboard belongs
- * to the box. A file the engine can draw — an image, a video, a PDF — is drawn
- * from `domicile://home/`; anything else is what the host reads of it.
+ * A site in a `<webview>` of its own, which the pointer reaches so the wheel
+ * scrolls it; a click in it takes the keyboard, which `keepKeyboardIn` hands
+ * straight back to the box. A file the engine can draw — an image, a video, a
+ * PDF — is drawn from `domicile://home/`; anything else is what the host reads
+ * of it.
  */
 const ChoicePreview = ({
   choice,
@@ -960,24 +1034,20 @@ const placeholderNoteStyles = css({
   fontSize: "sm",
 });
 
-// The page a URL is, drawn small and not touchable: the pointer passes through
-// it to the pane, so a click cannot take the keyboard out of the box.
+// The page a URL is, drawn small. The pointer reaches it so the wheel scrolls
+// it; the focus a click takes is `keepKeyboardIn`'s to give back.
 const viewStyles = css({
   blockSize: "100%",
   border: "none",
   display: "block",
   inlineSize: "100%",
-  pointerEvents: "none",
 });
 
-// Selectable where nothing else in the shell is: this is somebody's file
-// rather than the shell's own words, and a line of it may be why they looked.
 const textPreviewStyles = css({
   fontFamily: "mono",
   fontSize: "sm",
   margin: 0,
   padding: 3,
-  userSelect: "text",
   whiteSpace: "pre-wrap",
   wordBreak: "break-all",
 });
