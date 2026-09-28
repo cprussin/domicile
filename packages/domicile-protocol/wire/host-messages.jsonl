@@ -18,6 +18,7 @@
 {"type":"found_files","query":"plan","files":["Notes/2026/plan.org"],"matched":1,"indexing":true}
 {"type":"file_preview","path":"Notes/2026/plan.org","kind":"text","text":"* The plan\n"}
 {"type":"file_preview","path":"Notes","kind":"directory","entries":["2026/","today.org"]}
+{"type":"file_preview","path":"Music/song.flac","kind":"audio","title":"Song","artist":"Band","duration":61.5,"cover":"data:image/png;base64,AQID"}
 {"type":"file_preview","path":"photo.jpg","kind":"binary"}
 {"type":"file_preview","path":"gone.txt","kind":"unreadable"}
 {"type":"battery","charge":0.42,"charging":true}
