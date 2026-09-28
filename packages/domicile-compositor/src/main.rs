@@ -45,11 +45,16 @@ use smithay::reexports::{
         timer::{TimeoutAction, Timer},
         EventLoop, InsertError, Interest, LoopHandle, Mode, PostAction, RegistrationToken,
     },
+    wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode as XdgDecorationMode,
     wayland_protocols::xdg::shell::server::xdg_toplevel,
+    wayland_protocols_misc::server_decoration::server::{
+        org_kde_kwin_server_decoration::{Mode as KdeMode, OrgKdeKwinServerDecoration},
+        org_kde_kwin_server_decoration_manager::Mode as KdeDefaultMode,
+    },
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
         protocol::{wl_buffer, wl_seat, wl_surface::WlSurface},
-        Client, Display, DisplayHandle, Resource as _,
+        Client, Display, DisplayHandle, Resource as _, WEnum,
     },
 };
 use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
@@ -76,6 +81,8 @@ use smithay::wayland::{
         PrimarySelectionHandler, PrimarySelectionState,
     },
     selection::{SelectionHandler, SelectionSource, SelectionTarget},
+    shell::kde::decoration::{KdeDecorationHandler, KdeDecorationState},
+    shell::xdg::decoration::{XdgDecorationHandler, XdgDecorationState},
     shell::xdg::{
         PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler,
         XdgShellState, XdgToplevelSurfaceData,
@@ -91,9 +98,9 @@ use smithay::wayland::{
 };
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_device,
-    delegate_dmabuf, delegate_idle_inhibit, delegate_output, delegate_primary_selection,
-    delegate_seat, delegate_shm, delegate_single_pixel_buffer, delegate_viewporter,
-    delegate_xdg_activation, delegate_xdg_shell,
+    delegate_dmabuf, delegate_idle_inhibit, delegate_kde_decoration, delegate_output,
+    delegate_primary_selection, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
+    delegate_viewporter, delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -1589,6 +1596,10 @@ struct DomicileCompositor {
     // The global a client asks for the keyboard through. Held rather than
     // acted on: see `XdgActivationHandler` below.
     xdg_activation_state: XdgActivationState,
+    // The two globals a client asks who draws its frame through. The answer is
+    // always the shell: see `XdgDecorationHandler` below.
+    _xdg_decoration_state: XdgDecorationState,
+    kde_decoration_state: KdeDecorationState,
     shm_state: ShmState,
     seat_state: SeatState<DomicileCompositor>,
     seat: Seat<DomicileCompositor>,
@@ -5807,6 +5818,59 @@ impl XdgActivationHandler for DomicileCompositor {
 
 delegate_xdg_activation!(DomicileCompositor);
 
+// ---- decorations: the shell draws every window's frame ---------------------
+//
+// A shell puts a title bar over every window, so a client drawing its own
+// frame — and a shadow around it — draws a second one inside the first. Both
+// protocols a client asks through are answered "server side" whatever it
+// asked; a client is free to draw one anyway (GTK4 does), which is what
+// `window_geometry.rs` is for.
+
+impl XdgDecorationHandler for DomicileCompositor {
+    fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+        shell_draws_the_frame(&toplevel);
+    }
+
+    fn request_mode(&mut self, toplevel: ToplevelSurface, _: XdgDecorationMode) {
+        shell_draws_the_frame(&toplevel);
+    }
+
+    fn unset_mode(&mut self, toplevel: ToplevelSurface) {
+        shell_draws_the_frame(&toplevel);
+    }
+}
+delegate_xdg_decoration!(DomicileCompositor);
+
+/// Tell `toplevel` the shell draws its frame.
+///
+/// Sent now only once the window has had its first configure: before that,
+/// the answer rides the initial configure `commit` sends, which is the one the
+/// protocol says a decoration mode belongs in.
+fn shell_draws_the_frame(toplevel: &ToplevelSurface) {
+    toplevel.with_pending_state(|state| {
+        state.decoration_mode = Some(XdgDecorationMode::ServerSide);
+    });
+    if toplevel.is_initial_configure_sent() {
+        toplevel.send_pending_configure();
+    }
+}
+
+impl KdeDecorationHandler for DomicileCompositor {
+    fn kde_decoration_state(&self) -> &KdeDecorationState {
+        &self.kde_decoration_state
+    }
+
+    fn request_mode(
+        &mut self,
+        _: &WlSurface,
+        decoration: &OrgKdeKwinServerDecoration,
+        _: WEnum<KdeMode>,
+    ) {
+        decoration.mode(KdeMode::Server);
+    }
+}
+delegate_kde_decoration!(DomicileCompositor);
+
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
 /// The mime types this compositor offers a selection of its own under.
@@ -6546,6 +6610,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),
         xdg_shell_state: XdgShellState::new::<DomicileCompositor>(&dh),
         xdg_activation_state: XdgActivationState::new::<DomicileCompositor>(&dh),
+        _xdg_decoration_state: XdgDecorationState::new::<DomicileCompositor>(&dh),
+        kde_decoration_state: KdeDecorationState::new::<DomicileCompositor>(
+            &dh,
+            KdeDefaultMode::Server,
+        ),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,
         data_device_state,
