@@ -448,7 +448,16 @@ struct DomicileEngine {
   int fd() { return queue_.fd(); }
 
   // On the caller's thread, which is the whole point of the fd.
-  void Dispatch() {
+  //
+  // DISABLE_CFI_ICALL because every call below is through a pointer the
+  // compositor handed in, to a function written in Rust. An official build
+  // checks each indirect call against the functions it compiled itself, and a
+  // Rust function is none of them, so without this the first callback is a
+  // trap: production run 36349359457's engine took the compositor down with
+  // "Illegal instruction" as soon as a window was brokered. Every call into
+  // the compositor stays in this function for that reason, and
+  // scripts/test-a-callback-into-the-compositor-is-not-a-cfi-trap.sh says so.
+  DISABLE_CFI_ICALL void Dispatch() {
     for (const domicile::EngineEvent& event : queue_.Drain()) {
       switch (event.type) {
         case domicile::EngineEvent::Type::kConfigure:
