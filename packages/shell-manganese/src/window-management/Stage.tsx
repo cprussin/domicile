@@ -144,6 +144,8 @@ export const Stage = ({
     tabs,
     windows,
   });
+  // The window being worked in as it is drawn, which is what the ring rings.
+  const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Where a tiled window being moved would land, which is drawn over every
   // window rather than by the one being dragged — see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
@@ -427,10 +429,11 @@ export const Stage = ({
       {selection !== undefined && (
         <SelectionRing
           // Around the window being worked in, which is the one a raise
-          // shuffles over the others — so the ring shuffles with it.
-          restack={
-            motions.drawn.find(({ window }) => window.id === activeId)?.restack
-          }
+          // shuffles over the others and the one that has just opened — so
+          // the ring plays either with it. Not around a group, which is not
+          // the window growing in.
+          opening={!selection.group && active?.motion === "opening"}
+          restack={active?.restack}
           selection={selection}
         />
       )}
