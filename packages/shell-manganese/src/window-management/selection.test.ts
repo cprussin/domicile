@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import type { Geometry, Placement } from "./placement";
 import { placementsOf, TILED } from "./placement";
+import { TITLE_BAR } from "./rect";
 import { selectionOf } from "./selection";
+import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
@@ -49,6 +51,7 @@ describe("selectionOf", () => {
     const state = desktop();
 
     expect(selected(state)).toEqual({
+      bar: placementOf(state, "two").bar,
       depth: TILED,
       dragging: false,
       group: false,
@@ -56,8 +59,20 @@ describe("selectionOf", () => {
     });
   });
 
+  it("rises around the open tab alone, rather than the tabs beside it", () => {
+    const state = desktop(WindowAction.LayoutSet(Layout.Tabbed));
+
+    expect(selected(state)?.bar).toEqual({
+      height: TITLE_BAR,
+      width: 960,
+      x: 960,
+      y: GEOMETRY.workspace.y,
+    });
+  });
+
   it("rings the group `focus parent` selected instead", () => {
     expect(selected(desktop(WindowAction.ParentFocused()))).toEqual({
+      bar: { ...GEOMETRY.workspace, height: TITLE_BAR },
       depth: TILED,
       dragging: false,
       group: true,

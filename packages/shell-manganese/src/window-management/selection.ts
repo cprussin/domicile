@@ -1,9 +1,16 @@
 import type { Screenful } from "./placement";
 import { TILED } from "./placement";
 import type { Rect } from "./rect";
+import { barOf } from "./rect";
 
 /** What the commands are pointed at, and where to draw it. */
 export type Selection = {
+  /**
+   * The bar across the top of `rect` the ring rises around: the window's own,
+   * or its tab — which leaves the tabs beside it outside the ring. The whole
+   * top of a group.
+   */
+  bar: Rect;
   depth: number;
   /**
    * The window it rings is being dragged, so the ring keeps to it rather than
@@ -37,11 +44,18 @@ export const selectionOf = (
   if (fullscreenId !== undefined) {
     return undefined;
   } else if (selection !== undefined) {
-    return { depth: TILED, dragging: false, group: true, rect: selection };
+    return {
+      bar: barOf(selection),
+      depth: TILED,
+      dragging: false,
+      group: true,
+      rect: selection,
+    };
   } else if (active === undefined) {
     return undefined;
   } else {
     return {
+      bar: active.bar,
       depth: active.depth,
       dragging: active.id === draggingId,
       group: false,
