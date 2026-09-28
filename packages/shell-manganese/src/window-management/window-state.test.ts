@@ -458,12 +458,12 @@ describe("the keyed commands", () => {
   });
 
   it("rearranges and splits the container the focus is in", () => {
-    const tabbed = reduce(
+    const stacked = reduce(
       desktop("kitty", "editor"),
-      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.LayoutSet(Layout.Stacking),
     );
-    expect(workspaceHere(tabbed).tiling.root).toMatchObject({
-      layout: Layout.Tabbed,
+    expect(workspaceHere(stacked).tiling.root).toMatchObject({
+      layout: Layout.Stacking,
     });
 
     const split = reduce(
@@ -692,6 +692,7 @@ describe("the pointer", () => {
     // hundred pixels is a tenth of what they share.
     const state = reduce(
       desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.WindowStretched(APP("kitty"), Direction.Right, 100, {
         height: 800,
         width: 1020,

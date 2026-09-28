@@ -1,19 +1,16 @@
 // A window opening into the tree: beside the one being worked in, and focused.
 
-import { Axis } from "../direction";
 import type { LayoutNode } from "./node";
-import { LayoutNode as Node, NodeKind, splitFor, withChildAt } from "./node";
+import { Layout, LayoutNode as Node, NodeKind, withChildAt } from "./node";
 import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
 import { focusPathOf, withFocusOn } from "./tiling";
 
 /**
- * Which way a workspace's first split runs.
- *
- * sway asks the output: a screen wider than it is tall splits left and right,
- * which every desktop this shell runs on is.
+ * The layout a workspace's first container has: sway's `workspace_layout`,
+ * which this desktop sets to tabbed.
  */
-const FIRST_SPLIT = Axis.Horizontal;
+const WORKSPACE_LAYOUT = Layout.Tabbed;
 
 /**
  * The tree with the window `id` opened in it, focused.
@@ -56,7 +53,7 @@ const besideFocus = (
 };
 
 // A window's sibling, which is a question for its parent — and where there is
-// no parent, the workspace's first split: one window becomes two side by side.
+// no parent, the workspace's first container: one window becomes two tabs.
 const besideWindow = (
   root: LayoutNode,
   path: readonly number[],
@@ -64,7 +61,7 @@ const besideWindow = (
 ): LayoutNode => {
   const at = path.at(-1);
   return at === undefined
-    ? Node.Container(splitFor(FIRST_SPLIT), [root, opened], 1)
+    ? Node.Container(WORKSPACE_LAYOUT, [root, opened], 1)
     : replacedAt(root, path.slice(0, -1), (parent) => {
         if (parent.kind === NodeKind.Window) {
           throw new Error("layout tree: a window is not a parent");
