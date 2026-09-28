@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 27 Sep 2026 21:40:00 +0000
+Subject: [PATCH] domicile: a popup is drawn inside the window it opened over
+
+Clicking a <select> on a tty opened nothing anyone could see. The list is a
+page popup: `RenderWidgetHostViewAura::InitAsPopup` makes an aura window of
+`WINDOW_TYPE_MENU` and hands it to `ParentWindowWithContext`, and
+`DesktopNativeWidgetAuraWindowParentingClient::GetDefaultParent` answers a
+menu with a top-level widget of its own. A views menu -- a context menu -- and
+a tooltip take the same road from the other end: `GetNativeWidgetTypeForInitParams`
+answers `TYPE_MENU` and `TYPE_TOOLTIP` with `kDesktopNativeWidgetAura` even
+when they have a parent.
+
+On ozone/drm a second top-level window binds to no CRTC -- `0023` says why,
+and set `presents_every_window` false for it -- so every frame such a window
+submits is dropped. The popup opened, took the capture and the keyboard, and
+was never drawn.
+
+ChromeOS never meets this because ash keeps menus inside the root window. So
+does this, on the platforms that say they need it: both places ask
+`presents_every_window`, and where the answer is no a menu stays a child of the
+window it belongs to and is drawn in that window's frame. Every other platform
+answers yes and is untouched. What is lost is a menu leaving its window, which
+on a tty is leaving the screen.
+
+`scripts/test-a-popup-is-drawn-inside-its-window.sh` reads the series for both
+halves.
+---
+ .../ui/views/chrome_views_delegate_linux.cc   | 10 ++++++++
+ .../desktop_native_widget_aura.cc             | 25 +++++++++++++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/chrome/browser/ui/views/chrome_views_delegate_linux.cc b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
+index c5808a0..c7a7a46 100644
+--- a/chrome/browser/ui/views/chrome_views_delegate_linux.cc
++++ b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
+@@ -86,6 +86,16 @@ NativeWidgetType GetNativeWidgetTypeForInitParams(
+     return NativeWidgetType::kDesktopNativeWidgetAura;
+   }
+ 
++  // Domicile's engine fork. A menu or tooltip is a top-level window of its own
++  // so that it can leave its parent's bounds, but on a platform that presents
++  // only the window filling a display that window is never drawn: on ozone/drm
++  // it binds to no CRTC. Draw it in its parent instead, as ash does.
++  if (params.parent && !ui::OzonePlatform::GetInstance()
++                            ->GetPlatformRuntimeProperties()
++                            .presents_every_window) {
++    return NativeWidgetType::kNativeWidgetAura;
++  }
++
+   return (params.parent &&
+           params.type != views::Widget::InitParams::TYPE_MENU &&
+           params.type != views::Widget::InitParams::TYPE_TOOLTIP)
+diff --git a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
+index 7527363..af8380e 100644
+--- a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
++++ b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
+@@ -88,6 +88,10 @@
+ #include "ui/wm/core/window_properties.h"
+ #endif
+ 
++#if BUILDFLAG(IS_OZONE)
++#include "ui/ozone/public/ozone_platform.h"
++#endif
++
+ DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT,
+                                        views::DesktopNativeWidgetAura*)
+ 
+@@ -99,6 +103,18 @@ DEFINE_UI_CLASS_PROPERTY_KEY(DesktopNativeWidgetAura*,
+ 
+ namespace {
+ 
++// Whether a top-level window of its own can reach a display at all. See
++// PlatformRuntimeProperties::presents_every_window.
++bool PlatformPresentsEveryWindow() {
++#if BUILDFLAG(IS_OZONE)
++  return ui::OzonePlatform::GetInstance()
++      ->GetPlatformRuntimeProperties()
++      .presents_every_window;
++#else
++  return true;
++#endif
++}
++
+ // This class provides functionality to create a top level widget to host a
+ // child window.
+ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
+@@ -256,6 +272,15 @@ class DesktopNativeWidgetAuraWindowParentingClient
+                          ui::mojom::WindowShowState::kFullscreen;
+     bool is_menu = window->GetType() == aura::client::WINDOW_TYPE_MENU;
+ 
++    // Domicile's engine fork. On a platform that presents only the window
++    // filling a display, a menu's own top-level window is never drawn: on
++    // ozone/drm it binds to no CRTC, so a <select>'s list or a context menu
++    // opened invisible. Keep it in this root window instead, as ash does, so
++    // it is drawn in the frame of the window it opened over.
++    if (is_menu && !PlatformPresentsEveryWindow()) {
++      return root_window_;
++    }
++
+     if (is_fullscreen || is_menu) {
+       ui::ZOrderLevel root_z_order = ui::ZOrderLevel::kNormal;
+       internal::NativeWidgetPrivate* native_widget =
