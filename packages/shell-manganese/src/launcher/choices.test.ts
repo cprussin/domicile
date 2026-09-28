@@ -5,6 +5,14 @@ import { Choice, choicesFor, launchOf } from "./choices";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
+/** An application a desktop entry offers, as the host would have answered. */
+const EDITOR = {
+  command: ["gedit", "--new-window"],
+  comment: "Edit text files",
+  id: "org.gnome.gedit.desktop",
+  name: "Text Editor",
+};
+
 /** What a home might have in it, as the host would have answered. */
 const FOUND = ["Notes/", "Notes/today.org", "notes.org"];
 
@@ -18,26 +26,28 @@ describe("choicesFor", () => {
   it("offers only the files for an empty box", () => {
     // Enter on an empty box is a keystroke nobody meant as a command, and a
     // search for the empty string is not a row anybody wants.
-    expect(choicesFor("   ", FOUND)).toStrictEqual(FOUND.map(Choice.File));
+    expect(choicesFor("   ", FOUND, [])).toStrictEqual(FOUND.map(Choice.File));
   });
 
   it("offers the files the host found, then a search for the words", () => {
     // Always a search, even for a name that matched: the file is what was
     // probably meant and the search is what is left if it was not.
-    expect(choicesFor("today", ["Notes/today.org"])).toStrictEqual([
+    expect(choicesFor("today", ["Notes/today.org"], [])).toStrictEqual([
       Choice.File("Notes/today.org"),
       search("today"),
     ]);
   });
 
   it("offers a search alone for words no file matched", () => {
-    expect(choicesFor("kate bush", [])).toStrictEqual([search("kate bush")]);
+    expect(choicesFor("kate bush", [], [])).toStrictEqual([
+      search("kate bush"),
+    ]);
   });
 
   it("puts a URL first, then the files it matched, then a search", () => {
     // `notes.org` is a real domain and, here, a real file. Both are offered,
     // and the site is on top: a URL typed whole is a URL meant.
-    expect(choicesFor("notes.org", ["notes.org"])).toStrictEqual([
+    expect(choicesFor("notes.org", ["notes.org"], [])).toStrictEqual([
       Choice.Site("https://notes.org"),
       Choice.File("notes.org"),
       search("notes.org"),
@@ -48,7 +58,7 @@ describe("choicesFor", () => {
     // The tag says where the search was meant to go, so that row is on top;
     // below it is what the line gets as typed, tag and all — the search among
     // them on Google, so it is a second answer rather than the first again.
-    expect(choicesFor("!wiki notes", ["Notes/"])).toStrictEqual([
+    expect(choicesFor("!wiki notes", ["Notes/"], [])).toStrictEqual([
       Choice.TaggedSearch({
         engine: Engine.Wikipedia,
         query: "notes",
@@ -60,7 +70,7 @@ describe("choicesFor", () => {
   });
 
   it("offers the page a !gh name goes to above the search for it", () => {
-    expect(choicesFor("!gh cprussin", [])).toStrictEqual([
+    expect(choicesFor("!gh cprussin", [], [])).toStrictEqual([
       Choice.TaggedSite({
         engine: Engine.GitHub,
         path: "cprussin",
@@ -79,15 +89,47 @@ describe("choicesFor", () => {
     // The list is what a home has in it, not what exists: `/etc/hosts` is not
     // under home and is still a file. A leading `/`, `./`, `../` or `~/`
     // cannot be a hostname or a search anybody meant — so it goes on top.
-    expect(choicesFor("/etc/hosts", [])).toStrictEqual([
+    expect(choicesFor("/etc/hosts", [], [])).toStrictEqual([
       Choice.File("/etc/hosts"),
       search("/etc/hosts"),
     ]);
   });
 
+  it("offers the applications above the files, and a search below both", () => {
+    expect(choicesFor("text", ["text.md"], [EDITOR])).toStrictEqual([
+      Choice.App(EDITOR),
+      Choice.File("text.md"),
+      search("text"),
+    ]);
+  });
+
+  it("offers the applications for an empty box, above the files", () => {
+    expect(choicesFor("", ["notes.org"], [EDITOR])).toStrictEqual([
+      Choice.App(EDITOR),
+      Choice.File("notes.org"),
+    ]);
+  });
+
+  it("offers a tagged query's rows above the applications", () => {
+    expect(choicesFor("!gh text", [], [EDITOR])).toStrictEqual([
+      Choice.TaggedSite({
+        engine: Engine.GitHub,
+        path: "text",
+        url: "https://github.com/text",
+      }),
+      Choice.TaggedSearch({
+        engine: Engine.GitHub,
+        query: "text",
+        url: "https://github.com/search?q=text",
+      }),
+      Choice.App(EDITOR),
+      search("!gh text"),
+    ]);
+  });
+
   it("reads a typed ~/ as the home the host names its answers from", () => {
     // And does not offer it twice when the host found it too.
-    expect(choicesFor("~/notes.org", ["notes.org"])).toStrictEqual([
+    expect(choicesFor("~/notes.org", ["notes.org"], [])).toStrictEqual([
       Choice.File("notes.org"),
       search("~/notes.org"),
     ]);
@@ -98,6 +140,12 @@ describe("launchOf", () => {
   it("edits a file, without the slash the host marks a directory with", () => {
     expect(launchOf(Choice.File("Notes/"))).toStrictEqual(
       Launch.Opened("Notes"),
+    );
+  });
+
+  it("runs an application's command", () => {
+    expect(launchOf(Choice.App(EDITOR))).toStrictEqual(
+      Launch.Ran(["gedit", "--new-window"]),
     );
   });
 

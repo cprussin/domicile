@@ -372,6 +372,47 @@ export type DomicileFilePreviewEvent = Event & {
 };
 
 /**
+ * An application a desktop entry offers.
+ *
+ * An interface on the engine's side rather than a plain object, for
+ * {@link DomicileClipboardEntry}'s reason.
+ */
+export type DomicileDesktopEntry = {
+  /** The desktop file ID: its path under `applications/`, `/` read as `-`. */
+  readonly id: string;
+
+  /** `Name`, unlocalized. */
+  readonly name: string;
+
+  /** `Comment`, or empty for an entry that has none. */
+  readonly comment: string;
+
+  /**
+   * `Exec`, as the argv it runs: unquoted, with its field codes dropped. Hand
+   * it to {@link DomicileHost.spawn}; nothing on the page parses an `Exec`
+   * line.
+   */
+  readonly command: readonly string[];
+};
+
+/**
+ * The applications a {@link DomicileHost.searchApps} matched, best first.
+ */
+export type DomicileAppsEvent = Event & {
+  /** The query this answers. */
+  readonly query: string;
+
+  readonly apps: readonly DomicileDesktopEntry[];
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
+/**
  * What matched a {@link DomicileHost.searchFiles}, answering it and nothing
  * else — the compositor's index of the home never crosses into the page.
  *
@@ -661,6 +702,8 @@ export type DomicileHostEventMap = {
   files: DomicileFilesEvent;
   /** What a {@link DomicileHost.previewFile} found. Only ever an answer. */
   filepreview: DomicileFilePreviewEvent;
+  /** What a {@link DomicileHost.searchApps} found. Only ever an answer. */
+  apps: DomicileAppsEvent;
   /** The charge, whenever it moves far enough to draw. Nobody asked for it. */
   battery: DomicileBatteryEvent;
   /** What has been copied, whenever that changes. Nobody asked for it either. */
@@ -765,6 +808,15 @@ export type DomicileHost = {
    * already have named. See `domicile_host::file_preview`.
    */
   previewFile(path: string): void;
+
+  /**
+   * Ask which installed applications match `query`. Answered with an `apps`
+   * event carrying the same query.
+   *
+   * Words, like {@link searchFiles}: which directories hold the desktop
+   * entries is the compositor's to read. See `domicile_host::desktop_entries`.
+   */
+  searchApps(query: string): void;
 
   /**
    * Put a row of the clipboard's history back on the clipboard.

@@ -286,6 +286,7 @@ export enum WindowActionKind {
   AppMaxSize,
   AppMinSize,
   AppTitled,
+  AppLaunched,
   BrowserOpened,
   ChildFocused,
   ClipboardDismissed,
@@ -348,6 +349,18 @@ export const WindowAction = {
     appId,
     cursor,
     kind: WindowActionKind.AppCursorChanged as const,
+  }),
+
+  /**
+   * The user picked an application in the launcher, whose `command` the
+   * compositor runs.
+   *
+   * Nothing in the state moves but the panel, for
+   * {@link WindowAction.FileOpened}'s reason.
+   */
+  AppLaunched: (command: readonly string[]) => ({
+    command,
+    kind: WindowActionKind.AppLaunched as const,
   }),
 
   /** The client said the largest it will draw its window. */
@@ -801,10 +814,11 @@ const reduceAction = (
     case WindowActionKind.DeskAdopted: {
       return action.desk;
     }
+    case WindowActionKind.AppLaunched:
     case WindowActionKind.FileOpened: {
       // The compositor spawns it and the host announces the window it opens,
       // the same way a terminal's arrives. The panel goes, because the panel
-      // is how the file was asked for.
+      // is how the file or application was asked for.
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.FloatToggled: {
@@ -1010,9 +1024,9 @@ const openApp = (
     : state;
 };
 
-// The launcher shuts here as well as on `FileOpened`, because those are
-// the two answers it has and a panel left up over its own answer is one the
-// user has to dismiss after every URL they type. Harmless on the bar's `+`,
+// The launcher shuts here as well as on `FileOpened` and `AppLaunched`,
+// because those are the answers it has and a panel left up over its own
+// answer is one the user has to dismiss after every URL they type. Harmless on the bar's `+`,
 // where it is already shut.
 const openBrowser = (state: WindowState, src: string): WindowState => {
   const browsersOpened = state.browsersOpened + 1;
