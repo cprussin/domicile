@@ -225,6 +225,32 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
     );
 }
 
+#[test]
+fn the_extensions_the_config_names_ride_with_the_handshake() {
+    // The browser process installs these, and one whose page reloaded has a
+    // new control channel -- so, like the keymap, the list is told again
+    // rather than having had to be heard the first time.
+    let mut session = Session::new();
+    session.host_mut().set_keymap(KEYMAP.into());
+    session.host_mut().set_extensions(
+        vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".into()],
+        vec!["/home/you/src/my-extension".into()],
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert_eq!(
+        out.last(),
+        Some(&HostMessage::Extensions {
+            web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".into()],
+            unpacked: vec!["/home/you/src/my-extension".into()],
+        }),
+        "after the keymap, the other fact only the browser process reads"
+    );
+}
+
 /// Standing in for the real thing, which is some 40 kilobytes of
 /// `xkb_keymap { ... }`. What crosses is text and nothing here compiles it.
 const KEYMAP: &str = "xkb_keymap { /* the compositor's */ };";

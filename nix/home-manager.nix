@@ -242,6 +242,29 @@ in {
       type = lib.types.submodule {
         freeformType = toml.type;
         options = {
+          extensions = {
+            web_store = lib.mkOption {
+              description = ''
+                Chrome Web Store ids of extensions this desk runs: installed
+                from the Store and updated from it. Naming one is the consent
+                -- there is no install prompt -- and one the list stops naming
+                is uninstalled. Manifest V3 only.
+              '';
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              example = ["ddkjiahejlhfcafbddmgiahcphecmpfh"];
+            };
+            unpacked = lib.mkOption {
+              description = ''
+                Directories holding an unpacked extension, loaded as they are.
+                Absolute: `~` is not expanded, so write the home out.
+              '';
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              example = lib.literalExpression "[\"\${config.home.homeDirectory}/src/my-extension\"]";
+            };
+          };
+
           files.omit = lib.mkOption {
             description = ''
               What the launcher's file index leaves out of the home, as globs

@@ -259,6 +259,18 @@ const keymapSchema = z.looseObject({
   type: z.literal("keymap"),
 });
 
+// The Chrome extensions the desk's config names: Web Store ids, and absolute
+// paths to unpacked extensions. Like `keymap`, what it is for is the browser
+// process, which installs them into the profile its browser windows use — see
+// `docs/architecture/EXTENSIONS.md` — and it rides with the handshake and again
+// on a reload that changes it. It is here for `keymap`'s reason: these schemas
+// are the compositor's wire, and `wire-fixture.test.ts` reads every line.
+const extensionsSchema = z.looseObject({
+  type: z.literal("extensions"),
+  unpacked: z.array(z.string()),
+  web_store: z.array(z.string()),
+});
+
 // What matched a `search_files`, answering it and nothing else: the index
 // itself never crosses. `query` is the one answered; `files` is the front of
 // what matched, relative to the home directory, in byte order, with a
@@ -437,6 +449,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appCursorSchema,
   displaysSchema,
   keymapSchema,
+  extensionsSchema,
   focusChangedSchema,
   focusRequestedSchema,
   shortcutMessageSchema,

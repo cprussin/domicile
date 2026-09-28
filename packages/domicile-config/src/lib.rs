@@ -698,10 +698,58 @@ pub struct ThemeConfig {
     pub mode: ThemeMode,
 }
 
+/// The Chrome extensions this desk runs, which the engine installs into the
+/// profile its browser windows use — see `docs/architecture/EXTENSIONS.md`.
+///
+/// Naming one is the consent: there is no install prompt, and an extension
+/// the list stops naming is uninstalled.
+///
+/// Compared, which is what `PartialEq` is for: a reload asks what moved
+/// between two configs, and the extensions are one of the answers — see the
+/// compositor's `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExtensionsConfig {
+    /// Chrome Web Store ids, installed from the Store and updated from it.
+    pub web_store: Vec<String>,
+    /// Directories holding an unpacked extension, loaded as they are.
+    pub unpacked: Vec<PathBuf>,
+}
+
+impl ExtensionsConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        // Thirty-two letters from `a` to `p`, which is what the Store names an
+        // extension by. Refused here, where the file can be named, rather than
+        // by the Store a network round trip later in a log nobody reads.
+        if let Some(id) = self
+            .web_store
+            .iter()
+            .find(|id| id.len() != 32 || !id.bytes().all(|b| (b'a'..=b'p').contains(&b)))
+        {
+            return Err(ConfigError::Validation(format!(
+                "extensions.web_store {id:?} is not a Chrome Web Store id, which is \
+                 32 letters from `a` to `p`"
+            )));
+        }
+        // Absolute, because nothing expands a `~` in this file and a relative
+        // path is relative to wherever the compositor happened to start. The
+        // file is generated, so the generator writes the home out.
+        if let Some(path) = self.unpacked.iter().find(|path| !path.is_absolute()) {
+            return Err(ConfigError::Validation(format!(
+                "extensions.unpacked {:?} is not an absolute path; `~` is not \
+                 expanded, so write the home directory out",
+                path.display().to_string()
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
     pub idle: IdleConfig,
     pub input: InputConfig,
@@ -752,6 +800,7 @@ impl Config {
 
     /// Semantic validation beyond what the type system / deserializer enforce.
     fn validate(&self) -> Result<(), ConfigError> {
+        self.extensions.validate()?;
         self.idle.validate()?;
         self.input.keyboard.validate()?;
         self.lock.validate()?;

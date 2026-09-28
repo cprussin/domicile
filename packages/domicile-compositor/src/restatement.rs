@@ -23,8 +23,9 @@
 //! | `idle.blank_after_seconds` | the clock restarted and its timer re-armed — `reset_the_idle_clock` |
 //! | `theme.mode` | told to every chrome and to the desk's clients — `take_up_the_theme` |
 //! | `files.omit` | handed to the index, which walks the home again under it — `omit_from_the_index` |
+//! | `extensions.*` | told to every chrome, whose browser process installs them — `hand_over_the_extensions` |
 //!
-//! Seven rows for the seven fields [`Config`] has: a reload acts on each of them
+//! Eight rows for the eight fields [`Config`] has: a reload acts on each of them
 //! rather than storing it. Three limits read like gaps and are not.
 //! `output.max_scale` governs only the output that follows Domicile's own
 //! window — a described display states its own scale, and a desktop the config
@@ -42,7 +43,7 @@
 //! nothing anywhere saying so. The unit tests below are the shape to copy:
 //! what moved is restated, and what did not is not.
 
-use domicile_config::{Config, IdleConfig, KeyboardConfig, Omit, ThemeMode};
+use domicile_config::{Config, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode};
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -70,6 +71,9 @@ pub struct Restatement {
     pub theme: Option<ThemeMode>,
     /// What the file index leaves out, or `None` where that did not move.
     pub omit: Option<Omit>,
+    /// The extensions the browser process installs, or `None` where the list
+    /// did not move.
+    pub extensions: Option<ExtensionsConfig>,
 }
 
 impl Restatement {
@@ -83,6 +87,7 @@ impl Restatement {
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
             theme: (was.theme != now.theme).then_some(now.theme.mode),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
+            extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
         }
     }
 }
@@ -170,6 +175,21 @@ mod tests {
     }
 
     #[test]
+    fn extensions_that_moved_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_WITH_AN_EXTENSION);
+
+        assert_eq!(
+            Restatement::between(&was, &now)
+                .extensions
+                .expect("the extensions moved")
+                .web_store,
+            ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+            "the list handed back is the new one, not the one being replaced"
+        );
+    }
+
+    #[test]
     fn a_cap_on_the_scale_that_moved_is_restated() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_CAPPED_DESK);
@@ -207,6 +227,20 @@ size = [1024, 768]
     const A_DESK_OFFERING_ITS_DOTFILES: &str = r#"
 [files]
 omit = []
+
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, running one extension from the Web Store.
+    const A_DESK_WITH_AN_EXTENSION: &str = r#"
+[extensions]
+web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
 
 [input.keyboard]
 xkb_variant = "dvp"

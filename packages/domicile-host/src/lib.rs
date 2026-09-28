@@ -98,6 +98,14 @@ pub struct Host {
     /// them would be worse than the silence: it would be a desktop typing in
     /// a layout nobody chose.
     keymap: Option<String>,
+    /// The Chrome extensions the config names — Web Store ids, then unpacked
+    /// directories — for the browser process to install.
+    ///
+    /// `None` until something sets them, for the keymap's reason and one more:
+    /// the browser uninstalls what it added and the list no longer names, so a
+    /// host with no config behind it saying "none" would empty a profile it
+    /// was never asked about.
+    extensions: Option<(Vec<String>, Vec<String>)>,
     /// Which way round the desktop is drawn, as every chrome is told — on
     /// connecting, and again whenever it changes under them.
     ///
@@ -165,6 +173,27 @@ impl Host {
         self.keymap
             .clone()
             .map(|keymap| HostMessage::Keymap { keymap })
+    }
+
+    /// Hand over the extensions the config names, for every chrome that
+    /// connects after.
+    ///
+    /// [`Host::set_keymap`]'s shape: set at startup and again whenever a
+    /// reload changes `[extensions]`, replacing rather than accumulating, and
+    /// broadcast by the compositor to the chromes already connected.
+    pub fn set_extensions(&mut self, web_store: Vec<String>, unpacked: Vec<String>) {
+        self.extensions = Some((web_store, unpacked));
+    }
+
+    /// The extensions, in the message a chrome is told them as, or `None` from
+    /// a host that has never been given any.
+    pub fn describe_extensions(&self) -> Option<HostMessage> {
+        self.extensions
+            .clone()
+            .map(|(web_store, unpacked)| HostMessage::Extensions {
+                web_store,
+                unpacked,
+            })
     }
 
     /// Take up a theme, and hand back what to tell the chromes — or `None`

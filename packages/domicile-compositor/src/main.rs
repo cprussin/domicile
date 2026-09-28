@@ -163,7 +163,7 @@ use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
-    Config, ConfigError, ConfigStore, IdleConfig, KeyboardConfig, Omit, ThemeMode,
+    Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
 };
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
@@ -4083,6 +4083,19 @@ impl DomicileCompositor {
         if let Some(omit) = &restated.omit {
             self.omit_from_the_index(omit);
         }
+        if let Some(extensions) = &restated.extensions {
+            // Retained and then broadcast, in that order, for the reason
+            // `retype_the_desktop` gives about the keymap: the chrome that
+            // connects next has to be told the list this desk names now.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                hand_over_the_extensions(&mut host, extensions);
+                host.describe_extensions()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been given extensions has them to state"),
+            );
+        }
         if let Some(theme) = restated.theme {
             // THE FILE OVERRULES THE TOGGLE, deliberately. A click on the
             // shell's bar changes the live theme and writes nothing back --
@@ -6304,6 +6317,22 @@ fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     }
 }
 
+/// Give the host the `[extensions]` a config names, for every chrome that
+/// connects after.
+///
+/// A path goes as its text: one read out of TOML is UTF-8, so `display` loses
+/// nothing.
+fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
+    host.set_extensions(
+        extensions.web_store.clone(),
+        extensions
+            .unpacked
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
+    );
+}
+
 /// The home directory whose files a launcher is offered.
 ///
 /// **The one thing this compositor reads from its environment that is not
@@ -6695,6 +6724,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // decodes every key the shell is typed with, and off ChromeOS nothing
         // else in Chromium ever hands its layout engine one. See `keymap`.
         host.set_keymap(keymap);
+        // And the extensions, which the same browser process installs and a
+        // page that reloads has to be told again. See `EXTENSIONS.md`.
+        hand_over_the_extensions(&mut host, &config.extensions);
         // And the theme, for the handshake's reason one more time: it is what
         // the page paints in, and a page told late paints once in the wrong
         // one. Set rather than taken up -- `take_up_the_theme` broadcasts, and
