@@ -106,6 +106,36 @@ describe("movedBy", () => {
     expect(windowsOf(moved)).toEqual(["b", "c", "a"]);
   });
 
+  describe("off the end of a tabbed workspace", () => {
+    const tabs = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+        LayoutNode.Window("c"),
+      ]),
+    };
+
+    it("splits the last tab out to the right", () => {
+      const moved = movedBy(withFocusOn(tabs, "c"), Direction.Right);
+
+      expect(moved.root).toMatchObject({
+        children: [{ layout: Layout.Tabbed }, { id: "c" }],
+        layout: Layout.SplitH,
+      });
+      expect(focusedIdOf(moved)).toBe("c");
+    });
+
+    it("splits the first tab out to the left", () => {
+      const moved = movedBy(withFocusOn(tabs, "a"), Direction.Left);
+
+      expect(moved.root).toMatchObject({
+        children: [{ id: "a" }, { layout: Layout.Tabbed }],
+        layout: Layout.SplitH,
+      });
+    });
+  });
+
   it("moves a window out of the container it is in", () => {
     const moved = movedBy(withFocusOn(NESTED, "b"), Direction.Left);
 
