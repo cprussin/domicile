@@ -23,7 +23,7 @@ use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 
 use crate::dmabuf_descriptor::DmabufDescriptor;
-use domicile_config::Transform;
+use domicile_config::{Desk, Transform};
 use libloading::{Library, Symbol};
 use thiserror::Error;
 
@@ -223,6 +223,9 @@ pub struct Connector {
     /// Device pixels per logical pixel. The engine draws this connector's
     /// window at it, so the page in it lays out in logical pixels.
     pub scale: f64,
+    /// Where the profile put this display on the desktop, or `None` for a
+    /// dark one. The engine carries a pointer between monitors by it.
+    pub desk: Option<Desk>,
 }
 
 /// What the browser has to tell the compositor, and what each already is in
@@ -377,8 +380,8 @@ struct RawDisplay {
 ///
 /// Flat scalars and an `int32_t` for what is an `Option` on the safe side,
 /// because C has neither tuples nor sum types. One `int64_t`, three `int32_t`,
-/// a `uint32_t` and a `double`, which is 32 bytes with no padding -- see the size test
-/// below, and the C header this mirrors. Not public: [`Connector`] is what a
+/// a `uint32_t`, a `double` and four more `int32_t`, which is 48 bytes with no
+/// padding -- see the size test below, and the C header this mirrors. Not public: [`Connector`] is what a
 /// caller wants.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
@@ -392,6 +395,12 @@ struct RawLayout {
     /// `DomicileDisplayTransform`: the `wl_output` order, normal first.
     transform: u32,
     scale: f64,
+    /// Where the profile put this display on the desktop, in logical pixels.
+    /// Zeros for a dark display, which has no place there.
+    desk_x: i32,
+    desk_y: i32,
+    desk_width: i32,
+    desk_height: i32,
 }
 
 /// `DomicileSpikeCapture`, exactly as the C header lays it out.
@@ -1016,8 +1025,18 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
                 Transform::Rotate270 => 3,
             },
             scale: connector.scale,
+            desk_x: connector.desk.map_or(0, |desk| desk.position.0),
+            desk_y: connector.desk.map_or(0, |desk| desk.position.1),
+            desk_width: connector.desk.map_or(0, |desk| logical(desk.size.0)),
+            desk_height: connector.desk.map_or(0, |desk| logical(desk.size.1)),
         })
         .collect()
+}
+
+/// A logical size as the C header's `int32_t`. An assertion: a profile whose
+/// desktop does not fit an `int32_t` is refused where it is laid out.
+fn logical(size: u32) -> i32 {
+    i32::try_from(size).expect("a laid-out desktop fits an int32_t")
 }
 
 /// The panel's own name, copied out of the record's borrowed characters.
@@ -1130,14 +1149,14 @@ mod tests {
     }
 
     #[test]
-    fn a_connector_is_the_int64_four_int32s_and_double_the_c_header_declares() {
+    fn a_connector_is_the_int64_four_int32s_double_and_desk_the_c_header_declares() {
         // 8 for the id, 16 for the three `int32_t` and the `uint32_t`, 8 for
-        // the `double`: 32,
-        // with no padding anywhere because the double lands on its own
-        // alignment. Asserted rather than summed, for the reason the
-        // display's 48 is: the padding is as much part of the ABI as the
-        // fields are, and here there being none is the claim.
-        assert_eq!(std::mem::size_of::<RawLayout>(), 32);
+        // the `double`, 16 for the desk's four `int32_t`: 48, with no padding
+        // anywhere because the double lands on its own alignment. Asserted
+        // rather than summed, for the reason the display's 48 is: the padding
+        // is as much part of the ABI as the fields are, and here there being
+        // none is the claim.
+        assert_eq!(std::mem::size_of::<RawLayout>(), 48);
     }
 
     #[test]
@@ -1196,6 +1215,10 @@ mod tests {
         origin: (3840, 0),
         transform: Transform::Rotate270,
         scale: 1.2,
+        desk: Some(Desk {
+            position: (1800, 0),
+            size: (1800, 3200),
+        }),
     };
 
     #[test]
@@ -1211,6 +1234,10 @@ mod tests {
                 y: 0,
                 transform: 3,
                 scale: 1.2,
+                desk_x: 1800,
+                desk_y: 0,
+                desk_width: 1800,
+                desk_height: 3200,
             }]
         );
     }
@@ -1227,6 +1254,7 @@ mod tests {
             origin: (11520, 0),
             transform: Transform::Normal,
             scale: 1.0,
+            desk: None,
         }]);
 
         assert_eq!(
@@ -1238,6 +1266,11 @@ mod tests {
                 y: 0,
                 transform: 0,
                 scale: 1.0,
+                // Nowhere on the desk, which the header spells as zeros.
+                desk_x: 0,
+                desk_y: 0,
+                desk_width: 0,
+                desk_height: 0,
             }]
         );
     }

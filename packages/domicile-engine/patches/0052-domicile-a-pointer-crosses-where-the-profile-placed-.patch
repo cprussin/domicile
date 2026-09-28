@@ -1,0 +1,124 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 27 Sep 2026 21:00:00 +0000
+Subject: [PATCH] domicile: a pointer crosses where the profile placed the
+ screens
+
+Patch 0050 carried the pointer between monitors across the engine's own
+desktop: the row the compositor steps the CRTCs across, all at y = 0,
+in the order a profile places them. That row answers "which CRTC is
+next" and nothing else. A laptop at the bottom-left of two turned
+monitors arrived at the TOP of the one beside it, and a laptop centered
+under a monitor was reached by that monitor's RIGHT edge.
+
+The layout the compositor already sends now carries each lit display's
+rectangle on the desktop a shell lays out in (`desk`), and `DrmCursor`
+keeps it. `PointerCrossingFor` reads a pointer that left its screen onto
+that desktop, finds the screen placed there, and puts it down at the
+same place on the new one -- by any edge, which is sway's rule. A
+connector the layout leaves dark has no place and is never entered, so
+the pointer cannot wander onto a panel that is off. With no layout (the
+hardware decides) the engine's own desktop is the desk, as before.
+
+A profile's positions are rounded outward, so two screens meant to
+touch can be a logical pixel apart; a point within a pixel of a screen
+lands on its edge, or a slow hand would never get across.
+---
+ ui/ozone/platform/drm/host/drm_cursor.cc    | 9 ++++++++-
+ ui/ozone/platform/drm/host/drm_cursor.h     | 6 ++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 5 +++++
+ ui/ozone/public/ozone_platform.h            | 7 +++++++
+ 4 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 070825a..fc56bbf 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -175,6 +175,13 @@ void DrmCursor::OnWindowTurned(gfx::AcceleratedWidget window,
+   ScreenLocked(window).rotation = rotation;
+ }
+ 
++void DrmCursor::SetDomicileDisplayLayout(
++    const std::vector<DomicileDisplayLayout>& layout) {
++  DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
++  base::AutoLock lock(lock_);
++  layout_ = layout;
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+@@ -264,7 +271,7 @@ void DrmCursor::MoveCursor(const gfx::Vector2dF& delta) {
+   // the clamp below holds the pointer on whichever monitor it started on.
+   const gfx::PointF moved = location_ + transformed_delta;
+   const std::optional<PointerCrossing> crossing =
+-      PointerCrossingFor(screens_, window_, moved);
++      PointerCrossingFor(screens_, layout_, window_, moved);
+   if (crossing.has_value()) {
+     CrossLocked(*crossing);
+   } else {
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index c683d4a..742a6c4 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -83,6 +83,11 @@ class DrmCursor : public CursorDelegateEvdev {
+   void OnWindowTurned(gfx::AcceleratedWidget window,
+                       display::Display::Rotation rotation);
+ 
++  // DOMICILE: where the compositor's profile placed each display, which is
++  // what a pointer crosses between monitors by. See `PointerCrossingFor`.
++  void SetDomicileDisplayLayout(
++      const std::vector<DomicileDisplayLayout>& layout);
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+@@ -144,6 +149,7 @@ class DrmCursor : public CursorDelegateEvdev {
+   // asked of `window_manager_` because a hand's motion arrives on the evdev
+   // thread and the window manager is the UI thread's.
+   std::vector<PointerScreen> screens_ GUARDED_BY(lock_);
++  std::vector<DomicileDisplayLayout> layout_ GUARDED_BY(lock_);
+ 
+   const raw_ptr<DrmWindowHostManager> window_manager_
+       GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 96da427..4af83ef 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -161,6 +161,11 @@ class OzonePlatformDrm : public OzonePlatform {
+     if (modeset_) {
+       modeset_->SetLayout(layout);
+     }
++    // And the pointer, which crosses between monitors where the profile
++    // placed them rather than where the row above put their CRTCs.
++    if (cursor_) {
++      cursor_->SetDomicileDisplayLayout(layout);
++    }
+   }
+ 
+   // DOMICILE: the desktop's clipboards, which without this the browser does
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index b8d4a46..a99f31a 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -21,6 +21,7 @@
+ #include "ui/base/clipboard/clipboard_buffer.h"
+ #include "ui/gfx/buffer_types.h"
+ #include "ui/gfx/geometry/point.h"
++#include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/native_ui_types.h"
+ #include "ui/platform_window/platform_window.h"
+ #include "ui/platform_window/platform_window_delegate.h"
+@@ -86,6 +87,12 @@ struct DomicileDisplayLayout {
+   // worth. With `transform`, what the browser turns and scales this display's
+   // window by, so the page in it lays out upright in logical pixels.
+   double scale = 1.0;
++  // Where the profile put this display on the desktop a shell lays out in, in
++  // its logical pixels. Empty where `enabled` is false: a dark display has no
++  // place there. What a pointer leaving one monitor is carried onto the next
++  // by -- the row `origin` is in says nothing about which monitor is above or
++  // beside which. See ui/ozone/platform/drm/domicile/drm_pointer_crossing.h.
++  gfx::Rect desk;
+ };
+ 
+ // Base class for Ozone platform implementations.
