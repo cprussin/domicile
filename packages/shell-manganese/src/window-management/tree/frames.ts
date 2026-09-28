@@ -284,14 +284,18 @@ const titled = (
   );
 };
 
-// Tabs divide the top of the area between them; a stack gives each child a
-// full-width bar of its own, one under the other.
+/** How far apart neighboring tabs are. */
+const TAB_GAP = 4;
+
+// Tabs divide the top of the area between them, a little apart; a stack gives
+// each child a full-width bar of its own, one under the other.
 const titleOf = (container: Container, area: Rect, at: number): Rect => {
   if (container.layout === Layout.Stacking) {
     return { ...barOf(area), y: area.y + TITLE_BAR * at };
   } else {
-    const width = area.width / container.children.length;
-    return { ...barOf(area), width, x: area.x + width * at };
+    const count = container.children.length;
+    const width = (area.width - TAB_GAP * (count - 1)) / count;
+    return { ...barOf(area), width, x: area.x + (width + TAB_GAP) * at };
   }
 };
 
