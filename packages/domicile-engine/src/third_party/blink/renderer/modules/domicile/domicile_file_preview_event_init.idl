@@ -6,5 +6,10 @@ dictionary DomicileFilePreviewEventInit : EventInit {
   DOMString kind = "";
   DOMString text = "";
   sequence<DOMString> entries = [];
+  DOMString title = "";
+  DOMString artist = "";
+  DOMString album = "";
+  double duration = 0;
+  DOMString cover = "";
   DOMHighResTimeStamp arrival = 0;
 };
