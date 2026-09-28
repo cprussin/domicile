@@ -1513,6 +1513,22 @@ describe("Shell", () => {
       });
     });
 
+    it("floats a window no smaller than its client will draw", () => {
+      // Wider than the 640 a float opens at, and shorter than its 390: the
+      // client's frame would be cut off across and stretched down.
+      const { container } = renderShell();
+      clientAppears("vault");
+      domicile.emit("app_min_size", { app_id: "vault", size: [680, 300] });
+      domicile.emit("app_max_size", { app_id: "vault", size: [700, 350] });
+
+      press("Tab", true);
+
+      expect(boxOf(appElement(container, "vault"))).toMatchObject({
+        height: "350px",
+        width: "680px",
+      });
+    });
+
     it("keeps a window's bar across floating it and back", () => {
       // The window under it is the same element either way and eases to its
       // new box; a bar made anew would jump there and leave the window behind.

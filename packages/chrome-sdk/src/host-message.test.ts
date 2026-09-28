@@ -18,6 +18,7 @@ import {
   appAppeared,
   appCursor,
   appResized,
+  appSizeLimit,
   appTitled,
   battery,
   clipboard,
@@ -132,6 +133,24 @@ describe("a resize", () => {
         }),
       ),
     ).toStrictEqual({ app_id: "term", size: [800.5, 600.25] });
+  });
+});
+
+describe("a window's size limits", () => {
+  it("read a zero on an axis as no limit on it", () => {
+    // xdg-shell's spelling, which the engine passes on: a client that will be
+    // no narrower than 680 and any height says `680x0`. As a number the zero
+    // is a limit a shell would clamp every window to, so it is not one here.
+    expect(
+      appSizeLimit(
+        appEvent("appminsize", {
+          appId: "vault",
+          hasSize: true,
+          height: 0,
+          width: 680,
+        }),
+      ),
+    ).toStrictEqual({ app_id: "vault", size: [680, undefined] });
   });
 });
 

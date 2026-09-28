@@ -171,6 +171,12 @@ export const useWindows = (
     domicile.on("app_titled", ({ app_id, title }) => {
       told(Action.AppTitled(app_id, title));
     });
+    domicile.on("app_min_size", ({ app_id, size }) => {
+      told(Action.AppMinSize(app_id, size));
+    });
+    domicile.on("app_max_size", ({ app_id, size }) => {
+      told(Action.AppMaxSize(app_id, size));
+    });
     domicile.on("app_closed", ({ app_id }) => {
       told(Action.AppClosed(app_id));
     });

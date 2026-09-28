@@ -25,6 +25,8 @@
   X(apptitled, Apptitled)                \
   X(appappeared, Appappeared)            \
   X(appresized, Appresized)              \
+  X(appminsize, Appminsize)              \
+  X(appmaxsize, Appmaxsize)              \
   X(appclosed, Appclosed)                \
   X(appcursor, Appcursor)                \
   X(shortcut, Shortcut)                  \

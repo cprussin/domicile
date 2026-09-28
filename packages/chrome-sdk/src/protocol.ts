@@ -100,6 +100,20 @@ const popupPlacedSchema = z.looseObject({
   type: z.literal("popup_placed"),
 });
 
+// The smallest and largest a client will draw its window, with `0` on an axis
+// for no limit — xdg-shell's own spelling, passed through.
+const appMinSizeSchema = z.looseObject({
+  app_id: z.string(),
+  size: sizeSchema,
+  type: z.literal("app_min_size"),
+});
+
+const appMaxSizeSchema = z.looseObject({
+  app_id: z.string(),
+  size: sizeSchema,
+  type: z.literal("app_max_size"),
+});
+
 const appClosedSchema = z.looseObject({
   app_id: z.string(),
   type: z.literal("app_closed"),
@@ -433,6 +447,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appTitledSchema,
   appResizedSchema,
   popupPlacedSchema,
+  appMinSizeSchema,
+  appMaxSizeSchema,
   appClosedSchema,
   appCursorSchema,
   displaysSchema,
@@ -467,6 +483,8 @@ export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type PopupPlacedMessage = z.infer<typeof popupPlacedSchema>;
+export type AppMinSizeMessage = z.infer<typeof appMinSizeSchema>;
+export type AppMaxSizeMessage = z.infer<typeof appMaxSizeSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
