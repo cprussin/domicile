@@ -120,6 +120,31 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
     };
   }, [settle]);
 
+  // What the keys cannot say, because this page is not sent them. A key let go
+  // of while the desktop's window does not have the keyboard — a nested
+  // desktop whose host took it, Meta+2 on the host's own workspaces — is a
+  // release this page never hears, and a Meta it never hears let go of is a
+  // desktop that leaves every window's grab sheet up. So losing the keyboard
+  // lets go of everything, and every pointer event over this page, which
+  // carries the modifiers held as it happened, puts back what is really down.
+  // Captured, so nothing under the pointer can stop one on its way.
+  useEffect(() => {
+    const released = () => {
+      settle(NONE);
+    };
+    const pointed = (event: PointerEvent) => {
+      settle({ meta: event.metaKey, shift: event.shiftKey });
+    };
+    window.addEventListener("blur", released);
+    document.addEventListener("pointermove", pointed, { capture: true });
+    document.addEventListener("pointerdown", pointed, { capture: true });
+    return () => {
+      window.removeEventListener("blur", released);
+      document.removeEventListener("pointermove", pointed, { capture: true });
+      document.removeEventListener("pointerdown", pointed, { capture: true });
+    };
+  }, [settle]);
+
   useEffect(() => {
     const reported = (held: HostMessageOf<"modifiers">) => {
       if (guestHasKeyboard()) {
