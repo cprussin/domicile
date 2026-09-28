@@ -101,7 +101,7 @@ describe("framesOf", () => {
     });
   });
 
-  it("makes a tabbed container's title bars its tabs", () => {
+  it("makes a tabbed container's title bars its tabs, a little apart", () => {
     const tiled = framesOf(
       {
         depth: 1,
@@ -117,11 +117,11 @@ describe("framesOf", () => {
 
     expect(frameFor(tiled, "a").bar).toEqual({
       height: TITLE_BAR,
-      width: 500,
+      width: 498,
       x: 0,
       y: 0,
     });
-    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 500, x: 500 });
+    expect(frameFor(tiled, "b").bar).toMatchObject({ width: 498, x: 502 });
   });
 
   it("shows only the tab a tabbed container has the focus in", () => {
@@ -210,7 +210,7 @@ describe("framesOf", () => {
       {
         active: true,
         id: "a",
-        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
       },
     ]);
     // And the windows inside it are laid out under the tabs, with title bars
@@ -243,7 +243,7 @@ describe("framesOf", () => {
       {
         active: false,
         id: "a",
-        rect: { height: TITLE_BAR, width: 500, x: 0, y: 0 },
+        rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
       },
     ]);
   });

@@ -1216,7 +1216,7 @@ describe("Shell", () => {
       // them — over the other's, which is drawn in the same box beneath it so
       // that it is already on screen when its tab is.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
-        width: "960px",
+        width: "958px",
         x: "0px",
       });
       expect(boxOf(appElement(container, "one"))).toEqual(
@@ -1286,11 +1286,11 @@ describe("Shell", () => {
 
       // The second of two tabs, in the ring's own coordinates.
       expect(boxOf(ringPart(container, "tab"))).toMatchObject({
-        width: "960px",
-        x: "960px",
+        width: "958px",
+        x: "962px",
       });
       expect(boxOf(ringPart(container, "before"))).toMatchObject({
-        width: "960px",
+        width: "962px",
       });
       expect(boxOf(ringPart(container, "after"))).toMatchObject({
         width: "0px",

@@ -64,8 +64,8 @@ describe("selectionOf", () => {
 
     expect(selected(state)?.bar).toEqual({
       height: TITLE_BAR,
-      width: 960,
-      x: 960,
+      width: 958,
+      x: 962,
       y: GEOMETRY.workspace.y,
     });
   });
