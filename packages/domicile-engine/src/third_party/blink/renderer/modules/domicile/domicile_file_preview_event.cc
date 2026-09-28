@@ -25,6 +25,11 @@ DomicileFilePreviewEvent::DomicileFilePreviewEvent(
       text_(initializer->text()),
       entries_(MakeGarbageCollected<FrozenArray<IDLString>>(
           initializer->entries())),
+      title_(initializer->title()),
+      artist_(initializer->artist()),
+      album_(initializer->album()),
+      duration_(initializer->duration()),
+      cover_(initializer->cover()),
       arrival_(initializer->arrival()) {}
 
 DomicileFilePreviewEvent::DomicileFilePreviewEvent(const AtomicString& type,
@@ -32,6 +37,11 @@ DomicileFilePreviewEvent::DomicileFilePreviewEvent(const AtomicString& type,
                                                    String kind,
                                                    String text,
                                                    Vector<String> entries,
+                                                   String title,
+                                                   String artist,
+                                                   String album,
+                                                   double duration,
+                                                   String cover,
                                                    DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       path_(std::move(path)),
@@ -39,6 +49,11 @@ DomicileFilePreviewEvent::DomicileFilePreviewEvent(const AtomicString& type,
       text_(std::move(text)),
       entries_(
           MakeGarbageCollected<FrozenArray<IDLString>>(std::move(entries))),
+      title_(std::move(title)),
+      artist_(std::move(artist)),
+      album_(std::move(album)),
+      duration_(duration),
+      cover_(std::move(cover)),
       arrival_(arrival) {}
 
 DomicileFilePreviewEvent::~DomicileFilePreviewEvent() = default;

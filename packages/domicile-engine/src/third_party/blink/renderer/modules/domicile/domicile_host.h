@@ -199,6 +199,11 @@ class MODULES_EXPORT DomicileHost final
                    const String& kind,
                    const String& text,
                    const Vector<String>& entries,
+                   const String& title,
+                   const String& artist,
+                   const String& album,
+                   double duration,
+                   const String& cover,
                    base::TimeTicks arrival) override;
   void Battery(double charge,
                bool charging,

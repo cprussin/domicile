@@ -304,14 +304,19 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
-// What a path holds, answering `preview_file`. `kind` says which of `text`
-// and `entries` it carries; a `binary` or `unreadable` preview carries
-// neither.
+// What a path holds, answering `preview_file`. `kind` says which of `text`,
+// `entries` and a song's tags it carries; a `binary` or `unreadable` preview
+// carries none of them.
 const filePreviewSchema = z.looseObject({
+  album: z.string().optional(),
+  artist: z.string().optional(),
+  cover: z.string().optional(),
+  duration: z.number().nonnegative().optional(),
   entries: z.array(z.string()).optional(),
-  kind: z.enum(["text", "directory", "binary", "unreadable"]),
+  kind: z.enum(["text", "directory", "audio", "binary", "unreadable"]),
   path: z.string(),
   text: z.string().optional(),
+  title: z.string().optional(),
   type: z.literal("file_preview"),
 });
 
