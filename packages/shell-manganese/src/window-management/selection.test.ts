@@ -83,6 +83,12 @@ describe("selectionOf", () => {
     expect(selected(desktop(), appWindowId("two"))).toBeUndefined();
   });
 
+  it("rings no group over a window filling the screen", () => {
+    expect(
+      selected(desktop(WindowAction.ParentFocused()), appWindowId("two")),
+    ).toBeUndefined();
+  });
+
   it("rings nothing while no window is being worked in", () => {
     expect(selected(NO_WINDOWS)).toBeUndefined();
   });

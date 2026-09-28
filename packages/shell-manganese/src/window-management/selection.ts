@@ -23,8 +23,9 @@ export type Selection = {
  * the same element whichever it is around eases from a window out to its
  * group and back rather than one line vanishing as another appears.
  *
- * Nothing around a window filling the screen: a line around the screen's
- * edge says nothing the fullscreen window does not already.
+ * Nothing while a window fills the screen: a line around the screen's edge
+ * says nothing the fullscreen window does not already, and a group's is drawn
+ * over a window that covers it.
  */
 export const selectionOf = (
   { placements, selection }: Screenful,
@@ -33,9 +34,11 @@ export const selectionOf = (
   draggingId: string | undefined,
 ): Selection | undefined => {
   const active = placements.find(({ id }) => id === activeId);
-  if (selection !== undefined) {
+  if (fullscreenId !== undefined) {
+    return undefined;
+  } else if (selection !== undefined) {
     return { depth: TILED, dragging: false, group: true, rect: selection };
-  } else if (active === undefined || active.id === fullscreenId) {
+  } else if (active === undefined) {
     return undefined;
   } else {
     return {
