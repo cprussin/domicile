@@ -167,16 +167,16 @@ type QueryProps = {
 const Query = ({ onLaunch, preview, search }: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
-  // Where the arrow keys have walked to, and `undefined` for a list nobody has
-  // walked. Not the highlight itself — see `highlightIn`, which is what turns
-  // "nobody has walked it" into "the first row, because they typed".
-  const [stepped, setStepped] = useState<number | undefined>(undefined);
+  // Where the arrow keys or the pointer have taken the highlight, from the
+  // first row. Not the highlight itself — see `highlightIn`, which keeps it
+  // inside a list that has narrowed since.
+  const [stepped, setStepped] = useState(0);
 
   const found = useFound(search, query);
   // Every row is a thing Enter can do — the files, and a site and a search
   // around them — so the list is the whole answer to what it will do.
   const choices = choicesFor(query, found.files);
-  const highlighted = highlightIn(choices.length, query, stepped);
+  const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
   // Keyed rather than the choice itself, because a choice is a new object on
   // every render and would never be seen to settle.
@@ -204,7 +204,7 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
           // The walk belongs to the list that was on screen when it happened.
           // A narrower list would otherwise keep an index into the old one,
           // which is a highlight on a row nobody chose.
-          setStepped(undefined);
+          setStepped(0);
         }}
         onKeyDown={(event) => {
           const step = stepOf(event);
@@ -212,10 +212,12 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
             // Taken from the box, which would otherwise put the caret at the
             // end of the query on the way past.
             event.preventDefault();
-            setStepped(steppedTo(highlighted, step, choices.length));
+            // From the highlight rather than from `stepped`, which a list
+            // that narrowed under it can have left past the end. No highlight
+            // is no list, which has nowhere to walk to but the top.
+            setStepped(steppedTo(highlighted ?? 0, step, choices.length));
           } else if (event.key === "Enter" && chosen !== undefined) {
-            // Nothing highlighted is an empty box, which is Enter on a
-            // keystroke nobody meant as a command.
+            // Nothing highlighted is an empty list, which has nothing to open.
             onLaunch(launchOf(chosen));
           }
         }}
@@ -269,6 +271,14 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
                 key={keyOf(choice)}
                 onClick={() => {
                   onLaunch(launchOf(choice));
+                }}
+                // The pointer moves the one highlight rather than drawing a
+                // hover of its own beside it: two marks on the list is two
+                // answers to what Enter takes. A move rather than an enter,
+                // because a row scrolled under a pointer that has not moved
+                // is the keyboard's walk, not the pointer's.
+                onPointerMove={() => {
+                  setStepped(at);
                 }}
                 // Only the highlighted row carries it, and it is the same
                 // function every render, so React calls it exactly when the
@@ -759,29 +769,12 @@ const stepOf = ({
 };
 
 /**
- * Which of `count` rows is highlighted: the one walked to, the first, or none.
- *
- * The middle case is the one worth spelling out. A query that has narrowed the
- * list to something has already chosen — that is what typing a name is for —
- * so Enter takes the top row without anybody pressing an arrow key. An *empty*
- * box has not chosen, even though every file is on screen and one of them is
- * first, so it highlights nothing and Enter does nothing.
+ * Which of `count` rows is highlighted: the one walked to, kept inside the
+ * list, or none when there is no list. A fresh walk starts on the first row,
+ * so Enter takes the top row without anybody pressing an arrow key.
  */
-const highlightIn = (
-  count: number,
-  query: string,
-  stepped: number | undefined,
-): number | undefined => {
-  if (count === 0) {
-    return undefined;
-  } else if (stepped !== undefined) {
-    return Math.min(stepped, count - 1);
-  } else if (query.trim() === "") {
-    return undefined;
-  } else {
-    return 0;
-  }
-};
+const highlightIn = (count: number, stepped: number): number | undefined =>
+  count === 0 ? undefined : Math.min(stepped, count - 1);
 
 /**
  * Where an arrow key lands, clamped rather than wrapped.
@@ -790,19 +783,8 @@ const highlightIn = (
  * an Up press that jumped to the bottom of two hundred rows would lose the
  * user's place rather than move it.
  */
-const steppedTo = (
-  from: number | undefined,
-  by: number,
-  count: number,
-): number | undefined => {
-  if (count === 0) {
-    return undefined;
-  } else if (from === undefined) {
-    return by > 0 ? 0 : count - 1;
-  } else {
-    return Math.min(Math.max(from + by, 0), count - 1);
-  }
-};
+const steppedTo = (from: number, by: number, count: number): number =>
+  Math.max(Math.min(from + by, count - 1), 0);
 
 /** What tells one row from the others across a keystroke. */
 const keyOf = (choice: Choice): string => {
@@ -1010,31 +992,18 @@ const listStyles = flex({
 });
 
 const rowStyles = hstack({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
-  },
-  // The pointer's row, which is not the keyboard's: a tile a shade brighter
-  // and its glyph at full strength, where the walked-to row below takes the
-  // accent. Two signals that have to be told apart, because both can be on
-  // screen at once and only one of them is what Enter would take.
-  "&:hover:not([data-highlighted]) [data-row-tile]": {
-    borderColor: "color-mix(in oklab, {colors.foreground} 16%, transparent)",
-    color: "foreground",
-  },
-  // A SOLID GLYPH FOR THE ROW BEING ATTENDED TO, by the pointer or by the
-  // keyboard. An outline glyph is mostly the ground it is drawn on, so a row
-  // that lightens its ground takes the glyph's contrast with it and the thing
-  // meant to be read best is read worst.
-  "&:is(:hover, [data-highlighted]) [data-row-glyph=reached]": { opacity: 1 },
-  "&:is(:hover, [data-highlighted]) [data-row-glyph=resting]": { opacity: 0 },
-  // The walked-to row, in the desktop's own accent: a wash that fades across
-  // the row rather than a band of flat color, stronger than the hover above it
-  // on purpose — hover is where the pointer happens to be, and this is what
-  // Enter would take.
+  // The highlighted row, walked to by the keyboard or the pointer, in the
+  // desktop's own accent: a wash that fades across the row rather than a band
+  // of flat color. There is no hover beside it — the pointer moves this.
   "&[data-highlighted]": {
     backgroundImage:
       "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
   },
+  // A SOLID GLYPH FOR THE HIGHLIGHTED ROW. An outline glyph is mostly the
+  // ground it is drawn on, so a row that lightens its ground takes the glyph's
+  // contrast with it and the thing meant to be read best is read worst.
+  "&[data-highlighted] [data-row-glyph=reached]": { opacity: 1 },
+  "&[data-highlighted] [data-row-glyph=resting]": { opacity: 0 },
   "&[data-highlighted] [data-row-tile]": {
     backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
     borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",

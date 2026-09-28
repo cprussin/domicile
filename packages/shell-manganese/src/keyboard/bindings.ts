@@ -26,6 +26,7 @@ import type { WindowAction } from "../window-management/window-state";
 import {
   WindowAction as Action,
   BindingMode,
+  WindowActionKind,
 } from "../window-management/window-state";
 import { codeFor } from "./programmers-dvorak";
 
@@ -221,3 +222,13 @@ export const actionForKeycode = (
       binding.chord.keycode === keycode &&
       binding.shift === shift,
   )?.action;
+
+/**
+ * Whether a press is answered while the launcher is up.
+ *
+ * Only its own key is, which is what closes it. The panel is modal, and a
+ * workspace switched or a window killed behind it is the desktop reacting to
+ * keys somebody pressed at the panel.
+ */
+export const heardOverLauncher = (action: WindowAction): boolean =>
+  action.kind === WindowActionKind.LauncherToggled;

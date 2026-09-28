@@ -5,10 +5,17 @@ import type {
   BindingMode,
   WindowAction,
 } from "../window-management/window-state";
-import { actionForCode, actionForKeycode, CHORDS } from "./bindings";
+import {
+  actionForCode,
+  actionForKeycode,
+  CHORDS,
+  heardOverLauncher,
+} from "./bindings";
 
 type Options = {
   domicile: DomicileClient;
+  /** Whether the launcher is up, which silences every key but its own. */
+  launcherOpen: boolean;
   /** Which set of bindings is live — the default one, or resize mode. */
   mode: BindingMode;
   /** What the desktop is being asked to do. */
@@ -33,7 +40,12 @@ type Options = {
  * Both paths read one table, and both read it *in the current mode*: `mod+r`
  * changes what the same keys do, and the compositor knows nothing about modes.
  */
-export const useShortcuts = ({ domicile, mode, onAction }: Options) => {
+export const useShortcuts = ({
+  domicile,
+  launcherOpen,
+  mode,
+  onAction,
+}: Options) => {
   // Claimed once for the whole session, for every mode at once: a claim cannot
   // be given back, and a mode that grabbed its keys on the way in would be a
   // desktop that kept them for good.
@@ -49,11 +61,14 @@ export const useShortcuts = ({ domicile, mode, onAction }: Options) => {
     // mode without the claim above being made again.
     domicile.on("shortcut", ({ keycode, shiftKey }) => {
       const action = actionForKeycode(mode, keycode, shiftKey);
-      if (action !== undefined) {
+      if (
+        action !== undefined &&
+        (!launcherOpen || heardOverLauncher(action))
+      ) {
         onAction(action);
       }
     });
-  }, [domicile, mode, onAction]);
+  }, [domicile, launcherOpen, mode, onAction]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -69,7 +84,7 @@ export const useShortcuts = ({ domicile, mode, onAction }: Options) => {
           event.preventDefault();
           // A held key repeats tens of times a second and the compositor never
           // sees a repeat at all, so one press does one thing on either path.
-          if (!event.repeat) {
+          if (!event.repeat && (!launcherOpen || heardOverLauncher(action))) {
             onAction(action);
           }
         }
@@ -79,5 +94,5 @@ export const useShortcuts = ({ domicile, mode, onAction }: Options) => {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [mode, onAction]);
+  }, [launcherOpen, mode, onAction]);
 };
