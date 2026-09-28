@@ -33,8 +33,11 @@ type Drag = {
 const SECONDARY_BUTTON = 2;
 
 export type TileDrag = {
-  /** Whether a drag is running, and whether it is resizing rather than moving. */
-  drag: { resizes: boolean } | undefined;
+  /**
+   * Whether a drag is running, and the corner it is resizing from, or
+   * `undefined` for a move.
+   */
+  drag: { corner: Corner | undefined } | undefined;
   /** Swallow the menu the secondary button would otherwise open. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -82,7 +85,9 @@ export const useTileDrag = ({
   targets,
 }: Options): TileDrag => {
   const running = useRef<Drag | undefined>(undefined);
-  const [drag, setDrag] = useState<{ resizes: boolean } | undefined>(undefined);
+  const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     const moved = (event: PointerEvent) => {
@@ -118,12 +123,13 @@ export const useTileDrag = ({
     },
     onPointerDown: (event) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      const resizing = resizes || event.button === SECONDARY_BUTTON;
+      const corner =
+        resizes || event.button === SECONDARY_BUTTON
+          ? cornerOf(frame, event.clientX, event.clientY)
+          : undefined;
       running.current = {
         aim: undefined,
-        corner: resizing
-          ? cornerOf(frame, event.clientX, event.clientY)
-          : undefined,
+        corner,
         id,
         last: { x: event.clientX, y: event.clientY },
         onAim,
@@ -132,7 +138,7 @@ export const useTileDrag = ({
         onStretch,
         targets,
       };
-      setDrag({ resizes: resizing });
+      setDrag({ corner });
       onGrab();
     },
   };

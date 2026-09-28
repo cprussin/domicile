@@ -37,8 +37,11 @@ type Drag = {
 const SECONDARY_BUTTON = 2;
 
 export type FloatDrag = {
-  /** Whether a drag is running, and whether it is resizing rather than moving. */
-  drag: { resizes: boolean } | undefined;
+  /**
+   * Whether a drag is running, and the corner it is resizing from, or
+   * `undefined` for a move.
+   */
+  drag: { corner: Corner | undefined } | undefined;
   /**
    * Swallow the menu the secondary button would otherwise open.
    *
@@ -108,7 +111,9 @@ export const useFloatDrag = ({
   resizes,
 }: Options): FloatDrag => {
   const running = useRef<Drag | undefined>(undefined);
-  const [drag, setDrag] = useState<{ resizes: boolean } | undefined>(undefined);
+  const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     const moved = (event: PointerEvent) => {
@@ -159,18 +164,19 @@ export const useFloatDrag = ({
         // covers the one thing they cannot see: a pointer that has moved over a
         // browsing context of its own, where the events are that document's.
         event.currentTarget.setPointerCapture(event.pointerId);
-        const resizing = resizes || event.button === SECONDARY_BUTTON;
+        const corner =
+          resizes || event.button === SECONDARY_BUTTON
+            ? cornerOf(rectOf(float), event.clientX, event.clientY)
+            : undefined;
         running.current = {
           box: float,
-          corner: resizing
-            ? cornerOf(rectOf(float), event.clientX, event.clientY)
-            : undefined,
+          corner,
           from: { x: event.clientX, y: event.clientY },
           onDrop,
           onMove,
           onResize,
         };
-        setDrag({ resizes: resizing });
+        setDrag({ corner });
         onGrab();
       }
     },

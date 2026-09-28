@@ -147,6 +147,14 @@ describe("useTileDrag", () => {
       expect(calls.onAim).not.toHaveBeenCalled();
     });
 
+    it("says which corner it is resizing from, for the cursor over it", () => {
+      const { grab, result } = dragging(true);
+      grab(10, 390);
+      expect(result.current.drag).toStrictEqual({
+        corner: { horizontal: Direction.Left, vertical: Direction.Down },
+      });
+    });
+
     it("resizes when taken hold of with the secondary button", () => {
       const { calls, grab } = dragging();
       grab(100, 100, SECONDARY);

@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
+import { Direction } from "../direction";
 import type { Float } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
@@ -177,10 +178,12 @@ describe("useFloatDrag", () => {
       expect(calls.onMove).not.toHaveBeenCalled();
     });
 
-    it("says it is resizing while it resizes, for the cursor over it", () => {
+    it("says which corner it is resizing from, for the cursor over it", () => {
       const { grab, result } = dragging(true);
-      grab();
-      expect(result.current.drag).toStrictEqual({ resizes: true });
+      grab(...BOTTOM_RIGHT);
+      expect(result.current.drag).toStrictEqual({
+        corner: { horizontal: Direction.Right, vertical: Direction.Down },
+      });
     });
   });
 
