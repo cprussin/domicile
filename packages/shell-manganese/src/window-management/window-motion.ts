@@ -32,7 +32,14 @@ export type WindowMotion =
   | "leaving-to-start"
   | "opening"
   | Shuffle
-  | "resting";
+  | "resting"
+  | TabFade;
+
+/**
+ * The two halves of a tab switch's crossfade: the window revealed fades in
+ * over the one it hides — see `tab-switch.ts`.
+ */
+export type TabFade = "concealing" | "revealing";
 
 /**
  * A float trading places with another in the stack, which is one movement
@@ -69,11 +76,41 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     }
     case "arriving-from-end":
     case "arriving-from-start":
+    case "concealing":
+    case "opening":
+    case "restacking":
+    case "restacking-again":
+    case "resting":
+    case "revealing": {
+      return false;
+    }
+  }
+};
+
+/**
+ * What a window's bar does while the window does this.
+ *
+ * Everything but a tab switch, which is the contents' alone: the bar of a
+ * window in a tabbed container is its tab, and the tab is on screen before,
+ * during and after.
+ */
+export const barMotion = (motion: WindowMotion): WindowMotion => {
+  switch (motion) {
+    case "concealing":
+    case "revealing": {
+      return "resting";
+    }
+    case "arriving-from-end":
+    case "arriving-from-start":
+    case "closing":
+    case "closing-tab":
+    case "leaving-to-end":
+    case "leaving-to-start":
     case "opening":
     case "restacking":
     case "restacking-again":
     case "resting": {
-      return false;
+      return motion;
     }
   }
 };

@@ -6,9 +6,10 @@ import type { Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
 import type { Shown } from "./shown";
+import { tabSwitched } from "./tab-switch";
 import type { Tab } from "./tree/frames";
 import type { ShellWindow } from "./window";
-import type { Shuffle, WindowMotion } from "./window-motion";
+import type { Shuffle, TabFade, WindowMotion } from "./window-motion";
 import { arrivalFrom, departureFor } from "./window-motion";
 import type { WorkspaceSwitch } from "./workspace-switch";
 import { switchedTo } from "./workspace-switch";
@@ -68,6 +69,11 @@ type Playing = {
    */
   shuffled: readonly { id: string; motion: Shuffle }[];
   switching: WorkspaceSwitch | undefined;
+  /**
+   * The windows a tab switch is crossfading between: the ones fading in, and
+   * the ones they are fading in over.
+   */
+  tabbing: readonly { id: string; motion: TabFade }[];
 };
 
 const NOTHING_PLAYING: Playing = {
@@ -76,6 +82,7 @@ const NOTHING_PLAYING: Playing = {
   restacking: [],
   shuffled: [],
   switching: undefined,
+  tabbing: [],
 };
 
 /**
@@ -143,6 +150,11 @@ const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
     motion: nextShuffle(playing, restack.id),
     restack,
   }));
+  const { concealed, revealed } = tabSwitched(before, shown);
+  const fades = [
+    ...concealed.map((id) => ({ id, motion: "concealing" as const })),
+    ...revealed.map((id) => ({ id, motion: "revealing" as const })),
+  ];
   return {
     closing: [...playing.closing, ...departed(before, shown.windows)],
     // The ones still open, and the ones that have just appeared. A window that
@@ -171,6 +183,15 @@ const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
       ...shuffles.map(({ motion, restack }) => ({ id: restack.id, motion })),
     ],
     switching: switchedTo(before, shown) ?? playing.switching,
+    // A window switched back before it has finished plays the latest half —
+    // which is always the other one, so the browser starts it over.
+    tabbing: [
+      ...playing.tabbing.filter(
+        ({ id }) =>
+          holds(shown.windows, id) && !fades.some((fade) => fade.id === id),
+      ),
+      ...fades,
+    ],
   };
 };
 
@@ -243,6 +264,15 @@ const played = (
         ? playing
         : { ...playing, restacking };
     }
+    case "concealing":
+    case "revealing": {
+      const tabbing = playing.tabbing.filter(
+        (fade) => fade.id !== id || fade.motion !== motion,
+      );
+      return tabbing.length === playing.tabbing.length
+        ? playing
+        : { ...playing, tabbing };
+    }
     case "resting": {
       // A window that is not doing anything cannot have finished doing it.
       // What reaches here is an animation of the chrome's own — a spinner in
@@ -300,6 +330,7 @@ const arriving = (playing: Playing, id: string): WindowMotion => {
     return "opening";
   } else {
     return (
+      playing.tabbing.find((fade) => fade.id === id)?.motion ??
       playing.restacking.find((shuffle) => shuffle.restack.id === id)?.motion ??
       "resting"
     );

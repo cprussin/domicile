@@ -146,6 +146,19 @@ export default defineConfig({
             transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
           },
         },
+        // A tab switch, which is two windows in one box trading depths — see
+        // `tab-switch.ts`. The one revealed fades in over the one it hides.
+        //
+        // Both hold their new depths for the whole of it: `TILED` for the one
+        // fading in, `COVERED` for the one under it (see `placement.ts`). Left
+        // to `settlingStyles`, the step of one would ease, and the two would
+        // not trade places until half way — the fade played out behind the
+        // window it is fading in over. A depth an animation holds is one a
+        // transition does not start on.
+        windowConcealing: {
+          "0%": { zIndex: "-1" },
+          "100%": { zIndex: "-1" },
+        },
         // And the workspace being left goes the other way, a screen's width
         // too, so it is pushed off by the one coming on.
         windowLeavingToEnd: {
@@ -180,6 +193,10 @@ export default defineConfig({
         },
         windowRestacking: RESTACKING,
         windowRestackingAgain: RESTACKING,
+        windowRevealing: {
+          "0%": { opacity: "0", zIndex: "0" },
+          "100%": { opacity: "1", zIndex: "0" },
+        },
         // A browser window's zoom, said for a moment and put away: in quickly
         // enough to answer the key that asked, held long enough to be read,
         // and out without anybody dismissing it.
