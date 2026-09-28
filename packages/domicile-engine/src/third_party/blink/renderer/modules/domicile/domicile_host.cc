@@ -359,6 +359,20 @@ void DomicileHost::AppResized(const String& app_id, double width, double height,
       Arrival(arrival)));
 }
 
+void DomicileHost::AppMinSize(const String& app_id, double width, double height,
+                              base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
+      domicile_event_names::Appminsize(), app_id, String(), width, height,
+      Arrival(arrival)));
+}
+
+void DomicileHost::AppMaxSize(const String& app_id, double width, double height,
+                              base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
+      domicile_event_names::Appmaxsize(), app_id, String(), width, height,
+      Arrival(arrival)));
+}
+
 void DomicileHost::AppClosed(const String& app_id, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appclosed(), app_id, String(), std::nullopt,

@@ -524,6 +524,13 @@ size is a courier.
 The element is the engine's, and it has no methods of its own for either of
 these: a cursor is a style and a size is something the SDK already has.
 
+**A client's limits are yours to keep, if you size windows.** `app_min_size`
+and `app_max_size` say the smallest and largest a client will draw, per axis,
+with `undefined` for no limit. A box outside them gets a frame that does not
+fill it: cut off at the box's edge where the client will not shrink, stretched
+where it will not grow. `shell-manganese` holds its floating windows inside
+them; a tiling layout that cannot is left with the cut-off edge.
+
 ## Who gets the keyboard
 
 The compositor holds it — it is the only thing that can deliver a key — but

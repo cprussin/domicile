@@ -84,6 +84,7 @@ import {
   appClosed,
   appCursor,
   appResized,
+  appSizeLimit,
   appTitled,
   battery,
   clipboard,
@@ -214,6 +215,12 @@ export class DomicileClient {
       const message = appResized(event);
       this.#surfaceSizes.set(message.app_id, message.size);
       this.#deliver("app_resized", message);
+    });
+    host.addEventListener("appminsize", (event) => {
+      this.#deliver("app_min_size", appSizeLimit(event));
+    });
+    host.addEventListener("appmaxsize", (event) => {
+      this.#deliver("app_max_size", appSizeLimit(event));
     });
     host.addEventListener("appclosed", (event) => {
       const message = appClosed(event);

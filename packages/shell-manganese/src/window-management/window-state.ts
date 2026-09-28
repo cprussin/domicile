@@ -17,9 +17,10 @@
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
+import { limitedTo } from "./floating/float";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
-import type { ClientWindow, ShellWindow } from "./window";
+import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
 import {
@@ -274,6 +275,8 @@ export enum WindowActionKind {
   AppAppeared,
   AppClosed,
   AppCursorChanged,
+  AppMaxSize,
+  AppMinSize,
   AppTitled,
   BrowserOpened,
   ChildFocused,
@@ -336,6 +339,20 @@ export const WindowAction = {
     appId,
     cursor,
     kind: WindowActionKind.AppCursorChanged as const,
+  }),
+
+  /** The client said the largest it will draw its window. */
+  AppMaxSize: (appId: string, size: SizeLimit) => ({
+    appId,
+    kind: WindowActionKind.AppMaxSize as const,
+    size,
+  }),
+
+  /** The client said the smallest it will draw its window. */
+  AppMinSize: (appId: string, size: SizeLimit) => ({
+    appId,
+    kind: WindowActionKind.AppMinSize as const,
+    size,
   }),
 
   /**
@@ -701,7 +718,7 @@ export type WindowAction = ReturnType<
 export const reduceWindows = (
   state: WindowState,
   action: WindowAction,
-): WindowState => rehomed(reduceAction(state, action));
+): WindowState => rehomed(limited(state, reduceAction(state, action)));
 
 const reduceAction = (
   state: WindowState,
@@ -718,6 +735,18 @@ const reduceAction = (
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
+      }));
+    }
+    case WindowActionKind.AppMaxSize: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        maxSize: action.size,
+      }));
+    }
+    case WindowActionKind.AppMinSize: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        minSize: action.size,
       }));
     }
     case WindowActionKind.AppTitled: {
@@ -1338,3 +1367,47 @@ const homeOf = (
     return state.focused;
   }
 };
+
+/**
+ * `after`, with every floating window held to what its client will draw —
+ * see `limitedTo`. After every action rather than in each that moves a float,
+ * because a client can say its limits after it was floated, and every way a
+ * float is sized would otherwise have to remember to ask.
+ */
+const limited = (before: WindowState, after: WindowState): WindowState => {
+  const workspaces = after.workspaces.map((workspace) =>
+    limitedFloats(before, after, workspace),
+  );
+  return workspaces.every(
+    (workspace, index) => workspace === after.workspaces[index],
+  )
+    ? after
+    : { ...after, workspaces };
+};
+
+const limitedFloats = (
+  before: WindowState,
+  after: WindowState,
+  workspace: Workspace,
+): Workspace => {
+  const floats = workspace.floats.map((float) => {
+    const window = after.windows.find(({ id }) => id === float.id);
+    return window?.kind === WindowKind.App
+      ? limitedTo(
+          float,
+          floatBefore(before, float.id),
+          window.minSize,
+          window.maxSize,
+        )
+      : float;
+  });
+  return floats.every((float, index) => float === workspace.floats[index])
+    ? workspace
+    : { ...workspace, floats };
+};
+
+/** Where the float `id` was before the action, if it was floating then. */
+const floatBefore = (state: WindowState, id: string) =>
+  state.workspaces
+    .flatMap(({ floats }) => floats)
+    .find((float) => float.id === id);
