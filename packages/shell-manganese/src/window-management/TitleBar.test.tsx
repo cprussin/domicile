@@ -149,6 +149,20 @@ describe("TitleBar", () => {
     );
   });
 
+  it("rounds its top corners, and squares them while its window fills the screen", () => {
+    const rounded = globalThis.getComputedStyle(
+      bar(render(<TitleBar {...barProps} />).container),
+    );
+    const square = globalThis.getComputedStyle(
+      bar(render(<TitleBar {...barProps} fullscreen />).container),
+    );
+
+    expect(rounded.borderStartStartRadius).not.toBe("");
+    expect(rounded.borderStartEndRadius).not.toBe("");
+    expect(square.borderStartStartRadius).toBe("");
+    expect(square.borderStartEndRadius).toBe("");
+  });
+
   describe("the button that fills the screen", () => {
     it("asks for the window it names to fill the screen", async () => {
       await new Promise<void>((resolve) => {

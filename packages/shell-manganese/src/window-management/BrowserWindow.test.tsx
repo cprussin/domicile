@@ -201,6 +201,7 @@ describe("BrowserWindow", () => {
         dragging={false}
         focused
         frame={FRAME}
+        fullscreen={false}
         motion="resting"
         onHover={() => undefined}
         onMotionEnded={nothingEnded}
@@ -219,6 +220,32 @@ describe("BrowserWindow", () => {
     expect(style.overflow).toBe("hidden");
   });
 
+  it("squares its corners while it fills the screen", () => {
+    render(
+      <BrowserWindow
+        clickThrough={false}
+        depth={0}
+        domicile={silentDomicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen
+        motion="resting"
+        onHover={() => undefined}
+        onMotionEnded={nothingEnded}
+        onNavigate={() => undefined}
+        onOpenWindow={noWindows}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        src="https://example.com"
+      />,
+    );
+    const style = globalThis.getComputedStyle(browser());
+
+    expect(style.borderEndStartRadius).toBe("");
+    expect(style.borderEndEndRadius).toBe("");
+  });
+
   it("reports where the pointer crossed into it", async () => {
     // The place is the whole of what says whether the pointer went to the
     // window or the window came to the pointer — see `usePointerWarp` — so
@@ -234,6 +261,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={resolve}
           onMotionEnded={nothingEnded}
@@ -266,6 +294,7 @@ describe("BrowserWindow", () => {
         dragging={false}
         focused
         frame={FRAME}
+        fullscreen={false}
         motion="resting"
         onHover={noHover}
         onMotionEnded={nothingEnded}
@@ -290,6 +319,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -321,6 +351,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -353,6 +384,7 @@ describe("BrowserWindow", () => {
         dragging: false,
         focused: true,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -388,6 +420,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -417,6 +450,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -452,6 +486,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -478,6 +513,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -516,6 +552,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -539,6 +576,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused={false}
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -578,6 +616,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -603,6 +642,7 @@ describe("BrowserWindow", () => {
         domicile: silentDomicile,
         dragging: false,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -635,6 +675,7 @@ describe("BrowserWindow", () => {
         domicile: silentDomicile,
         dragging: false,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -671,6 +712,7 @@ describe("BrowserWindow", () => {
         domicile: silentDomicile,
         dragging: false,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -702,6 +744,7 @@ describe("BrowserWindow", () => {
         domicile: silentDomicile,
         dragging: false,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -742,6 +785,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused={false}
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -768,6 +812,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused={false}
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -797,6 +842,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused={false}
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -828,6 +874,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -855,6 +902,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={noHover}
             onMotionEnded={nothingEnded}
@@ -884,6 +932,7 @@ describe("BrowserWindow", () => {
         domicile: silentDomicile,
         dragging: false,
         frame: FRAME,
+        fullscreen: false,
         motion: "resting",
         onHover: noHover,
         onMotionEnded: nothingEnded,
@@ -926,6 +975,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -969,6 +1019,7 @@ describe("BrowserWindow", () => {
             dragging={false}
             focused={false}
             frame={FRAME}
+            fullscreen={false}
             motion="resting"
             onHover={() => {
               resolve();
@@ -1000,6 +1051,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -1027,6 +1079,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -1057,6 +1110,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -1086,6 +1140,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -1122,6 +1177,7 @@ describe("BrowserWindow", () => {
           dragging={false}
           focused
           frame={FRAME}
+          fullscreen={false}
           motion="resting"
           onHover={noHover}
           onMotionEnded={nothingEnded}
@@ -1232,6 +1288,7 @@ describe("BrowserWindow", () => {
         dragging={false}
         focused={false}
         frame={FRAME}
+        fullscreen={false}
         motion="resting"
         onHover={noHover}
         onMotionEnded={nothingEnded}
@@ -1256,6 +1313,7 @@ describe("BrowserWindow", () => {
       dragging: false,
       focused: false,
       frame: FRAME,
+      fullscreen: false,
       motion: "resting",
       onHover: noHover,
       onMotionEnded: nothingEnded,

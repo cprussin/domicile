@@ -67,6 +67,11 @@ type Props = {
    */
   frame: Rect | undefined;
   /**
+   * Whether this window fills the screen, which squares its corners: the
+   * screen's own are the only ones it has.
+   */
+  fullscreen: boolean;
+  /**
    * What this window is doing that the page has to draw over time: arriving,
    * leaving, or nothing at all.
    *
@@ -161,6 +166,7 @@ export const BrowserWindow = ({
   dragging,
   focused,
   frame,
+  fullscreen,
   motion,
   onHover,
   onMotionEnded,
@@ -465,7 +471,7 @@ export const BrowserWindow = ({
         browserStyles,
         // The bar above carries the top edge; this picks up the other three.
         edgeStyles,
-        bottomCornerStyles,
+        !fullscreen && bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,

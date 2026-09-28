@@ -81,6 +81,7 @@ const windowProps = {
   domicile: recordingDomicile,
   dragging: false,
   frame: FRAME,
+  fullscreen: false,
   hasKeyboard: false,
   motion: "resting",
   onHover: noHover,
@@ -135,6 +136,16 @@ describe("AppWindow", () => {
     // Under the bar, where a radius would cut a notch out of the seam.
     expect(style.borderStartStartRadius).toBe("");
     expect(style.borderStartEndRadius).toBe("");
+  });
+
+  it("squares its corners while it fills the screen", () => {
+    const { container } = render(
+      <AppWindow {...windowProps} focused fullscreen onReach={noReach} />,
+    );
+    const style = globalThis.getComputedStyle(portal(container));
+
+    expect(style.borderEndStartRadius).toBe("");
+    expect(style.borderEndEndRadius).toBe("");
   });
 
   it("mounts an element carrying the host's app id", () => {

@@ -68,6 +68,11 @@ type Props = {
   /** Whether the user is working in this window, so it takes the keyboard. */
   focused: boolean;
   /**
+   * Whether this window fills the screen, which squares its corners: the
+   * screen's own are the only ones it has.
+   */
+  fullscreen: boolean;
+  /**
    * Whether the compositor says this window is the one it is typing into.
    *
    * Not the same fact as {@link Props.focused}, which is the shell's own, and
@@ -153,6 +158,7 @@ export const AppWindow = ({
   dragging,
   focused,
   frame,
+  fullscreen,
   hasKeyboard,
   motion,
   onHover,
@@ -280,7 +286,7 @@ export const AppWindow = ({
         windowStyles,
         appStyles,
         edgeStyles,
-        bottomCornerStyles,
+        !fullscreen && bottomCornerStyles,
         movingStyles({ motion }),
         // The frame says what the bar above it says: this is the window the
         // keyboard is in.

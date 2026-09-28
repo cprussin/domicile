@@ -44,7 +44,8 @@ type Props = {
    *
    * The bar is drawn over a fullscreen window rather than hidden under it —
    * see `placement.ts` — so this is the one control on the desktop that would
-   * otherwise lie about what pressing it does.
+   * otherwise lie about what pressing it does. And it squares the bar's
+   * corners, which are the screen's.
    */
   fullscreen: boolean;
   /**
@@ -115,6 +116,7 @@ export const TitleBar = ({
   <div
     className={cx(
       barStyles({ focus }),
+      !fullscreen && topCornerStyles,
       movingStyles({ motion }),
       // The window this names has gone, and what is drawn is where it was.
       isLeaving(motion) && clickThroughStyles,
@@ -199,12 +201,6 @@ const barStyles = cva({
     // The frame's line is one line: the bar carries the top and the sides down
     // to where the window picks them up, and the seam between them is not one.
     borderBlockEndWidth: 0,
-    // Rounded at the top and square at the bottom, because the bottom of a
-    // frame is the window's contents, which round their own — see
-    // `bottomCornerStyles`. A radius on the underside of this would cut a
-    // notch out of the seam between the two rather than rounding anything.
-    borderStartEndRadius: "lg",
-    borderStartStartRadius: "lg",
     borderStyle: "solid",
     borderWidth: "1px",
     gap: 1.5,
@@ -246,6 +242,18 @@ const barStyles = cva({
       },
     },
   },
+});
+
+/**
+ * Rounded at the top and square at the bottom, because the bottom of a frame
+ * is the window's contents, which round their own — see `bottomCornerStyles`.
+ * A radius on the underside of this would cut a notch out of the seam between
+ * the two rather than rounding anything. Not on a window filling the screen,
+ * whose corners are the screen's.
+ */
+const topCornerStyles = css({
+  borderStartEndRadius: "lg",
+  borderStartStartRadius: "lg",
 });
 
 // The two of them touching, which is what reads as one group at the end of a
