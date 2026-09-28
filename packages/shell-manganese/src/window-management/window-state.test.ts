@@ -836,6 +836,18 @@ describe("the launcher", () => {
     expect(launched.windows).toHaveLength(1);
   });
 
+  it("shuts behind the application it ran, and opens no window itself", () => {
+    // The application is a Wayland client, like the one that opens a file.
+    const launched = reduce(
+      NO_WINDOWS,
+      WindowAction.LauncherToggled(),
+      WindowAction.AppLaunched(["gedit"]),
+    );
+
+    expect(launched.launcherOpen).toBe(false);
+    expect(launched.windows).toStrictEqual([]);
+  });
+
   it("shuts behind the file it opened, and opens no window itself", () => {
     // What opens the file is a Wayland client the compositor spawns, so its
     // window arrives as an `app_appeared` like any other client's. Nothing
