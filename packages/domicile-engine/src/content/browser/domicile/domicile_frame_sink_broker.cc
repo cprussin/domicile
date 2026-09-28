@@ -199,7 +199,8 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .enabled = display->enabled,
                       .origin = display->origin,
                       .transform = TransformOf(display->transform),
-                      .scale = display->scale});
+                      .scale = display->scale,
+                      .desk = display->desk});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
 }
