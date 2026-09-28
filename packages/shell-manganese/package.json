@@ -3,6 +3,7 @@
     "@domicile/chrome-sdk": "workspace:*",
     "@domicile/component-library": "workspace:*",
     "@phosphor-icons/react": "catalog:",
+    "lowlight": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"

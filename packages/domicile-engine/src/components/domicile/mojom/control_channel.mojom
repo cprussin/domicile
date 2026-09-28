@@ -426,18 +426,27 @@ interface ControlChannelClient {
   //
   //   "text"        `text` is the front of the file
   //   "directory"   `entries` is what is in it, a subdirectory ending in `/`
+  //   "audio"       `title`, `artist`, `album` and `cover` are what a song
+  //                 says of itself, each empty when it does not say, and
+  //                 `duration` is how long it plays, in seconds. `cover` is a
+  //                 `data:` URL, because the page cannot read the file
   //   "binary"      nothing else: it is a file, and not one to print
   //   "unreadable"  nothing else: not in the index, or not readable
   //
   // A string rather than an enum, because nothing on the page's side decides
   // anything with it but which of those to draw -- and the browser refuses a
-  // word that is not one of the four before it gets here. An answer and not a
+  // word that is not one of the five before it gets here. An answer and not a
   // push, like Files, so the path comes back for the page to tell answers
   // apart.
   FilePreview(string path,
               string kind,
               string text,
               array<string> entries,
+              string title,
+              string artist,
+              string album,
+              double duration,
+              string cover,
               mojo_base.mojom.TimeTicks arrival);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`

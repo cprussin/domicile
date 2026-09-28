@@ -16,6 +16,7 @@ use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme};
 
 pub mod battery;
 pub mod clipboard;
+mod data_url;
 pub mod file_changes;
 pub mod file_index;
 pub mod file_preview;

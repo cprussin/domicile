@@ -143,6 +143,33 @@ fn a_preview_is_flat_on_the_wire() {
     );
 }
 
+/// An audio file's tags sit flat beside its kind, and a tag the file does not
+/// carry is absent rather than empty: an empty title is a title.
+#[test]
+fn an_audio_preview_is_flat_on_the_wire() {
+    let v = serde_json::to_value(HostMessage::FilePreview {
+        path: "Music/song.flac".into(),
+        preview: FilePreview::Audio {
+            title: Some("Song".into()),
+            artist: None,
+            album: None,
+            duration: 61.5,
+            cover: None,
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "file_preview",
+            "path": "Music/song.flac",
+            "kind": "audio",
+            "title": "Song",
+            "duration": 61.5,
+        })
+    );
+}
+
 #[test]
 fn host_messages_round_trip() {
     host_round_trip(&HostMessage::Welcome {
@@ -197,6 +224,13 @@ fn host_messages_round_trip() {
         },
         FilePreview::Directory {
             entries: vec!["2026/".into()],
+        },
+        FilePreview::Audio {
+            title: Some("Song".into()),
+            artist: Some("Band".into()),
+            album: Some("Record".into()),
+            duration: 61.5,
+            cover: Some("data:image/png;base64,AA==".into()),
         },
         FilePreview::Binary,
         FilePreview::Unreadable,
