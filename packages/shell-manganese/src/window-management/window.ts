@@ -45,8 +45,24 @@ export type ClientWindow = {
   cursor: CursorShape | undefined;
   id: string;
   kind: WindowKind.App;
+  /** The largest the client will draw its window. */
+  maxSize: SizeLimit;
+  /** The smallest the client will draw its window. */
+  minSize: SizeLimit;
   title: string;
 };
+
+/**
+ * How far a client will size its window, per axis, in the pixels its box is
+ * laid out in — `undefined` on an axis it does not limit.
+ */
+export type SizeLimit = readonly [
+  width: number | undefined,
+  height: number | undefined,
+];
+
+/** No limit on either axis, which is where every window starts. */
+export const UNLIMITED: SizeLimit = [undefined, undefined];
 
 export const ShellWindow = {
   /**
@@ -58,6 +74,8 @@ export const ShellWindow = {
     cursor: undefined,
     id: appWindowId(appId),
     kind: WindowKind.App,
+    maxSize: UNLIMITED,
+    minSize: UNLIMITED,
     title,
   }),
 

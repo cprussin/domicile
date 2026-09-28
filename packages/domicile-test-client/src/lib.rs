@@ -40,7 +40,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
             eprintln!(
-                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup]"
+                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup] [--popup-grab] [--min-size WxH] [--max-size WxH]"
             );
             return ExitCode::from(2);
         }
