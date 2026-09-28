@@ -163,6 +163,14 @@ class MODULES_EXPORT DomicileHost final
                   double width,
                   double height,
                   base::TimeTicks arrival) override;
+  void AppMinSize(const String& app_id,
+                  double width,
+                  double height,
+                  base::TimeTicks arrival) override;
+  void AppMaxSize(const String& app_id,
+                  double width,
+                  double height,
+                  base::TimeTicks arrival) override;
   void AppClosed(const String& app_id, base::TimeTicks arrival) override;
   void AppCursor(const String& app_id,
                  domicile::mojom::blink::CursorShape cursor,

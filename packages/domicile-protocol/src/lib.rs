@@ -409,6 +409,16 @@ pub enum HostMessage {
         size: [f64; 2],
         grab: bool,
     },
+    /// The smallest a client will draw its window, in logical units —
+    /// `xdg_toplevel.set_min_size`. A `0` on an axis is no limit on it, as in
+    /// xdg-shell. A box smaller than this gets a frame larger than the box,
+    /// which the compositor crops, so a shell that sizes windows keeps them at
+    /// least this big. Sent when it changes, and not before the first change.
+    AppMinSize { app_id: String, size: [f64; 2] },
+
+    /// The largest a client will draw its window — `xdg_toplevel.set_max_size`,
+    /// read as [`HostMessage::AppMinSize`] is.
+    AppMaxSize { app_id: String, size: [f64; 2] },
 
     /// A client went away; the chrome should unmount its `<app>` element.
     AppClosed { app_id: String },

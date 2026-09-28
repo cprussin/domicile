@@ -175,6 +175,13 @@
   // the window at nothing at all.
   attribute EventHandler onappappeared;
   attribute EventHandler onappresized;
+
+  // The smallest and largest a client will draw its window, as `width` and
+  // `height` in CSS pixels, with 0 on an axis for no limit -- xdg-shell's
+  // `set_min_size` and `set_max_size`. A box outside them gets a frame that
+  // does not fill it.
+  attribute EventHandler onappminsize;
+  attribute EventHandler onappmaxsize;
   attribute EventHandler onappclosed;
   attribute EventHandler onappcursor;
 

@@ -115,6 +115,12 @@ pub struct Arguments {
     /// Whether that popup grabs, as a menu does: `--popup-grab` is `--popup`
     /// with `xdg_popup.grab` before its first commit.
     pub popup_grab: bool,
+    /// The smallest and largest the window will be, in surface pixels, as
+    /// `xdg_toplevel.set_min_size` and `set_max_size` say them — `0` on an
+    /// axis for no limit. Neither is said unless asked, which is what most
+    /// clients do.
+    pub min_size: Option<(i32, i32)>,
+    pub max_size: Option<(i32, i32)>,
 }
 
 /// When a client takes the inhibitor it was asked for.
@@ -146,6 +152,9 @@ pub enum ArgumentError {
     #[error("{flag} was given more than once")]
     Repeated { flag: String },
 
+    #[error("{flag} wants WIDTHxHEIGHT, not {value}")]
+    NotASize { flag: String, value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -164,6 +173,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
+    let mut min_size = None;
+    let mut max_size = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -216,6 +227,12 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--popup-grab" => {
                 take(&mut popup_grab, &flag, true)?;
             }
+            "--min-size" => {
+                take(&mut min_size, &flag, size(&mut args, &flag)?)?;
+            }
+            "--max-size" => {
+                take(&mut max_size, &flag, size(&mut args, &flag)?)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -233,6 +250,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         paste: paste.unwrap_or(false),
         popup: popup.unwrap_or(false) || popup_grab.unwrap_or(false),
         popup_grab: popup_grab.unwrap_or(false),
+        min_size,
+        max_size,
     })
 }
 
@@ -256,6 +275,21 @@ fn value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String
     } else {
         Ok(stated)
     }
+}
+
+/// The `WIDTHxHEIGHT` after a flag.
+fn size(
+    args: &mut impl Iterator<Item = OsString>,
+    flag: &str,
+) -> Result<(i32, i32), ArgumentError> {
+    let stated = value(args, flag)?;
+    stated
+        .split_once('x')
+        .and_then(|(width, height)| Some((width.parse().ok()?, height.parse().ok()?)))
+        .ok_or_else(|| ArgumentError::NotASize {
+            flag: flag.to_string(),
+            value: stated.clone(),
+        })
 }
 
 /// Store a flag's value, refusing a second one.

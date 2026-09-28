@@ -390,6 +390,40 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ locked: true }]);
     });
 
+    it("delivers the smallest and largest a window will be", () => {
+      const limits: unknown[] = [];
+      domicile.on("app_min_size", (message) => {
+        limits.push(["min", message]);
+      });
+      domicile.on("app_max_size", (message) => {
+        limits.push(["max", message]);
+      });
+
+      host.dispatch(
+        "appminsize",
+        appEvent("appminsize", {
+          appId: "vault",
+          hasSize: true,
+          height: 500,
+          width: 680,
+        }),
+      );
+      host.dispatch(
+        "appmaxsize",
+        appEvent("appmaxsize", {
+          appId: "vault",
+          hasSize: true,
+          height: 800,
+          width: 1000,
+        }),
+      );
+
+      expect(limits).toStrictEqual([
+        ["min", { app_id: "vault", size: [680, 500] }],
+        ["max", { app_id: "vault", size: [1000, 800] }],
+      ]);
+    });
+
     it("delivers a client's request for the keyboard without moving it", () => {
       const asked: unknown[] = [];
       domicile.on("focus_requested", (message) => {
