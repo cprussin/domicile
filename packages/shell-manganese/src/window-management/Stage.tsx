@@ -1,6 +1,8 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { Fragment, useState } from "react";
 
+import { css } from "../../styled-system/css";
+
 import type { Modifiers } from "../keyboard/useModifiers";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
@@ -152,9 +154,13 @@ export const Stage = ({
   // Where a tiled window being moved would land, which is drawn over every
   // window rather than by the one being dragged — see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
+  // Whether a tiled window's border is being dragged. Not a grab: the window
+  // is resized in place rather than picked up, so it is not dimmed — see
+  // `stageStyles` for the rest of what this changes.
+  const [stretching, setStretching] = useState(false);
   const targets = tiledTargets(placements);
   return (
-    <main>
+    <main className={stageStyles} data-stretching={stretching || undefined}>
       {/*
         Before every window, so each float covers its own shadow on document
         order — see `FloatShadow`. Not for a float filling the screen, whose
@@ -189,6 +195,7 @@ export const Stage = ({
         // with the mouse already let go.
         const clickThrough =
           draggingId !== undefined ||
+          stretching ||
           (meta &&
             (floating !== undefined ||
               targets.some(({ id }) => id === window.id)));
@@ -270,9 +277,12 @@ export const Stage = ({
           edge={edge}
           id={id}
           key={`${id}-${edge.toString()}`}
-          onDrop={onDrop}
+          onDrop={() => {
+            setStretching(false);
+          }}
           onGrab={() => {
-            onGrab(id);
+            setStretching(true);
+            onSelect(id);
           }}
           onStretch={(stretched, by) => {
             onStretch(id, stretched, by);
@@ -451,6 +461,17 @@ export const Stage = ({
     </main>
   );
 };
+
+/**
+ * While a border is dragged, every window follows it at once rather than
+ * easing: the one being resized and the ones giving it room move together, so
+ * an ease on any of them is a gap that opens and closes behind the pointer.
+ * Over the whole stage because every window a stretch moves is one the drag
+ * did not start on.
+ */
+const stageStyles = css({
+  "&[data-stretching] *": { transition: "none" },
+});
 
 /**
  * The tiled windows on screen, which are what a tiled window can be picked up
