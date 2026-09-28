@@ -52,6 +52,26 @@ source_set("surface_crop_unit_tests") {
   ]
 }
 
+# Whether a client's buffer is blended over the page or drawn opaque, by its
+# pixel format.
+source_set("surface_alpha") {
+  sources = [
+    "surface_alpha.cc",
+    "surface_alpha.h",
+  ]
+}
+
+source_set("surface_alpha_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_alpha_unittest.cc" ]
+
+  deps = [
+    ":surface_alpha",
+    "//testing/gtest",
+  ]
+}
+
 source_set("event_queue_unit_tests") {
   testonly = true
 
@@ -75,6 +95,7 @@ shared_library("domicile_engine") {
 
   deps = [
     ":event_queue",
+    ":surface_alpha",
     ":surface_crop",
     "//base",
     "//components/domicile/mojom",
