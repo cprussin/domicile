@@ -49,6 +49,7 @@ describe("framesOf", () => {
 
     expect(frameFor(tiled, "a")).toEqual({
       bar: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
+      behind: undefined,
       id: "a",
       surface: {
         height: 1000 - TITLE_BAR,
@@ -144,6 +145,28 @@ describe("framesOf", () => {
       x: 0,
       y: TITLE_BAR,
     });
+  });
+
+  // So that it is already on screen the moment its tab is: a window revealed
+  // from nothing takes a frame or two to be drawn, and the desktop shows
+  // through for as long as it does — behind a window opening over it, or one
+  // closing off it.
+  it("draws the tabs it is not showing under the one it is", () => {
+    const tiled = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(
+          Layout.Tabbed,
+          [LayoutNode.Window("a"), LayoutNode.Window("b")],
+          1,
+        ),
+      },
+      AREA,
+      0,
+    );
+
+    expect(frameFor(tiled, "a").behind).toEqual(frameFor(tiled, "b").surface);
+    expect(frameFor(tiled, "b").behind).toBeUndefined();
   });
 
   it("stacks a stacking container's title bars above its contents", () => {

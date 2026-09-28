@@ -125,7 +125,7 @@ type Props = {
   onReach: () => void;
   /**
    * Where the window's contents go, or `undefined` when it is not on screen
-   * at all — on another workspace, or behind another window's tab.
+   * at all — on another workspace, or inside a container behind a tab.
    */
   rect: Rect | undefined;
   /**

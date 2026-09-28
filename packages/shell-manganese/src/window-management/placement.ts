@@ -21,6 +21,12 @@ export type Placement = {
   /** Its title bar: its own, or its tab in the container it is in. */
   bar: Rect;
   /**
+   * Where a window a tab is hiding is drawn instead: under the one its
+   * container shows, at {@link COVERED}. `undefined` for a window with a
+   * `surface` — see `Frame.behind`.
+   */
+  behind: Rect | undefined;
+  /**
    * The window's own `z-index`.
    *
    * Nothing reports it. The window is a layer in this page's layer tree, so
@@ -69,6 +75,16 @@ export type Screenful = {
   selection: Rect | undefined;
   tabs: readonly Tab[];
 };
+
+/**
+ * Under every tiled window, a window a tab is hiding — see
+ * {@link Placement.behind}.
+ *
+ * Under the page's own stack rather than at the bottom of it, and still over
+ * the wallpaper: that sits at this depth too and comes first in the document,
+ * and two elements at one `z-index` are decided by the order they come in it.
+ */
+const COVERED = -1;
 
 /** The `z-index` the tiled windows share: the bottom of the page's stack. */
 export const TILED = 0;
@@ -140,6 +156,7 @@ export const placementsOf = (
       placed(
         {
           bar: barOf(rectOf(float)),
+          behind: undefined,
           id: float.id,
           surface: surfaceOf(rectOf(float)),
         },
@@ -157,6 +174,23 @@ export const placementsOf = (
   return { placements, selection, tabs };
 };
 
+/**
+ * Where a window's contents are drawn and how they stack: at its `surface`,
+ * or under the window its container shows when a tab is hiding it — or
+ * `undefined` for a window that is not on screen at all.
+ */
+export const contentsOf = (
+  placement: Placement | undefined,
+): { depth: number; rect: Rect } | undefined => {
+  if (placement?.surface !== undefined) {
+    return { depth: placement.depth, rect: placement.surface };
+  } else if (placement?.behind === undefined) {
+    return undefined;
+  } else {
+    return { depth: COVERED, rect: placement.behind };
+  }
+};
+
 // The one window a fullscreen workspace shows, or `undefined` when none is
 // asked for. A fullscreen that names a window the workspace no longer has is
 // nothing to draw — `closed` clears it, so this is the ordering rather than a
@@ -171,7 +205,12 @@ const fullscreen = (
   } else {
     const area = full.global ? geometry.desktop : geometry.screen;
     return placed(
-      { bar: barOf(area), id: full.id, surface: surfaceOf(area) },
+      {
+        bar: barOf(area),
+        behind: undefined,
+        id: full.id,
+        surface: surfaceOf(area),
+      },
       FULLSCREEN,
     );
   }
@@ -184,8 +223,12 @@ const fullscreen = (
  * turn about is worked out once rather than at each of the three ways a
  * window reaches the screen.
  */
-const placed = ({ bar, id, surface }: Frame, depth: number): Placement => ({
+const placed = (
+  { bar, behind, id, surface }: Frame,
+  depth: number,
+): Placement => ({
   bar,
+  behind,
   depth,
   frame: surface === undefined ? bar : spanning(bar, surface),
   id,

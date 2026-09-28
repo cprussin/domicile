@@ -12,6 +12,7 @@ const MAIL = ShellWindow.App("mail", "mail");
 
 const placementOf = (id: string): Placement => ({
   bar: { height: 30, width: 1200, x: 0, y: 32 },
+  behind: undefined,
   depth: 0,
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,
@@ -59,6 +60,23 @@ describe("departed", () => {
         ({ placement }) => placement.depth,
       ),
     ).toStrictEqual([LEAVING]);
+  });
+
+  // Raised to `LEAVING`, contents a tab was hiding would be drawn over the
+  // window the tab is showing for the length of the departure.
+  it("draws only the tab of a window a tab was hiding", () => {
+    const before = shown([TERMINAL, EDITOR]);
+    const hidden = {
+      ...placementOf(TERMINAL.id),
+      behind: placementOf(TERMINAL.id).surface,
+      surface: undefined,
+    };
+
+    expect(
+      departed({ ...before, placements: [hidden] }, [EDITOR]).map(
+        ({ placement }) => [placement.behind, placement.surface],
+      ),
+    ).toStrictEqual([[undefined, undefined]]);
   });
 
   it("remembers where it was in the list", () => {

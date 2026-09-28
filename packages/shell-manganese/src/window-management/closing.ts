@@ -73,7 +73,9 @@ export const departed = (
           {
             at,
             focused: before.activeId === window.id,
-            placement: { ...placement, depth: LEAVING },
+            // Only the tab of a window a tab was hiding: raised, its
+            // contents would be drawn over the window the tab is showing.
+            placement: { ...placement, behind: undefined, depth: LEAVING },
             window,
           },
         ];

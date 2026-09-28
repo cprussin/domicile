@@ -9,6 +9,7 @@ const TERMINAL = ShellWindow.App("term", "kitty");
 
 const placementOf = (id: string): Placement => ({
   bar: { height: 30, width: 1200, x: 0, y: 32 },
+  behind: undefined,
   depth: 0,
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,

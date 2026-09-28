@@ -54,6 +54,17 @@ describe("Wallpaper", () => {
     expect(sheet?.className).toContain(css({ inset: 0 }));
   });
 
+  // At the depth of the windows a tab is hiding rather than above it: they are
+  // drawn over the wallpaper and under everything else, and a wallpaper over
+  // them would show through a window opening or closing in front of one.
+  it("sits at the depth a window a tab hides is drawn at", () => {
+    const { container } = render(<Wallpaper />);
+
+    expect(container.firstElementChild?.className).toContain(
+      css({ zIndex: -1 }),
+    );
+  });
+
   it("fades the next photograph in over the one it is leaving", () => {
     // Both at once, in their two roles, because the one underneath is what
     // makes the dissolve clean: it stays opaque while the one above it rises,
