@@ -3,6 +3,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
+  WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
@@ -18,9 +19,19 @@ import userEvent from "@testing-library/user-event";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
 
+/** A home with one file in it, which is all a picker here is asked about. */
+const HOME_FILES = ["notes.txt"];
+
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
+  searchFiles: (query: string) =>
+    Promise.resolve({
+      files: HOME_FILES,
+      indexing: false,
+      matched: HOME_FILES.length,
+      query,
+    }),
 } as unknown as DomicileClient;
 
 /** A domicile client that keeps what the window told the host, in order. */
@@ -106,6 +117,32 @@ const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
     Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
   );
 };
+
+/**
+ * The engine saying the page inside the view is waiting on a file, with every
+ * answer the window gives it kept in order. Built rather than constructed, like
+ * the new window's, and cancelable because taking it is `preventDefault()`.
+ */
+const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
+  fireEvent(
+    element,
+    Object.assign(new Event(WEBVIEW_FILE_CHOOSER_EVENT, { cancelable: true }), {
+      accept: [],
+      cancel: () => {
+        answers.push("cancel");
+      },
+      choose: (paths: readonly string[]) => {
+        answers.push(`choose ${paths.join(",")}`);
+      },
+      mode: "open",
+      suggestedName: "",
+    }),
+  );
+};
+
+/** The picker's search box, which is where its keyboard is. */
+const pickerBox = (): HTMLElement =>
+  screen.getByRole("combobox", { name: "Search your files" });
 
 /**
  * The engine reporting where the guest now is and what it says about the
@@ -484,6 +521,115 @@ describe("BrowserWindow", () => {
         asksForAWindow(view(container), "https://example.com/opened");
       });
       expect(wanted).toBe("https://example.com/opened");
+    });
+  });
+
+  // A PAGE WAITING ON A FILE IS WAITING ON THIS WINDOW. The engine draws no
+  // dialog of its own and cancels a question nobody takes, so the picker is
+  // this window's to draw — over its page, holding its keyboard, until it is
+  // answered.
+  describe("a file its page asks for", () => {
+    const windowProps = {
+      clickThrough: false,
+      depth: 0,
+      domicile: silentDomicile,
+      dragging: false,
+      frame: FRAME,
+      fullscreen: false,
+      motion: "resting",
+      onHover: noHover,
+      onMotionEnded: nothingEnded,
+      onNavigate: () => undefined,
+      onOpenWindow: noWindows,
+      onReach: () => undefined,
+      rect: ON_SCREEN,
+      src: "https://example.com",
+    } as const;
+
+    it("answers the page with what is picked, and puts the picker away", async () => {
+      const answers: string[] = [];
+      const { container } = render(<BrowserWindow {...windowProps} focused />);
+      asksForAFile(view(container), answers);
+
+      await userEvent.click(
+        await screen.findByRole("option", { name: "notes.txt" }),
+      );
+
+      expect(answers).toStrictEqual(["choose notes.txt"]);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("puts the keyboard in the picker rather than the page", async () => {
+      const { container } = render(<BrowserWindow {...windowProps} focused />);
+
+      asksForAFile(view(container), []);
+      await screen.findByRole("option", { name: "notes.txt" });
+
+      expect(pickerBox()).toHaveFocus();
+    });
+
+    // The focus it gives its picker is its own, like the focus it gives its
+    // page, and not the user reaching for the window.
+    it("says nothing when it puts the keyboard in its picker", async () => {
+      const reaches: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          {...windowProps}
+          focused
+          onReach={() => {
+            reaches.push("reach");
+          }}
+        />,
+      );
+
+      asksForAFile(view(container), []);
+      await screen.findByRole("option", { name: "notes.txt" });
+
+      expect(reaches).toStrictEqual([]);
+    });
+
+    // The window's keyboard is the picker's for as long as it is up, so a
+    // window the user comes back to hands it there and not to a page that is
+    // waiting on it.
+    it("hands the keyboard back to the picker when the window is reached again", async () => {
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} focused />,
+      );
+      asksForAFile(view(container), []);
+      await screen.findByRole("option", { name: "notes.txt" });
+
+      rerender(<BrowserWindow {...windowProps} focused={false} />);
+      expect(pickerBox()).not.toHaveFocus();
+      rerender(<BrowserWindow {...windowProps} focused />);
+
+      expect(pickerBox()).toHaveFocus();
+    });
+
+    // The newer question replaces the older — see `useFileRequest` — and is
+    // a question of its own, not the rest of the last one's typing.
+    it("starts afresh on a second question", async () => {
+      const answers: string[] = [];
+      const { container } = render(<BrowserWindow {...windowProps} focused />);
+      asksForAFile(view(container), answers);
+      await userEvent.type(pickerBox(), "notes");
+
+      asksForAFile(view(container), answers);
+
+      expect(answers).toStrictEqual(["cancel"]);
+      expect(pickerBox()).toHaveValue("");
+      await screen.findByRole("option", { name: "notes.txt" });
+    });
+
+    it("gives the page its keyboard back once the question is answered", async () => {
+      const answers: string[] = [];
+      const { container } = render(<BrowserWindow {...windowProps} focused />);
+      asksForAFile(view(container), answers);
+      await screen.findByRole("option", { name: "notes.txt" });
+
+      await userEvent.type(pickerBox(), "{Escape}");
+
+      expect(answers).toStrictEqual(["cancel"]);
+      expect(view(container)).toHaveFocus();
     });
   });
 

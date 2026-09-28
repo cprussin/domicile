@@ -5,13 +5,17 @@
 #define COMPONENTS_DOMICILE_BROWSER_WEB_VIEW_GUEST_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/callback_list.h"
+#include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
+#include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/invalidate_type.h"
@@ -25,6 +29,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -100,6 +105,25 @@ class WebViewGuest : public mojom::WebViewGuest,
   WebViewGuest& operator=(const WebViewGuest&) = delete;
 
   ~WebViewGuest() override;
+
+  // The guest behind `contents`, or null when `contents` is not one -- the
+  // shell's own page, say. How //chrome finds its way here from a download,
+  // which knows its WebContents and nothing about <webview>.
+  static WebViewGuest* FromWebContents(content::WebContents* contents);
+
+  // Ask the shell where a download from this guest's page goes.
+  //
+  // WHY A DOWNLOAD ASKS AT ALL. Chrome's own answer is a save dialog it draws
+  // -- see RunFileChooser below for why that is not this desktop's -- so every
+  // download is a question to the shell, the same one a page's
+  // `<input type="file">` asks, in `kSave` mode. The profile prompts for every
+  // one; see the patch that routes ChromeDownloadManagerDelegate here.
+  //
+  // `chosen` gets the absolute path, or nothing for a download the shell
+  // canceled or never answered.
+  void ChooseDownloadPath(
+      const base::FilePath& suggested_path,
+      base::OnceCallback<void(std::optional<base::FilePath>)> chosen);
 
   // mojom::WebViewGuest:
   void Navigate(const GURL& url) override;
@@ -271,6 +295,23 @@ class WebViewGuest : public mojom::WebViewGuest,
       const content::OpenURLParams& params,
       base::OnceCallback<void(content::NavigationHandle&)>
           navigation_handle_callback) override;
+
+  // A PAGE ASKING FOR A FILE, AND THE SHELL IS WHAT ANSWERS.
+  //
+  // Content's default cancels every one, which made `<input type="file">` a
+  // button that did nothing. Chrome's answer is FileSelectHelper, which opens
+  // a dialog through the desktop portal -- a GTK window the shell did not draw
+  // and cannot place, over a desktop whose rule is that the browser draws no
+  // UI of its own. So the question goes to the element as FileChooserRequested
+  // and the shell draws the picker.
+  //
+  // WHAT CONTENT DOES WITH THE ANSWER is its own: FileChooserImpl grants the
+  // renderer read access to each path -- write, for a save -- when the
+  // listener is told. A folder upload is the one mode this has to finish by
+  // hand, because the page wants the files under the folder and not the folder.
+  void RunFileChooser(content::RenderFrameHost* render_frame_host,
+                      scoped_refptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;

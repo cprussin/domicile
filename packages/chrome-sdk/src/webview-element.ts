@@ -209,6 +209,43 @@ export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
 export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
 
 /**
+ * Fired when the page inside the view needs a file picked: an
+ * `<input type="file">` clicked, or a download that needs somewhere to go.
+ *
+ * THE ENGINE DISPATCHES THIS, and it is a question: the page waits until the
+ * shell answers with {@link DomicileFileChooserEvent.choose} or
+ * {@link DomicileFileChooserEvent.cancel}. The browser draws no dialog of its
+ * own — a picker is the desktop's UI, so it is the shell's to draw.
+ *
+ * `preventDefault()` IS HOW A SHELL TAKES IT. One nobody takes is canceled as
+ * soon as the dispatch returns, so a shell that ignores this is a desktop where
+ * uploads and downloads are refused rather than one where the page hangs.
+ *
+ * Every download asks: the browser saves nothing without a path from here.
+ *
+ * It bubbles, so a chrome can listen on the window it drew.
+ */
+export const WEBVIEW_FILE_CHOOSER_EVENT = "domicile-file-chooser";
+
+/**
+ * What a {@link WEBVIEW_FILE_CHOOSER_EVENT} asks for.
+ *
+ * - `open`: one existing file.
+ * - `open-multiple`: one or more existing files.
+ * - `open-folder`: one existing directory — the browser reads what is in it.
+ * - `save`: one path to write, which need not exist yet.
+ */
+export const WEBVIEW_FILE_CHOOSER_MODES = [
+  "open",
+  "open-multiple",
+  "open-folder",
+  "save",
+] as const;
+
+export type WebViewFileChooserMode =
+  (typeof WEBVIEW_FILE_CHOOSER_MODES)[number];
+
+/**
  * What a `<webview>` is, to everything holding one.
  *
  * Global rather than exported, and merged rather than defined, because the name
@@ -305,6 +342,39 @@ declare global {
   }
 
   /**
+   * The event {@link WEBVIEW_FILE_CHOOSER_EVENT} names: a page waiting for a
+   * file to be picked.
+   *
+   * PATHS ARE RELATIVE TO THE HOME DIRECTORY, the same vocabulary a
+   * `found_files` answer uses — so a picker built on `searchFiles` hands back
+   * what it was shown. A path that is absolute, empty or climbs out with `..`
+   * is a `TypeError`.
+   */
+  interface DomicileFileChooserEvent extends Event {
+    /**
+     * One of {@link WEBVIEW_FILE_CHOOSER_MODES}. A `string` because it is
+     * external data; parse it at the boundary.
+     */
+    readonly mode: string;
+    /**
+     * The file extensions the page will take, lower case and without the dot
+     * — the browser has already turned `image/*` and the like into them.
+     * Empty means anything.
+     */
+    readonly accept: readonly string[];
+    /** The name the page suggests for a `save`; `""` otherwise. */
+    readonly suggestedName: string;
+    /**
+     * Answer with the paths picked. `open`, `open-folder` and `save` take
+     * exactly one, `open-multiple` at least one; anything else is a
+     * `TypeError`. A second answer is an `InvalidStateError`.
+     */
+    choose(paths: readonly string[]): void;
+    /** Answer that nothing was picked. */
+    cancel(): void;
+  }
+
+  /**
    * So that a listener for the name above is handed the event's own type rather
    * than a bare `Event` a shell would have to cast.
    *
@@ -319,5 +389,6 @@ declare global {
   interface HTMLElementEventMap {
     "domicile-new-window": DomicileNewWindowEvent;
     "domicile-guest-keydown": KeyboardEvent;
+    "domicile-file-chooser": DomicileFileChooserEvent;
   }
 }

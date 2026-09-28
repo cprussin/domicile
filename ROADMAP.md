@@ -402,7 +402,14 @@ costs nothing.
   it is still refused, and the address now reaches the shell, which opens a
   browser window of its own — but `window.open` gets `null`, the opener and the
   target's name are not carried, and a form POSTed at a new target arrives as a
-  GET of its action.
+  GET of its action. A file input and a download's save location are answered
+  too, by the shell — see *A file the page asks for* below.
+- **A file the page asks for is half of what Chrome offers.** A file input and
+  a download ask the shell (`domicile-file-chooser`). Still not routed: the
+  File System Access pickers (`showOpenFilePicker`, `showSaveFilePicker`) and
+  "save page as", which still open the portal's GTK dialog; a directory dropped
+  on a page (`EnumerateDirectory`, refused); and a download's progress, which
+  nothing reports — a large file arrives with no sign it is on its way.
 - **A browser window's padlock rests on a guard that cannot fail it.**
   `PageChanged` carries the guest's visible entry — the address, and
   `security_state::GetSecurityLevel` over that same entry, which is where

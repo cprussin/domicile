@@ -206,6 +206,27 @@ source_set("shortcut_registry") {
   public_deps = [ "//base" ]
 }
 
+# What a shell's answer to a <webview>'s file chooser means to the browser: a
+# home-relative path resolved, a count checked against what was asked, and an
+# `accept` list turned into the extensions a picker can match a name against.
+#
+# Its own target beside :web_view_guest because it is the part of choosing a
+# file that needs no browser, which is where its tests are. //net for the MIME
+# table and nothing of //content.
+source_set("file_choice") {
+  sources = [
+    "browser/file_choice.cc",
+    "browser/file_choice.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+  ]
+
+  deps = [ "//net" ]
+}
+
 # The page behind a <webview>.
 #
 # Its own target beside :shell_scheme rather than part of it, for the reason
@@ -220,6 +241,7 @@ source_set("web_view_guest") {
   ]
 
   public_deps = [
+    ":file_choice",
     ":shortcut_registry",
     "//base",
     "//components/domicile/mojom",
@@ -353,6 +375,7 @@ source_set("unit_tests") {
     "browser/command_protocol_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
     "browser/display_list_unittest.cc",
+    "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/line_framer_unittest.cc",
     "browser/pointer_warp_unittest.cc",
@@ -385,6 +408,7 @@ source_set("unit_tests") {
     ":cursor_shape",
     ":desktop_prefs",
     ":display_transform",
+    ":file_choice",
     ":keyboard_layout",
     ":line_framer",
     ":pointer_warp",

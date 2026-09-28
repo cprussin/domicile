@@ -352,6 +352,8 @@ if wanted engine; then
       scripts/engine-guard-webview-click.sh \
       scripts/engine-guard-webview-new-window.sh \
       scripts/engine-guard-webview-routed-link.sh \
+      scripts/engine-guard-webview-upload.sh \
+      scripts/engine-guard-webview-download.sh \
       scripts/engine-guard-control-arrival.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&

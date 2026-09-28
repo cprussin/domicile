@@ -9,12 +9,17 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/files/file_enumerator.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
@@ -26,9 +31,11 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -215,6 +222,146 @@ mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
   }
 }
 
+// What a guest's WebContents carries it under, so that FromWebContents can find
+// it from a WebContents and nothing else.
+constexpr char kGuestUserDataKey[] = "domicile_web_view_guest";
+
+// A weak pointer rather than the guest itself: the guest is not the
+// WebContents' to own. Both go together in WebContentsDestroyed anyway, so
+// this never outlives what it points at by more than that call.
+class GuestLink : public base::SupportsUserData::Data {
+ public:
+  explicit GuestLink(base::WeakPtr<WebViewGuest> guest)
+      : guest_(std::move(guest)) {}
+
+  WebViewGuest* guest() const { return guest_.get(); }
+
+ private:
+  base::WeakPtr<WebViewGuest> guest_;
+};
+
+// Blink's five modes as the four a picker draws. See WebViewFileChooserMode in
+// the mojom. No default arm, so a mode Blink adds stops this build.
+mojom::WebViewFileChooserMode AsWebViewFileChooserMode(
+    blink::mojom::FileChooserParams::Mode mode) {
+  switch (mode) {
+    case blink::mojom::FileChooserParams::Mode::kOpen:
+      return mojom::WebViewFileChooserMode::kOpen;
+    case blink::mojom::FileChooserParams::Mode::kOpenMultiple:
+      return mojom::WebViewFileChooserMode::kOpenMultiple;
+    case blink::mojom::FileChooserParams::Mode::kUploadFolder:
+    case blink::mojom::FileChooserParams::Mode::kOpenDirectory:
+      return mojom::WebViewFileChooserMode::kOpenFolder;
+    case blink::mojom::FileChooserParams::Mode::kSave:
+      return mojom::WebViewFileChooserMode::kSave;
+  }
+}
+
+// The absolute paths a shell's answer names, or nothing for an answer that is
+// not one to `mode` -- which the element refuses before sending, so nothing
+// here is an answer a shell gave.
+std::optional<std::vector<base::FilePath>> ChosenPaths(
+    mojom::WebViewFileChooserMode mode,
+    const std::vector<std::string>& paths) {
+  if (!IsAnswerFor(mode, paths.size())) {
+    return std::nullopt;
+  }
+  const base::FilePath home = base::GetHomeDir();
+  std::vector<base::FilePath> chosen;
+  for (const std::string& path : paths) {
+    std::optional<base::FilePath> in_home = PathInHome(home, path);
+    if (!in_home.has_value()) {
+      return std::nullopt;
+    }
+    chosen.push_back(*in_home);
+  }
+  return chosen;
+}
+
+constexpr char kNotAnAnswer[] =
+    "domicile: a <webview> answered a file chooser with paths it was not "
+    "asked for.";
+
+std::vector<blink::mojom::FileChooserFileInfoPtr> AsFileInfos(
+    const std::vector<base::FilePath>& paths) {
+  std::vector<blink::mojom::FileChooserFileInfoPtr> files;
+  for (const base::FilePath& path : paths) {
+    files.push_back(blink::mojom::FileChooserFileInfo::NewNativeFile(
+        blink::mojom::NativeFileInfo::New(path, std::u16string(),
+                                          std::vector<std::u16string>())));
+  }
+  return files;
+}
+
+// Every file under `folder`, which is what a folder upload hands the page.
+// Blocking, so it runs on the thread pool.
+std::vector<base::FilePath> FilesUnder(const base::FilePath& folder) {
+  std::vector<base::FilePath> files;
+  base::FileEnumerator walk(folder, /*recursive=*/true,
+                            base::FileEnumerator::FILES);
+  for (base::FilePath file = walk.Next(); !file.empty(); file = walk.Next()) {
+    files.push_back(file);
+  }
+  return files;
+}
+
+void FolderRead(scoped_refptr<content::FileSelectListener> listener,
+                const base::FilePath& folder,
+                std::vector<base::FilePath> files) {
+  listener->FileSelected(AsFileInfos(files), folder,
+                         blink::mojom::FileChooserParams::Mode::kUploadFolder);
+}
+
+// The shell's answer to a page's `<input type="file">`, handed to content.
+//
+// A FREE FUNCTION AND NOT A METHOD, because the listener must hear an answer
+// whatever happens to the guest: content expects every listener to be told
+// exactly once, and a callback bound to a guest that has gone would drop it.
+void FilesChosen(scoped_refptr<content::FileSelectListener> listener,
+                 blink::mojom::FileChooserParams::Mode mode,
+                 const std::optional<std::vector<std::string>>& paths) {
+  if (!paths.has_value()) {
+    listener->FileSelectionCanceled();
+    return;
+  }
+  std::optional<std::vector<base::FilePath>> chosen =
+      ChosenPaths(AsWebViewFileChooserMode(mode), *paths);
+  if (!chosen.has_value()) {
+    mojo::ReportBadMessage(kNotAnAnswer);
+    listener->FileSelectionCanceled();
+    return;
+  }
+  LOG(INFO) << "domicile: a <webview>'s file chooser was answered with "
+            << chosen->size() << " path(s).";
+  if (mode == blink::mojom::FileChooserParams::Mode::kUploadFolder) {
+    const base::FilePath folder = chosen->front();
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()}, base::BindOnce(&FilesUnder, folder),
+        base::BindOnce(&FolderRead, std::move(listener), folder));
+    return;
+  }
+  listener->FileSelected(AsFileInfos(*chosen), base::FilePath(), mode);
+}
+
+// The shell's answer to "where does this download go?", handed to //chrome.
+void DownloadPathChosen(
+    base::OnceCallback<void(std::optional<base::FilePath>)> chosen,
+    const std::optional<std::vector<std::string>>& paths) {
+  if (!paths.has_value()) {
+    std::move(chosen).Run(std::nullopt);
+    return;
+  }
+  std::optional<std::vector<base::FilePath>> resolved =
+      ChosenPaths(mojom::WebViewFileChooserMode::kSave, *paths);
+  if (!resolved.has_value()) {
+    mojo::ReportBadMessage(kNotAnAnswer);
+    std::move(chosen).Run(std::nullopt);
+    return;
+  }
+  LOG(INFO) << "domicile: a <webview>'s download was given somewhere to go.";
+  std::move(chosen).Run(resolved->front());
+}
+
 }  // namespace
 
 // static
@@ -238,6 +385,9 @@ void WebViewGuest::CreateAndAttach(
       content::WebContents::Create(params);
 
   guest->guest_contents_ = contents.get();
+  contents->SetUserData(
+      kGuestUserDataKey,
+      std::make_unique<GuestLink>(guest->weak_factory_.GetWeakPtr()));
   guest->owned_guest_contents_ = std::move(contents);
   guest->Observe(guest->guest_contents_);
   guest->guest_contents_->SetDelegate(guest.get());
@@ -314,6 +464,33 @@ WebViewGuest::WebViewGuest(
       client_(std::move(client)) {}
 
 WebViewGuest::~WebViewGuest() = default;
+
+// static
+WebViewGuest* WebViewGuest::FromWebContents(content::WebContents* contents) {
+  const auto* link =
+      static_cast<GuestLink*>(contents->GetUserData(kGuestUserDataKey));
+  return link == nullptr ? nullptr : link->guest();
+}
+
+void WebViewGuest::ChooseDownloadPath(
+    const base::FilePath& suggested_path,
+    base::OnceCallback<void(std::optional<base::FilePath>)> chosen) {
+  // Before the ask, so the line means "the shell was asked" whether or not it
+  // answers. The download guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s download asked the shell where to go.";
+
+  // No accept list: a download can be saved under any name the user likes,
+  // and the suggestion already carries the one the site gave it.
+  //
+  // WRAPPED so that a pipe closing unanswered -- the element removed, the shell
+  // reloaded -- still tells //chrome, which holds the download waiting.
+  client_->FileChooserRequested(
+      mojom::WebViewFileChooserMode::kSave, {},
+      suggested_path.BaseName().AsUTF8Unsafe(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&DownloadPathChosen, std::move(chosen)),
+          std::nullopt));
+}
 
 void WebViewGuest::Navigate(const GURL& url) {
   // A CHECK rather than a guard: this object is destroyed with the guest's
@@ -502,6 +679,30 @@ bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   return true;
+}
+
+void WebViewGuest::RunFileChooser(
+    content::RenderFrameHost* render_frame_host,
+    scoped_refptr<content::FileSelectListener> listener,
+    const blink::mojom::FileChooserParams& params) {
+  // The line that tells a picker the shell never drew from a question that
+  // never left the browser. The upload guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page asked for a file; asking the "
+               "shell.";
+
+  // `default_file_name` is empty for every mode but a save -- Blink clears it
+  // -- so it is the suggestion as it stands.
+  //
+  // WRAPPED, for the reason ChooseDownloadPath's ask is: content holds the
+  // page's chooser open until the listener hears something, and a pipe that
+  // closes unanswered has to be a cancel rather than a page that never hears.
+  client_->FileChooserRequested(
+      AsWebViewFileChooserMode(params.mode),
+      AcceptedExtensions(params.accept_types),
+      params.default_file_name.BaseName().AsUTF8Unsafe(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&FilesChosen, std::move(listener), params.mode),
+          std::nullopt));
 }
 
 void WebViewGuest::NavigationStateChanged(
