@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { css, cx } from "../../styled-system/css";
 import type { Restack } from "./restacking";
 import type { Selection } from "./selection";
@@ -13,7 +15,8 @@ type Props = {
   /**
    * What the window it rings is doing, which it does too while that is a
    * shuffle — the same one of the two, so it starts over when the window does
-   * — or a workspace switch bringing it on.
+   * — or a workspace switch bringing it on, or the window opening where there
+   * was no ring before.
    */
   motion?: WindowMotion | undefined;
   /**
@@ -45,6 +48,10 @@ type Props = {
  * keyboard is, so it slides across from the last window to the new one rather
  * than reappearing there — the eye follows it instead of hunting for it.
  *
+ * **Unless there was no last window.** The first window of a workspace has
+ * nothing to slide across from, so the ring grows in with it — a ring drawn at
+ * full size around a window still growing in is a line out ahead of it.
+ *
  * At the depth of what it rings and after every window in the document, which
  * puts it over that window's bar and the client surface along all four sides
  * — and under the floats over it. It takes no pointer, so a band of accent
@@ -59,7 +66,15 @@ export const SelectionRing = ({
   // The tab's place along the top, in the ring's own coordinates.
   const before = bar.x - rect.x;
   const after = rect.x + rect.width - (bar.x + bar.width);
-  const carried = restack !== undefined || isArrival(motion);
+  // Whether the ring came on with the window it rings opening — which it
+  // stops being for good once that window has finished, so a later window
+  // opening is slid across to rather than grown in with. Adjusted while
+  // rendering rather than in an effect, so the frame it changes is this one.
+  const [appearing, setAppearing] = useState(motion === "opening");
+  if (appearing && motion !== "opening") {
+    setAppearing(false);
+  }
+  const carried = restack !== undefined || isArrival(motion) || appearing;
   // Held at its box for a switch for the reason a drag holds it: something
   // else is already carrying it there.
   const parts = settlingStyles({ dragging: dragging || isArrival(motion) });
