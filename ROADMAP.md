@@ -335,6 +335,10 @@ these is one run, and each has a line to look for.
 True, understood, and not scheduled. Each is here so that finding it again
 costs nothing.
 
+- **A client is offered 8-bit formats only.** The engine imports four
+  fourccs (`FOURCCS` in `engine.rs`), so a client that would draw in 10 bits
+  draws in 8. Widening it is a `FormatFromFourcc` case in the fork and an entry
+  there; `scripts/test-the-engines-fourccs-agree.sh` holds them together.
 - **A frame in which the chrome repainted reports the whole output damaged.**
   The chrome is one layer covering the desktop, and it repaints for a clock, a
   caret, a hover.

@@ -79,6 +79,17 @@ pub struct Plane {
 /// and what `DomicileDmabuf` has room for.
 pub const MAX_PLANES: usize = 4;
 
+/// The DRM fourccs the engine imports: `FormatFromFourcc` in
+/// `packages/domicile-engine/src/components/domicile/browser/brokered_frame_sink.cc`,
+/// which refuses anything else. `scripts/test-the-engines-fourccs-agree.sh`
+/// keeps the two lists one list.
+pub const FOURCCS: [u32; 4] = [
+    0x3432_5241, // DRM_FORMAT_ARGB8888
+    0x3432_5258, // DRM_FORMAT_XRGB8888
+    0x3432_4241, // DRM_FORMAT_ABGR8888
+    0x3432_4258, // DRM_FORMAT_XBGR8888
+];
+
 /// A client's buffer, as the ABI takes it. The fds are borrowed for the
 /// duration of the call.
 #[repr(C)]
