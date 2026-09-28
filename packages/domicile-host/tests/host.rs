@@ -290,6 +290,91 @@ fn app_appeared_assigns_ids_and_announces_to_chrome() {
 }
 
 #[test]
+fn a_popup_is_announced_as_its_own_app_over_its_window() {
+    let mut host = Host::new();
+    let (window, _) = host.app_appeared(None, None);
+
+    let (popup, placed) = host
+        .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), true)
+        .expect("a window's popup is announced");
+
+    // An id of its own, from the windows' counter: the engine embeds by it, so
+    // it can be no id a window has.
+    assert_ne!(popup, window);
+    assert_eq!(
+        placed,
+        HostMessage::PopupPlaced {
+            app_id: popup.clone(),
+            parent: window.clone(),
+            position: [12.0, 30.0],
+            size: [180.0, 240.0],
+            grab: true,
+        }
+    );
+    // A popup over a popup, which is a submenu.
+    assert!(host
+        .popup_placed(&popup, (180.0, 0.0), (100.0, 100.0), true)
+        .is_some());
+    // Over nothing it is nothing anybody can place.
+    assert!(host
+        .popup_placed("app-nowhere", (0.0, 0.0), (1.0, 1.0), false)
+        .is_none());
+}
+
+#[test]
+fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
+    let mut host = Host::new();
+    let (window, _) = host.app_appeared(None, None);
+    let (popup, _) = host
+        .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), false)
+        .unwrap();
+
+    assert_eq!(
+        host.popup_moved(&popup, (40.0, 30.0), (180.0, 200.0)),
+        Some(HostMessage::PopupPlaced {
+            app_id: popup.clone(),
+            parent: window.clone(),
+            position: [40.0, 30.0],
+            size: [180.0, 200.0],
+            grab: false,
+        })
+    );
+    assert_eq!(host.popup_moved(&window, (0.0, 0.0), (1.0, 1.0)), None);
+
+    assert_eq!(
+        host.app_closed(&popup),
+        Some(HostMessage::AppClosed {
+            app_id: popup.clone()
+        })
+    );
+    assert_eq!(host.popup_moved(&popup, (0.0, 0.0), (1.0, 1.0)), None);
+}
+
+#[test]
+fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
+    let mut host = Host::new();
+    let (window, _) = host.app_appeared(None, None);
+    let (menu, _) = host
+        .popup_placed(&window, (0.0, 30.0), (180.0, 240.0), true)
+        .unwrap();
+    let (submenu, _) = host
+        .popup_placed(&menu, (180.0, 0.0), (100.0, 100.0), true)
+        .unwrap();
+
+    let told: Vec<String> =
+        host.open_apps()
+            .into_iter()
+            .filter_map(|message| match message {
+                HostMessage::AppAppeared { app_id, .. }
+                | HostMessage::PopupPlaced { app_id, .. } => Some(app_id),
+                _ => None,
+            })
+            .collect();
+
+    assert_eq!(told, vec![window, menu, submenu]);
+}
+
+#[test]
 fn resizing_and_closing_report_to_chrome() {
     let mut host = Host::new();
     let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));

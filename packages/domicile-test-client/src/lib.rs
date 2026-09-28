@@ -27,7 +27,7 @@ pub mod arguments;
 pub mod trace;
 mod window;
 
-pub use window::{TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
+pub use window::{POPUP, POPUP_COLOR, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
 
 /// Be the client: open a window on the compositor `WAYLAND_DISPLAY` names and
 /// keep drawing until something kills it.
@@ -40,7 +40,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
             eprintln!(
-                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste]"
+                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup]"
             );
             return ExitCode::from(2);
         }

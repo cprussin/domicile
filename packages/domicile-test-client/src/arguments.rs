@@ -103,6 +103,18 @@ pub struct Arguments {
     /// is a real paste, pipe and all, rather than a report that one was
     /// possible.
     pub paste: bool,
+
+    /// Whether to open a popup over the window once it is up — see
+    /// [`crate::window::POPUP`] for where and how big.
+    ///
+    /// Off by default. On, it is a menu that a check can find: its own
+    /// surface, placed against the window's by a positioner, in a color the
+    /// window never draws.
+    pub popup: bool,
+
+    /// Whether that popup grabs, as a menu does: `--popup-grab` is `--popup`
+    /// with `xdg_popup.grab` before its first commit.
+    pub popup_grab: bool,
 }
 
 /// When a client takes the inhibitor it was asked for.
@@ -150,6 +162,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut copy = None;
     let mut copy_primary = None;
     let mut paste = None;
+    let mut popup = None;
+    let mut popup_grab = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -196,6 +210,12 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--paste" => {
                 take(&mut paste, &flag, true)?;
             }
+            "--popup" => {
+                take(&mut popup, &flag, true)?;
+            }
+            "--popup-grab" => {
+                take(&mut popup_grab, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -211,6 +231,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         copy,
         copy_primary,
         paste: paste.unwrap_or(false),
+        popup: popup.unwrap_or(false) || popup_grab.unwrap_or(false),
+        popup_grab: popup_grab.unwrap_or(false),
     })
 }
 

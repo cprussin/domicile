@@ -388,6 +388,28 @@ pub enum HostMessage {
     /// buffer's own pixels, which at scale > 1 are more numerous.
     AppResized { app_id: String, size: [f64; 2] },
 
+    /// A client opened a popup — a menu, a tooltip — over one of its windows,
+    /// or moved one it had open. It is an `<app>` of its own, placed rather
+    /// than laid out: `position` is its box's top-left relative to `parent`'s
+    /// box, and `size` is its box, both in logical units. `parent` is a window
+    /// or another popup, and is always announced first.
+    ///
+    /// Sent again with the same `app_id` when the client repositions it. It
+    /// goes the way a window does, with [`HostMessage::AppClosed`]. A popup is
+    /// never a window: it has no title, is not given the keyboard by name,
+    /// and is not tiled — a shell that treated it as one would put a menu in
+    /// a frame of its own.
+    ///
+    /// `grab` is a menu, which the client expects to go away when a press
+    /// lands anywhere else; a tooltip has none.
+    PopupPlaced {
+        app_id: String,
+        parent: String,
+        position: [f64; 2],
+        size: [f64; 2],
+        grab: bool,
+    },
+
     /// A client went away; the chrome should unmount its `<app>` element.
     AppClosed { app_id: String },
 

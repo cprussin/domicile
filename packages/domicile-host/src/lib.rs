@@ -54,11 +54,27 @@ pub struct App {
     pub size: Option<(f64, f64)>,
 }
 
+/// A popup a client opened over one of its windows — see
+/// [`HostMessage::PopupPlaced`]. Not an [`App`]: it has no title, and the
+/// keyboard is never given to it by name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Popup {
+    pub app_id: AppId,
+    /// From the same counter as [`App::arrival`], so a popup always comes
+    /// after what it is over.
+    pub arrival: u64,
+    pub parent: AppId,
+    pub position: (f64, f64),
+    pub size: (f64, f64),
+    pub grab: bool,
+}
+
 /// The compositor's orchestration state.
 #[derive(Debug, Default)]
 pub struct Host {
     scene: Scene,
     apps: HashMap<AppId, App>,
+    popups: HashMap<AppId, Popup>,
     next_id: u64,
     /// The keyboard holder as the chromes were last told it, so that
     /// [`Host::focus_change`] can say nothing when nothing moved.
@@ -239,14 +255,31 @@ impl Host {
     /// — a desktop that mounts its windows in a different order on each reload
     /// is its own bug.
     pub fn open_apps(&self) -> Vec<HostMessage> {
-        let mut open: Vec<&App> = self.apps.values().collect();
-        open.sort_by_key(|app| app.arrival);
-        open.iter()
-            .map(|app| HostMessage::AppAppeared {
-                app_id: app.app_id.clone(),
-                title: app.title.clone(),
-                size: app.size.map(wire_size),
+        // Popups among the windows, by the one counter both are numbered
+        // from: a popup is always newer than what it is over, so this is also
+        // what puts every parent before its popups.
+        let mut open: Vec<(u64, HostMessage)> = self
+            .apps
+            .values()
+            .map(|app| {
+                (
+                    app.arrival,
+                    HostMessage::AppAppeared {
+                        app_id: app.app_id.clone(),
+                        title: app.title.clone(),
+                        size: app.size.map(wire_size),
+                    },
+                )
             })
+            .chain(
+                self.popups
+                    .values()
+                    .map(|popup| (popup.arrival, placed(popup))),
+            )
+            .collect();
+        open.sort_by_key(|(arrival, _)| *arrival);
+        open.into_iter()
+            .map(|(_, message)| message)
             // And who has the keyboard, which a page that has just loaded has
             // no other way to learn. After the windows: it names one of them.
             //
@@ -345,11 +378,54 @@ impl Host {
         }
     }
 
+    /// A popup opened over `parent`, a window or another popup. Returns its
+    /// new id and the chrome notification, or `None` if `parent` is unknown.
+    pub fn popup_placed(
+        &mut self,
+        parent: &str,
+        position: (f64, f64),
+        size: (f64, f64),
+        grab: bool,
+    ) -> Option<(AppId, HostMessage)> {
+        if !self.apps.contains_key(parent) && !self.popups.contains_key(parent) {
+            return None;
+        }
+        self.next_id += 1;
+        let popup = Popup {
+            app_id: format!("app-{}", self.next_id),
+            arrival: self.next_id,
+            parent: parent.to_string(),
+            position,
+            size,
+            grab,
+        };
+        let message = placed(&popup);
+        let app_id = popup.app_id.clone();
+        self.popups.insert(app_id.clone(), popup);
+        Some((app_id, message))
+    }
+
+    /// A popup the client repositioned. Returns the chrome notification, or
+    /// `None` if `app_id` is no popup.
+    pub fn popup_moved(
+        &mut self,
+        app_id: &str,
+        position: (f64, f64),
+        size: (f64, f64),
+    ) -> Option<HostMessage> {
+        let popup = self.popups.get_mut(app_id)?;
+        popup.position = position;
+        popup.size = size;
+        Some(placed(popup))
+    }
+
     /// Tear down a client: forget it and remove any portal. Returns the chrome
     /// notification, or `None` if the app was already gone.
     pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {
-        self.apps.remove(app_id)?;
-        self.scene.window_gone(app_id);
+        if self.popups.remove(app_id).is_none() {
+            self.apps.remove(app_id)?;
+            self.scene.window_gone(app_id);
+        }
         Some(HostMessage::AppClosed {
             app_id: app_id.to_string(),
         })
@@ -458,6 +534,17 @@ impl Host {
 
 /// A size as the wire carries it. The memory form is a tuple and the protocol's
 /// is a two-element array; this is the one place the two meet.
+/// A popup, as the chrome is told it.
+fn placed(popup: &Popup) -> HostMessage {
+    HostMessage::PopupPlaced {
+        app_id: popup.app_id.clone(),
+        parent: popup.parent.clone(),
+        position: wire_size(popup.position),
+        size: wire_size(popup.size),
+        grab: popup.grab,
+    }
+}
+
 fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
     [width, height]
 }
