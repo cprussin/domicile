@@ -155,7 +155,9 @@ PRESSED_AFTER=0
 press "$AFTER" && PRESSED_AFTER=1
 
 LOADS=$(grep -c "GUARD loaded" "$ENGINE_LOG")
-MOVED=$(grep -cE "GUARD (popstate|resized)" "$ENGINE_LOG")
+# From the first key on: a headless window settles its viewport once as the
+# shell loads, and that `resized` is nobody's chord.
+MOVED=$(awk '/GUARD keydown/ { keyed = 1 } keyed && /GUARD (popstate|resized)/ { n++ } END { print n + 0 }' "$ENGINE_LOG")
 SAW_LOADED=$([ "$LOADS" -ge 1 ] && echo 1 || echo 0)
 HEARD_ALL=$([ "$HEARD" -ge "${#CHORDS[@]}" ] && echo 1 || echo 0)
 

@@ -61,6 +61,14 @@
     width: 160px;
   }
 
+  /* FROM in the script, from the first layout on. Sized by script alone, the
+     <app> could be laid out first at a replaced element's default 300x150 and
+     embedded at that, which the guard reads as its first configure. */
+  #app, #control {
+    height: 90px;
+    width: 120px;
+  }
+
   .box {
     display: block;
     left: 80px;                  /* kBoxLeft */
