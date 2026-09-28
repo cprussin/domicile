@@ -24,16 +24,20 @@ import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
 import { Engine } from "../address/search";
+import { AudioPreview } from "./AudioPreview";
 import type { Choice } from "./choices";
 import { ChoiceKind, choicesFor, launchOf } from "./choices";
+import { FolderPreview } from "./FolderPreview";
 import type { FileRow } from "./file-row";
 import type { Launch } from "./launch";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
+import { TextPreview } from "./TextPreview";
 import { useFound } from "./useFound";
 import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
+import { VideoPreview } from "./VideoPreview";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
@@ -582,7 +586,8 @@ const Placeholder = ({
  * A site in a `<webview>` of its own, which the pointer reaches so the wheel
  * scrolls it; a click in it takes the keyboard, which `keepKeyboardIn` hands
  * straight back to the box. A file the engine can draw — an image, a video, a
- * PDF — is drawn from `domicile://home/`; anything else is what the host reads
+ * PDF — is drawn from `domicile://home/`; a song is played from there too,
+ * under what the host reads of its tags; anything else is what the host reads
  * of it.
  */
 const ChoicePreview = ({
@@ -594,13 +599,14 @@ const ChoicePreview = ({
 }) => {
   switch (choice.kind) {
     case ChoiceKind.File: {
-      const media = mediaIn(choice.row);
       // Keyed on the path, so what one row learned — an image that would not
-      // load — is not carried onto the next.
-      return media === undefined ? (
-        <FilePreviewPane preview={preview} row={choice.row} />
-      ) : (
-        <MediaPreview key={choice.row.path} kind={media} row={choice.row} />
+      // load, a song that was playing — is not carried onto the next.
+      return (
+        <FileChoicePreview
+          key={choice.row.path}
+          preview={preview}
+          row={choice.row}
+        />
       );
     }
     case ChoiceKind.Site:
@@ -614,12 +620,42 @@ const ChoicePreview = ({
   }
 };
 
+/** A file, drawn by the element its kind is drawn in. */
+const FileChoicePreview = ({
+  preview,
+  row,
+}: {
+  preview: Preview;
+  row: FileRow;
+}) => {
+  const media = mediaIn(row);
+  switch (media) {
+    case undefined: {
+      return <FilePreviewPane preview={preview} row={row} />;
+    }
+    case MediaKind.Audio: {
+      return <SongPane preview={preview} row={row} />;
+    }
+    case MediaKind.Image:
+    case MediaKind.Video:
+    case MediaKind.Pdf: {
+      return <MediaPreview kind={media} row={row} />;
+    }
+  }
+};
+
 /**
  * A file drawn as itself, from where the engine serves the home — or, when
  * the engine could not draw it after all, named as one it cannot. An extension
  * is a guess, and a broken image is a blank pane.
  */
-const MediaPreview = ({ kind, row }: { kind: MediaKind; row: FileRow }) => {
+const MediaPreview = ({
+  kind,
+  row,
+}: {
+  kind: Exclude<MediaKind, MediaKind.Audio>;
+  row: FileRow;
+}) => {
   const [failed, setFailed] = useState(false);
   const url = homeUrl(row.path);
   const fail = () => {
@@ -641,32 +677,7 @@ const MediaPreview = ({ kind, row }: { kind: MediaKind; row: FileRow }) => {
         );
       }
       case MediaKind.Video: {
-        // Muted, because a preview that starts talking is not a preview.
-        return (
-          <video
-            autoPlay
-            className={mediaStyles}
-            loop
-            muted
-            onError={fail}
-            src={url}
-          >
-            <track kind="captions" />
-          </video>
-        );
-      }
-      case MediaKind.Audio: {
-        return (
-          <Placeholder
-            icon={FileIcon}
-            note={
-              <audio controls onError={fail} src={url}>
-                <track kind="captions" />
-              </audio>
-            }
-            title={row.name}
-          />
-        );
+        return <VideoPreview name={row.name} onError={fail} url={url} />;
       }
       case MediaKind.Pdf: {
         // The viewer's open parameters: no toolbar, no page sidebar — the
@@ -700,6 +711,23 @@ const CannotPreview = ({ row }: { row: FileRow }) => (
 const mediaIn = (row: FileRow): MediaKind | undefined =>
   row.isDirectory || row.path.startsWith("/") ? undefined : mediaOf(row.path);
 
+/**
+ * A song, played from where the engine serves the home, under the tags the
+ * host reads of it. One the host could not read as a song is still offered:
+ * its name said it is one, and the engine may yet play it.
+ */
+const SongPane = ({ preview, row }: { preview: Preview; row: FileRow }) => {
+  const shown = usePreview(preview, row.path);
+  return shown === undefined ? (
+    <NamedFile row={row} />
+  ) : (
+    <AudioPreview
+      row={row}
+      tags={shown.kind === FilePreviewKind.Audio ? shown.tags : undefined}
+    />
+  );
+};
+
 /** What the host says a path holds, drawn by kind. */
 const FilePreviewPane = ({
   preview,
@@ -716,7 +744,7 @@ const FilePreviewPane = ({
       return <NamedFile row={row} />;
     }
     case FilePreviewKind.Text: {
-      return <pre className={textPreviewStyles}>{shown.text}</pre>;
+      return <TextPreview path={row.path} text={shown.text} />;
     }
     case FilePreviewKind.Directory: {
       // An empty list is an answer, and a blank pane would read as one still
@@ -728,12 +756,11 @@ const FilePreviewPane = ({
           title={row.name}
         />
       ) : (
-        <ul className={entriesStyles}>
-          {shown.entries.map((entry) => (
-            <li key={entry}>{entry}</li>
-          ))}
-        </ul>
+        <FolderPreview entries={shown.entries} row={row} />
       );
+    }
+    case FilePreviewKind.Audio: {
+      return <AudioPreview row={row} tags={shown.tags} />;
     }
     case FilePreviewKind.Binary: {
       return <CannotPreview row={row} />;
@@ -1041,22 +1068,6 @@ const viewStyles = css({
   border: "none",
   display: "block",
   inlineSize: "100%",
-});
-
-const textPreviewStyles = css({
-  fontFamily: "mono",
-  fontSize: "sm",
-  margin: 0,
-  padding: 3,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-all",
-});
-
-const entriesStyles = css({
-  fontSize: "sm",
-  listStyle: "none",
-  margin: 0,
-  padding: 3,
 });
 
 const listStyles = flex({
