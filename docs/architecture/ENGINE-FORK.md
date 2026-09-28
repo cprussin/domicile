@@ -78,6 +78,14 @@ referencing the output of another compositor instance or client"
 (`cc/layers/surface_layer.h:36`). It goes into the property trees with every
 other layer, which is the whole of requirement 2.
 
+**The deadline is the one thing a `<webview>` does not take from it.**
+`UseDefaultDeadline()` makes the embedder's frame wait for the child to draw at
+every new surface, and a shell gives a browser window a new size on every frame
+of a drag or a tiling animation — so the whole desktop waited on one page's
+layout each frame, where an `<app>` (`SurfaceLayerBridge`, deadline 0) never
+did. Patch 0053 embeds a `<webview>`'s guest with deadline 0 too; an `<iframe>`
+still waits. `scripts/test-a-webview-does-not-hold-the-shell.sh` holds it.
+
 ### Who may create a frame sink
 
 **Nobody, at the viz layer.** `FrameSinkManagerImpl::CreateCompositorFrameSink`

@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Mon, 28 Sep 2026 04:53:53 +0000
+Subject: [PATCH] domicile: a resizing <webview> does not hold the shell's
+ frame
+
+A <webview>'s guest is embedded as an out-of-process <iframe> is: a
+RemoteFrame whose ChildFrameCompositingHelper puts a cc::SurfaceLayer on
+the guest's surface with UseDefaultDeadline(). Every new size is a new
+LocalSurfaceId, the shell's CompositorFrame depends on it, and viz holds
+that frame back until the guest draws at the new size or the deadline
+passes. A shell resizes a browser window on every frame of a drag or a
+tiling animation, so the whole desktop waited on one page's layout and
+raster every frame -- where an <app>, embedded by SurfaceLayerBridge with
+UseSpecifiedDeadline(0u), never waited at all.
+
+SetSurfaceId takes whether to wait, defaulting to upstream's answer, and
+RemoteFrame says no when its owner is a <webview>. Nothing blanks: with no
+fallback set, viz draws the latest surface of the allocation group, which
+a resize stays in. An <iframe> is part of its page's own layout and still
+waits.
+
+The owner is recognized by its tag, as patch 0011 does.
+---
+ .../core/frame/child_frame_compositing_helper.cc    | 13 ++++++++++---
+ .../core/frame/child_frame_compositing_helper.h     |  7 ++++++-
+ .../blink/renderer/core/frame/remote_frame.cc       | 13 ++++++++++++-
+ 3 files changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
+index 8608ced..3029d33 100644
+--- a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
++++ b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
+@@ -49,7 +49,8 @@ void ChildFrameCompositingHelper::ChildFrameGone(float device_scale_factor) {
+ 
+ void ChildFrameCompositingHelper::SetSurfaceId(
+     const viz::SurfaceId& surface_id,
+-    AllowPaintHolding allow_paint_holding) {
++    AllowPaintHolding allow_paint_holding,
++    WaitForChild wait_for_child) {
+   if (surface_id_ == surface_id)
+     return;
+ 
+@@ -62,8 +63,14 @@ void ChildFrameCompositingHelper::SetSurfaceId(
+   surface_layer_->SetSurfaceHitTestable(true);
+   surface_layer_->SetBackgroundColor(SkColors::kTransparent);
+ 
+-  surface_layer_->SetSurfaceId(surface_id,
+-                               cc::DeadlinePolicy::UseDefaultDeadline());
++  // Deadline 0 is what SurfaceLayerBridge::EmbedSurface uses: viz draws the
++  // latest surface of the allocation group, which a resize stays in, until the
++  // child's frame at the new size arrives -- rather than holding the embedder's
++  // whole frame back for it.
++  surface_layer_->SetSurfaceId(
++      surface_id, wait_for_child == WaitForChild::kYes
++                      ? cc::DeadlinePolicy::UseDefaultDeadline()
++                      : cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
+   MaybeSetUpPaintHolding(current_surface_id, allow_paint_holding);
+ 
+   // TODO(lfg): Investigate if it's possible to propagate the information
+diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
+index a7f2f67..b955879 100644
+--- a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
++++ b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
+@@ -32,8 +32,13 @@ class CORE_EXPORT ChildFrameCompositingHelper : public cc::ContentLayerClient {
+   ~ChildFrameCompositingHelper() override;
+ 
+   enum class AllowPaintHolding { kYes, kNo };
++  // Domicile's engine fork: whether the embedder's frame waits for the child
++  // to draw at a new surface (upstream's behavior, and every <iframe>'s) or
++  // draws the child's latest frame and moves on, as a SurfaceLayerBridge does.
++  enum class WaitForChild { kYes, kNo };
+   void SetSurfaceId(const viz::SurfaceId& surface_id,
+-                    AllowPaintHolding allow_paint_holding);
++                    AllowPaintHolding allow_paint_holding,
++                    WaitForChild wait_for_child = WaitForChild::kYes);
+   void UpdateVisibility(bool visible);
+   void ChildFrameGone(float device_scale_factor);
+ 
+diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
+index 62180d8..492d312 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
+@@ -45,6 +45,7 @@
+ #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
+ #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
+ #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
++#include "third_party/blink/renderer/core/html_names.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
+ #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
+@@ -1025,7 +1026,17 @@ bool RemoteFrame::SynchronizeVisualProperties(
+   DCHECK(surface_id.is_valid());
+   DCHECK(!remote_process_gone_);
+ 
+-  compositing_helper_->SetSurfaceId(surface_id, allow_paint_holding);
++  // Domicile's engine fork: a <webview>'s guest is a browser window the shell
++  // resizes on every frame of a drag or a tiling animation, and waiting for it
++  // to draw at each size held the shell's whole frame back each time. So it is
++  // embedded as an <app> is, and an <iframe> -- part of its page's own layout
++  // -- still waits. The tag rather than a cast, for patch 0011's reason.
++  const auto* owner_element = DynamicTo<HTMLFrameOwnerElement>(Owner());
++  compositing_helper_->SetSurfaceId(
++      surface_id, allow_paint_holding,
++      owner_element && owner_element->HasTagName(html_names::kWebviewTag)
++          ? ChildFrameCompositingHelper::WaitForChild::kNo
++          : ChildFrameCompositingHelper::WaitForChild::kYes);
+ 
+   bool rect_changed = !sent_visual_properties_ ||
+                       sent_visual_properties_->rect_in_local_root !=
