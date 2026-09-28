@@ -13,6 +13,7 @@
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
+use smithay::backend::allocator::Format;
 use smithay::backend::egl::{EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
@@ -96,11 +97,11 @@ impl DmabufImporter {
         self.node.as_deref()
     }
 
-    /// The formats to advertise on `zwp_linux_dmabuf_v1` — exactly the ones
-    /// this renderer can turn into a texture, so a client never allocates a
-    /// buffer we would have to reject.
+    /// The formats to advertise on `zwp_linux_dmabuf_v1` — the ones this
+    /// renderer can turn into a texture AND the engine imports, so a client
+    /// never allocates a buffer one of them would reject.
     pub fn formats(renderer: &GlesRenderer) -> FormatSet {
-        renderer.dmabuf_formats()
+        advertisable(renderer.dmabuf_formats())
     }
 
     /// Whether a client's buffer really imports, answering the protocol's
@@ -128,6 +129,17 @@ fn drm_node(device: &EGLDevice) -> Option<u64> {
     }
 }
 
+/// The formats of `imported` the engine can take too.
+///
+/// A client picks from what is advertised, so a format the renderer imports
+/// and the engine refuses is a window whose every frame is refused.
+fn advertisable(imported: impl IntoIterator<Item = Format>) -> FormatSet {
+    imported
+        .into_iter()
+        .filter(|format| crate::engine::FOURCCS.contains(&(format.code as u32)))
+        .collect()
+}
+
 /// Pick the device to render on: real hardware when there is any, otherwise
 /// whatever software rasterizer EGL offers.
 ///
@@ -143,4 +155,48 @@ fn preferred_device<D>(
         .into_iter()
         .next()
         .or_else(|| software.into_iter().next())
+}
+
+#[cfg(test)]
+mod tests {
+    use smithay::backend::allocator::{Format, Fourcc, Modifier};
+
+    use super::advertisable;
+
+    fn format(code: Fourcc) -> Format {
+        Format {
+            code,
+            modifier: Modifier::Linear,
+        }
+    }
+
+    // A client picks its format from what is advertised, and a 10-bit one the
+    // renderer imports but the engine does not is a window that never draws:
+    // imv chose XR30 and every frame it committed was refused.
+    #[test]
+    fn only_what_the_engine_imports_is_advertised() {
+        let renderer_imports = [
+            format(Fourcc::Argb8888),
+            format(Fourcc::Xrgb8888),
+            format(Fourcc::Abgr8888),
+            format(Fourcc::Xbgr8888),
+            format(Fourcc::Xrgb2101010),
+            format(Fourcc::Nv12),
+        ];
+
+        let mut advertised: Vec<Fourcc> = advertisable(renderer_imports)
+            .iter()
+            .map(|format| format.code)
+            .collect();
+        advertised.sort_by_key(|code| *code as u32);
+
+        let mut expected = vec![
+            Fourcc::Argb8888,
+            Fourcc::Xrgb8888,
+            Fourcc::Abgr8888,
+            Fourcc::Xbgr8888,
+        ];
+        expected.sort_by_key(|code| *code as u32);
+        assert_eq!(advertised, expected);
+    }
 }
