@@ -108,6 +108,7 @@ cleanup() {
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
   fi
+  rm -rf "$PROFILE"
 }
 trap cleanup EXIT
 
