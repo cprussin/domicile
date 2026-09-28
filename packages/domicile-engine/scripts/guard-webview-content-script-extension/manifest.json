@@ -1,0 +1,13 @@
+{
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["http://127.0.0.1/*"],
+      "run_at": "document_end"
+    }
+  ],
+  "description": "Paints every page on 127.0.0.1 one flat color, for guard-webview-content-script.sh.",
+  "manifest_version": 3,
+  "name": "Domicile content-script guard",
+  "version": "1"
+}
