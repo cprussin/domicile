@@ -1,3 +1,5 @@
+import type { Theme } from "@domicile/component-library/theme-core";
+import { THEMES } from "@domicile/component-library/theme-core";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
@@ -36,6 +38,12 @@ enum Layer {
  * its own would put a second region on every display, which is one region too
  * many for anything that looks a display up by `data-screen`.
  *
+ * **One rotation per theme**, both mounted and stepping together, and CSS
+ * showing whichever the desk is in. Mounted rather than chosen in React so the
+ * other theme's photographs are loaded before a flip — the wipe reveals one
+ * that is already here — and so the flip is the `data-theme` attribute alone,
+ * like the rest of the page's colors.
+ *
  * **It takes no pointer.** Paint and nothing else: the desktop behind the
  * chrome was never a hit target, and a sheet over the whole of it that took the
  * pointer would make it one.
@@ -54,19 +62,27 @@ export const Wallpaper = () => {
 
   return (
     <div className={sheetStyles}>
-      {WALLPAPER_PHOTOS.map((photo, index) => (
-        // `alt=""`, because a wallpaper is decoration: there is nothing here to
-        // announce to a reader that the chrome in front of it does not say
-        // better. The role is an attribute rather than a class so that one
-        // stylesheet covers all three states — and so the rotation is legible
-        // from outside, which is what its tests read.
-        <img
-          alt=""
-          className={layerStyles}
-          data-wallpaper={layerOf(index, step)}
-          key={photo}
-          src={photo}
-        />
+      {THEMES.map((theme) => (
+        <div
+          className={rotationStyles[theme]}
+          data-wallpaper-theme={theme}
+          key={theme}
+        >
+          {WALLPAPER_PHOTOS[theme].map((photo, index, photos) => (
+            // `alt=""`, because a wallpaper is decoration: there is nothing
+            // here to announce to a reader that the chrome in front of it does
+            // not say better. The role is an attribute rather than a class so
+            // that one stylesheet covers all three states — and so the
+            // rotation is legible from outside, which is what its tests read.
+            <img
+              alt=""
+              className={layerStyles}
+              data-wallpaper={layerOf(index, step, photos.length)}
+              key={photo}
+              src={photo}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -75,14 +91,14 @@ export const Wallpaper = () => {
 /**
  * Which role the photograph at `index` plays on this step of the rotation.
  *
- * `step` counts up for ever and the photographs are a ring, so the modulus is
- * what turns one into the other. The previous step needs no guard for the first
- * tick: `-1 % n` is `-1`, which is no photograph's index.
+ * `step` counts up for ever and a rotation's `length` photographs are a ring,
+ * so the modulus is what turns one into the other. The previous step needs no
+ * guard for the first tick: `-1 % n` is `-1`, which is no photograph's index.
  */
-const layerOf = (index: number, step: number): Layer => {
-  if (index === step % WALLPAPER_PHOTOS.length) {
+const layerOf = (index: number, step: number, length: number): Layer => {
+  if (index === step % length) {
     return Layer.Current;
-  } else if (index === (step - 1) % WALLPAPER_PHOTOS.length) {
+  } else if (index === (step - 1) % length) {
     return Layer.Previous;
   } else {
     return Layer.Waiting;
@@ -106,6 +122,13 @@ const sheetStyles = css({
   // and show through a window opening or closing in front of one.
   zIndex: -1,
 });
+
+// `contents`, so a rotation is no box of its own: its layers stay positioned
+// against the sheet, and stacked in the sheet's isolated context.
+const rotationStyles: Record<Theme, string> = {
+  dark: css({ _light: { display: "none" } }),
+  light: css({ _light: { display: "contents" }, display: "none" }),
+};
 
 const layerStyles = css({
   // The stacking is the role's, not the markup's: the photograph coming in has

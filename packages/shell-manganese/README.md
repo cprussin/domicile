@@ -681,6 +681,11 @@ rotation the photograph coming in is the *earlier* element of the two, and
 stacking context — where it would be a wallpaper painted over the chrome, level
 with a floating window.
 
+**Each theme has its own rotation**: dark skies for dark, daylit landscapes for
+light. Both are mounted and step together, and CSS shows whichever the desk is
+in — so a flip lands on a photograph that is already loaded, and is the
+`data-theme` attribute alone, like the rest of the page's colors.
+
 The photographs are [Wikimedia Commons](https://commons.wikimedia.org) files, by
 title: `Special:FilePath` serves the file a title names and `?width=` has
 Wikimedia's thumbnailer scale it, so they are the same six every time and the
