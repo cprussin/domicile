@@ -11,7 +11,7 @@ import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import type { Float } from "./floating/float";
 import type { Screenful } from "./placement";
-import { TILED } from "./placement";
+import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import { SelectionRing } from "./SelectionRing";
@@ -199,10 +199,11 @@ export const Stage = ({
           (meta &&
             (floating !== undefined ||
               targets.some(({ id }) => id === window.id)));
-        // A window with no placement is not on screen, so what it would stack
-        // against is not a question: it is rendered hidden, which is what keeps
-        // its portal and its page alive across a workspace switch.
-        const depth = placement?.depth ?? 0;
+        // A window with no contents on screen is not drawn, so what it would
+        // stack against is not a question: it is rendered hidden, which is what
+        // keeps its portal and its page alive across a workspace switch.
+        const contents = contentsOf(placement);
+        const depth = contents?.depth ?? 0;
         const onMotionEnded = () => {
           motions.onPlayedOut(window.id, motion);
         };
@@ -230,7 +231,7 @@ export const Stage = ({
                 onReach={() => {
                   onSelect(window.id);
                 }}
-                rect={placement?.surface}
+                rect={contents?.rect}
                 restack={restack}
               />
             );
@@ -258,7 +259,7 @@ export const Stage = ({
                 onReach={() => {
                   onSelect(window.id);
                 }}
-                rect={placement?.surface}
+                rect={contents?.rect}
                 restack={restack}
                 src={window.src}
               />

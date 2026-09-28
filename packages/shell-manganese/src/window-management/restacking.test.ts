@@ -13,6 +13,7 @@ const APART: Rect = { height: 400, width: 600, x: 900, y: 0 };
 
 const placed = (id: string, frame: Rect, depth: number): Placement => ({
   bar: { ...frame, height: 30 },
+  behind: undefined,
   depth,
   frame,
   id,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis } from "./direction";
 import type { Geometry } from "./placement";
-import { LEAVING, placementsOf } from "./placement";
+import { contentsOf, LEAVING, placementsOf, TILED } from "./placement";
 import { TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
@@ -59,6 +59,7 @@ describe("placementsOf", () => {
     // it away from.
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
       bar: { height: TITLE_BAR, width: 1920, x: 0, y: 32 },
+      behind: undefined,
       depth: 0,
       frame: { height: 1048, width: 1920, x: 0, y: 32 },
       id: appWindowId("kitty"),
@@ -225,5 +226,28 @@ describe("placementsOf", () => {
 
     expect(hidden?.surface).toBeUndefined();
     expect(hidden?.frame).toEqual(hidden?.bar ?? GEOMETRY.screen);
+  });
+
+  // Under the tab it shows rather than taken off the screen, so that it is
+  // already drawn when its tab is — see `Placement.behind`.
+  it("draws a window a tab is hiding under the one it shows", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+    const shown = placementFor(state, "editor");
+
+    const covered = contentsOf(placementFor(state, "kitty"));
+
+    expect(covered?.rect).toEqual(shown?.surface ?? GEOMETRY.screen);
+    expect(covered?.depth ?? TILED).toBeLessThan(TILED);
+    expect(contentsOf(shown)).toEqual({
+      depth: TILED,
+      rect: shown?.surface ?? GEOMETRY.screen,
+    });
+  });
+
+  it("draws nothing for a window that is not on screen", () => {
+    expect(contentsOf(undefined)).toBeUndefined();
   });
 });

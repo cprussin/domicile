@@ -100,6 +100,11 @@ const sheetStyles = css({
   // The viewport is the desktop: the compositor configures this window to the
   // desktop's own size, so a fixed sheet at the origin covers every screen.
   position: "fixed",
+  // Under the page's own stack, at the depth of a window a tab is hiding —
+  // `COVERED` in `placement.ts` — which comes later in the document and so is
+  // drawn over it. Left at the page's own level it would cover those windows,
+  // and show through a window opening or closing in front of one.
+  zIndex: -1,
 });
 
 const layerStyles = css({

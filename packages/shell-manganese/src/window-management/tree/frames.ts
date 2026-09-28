@@ -20,6 +20,17 @@ import { focusedWindowIn, focusPathOf } from "./tiling";
 export type Frame = {
   /** The bar that names it — its own, or its tab in the container it is in. */
   bar: Rect;
+  /**
+   * Where a window a tabbed or stacking container is not showing is drawn
+   * instead: under the one it is showing, in the same box. `undefined` for a
+   * window with a `surface`.
+   *
+   * Drawn rather than taken off the screen, so that it is already on screen
+   * the moment its tab is. A window revealed from nothing takes a frame or two
+   * to be drawn, and the desktop shows through for as long as it does —
+   * around a window growing in over it, or under one shrinking away off it.
+   */
+  behind: Rect | undefined;
   id: string;
   /**
    * Where its contents go, or `undefined` for a window a tabbed or stacking
@@ -117,7 +128,14 @@ const placed = (
   switch (node.kind) {
     case NodeKind.Window: {
       return {
-        frames: [{ bar: barOf(area), id: node.id, surface: surfaceOf(area) }],
+        frames: [
+          {
+            bar: barOf(area),
+            behind: undefined,
+            id: node.id,
+            surface: surfaceOf(area),
+          },
+        ],
         selection: undefined,
         tabs: [],
       };
@@ -230,11 +248,17 @@ const titled = (
     container.children.map((child, at) => {
       const bar = titleOf(container, area, at);
       const showing = at === container.focused;
-      const surface = showing ? contents : undefined;
       switch (child.kind) {
         case NodeKind.Window: {
           return {
-            frames: [{ bar, id: child.id, surface }],
+            frames: [
+              {
+                bar,
+                behind: showing ? undefined : contents,
+                id: child.id,
+                surface: showing ? contents : undefined,
+              },
+            ],
             selection: undefined,
             tabs: [],
           };

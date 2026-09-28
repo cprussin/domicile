@@ -1209,13 +1209,19 @@ describe("Shell", () => {
 
       press("w");
 
-      // One tab each across the top, and only the focused window's contents
-      // under them.
+      // One tab each across the top, and the focused window's contents under
+      // them — over the other's, which is drawn in the same box beneath it so
+      // that it is already on screen when its tab is.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
         width: "960px",
         x: "0px",
       });
-      expect(windowsOnScreen(container)).toEqual(["two"]);
+      expect(boxOf(appElement(container, "one"))).toEqual(
+        boxOf(appElement(container, "two")),
+      );
+      expect(Number(appElement(container, "one").style.zIndex)).toBeLessThan(
+        Number(appElement(container, "two").style.zIndex),
+      );
     });
 
     it("grows the ring out to the group `focus parent` selects, and back", () => {
