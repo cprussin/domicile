@@ -33,7 +33,14 @@ use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
 };
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
+use wayland_protocols::xdg::decoration::zv1::client::{
+    zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
+};
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
+
+use wayland_protocols_misc::server_decoration::client::{
+    org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
+};
 
 use crate::arguments::{Arguments, HoldTheScreensOn};
 
@@ -366,6 +373,11 @@ struct Globals {
     /// a different name — which is the whole of why a desktop can have one of
     /// the two clipboards and not the other.
     primary: Option<zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1>,
+    /// Who draws the frame, asked the way Chromium, Electron and Qt ask.
+    decoration: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
+    /// Who draws the frame, asked the way GTK3 asks.
+    kde_decoration:
+        Option<org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager>,
     named: Vec<(u32, String, u32)>,
 }
 
@@ -438,6 +450,13 @@ impl Client {
                 "zwp_primary_selection_device_manager_v1" => {
                     self.globals.primary = Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "zxdg_decoration_manager_v1" => {
+                    self.globals.decoration = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "org_kde_kwin_server_decoration_manager" => {
+                    self.globals.kde_decoration =
+                        Some(registry.bind(name, version.min(1), handle, ()));
+                }
                 _ => {}
             }
         }
@@ -497,6 +516,18 @@ impl Client {
         // is one a shell cannot address. The title is the human name; this is
         // the one programs match on.
         toplevel.set_app_id("dev.domicile.test-client".to_string());
+        // Asking to draw its own frame, which is what a client with
+        // decorations of its own asks — and so the request whose answer
+        // `tests/decorations.rs` reads. Before the first commit, as the
+        // protocol wants, so the answer rides the first configure.
+        if let Some(manager) = &self.globals.decoration {
+            let decoration = manager.get_toplevel_decoration(&toplevel, handle, ());
+            decoration.set_mode(zxdg_toplevel_decoration_v1::Mode::ClientSide);
+        }
+        if let Some(manager) = &self.globals.kde_decoration {
+            let decoration = manager.create(&surface, handle, ());
+            decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+        }
         // Scale 1 here, not whatever the outputs have said: the surface has
         // not entered one yet — that only happens once it is mapped — so there
         // is no screen whose density this window is on. `follow` raises it
@@ -1427,6 +1458,40 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 }
 
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
+delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
+
+/// The answer to asking who draws the frame. Traced by name rather than by
+/// number, because the two protocols number their modes differently.
+impl Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        decoration: &zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1,
+        event: zxdg_toplevel_decoration_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zxdg_toplevel_decoration_v1::Event::Configure { mode } = event {
+            crate::say!(decoration.id(), "configure({})", named(mode));
+        }
+    }
+}
+
+impl Dispatch<org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration, ()> for Client {
+    fn event(
+        _: &mut Client,
+        decoration: &org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration,
+        event: org_kde_kwin_server_decoration::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let org_kde_kwin_server_decoration::Event::Mode { mode } = event {
+            crate::say!(decoration.id(), "mode({})", named(mode));
+        }
+    }
+}
 delegate_noop!(Client: ignore zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1);
 delegate_noop!(Client: ignore zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1);
 delegate_noop!(Client: ignore wl_data_device_manager::WlDataDeviceManager);
@@ -1693,6 +1758,14 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
 /// match on it. `WEnum` is either the value or the number a newer compositor
 /// sent that this client's protocol copy has no name for — and the number is
 /// what both cases have.
+/// An enum a compositor stated, by name where this client knows the name.
+fn named<T: std::fmt::Debug>(stated: WEnum<T>) -> String {
+    match stated {
+        WEnum::Value(value) => format!("{value:?}"),
+        WEnum::Unknown(raw) => raw.to_string(),
+    }
+}
+
 fn number<T: Into<u32>>(stated: WEnum<T>) -> u32 {
     match stated {
         WEnum::Value(known) => known.into(),
