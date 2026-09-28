@@ -242,7 +242,8 @@ says "and one with a note says what it read" '3s'
 # path has to write the note the control reads — a guard that only ever asks
 # gets the full budget forever and looks exactly like this working.
 GUARDS="$ROOT/packages/domicile-engine/scripts"
-for guard in guard-client-window guard-shell guard-webview-framing; do
+for guard in guard-client-window guard-shell guard-webview-framing \
+  guard-webview-content-script; do
   file="$GUARDS/$guard.sh"
   if [ ! -f "$file" ]; then
     printf '  FAIL  %s is a guard this repository has
