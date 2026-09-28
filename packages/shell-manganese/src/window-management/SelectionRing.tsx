@@ -10,6 +10,11 @@ import {
 
 type Props = {
   /**
+   * The window it rings has just opened and is growing in, which the ring
+   * does with it — see {@link SelectionRing}.
+   */
+  opening: boolean;
+  /**
    * The shuffle the window it rings is playing, which it plays too — or
    * `undefined` while that window is not shuffling, or it rings a group.
    */
@@ -29,17 +34,23 @@ type Props = {
  * goes on saying where the keyboard is inside a group, because that is still
  * where it is.
  *
+ * **Nor around a window that has just opened.** That one grows out of the
+ * middle of its own frame, and a ring easing across from the last window to
+ * meet it is a second movement beside the first. It is at the new box from the
+ * first frame and grows in with the window instead.
+ *
  * At the depth of what it rings and after every window in the document, which
  * puts it over that window's bar and the client surface along all four sides
  * — and under the floats over it. It takes no pointer, so a band of accent
  * along the outer edge is the whole of what it costs them.
  */
-export const SelectionRing = ({ restack, selection }: Props) => (
+export const SelectionRing = ({ opening, restack, selection }: Props) => (
   <div
     className={cx(
       ringStyles,
+      opening && movingStyles({ motion: "opening" }),
       restack !== undefined && movingStyles({ motion: "restacking" }),
-      settlingStyles({ dragging: selection.dragging }),
+      settlingStyles({ dragging: selection.dragging || opening }),
     )}
     // What is selected, as an attribute as well as a line: the desktop's own
     // state is worth being able to read off the element, in devtools and in a

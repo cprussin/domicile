@@ -26,7 +26,10 @@ import {
   reduceWindows,
   WindowAction,
 } from "./window-management/window-state";
-import { settlingStyles } from "./window-management/window-styles";
+import {
+  movingStyles,
+  settlingStyles,
+} from "./window-management/window-styles";
 
 // The desktop as the *engine* describes it: a corner and an extent as four
 // numbers, which `screens/host-displays.ts` is what regroups into the rectangle
@@ -1240,6 +1243,21 @@ describe("Shell", () => {
       expect(selectionRing(container).className).toContain(
         css({ borderRadius: "lg" }),
       );
+    });
+
+    it("grows the ring in with a window that has just opened", () => {
+      // A ring easing across from the last window while the new one grows out
+      // of its own middle is two movements where there should be one.
+      const { container } = renderShell();
+      clientAppears("one");
+      motionsPlayOut(container);
+      clientAppears("two");
+      const ring = selectionRing(container);
+
+      expect(ring.className).toContain(movingStyles({ motion: "opening" }));
+      expect(ring.className).toContain(settlingStyles({ dragging: true }));
+      motionsPlayOut(container);
+      expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 
     it("keeps the group when the layout slides a window under the pointer", () => {
