@@ -106,6 +106,7 @@ const EVENT_NAMES = [
   "appresized",
   "appminsize",
   "appmaxsize",
+  "popupplaced",
   "appclosed",
   "appcursor",
   "shortcut",

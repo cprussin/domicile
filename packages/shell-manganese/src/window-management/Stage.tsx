@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { css } from "../../styled-system/css";
 
 import type { Modifiers } from "../keyboard/useModifiers";
+import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
@@ -13,6 +14,8 @@ import type { Float } from "./floating/float";
 import type { Screenful } from "./placement";
 import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
+import type { Popup } from "./popup";
+import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
 import { SelectionRing } from "./SelectionRing";
 import { selectionOf } from "./selection";
@@ -93,6 +96,8 @@ type Props = {
   onSelect: (id: string) => void;
   /** A tiled window's `edge` dragged `by` pixels, rightwards or downwards. */
   onStretch: (id: string, edge: Direction, by: number) => void;
+  /** The popups clients have open, drawn over the windows here they belong to. */
+  popups: readonly Popup[];
   /** Where every window on screen goes, and the tabs of any container. */
   screenful: Screenful;
   /**
@@ -143,6 +148,7 @@ export const Stage = ({
   onResize,
   onSelect,
   onStretch,
+  popups,
   screenful,
   width,
   windows,
@@ -467,6 +473,14 @@ export const Stage = ({
         />
       )}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
+      {/*
+        Last, so a popup wins the tie with everything at its window's depth —
+        the window, its bar and the ring — and stays under a window stacked
+        above its own, as a menu of a window behind does.
+      */}
+      {popupsOver(popups, placements).map((popup) => (
+        <AppPopup key={popup.appId} popup={popup} />
+      ))}
     </main>
   );
 };

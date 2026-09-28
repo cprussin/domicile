@@ -27,6 +27,7 @@
   X(appresized, Appresized)              \
   X(appminsize, Appminsize)              \
   X(appmaxsize, Appmaxsize)              \
+  X(popupplaced, Popupplaced)            \
   X(appclosed, Appclosed)                \
   X(appcursor, Appcursor)                \
   X(shortcut, Shortcut)                  \

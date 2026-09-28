@@ -169,6 +169,17 @@ export type DomicileAppEvent = Event & {
   readonly height: number;
 
   /**
+   * `popupplaced` only: the window or popup this popup is over, and where its
+   * box goes from that one's top-left, in CSS pixels. Empty and zero on every
+   * other event.
+   */
+  readonly parentAppId: string;
+  readonly x: number;
+  readonly y: number;
+  /** `popupplaced` only: a menu, which grabbed; `false` for a tooltip. */
+  readonly grab: boolean;
+
+  /**
    * When the browser process had this message, in `performance.now()`'s
    * milliseconds.
    *
@@ -574,6 +585,11 @@ export type DomicileHostEventMap = {
   appminsize: DomicileAppEvent;
   /** The largest, as {@link DomicileHostEventMap.appminsize} is the smallest. */
   appmaxsize: DomicileAppEvent;
+  /**
+   * A client opened a popup over one of its windows, or moved one — see
+   * `popup_placed` in `domicile-protocol`.
+   */
+  popupplaced: DomicileAppEvent;
   appclosed: DomicileAppEvent;
   appcursor: DomicileAppCursorEvent;
   focuschanged: DomicileAppEvent;

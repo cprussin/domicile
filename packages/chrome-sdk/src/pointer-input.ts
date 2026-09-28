@@ -157,8 +157,10 @@ const forApp = (
 const requestFocus = (
   context: ElementContext,
   element: HTMLAppElement,
-  appId: string,
+  pressed: string,
 ): void => {
+  // A popup's window rather than the popup: see `DomicileClient.windowOf`.
+  const appId = context.domicile.windowOf(pressed);
   const unanswered = element.dispatchEvent(
     new CustomEvent<AppFocusRequest>(APP_FOCUS_REQUESTED_EVENT, {
       bubbles: true,

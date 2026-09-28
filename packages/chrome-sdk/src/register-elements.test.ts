@@ -30,6 +30,10 @@ class FakeDomicile {
   surfaceSizeOf(appId: string): SurfaceSize | undefined {
     return this.#drawn.get(appId);
   }
+  /** Every client here is a window, but `menu`, which is over `term`. */
+  windowOf(appId: string): string {
+    return appId === "menu" ? "term" : appId;
+  }
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -232,6 +236,28 @@ describe("registerElements", () => {
 
       expect(requests).toStrictEqual(["term"]);
       expect(domicile.calls).toContainEqual(["focusApp", "term"]);
+    });
+
+    it("asks for a popup's window when the popup is clicked", () => {
+      // A menu is not a window a shell knows, and the keyboard is already in
+      // it — but a click on it is the user working in its window, and a
+      // shell that moved the keyboard elsewhere would dismiss it.
+      const element = mountApp("menu");
+      const requests: (string | undefined)[] = [];
+      document.addEventListener(
+        APP_FOCUS_REQUESTED_EVENT,
+        (event) => {
+          requests.push((event as CustomEvent<AppFocusRequest>).detail.appId);
+        },
+        { signal: shell.signal },
+      );
+
+      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+
+      expect(requests).toStrictEqual(["term"]);
+      expect(domicile.calls).toContainEqual(["focusApp", "term"]);
+      // The press itself is the menu's.
+      expect(domicile.calls).toContainEqual(["button", "menu", BTN_LEFT, true]);
     });
 
     it("leaves the keyboard alone when the shell cancels the request", () => {

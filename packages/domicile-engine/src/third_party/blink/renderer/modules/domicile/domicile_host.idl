@@ -182,6 +182,11 @@
   // does not fill it.
   attribute EventHandler onappminsize;
   attribute EventHandler onappmaxsize;
+
+  // A client opened a popup -- a menu, a tooltip -- over one of its windows,
+  // or moved one. An <app> of its own, placed at `x`, `y` from the box of
+  // `parentAppId` rather than laid out, and gone with `appclosed`.
+  attribute EventHandler onpopupplaced;
   attribute EventHandler onappclosed;
   attribute EventHandler onappcursor;
 

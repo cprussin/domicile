@@ -148,6 +148,7 @@ a new message.
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
 Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `app_min_size`, `app_max_size`,
+`popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `battery`, `clipboard`, `theme`, `focus_changed`,
 `focus_requested`, `displays`, `keymap`.
