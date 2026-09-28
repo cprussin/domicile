@@ -50,6 +50,14 @@
   // could not already have named.
   [CallWith=ScriptState, RaisesException] undefined previewFile(DOMString path);
 
+  // Ask which installed applications match `query`. Answered with an `apps`
+  // event carrying the same query.
+  //
+  // Words, like searchFiles(): which directories hold the desktop entries is
+  // the compositor's to read, and each entry comes back with the argv to hand
+  // to spawn(), so nothing on the page parses an Exec line.
+  [CallWith=ScriptState, RaisesException] undefined searchApps(DOMString query);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // IT NAMES A ROW AND CARRIES NO TEXT: a shell is served over domicile:// so
@@ -215,6 +223,9 @@
   // What a previewFile() found, as a DomicileFilePreviewEvent. Only ever an
   // answer.
   attribute EventHandler onfilepreview;
+
+  // What a searchApps() found, as a DomicileAppsEvent. Only ever an answer.
+  attribute EventHandler onapps;
 
   // The machine's battery, as a DomicileBatteryEvent.
   //

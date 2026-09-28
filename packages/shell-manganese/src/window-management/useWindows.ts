@@ -129,6 +129,9 @@ export const useWindows = (
       if (action.kind === WindowActionKind.FileOpened) {
         domicile.spawn(openCommand(action.path));
       }
+      if (action.kind === WindowActionKind.AppLaunched) {
+        domicile.spawn(action.command);
+      }
       if (
         action.kind === WindowActionKind.WindowKilled ||
         action.kind === WindowActionKind.WindowClosed

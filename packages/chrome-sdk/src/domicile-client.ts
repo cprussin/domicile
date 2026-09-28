@@ -75,6 +75,7 @@ import type {
 import { setFocusedApp } from "./element-context";
 import type {
   FilePreviewMessage,
+  FoundAppsMessage,
   FoundFilesMessage,
   HostMessageOf,
   HostMessageType,
@@ -92,6 +93,7 @@ import {
   filePreview,
   focusChanged,
   focusRequested,
+  foundApps,
   foundFiles,
   idle,
   locked,
@@ -193,6 +195,12 @@ export class DomicileClient {
     ((found: FoundFilesMessage) => void)[]
   >();
 
+  /** The application searches waiting on an answer, by query. */
+  readonly #appSearches = new Map<
+    string,
+    ((found: FoundAppsMessage) => void)[]
+  >();
+
   /** The previews waiting on an answer, by the path each asked about. */
   readonly #previews = new Map<
     string,
@@ -279,6 +287,13 @@ export class DomicileClient {
         settle(previewed);
       }
       this.#previews.delete(previewed.path);
+    });
+    host.addEventListener("apps", (event) => {
+      const found = foundApps(event);
+      for (const settle of this.#appSearches.get(found.query) ?? []) {
+        settle(found);
+      }
+      this.#appSearches.delete(found.query);
     });
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
@@ -574,6 +589,20 @@ export class DomicileClient {
     return new Promise((settle) => {
       this.#previews.set(path, [...(this.#previews.get(path) ?? []), settle]);
       this.#host.previewFile(path);
+    });
+  }
+
+  /**
+   * Which installed applications match `query`, best first — each with the
+   * argv that launches it, for {@link spawn}. See `DomicileHost.searchApps`.
+   */
+  searchApps(query: string): Promise<FoundAppsMessage> {
+    return new Promise((settle) => {
+      this.#appSearches.set(query, [
+        ...(this.#appSearches.get(query) ?? []),
+        settle,
+      ]);
+      this.#host.searchApps(query);
     });
   }
 
