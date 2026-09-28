@@ -710,14 +710,20 @@ describe("the pointer", () => {
       desktop("kitty"),
       WindowAction.FloatToggled(),
       WindowAction.WindowMoved(APP("kitty"), 300, 200),
-      WindowAction.WindowResized(APP("kitty"), 800, 600),
+      WindowAction.WindowResized(APP("kitty"), {
+        height: 600,
+        width: 800,
+        x: 250,
+        y: 150,
+      }),
     );
 
+    // A resize from the top-left corner moves the window as well.
     expect(workspaceHere(state).floats[0]).toMatchObject({
       height: 600,
       width: 800,
-      x: 300,
-      y: 200,
+      x: 250,
+      y: 150,
     });
   });
 });

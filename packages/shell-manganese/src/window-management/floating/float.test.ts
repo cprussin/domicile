@@ -11,6 +11,7 @@ import {
   rectOf,
   shifted,
   sizedTo,
+  stretched,
 } from "./float";
 
 const AT: Float = {
@@ -97,6 +98,42 @@ describe("sizedTo", () => {
 
   it("leaves the window where it is", () => {
     expect(sizedTo(AT, 800, 500)).toMatchObject({ x: AT.x, y: AT.y });
+  });
+});
+
+describe("stretched", () => {
+  const BOTTOM_RIGHT = {
+    horizontal: Direction.Right,
+    vertical: Direction.Down,
+  };
+  const TOP_LEFT = { horizontal: Direction.Left, vertical: Direction.Up };
+
+  it("drags the bottom-right corner, leaving the window where it is", () => {
+    expect(stretched(AT, BOTTOM_RIGHT, 30, 20)).toStrictEqual({
+      ...AT,
+      height: AT.height + 20,
+      width: AT.width + 30,
+    });
+  });
+
+  it("drags the top-left corner, leaving the bottom-right one where it is", () => {
+    expect(stretched(AT, TOP_LEFT, 30, 20)).toStrictEqual({
+      ...AT,
+      height: AT.height - 20,
+      width: AT.width - 30,
+      x: AT.x + 30,
+      y: AT.y + 20,
+    });
+  });
+
+  it("holds the far edges still where the dragged ones have to stop", () => {
+    // Too small on one axis and off the desktop on the other: either way the
+    // edge not taken hold of must not be the one that gives.
+    const squashed = stretched(AT, TOP_LEFT, AT.width, -AT.y - 50);
+    expect(squashed.x + squashed.width).toBe(AT.x + AT.width);
+    expect(squashed.width).toBeLessThan(AT.width);
+    expect(squashed.y).toBe(0);
+    expect(squashed.height).toBe(AT.y + AT.height);
   });
 });
 

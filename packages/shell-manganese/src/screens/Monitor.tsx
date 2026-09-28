@@ -156,8 +156,8 @@ export const Monitor = ({
         onRename={(id, url) => {
           act(WindowAction.WindowRenamed(id, siteOf(url)));
         }}
-        onResize={(id, width, height) => {
-          act(WindowAction.WindowResized(id, width, height));
+        onResize={(id, box) => {
+          act(WindowAction.WindowResized(id, box));
         }}
         onSelect={(id) => {
           act(WindowAction.WindowSelected(id));

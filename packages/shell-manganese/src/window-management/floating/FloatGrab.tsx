@@ -1,4 +1,5 @@
 import { css, cx } from "../../../styled-system/css";
+import type { Rect } from "../rect";
 import { placedAt } from "../window-styles";
 import type { Float } from "./float";
 import { rectOf } from "./float";
@@ -11,7 +12,7 @@ type Props = {
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
-  onResize: (width: number, height: number) => void;
+  onResize: (box: Rect) => void;
   /** Whether taking hold now would resize the window rather than move it. */
   resizes: boolean;
 };
@@ -62,6 +63,4 @@ const grabStyles = css({ position: "absolute" });
 
 const moveStyles = css({ cursor: "move" });
 
-// The corner it is driven from is the bottom-right one, which is the direction
-// this arrow points.
 const resizeStyles = css({ cursor: "nwse-resize" });

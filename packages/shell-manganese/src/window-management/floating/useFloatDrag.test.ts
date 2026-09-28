@@ -27,6 +27,12 @@ const press = (x = 0, y = 0, button = 0) =>
 /** The secondary button, which resizes whatever it takes hold of. */
 const SECONDARY = 2;
 
+/** A point in the window's bottom-right quarter, whose corner a resize drives. */
+const BOTTOM_RIGHT = [
+  FLOAT.x + FLOAT.width - 1,
+  FLOAT.y + FLOAT.height - 1,
+] as const;
+
 /**
  * The rest of a drag, which the hook listens for on `window` rather than on
  * the element the press landed on — so that is where the tests raise it.
@@ -104,17 +110,35 @@ describe("useFloatDrag", () => {
   });
 
   describe("resizing", () => {
-    it("resizes the window by the pointer's delta", () => {
+    it("drags the bottom-right corner when taken hold of near it", () => {
       const { calls, grab } = dragging(true);
-      grab();
+      grab(...BOTTOM_RIGHT);
       act(() => {
-        moveTo(70, 30);
+        moveTo(BOTTOM_RIGHT[0] + 70, BOTTOM_RIGHT[1] + 30);
       });
-      expect(calls.onResize).toHaveBeenCalledWith(
-        FLOAT.width + 70,
-        FLOAT.height + 30,
-      );
+      expect(calls.onResize).toHaveBeenCalledWith({
+        height: FLOAT.height + 30,
+        width: FLOAT.width + 70,
+        x: FLOAT.x,
+        y: FLOAT.y,
+      });
       expect(calls.onMove).not.toHaveBeenCalled();
+    });
+
+    it("drags the top-left corner when taken hold of near it", () => {
+      // sway's: the corner driven is the one of the quarter the pointer is in,
+      // so a window can be grown towards whichever side there is room on.
+      const { calls, grab } = dragging(true);
+      grab(FLOAT.x + 1, FLOAT.y + 1);
+      act(() => {
+        moveTo(FLOAT.x - 4, FLOAT.y - 9);
+      });
+      expect(calls.onResize).toHaveBeenCalledWith({
+        height: FLOAT.height + 10,
+        width: FLOAT.width + 5,
+        x: FLOAT.x - 5,
+        y: FLOAT.y - 10,
+      });
     });
 
     it("goes on resizing after Shift is let go of mid-drag", () => {
@@ -139,15 +163,17 @@ describe("useFloatDrag", () => {
       // means the corner rather than the whole window.
       const { calls, result } = dragging();
       act(() => {
-        result.current.onPointerDown(press(0, 0, SECONDARY));
+        result.current.onPointerDown(press(...BOTTOM_RIGHT, SECONDARY));
       });
       act(() => {
-        moveTo(70, 30);
+        moveTo(BOTTOM_RIGHT[0] + 70, BOTTOM_RIGHT[1] + 30);
       });
-      expect(calls.onResize).toHaveBeenCalledWith(
-        FLOAT.width + 70,
-        FLOAT.height + 30,
-      );
+      expect(calls.onResize).toHaveBeenCalledWith({
+        height: FLOAT.height + 30,
+        width: FLOAT.width + 70,
+        x: FLOAT.x,
+        y: FLOAT.y,
+      });
       expect(calls.onMove).not.toHaveBeenCalled();
     });
 
