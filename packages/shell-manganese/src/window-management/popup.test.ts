@@ -15,6 +15,7 @@ const placed = (
   frame: { height: 0, width: 0, x: 0, y: 0 },
   id,
   surface,
+  tabbed: undefined,
 });
 
 describe("where a popup goes", () => {
