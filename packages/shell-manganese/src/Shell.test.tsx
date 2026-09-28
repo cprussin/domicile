@@ -1288,18 +1288,16 @@ describe("Shell", () => {
       });
     });
 
-    it("grows the ring in with a window that has just opened", () => {
-      // A ring easing across from the last window while the new one grows out
-      // of its own middle is two movements where there should be one.
+    it("slides the ring across to a window that has just opened", () => {
+      // The ring is where the keyboard is, and the eye follows it there from
+      // the last window rather than hunting for where it reappeared.
       const { container } = renderShell();
       clientAppears("one");
       motionsPlayOut(container);
       clientAppears("two");
       const ring = selectionRing(container);
 
-      expect(ring.className).toContain(movingStyles({ motion: "opening" }));
-      expect(ring.className).toContain(settlingStyles({ dragging: true }));
-      motionsPlayOut(container);
+      expect(ring.className).toContain(settlingStyles({ dragging: false }));
       expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 

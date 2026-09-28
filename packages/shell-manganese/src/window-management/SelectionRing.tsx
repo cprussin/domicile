@@ -16,11 +16,6 @@ type Props = {
    */
   motion?: WindowMotion | undefined;
   /**
-   * The window it rings has just opened and is growing in, which the ring
-   * does with it — see {@link SelectionRing}.
-   */
-  opening: boolean;
-  /**
    * The shuffle the window it rings is playing, which it plays too — or
    * `undefined` while that window is not shuffling, or it rings a group.
    */
@@ -40,10 +35,9 @@ type Props = {
  * goes on saying where the keyboard is inside a group, because that is still
  * where it is.
  *
- * **Nor around a window that has just opened.** That one grows out of the
- * middle of its own frame, and a ring easing across from the last window to
- * meet it is a second movement beside the first. It is at the new box from the
- * first frame and grows in with the window instead.
+ * **Around a window that has just opened too.** The ring is where the
+ * keyboard is, so it slides across from the last window to the new one rather
+ * than reappearing there — the eye follows it instead of hunting for it.
  *
  * At the depth of what it rings and after every window in the document, which
  * puts it over that window's bar and the client surface along all four sides
@@ -52,7 +46,6 @@ type Props = {
  */
 export const SelectionRing = ({
   motion = "resting",
-  opening,
   restack,
   selection,
 }: Props) => {
@@ -60,12 +53,11 @@ export const SelectionRing = ({
   // The tab's place along the top, in the ring's own coordinates.
   const before = bar.x - rect.x;
   const after = rect.x + rect.width - (bar.x + bar.width);
-  const parts = settlingStyles({ dragging: dragging || opening });
+  const parts = settlingStyles({ dragging });
   return (
     <div
       className={cx(
         ringStyles,
-        opening && movingStyles({ motion: "opening" }),
         restack !== undefined && movingStyles({ motion }),
         parts,
       )}
