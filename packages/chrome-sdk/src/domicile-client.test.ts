@@ -656,11 +656,16 @@ describe("DomicileClient", () => {
       host.dispatch(
         "filepreview",
         Object.assign(new Event("filepreview"), {
+          album: "",
           arrival: 0,
+          artist: "",
+          cover: "",
+          duration: 0,
           entries: [],
           kind: "text",
           path,
           text,
+          title: "",
         }),
       );
     };

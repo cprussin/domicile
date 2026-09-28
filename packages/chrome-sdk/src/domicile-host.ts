@@ -329,8 +329,9 @@ export type DomicileModifiersEvent = Event & {
 /**
  * What a path holds, answering {@link DomicileHost.previewFile}.
  *
- * `kind` is `text`, `directory`, `binary` or `unreadable`; `text` is filled
- * for the first and `entries` for the second, and both are empty otherwise.
+ * `kind` is `text`, `directory`, `audio`, `binary` or `unreadable`; `text` is
+ * filled for the first, `entries` for the second and the tags for the third,
+ * and each is empty otherwise.
  */
 export type DomicileFilePreviewEvent = Event & {
   /** The path this answers. */
@@ -343,6 +344,17 @@ export type DomicileFilePreviewEvent = Event & {
 
   /** The front of the directory, for a `directory` preview. */
   readonly entries: readonly string[];
+
+  /** What a song says of itself, for an `audio` preview; empty if it does not. */
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string;
+
+  /** How long an `audio` preview plays, in seconds. */
+  readonly duration: number;
+
+  /** The picture an `audio` preview carries of itself, as a `data:` URL. */
+  readonly cover: string;
 
   /** When the browser process had it, on `performance.now()`'s clock. */
   readonly arrival: DOMHighResTimeStamp;
