@@ -388,6 +388,10 @@ costs nothing.
   browser window of its own — but `window.open` gets `null`, the opener and the
   target's name are not carried, and a form POSTed at a new target arrives as a
   GET of its action.
+- **What a browser window's resize costs is unmeasured.** Patch 0053 stops the
+  shell's frame waiting for a `<webview>` to draw at each new size, as it never
+  waited for an `<app>`; no guard times a resize of either, so "it is as fluid
+  as a terminal now" is reasoning from the deadline rather than a number.
 - **A browser window's padlock rests on a guard that cannot fail it.**
   `PageChanged` carries the guest's visible entry — the address, and
   `security_state::GetSecurityLevel` over that same entry, which is where
