@@ -5,6 +5,11 @@ import type { Rect } from "./rect";
 /** What the commands are pointed at, and where to draw it. */
 export type Selection = {
   depth: number;
+  /**
+   * The window it rings is being dragged, so the ring keeps to it rather than
+   * easing after it.
+   */
+  dragging: boolean;
   /** A container `focus parent` selected, rather than a window. */
   group: boolean;
   rect: Rect;
@@ -25,13 +30,19 @@ export const selectionOf = (
   { placements, selection }: Screenful,
   activeId: string | undefined,
   fullscreenId: string | undefined,
+  draggingId: string | undefined,
 ): Selection | undefined => {
   const active = placements.find(({ id }) => id === activeId);
   if (selection !== undefined) {
-    return { depth: TILED, group: true, rect: selection };
+    return { depth: TILED, dragging: false, group: true, rect: selection };
   } else if (active === undefined || active.id === fullscreenId) {
     return undefined;
   } else {
-    return { depth: active.depth, group: false, rect: active.frame };
+    return {
+      depth: active.depth,
+      dragging: active.id === draggingId,
+      group: false,
+      rect: active.frame,
+    };
   }
 };
