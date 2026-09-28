@@ -32,16 +32,24 @@ unpacked = ["/home/you/src/my-extension"]         # absolute: `~` is not expande
 | Parse `[extensions]`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
 | Send the list as a fact that rides the handshake, like `Keymap`, and again on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
 | Intercept it in the browser process, as `Keymap` is | `components/domicile/browser/control_channel.cc` |
-| Reconcile the profile against the list | `components/domicile/browser/extension_installer.{h,cc}` |
+| Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
+| Carry it out in the page's profile | `chrome/browser/domicile/domicile_extension_installer.{h,cc}`, bound by patch 0054 |
 
-Reconciling does three things:
+Reconciling does three things, once `ExtensionSystem::ready()`:
 
-- A Web Store id goes to `PendingExtensionManager` with the Web Store's update URL (`https://clients2.google.com/service/update2/crx`). It installs from the Store and updates from it.
-- An unpacked directory goes to `UnpackedInstaller::Load`.
-- An extension this installer added that the list no longer names gets uninstalled. Anything else in the profile is left alone.
+- A Web Store id not installed goes to `PendingExtensionManager::AddFromExternalUpdateUrl` with `extension_urls::GetWebstoreUpdateUrl()`, as `kExternalPrefDownload`, acknowledged. It installs from the Store and updates from it.
+- A directory not already loaded goes to `UnpackedInstaller::Load`, silent on failure (the error is logged). Directories are compared after `base::MakeAbsoluteFilePath`, as the installer records them.
+- An extension this installer added that the list no longer names is uninstalled with `UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION`, which neither asks policy nor marks it user-removed. What it added is the profile pref `domicile.extensions.added`. Anything else in the profile is left alone.
 
 Naming an extension in the config is the consent. There is no install prompt,
 and the manifest's permissions are granted as declared.
+
+Two things Chromium does to an extension installed this way, at the pin:
+
+| Chromium | On a desk |
+|---|---|
+| `ExtensionRegistrar` disables an unacknowledged external extension (`DISABLE_EXTERNAL_EXTENSION`) only where `FeatureSwitch::prompt_for_external_extensions` is on: Windows and macOS. | Never applies on Linux. The Web Store add passes `mark_acknowledged` anyway. |
+| `StandardManagementPolicyProvider` disables a `kUnpacked` extension in a profile not in developer mode (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). | The installer sets `prefs::kExtensionsUIDeveloperMode` before loading a directory, and leaves it on. |
 
 ### The tray: engine to page
 
@@ -123,7 +131,7 @@ Slice 1: extensions run, and show in a tray.
 - [x] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
 - [x] `[extensions]` in `domicile-config`
 - [x] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
-- [ ] `extension_installer` in the fork, and the control channel handing it the list
+- [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
 - [ ] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`
 - [ ] `WebViewGuestClient.CloseRequested` and `domicile-close`
 - [ ] `ExtensionTray` mojo, `onextensions`, `activateExtension`
@@ -137,7 +145,3 @@ Slice 2: tabs.
 - [ ] the mutations table, each to where it goes
 - [ ] per-tab action state in `onextensions`
 - [ ] a guard: a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`
-
-## Open questions
-
-- **Does the pin disable an externally added extension until someone approves it?** `ExternalInstallManager` does this on some platforms, and a desk has no bubble to approve it from. Recommendation: verify on `crux` with the first installer build. If it does, clear the disable reason in `ExtensionPrefs` from the installer rather than patching the prompt.

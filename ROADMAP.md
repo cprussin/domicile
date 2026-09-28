@@ -170,9 +170,9 @@ The evidence for each of those is in the doc that made the claim —
 4. **Chrome extensions.** Installed from `[extensions]` in the config, their
    actions in the shell's tray with popups in a `<webview>`, and every
    `<webview>` a tab to `chrome.tabs`. Started: a guard proves a content script
-   reaches a `<webview>`, and the compositor sends the config's list to the
-   browser as `HostMessage::Extensions`. Next is the fork's installer that
-   reads it.
+   reaches a `<webview>`, the compositor sends the config's list to the
+   browser as `HostMessage::Extensions`, and the fork installs what it names.
+   Next is a tab helper on every `WebViewGuest`.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 ## In the engine fork — the agent on `crux`

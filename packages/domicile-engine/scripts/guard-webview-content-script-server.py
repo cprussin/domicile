@@ -4,6 +4,11 @@
 One path, `/page`: a document in one flat color, and nothing else, so every
 pixel of it is either that color or the extension's mark over it. Served from
 127.0.0.1, which is what the fixture extension's content script matches.
+
+It reloads itself every second. A content script reaches only documents that
+load after its extension has, and an extension loading at startup races the
+first page: under a busy runner the page won, and a leg that was sharp alone
+read "unmarked" forever. Reloading turns that race into a delay.
 """
 
 import argparse
@@ -17,6 +22,7 @@ PAGE = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="1" />
     <title>a page for a content script</title>
     <style>
       html,
