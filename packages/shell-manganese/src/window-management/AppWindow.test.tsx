@@ -31,6 +31,8 @@ const recordingDomicile = {
   pointerButton: () => undefined,
   pointerMotion: () => undefined,
   surfaceSizeOf: () => undefined,
+  // Every client here is a window, which is its own.
+  windowOf: (appId: string) => appId,
 } as unknown as DomicileClient;
 
 // The test DOM performs no layout, so measurement is injected.

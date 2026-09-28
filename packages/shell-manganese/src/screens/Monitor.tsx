@@ -167,6 +167,7 @@ export const Monitor = ({
         onStretch={(id, edge, by) => {
           act(WindowAction.WindowStretched(id, edge, by, geometry.workspace));
         }}
+        popups={windows.popups}
         screenful={screenful}
         width={geometry.screen.width}
         windows={windows.windows}
