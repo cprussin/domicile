@@ -1692,6 +1692,33 @@ describe("Shell", () => {
         ),
       ).not.toContain("");
     });
+
+    it("starts the ring's shuffle over with its window's", () => {
+      // Pressed back and forth faster than a shuffle takes: each press is a
+      // new animation, for the ring as much as for the window it rings.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("Tab", true);
+      press("Tab");
+      press("Tab", true);
+      motionsPlayOut(container);
+
+      for (const id of ["two", "one"]) {
+        fireEvent.pointerDown(barFor(container, `app:${id}`), {
+          clientX: 100,
+          clientY: 100,
+        });
+        fireEvent.pointerUp(window, { clientX: 100, clientY: 100 });
+      }
+
+      expect(appElement(container, "one").dataset.motion).toBe(
+        "restacking-again",
+      );
+      expect(selectionRing(container).className).toContain(
+        movingStyles({ motion: "restacking-again" }),
+      );
+    });
   });
 
   describe("the scratchpad", () => {

@@ -1,6 +1,7 @@
 import { css, cx } from "../../styled-system/css";
 import type { Restack } from "./restacking";
 import type { Selection } from "./selection";
+import type { WindowMotion } from "./window-motion";
 import {
   movingStyles,
   placedAt,
@@ -9,6 +10,11 @@ import {
 } from "./window-styles";
 
 type Props = {
+  /**
+   * What the window it rings is doing, which it does too while that is a
+   * shuffle — the same one of the two, so it starts over when the window does.
+   */
+  motion?: WindowMotion | undefined;
   /**
    * The window it rings has just opened and is growing in, which the ring
    * does with it — see {@link SelectionRing}.
@@ -44,12 +50,17 @@ type Props = {
  * — and under the floats over it. It takes no pointer, so a band of accent
  * along the outer edge is the whole of what it costs them.
  */
-export const SelectionRing = ({ opening, restack, selection }: Props) => (
+export const SelectionRing = ({
+  motion = "resting",
+  opening,
+  restack,
+  selection,
+}: Props) => (
   <div
     className={cx(
       ringStyles,
       opening && movingStyles({ motion: "opening" }),
-      restack !== undefined && movingStyles({ motion: "restacking" }),
+      restack !== undefined && movingStyles({ motion }),
       settlingStyles({ dragging: selection.dragging || opening }),
     )}
     // What is selected, as an attribute as well as a line: the desktop's own

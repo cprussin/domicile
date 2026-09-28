@@ -161,6 +161,49 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, EDITOR.id)).toBe("resting");
       expect(motionOf(result, TERMINAL.id)).toBe("restacking");
     });
+
+    // A NEW SHUFFLE IS A NEW ANIMATION. A browser restarts an animation only
+    // when its name changes, so a window raised back while it is still
+    // shuffling — or in the very frame it finished — has to be given the other
+    // of the two, or it plays nothing and never says it has finished.
+    it("starts over when raised back before it has finished", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      act(() => {
+        rerender(floating(TERMINAL.id, EDITOR.id));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
+      expect(motionOf(result, EDITOR.id)).toBe("restacking-again");
+    });
+
+    it("starts over when raised back once it has finished", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "restacking");
+        result.current.onPlayedOut(TERMINAL.id, "restacking");
+      });
+
+      act(() => {
+        rerender(floating(TERMINAL.id, EDITOR.id));
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
+
+      act(() => {
+        result.current.onPlayedOut(TERMINAL.id, "restacking-again");
+        result.current.onPlayedOut(EDITOR.id, "restacking-again");
+      });
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking");
+    });
   });
 
   describe("a workspace switch", () => {

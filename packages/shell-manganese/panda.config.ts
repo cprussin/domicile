@@ -1,6 +1,34 @@
 import { domicilePreset } from "@domicile/component-library/pandacss-preset";
 import { defineConfig } from "@pandacss/dev";
 
+// A float trading places with one it overlaps: it parts from the other,
+// trades depths with it at the furthest point, and comes back. See
+// `shuffledBy` for the custom properties, and `restacking.ts` for why a
+// shuffle.
+//
+// The new depth is written at 51% as well as at the end, so it lands in the
+// frame after the furthest point: left to interpolate from 50% to 100%, a step
+// of one would round over three quarters of the way back, with the two windows
+// already on top of each other again.
+//
+// Above the config because it is used twice, under two names — see
+// `nextShuffle`.
+const RESTACKING = {
+  "0%": {
+    transform: "translate(0, 0)",
+    zIndex: "var(--restack-from)",
+  },
+  "50%": {
+    transform: "translate(var(--restack-x), var(--restack-y))",
+    zIndex: "var(--restack-from)",
+  },
+  "51%": { zIndex: "var(--restack-to)" },
+  "100%": {
+    transform: "translate(0, 0)",
+    zIndex: "var(--restack-to)",
+  },
+};
+
 export default defineConfig({
   exclude: [],
   // The page is the desktop and nothing in it scrolls: every window is placed
@@ -136,30 +164,8 @@ export default defineConfig({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
-        // A float trading places with one it overlaps: it parts from the
-        // other, trades depths with it at the furthest point, and comes back.
-        // See `shuffledBy` for the custom properties, and `restacking.ts` for
-        // why a shuffle.
-        //
-        // The new depth is written at 51% as well as at the end, so it lands
-        // in the frame after the furthest point: left to interpolate from 50%
-        // to 100%, a step of one would round over three quarters of the way
-        // back, with the two windows already on top of each other again.
-        windowRestacking: {
-          "0%": {
-            transform: "translate(0, 0)",
-            zIndex: "var(--restack-from)",
-          },
-          "50%": {
-            transform: "translate(var(--restack-x), var(--restack-y))",
-            zIndex: "var(--restack-from)",
-          },
-          "51%": { zIndex: "var(--restack-to)" },
-          "100%": {
-            transform: "translate(0, 0)",
-            zIndex: "var(--restack-to)",
-          },
-        },
+        windowRestacking: RESTACKING,
+        windowRestackingAgain: RESTACKING,
         // A browser window's zoom, said for a moment and put away: in quickly
         // enough to answer the key that asked, held long enough to be read,
         // and out without anybody dismissing it.
