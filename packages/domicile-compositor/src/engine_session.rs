@@ -104,6 +104,9 @@ pub struct EngineSession {
     /// another set of fds every frame for the same pixmap.
     imports: HashMap<ImportKey, (SurfaceId, BufferId)>,
     held: HeldBuffers<Submitted>,
+    /// The part of its buffer each app's last frame showed, so the frame a
+    /// reconnect puts back up is cropped the way it was.
+    crops: HashMap<String, (i32, i32, i32, i32)>,
 }
 
 impl EngineSession {
@@ -118,6 +121,7 @@ impl EngineSession {
             surfaces: Surfaces::default(),
             imports: HashMap::new(),
             held: HeldBuffers::default(),
+            crops: HashMap::new(),
         })
     }
 
@@ -241,7 +245,8 @@ impl EngineSession {
         let Some(descriptor) = describe(buffer) else {
             return false;
         };
-        self.submit(app_id, buffer.clone(), &descriptor, (0, 0, 0, 0), now)
+        let crop = self.crops.get(app_id).copied().unwrap_or_default();
+        self.submit(app_id, buffer.clone(), &descriptor, crop, (0, 0, 0, 0), now)
     }
 
     /// The fd to add to the compositor's loop.
@@ -276,6 +281,7 @@ impl EngineSession {
         app_id: &str,
         buffer: Submitted,
         descriptor: &DmabufDescriptor,
+        crop: (i32, i32, i32, i32),
         damage: (i32, i32, i32, i32),
         now: Instant,
     ) -> bool {
@@ -292,7 +298,8 @@ impl EngineSession {
         let Some(id) = self.import(surface, &buffer, descriptor) else {
             return false;
         };
-        self.engine.submit(surface, id, damage);
+        self.engine.submit(surface, id, crop, damage);
+        self.crops.insert(app_id.to_owned(), crop);
         // A hold this replaced is the *same* buffer — ids come from
         // `imports`, which is keyed on the object — so it is dropped and not
         // released. Releasing it would tell the client it may draw into the
@@ -346,6 +353,7 @@ impl EngineSession {
     /// gone, and waiting out the deadline for each would stall a client that
     /// is still running for no reason.
     pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {
+        self.crops.remove(app_id);
         let Some(surface) = self.surfaces.forget(app_id) else {
             return Vec::new();
         };
