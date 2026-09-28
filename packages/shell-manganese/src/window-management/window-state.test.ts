@@ -935,3 +935,35 @@ describe("a client's limits on its size", () => {
     expect(floatOf(state)).toMatchObject({ width: 680, x: right - 680 });
   });
 });
+
+describe("a client's popups", () => {
+  const MENU = {
+    appId: "menu",
+    parent: "term",
+    position: [12, 30],
+    size: [180, 240],
+  } as const;
+
+  it("are held as they are placed, and moved in place", () => {
+    const state = reduce(
+      desktop("term"),
+      WindowAction.PopupPlaced(MENU),
+      WindowAction.PopupPlaced({ ...MENU, position: [40, 30] }),
+    );
+
+    expect(state.popups).toEqual([{ ...MENU, position: [40, 30] }]);
+    // And never as windows: a menu in a frame of its own is the bug.
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
+  });
+
+  it("go when the client closes them, and leave the window alone", () => {
+    const state = reduce(
+      desktop("term"),
+      WindowAction.PopupPlaced(MENU),
+      WindowAction.AppClosed("menu"),
+    );
+
+    expect(state.popups).toEqual([]);
+    expect(state.windows.map(({ id }) => id)).toEqual([APP("term")]);
+  });
+});

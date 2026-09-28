@@ -373,6 +373,19 @@ void DomicileHost::AppMaxSize(const String& app_id, double width, double height,
       Arrival(arrival)));
 }
 
+void DomicileHost::PopupPlaced(const String& app_id,
+                               const String& parent_app_id,
+                               double x,
+                               double y,
+                               double width,
+                               double height,
+                               bool grab,
+                               base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
+      domicile_event_names::Popupplaced(), app_id, parent_app_id, x, y, width,
+      height, grab, Arrival(arrival)));
+}
+
 void DomicileHost::AppClosed(const String& app_id, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appclosed(), app_id, String(), std::nullopt,

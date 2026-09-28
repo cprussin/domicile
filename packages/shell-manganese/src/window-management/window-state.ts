@@ -18,6 +18,7 @@ import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
 import { limitedTo } from "./floating/float";
+import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
@@ -180,6 +181,11 @@ export type WindowState = {
    * back to (`workspaceAutoBackAndForth`).
    */
   previous: string | undefined;
+  /**
+   * The popups — menus, tooltips — clients have open over their windows,
+   * oldest first. Not windows: see `popup.ts`.
+   */
+  popups: readonly Popup[];
   /** The windows in the scratchpad, the most recently hidden last. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
@@ -196,6 +202,7 @@ export const NO_WINDOWS: WindowState = {
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: BindingMode.Default,
+  popups: [],
   previous: undefined,
   scratchpad: [],
   screens: [{ current: "1", name: UNDESCRIBED_SCREEN }],
@@ -296,6 +303,7 @@ export enum WindowActionKind {
   ModeSet,
   ModeSwapped,
   ParentFocused,
+  PopupPlaced,
   ScratchpadShown,
   ScreenHovered,
   ScreensDescribed,
@@ -518,6 +526,12 @@ export const WindowAction = {
   /** `focus parent`. */
   ParentFocused: () => ({ kind: WindowActionKind.ParentFocused as const }),
 
+  /** A client opened a popup over one of its windows, or moved one. */
+  PopupPlaced: (popup: Popup) => ({
+    kind: WindowActionKind.PopupPlaced as const,
+    popup,
+  }),
+
   /** `scratchpad show`. */
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
 
@@ -729,7 +743,14 @@ const reduceAction = (
       return openApp(state, action.appId, action.title);
     }
     case WindowActionKind.AppClosed: {
-      return closeWindow(state, appWindowId(action.appId));
+      // A popup, or a window: the ids are one space, and a popup's is never
+      // a window's.
+      return state.popups.some(({ appId }) => appId === action.appId)
+        ? {
+            ...state,
+            popups: state.popups.filter(({ appId }) => appId !== action.appId),
+          }
+        : closeWindow(state, appWindowId(action.appId));
     }
     case WindowActionKind.AppCursorChanged: {
       return reshapeApp(state, action.appId, (window) => ({
@@ -828,6 +849,18 @@ const reduceAction = (
     }
     case WindowActionKind.ModeSwapped: {
       return onCurrent(state, modeToggled);
+    }
+    case WindowActionKind.PopupPlaced: {
+      // Moved in place rather than appended, so a menu keeps its order.
+      const placed = action.popup;
+      return {
+        ...state,
+        popups: state.popups.some(({ appId }) => appId === placed.appId)
+          ? state.popups.map((popup) =>
+              popup.appId === placed.appId ? placed : popup,
+            )
+          : [...state.popups, placed],
+      };
     }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);
