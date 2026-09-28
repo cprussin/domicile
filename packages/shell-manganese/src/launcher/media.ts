@@ -1,5 +1,6 @@
 // Which files the launcher's preview draws itself rather than asking the host
-// to read: the ones the engine can show from a URL, by extension.
+// to read: the ones the engine can show from a URL, by extension. A song is
+// both — the engine plays it, and the host reads its tags.
 //
 // The engine serves them from `domicile://home/` — the user's home, to the
 // shell's own document only, and never a dotfile. See `kDomicileHomeHost` in

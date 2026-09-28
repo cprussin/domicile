@@ -7,15 +7,29 @@
 
 import { z } from "zod";
 
-/** Which of the four things a preview can be. */
+/** Which of the five things a preview can be. */
 export enum FilePreviewKind {
   Text,
   Directory,
+  Audio,
   Binary,
   Unreadable,
 }
 
+/** What a song says of itself. A tag it does not say is `undefined`. */
+export type AudioTags = {
+  album: string | undefined;
+  artist: string | undefined;
+  /** The picture it carries of itself, as a `data:` URL. */
+  cover: string | undefined;
+  /** How long it plays, in seconds. */
+  duration: number;
+  title: string | undefined;
+};
+
 export const FilePreview = {
+  /** A file that plays as sound, by what it says of itself. */
+  Audio: (tags: AudioTags) => ({ kind: FilePreviewKind.Audio as const, tags }),
   /** A file that is not text, and so has nothing a preview can draw. */
   Binary: () => ({ kind: FilePreviewKind.Binary as const }),
   /** The front of what a directory holds, a directory ending in `/`. */
@@ -35,7 +49,7 @@ export type FilePreview = ReturnType<
 
 /** The engine's `kind` word, read as the kind it names. */
 export const filePreviewKindSchema = z
-  .enum(["text", "directory", "binary", "unreadable"])
+  .enum(["text", "directory", "audio", "binary", "unreadable"])
   .transform((kind) => {
     switch (kind) {
       case "text": {
@@ -43,6 +57,9 @@ export const filePreviewKindSchema = z
       }
       case "directory": {
         return FilePreviewKind.Directory;
+      }
+      case "audio": {
+        return FilePreviewKind.Audio;
       }
       case "binary": {
         return FilePreviewKind.Binary;
