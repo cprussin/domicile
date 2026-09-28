@@ -3,6 +3,8 @@ import { useCallback, useState } from "react";
 import type { Closing } from "./closing";
 import { departed, withClosing } from "./closing";
 import type { Placement } from "./placement";
+import type { Restack } from "./restacking";
+import { restacked } from "./restacking";
 import type { Shown } from "./shown";
 import type { Tab } from "./tree/frames";
 import type { ShellWindow } from "./window";
@@ -50,12 +52,15 @@ type Playing = {
   closing: readonly Closing[];
   /** The windows that have just opened and are still growing in. */
   opening: readonly string[];
+  /** The floats still lifting over, or sinking under, one another. */
+  restacking: readonly Restack[];
   switching: WorkspaceSwitch | undefined;
 };
 
 const NOTHING_PLAYING: Playing = {
   closing: [],
   opening: [],
+  restacking: [],
   switching: undefined,
 };
 
@@ -111,20 +116,33 @@ const moved = (before: Shown, shown: Shown): boolean =>
   before.windows !== shown.windows;
 
 /** What is playing once the desktop has moved from `before` to `shown`. */
-const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => ({
-  closing: [...playing.closing, ...departed(before, shown.windows)],
-  // The ones still open, and the ones that have just appeared. A window that
-  // closed while it was still growing in never says it has arrived — it is
-  // playing its departure instead — so the ones that are gone are dropped
-  // here rather than waiting to be told.
-  opening: [
-    ...playing.opening.filter((id) => holds(shown.windows, id)),
-    ...shown.windows
-      .filter(({ id }) => !holds(before.windows, id))
-      .map(({ id }) => id),
-  ],
-  switching: switchedTo(before, shown) ?? playing.switching,
-});
+const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
+  const restacks = restacked(before, shown);
+  return {
+    closing: [...playing.closing, ...departed(before, shown.windows)],
+    // The ones still open, and the ones that have just appeared. A window that
+    // closed while it was still growing in never says it has arrived — it is
+    // playing its departure instead — so the ones that are gone are dropped
+    // here rather than waiting to be told.
+    opening: [
+      ...playing.opening.filter((id) => holds(shown.windows, id)),
+      ...shown.windows
+        .filter(({ id }) => !holds(before.windows, id))
+        .map(({ id }) => id),
+    ],
+    // A window raised again before it has settled plays the latest raise
+    // rather than both.
+    restacking: [
+      ...playing.restacking.filter(
+        ({ id }) =>
+          holds(shown.windows, id) &&
+          !restacks.some((restack) => restack.id === id),
+      ),
+      ...restacks,
+    ],
+    switching: switchedTo(before, shown) ?? playing.switching,
+  };
+};
 
 const holds = (windows: readonly ShellWindow[], id: string): boolean =>
   windows.some((window) => window.id === id);
@@ -165,6 +183,15 @@ const played = (
         ? playing
         : { ...playing, opening };
     }
+    case "sinking":
+    case "surfacing": {
+      const restacking = playing.restacking.filter(
+        (restack) => restack.id !== id,
+      );
+      return restacking.length === playing.restacking.length
+        ? playing
+        : { ...playing, restacking };
+    }
     case "resting": {
       // A window that is not doing anything cannot have finished doing it.
       // What reaches here is an animation of the chrome's own — a spinner in
@@ -200,14 +227,22 @@ const drawnWindow = (
   }
 };
 
-/** How a window that is on screen got there. */
+/**
+ * How a window that is on screen got there, or what it last did there.
+ *
+ * Arriving outranks a raise: a window that is still growing in or sliding on
+ * is not done arriving because something was put over it.
+ */
 const arriving = (playing: Playing, id: string): WindowMotion => {
+  const restack = playing.restacking.find((restacking) => restacking.id === id);
   if (playing.switching !== undefined) {
     return arrivalFrom(playing.switching.towards);
   } else if (playing.opening.includes(id)) {
     return "opening";
-  } else {
+  } else if (restack === undefined) {
     return "resting";
+  } else {
+    return restack.motion;
   }
 };
 

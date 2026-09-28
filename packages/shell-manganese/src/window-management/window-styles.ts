@@ -203,6 +203,18 @@ export const movingStyles = cva({
       // the time. Revealed by a workspace switch, a tab, a fullscreen let go
       // of: it is there, and a window that is there has nothing to play.
       resting: {},
+      // A float trading places with one it overlaps: the one raised lifts
+      // towards the user as it comes over and the one it covered sinks back,
+      // and both settle where they were. A raise is otherwise a `z-index` that
+      // changes between two frames, which says nothing about which of the two
+      // moved. Back to where they started rather than `forwards`, because
+      // where they started is where they stay.
+      sinking: {
+        animation: "windowSinking {durations.normal} {easings.out}",
+      },
+      surfacing: {
+        animation: "windowSurfacing {durations.normal} {easings.out}",
+      },
     },
   },
 });

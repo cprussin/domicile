@@ -119,6 +119,41 @@ describe("useWindowMotion", () => {
     });
   });
 
+  describe("a float raised over another", () => {
+    const floating = (on: string, under: string): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        { ...placementOf(on), depth: 2 },
+        { ...placementOf(under), depth: 1 },
+      ],
+    });
+
+    it("surfaces, and the one it covered sinks", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("surfacing");
+      expect(motionOf(result, TERMINAL.id)).toBe("sinking");
+    });
+
+    it("is done when it says it has surfaced", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "surfacing");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("sinking");
+    });
+  });
+
   describe("a workspace switch", () => {
     it("slides the workspace arriving in from the side it was on", () => {
       const { rerender, result } = showing(
