@@ -323,6 +323,28 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit(DomicileEngine* engine,
                                                     int32_t damage_width,
                                                     int32_t damage_height);
 
+// domicile_surface_submit, showing only the `crop` of `buffer` -- a rectangle
+// in the buffer's pixels, where an empty one is the whole buffer.
+//
+// This is xdg_surface.set_window_geometry. A client that draws its own shadow
+// commits a buffer larger than its window, and only the window is the <app>
+// element's box; the shadow drawn into it is dead space and every click lands
+// off by the shadow's width. A new symbol rather than new arguments on the old
+// one, so a compositor newer than its engine fails to find it rather than
+// calling it with arguments it does not read.
+DOMICILE_ENGINE_EXPORT void domicile_surface_submit_crop(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    DomicileBufferId buffer,
+    int32_t crop_x,
+    int32_t crop_y,
+    int32_t crop_width,
+    int32_t crop_height,
+    int32_t damage_x,
+    int32_t damage_y,
+    int32_t damage_width,
+    int32_t damage_height);
+
 // Tells the browser which connectors to light and where.
 //
 // THE ANSWER TO the `displays` callback, and the reason this ABI carries both

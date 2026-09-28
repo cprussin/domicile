@@ -17,7 +17,7 @@
 //! is the defect `ERRORS.md` exists to prevent.
 //!
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
 use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
@@ -330,6 +330,9 @@ pub struct Engine {
     events: Box<RefCell<Vec<Event>>>,
     library: Library,
     path: PathBuf,
+    /// Whether the engine has been said to predate cropping — once, because
+    /// it is said from the submit path, which runs every frame.
+    said_it_cannot_crop: Cell<bool>,
 }
 
 /// `DomicileDisplay`, exactly as the C header lays it out.
@@ -443,6 +446,7 @@ impl Engine {
             events,
             library,
             path,
+            said_it_cannot_crop: Cell::new(false),
         })
     }
 
@@ -586,9 +590,69 @@ impl Engine {
         };
     }
 
-    /// Submits a frame showing `buffer`. An empty damage rectangle means the
-    /// whole surface. This is `wl_surface.commit`.
-    pub fn submit(&self, surface: SurfaceId, buffer: BufferId, damage: (i32, i32, i32, i32)) {
+    /// Submits a frame showing the `crop` of `buffer`. An empty crop means the
+    /// whole buffer and an empty damage rectangle the whole surface. This is
+    /// `wl_surface.commit`, with the window geometry a client that draws its
+    /// own shadow sets — see [`crate::window_geometry`].
+    pub fn submit(
+        &self,
+        surface: SurfaceId,
+        buffer: BufferId,
+        crop: (i32, i32, i32, i32),
+        damage: (i32, i32, i32, i32),
+    ) {
+        #[allow(clippy::type_complexity)] // the C signature, spelled out
+        let f: Symbol<
+            unsafe extern "C" fn(
+                *mut Handle,
+                SurfaceId,
+                BufferId,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+            ),
+        > = match self.symbol(
+            b"domicile_surface_submit_crop\0",
+            "domicile_surface_submit_crop",
+        ) {
+            Ok(symbol) => symbol,
+            // An engine older than this compositor: the window is drawn with
+            // its shadow rather than not drawn at all.
+            Err(why) => {
+                if !self.said_it_cannot_crop.replace(true) {
+                    tracing::warn!(%why, "windows are drawn uncropped, shadows and all");
+                }
+                return self.submit_uncropped(surface, buffer, damage);
+            }
+        };
+        let (crop_x, crop_y, crop_width, crop_height) = crop;
+        let (x, y, width, height) = damage;
+        // SAFETY: as above.
+        unsafe {
+            f(
+                self.handle,
+                surface,
+                buffer,
+                crop_x,
+                crop_y,
+                crop_width,
+                crop_height,
+                x,
+                y,
+                width,
+                height,
+            )
+        };
+    }
+
+    /// `domicile_surface_submit`: the whole buffer, for an engine without
+    /// `domicile_surface_submit_crop`.
+    fn submit_uncropped(&self, surface: SurfaceId, buffer: BufferId, damage: (i32, i32, i32, i32)) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, BufferId, i32, i32, i32, i32)> =
             match self.symbol(b"domicile_surface_submit\0", "domicile_surface_submit") {
                 Ok(symbol) => symbol,

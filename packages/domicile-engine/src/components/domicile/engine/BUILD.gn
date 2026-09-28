@@ -24,6 +24,34 @@ source_set("event_queue") {
   public_deps = [ "//base" ]
 }
 
+# Which part of a client's buffer fills its window: the window geometry a
+# client that draws its own shadow states, as the texture coordinates a quad
+# samples by.
+source_set("surface_crop") {
+  sources = [
+    "surface_crop.cc",
+    "surface_crop.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
+
+source_set("surface_crop_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_crop_unittest.cc" ]
+
+  deps = [
+    ":surface_crop",
+    "//base",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+  ]
+}
+
 source_set("event_queue_unit_tests") {
   testonly = true
 
@@ -47,6 +75,7 @@ shared_library("domicile_engine") {
 
   deps = [
     ":event_queue",
+    ":surface_crop",
     "//base",
     "//components/domicile/mojom",
     "//components/domicile/spike/mojom",

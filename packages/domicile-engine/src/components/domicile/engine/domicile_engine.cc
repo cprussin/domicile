@@ -25,6 +25,7 @@
 #include "base/threading/thread.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
+#include "components/domicile/engine/surface_crop.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/domicile/spike/mojom/spike_probe.mojom.h"
@@ -50,6 +51,7 @@
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/geometry/transform.h"
@@ -144,7 +146,9 @@ class Surface : public mojom::SurfaceObserver,
     }
   }
 
-  bool Submit(uint64_t buffer_id, const gfx::Rect& damage) {
+  bool Submit(uint64_t buffer_id,
+              const gfx::Rect& crop,
+              const gfx::Rect& damage) {
     auto iter = buffers_.find(buffer_id);
     if (iter == buffers_.end() || !local_surface_id_.is_valid()) {
       return false;
@@ -162,11 +166,14 @@ class Surface : public mojom::SurfaceObserver,
                        /*sorting_context=*/0, /*layer_id=*/0u,
                        /*fast_rounded_corner=*/false);
 
+    // Only the window fills the box: a client's shadow is outside `crop`.
+    const gfx::RectF uv =
+        CropToUv(crop, iter->second.shared_image->size());
     viz::TextureDrawQuad* quad =
         pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
     quad->SetNew(quad_state, rect, rect, /*needs_blending=*/false,
-                 iter->second.resource.id, gfx::PointF(0.f, 0.f),
-                 gfx::PointF(1.f, 1.f), SkColors::kTransparent,
+                 iter->second.resource.id, uv.origin(), uv.bottom_right(),
+                 SkColors::kTransparent,
                  /*nearest_neighbor=*/false, /*secure_output_only=*/false,
                  gfx::ProtectedVideoType::kClear,
                  /*is_tex_coords_normalized=*/true);
@@ -535,11 +542,12 @@ struct DomicileEngine {
 
   void SubmitBuffer(DomicileSurfaceId surface,
                     DomicileBufferId buffer,
+                    const gfx::Rect& crop,
                     const gfx::Rect& damage) {
     thread_.task_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
-                       base::Unretained(this), surface, buffer, damage));
+                       base::Unretained(this), surface, buffer, crop, damage));
   }
 
   // THROWAWAY. See domicile_engine_spike.h.
@@ -750,10 +758,11 @@ struct DomicileEngine {
 
   void SubmitBufferOnThread(DomicileSurfaceId surface,
                             DomicileBufferId buffer,
+                            const gfx::Rect& crop,
                             const gfx::Rect& damage) {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end()) {
-      iter->second->Submit(buffer, damage);
+      iter->second->Submit(buffer, crop, damage);
     }
   }
 
@@ -964,9 +973,24 @@ void domicile_surface_submit(DomicileEngine* engine,
                              int32_t damage_y,
                              int32_t damage_width,
                              int32_t damage_height) {
+  domicile_surface_submit_crop(engine, surface, buffer, 0, 0, 0, 0, damage_x,
+                               damage_y, damage_width, damage_height);
+}
+
+void domicile_surface_submit_crop(DomicileEngine* engine,
+                                  DomicileSurfaceId surface,
+                                  DomicileBufferId buffer,
+                                  int32_t crop_x,
+                                  int32_t crop_y,
+                                  int32_t crop_width,
+                                  int32_t crop_height,
+                                  int32_t damage_x,
+                                  int32_t damage_y,
+                                  int32_t damage_width,
+                                  int32_t damage_height) {
   if (engine) {
     engine->SubmitBuffer(
-        surface, buffer,
+        surface, buffer, gfx::Rect(crop_x, crop_y, crop_width, crop_height),
         gfx::Rect(damage_x, damage_y, damage_width, damage_height));
   }
 }
