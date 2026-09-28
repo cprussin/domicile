@@ -5,12 +5,19 @@ use std::fs;
 use domicile_host::file_preview::preview;
 use domicile_host::file_search::FileSearch;
 use domicile_protocol::FilePreview;
+use lofty::config::WriteOptions;
+use lofty::picture::{MimeType, Picture, PictureType};
+use lofty::prelude::*;
+use lofty::tag::{Tag, TagType};
 
 /// How much of a file a preview is sent, as `file_preview` says.
 const PREVIEW_BYTES: usize = 8 * 1024;
 
 /// How many of a directory's entries a preview is sent.
 const PREVIEW_ENTRIES: usize = 200;
+
+/// The largest cover a song is sent with, as `file_preview` says.
+const COVER_BYTES: usize = 1024 * 1024;
 
 /// A home holding `paths`, written to disk, and the index a walk would make of
 /// it.
@@ -135,5 +142,110 @@ fn a_file_gone_since_the_walk_is_unreadable() {
     assert_eq!(
         preview(dir.path(), "gone.txt", &search),
         FilePreview::Unreadable
+    );
+}
+
+/// One second of silence as a WAV: 8 kHz, mono, eight bits a sample.
+fn silence() -> Vec<u8> {
+    let samples = vec![0x80u8; 8000];
+    let mut wav = Vec::new();
+    wav.extend(b"RIFF");
+    wav.extend((36 + samples.len() as u32).to_le_bytes());
+    wav.extend(b"WAVEfmt ");
+    wav.extend(16u32.to_le_bytes());
+    wav.extend(1u16.to_le_bytes()); // PCM
+    wav.extend(1u16.to_le_bytes()); // mono
+    wav.extend(8000u32.to_le_bytes()); // sample rate
+    wav.extend(8000u32.to_le_bytes()); // byte rate
+    wav.extend(1u16.to_le_bytes()); // block align
+    wav.extend(8u16.to_le_bytes()); // bits a sample
+    wav.extend(b"data");
+    wav.extend((samples.len() as u32).to_le_bytes());
+    wav.extend(samples);
+    wav
+}
+
+#[test]
+fn a_song_is_shown_as_its_tags() {
+    let (dir, search) = home(&["Music/song.wav"]);
+    let at = dir.path().join("Music/song.wav");
+    fs::write(&at, silence()).unwrap();
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.set_title("Song".into());
+    tag.set_artist("Band".into());
+    tag.set_album("Record".into());
+    tag.push_picture(
+        Picture::unchecked(vec![1, 2, 3])
+            .pic_type(PictureType::CoverFront)
+            .mime_type(MimeType::Png)
+            .build(),
+    );
+    tag.save_to_path(&at, WriteOptions::default()).unwrap();
+
+    assert_eq!(
+        preview(dir.path(), "Music/song.wav", &search),
+        FilePreview::Audio {
+            title: Some("Song".into()),
+            artist: Some("Band".into()),
+            album: Some("Record".into()),
+            duration: 1.0,
+            cover: Some("data:image/png;base64,AQID".into()),
+        }
+    );
+}
+
+#[test]
+fn a_cover_too_big_to_send_or_of_no_stated_kind_is_left_out() {
+    let (dir, search) = home(&["big.wav", "unsaid.wav"]);
+    for (name, picture) in [
+        (
+            "big.wav",
+            Picture::unchecked(vec![0; COVER_BYTES + 1])
+                .mime_type(MimeType::Png)
+                .build(),
+        ),
+        ("unsaid.wav", Picture::unchecked(vec![1, 2, 3]).build()),
+    ] {
+        let at = dir.path().join(name);
+        fs::write(&at, silence()).unwrap();
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.push_picture(picture);
+        tag.save_to_path(&at, WriteOptions::default()).unwrap();
+
+        let FilePreview::Audio { cover, .. } = preview(dir.path(), name, &search) else {
+            panic!("a song");
+        };
+        assert_eq!(cover, None, "{name}");
+    }
+}
+
+#[test]
+fn a_song_with_no_tags_is_still_a_song() {
+    let (dir, search) = home(&["Music/song.wav"]);
+    fs::write(dir.path().join("Music/song.wav"), silence()).unwrap();
+
+    assert_eq!(
+        preview(dir.path(), "Music/song.wav", &search),
+        FilePreview::Audio {
+            title: None,
+            artist: None,
+            album: None,
+            duration: 1.0,
+            cover: None,
+        }
+    );
+}
+
+#[test]
+fn a_file_named_like_a_song_that_is_not_one_is_read_as_what_it_is() {
+    // An extension is a guess, and the preview of a guess that was wrong is
+    // the file's own front rather than nothing.
+    let (dir, search) = home(&["Music/notes.mp3"]);
+
+    assert_eq!(
+        preview(dir.path(), "Music/notes.mp3", &search),
+        FilePreview::Text {
+            text: "in Music/notes.mp3\n".into()
+        }
     );
 }

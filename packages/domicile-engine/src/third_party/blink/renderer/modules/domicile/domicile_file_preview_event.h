@@ -37,6 +37,11 @@ class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
                            String kind,
                            String text,
                            Vector<String> entries,
+                           String title,
+                           String artist,
+                           String album,
+                           double duration,
+                           String cover,
                            DOMHighResTimeStamp arrival);
   ~DomicileFilePreviewEvent() override;
 
@@ -44,6 +49,11 @@ class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
   const String& kind() const { return kind_; }
   const String& text() const { return text_; }
   const FrozenArray<IDLString>& entries() const { return *entries_; }
+  const String& title() const { return title_; }
+  const String& artist() const { return artist_; }
+  const String& album() const { return album_; }
+  double duration() const { return duration_; }
+  const String& cover() const { return cover_; }
 
   // When the browser process had this, on `performance.now()`'s clock. See
   // DomicileAppEvent::arrival.
@@ -59,6 +69,12 @@ class MODULES_EXPORT DomicileFilePreviewEvent final : public Event {
   // Frozen because the IDL says so, and never null: both constructors build
   // one. Empty for every kind but a directory.
   Member<FrozenArray<IDLString>> entries_;
+  // What a song says of itself. Empty, and zero, for every kind but audio.
+  String title_;
+  String artist_;
+  String album_;
+  double duration_ = 0;
+  String cover_;
   DOMHighResTimeStamp arrival_ = 0;
 };
 

@@ -51,9 +51,21 @@ const previewing = (path: string) => {
 const holding = (path: string): FilePreview => {
   if (path === "src") {
     return FilePreview.Directory(["domicile/", "README.md"]);
+  } else if (path === "Pictures") {
+    return FilePreview.Directory(["cat.png", "2026/", "notes.txt"]);
+  } else if (path === "src/main.ts") {
+    return FilePreview.Text('const a = "b";');
+  } else if (path === "Music/song.flac" || path === "Music/take") {
+    return FilePreview.Audio({
+      album: "Record",
+      artist: "Band",
+      cover: "data:image/png;base64,AQID",
+      duration: 61.5,
+      title: "Song",
+    });
   } else if (path === "empty") {
     return FilePreview.Directory([]);
-  } else if (path.endsWith(".bin")) {
+  } else if (path.endsWith(".bin") || path === "Music/noise.mp3") {
     return FilePreview.Binary();
   } else {
     return FilePreview.Text(`contents of ${path}`);
@@ -348,7 +360,13 @@ describe("Launcher", () => {
         "contents of Notes/today.org",
       );
 
-      expect(globalThis.getComputedStyle(text).userSelect).toBe("text");
+      // Said on the block the text is in: a run inside it is `auto`, which
+      // takes its parent's.
+      const block = text.closest("pre");
+      expect(block).not.toBeNull();
+      expect(globalThis.getComputedStyle(block as HTMLElement).userSelect).toBe(
+        "text",
+      );
     });
 
     it("waits for the typing to settle before it asks", async () => {
@@ -386,6 +404,128 @@ describe("Launcher", () => {
           await within(previewPane()).findByTitle("DS11_Complete.pdf")
         ).getAttribute("src"),
       ).toBe("domicile://home/Scratch/DS11_Complete.pdf#toolbar=0&navpanes=0");
+    });
+
+    it("lights a file's code by what each piece of it is", async () => {
+      // A word for what the text is, and the pane's own colors for the word,
+      // so a light desk and a dark one both read.
+      const panel = launcher(["src/main.ts"]);
+
+      await panel.user.type(panel.box(), "main");
+
+      expect(
+        (await within(previewPane()).findByText("const")).getAttribute(
+          "data-scope",
+        ),
+      ).toBe("keyword");
+      expect(
+        within(previewPane()).getByText('"b"').getAttribute("data-scope"),
+      ).toBe("string");
+    });
+
+    it("heads a folder with its name and what it holds, folders first", async () => {
+      const panel = launcher(["Pictures/"]);
+
+      await panel.user.type(panel.box(), "Pictures");
+
+      expect(
+        await within(previewPane()).findByRole("heading", { name: "Pictures" }),
+      ).toBeInTheDocument();
+      expect(previewPane()).toHaveTextContent("1 folder · 2 files");
+      expect(
+        within(previewPane())
+          .getAllByRole("listitem")
+          .map((entry) => entry.textContent),
+      ).toStrictEqual(["2026", "cat.png", "notes.txt"]);
+    });
+
+    it("draws the pictures in a folder as themselves", async () => {
+      const panel = launcher(["Pictures/"]);
+
+      await panel.user.type(panel.box(), "Pictures");
+
+      expect(
+        (
+          await within(previewPane()).findByRole("img", { name: "cat.png" })
+        ).getAttribute("src"),
+      ).toBe("domicile://home/Pictures/cat.png");
+    });
+
+    it("shows a song by what it says of itself, and offers to play it", async () => {
+      const panel = launcher(["Music/song.flac"]);
+
+      await panel.user.type(panel.box(), "song");
+
+      const pane = within(previewPane());
+      expect(
+        await pane.findByRole("heading", { name: "Song" }),
+      ).toBeInTheDocument();
+      expect(previewPane()).toHaveTextContent("Band");
+      expect(previewPane()).toHaveTextContent("Record");
+      expect(previewPane()).toHaveTextContent("1:01");
+      expect(
+        pane.getByRole("img", { name: "Cover art" }).getAttribute("src"),
+      ).toBe("data:image/png;base64,AQID");
+      expect(pane.getByLabelText("Play song.flac").getAttribute("src")).toBe(
+        "domicile://home/Music/song.flac",
+      );
+    });
+
+    it("still offers to play a song that says nothing of itself", async () => {
+      const panel = launcher(["Music/noise.mp3"]);
+
+      await panel.user.type(panel.box(), "noise");
+
+      expect(
+        await within(previewPane()).findByRole("heading", {
+          name: "noise.mp3",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(previewPane()).getByLabelText("Play noise.mp3"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows a song the host heard, whatever its name says", async () => {
+      const panel = launcher(["Music/take"]);
+
+      await panel.user.type(panel.box(), "take");
+
+      expect(
+        await within(previewPane()).findByLabelText("Play take"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows a video that does not say how long it is from its start", async () => {
+      const panel = launcher(["Videos/clip.webm"]);
+
+      await panel.user.type(panel.box(), "clip");
+      const video = await within(previewPane()).findByLabelText("clip.webm");
+      Object.defineProperty(video, "duration", {
+        value: Number.POSITIVE_INFINITY,
+      });
+      fireEvent.loadedMetadata(video);
+
+      expect((video as HTMLVideoElement).currentTime).toBe(0);
+      expect(previewPane()).not.toHaveTextContent(/\d:\d\d/);
+    });
+
+    it("shows a video as a still from a way into it, not playing", async () => {
+      // The first frame of most videos is black, and a preview that starts
+      // playing is not a preview.
+      const panel = launcher(["Videos/clip.mp4"]);
+
+      await panel.user.type(panel.box(), "clip");
+      const video = await within(previewPane()).findByLabelText("clip.mp4");
+      Object.defineProperty(video, "duration", { value: 100 });
+      fireEvent.loadedMetadata(video);
+
+      expect(video).toBeInstanceOf(HTMLVideoElement);
+      expect((video as HTMLVideoElement).autoplay).toBe(false);
+      expect((video as HTMLVideoElement).currentTime).toBe(10);
+      expect(
+        await within(previewPane()).findByText("1:40"),
+      ).toBeInTheDocument();
     });
 
     it("shows what the highlighted directory holds", async () => {

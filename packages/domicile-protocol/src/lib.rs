@@ -880,13 +880,29 @@ pub enum CursorShape {
 }
 
 /// What a path holds, as much of it as a preview has room for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FilePreview {
     /// The front of a file that reads as text.
     Text { text: String },
     /// The front of what a directory holds, sorted, a directory ending in `/`.
     Directory { entries: Vec<String> },
+    /// A file that plays as sound, by what it says about itself. A tag the
+    /// file does not carry is absent: an empty title is a title.
+    Audio {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        artist: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        album: Option<String>,
+        /// How long it plays, in seconds.
+        duration: f64,
+        /// The picture it carries of itself, as a `data:` URL a page can
+        /// draw without being able to read the file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cover: Option<String>,
+    },
     /// A file that is not text, and so has nothing a preview can draw.
     Binary,
     /// Not in the index, or not readable: nothing to show, and said so.
