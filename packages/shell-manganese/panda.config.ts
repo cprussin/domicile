@@ -110,13 +110,13 @@ export default defineConfig({
         // stylesheet has — and one that crossed the whole desktop would spend
         // most of its time off the edge of it.
         windowArrivingFromEnd: {
-          "0%": { opacity: "0", transform: "translateX({spacing.24})" },
+          "0%": { opacity: "0", transform: "translateX({spacing.40})" },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
         windowArrivingFromStart: {
           "0%": {
             opacity: "0",
-            transform: "translateX(calc(-1 * {spacing.24}))",
+            transform: "translateX(calc(-1 * {spacing.40}))",
           },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
@@ -133,15 +133,23 @@ export default defineConfig({
         },
         // And the workspace being left goes the other way, so the two pass
         // each other.
+        //
+        // Gone before it has finished moving: faded out by 60% rather than at
+        // the end, so the two workspaces spend as little of the switch as
+        // possible drawn through each other. The slide still runs the whole
+        // length — a property's keyframes are its own — so the two go on
+        // moving together.
         windowLeavingToEnd: {
           "0%": { opacity: "1", transform: "translateX(0)" },
-          "100%": { opacity: "0", transform: "translateX({spacing.24})" },
+          "60%": { opacity: "0" },
+          "100%": { opacity: "0", transform: "translateX({spacing.40})" },
         },
         windowLeavingToStart: {
           "0%": { opacity: "1", transform: "translateX(0)" },
+          "60%": { opacity: "0" },
           "100%": {
             opacity: "0",
-            transform: "translateX(calc(-1 * {spacing.24}))",
+            transform: "translateX(calc(-1 * {spacing.40}))",
           },
         },
         // A window arriving: up from nothing, and out to the box the layout

@@ -1037,6 +1037,25 @@ describe("Shell", () => {
       expect(moving(container)).toContain("arriving-from-start");
     });
 
+    // The ring is where the keyboard is, and the keyboard arrived with the
+    // workspace: eased across from the window it last ringed, it crosses the
+    // screen on its own while the windows slide.
+    it("brings the ring on with the workspace rather than easing it across", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("braceright");
+      clientAppears("editor");
+
+      press("parenleft");
+
+      expect(selectionRing(container).className).toContain(
+        movingStyles({ motion: "arriving-from-start" }),
+      );
+      expect(selectionRing(container).className).toContain(
+        settlingStyles({ dragging: true }),
+      );
+    });
+
     it("and the other way when the switch goes the other way", () => {
       const { container } = renderShell();
       clientAppears("term");

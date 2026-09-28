@@ -78,7 +78,7 @@ describe("TitleBar", () => {
   });
 
   // The window it names is going, and its Close does nothing now: a control
-  // the keyboard can still reach for a fifth of a second is not one.
+  // the keyboard can still reach for a moment is not one.
   it("is nothing a pointer or a keyboard can reach while it leaves", () => {
     const { container } = render(<TitleBar {...barProps} motion="closing" />);
 
