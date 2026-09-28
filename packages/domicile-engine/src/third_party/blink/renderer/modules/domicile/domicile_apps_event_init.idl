@@ -1,0 +1,8 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+dictionary DomicileAppsEventInit : EventInit {
+  DOMString query = "";
+  sequence<DomicileDesktopEntry> apps = [];
+  DOMHighResTimeStamp arrival = 0;
+};

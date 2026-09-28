@@ -96,6 +96,9 @@ class FakeHost implements DomicileHost {
   previewFile(path: string): void {
     this.calls.push(["previewFile", path]);
   }
+  searchApps(query: string): void {
+    this.calls.push(["searchApps", query]);
+  }
   copyClipboardEntry(entry: number): void {
     this.calls.push(["copyClipboardEntry", entry]);
   }
@@ -818,6 +821,35 @@ describe("DomicileClient", () => {
         preview: FilePreview.Text("ay"),
       });
       expect((await second).preview).toStrictEqual(FilePreview.Text("bee"));
+    });
+  });
+
+  describe("searching for an application", () => {
+    const editor = {
+      command: ["editor"],
+      comment: "Edit text",
+      id: "editor.desktop",
+      name: "Editor",
+    };
+
+    /** The compositor answering `query`, as the engine dispatches it. */
+    const answer = (query: string, apps: readonly (typeof editor)[]) => {
+      host.dispatch(
+        "apps",
+        Object.assign(new Event("apps"), { apps, arrival: 0, query }),
+      );
+    };
+
+    it("asks the host, and settles each search with its own query's answer", async () => {
+      const shorter = domicile.searchApps("e");
+      expect(host.lastCall()).toStrictEqual(["searchApps", "e"]);
+      const longer = domicile.searchApps("ed");
+
+      answer("ed", [editor]);
+      answer("e", []);
+
+      expect(await longer).toStrictEqual({ apps: [editor], query: "ed" });
+      expect((await shorter).apps).toStrictEqual([]);
     });
   });
 
