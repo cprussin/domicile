@@ -124,6 +124,21 @@ export default defineConfig({
           "0%": { opacity: "0", transform: "scale(0.85)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // A float raised over one it overlaps, and the one it covered: a
+        // swell towards the user and a dip away, over within a blink. Small,
+        // because the window has not gone anywhere — it is the stack that
+        // moved, and the scale is only there to say which way. About the
+        // middle of the frame, as everything here is — see `scaledAbout`.
+        windowSinking: {
+          "0%": { transform: "scale(1)" },
+          "40%": { transform: "scale(0.97)" },
+          "100%": { transform: "scale(1)" },
+        },
+        windowSurfacing: {
+          "0%": { transform: "scale(1)" },
+          "40%": { transform: "scale(1.03)" },
+          "100%": { transform: "scale(1)" },
+        },
         // A browser window's zoom, said for a moment and put away: in quickly
         // enough to answer the key that asked, held long enough to be read,
         // and out without anybody dismissing it.
