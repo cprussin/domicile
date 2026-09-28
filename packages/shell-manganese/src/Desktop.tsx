@@ -121,7 +121,12 @@ export const Desktop = ({ desk, domicile }: Props) => {
     [act, spendShift],
   );
 
-  useShortcuts({ domicile, mode: windows.mode, onAction });
+  useShortcuts({
+    domicile,
+    launcherOpen: windows.launcherOpen,
+    mode: windows.mode,
+    onAction,
+  });
 
   // The pointer carries the keyboard from one monitor to the next, windows or
   // none: the engine hands the keys to the monitor the pointer is on, and the

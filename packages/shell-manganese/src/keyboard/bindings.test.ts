@@ -8,7 +8,13 @@ import {
   WindowActionKind,
   WORKSPACES,
 } from "../window-management/window-state";
-import { actionForCode, actionForKeycode, BINDINGS, CHORDS } from "./bindings";
+import {
+  actionForCode,
+  actionForKeycode,
+  BINDINGS,
+  CHORDS,
+  heardOverLauncher,
+} from "./bindings";
 import { codeFor } from "./programmers-dvorak";
 
 const pressing = (keysym: string, shift = false, mode = BindingMode.Default) =>
@@ -126,6 +132,19 @@ describe("resize mode", () => {
 
   it("answers nothing else at all, the way a sway mode does not", () => {
     expect(pressing("parenleft", false, BindingMode.Resize)).toBeUndefined();
+  });
+});
+
+describe("over the launcher", () => {
+  it("answers only the launcher's own key", () => {
+    // The panel is modal: a workspace switched or a window killed behind it
+    // is the desktop reacting to keys somebody pressed at the panel.
+    expect(heardOverLauncher(WindowAction.LauncherToggled())).toBe(true);
+    expect(
+      BINDINGS.map(({ action }) => action)
+        .filter((action) => action.kind !== WindowActionKind.LauncherToggled)
+        .some(heardOverLauncher),
+    ).toBe(false);
   });
 });
 

@@ -263,15 +263,26 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
-  it("launches nothing on Enter over an empty box", async () => {
-    // Even though every file is on screen and one of them is first. An empty
-    // box is a person who has not decided, and opening whatever sorted to the
-    // top of their home would be the launcher deciding for them.
+  it("highlights the first row as it opens", async () => {
     const panel = launcher();
+    await panel.rows();
 
-    await panel.user.type(panel.box(), "{Enter}");
+    expect(screen.getAllByRole("option")[0]).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
 
-    expect(panel.launched).toStrictEqual([]);
+  it("moves the highlight to the row the pointer is over", async () => {
+    // One highlight rather than a hover beside it: the row the pointer is on
+    // is the row Enter takes.
+    const panel = launcher();
+    await panel.rows();
+
+    await panel.user.hover(screen.getByText("todo.txt"));
+    await panel.user.keyboard("{Enter}");
+
+    expect(panel.launched).toStrictEqual([Launch.Opened("todo.txt")]);
   });
 
   it("browses a URL that matched no file", async () => {
@@ -424,14 +435,13 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
     });
 
-    it("says what to do while no row is highlighted", async () => {
-      // An empty box has chosen nothing, and previewing whatever sorted to the
-      // top of the home would be the launcher choosing for it — but the pane
-      // is never blank, because a blank pane reads as a broken one.
-      const panel = launcher();
-      await panel.rows();
+    it("says what to do while there is no row to highlight", async () => {
+      // The pane is never blank, because a blank pane reads as a broken one.
+      launcher([]);
 
-      expect(previewPane()).toHaveTextContent("Nothing selected");
+      expect(
+        await within(previewPane()).findByText("Nothing selected"),
+      ).toBeInTheDocument();
     });
 
     it("names a file it cannot draw, and says why", async () => {
@@ -483,7 +493,7 @@ describe("Launcher", () => {
     const panel = launcher();
 
     await panel.rows();
-    await panel.user.type(panel.box(), "{ArrowDown}{ArrowDown}");
+    await panel.user.type(panel.box(), "{ArrowDown}");
     scrollIntoView.mockRestore();
 
     expect(scrolled.at(-1)).toBe("Notestoday.org");
@@ -553,17 +563,18 @@ describe("Launcher", () => {
   });
 
   it("keeps the arrow keys inside the rows it drew", async () => {
-    // The walk is over what is on screen rather than over what matched, which
-    // is what makes the cap above safe: an Up press onto the bottom of the
-    // list has to land on the last row that exists, not on the five hundredth
-    // match that was never drawn.
-    const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
-    const panel = launcher(home);
+    // Clamped rather than wrapped, at both ends: an Up press past the top of
+    // two hundred rows that jumped to the bottom would lose the user's place.
+    const panel = launcher();
 
     await panel.rows();
     await panel.user.keyboard("{ArrowUp}{Enter}");
+    await panel.user.keyboard("{ArrowDown>6/}{Enter}");
 
-    expect(panel.launched).toStrictEqual([Launch.Opened("file-199")]);
+    expect(panel.launched).toStrictEqual([
+      Launch.Opened("Notes/2026/april.org"),
+      Launch.Opened("todo.txt"),
+    ]);
   });
 
   it("walks the rows with ctrl+n and ctrl+p as well as the arrow keys", async () => {
@@ -572,7 +583,7 @@ describe("Launcher", () => {
 
     await panel.rows();
     await panel.user.keyboard(
-      "{Control>}n{/Control}{Control>}n{/Control}{Control>}n{/Control}{Control>}p{/Control}{Enter}",
+      "{Control>}n{/Control}{Control>}n{/Control}{Control>}p{/Control}{Enter}",
     );
 
     expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
