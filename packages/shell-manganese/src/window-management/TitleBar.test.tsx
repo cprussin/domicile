@@ -149,7 +149,7 @@ describe("TitleBar", () => {
     );
   });
 
-  it("rounds its top corners, and squares them while its window fills the screen", () => {
+  it("rounds its top corners, and squares them and drops its edge while its window fills the screen", () => {
     const rounded = globalThis.getComputedStyle(
       bar(render(<TitleBar {...barProps} />).container),
     );
@@ -161,6 +161,8 @@ describe("TitleBar", () => {
     expect(rounded.borderStartEndRadius).not.toBe("");
     expect(square.borderStartStartRadius).toBe("");
     expect(square.borderStartEndRadius).toBe("");
+    expect(rounded.borderTopWidth).toBe("1px");
+    expect(square.borderTopWidth).not.toBe("1px");
   });
 
   describe("the button that fills the screen", () => {

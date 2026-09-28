@@ -69,8 +69,8 @@ type Props = {
    */
   frame: Rect | undefined;
   /**
-   * Whether this window fills the screen, which squares its corners: the
-   * screen's own are the only ones it has.
+   * Whether this window fills the screen, which squares its corners and drops
+   * its edge: the screen's own are the only ones it has.
    */
   fullscreen: boolean;
   /**
@@ -478,7 +478,8 @@ export const BrowserWindow = ({
         windowStyles,
         browserStyles,
         // The bar above carries the top edge; this picks up the other three.
-        edgeStyles,
+        // Neither a line nor rounded corners around the screen's own edge.
+        !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
         focused ? focusedEdgeStyles : restingEdgeStyles,

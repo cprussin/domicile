@@ -138,7 +138,7 @@ describe("AppWindow", () => {
     expect(style.borderStartEndRadius).toBe("");
   });
 
-  it("squares its corners while it fills the screen", () => {
+  it("squares its corners and drops its edge while it fills the screen", () => {
     const { container } = render(
       <AppWindow {...windowProps} focused fullscreen onReach={noReach} />,
     );
@@ -146,6 +146,8 @@ describe("AppWindow", () => {
 
     expect(style.borderEndStartRadius).toBe("");
     expect(style.borderEndEndRadius).toBe("");
+    // A line around the edge of the screen says nothing the window does not.
+    expect(style.borderTopWidth).not.toBe("1px");
   });
 
   it("mounts an element carrying the host's app id", () => {
