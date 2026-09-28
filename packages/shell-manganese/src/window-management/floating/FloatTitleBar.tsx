@@ -1,4 +1,5 @@
 import type { Rect } from "../rect";
+import type { Restack } from "../restacking";
 import { TitleBar } from "../TitleBar";
 import type { TitleFocus } from "../title-focus";
 import type { WindowMotion } from "../window-motion";
@@ -31,6 +32,8 @@ type Props = {
    * a fullscreen window has left for the whole screen.
    */
   rect: Rect;
+  /** What that window is shuffling, which its bar does with it. */
+  restack?: Restack | undefined;
   title: string;
 };
 
@@ -64,6 +67,7 @@ export const FloatTitleBar = ({
   onMove,
   onReach,
   rect,
+  restack,
   title,
 }: Props) => {
   const { drag: _drag, ...handlers } = useFloatDrag({
@@ -87,6 +91,7 @@ export const FloatTitleBar = ({
       onMotionEnded={onMotionEnded}
       onReach={onReach}
       rect={rect}
+      restack={restack}
       title={title}
       window={float.id}
       {...handlers}

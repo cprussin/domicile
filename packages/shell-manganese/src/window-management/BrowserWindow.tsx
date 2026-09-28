@@ -16,6 +16,7 @@ import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
+import type { Restack } from "./restacking";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
@@ -34,6 +35,7 @@ import {
   restingEdgeStyles,
   scaledAbout,
   settlingStyles,
+  shuffledBy,
   windowStyles,
 } from "./window-styles";
 
@@ -147,6 +149,11 @@ type Props = {
    * at all — on another workspace, or behind another window's tab.
    */
   rect: Rect | undefined;
+  /**
+   * The shuffle it is playing while it trades places with another float in
+   * the stack — see `shuffledBy` — or `undefined` while it is not.
+   */
+  restack?: Restack | undefined;
   /** Where the window starts. The view owns navigation from there. */
   src: string;
 };
@@ -174,6 +181,7 @@ export const BrowserWindow = ({
   onOpenWindow,
   onReach,
   rect,
+  restack,
   src,
 }: Props) => {
   // A window the desktop no longer has is being drawn and nothing else. What
@@ -526,7 +534,11 @@ export const BrowserWindow = ({
       style={
         rect === undefined || frame === undefined
           ? undefined
-          : { ...placedAt(rect, depth), ...scaledAbout(frame, rect) }
+          : {
+              ...placedAt(rect, depth),
+              ...scaledAbout(frame, rect),
+              ...shuffledBy(restack),
+            }
       }
     >
       <AddressBar

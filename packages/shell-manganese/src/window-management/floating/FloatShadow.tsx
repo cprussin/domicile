@@ -1,5 +1,6 @@
 import { css, cx } from "../../../styled-system/css";
 import type { Rect } from "../rect";
+import type { Restack } from "../restacking";
 import type { WindowMotion } from "../window-motion";
 import {
   draggingStyles,
@@ -7,6 +8,7 @@ import {
   placedAt,
   scaledAbout,
   settlingStyles,
+  shuffledBy,
 } from "../window-styles";
 
 type Props = {
@@ -18,6 +20,8 @@ type Props = {
   frame: Rect;
   /** What that window is doing, which its shadow does with it. */
   motion: WindowMotion;
+  /** And the shuffle it plays with it, if it is playing one. */
+  restack?: Restack | undefined;
 };
 
 /**
@@ -37,7 +41,13 @@ type Props = {
  * It moves as the window does: the same motion about the same point, the same
  * see-through while it is dragged, and the same easing between boxes.
  */
-export const FloatShadow = ({ depth, dragging, frame, motion }: Props) => (
+export const FloatShadow = ({
+  depth,
+  dragging,
+  frame,
+  motion,
+  restack,
+}: Props) => (
   <div
     className={cx(
       shadowStyles,
@@ -46,7 +56,11 @@ export const FloatShadow = ({ depth, dragging, frame, motion }: Props) => (
       settlingStyles({ dragging }),
     )}
     data-shadow
-    style={{ ...placedAt(frame, depth), ...scaledAbout(frame, frame) }}
+    style={{
+      ...placedAt(frame, depth),
+      ...scaledAbout(frame, frame),
+      ...shuffledBy(restack),
+    }}
   />
 );
 

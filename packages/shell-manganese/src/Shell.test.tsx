@@ -1619,6 +1619,61 @@ describe("Shell", () => {
         Number(appElement(container, "two").style.zIndex),
       );
     });
+    it("shuffles a float pressed on over the one covering it", () => {
+      // The two part, trade depths while apart and come back together — every
+      // part of each window with it, and the ring around the one pressed on.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("Tab", true);
+      press("Tab");
+      press("Tab", true);
+      motionsPlayOut(container);
+      const under = appElement(container, "two");
+      expect(Number(under.style.zIndex)).toBeLessThan(
+        Number(appElement(container, "one").style.zIndex),
+      );
+
+      fireEvent.pointerDown(barFor(container, "app:two"), {
+        clientX: 100,
+        clientY: 100,
+      });
+
+      const raised = [
+        appElement(container, "two"),
+        barFor(container, "app:two"),
+        selectionRing(container),
+      ];
+      const covered = [
+        appElement(container, "one"),
+        barFor(container, "app:one"),
+      ];
+      for (const element of [...raised, ...covered]) {
+        expect(element.style.getPropertyValue("--restack-x")).not.toBe("");
+      }
+      expect(
+        movingParts(container, "restacking").filter(
+          (element) => element.dataset.shadow === undefined,
+        ),
+      ).toEqual([
+        appElement(container, "one"),
+        appElement(container, "two"),
+        barFor(container, "app:one"),
+        barFor(container, "app:two"),
+      ]);
+      for (const element of raised) {
+        expect(
+          Number(element.style.getPropertyValue("--restack-to")),
+        ).toBeGreaterThan(
+          Number(element.style.getPropertyValue("--restack-from")),
+        );
+      }
+      expect(
+        [...shadows(container)].map((shadow) =>
+          shadow.style.getPropertyValue("--restack-x"),
+        ),
+      ).not.toContain("");
+    });
   });
 
   describe("the scratchpad", () => {

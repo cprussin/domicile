@@ -1,8 +1,19 @@
 import { css, cx } from "../../styled-system/css";
+import type { Restack } from "./restacking";
 import type { Selection } from "./selection";
-import { placedAt, settlingStyles } from "./window-styles";
+import {
+  movingStyles,
+  placedAt,
+  settlingStyles,
+  shuffledBy,
+} from "./window-styles";
 
 type Props = {
+  /**
+   * The shuffle the window it rings is playing, which it plays too — or
+   * `undefined` while that window is not shuffling, or it rings a group.
+   */
+  restack?: Restack | undefined;
   selection: Selection;
 };
 
@@ -23,14 +34,21 @@ type Props = {
  * — and under the floats over it. It takes no pointer, so a band of accent
  * along the outer edge is the whole of what it costs them.
  */
-export const SelectionRing = ({ selection }: Props) => (
+export const SelectionRing = ({ restack, selection }: Props) => (
   <div
-    className={cx(ringStyles, settlingStyles({ dragging: selection.dragging }))}
+    className={cx(
+      ringStyles,
+      restack !== undefined && movingStyles({ motion: "restacking" }),
+      settlingStyles({ dragging: selection.dragging }),
+    )}
     // What is selected, as an attribute as well as a line: the desktop's own
     // state is worth being able to read off the element, in devtools and in a
     // test, rather than only off a hashed class name.
     data-selection={selection.group ? "group" : "window"}
-    style={placedAt(selection.rect, selection.depth)}
+    style={{
+      ...placedAt(selection.rect, selection.depth),
+      ...shuffledBy(restack),
+    }}
   />
 );
 
