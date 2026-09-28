@@ -30,6 +30,7 @@ use domicile_launch::control_socket::{
 use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::platform::platform;
+use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
     clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
@@ -161,8 +162,12 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // with the run is every sign-in thrown away with it. Refused rather than
     // guessed when nothing names a home, because a person's logins kept
     // somewhere nobody named are logins nobody can find to delete.
-    let profile = profile_directory(&env)
+    let kept = profile_directory(&env)
         .ok_or("nowhere to keep the engine's profile -- neither XDG_STATE_HOME nor HOME is set")?;
+    // Held until this returns, across every desktop the run starts: another
+    // desktop running on the same profile is an engine that never starts.
+    let profile = claim(&kept)
+        .map_err(|why| format!("cannot claim a profile beside {}: {why}", kept.display()))?;
 
     // One directory per run, thrown away with it. The sockets go in it, so a
     // desktop that exits leaves nothing behind and two running at once do not
@@ -173,7 +178,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
         chrome_socket: runtime.join("chrome.sock"),
         command: runtime.join("command.sock"),
         control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
-        profile,
+        profile: profile.path.clone(),
         session: runtime.join("session.json"),
     };
 

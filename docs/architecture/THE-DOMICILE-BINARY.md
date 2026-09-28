@@ -86,6 +86,7 @@ refuses the whole file, so the desk comes up on its defaults.
 | `handshake` | yes | whether a page ever reached the compositor, and what to say when none did |
 | `restart` | yes | whether a component that died gets another one, which component that is, how long it waits, and when it stops getting them |
 | `supervise` | no | temp dirs, two children in order, the broker socket, letting go of one of them, teardown |
+| `profile_claim` | no | which profile this desktop holds: the kept one, or `profile-2`, `profile-3`… when another desktop has it |
 | `control_socket` | no | where a desktop answers, taking it from whatever is there, and carrying a line each way |
 | `command_socket` | no | where the engine answers, and carrying one line each way to it |
 
@@ -246,6 +247,11 @@ domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engi
 **A session holds as many desktops as it likes.** Each answers its own socket
 and each tells its own apps where that is, so a command reaches the desktop it
 was typed inside rather than whichever one started first.
+
+Each also holds an engine profile of its own, because Chromium runs one browser
+per profile and hands a second one's command line to the first. The first
+desktop takes `profile`; one started beside it takes `profile-2`, as a second
+compositor takes `wayland-2`.
 
 A client with no `DOMICILE_SOCK` is refused, by name, and told what to set. It
 would be reachable to scan the runtime directory instead and it is deliberately

@@ -4,8 +4,9 @@
 //! What that takes is a handful of decisions, and each is a module here with
 //! tests of its own — which command line was given ([`cli`]), which module to
 //! load ([`shell_path`]), which config file the compositor reads
-//! ([`config_path`]), where the engine keeps its profile ([`profile_path`]),
-//! which ozone platform ([`platform`]), where the two
+//! ([`config_path`]), where the engine keeps its profile ([`profile_path`])
+//! and which one this desktop holds ([`profile_claim`]), which ozone platform
+//! ([`platform`]), where the two
 //! components are ([`components`]), what each is started with ([`spawn`]),
 //! and the order they go up in ([`supervise`]) — and, when one of them stops
 //! being a component, whether there is another desktop in it ([`restart`]).
@@ -49,6 +50,7 @@ pub mod handshake;
 pub mod heard;
 pub mod milestones;
 pub mod platform;
+pub mod profile_claim;
 pub mod profile_path;
 pub mod restart;
 pub mod session;
