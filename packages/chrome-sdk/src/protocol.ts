@@ -278,6 +278,21 @@ const foundFilesSchema = z.looseObject({
   type: z.literal("found_files"),
 });
 
+// The applications a `search_apps` matched, best first. Each carries the argv
+// it runs, for `spawn`, and a `comment` that is empty when the entry has none.
+const desktopEntrySchema = z.looseObject({
+  command: z.array(z.string()),
+  comment: z.string(),
+  id: z.string(),
+  name: z.string(),
+});
+
+const foundAppsSchema = z.looseObject({
+  apps: z.array(desktopEntrySchema),
+  query: z.string(),
+  type: z.literal("found_apps"),
+});
+
 // What a path holds, answering `preview_file`. `kind` says which of `text`
 // and `entries` it carries; a `binary` or `unreadable` preview carries
 // neither.
@@ -442,6 +457,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shortcutMessageSchema,
   modifiersSchema,
   foundFilesSchema,
+  foundAppsSchema,
   filePreviewSchema,
   batterySchema,
   clipboardSchema,
@@ -477,6 +493,7 @@ export type ShortcutMessage = z.infer<typeof shortcutMessageSchema>;
 export type ModifiersMessage = z.infer<typeof modifiersSchema>;
 export type FoundFilesMessage = z.infer<typeof foundFilesSchema>;
 export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
+export type FoundAppsMessage = z.infer<typeof foundAppsSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;

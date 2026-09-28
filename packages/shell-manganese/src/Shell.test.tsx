@@ -156,6 +156,12 @@ class FakeDomicile {
     });
   }
 
+  /** The host's search for applications, which these tests never need answered. */
+  searchApps(query: string): Promise<unknown> {
+    this.calls.push(["searchApps", query]);
+    return new Promise(() => undefined);
+  }
+
   /** The host's preview, which these tests never need answered. */
   previewFile(path: string): Promise<unknown> {
     this.calls.push(["previewFile", path]);
@@ -2022,16 +2028,18 @@ describe("the launcher", () => {
    * and matched by name.
    */
   const launcherBox = (): HTMLElement | null =>
-    screen.queryByRole("combobox", { name: "Open a file, a URL, or search" });
+    screen.queryByRole("combobox", {
+      name: "Open an app, a file, a URL, or search",
+    });
 
   /** The same box where a case needs it to be there. */
   const typeIntoLauncher = async (typed: string): Promise<void> => {
-    await userEvent
-      .setup()
-      .type(
-        screen.getByRole("combobox", { name: "Open a file, a URL, or search" }),
-        typed,
-      );
+    await userEvent.setup().type(
+      screen.getByRole("combobox", {
+        name: "Open an app, a file, a URL, or search",
+      }),
+      typed,
+    );
   };
 
   /** Where each browser window on the desktop was pointed. */
@@ -2060,6 +2068,7 @@ describe("the launcher", () => {
 
     expect(launcherBox()).toBeVisible();
     expect(domicile.calls).toContainEqual(["searchFiles", ""]);
+    expect(domicile.calls).toContainEqual(["searchApps", ""]);
   });
 
   it("shows the files the host answered with", async () => {

@@ -16,6 +16,7 @@ use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme};
 
 pub mod battery;
 pub mod clipboard;
+pub mod desktop_entries;
 pub mod file_changes;
 pub mod file_index;
 pub mod file_preview;
@@ -478,6 +479,7 @@ impl Host {
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::SearchFiles { .. }
             | ChromeMessage::PreviewFile { .. }
+            | ChromeMessage::SearchApps { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::ThemeCaptured { .. }

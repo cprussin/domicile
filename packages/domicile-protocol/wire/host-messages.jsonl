@@ -21,6 +21,8 @@
 {"type":"file_preview","path":"Notes","kind":"directory","entries":["2026/","today.org"]}
 {"type":"file_preview","path":"photo.jpg","kind":"binary"}
 {"type":"file_preview","path":"gone.txt","kind":"unreadable"}
+{"type":"found_apps","query":"fire","apps":[{"id":"firefox.desktop","name":"Firefox","comment":"Browse the web","command":["firefox","--new-window"]}]}
+{"type":"found_apps","query":"zzz","apps":[]}
 {"type":"battery","charge":0.42,"charging":true}
 {"type":"theme","theme":"light"}
 {"type":"windows_theme","theme":"light"}

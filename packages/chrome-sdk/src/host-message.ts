@@ -31,10 +31,12 @@ import { cursorShapeSchema } from "./cursor-shape";
 import type {
   DomicileAppCursorEvent,
   DomicileAppEvent,
+  DomicileAppsEvent,
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
   DomicileClipboardEntry,
   DomicileClipboardEvent,
+  DomicileDesktopEntry,
   DomicileDisplay,
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
@@ -206,6 +208,16 @@ export type FoundFilesMessage = {
    * Say so on screen, and ask again.
    */
   indexing: boolean;
+};
+
+/**
+ * The applications a search matched, best first: the answer to
+ * {@link DomicileClient.searchApps}.
+ */
+export type FoundAppsMessage = {
+  /** The query this answers. */
+  query: string;
+  apps: readonly DomicileDesktopEntry[];
 };
 
 /**
@@ -441,6 +453,15 @@ export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
   files: event.files,
   indexing: event.indexing,
   matched: event.matched,
+  query: event.query,
+});
+
+/**
+ * What applications matched, passed through like {@link foundFiles}: the
+ * engine's entries are already what a shell draws and what it spawns.
+ */
+export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
+  apps: event.apps,
   query: event.query,
 });
 
