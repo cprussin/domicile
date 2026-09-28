@@ -205,21 +205,29 @@ export const shuffledBy = (
 export const movingStyles = cva({
   variants: {
     motion: {
+      // The two workspaces of a switch move as one strip: the same distance,
+      // the same length and the same curve, so the gap between them holds
+      // while they cross. A curve each — out for the arrival, in for the
+      // departure — had the one being left hang while the other was already
+      // most of the way on, which is two movements rather than one.
       "arriving-from-end": {
-        animation: "windowArrivingFromEnd {durations.slow} {easings.out}",
+        animation:
+          "windowArrivingFromEnd {durations.slower} {easings.outQuart}",
       },
       "arriving-from-start": {
-        animation: "windowArrivingFromStart {durations.slow} {easings.out}",
+        animation:
+          "windowArrivingFromStart {durations.slower} {easings.outQuart}",
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
       },
       "leaving-to-end": {
-        animation: "windowLeavingToEnd {durations.slow} {easings.in} forwards",
+        animation:
+          "windowLeavingToEnd {durations.slower} {easings.outQuart} forwards",
       },
       "leaving-to-start": {
         animation:
-          "windowLeavingToStart {durations.slow} {easings.in} forwards",
+          "windowLeavingToStart {durations.slower} {easings.outQuart} forwards",
       },
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",

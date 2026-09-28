@@ -56,7 +56,7 @@ export const departureFor = (towards: Towards): WindowMotion =>
  * What such a window is owed is that nothing about it changes while it goes:
  * it is drawn at the box it had, saying what it said, and it asks for nothing
  * and answers nothing — the keyboard has moved on, and a window the user can
- * still reach is one they can reach for a fifth of a second and then not.
+ * still reach is one they can reach for a moment and then not.
  */
 export const isLeaving = (motion: WindowMotion): boolean => {
   switch (motion) {

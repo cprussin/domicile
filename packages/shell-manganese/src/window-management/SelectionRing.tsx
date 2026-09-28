@@ -12,7 +12,8 @@ import {
 type Props = {
   /**
    * What the window it rings is doing, which it does too while that is a
-   * shuffle — the same one of the two, so it starts over when the window does.
+   * shuffle — the same one of the two, so it starts over when the window does
+   * — or a workspace switch bringing it on.
    */
   motion?: WindowMotion | undefined;
   /**
@@ -35,6 +36,11 @@ type Props = {
  * goes on saying where the keyboard is inside a group, because that is still
  * where it is.
  *
+ * **Carried on with a workspace, though.** A switch moves the keyboard to a
+ * window that is sliding in, and a ring easing across from the last one would
+ * cross the screen on its own while the windows slide. It is put at the new
+ * box straight away and slides in with its window instead.
+ *
  * **Around a window that has just opened too.** The ring is where the
  * keyboard is, so it slides across from the last window to the new one rather
  * than reappearing there — the eye follows it instead of hunting for it.
@@ -53,14 +59,13 @@ export const SelectionRing = ({
   // The tab's place along the top, in the ring's own coordinates.
   const before = bar.x - rect.x;
   const after = rect.x + rect.width - (bar.x + bar.width);
-  const parts = settlingStyles({ dragging });
+  const carried = restack !== undefined || isArrival(motion);
+  // Held at its box for a switch for the reason a drag holds it: something
+  // else is already carrying it there.
+  const parts = settlingStyles({ dragging: dragging || isArrival(motion) });
   return (
     <div
-      className={cx(
-        ringStyles,
-        restack !== undefined && movingStyles({ motion }),
-        parts,
-      )}
+      className={cx(ringStyles, carried && movingStyles({ motion }), parts)}
       // What is selected, as an attribute as well as a line: the desktop's own
       // state is worth being able to read off the element, in devtools and in
       // a test, rather than only off a hashed class name.
@@ -165,5 +170,23 @@ const bodyStyles = css({
   insetBlockEnd: 0,
   insetInline: 0,
 });
+
+const isArrival = (motion: WindowMotion): boolean => {
+  switch (motion) {
+    case "arriving-from-end":
+    case "arriving-from-start": {
+      return true;
+    }
+    case "closing":
+    case "leaving-to-end":
+    case "leaving-to-start":
+    case "opening":
+    case "restacking":
+    case "restacking-again":
+    case "resting": {
+      return false;
+    }
+  }
+};
 
 const px = (length: number): string => `${length.toString()}px`;
