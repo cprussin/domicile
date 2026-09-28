@@ -75,12 +75,18 @@ describe("placementsOf", () => {
   it("puts the config's gap between two of them", () => {
     // `gaps.inner = 20`, so 1900 is shared out and the second starts 20 past
     // the first.
-    expect(
-      placementFor(desktop("kitty", "editor"), "kitty")?.bar,
-    ).toMatchObject({ width: 950, x: 0 });
-    expect(
-      placementFor(desktop("kitty", "editor"), "editor")?.bar,
-    ).toMatchObject({ width: 950, x: 970 });
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+    );
+    expect(placementFor(state, "kitty")?.bar).toMatchObject({
+      width: 950,
+      x: 0,
+    });
+    expect(placementFor(state, "editor")?.bar).toMatchObject({
+      width: 950,
+      x: 970,
+    });
   });
 
   it("leaves the windows on other workspaces off the screen", () => {

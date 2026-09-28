@@ -885,6 +885,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         width: "950px",
@@ -987,6 +988,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       domicile.emit("app_closed", { app_id: "one" });
 
@@ -1171,6 +1173,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       press("h", true);
 
@@ -1338,6 +1341,7 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
       clientAppears("three");
+      press("e");
       press("h");
       press("h");
       press("v");
@@ -1824,6 +1828,7 @@ describe("Shell", () => {
       // pointer event over that window would take the focus straight back.
       const { container } = renderShell();
       clientAppears("one");
+      press("b");
       domicile.calls.length = 0;
 
       clientAppears("two");
@@ -1847,6 +1852,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       domicile.calls.length = 0;
 
       press("h");

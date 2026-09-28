@@ -38,10 +38,9 @@ describe("inserted", () => {
     expect(focusedIdOf(tiling)).toBe("a");
   });
 
-  it("splits the workspace horizontally for the second one", () => {
-    // sway's `default_orientation` on a screen wider than it is tall, which is
-    // the desktop this shell is for.
-    expect(tiled("a", "b").root).toMatchObject({ layout: Layout.SplitH });
+  it("tabs the workspace for the second one", () => {
+    // sway's `workspace_layout tabbed`, which is this desktop's default.
+    expect(tiled("a", "b").root).toMatchObject({ layout: Layout.Tabbed });
   });
 
   it("puts a new window beside the one being worked in", () => {
