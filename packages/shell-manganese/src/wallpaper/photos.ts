@@ -11,6 +11,10 @@
 // than six of anything. These are three from orbit and three from the ground,
 // because a desktop is a thing you look at all day.
 //
+// **And chosen per theme.** A desk in light has bright chrome over it, and a
+// night sky behind that is a light theme in name only — so each theme has its
+// own rotation: the dark skies for dark, the daylit landscapes for light.
+//
 // All six are public domain — NASA, the National Park Service, the US Air
 // Force — so showing one owes no credit line, which matters for a surface that
 // has nowhere to put one.
@@ -21,21 +25,27 @@
 // megabytes of JPEG that nothing but the reference chrome would ever read. A
 // shell that wants its own pictures owns its own list.
 
-const PHOTO_TITLES: readonly string[] = [
-  // Webb's "Cosmic Cliffs": the rim of NGC 3324 in the Carina Nebula.
-  "NASA’s Webb Reveals Cosmic Cliffs, Glittering Landscape of Star Birth.jpg",
-  // "Celestial Fireworks", Hubble's 25th-anniversary image of Westerlund 2.
-  "Celestial Fireworks - The Official Hubble 25th Anniversary Image (27925696572).jpg",
-  // The Hubble Ultra-Deep Field. Square, and the one photograph here that
-  // loses nothing to the crop: every part of it is more galaxies.
-  "Hubble ultra deep field high rez edit1.jpg",
-  // Denali, from the national park that shares its name.
-  "Denali, Denali National Park and Preserve.jpg",
-  // Aurora borealis over Eielson Air Force Base, Alaska.
-  "Aurora borealis over Eielson Air Force Base, Alaska.jpg",
-  // The Grand Canyon under the fog inversion of December 2013.
-  "131201 Grand Canyon Shots 0707 - Flickr - Grand Canyon NPS.jpg",
-];
+import type { Theme } from "@domicile/component-library/theme-core";
+
+const PHOTO_TITLES: Record<Theme, readonly string[]> = {
+  dark: [
+    // Webb's "Cosmic Cliffs": the rim of NGC 3324 in the Carina Nebula.
+    "NASA’s Webb Reveals Cosmic Cliffs, Glittering Landscape of Star Birth.jpg",
+    // "Celestial Fireworks", Hubble's 25th-anniversary image of Westerlund 2.
+    "Celestial Fireworks - The Official Hubble 25th Anniversary Image (27925696572).jpg",
+    // The Hubble Ultra-Deep Field. Square, and the one photograph here that
+    // loses nothing to the crop: every part of it is more galaxies.
+    "Hubble ultra deep field high rez edit1.jpg",
+    // Aurora borealis over Eielson Air Force Base, Alaska.
+    "Aurora borealis over Eielson Air Force Base, Alaska.jpg",
+  ],
+  light: [
+    // Denali, from the national park that shares its name.
+    "Denali, Denali National Park and Preserve.jpg",
+    // The Grand Canyon under the fog inversion of December 2013.
+    "131201 Grand Canyon Shots 0707 - Flickr - Grand Canyon NPS.jpg",
+  ],
+};
 
 /**
  * 4K wide, for every screen rather than for one of them.
@@ -54,8 +64,17 @@ const PHOTO_TITLES: readonly string[] = [
  */
 const PHOTO_WIDTH = 3840;
 
-/** The photographs, in the order the desktop shows them. */
-export const WALLPAPER_PHOTOS: readonly string[] = PHOTO_TITLES.map(
-  (title) =>
-    `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(title)}?width=${PHOTO_WIDTH.toString()}`,
-);
+/**
+ * Where Commons serves the photograph `title` names, at {@link PHOTO_WIDTH}.
+ *
+ * Above {@link WALLPAPER_PHOTOS} rather than below it, because that is built
+ * when this module loads.
+ */
+const photoUrl = (title: string): string =>
+  `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(title)}?width=${PHOTO_WIDTH.toString()}`;
+
+/** Each theme's photographs, in the order the desktop shows them. */
+export const WALLPAPER_PHOTOS: Record<Theme, readonly string[]> = {
+  dark: PHOTO_TITLES.dark.map(photoUrl),
+  light: PHOTO_TITLES.light.map(photoUrl),
+};
