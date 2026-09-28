@@ -983,6 +983,8 @@ const viewStyles = css({
   pointerEvents: "none",
 });
 
+// Selectable where nothing else in the shell is: this is somebody's file
+// rather than the shell's own words, and a line of it may be why they looked.
 const textPreviewStyles = css({
   blockSize: "100%",
   fontFamily: "mono",
@@ -990,6 +992,7 @@ const textPreviewStyles = css({
   margin: 0,
   overflow: "hidden",
   padding: 3,
+  userSelect: "text",
   whiteSpace: "pre-wrap",
   wordBreak: "break-all",
 });
