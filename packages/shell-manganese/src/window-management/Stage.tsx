@@ -448,11 +448,8 @@ export const Stage = ({
       {selection !== undefined && (
         <SelectionRing
           // Around the window being worked in, which is the one a raise
-          // shuffles over the others and the one that has just opened — so
-          // the ring plays either with it. Not around a group, which is not
-          // the window growing in.
+          // shuffles over the others — so the ring shuffles with it.
           motion={active?.motion}
-          opening={!selection.group && active?.motion === "opening"}
           restack={active?.restack}
           selection={selection}
         />
