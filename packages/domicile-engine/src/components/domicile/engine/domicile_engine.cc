@@ -25,6 +25,7 @@
 #include "base/threading/thread.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
+#include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -122,8 +123,11 @@ class Surface : public mojom::SurfaceObserver,
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
   // Takes the SharedImage the browser made and keeps it under `buffer_id`, so
-  // a later Submit can name it in a resource list.
-  void Adopt(uint64_t buffer_id, gpu::ExportedSharedImage exported) {
+  // a later Submit can name it in a resource list. `has_alpha` is whether the
+  // client's pixels say how see-through they are -- see FourccHasAlpha.
+  void Adopt(uint64_t buffer_id,
+             gpu::ExportedSharedImage exported,
+             bool has_alpha) {
     scoped_refptr<gpu::ClientSharedImage> shared_image =
         gpu::ClientSharedImage::ImportUnowned(std::move(exported));
     if (!shared_image) {
@@ -135,7 +139,8 @@ class Surface : public mojom::SurfaceObserver,
     resource.id = next_resource_id_;
     next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
     resource_to_buffer_[resource.id] = buffer_id;
-    buffers_[buffer_id] = {std::move(shared_image), std::move(resource)};
+    buffers_[buffer_id] = {std::move(shared_image), std::move(resource),
+                           has_alpha};
   }
 
   void Forget(uint64_t buffer_id) {
@@ -154,6 +159,9 @@ class Surface : public mojom::SurfaceObserver,
       return false;
     }
     const gfx::Rect rect(size_);
+    // Blended where the client's pixels carry alpha: a menu's rounded corners
+    // are transparent, and drawn opaque they are black.
+    const bool opaque = !iter->second.has_alpha;
 
     auto pass = viz::CompositorRenderPass::Create();
     pass->SetNew(viz::CompositorRenderPassId{1}, rect,
@@ -161,7 +169,7 @@ class Surface : public mojom::SurfaceObserver,
 
     viz::SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
     quad_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(),
-                       /*clip=*/std::nullopt, /*contents_opaque=*/true,
+                       /*clip=*/std::nullopt, /*contents_opaque=*/opaque,
                        /*opacity_f=*/1.f, SkBlendMode::kSrcOver,
                        /*sorting_context=*/0, /*layer_id=*/0u,
                        /*fast_rounded_corner=*/false);
@@ -171,7 +179,7 @@ class Surface : public mojom::SurfaceObserver,
         CropToUv(crop, iter->second.shared_image->size());
     viz::TextureDrawQuad* quad =
         pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
-    quad->SetNew(quad_state, rect, rect, /*needs_blending=*/false,
+    quad->SetNew(quad_state, rect, rect, /*needs_blending=*/!opaque,
                  iter->second.resource.id, uv.origin(), uv.bottom_right(),
                  SkColors::kTransparent,
                  /*nearest_neighbor=*/false, /*secure_output_only=*/false,
@@ -262,6 +270,7 @@ class Surface : public mojom::SurfaceObserver,
   struct Adopted {
     scoped_refptr<gpu::ClientSharedImage> shared_image;
     viz::TransferableResource resource;
+    bool has_alpha = false;
   };
 
   const DomicileSurfaceId id_;
@@ -752,18 +761,18 @@ struct DomicileEngine {
         dmabuf.fourcc,
         base::BindOnce(
             [](base::RunLoop* loop, DomicileBufferId* imported,
-               domicile::Surface* surface, uint64_t id,
+               domicile::Surface* surface, bool has_alpha, uint64_t id,
                std::optional<gpu::ExportedSharedImage> exported) {
               // Naming the browser's SharedImage is what lets this process
               // build its own TransferableResource. Without it there is
               // nothing to submit, so the import counts as refused.
               if (id != 0 && exported.has_value()) {
-                surface->Adopt(id, std::move(exported).value());
+                surface->Adopt(id, std::move(exported).value(), has_alpha);
                 *imported = id;
               }
               loop->Quit();
             },
-            &loop, imported, raw));
+            &loop, imported, raw, domicile::FourccHasAlpha(dmabuf.fourcc)));
     loop.Run();
   }
 
