@@ -1,5 +1,4 @@
 import type { Screenful } from "./placement";
-import { TILED } from "./placement";
 import type { Rect } from "./rect";
 import { barOf } from "./rect";
 
@@ -45,11 +44,11 @@ export const selectionOf = (
     return undefined;
   } else if (selection !== undefined) {
     return {
-      bar: barOf(selection),
-      depth: TILED,
+      bar: barOf(selection.rect),
+      depth: selection.depth,
       dragging: false,
       group: true,
-      rect: selection,
+      rect: selection.rect,
     };
   } else if (active === undefined) {
     return undefined;

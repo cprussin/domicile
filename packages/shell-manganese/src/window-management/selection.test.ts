@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { Axis } from "./direction";
 import type { Geometry, Placement } from "./placement";
 import { placementsOf, TILED } from "./placement";
 import { TITLE_BAR } from "./rect";
@@ -84,6 +85,21 @@ describe("selectionOf", () => {
     const state = desktop(WindowAction.FloatToggled());
 
     expect(selected(state)?.depth).toBe(placementOf(state, "two").depth);
+  });
+
+  it("rings a floating group at its float's depth", () => {
+    const state = desktop(
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("three", "three"),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+      WindowAction.ParentFocused(),
+    );
+
+    expect(selected(state)).toMatchObject({
+      depth: placementOf(state, "two").depth,
+      group: true,
+    });
   });
 
   it("keeps to the window being dragged rather than easing after it", () => {

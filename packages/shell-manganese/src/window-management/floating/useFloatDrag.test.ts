@@ -7,6 +7,7 @@ import type { Float } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 const FLOAT: Float = {
+  depth: 0,
   height: 200,
   root: LayoutNode.Window("w1"),
   scratchpad: false,

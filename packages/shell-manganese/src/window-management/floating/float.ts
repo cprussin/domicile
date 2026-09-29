@@ -16,10 +16,19 @@ import type { Rect } from "../rect";
 import { TITLE_BAR } from "../rect";
 import type { LayoutNode } from "../tree/node";
 import { windowsIn } from "../tree/node";
+import type { Tiling } from "../tree/tiling";
+import { focusChainOf } from "../tree/tiling";
 import type { SizeLimit } from "../window";
 
-/** Where a floating window sits, in the desktop's own pixels. */
+/**
+ * Where a floating window sits, in the desktop's own pixels.
+ *
+ * A {@link Tiling} of its own as well, so the tree commands reach inside a
+ * floating group the way they reach inside the tiling.
+ */
 export type Float = {
+  /** How far down its own tree the commands are pointed — see `Tiling`. */
+  depth: number;
   height: number;
   /** What floats in the box: a window, or a group of them. */
   root: LayoutNode;
@@ -74,11 +83,32 @@ export const floatFor = (
   scratchpad = false,
 ): Float => ({
   ...OPENS_AT,
+  depth: focusChainOf(root).length,
   root,
   scratchpad,
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
 });
+
+/**
+ * The same box with its tree changed by `into` — the same object when nothing
+ * changed, so the pointer crossing a window re-renders nothing. Throws when
+ * that leaves the box empty: none of the commands that reach in here take a
+ * window out.
+ */
+export const retiled = (
+  float: Float,
+  into: (tiling: Tiling) => Tiling,
+): Float => {
+  const { depth, root } = into(float);
+  if (root === undefined) {
+    throw new Error("float: a command emptied a floating box");
+  } else if (depth === float.depth && root === float.root) {
+    return float;
+  } else {
+    return { ...float, depth, root };
+  }
+};
 
 /** Whether the window `id` is in this box. */
 export const floatHolds = (float: Float, id: string): boolean =>

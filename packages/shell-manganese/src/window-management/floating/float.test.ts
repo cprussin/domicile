@@ -10,12 +10,14 @@ import {
   grown,
   movedTo,
   rectOf,
+  retiled,
   shifted,
   sizedTo,
   stretched,
 } from "./float";
 
 const AT: Float = {
+  depth: 0,
   height: 420,
   root: LayoutNode.Window("w1"),
   scratchpad: false,
@@ -55,6 +57,12 @@ describe("floatFor", () => {
       height,
       width,
     });
+  });
+});
+
+describe("retiled", () => {
+  it("is the same box when its tree did not change", () => {
+    expect(retiled(AT, (tiling) => ({ ...tiling }))).toBe(AT);
   });
 });
 

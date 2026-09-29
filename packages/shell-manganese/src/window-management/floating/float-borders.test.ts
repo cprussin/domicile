@@ -7,6 +7,7 @@ import type { Float } from "./float";
 import { floatBordersOf } from "./float-borders";
 
 const AT: Float = {
+  depth: 0,
   height: 400,
   root: LayoutNode.Window("w1"),
   scratchpad: false,
