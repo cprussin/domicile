@@ -506,8 +506,8 @@ void DomicileHost::Displays(
 }
 
 // The whole tray, as rows a shell draws. An empty popup is WebIDL's null --
-// see DomicileExtension -- because an action with no popup is one the shell
-// activates rather than opens, and "" is not an address to open.
+// see DomicileExtension -- because an action with no popup has nothing for the
+// shell to open, and "" is not an address to open.
 void DomicileHost::ExtensionsChanged(
     Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) {
   HeapVector<Member<DomicileExtension>> tray;

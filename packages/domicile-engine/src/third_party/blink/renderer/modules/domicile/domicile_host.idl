@@ -161,9 +161,11 @@
   [CallWith=ScriptState, RaisesException] undefined grabShortcut(
       DomicileShortcut shortcut);
 
-  // Click an extension's action that has no popup: its `action.onClicked` is
-  // dispatched. An action with a popup is the shell's to open, as a <webview>
-  // at the `popup` an `extensions` event named.
+  // Click an extension's action, popup or not: the extension is granted
+  // activeTab on the active tab, as a toolbar click grants it in Chrome. Then
+  // an action with no popup has its `action.onClicked` dispatched; one with a
+  // popup is the shell's to open, as a <webview> at the `popup` an
+  // `extensions` event named, and is opened after this call.
   //
   // NOT THE COMPOSITOR'S. An action lives in this browser, so the call goes no
   // further than the browser process, over the tray's own pipe -- see
