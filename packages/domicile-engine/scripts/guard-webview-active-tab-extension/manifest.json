@@ -1,0 +1,14 @@
+{
+  "action": {
+    "default_title": "Domicile activeTab guard"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "description": "A click on its action paints the active tab with scripting.executeScript, which only activeTab lets it do, for guard-webview-active-tab.sh.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvgc2/ZzeV4xLIy9McDNghr849F4DhMEKnnvRXgLh6aSLyOrFVKh34fqNU9GSCLwuST6p5XBNQymoxHzoA3PI2G7/vJ/Q2nLxIUohCUueHami7M9c5kBZ/US6yFZcdU7/g7buXy+Z6kDo4jYr2tQgMwShhCwXdGRyr6JYr3xahByNMbk5+acsh1bkOZrFD3/Lo3hjJ7CVOXwLO+G4ZnN7W3oXJgnADLWETZcUpgLDpJKkV5F42gx5lsRoEdAgP+oRHG16TXyFNhk5AtzP1JV+K932pzs1mW22rywD4YFZpSVs7E2HGI75BCbeKIU+1tOFjTR/WXtQk6/XKzGh3xT37wIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile activeTab guard",
+  "permissions": ["activeTab", "scripting"],
+  "version": "1"
+}

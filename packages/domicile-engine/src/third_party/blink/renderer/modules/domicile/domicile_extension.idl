@@ -32,7 +32,8 @@
   readonly attribute DOMString badgeColor;
 
   // The popup a click opens, in a <webview> the shell draws; null for an
-  // action whose click is activateExtension().
+  // action whose click is its `action.onClicked`. Either way the click is
+  // activateExtension().
   readonly attribute USVString? popup;
 
   // False after the extension's action.disable().

@@ -188,6 +188,38 @@ describe("ExtensionTray", () => {
       expect(await asked).toBe(BLOCKER);
     });
 
+    it("activates an extension as it opens its popup, and not as it closes it", async () => {
+      // The activation is Chrome's toolbar click: it grants the extension
+      // `activeTab` on the focused browser window, which the popup's first
+      // `scripting.executeScript` needs. The engine dispatches no
+      // `action.onClicked` for an action with a popup.
+      const activated: string[] = [];
+      const { rerender } = render(
+        <ExtensionTray
+          domicile={recordingDomicile(activated)}
+          extensions={[blocker]}
+          onOpen={() => undefined}
+          opened={undefined}
+        />,
+      );
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Blocker: on for this site" }),
+      );
+      rerender(
+        <ExtensionTray
+          domicile={recordingDomicile(activated)}
+          extensions={[blocker]}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      await popupView();
+      await userEvent.keyboard("{Escape}");
+
+      expect(activated).toStrictEqual([BLOCKER]);
+    });
+
     it("activates an extension that has none, and opens nothing", async () => {
       const activated: string[] = [];
       const opened: (string | undefined)[] = [];

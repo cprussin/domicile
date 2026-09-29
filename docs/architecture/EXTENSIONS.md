@@ -78,8 +78,8 @@ interface DomicileExtension {
 - **`extensions` is the whole list, on every change.** Like `Displays`, a page that reloads is told again rather than having had to be listening. The source is `ExtensionRegistryObserver` plus `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **The icon is a data URL, not a `chrome-extension://` URL.** `action.setIcon({imageData})` sets an icon that has no URL.
 - **Action state is per tab**, so the list reports it for the active tab, and is sent again when the active tab changes. With no active tab it is the default state (tab `-1`).
-- **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
-- **A click without a popup** calls `activateExtension(id)`, which dispatches `action.onClicked` with the active tab.
+- **Every click is `activateExtension(id)`**, popup or not: what `ExtensionActionRunner::RunAction` does for a toolbar click, which the tray bypasses. It grants `activeTab` on the active tab (`ActiveTabPermissionGranter::GrantIfRequested`, on the guest's `extensions::TabHelper`), then dispatches `action.onClicked` with that tab only when the action has no popup. With no active tab, nothing is granted: the page clicked in is the shell's.
+- **A click with a popup** is then the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
 
 The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
 `packages/shell-manganese/src/extensions/` for the tray and the popup panel.
@@ -161,4 +161,7 @@ Slice 2: tabs.
 - [x] per-tab action state in `onextensions`, and `action.onClicked` naming the active tab
 - [x] a guard: `guard-webview-tabs.sh`, a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`; its control focuses the other one
 
-Left: tabs' zoom, and `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses).
+Follow-ups:
+
+- [x] `activeTab` granted on a tray click, popup or not: `ExtensionTray::Activate`. `guard-webview-active-tab.sh`: a fixture with `activeTab` and no host paints the focused `<webview>` with `scripting.executeScript` from its `onClicked`; its control does not click
+- [ ] tabs' zoom

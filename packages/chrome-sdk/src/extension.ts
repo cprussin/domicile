@@ -27,8 +27,9 @@ export const extensionSchema = z.object({
   name: z.string(),
   /**
    * The popup to open in a `<webview>` on a click; `undefined` for an action
-   * whose click is {@link DomicileClient.activateExtension}. The engine says
-   * `null`, which is WebIDL's absence rather than this SDK's.
+   * whose click is its `action.onClicked`. Either way the click is
+   * {@link DomicileClient.activateExtension}. The engine says `null`, which is
+   * WebIDL's absence rather than this SDK's.
    */
   popup: z
     .string()
