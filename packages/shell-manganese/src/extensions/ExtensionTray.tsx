@@ -10,7 +10,7 @@ import { hstack } from "../../styled-system/patterns";
 import { shownInTray } from "./shown";
 
 type Props = {
-  /** What a click on an extension with no popup asks. */
+  /** What every click asks, popup or not. */
   domicile: DomicileClient;
   /** Every extension with an action, as the engine last described them. */
   extensions: readonly Extension[];
@@ -27,11 +27,12 @@ type Props = {
 /**
  * The extensions' actions: Chrome's toolbar icons, on the bar.
  *
- * **A click is one of two things, and the extension says which.** One with a
+ * **Every click is `activateExtension`**, which is Chrome's toolbar click: the
+ * extension gets `activeTab` on the focused browser window. Then one with a
  * popup opens it in a panel under its icon, as a `<webview>` of the popup's
  * address — the page gets the extension API from its origin, not from the
  * view it is in. One without is `action.onClicked`, which the engine
- * dispatches for `activateExtension`.
+ * dispatches.
  *
  * **The panel closes the way Chrome's does**: a press outside it, Escape, or
  * the popup's own `window.close()`, which the view says as `domicile-close`.
@@ -67,6 +68,9 @@ export const ExtensionTray = ({
           align="start"
           key={id}
           onOpenChange={(open) => {
+            if (open) {
+              domicile.activateExtension(id);
+            }
             onOpen(open ? id : undefined);
           }}
           open={opened === id}
