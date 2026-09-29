@@ -7,6 +7,7 @@
 #include <ostream>
 #include <utility>
 
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -78,6 +79,8 @@ BrokeredFrameSink::BrokeredFrameSink(
       observer_(std::move(observer)),
       owner_(owner),
       get_shared_image_interface_(std::move(get_shared_image_interface)) {
+  mirrors_.set_disconnect_handler(base::BindRepeating(
+      &BrokeredFrameSink::OnMirrorGone, base::Unretained(this)));
   host_frame_sink_manager_->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
   // What the producer calls this window, so that a viz trace names the app
@@ -87,9 +90,9 @@ BrokeredFrameSink::BrokeredFrameSink(
 }
 
 BrokeredFrameSink::~BrokeredFrameSink() {
-  if (parent_frame_sink_id_.is_valid()) {
-    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
-        parent_frame_sink_id_, frame_sink_id_);
+  for (const auto& parent : parents_) {
+    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(parent.first,
+                                                           frame_sink_id_);
   }
   host_frame_sink_manager_->InvalidateFrameSinkId(frame_sink_id_, this, {});
 }
@@ -122,20 +125,27 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   // be refused by viz as a decrease, and viz answers a decrease by closing the
   // sink -- which freezes the window for good. The newer embed already said
   // everything this one would.
+  //
+  // Only against an id from the same allocator. A window handed from one
+  // monitor's page to another's is embedded by an allocator of its own there,
+  // whose sequence numbers say nothing about the first one's.
   if (local_surface_id_.is_valid() &&
+      local_surface_id_.embed_token() == local_surface_id.embed_token() &&
       local_surface_id_.IsNewerThan(local_surface_id)) {
     return;
   }
 
   // A page that navigates or reloads embeds again under a different frame
-  // sink, so the old edge has to go before the new one is added.
-  if (parent_frame_sink_id_.is_valid()) {
-    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
-        parent_frame_sink_id_, frame_sink_id_);
+  // sink, and a window handed to another monitor is embedded by that page, so
+  // the old edge goes -- after the new one is added, so that a page mirroring
+  // the window under the same parent keeps it throughout.
+  if (embedder_parent_ != parent_frame_sink_id) {
+    AddParent(parent_frame_sink_id);
+    if (embedder_parent_.is_valid()) {
+      RemoveParent(embedder_parent_);
+    }
+    embedder_parent_ = parent_frame_sink_id;
   }
-  parent_frame_sink_id_ = parent_frame_sink_id;
-  host_frame_sink_manager_->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                       frame_sink_id_);
 
   local_surface_id_ = local_surface_id;
   size_ = size;
@@ -148,6 +158,52 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
 
   if (observer_) {
     observer_->OnSurfaceEmbedded(local_surface_id, size, scale);
+  }
+
+  TellMirrors();
+}
+
+void BrokeredFrameSink::Mirror(
+    const viz::FrameSinkId& parent_frame_sink_id,
+    mojo::PendingRemote<mojom::ExternalSurfaceClient> client) {
+  AddParent(parent_frame_sink_id);
+  const mojo::RemoteSetElementId id = mirrors_.Add(std::move(client));
+  mirror_parents_[id] = parent_frame_sink_id;
+  // Nothing to show until a page has embedded it; the embed tells every
+  // mirror, this one included.
+  if (local_surface_id_.is_valid()) {
+    mirrors_.Get(id)->OnSurfaceChanged(frame_sink_id_, local_surface_id_);
+  }
+}
+
+void BrokeredFrameSink::AddParent(const viz::FrameSinkId& parent) {
+  if (parents_[parent]++ == 0) {
+    host_frame_sink_manager_->RegisterFrameSinkHierarchy(parent,
+                                                         frame_sink_id_);
+  }
+}
+
+void BrokeredFrameSink::RemoveParent(const viz::FrameSinkId& parent) {
+  auto iter = parents_.find(parent);
+  CHECK(iter != parents_.end());
+  if (--iter->second == 0) {
+    parents_.erase(iter);
+    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(parent,
+                                                           frame_sink_id_);
+  }
+}
+
+void BrokeredFrameSink::OnMirrorGone(mojo::RemoteSetElementId id) {
+  auto iter = mirror_parents_.find(id);
+  CHECK(iter != mirror_parents_.end());
+  const viz::FrameSinkId parent = iter->second;
+  mirror_parents_.erase(iter);
+  RemoveParent(parent);
+}
+
+void BrokeredFrameSink::TellMirrors() {
+  for (auto& mirror : mirrors_) {
+    mirror->OnSurfaceChanged(frame_sink_id_, local_surface_id_);
   }
 }
 

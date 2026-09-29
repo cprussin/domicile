@@ -40,4 +40,11 @@ void ExternalSurfaceProvider::Embed(
                  std::move(callback));
 }
 
+void ExternalSurfaceProvider::Mirror(
+    const std::string& app_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    mojo::PendingRemote<mojom::ExternalSurfaceClient> client) {
+  broker_->Mirror(app_id, parent_frame_sink_id, std::move(client));
+}
+
 }  // namespace domicile
