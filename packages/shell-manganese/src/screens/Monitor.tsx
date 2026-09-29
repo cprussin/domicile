@@ -9,7 +9,7 @@ import type { Modifiers } from "../keyboard/useModifiers";
 import { TOP_BAR, TopBar } from "../top-bar/TopBar";
 import { onScreen } from "../window-management/floating/float";
 import type { Geometry, Screenful } from "../window-management/placement";
-import { placementsOf } from "../window-management/placement";
+import { placementsOf, withOverhangs } from "../window-management/placement";
 import type { Focus } from "../window-management/pointer-warp";
 import type { Rect } from "../window-management/rect";
 import { Stage } from "../window-management/Stage";
@@ -63,10 +63,13 @@ export const Monitor = ({
   windows,
 }: Props) => {
   const geometry = useMemo(() => geometryOf(display, desk), [desk, display]);
-  const screenful = useMemo(
-    () => placementsOf(windows, geometry),
-    [geometry, windows],
-  );
+  // And what hangs over from the screens either side, on a page that is this
+  // monitor alone: a window dragged across the edge is drawn by both pages.
+  const alone = desk.some(({ scanout }) => scanout !== undefined);
+  const screenful = useMemo(() => {
+    const own = placementsOf(windows, geometry);
+    return alone ? withOverhangs(own, windows, geometry) : own;
+  }, [alone, geometry, windows]);
   const current = currentOn(windows, display.name);
   const workspace = workspaceOn(windows, display.name);
 
