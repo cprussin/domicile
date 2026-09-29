@@ -3,6 +3,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
+  WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -207,6 +208,10 @@ const nothingEnded = () => {
   // Nothing in the case plays an animation to its end.
 };
 
+const nothingClosed = () => {
+  // Nothing in the case asks for the window to close.
+};
+
 describe("BrowserWindow", () => {
   it("rounds its bottom corners, and clips the page to them", () => {
     render(
@@ -219,6 +224,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -246,6 +252,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen
         motion="resting"
+        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -273,6 +280,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -297,6 +305,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -328,6 +337,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={(url) => {
             seen.push(url);
@@ -360,6 +370,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onOpenWindow: noWindows,
         onReach: () => undefined,
@@ -395,6 +406,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -424,6 +436,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -459,6 +472,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={resolve}
@@ -470,6 +484,36 @@ describe("BrowserWindow", () => {
         asksForAWindow(view(container), "https://example.com/opened");
       });
       expect(wanted).toBe("https://example.com/opened");
+    });
+  });
+
+  // `window.close()` in the page, or `chrome.tabs.remove` from an extension:
+  // the engine closes nothing and asks, and the window is the desktop's to
+  // close. See `WEBVIEW_CLOSE_EVENT`.
+  describe("a close its page asks for", () => {
+    it("asks the desktop to close the window", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            clickThrough={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onClose={resolve}
+            onMotionEnded={nothingEnded}
+            onNavigate={() => undefined}
+            onOpenWindow={noWindows}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            src="https://example.com"
+          />,
+        );
+        view(container).dispatchEvent(new Event(WEBVIEW_CLOSE_EVENT));
+      });
     });
   });
 
@@ -486,6 +530,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onClose: nothingClosed,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
       onOpenWindow: noWindows,
@@ -593,6 +638,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -631,6 +677,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -654,6 +701,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -693,6 +741,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -718,6 +767,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -750,6 +800,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -786,6 +837,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -817,6 +869,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -857,6 +910,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -883,6 +937,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -914,6 +969,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -943,6 +999,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -972,6 +1029,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -1014,6 +1072,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1060,6 +1119,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1087,6 +1147,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1117,6 +1178,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1146,6 +1208,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1182,6 +1245,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1292,6 +1356,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -1316,6 +1381,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onClose: nothingClosed,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
       onOpenWindow: noWindows,

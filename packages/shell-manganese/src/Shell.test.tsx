@@ -3,7 +3,10 @@ import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
-import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_CLOSE_EVENT,
+  WEBVIEW_NEW_WINDOW_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
 import {
   act,
@@ -536,6 +539,16 @@ const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
       view,
       Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
     );
+  }
+};
+
+/** The page in the first browser window on screen asking to be closed. */
+const pageAsksToClose = (container: HTMLElement): void => {
+  const view = container.querySelector("webview");
+  if (view === null) {
+    throw new Error("test: no browser window for a page to ask from");
+  } else {
+    fireEvent(view, new Event(WEBVIEW_CLOSE_EVENT));
   }
 };
 
@@ -1286,6 +1299,22 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(addressesShowing()).toContain("https://example.com/opened");
+    });
+
+    // `window.close()` in the page, or an extension's `chrome.tabs.remove`:
+    // the engine closes nothing and asks, and the window goes the way its
+    // Close button takes it.
+    it("closes a browser window its page asks to close", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+
+      pageAsksToClose(container);
+      motionsPlayOut(container);
+
+      expect(windowsOnScreen(container)).toEqual([]);
     });
   });
 

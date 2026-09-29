@@ -1005,6 +1005,24 @@ whole, and a link is what this is for.
 
 **A middle click needs nothing from you beyond what you already wrote.** Middle-clicking a link asks for it in a second window, and a page cannot open one — the browser has to. Your `<webview>` announces it with the same `domicile-new-window` event a `target="_blank"` link fires, carrying the same `url`, so the handler you already have covers it. The guest does not navigate itself; opening the window is yours, exactly as it is for `_blank`.
 
+### A close the page asks for
+
+`window.close()` in the page, or an extension's `chrome.tabs.remove`, closes
+nothing: the element fires `domicile-close` and removing the window is yours.
+Close it the way your Close button does.
+
+```ts
+import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
+  closeBrowserWindow(frame);
+});
+```
+
+A shell that ignores it is a desktop where `window.close()` and
+`tabs.remove` do nothing. `window.close()` fires it only from a
+script-closable page: one whose history is a single entry.
+
 ### A file the page asks for
 
 An `<input type="file">` clicked, or a download that needs somewhere to go —
@@ -1115,7 +1133,7 @@ element, as the page's own asks do:
 | Extension call | Event on the `<webview>` |
 |---|---|
 | `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
-| `tabs.remove(id)` | `domicile-close` |
+| `tabs.remove(id)` | `domicile-close`: close that window ([A close the page asks for](#a-close-the-page-asks-for)) |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request`: raise that window (`WEBVIEW_FOCUS_REQUEST_EVENT`) |
 
 `tabs.move`, `tabs.group`, `tabs.discard`, `windows.create` and the rest

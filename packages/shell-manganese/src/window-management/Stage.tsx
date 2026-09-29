@@ -275,6 +275,9 @@ export const Stage = ({
                 frame={placement?.frame}
                 fullscreen={window.id === fullscreenId}
                 motion={motion}
+                onClose={() => {
+                  onClose(window.id);
+                }}
                 onMotionEnded={onMotionEnded}
                 onNavigate={(url) => {
                   onRename(window.id, url);
