@@ -6391,6 +6391,9 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
 /// setting but a fact about the user this process is running as, and it is the
 /// same one [`spawn_client`] hands every client it starts. Taking it on a flag
 /// would be asking the supervisor to tell us which user we are.
+///
+/// `domicile_config` reads the same `HOME`, for the same reason, to expand a
+/// `~` in `extensions.unpacked`.
 fn home_directory() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
 }

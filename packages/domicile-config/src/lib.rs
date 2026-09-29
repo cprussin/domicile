@@ -2,7 +2,8 @@
 //!
 //! Responsibilities:
 //! - Define the config schema ([`Config`]).
-//! - Parse it, apply defaults, and validate it ([`Config::parse`]).
+//! - Parse it, apply defaults, and validate it ([`Config::parse`]), expanding
+//!   a `~` against `HOME`.
 //! - Provide hot-reload that is *safe*: a bad write keeps the last known-good
 //!   config live and surfaces the error rather than crashing ([`ConfigStore`]).
 //!
@@ -731,17 +732,50 @@ impl ExtensionsConfig {
                  32 letters from `a` to `p`"
             )));
         }
-        // Absolute, because nothing expands a `~` in this file and a relative
-        // path is relative to wherever the compositor happened to start. The
-        // file is generated, so the generator writes the home out.
-        if let Some(path) = self.unpacked.iter().find(|path| !path.is_absolute()) {
-            return Err(ConfigError::Validation(format!(
-                "extensions.unpacked {:?} is not an absolute path; `~` is not \
-                 expanded, so write the home directory out",
+        // Absolute once a `~` is expanded, because a relative path is relative
+        // to wherever the compositor happened to start.
+        match self.unpacked.iter().find(|path| !path.is_absolute()) {
+            Some(path) => Err(ConfigError::Validation(format!(
+                "extensions.unpacked {:?} is not an absolute path, or one under `~`",
                 path.display().to_string()
-            )));
+            ))),
+            None => Ok(()),
         }
-        Ok(())
+    }
+
+    /// These extensions, with a leading `~` in `unpacked` expanded to `home`.
+    ///
+    /// Here rather than in the browser, which is handed the path and expands
+    /// nothing. Only `~` itself and `~/`, as `domicile`'s own argument does:
+    /// `~alice` is another user's home, a lookup this does not make.
+    fn at_home(self, home: Option<&Path>) -> Result<ExtensionsConfig, ConfigError> {
+        self.unpacked
+            .into_iter()
+            .map(|path| under_home(path, home))
+            .collect::<Result<_, _>>()
+            .map(|unpacked| ExtensionsConfig { unpacked, ..self })
+    }
+}
+
+/// `path` with a leading `~` component replaced by `home`.
+fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError> {
+    match (path.strip_prefix("~"), home) {
+        // Collected, so that a bare `~` is the home rather than the home with
+        // a `/` on the end.
+        (Ok(rest), Some(home)) => Ok(home.join(rest).components().collect()),
+        (Ok(_), None) => Err(ConfigError::Validation(format!(
+            "extensions.unpacked {:?} starts at a home directory and HOME is not \
+             set, so there is nowhere for it to start",
+            path.display().to_string()
+        ))),
+        (Err(_), _) if path.to_string_lossy().starts_with('~') => {
+            Err(ConfigError::Validation(format!(
+                "extensions.unpacked {:?} is under another user's home, which is not \
+                 expanded; only `~` and `~/` are, so write that home out",
+                path.display().to_string()
+            )))
+        }
+        (Err(_), _) => Ok(path),
     }
 }
 
@@ -776,12 +810,22 @@ impl Config {
     /// the `json` this desk's own config used — so nothing gained a chance to
     /// get the escaping wrong.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
+        Config::parse_at_home(text, home_directory().as_deref())
+    }
+
+    /// [`Config::parse`], with the home directory given rather than read.
+    fn parse_at_home(text: &str, home: Option<&Path>) -> Result<Config, ConfigError> {
         // `to_string` keeps toml's line, column and the span it underlines,
         // which is the actionable half of the complaint — and more of it than
         // JSON gave, because a TOML error names the key it was reading.
-        let config: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
-        config.validate()?;
-        Ok(config)
+        let parsed: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        parsed.extensions.at_home(home).and_then(|extensions| {
+            let config = Config {
+                extensions,
+                ..parsed
+            };
+            config.validate().map(|()| config)
+        })
     }
 
     /// Read and parse a config from a file.
@@ -806,6 +850,12 @@ impl Config {
         self.lock.validate()?;
         self.output.validate()
     }
+}
+
+/// The home directory a `~` stands for: `HOME`, which is the same one the
+/// compositor indexes for a launcher.
+fn home_directory() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 /// Holds the live configuration and applies hot-reloads safely.
@@ -930,5 +980,43 @@ impl ConfigStore {
     /// Apply a reload result delivered by a [`ConfigWatcher`].
     pub fn apply_watch(&mut self, result: Result<Config, ConfigError>) -> Result<(), ConfigError> {
         self.apply(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::{Config, ConfigError};
+
+    const HOME: &str = "/home/you";
+
+    fn unpacked(path: &str, home: Option<&Path>) -> Result<Vec<PathBuf>, ConfigError> {
+        Config::parse_at_home(&format!("[extensions]\nunpacked = [{path:?}]\n"), home)
+            .map(|config| config.extensions.unpacked)
+    }
+
+    #[test]
+    fn a_tilde_in_an_unpacked_extension_is_the_home_directory() {
+        for (written, meant) in [
+            ("~/src/my-extension", "/home/you/src/my-extension"),
+            ("~", "/home/you"),
+        ] {
+            assert_eq!(
+                unpacked(written, Some(Path::new(HOME))),
+                Ok(vec![PathBuf::from(meant)]),
+                "{written}"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_a_tilde_with_no_home_to_stand_for() {
+        let err = unpacked("~/src/my-extension", None).unwrap_err();
+        let ConfigError::Validation(message) = &err else {
+            panic!("got {err:?}");
+        };
+        assert!(message.contains("~/src/my-extension"), "{message}");
+        assert!(message.contains("HOME"), "{message}");
     }
 }
