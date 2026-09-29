@@ -472,10 +472,43 @@ fn the_engine_is_told_a_touchpad_is_libinputs() {
             None,
         ));
         assert!(
-            args.contains(&"--enable-features=LibinputHandleTouchpad".to_string()),
+            features_of(&args).contains(&"LibinputHandleTouchpad"),
             "{platform}: {args:?}"
         );
     }
+}
+
+#[test]
+fn the_engine_is_told_a_mouse_is_libinputs() {
+    // A MOUSE LEFT TO `EventConverterEvdevImpl` IS RAW. It reads `REL_X` and
+    // `REL_Y` one count to one pixel, with no acceleration, and has no
+    // `REL_WHEEL` case at all: a sluggish pointer and a wheel that does
+    // nothing. `kLibinputHandleMouse` is patch 0059's, and like the touchpad's
+    // it is off unless overridden.
+    for platform in ["drm", "wayland", "headless"] {
+        let args = args_of(&engine(
+            Path::new("/l/engine"),
+            &shell(),
+            platform,
+            &runtime(),
+            None,
+        ));
+        assert!(
+            features_of(&args).contains(&"LibinputHandleMouse"),
+            "{platform}: {args:?}"
+        );
+    }
+}
+
+/// The features the one `--enable-features` names. One, because a second
+/// replaces the first rather than adding to it.
+fn features_of(args: &[String]) -> Vec<&str> {
+    let lists: Vec<&str> = args
+        .iter()
+        .filter_map(|arg| arg.strip_prefix("--enable-features="))
+        .collect();
+    assert_eq!(lists.len(), 1, "{args:?}");
+    lists[0].split(',').collect()
 }
 
 #[test]
