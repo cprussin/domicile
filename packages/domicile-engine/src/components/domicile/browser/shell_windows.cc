@@ -54,12 +54,13 @@ ShellWindowPlaces::ShellWindowPlaces() = default;
 ShellWindowPlaces::~ShellWindowPlaces() = default;
 
 void ShellWindowPlaces::Place(uintptr_t window, int64_t display) {
-  placed_.insert_or_assign(window, display);
+  placed_.insert_or_assign(window, Record{.display = display, .seen = false});
 }
 
 std::vector<int64_t> ShellWindowPlaces::Update(
-    const std::vector<SightedShellWindow>& live) {
-  base::flat_map<uintptr_t, int64_t> still_here;
+    const std::vector<SightedShellWindow>& live,
+    const std::vector<uintptr_t>& loading) {
+  base::flat_map<uintptr_t, Record> still_here;
   std::vector<int64_t> windowed;
   windowed.reserve(live.size());
   for (const SightedShellWindow& one : live) {
@@ -67,9 +68,17 @@ std::vector<int64_t> ShellWindowPlaces::Update(
     // that has been seen is on the display it was seen on, whatever its
     // rectangle reads as in the middle of a hotplug.
     const auto known = placed_.find(one.window);
-    const int64_t on = known == placed_.end() ? one.nearest : known->second;
-    still_here.insert_or_assign(one.window, on);
+    const int64_t on =
+        known == placed_.end() ? one.nearest : known->second.display;
+    still_here.insert_or_assign(one.window,
+                                Record{.display = on, .seen = true});
     windowed.push_back(on);
+  }
+  for (uintptr_t window : loading) {
+    const auto known = placed_.find(window);
+    if (known != placed_.end() && !known->second.seen) {
+      still_here.insert_or_assign(window, known->second);
+    }
   }
   // Assigned rather than merged, so a window the browser no longer has is
   // gone from here too.
@@ -79,7 +88,8 @@ std::vector<int64_t> ShellWindowPlaces::Update(
 
 int64_t ShellWindowPlaces::Of(uintptr_t window) const {
   const auto known = placed_.find(window);
-  return known == placed_.end() ? display::kInvalidDisplayId : known->second;
+  return known == placed_.end() ? display::kInvalidDisplayId
+                                : known->second.display;
 }
 
 }  // namespace domicile

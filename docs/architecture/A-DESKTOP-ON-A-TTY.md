@@ -893,9 +893,9 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 
 | Rule | Why |
 |---|---|
-| **An empty layout means the hardware decides** | What every desktop but a matched profile's says, and what this did before a layout could be stated. It is also what *undoes* one: a profile that turned a panel off stops matching the moment a monitor is unplugged, and something has to say the panel comes back on |
-| **A non-empty layout is the whole truth** | A connector it does not name is left dark rather than lit where the card put it. An origin nothing chose can land on top of one that was, and two controllers claiming one rectangle is the exact-rect mismatch `FindWindowAt` answers by binding no window at all. That case is a monitor plugged in between the reading the compositor answered and this one, and it lights on the next round trip |
-| **A dark connector still gets a corner** | It is in the browser's display list whether or not it is lit, and one left where the card stacked it lands on top of a monitor that is on. The compositor puts the dark ones past the end of the row |
+| **An empty layout means the hardware decides what is lit** | What every desktop but a matched profile's says, and what this did before a layout could be stated. It is also what *undoes* one: a profile that turned a panel off stops matching the moment a monitor is unplugged, and something has to say the panel comes back on. Every connector is lit, one row in connector order |
+| **A non-empty layout is the whole truth** | A connector it does not name is left dark. That case is a monitor plugged in between the reading the compositor answered and this one, and it lights on the next round trip |
+| **Every connector gets a corner, and never the card's** | It is in the browser's display list whether or not it is lit. The compositor puts the dark ones it names past the end of its row; `OriginsForLayout` puts every connector the layout does not name past the right edge of everything it does, in connector order, and the modeset and the display list both read that one answer. Not the snapshot's origin: ozone gives a connector it has not read before `(0, 0)`, so three monitors arriving on one hub were three displays on one rectangle, sharing one window with the other CRTCs black |
 | **Primary is the first display the layout lights** | The difference between a desktop and a black screen. A views browser going fullscreen is sized from the display it is on, and the window it starts at is on whichever display holds `(10, 10)`. A profile that turns the laptop panel off is the ordinary case on a full desk, and a primary that is dark is a browser drawing correctly onto a screen nobody can see — with every log line saying the modeset succeeded |
 | **The connectors are stepped across in the order the displays are placed** | Ozone lays its own desktop out in connector order, which is the card's business and says nothing about which monitor is on which side of a desk — so a pointer leaving one screen arrived on whichever connector was numbered next |
 | **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
@@ -1163,10 +1163,15 @@ exact rectangle match — one window cannot be two rectangles. So the engine
 opens one per display now, **on the platform that scans out and nowhere
 else**, and keeps doing it: `ShellWindowsFor` answers what
 has no window and what has no display, and a `display::DisplayObserver` asks
-it again on every add, removal and bounds change. Two rules in it are the
+it again on every add and removal — on the next task, once the whole reading
+is in the list — and moves a window on every bounds change. Two rules in it are the
 difference between a desktop and a dead session — the last window is never
 closed, because closing it is the browser exiting, and windows open before
 they close, because a dock swapped at once would otherwise pass through zero.
+Two more keep an arriving monitor from getting two windows or none: a window
+is its display's from being asked for, through its page loading, onward
+(`ShellWindowPlaces`), and it is moved to where its display is when it
+arrives, not where it was when asked for.
 
 Every one of those windows would otherwise draw the *same* thing — they all
 load the same shell, and a shell lays its `<Screen>` regions out in the
