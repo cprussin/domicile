@@ -6,7 +6,7 @@
 // geometry comes from the display the chrome is on, which only the chrome
 // knows, so it is an argument rather than a field.
 
-import { rectOf } from "./floating/float";
+import { onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
@@ -162,10 +162,12 @@ export const placementsOf = (
   );
   // Over them, in the order the workspace stacks them: each float's own tree
   // laid out in its box.
-  const floating = workspace.floats.map((float, at) => ({
-    depth: FLOATING + at,
-    ...framesOf(float, rectOf(float), floatingGapOf(float)),
-  }));
+  const floating = workspace.floats
+    .map((float) => onScreen(float, geometry.screen))
+    .map((float, at) => ({
+      depth: FLOATING + at,
+      ...framesOf(float, rectOf(float), floatingGapOf(float)),
+    }));
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
     ...floating.flatMap(({ depth, frames: inFloat }) =>

@@ -1929,6 +1929,40 @@ describe("Shell", () => {
       ).toBe(was + 80);
     });
 
+    it("drags a floating window onto the next screen and keeps hold of it", () => {
+      // The screen its middle is over takes it, and the drag goes on after its
+      // bar has gone from the screen that was pressed.
+      const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("term");
+      press("Tab", true);
+      const was = Number.parseFloat(
+        barFor(container, "app:term").style.insetInlineStart,
+      );
+
+      fireEvent.pointerDown(barFor(container, "app:term"), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: 100 + LEFT.width,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: 110 + LEFT.width,
+        clientY: 100,
+      });
+      fireEvent.pointerUp(window, { clientX: 110 + LEFT.width, clientY: 100 });
+
+      const right = screenNamed(container, "right");
+      if (right instanceof HTMLElement) {
+        expect(
+          Number.parseFloat(barFor(right, "app:term").style.insetInlineStart),
+        ).toBe(was + LEFT.width + 10);
+      } else {
+        throw new Error("test: no right screen");
+      }
+    });
+
     it("draws a fullscreen float's bar at the top of the screen", async () => {
       const user = userEvent.setup();
       const { container } = renderShell();

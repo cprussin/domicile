@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import type { Rect } from "../rect";
 import type { Corner } from "../tiled/aim";
@@ -13,8 +13,9 @@ import { rectOf, stretched } from "./float";
  *
  * The callbacks are latched here with the box for one reason rather than two:
  * they are what this drag does, and a drag is what it was when it started.
- * Keeping them here is also what lets the listeners below be attached once and
- * never rebuilt, so no part of a drag depends on a render having happened.
+ * Keeping them here is also what lets a drag go on with nothing rendered at
+ * all — its element gone with the window to another monitor — so no part of
+ * it depends on a render having happened.
  */
 type Drag = {
   /** The window's box when it was taken hold of, which the delta is from. */
@@ -94,13 +95,18 @@ type Options = {
  * happens, and a drag that cannot be ended leaves its window see-through,
  * click-through, and following the pointer for ever.
  *
- * **The drag is a ref, and the state beside it is only what to draw.** A
- * pointer sequence is answered synchronously and a render is not: `setState`
- * schedules, so a handler built by a render sees whatever the drag was when
- * that render was built, and a press and a release inside one — a click —
- * would drop nothing at all. For the same reason the listeners are attached on
- * mount rather than when a drag starts: an effect runs after the commit, and a
- * release that beat it would be the release that never arrived.
+ * **AND THE ELEMENT MAY GO WHILE THE HAND HOLDS ON.** A window dragged onto
+ * the next monitor is drawn by that monitor's page from then on, and the
+ * element pressed on this one is taken out of the document — but this page
+ * still has the pointer, and the drag goes on in its pixels (see
+ * `floatDragged`). So the listeners belong to the drag rather than to the
+ * component: added by the press, in the handler itself, and taken off by the
+ * release. In the handler rather than an effect for a second reason: an
+ * effect runs after the commit, and a release that beat it — a click — would
+ * be the release that never arrived.
+ *
+ * The state beside it is only what to draw, and a page that has stopped
+ * drawing the element has nothing to draw it on.
  */
 export const useFloatDrag = ({
   float,
@@ -110,46 +116,12 @@ export const useFloatDrag = ({
   onResize,
   resizes,
 }: Options): FloatDrag => {
-  const running = useRef<Drag | undefined>(undefined);
+  // How to stop following the drag that is running, without dropping it: a
+  // second press while one is — another button — takes over from the first.
+  const running = useRef<(() => void) | undefined>(undefined);
   const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    const moved = (event: PointerEvent) => {
-      const started = running.current;
-      if (started !== undefined) {
-        const dx = event.clientX - started.from.x;
-        const dy = event.clientY - started.from.y;
-        if (started.corner === undefined) {
-          started.onMove(started.box.x + dx, started.box.y + dy);
-        } else {
-          started.onResize(
-            rectOf(stretched(started.box, started.corner, dx, dy)),
-          );
-        }
-      }
-    };
-    // Idempotent, because both a release and a cancel can arrive for one drag —
-    // a browser that ends a gesture itself sends the cancel after the release —
-    // and dropping a window twice raises whatever ended up under it.
-    const ended = () => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = undefined;
-        setDrag(undefined);
-        started.onDrop();
-      }
-    };
-    window.addEventListener("pointermove", moved);
-    window.addEventListener("pointerup", ended);
-    window.addEventListener("pointercancel", ended);
-    return () => {
-      window.removeEventListener("pointermove", moved);
-      window.removeEventListener("pointerup", ended);
-      window.removeEventListener("pointercancel", ended);
-    };
-  }, []);
 
   return {
     drag,
@@ -168,17 +140,60 @@ export const useFloatDrag = ({
           resizes || event.button === SECONDARY_BUTTON
             ? cornerOf(rectOf(float), event.clientX, event.clientY)
             : undefined;
-        running.current = {
-          box: float,
-          corner,
-          from: { x: event.clientX, y: event.clientY },
-          onDrop,
-          onMove,
-          onResize,
-        };
+        running.current?.();
+        running.current = follow(
+          {
+            box: float,
+            corner,
+            from: { x: event.clientX, y: event.clientY },
+            onDrop,
+            onMove,
+            onResize,
+          },
+          () => {
+            running.current = undefined;
+            setDrag(undefined);
+          },
+        );
         setDrag({ corner });
         onGrab();
       }
     },
   };
+};
+
+/**
+ * Follow `drag` until the pointer lets go: every move of it moves or resizes
+ * the window, and the release or a cancel drops it and stops listening, then
+ * says so with `ended`. Returns how to stop listening without dropping.
+ *
+ * Only the first of a release and a cancel drops it — a browser that ends a
+ * gesture itself sends the cancel after the release, and dropping a window
+ * twice raises whatever ended up under it — because the first takes both
+ * listeners off.
+ */
+const follow = (drag: Drag, ended: () => void): (() => void) => {
+  const moved = (event: PointerEvent) => {
+    const dx = event.clientX - drag.from.x;
+    const dy = event.clientY - drag.from.y;
+    if (drag.corner === undefined) {
+      drag.onMove(drag.box.x + dx, drag.box.y + dy);
+    } else {
+      drag.onResize(rectOf(stretched(drag.box, drag.corner, dx, dy)));
+    }
+  };
+  const stop = () => {
+    window.removeEventListener("pointermove", moved);
+    window.removeEventListener("pointerup", released);
+    window.removeEventListener("pointercancel", released);
+  };
+  const released = () => {
+    stop();
+    ended();
+    drag.onDrop();
+  };
+  window.addEventListener("pointermove", moved);
+  window.addEventListener("pointerup", released);
+  window.addEventListener("pointercancel", released);
+  return stop;
 };

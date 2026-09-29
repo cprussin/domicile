@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { popupShown } from "../extensions/shown";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { TOP_BAR, TopBar } from "../top-bar/TopBar";
+import { onScreen } from "../window-management/floating/float";
 import type { Geometry, Screenful } from "../window-management/placement";
 import { placementsOf } from "../window-management/placement";
 import type { Focus } from "../window-management/pointer-warp";
@@ -143,7 +144,11 @@ export const Monitor = ({
         current={current}
         domicile={domicile}
         draggingId={windows.draggingId}
-        floats={workspace.floats}
+        // In this page's pixels, which is where the screen is on it: a float
+        // is in its own screen's, and moves and resizes go back into them.
+        floats={workspace.floats.map((float) =>
+          onScreen(float, geometry.screen),
+        )}
         focusedId={windows.focusedId}
         fullscreenId={workspace.fullscreen?.id}
         modifiers={modifiers}
@@ -172,8 +177,17 @@ export const Monitor = ({
             act(WindowAction.WindowHovered(id));
           }
         }}
+        // Naming this screen, because the page pressed keeps the drag once
+        // the window has gone to another — see `floatDragged`.
         onMove={(id, x, y) => {
-          act(WindowAction.WindowMoved(id, x, y));
+          act(
+            WindowAction.WindowMoved(
+              id,
+              x - geometry.screen.x,
+              y - geometry.screen.y,
+              display.name,
+            ),
+          );
         }}
         onOpenWindow={(url) => {
           act(WindowAction.BrowserOpened(url));
@@ -182,7 +196,13 @@ export const Monitor = ({
           act(WindowAction.WindowRenamed(id, siteOf(url)));
         }}
         onResize={(id, box) => {
-          act(WindowAction.WindowResized(id, box));
+          act(
+            WindowAction.WindowResized(id, {
+              ...box,
+              x: box.x - geometry.screen.x,
+              y: box.y - geometry.screen.y,
+            }),
+          );
         }}
         onSelect={(id) => {
           act(WindowAction.WindowSelected(id));

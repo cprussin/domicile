@@ -204,6 +204,16 @@ jumping to wherever the pointer got to. A window is never dragged smaller than
 the grab it is dragged by, and its top-left corner stays on the desktop — the
 two edges a window dragged past could not be dragged back from.
 
+**A float goes to the screen its middle is dragged onto** — sway's rule —
+onto the workspace showing there, with the keyboard. A float is in its own
+screen's pixels, and the page that was pressed keeps the drag after the pointer
+crosses to the next monitor's page, so a move says which screen it is measured
+from and `floatDragged` converts. Until the middle crosses, a window past a
+screen's edge is cut off there: on a tty the next monitor does not draw it yet.
+A browser window stays on its screen, its middle held inside it, because a
+`<webview>` on another page is a new guest and a reload. See
+[WINDOWS-ACROSS-SCREENS.md](../../docs/architecture/WINDOWS-ACROSS-SCREENS.md).
+
 **Its edges resize it with no modifier held.** A ring around a floating window
 — a strip a little inside and a little outside each edge, and a bigger square
 at each corner — drags that edge or corner, the others staying put. Over the

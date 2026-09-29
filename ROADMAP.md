@@ -176,6 +176,12 @@ The evidence for each of those is in the doc that made the claim —
    tray click grants `activeTab`.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
+5. **A floating window across monitors.** A float goes to the screen its
+   middle is dragged onto. Left: drawing it on both while it crosses — a client
+   window can be embedded by only one page — and browser windows, which stay
+   on their screen because a `<webview>` on another page reloads.
+   [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
@@ -280,6 +286,12 @@ these is one run, and each has a line to look for.
   `/dev/dri`, so the launcher's half is proved by
   `scripts/test-a-desktop-that-fails-says-why.sh` against fake components and
   the compositor's half is proved only by unit tests over the decisions.
+- **A float dragged to the next monitor.** Two monitors, a floating terminal
+  on the left, Meta+drag it right until its middle is past the edge. Expect it
+  to appear on the right monitor and keep following the hand until release. A
+  window that stops at the edge means the pressed page lost the pointer when it
+  crossed CRTCs — the open question in
+  [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
 - **A desk left alone.** Run with `idle.blank_after_seconds = 60`, walk away for
   a minute, then touch the trackpad. Expect `nobody is at this desktop; its
   screens go dark connectors=N`, the panels off, and
