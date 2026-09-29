@@ -25,9 +25,10 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 8,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
-# ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 10.
+# ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12.
 #
-# 121, and it was 114 — ShellWindowPlaces was never in the filter, so its five
+# 123, and it was 121 — the factor tabs.setZoom sets and the zoom settings a
+# desk tab takes are two more DeskTabs cases. Before that 121, and it was 114 — ShellWindowPlaces was never in the filter, so its five
 # cases compiled and ran nowhere; with the two a window still loading its page
 # added, that suite is seven. Before that 114, and it was 104 — which <webview> is the active tab, what is refused
 # and which tabs a query names is ten DeskTabs cases. Before that 104, and it
@@ -49,7 +50,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=121
+FLOOR=123
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
