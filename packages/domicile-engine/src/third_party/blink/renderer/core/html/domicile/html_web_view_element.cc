@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -70,6 +71,11 @@ constexpr char kZoomChangeEvent[] = "domicile-zoom-change";
 constexpr char kZoomInRequestEvent[] = "domicile-zoom-in-request";
 constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
+// And what it asks when the page needs a file picked -- the one event here
+// that is a question, answered on the event itself. See
+// domicile_file_chooser_event.h.
+constexpr char kFileChooserEvent[] = "domicile-file-chooser";
+
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
 // named here so the element and the SDK have one spelling between them.
@@ -112,6 +118,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(host_);
   visitor->Trace(guest_);
   visitor->Trace(client_receiver_);
+  visitor->Trace(waiting_choosers_);
   HTMLFrameElementBase::Trace(visitor);
 }
 
@@ -396,6 +403,29 @@ void HTMLWebViewElement::ZoomChanged(double factor) {
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {
   DispatchEvent(*Event::CreateBubble(
       AtomicString(zoom_in ? kZoomInRequestEvent : kZoomOutRequestEvent)));
+}
+
+// Held until answered -- see `waiting_choosers_` -- and given up to the
+// shell only if somebody took it. An event nobody called `preventDefault()`
+// on is a shell that has no picker, and the page is told no rather than left
+// waiting for one.
+void HTMLWebViewElement::FileChooserRequested(
+    domicile::mojom::blink::WebViewFileChooserMode mode,
+    const Vector<String>& accept,
+    const String& suggested_name,
+    FileChooserRequestedCallback callback) {
+  auto* event = MakeGarbageCollected<DomicileFileChooserEvent>(
+      AtomicString(kFileChooserEvent), mode, accept, suggested_name,
+      std::move(callback), *this);
+  waiting_choosers_.insert(event);
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->CancelIfUnanswered();
+  }
+}
+
+void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {
+  waiting_choosers_.erase(&event);
 }
 
 }  // namespace blink

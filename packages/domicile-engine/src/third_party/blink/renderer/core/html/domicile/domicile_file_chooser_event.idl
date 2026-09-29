@@ -1,0 +1,36 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// The event a <webview> dispatches when the page inside it needs a file
+// picked -- an `<input type="file">` clicked, or a download that needs
+// somewhere to go. See docs/architecture/ENGINE-FORK.md in the Domicile
+// repository.
+//
+// Not a web standard and not proposed as one; it exists in Domicile's engine
+// fork only, beside the element that dispatches it. No constructor and no
+// event-init dictionary, for the reason DomicileNewWindowEvent has none: only
+// the browser process asks for one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicileFileChooserEvent : Event {
+  // "open", "open-multiple", "open-folder" or "save". A DOMString rather than
+  // an IDL enum for the reason HTMLWebViewElement's `security` is one: an enum
+  // is a generated file per enum, and this element adds none.
+  readonly attribute DOMString mode;
+
+  // The extensions the page will take, lower case and without the dot. Empty
+  // is anything.
+  readonly attribute FrozenArray<DOMString> accept;
+
+  // A save's suggested name, and the empty string otherwise.
+  readonly attribute DOMString suggestedName;
+
+  // The answer: paths relative to the home directory, as many as `mode` asks
+  // for. A wrong count or a path that is absolute, empty or climbs out with
+  // `..` is a TypeError; a second answer is an InvalidStateError.
+  [RaisesException] undefined choose(sequence<DOMString> paths);
+
+  // The other answer: nothing was picked.
+  [RaisesException] undefined cancel();
+};

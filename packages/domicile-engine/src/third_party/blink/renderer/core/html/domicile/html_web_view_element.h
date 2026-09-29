@@ -8,11 +8,13 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
 
+class DomicileFileChooserEvent;
 class ExceptionState;
 
 // <webview> — web content in a browsing context of its own.
@@ -155,6 +157,10 @@ class CORE_EXPORT HTMLWebViewElement final
   double zoom() const { return zoom_; }
   void setZoom(double factor, ExceptionState&);
 
+  // A file chooser this element dispatched has been answered, so it stops
+  // holding the event. See `waiting_choosers_`.
+  void FileChooserAnswered(DomicileFileChooserEvent&);
+
   void Trace(Visitor*) const override;
 
  private:
@@ -285,6 +291,16 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void ZoomRequested(bool zoom_in) override;
 
+  // The page needs a file picked, and the shell is asked in a
+  // `domicile-file-chooser` event it answers. One no listener takes with
+  // `preventDefault()` is canceled here as soon as the dispatch returns. See
+  // domicile_file_chooser_event.h.
+  void FileChooserRequested(
+      domicile::mojom::blink::WebViewFileChooserMode mode,
+      const Vector<String>& accept,
+      const String& suggested_name,
+      FileChooserRequestedCallback callback) override;
+
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the
   // placeholder frame does, and the browser holds it on this pipe until the
@@ -326,6 +342,15 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // 100% until the browser says otherwise, which is what a fresh guest is.
   double zoom_ = 1.0;
+
+  // Every file chooser a shell took and has not answered yet.
+  //
+  // HELD HERE SO THE GARBAGE COLLECTOR CANNOT ANSWER FOR THE SHELL. A shell
+  // takes the event and keeps it while the user picks; if nothing else held
+  // it, collecting it would destroy the browser's reply callback unrun, and
+  // the page would wait forever for a file. The event leaves this set when it
+  // is answered.
+  HeapHashSet<Member<DomicileFileChooserEvent>> waiting_choosers_;
 };
 
 }  // namespace blink
