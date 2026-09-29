@@ -410,6 +410,10 @@ costs nothing.
   "save page as", which still open the portal's GTK dialog; a directory dropped
   on a page (`EnumerateDirectory`, refused); and a download's progress, which
   nothing reports — a large file arrives with no sign it is on its way.
+- **What a browser window's resize costs is unmeasured.** Patch 0054 stops the
+  shell's frame waiting for a `<webview>` to draw at each new size, as it never
+  waited for an `<app>`; no guard times a resize of either, so "it is as fluid
+  as a terminal now" is reasoning from the deadline rather than a number.
 - **A browser window's padlock rests on a guard that cannot fail it.**
   `PageChanged` carries the guest's visible entry — the address, and
   `security_state::GetSecurityLevel` over that same entry, which is where
