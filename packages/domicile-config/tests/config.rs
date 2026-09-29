@@ -477,16 +477,28 @@ fn rejects_a_web_store_id_that_is_not_one() {
 
 #[test]
 fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
-    // This file is generated, and nothing here expands a `~` or knows what a
-    // relative path would be relative to -- so a path that is not absolute
+    // Nothing here knows what a relative path would be relative to, so one
     // is refused at load rather than handed to an engine that cannot find it.
-    for path in ["~/src/my-extension", "src/my-extension"] {
-        let err = Config::parse(&format!("[extensions]\nunpacked = [{path:?}]\n")).unwrap_err();
-        let ConfigError::Validation(message) = &err else {
-            panic!("{path}: got {err:?}");
-        };
-        assert!(message.contains(path), "{path}: {message}");
-    }
+    // A `~` is not relative: see the crate's own tests, which can say what the
+    // home is.
+    let err = Config::parse("[extensions]\nunpacked = [\"src/my-extension\"]\n").unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("got {err:?}");
+    };
+    assert!(message.contains("src/my-extension"), "{message}");
+}
+
+#[test]
+fn rejects_an_unpacked_extension_in_another_users_home() {
+    // `~alice` is a lookup of another user's home, which this does not make.
+    // Refused as that, rather than as a relative path nobody wrote.
+    let err =
+        Config::parse("[extensions]\nunpacked = [\"~alice/src/my-extension\"]\n").unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("got {err:?}");
+    };
+    assert!(message.contains("~alice/src/my-extension"), "{message}");
+    assert!(message.contains("another user's home"), "{message}");
 }
 
 #[test]

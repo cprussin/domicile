@@ -257,11 +257,12 @@ in {
             unpacked = lib.mkOption {
               description = ''
                 Directories holding an unpacked extension, loaded as they are.
-                Absolute: `~` is not expanded, so write the home out.
+                Absolute, or under `~` (`~` or `~/...`), which is expanded to
+                the home the desk runs in. `~user` is refused.
               '';
               type = lib.types.listOf lib.types.str;
               default = [];
-              example = lib.literalExpression "[\"\${config.home.homeDirectory}/src/my-extension\"]";
+              example = ["~/src/my-extension"];
             };
           };
 

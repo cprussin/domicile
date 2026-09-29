@@ -1067,7 +1067,7 @@ in a tray.
 ```toml
 [extensions]
 web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]  # uBlock Origin Lite
-unpacked = ["/home/you/src/my-extension"]         # absolute: `~` is not expanded
+unpacked = ["~/src/my-extension"]                 # absolute, or under `~`
 ```
 
 **The config is the consent.** There is no install prompt and no permission

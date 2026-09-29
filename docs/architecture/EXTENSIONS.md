@@ -24,12 +24,12 @@ compiled in, and nothing turns it off. Three things are missing:
 ```toml
 [extensions]
 web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]  # uBlock Origin Lite
-unpacked = ["/home/you/src/my-extension"]         # absolute: `~` is not expanded
+unpacked = ["~/src/my-extension"]                 # absolute, or under `~`
 ```
 
 | Step | Where |
 |---|---|
-| Parse `[extensions]`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
+| Parse `[extensions]`, expand a leading `~`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
 | Send the list as a fact that rides the handshake, like `Keymap`, and again on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
 | Intercept it in the browser process, as `Keymap` is | `components/domicile/browser/control_channel.cc` |
 | Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
