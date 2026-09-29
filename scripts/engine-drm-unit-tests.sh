@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The DRM platform's own gtest cases in ozone_unittests, and the one evdev
-# suite linked there (`ScrollAcceleratorTest`; see
-# scripts/test-a-fast-scroll-goes-further.sh).
+# The DRM platform's own gtest cases in ozone_unittests, and the two evdev
+# suites linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
+# scripts/test-a-fast-scroll-goes-further.sh and
+# scripts/test-a-mouse-goes-through-libinput.sh).
 #
 #   ./scripts/engine-drm-unit-tests.sh        # the suites this fork wrote
 #   ./scripts/engine-drm-unit-tests.sh all    # and upstream's, on the probe
@@ -54,6 +55,7 @@ SUITES=(
   DrmEdidSerialTest:18
   DrmPointerCrossingTest:13
   ScrollAcceleratorTest:7
+  WheelTicksTest:3
 )
 
 cd "$ENGINE_OUT"

@@ -186,8 +186,13 @@ pub fn engine(
         // THAN ADDING TO IT, because `CommandLine::AppendSwitchNative` keeps
         // the last value of a switch given twice -- the same rule
         // `--log-level` above relies on, working against us here. A run that
-        // wants another feature has to name this one alongside it.
-        "--enable-features=LibinputHandleTouchpad".into(),
+        // wants another feature has to name these alongside it.
+        //
+        // A MOUSE IS LIBINPUT'S TOO, or it is raw: `EventConverterEvdevImpl`
+        // moves the pointer one count to one pixel with no acceleration and
+        // has no `REL_WHEEL` case, so the wheel does nothing.
+        // `kLibinputHandleMouse` is patch 0059's, off unless overridden.
+        "--enable-features=LibinputHandleTouchpad,LibinputHandleMouse".into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),
