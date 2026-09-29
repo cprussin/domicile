@@ -30,6 +30,7 @@ import { useWindowMotion } from "./useWindowMotion";
 import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
 import { WindowKind } from "./window";
+import { barMotion } from "./window-motion";
 import { slidAcross } from "./window-styles";
 
 type Props = {
@@ -365,7 +366,7 @@ export const Stage = ({
                 focus={focus}
                 frame={placement.frame}
                 fullscreen={window.id === fullscreenId}
-                motion={motion}
+                motion={barMotion(motion)}
                 onClose={onCloseThis}
                 onDrop={onDrop}
                 onFullscreen={onFullscreenThis}

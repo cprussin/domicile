@@ -268,6 +268,12 @@ export const movingStyles = cva({
       "closing-tab": {
         animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
+      // The window a tab switch hides, held under the one fading in over it
+      // — see the keyframes. It plays for as long as that one does, so it is
+      // under it until the last frame.
+      concealing: {
+        animation: "windowConcealing {durations.fast} {easings.in-out}",
+      },
       "leaving-to-end": {
         animation:
           "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
@@ -293,9 +299,14 @@ export const movingStyles = cva({
         animation: "windowRestackingAgain {durations.slower} {easings.in-out}",
       },
       // A window that is simply on the desktop, which is most of them most of
-      // the time. Revealed by a workspace switch, a tab, a fullscreen let go
-      // of: it is there, and a window that is there has nothing to play.
+      // the time. Revealed by a workspace switch, a fullscreen let go of: it
+      // is there, and a window that is there has nothing to play.
       resting: {},
+      // The window a tab switch shows, fading in over the one it hides: the
+      // two are in one box, so a fade is a crossfade.
+      revealing: {
+        animation: "windowRevealing {durations.fast} {easings.in-out}",
+      },
     },
   },
 });

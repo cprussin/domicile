@@ -246,6 +246,61 @@ describe("useWindowMotion", () => {
     });
   });
 
+  describe("a tab switch", () => {
+    const tabbed = (on: ShellWindow, off: ShellWindow): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        placementOf(on.id),
+        {
+          ...placementOf(off.id),
+          behind: placementOf(off.id).surface,
+          surface: undefined,
+        },
+      ],
+    });
+
+    it("fades the window revealed in over the one it hides", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("revealing");
+      expect(motionOf(result, TERMINAL.id)).toBe("concealing");
+    });
+
+    it("is done with each window when it says it has finished", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "revealing");
+        result.current.onPlayedOut(TERMINAL.id, "concealing");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+
+    // Each is given the other motion's name, so the browser starts it over.
+    it("turns back when switched back before it has finished", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      act(() => {
+        rerender(tabbed(TERMINAL, EDITOR));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("revealing");
+      expect(motionOf(result, EDITOR.id)).toBe("concealing");
+    });
+  });
+
   describe("a workspace switch", () => {
     it("slides the workspace arriving in from the side it was on", () => {
       const { rerender, result } = showing(
