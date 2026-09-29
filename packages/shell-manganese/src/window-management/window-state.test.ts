@@ -558,6 +558,23 @@ describe("the pointer", () => {
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
+  it("raises a floating window it crosses into", () => {
+    // Every kind of window the same way: a client's window used to come up
+    // only because the compositor echoed the focus back as a reach, and a
+    // browser window, which names no client, never did.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowHovered(APP("kitty")),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowHovered(APP("editor")),
+    );
+
+    expect(
+      workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("kitty"), APP("editor")]);
+  });
+
   it("reports a window on another workspace as nothing at all", () => {
     // Which cannot happen from the page — an off-screen window has no box to
     // point at — and would be a focus on something the user cannot see.
