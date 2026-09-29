@@ -136,6 +136,8 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
     // Unretained: the subscription is a member, so it goes with this.
     focused_ = web_view->AddFocusedCallback(
         base::BindRepeating(&Tab::OnFocused, base::Unretained(this)));
+    zoomed_ = web_view->AddZoomChangedCallback(
+        base::BindRepeating(&Tab::OnZoomed, base::Unretained(this)));
   }
 
   // content::WebContentsObserver:
@@ -170,6 +172,10 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
  private:
   void OnFocused() { desk_->Focused(tab_id_, *web_contents()); }
 
+  void OnZoomed(double old_factor, double new_factor) {
+    desk_->Zoomed(tab_id_, old_factor, new_factor);
+  }
+
   // `property`, and `url` too if the address moved since it was last said.
   std::set<std::string> ChangedWithUrl(const char* property) {
     std::set<std::string> changed = {property};
@@ -185,7 +191,15 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
   GURL url_;
   bool complete_waiting_on_load_ = false;
   base::CallbackListSubscription focused_;
+  base::CallbackListSubscription zoomed_;
 };
+
+extensions::api::tabs::ZoomSettings DeskZoomSettings() {
+  extensions::api::tabs::ZoomSettings settings;
+  settings.mode = extensions::api::tabs::ZoomSettingsMode::kAutomatic;
+  settings.scope = extensions::api::tabs::ZoomSettingsScope::kPerOrigin;
+  return settings;
+}
 
 // static
 DomicileWindowController& DomicileWindowController::For(Profile* profile) {
@@ -385,6 +399,23 @@ void DomicileWindowController::Updated(int tab_id,
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchUpdated, tab_id, std::move(changed));
   Broadcast(profile(), std::move(event));
+}
+
+// tabs.onZoomChange, as TabsEventRouter::OnZoomChanged builds it: the settings
+// without a default factor.
+void DomicileWindowController::Zoomed(int tab_id,
+                                      double old_factor,
+                                      double new_factor) {
+  extensions::api::tabs::OnZoomChange::ZoomChangeInfo info;
+  info.tab_id = tab_id;
+  info.old_zoom_factor = old_factor;
+  info.new_zoom_factor = new_factor;
+  info.zoom_settings = DeskZoomSettings();
+  Broadcast(profile(),
+            std::make_unique<extensions::Event>(
+                extensions::events::TABS_ON_ZOOM_CHANGE,
+                extensions::api::tabs::OnZoomChange::kEventName,
+                extensions::api::tabs::OnZoomChange::Create(info), profile()));
 }
 
 void DomicileWindowController::Removed(int tab_id) {

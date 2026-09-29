@@ -31,11 +31,23 @@ inline constexpr int kCurrentWindowId = -2;
 //
 // A move, a group, a split, a duplicate, a discard, a second window: none has
 // a desktop meaning, and a call that answered success and did nothing would be
-// a bug the extension cannot see. The zoom four are here for a different
-// reason -- Chrome's reach for a ZoomController a guest does not have -- and
-// are the follow-up that could come out.
+// a bug the extension cannot see.
 base::span<const char* const> RefusedOnDesk();
 bool IsRefusedOnDesk(std::string_view function_name);
+
+// tabs.setZoom's `zoomFactor` as the factor a desk tab is zoomed to, or
+// nothing where the desk refuses it. 0 or less is `default_factor`, as in
+// Chrome. Outside [minimum, maximum] -- blink's browser zoom range, which the
+// <webview> element holds its own setZoom to -- is refused rather than stored.
+std::optional<double> DeskZoomFactor(double asked,
+                                     double default_factor,
+                                     double minimum,
+                                     double maximum);
+
+// Whether a desk tab takes tabs.setZoomSettings' `mode` and `scope`, each ""
+// where left out. A guest's zoom is HostZoomMap's, per site: Chrome's
+// automatic, per-origin mode, and the only one a desk has.
+bool DeskTakesZoomSettings(std::string_view mode, std::string_view scope);
 
 // Whether a guest showing a page of `scheme` becomes the active tab when it is
 // focused. Not an extension's page: a popup is in a <webview> like any window,

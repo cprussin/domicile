@@ -573,6 +573,19 @@ void WebViewGuest::SetZoom(double factor) {
         "domicile: a <webview> asked for a zoom outside the browser's range.");
     return;
   }
+  ZoomTo(factor);
+}
+
+double WebViewGuest::GetZoomFactor() const {
+  CHECK(guest_contents_);
+  return blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetZoomLevel(guest_contents_));
+}
+
+void WebViewGuest::ZoomTo(double factor) {
+  CHECK(guest_contents_);
+  CHECK(factor >= blink::kMinimumBrowserZoomFactor &&
+        factor <= blink::kMaximumBrowserZoomFactor);
 
   // The site's zoom rather than this window's, which is Chrome's rule and what
   // HostZoomMap::SetZoomLevel does for a WebContents with no temporary level.
@@ -826,19 +839,19 @@ void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
 }
 
 void WebViewGuest::ReportZoom() {
-  // The same CHECK ReportHistory makes, and for the same reason.
-  CHECK(guest_contents_);
-
-  const double zoom = blink::ZoomLevelToZoomFactor(
-      content::HostZoomMap::GetZoomLevel(guest_contents_));
+  // GetZoomFactor makes the same CHECK ReportHistory makes, and for the same
+  // reason.
+  const double zoom = GetZoomFactor();
 
   // ZoomValuesEqual rather than `!=`, because a factor has been through a
   // logarithm and back by the time it is read here: 1/3 set is not exactly
   // 1/3 read, and a message for the difference would be a DOM event for
   // nothing.
   if (!blink::ZoomValuesEqual(zoom, reported_zoom_)) {
+    const double was = reported_zoom_;
     reported_zoom_ = zoom;
     client_->ZoomChanged(zoom);
+    zoom_callbacks_.Notify(was, zoom);
   }
 }
 
@@ -1020,6 +1033,11 @@ base::CallbackListSubscription WebViewGuest::AddFocusedCallback(
 
 void WebViewGuest::Focused() {
   focused_callbacks_.Notify();
+}
+
+base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
+    ZoomChangedCallback changed) {
+  return zoom_callbacks_.Add(std::move(changed));
 }
 
 void WebViewGuest::WebContentsDestroyed() {

@@ -1144,6 +1144,7 @@ element, as the page's own asks do:
 | `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
 | `tabs.remove(id)` | `domicile-close`: close that window ([A close the page asks for](#a-close-the-page-asks-for)) |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request`: raise that window (`WEBVIEW_FOCUS_REQUEST_EVENT`) |
+| `tabs.setZoom(id, factor)` | `domicile-zoom-change`: already zoomed, as `view.setZoom` would have |
 
 `tabs.move`, `tabs.group`, `tabs.discard`, `windows.create` and the rest
 without a desktop meaning answer `not supported on a Domicile desk`.
