@@ -1,6 +1,7 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import {
+  WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
@@ -86,6 +87,13 @@ type Props = {
    */
   motion: WindowMotion;
   /**
+   * Called when the page asks for this window to close — its own
+   * `window.close()`, or an extension's `chrome.tabs.remove`. The engine
+   * closes nothing and asks, in `WEBVIEW_CLOSE_EVENT`, so the window goes the
+   * way its Close button takes it.
+   */
+  onClose: () => void;
+  /**
    * Called with the address this window was sent to, whenever the shell sends
    * it somewhere.
    *
@@ -167,6 +175,7 @@ export const BrowserWindow = ({
   frame,
   fullscreen,
   motion,
+  onClose,
   onMotionEnded,
   onNavigate,
   onOpenWindow,
@@ -272,6 +281,18 @@ export const BrowserWindow = ({
       };
     }
   }, [onReach, view]);
+
+  // The page asking to be closed — see `onClose`.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      view.addEventListener(WEBVIEW_CLOSE_EVENT, onClose);
+      return () => {
+        view.removeEventListener(WEBVIEW_CLOSE_EVENT, onClose);
+      };
+    }
+  }, [onClose, view]);
 
   // A window the page asked for, which is the one thing this window hears from
   // its page that is not about this window: a link with `target="_blank"` opens

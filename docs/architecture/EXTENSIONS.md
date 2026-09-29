@@ -157,7 +157,8 @@ Slice 2: tabs.
 - [x] `DomicileWindowController` and the lookup hooks: patch 0057, `chrome/browser/domicile/domicile_desk.h`
 - [x] tab events from `WebViewGuest`'s lifecycle
 - [x] the mutations table, each to where it goes. `domicile-focus-request` is the element's new event, and manganese raises the window on it
+- [x] manganese closes a browser window on `domicile-close`, as its Close button does
 - [x] per-tab action state in `onextensions`, and `action.onClicked` naming the active tab
 - [x] a guard: `guard-webview-tabs.sh`, a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`; its control focuses the other one
 
-Left: tabs' zoom, `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses), and manganese closing a browser window on `domicile-close`.
+Left: tabs' zoom, and `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses).
