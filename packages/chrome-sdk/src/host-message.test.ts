@@ -296,27 +296,38 @@ describe("what a search found", () => {
 });
 
 describe("what applications matched", () => {
-  it("arrives as the query it answers and the entries", () => {
-    const fields = {
-      apps: [
-        {
-          command: ["firefox", "--new-window"],
-          comment: "Browse the web",
-          id: "firefox.desktop",
-          name: "Firefox",
-        },
-      ],
-      query: "fire",
-    };
+  const firefox = {
+    command: ["firefox", "--new-window"],
+    comment: "Browse the web",
+    id: "firefox.desktop",
+    name: "Firefox",
+  };
 
+  it("arrives as the query it answers and the entries, each with its icon", () => {
     expect(
       foundApps(
         Object.assign(new Event("apps"), {
+          apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
           arrival: 0,
-          ...fields,
+          query: "fire",
         }) as DomicileAppsEvent,
       ),
-    ).toStrictEqual(fields);
+    ).toStrictEqual({
+      apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
+      query: "fire",
+    });
+  });
+
+  it("has no icon for an entry the engine carries an empty one for", () => {
+    const [found] = foundApps(
+      Object.assign(new Event("apps"), {
+        apps: [{ ...firefox, icon: "" }],
+        arrival: 0,
+        query: "fire",
+      }) as DomicileAppsEvent,
+    ).apps;
+
+    expect(found?.icon).toBeUndefined();
   });
 });
 

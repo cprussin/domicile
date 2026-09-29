@@ -393,6 +393,12 @@ export type DomicileDesktopEntry = {
    * line.
    */
   readonly command: readonly string[];
+
+  /**
+   * The icon the entry names, as a `data:` URL to draw, or empty for one the
+   * compositor did not find.
+   */
+  readonly icon: string;
 };
 
 /**

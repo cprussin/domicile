@@ -1,6 +1,8 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
+import type { DesktopEntry } from "@domicile/chrome-sdk/host-message";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
@@ -16,15 +18,25 @@ import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
 
 /** An application the machine has installed, as the host would describe it. */
-const EDITOR = {
+const EDITOR: DesktopEntry = {
   command: ["gedit", "--new-window"],
   comment: "Edit text files",
+  icon: undefined,
   id: "org.gnome.gedit.desktop",
   name: "Text Editor",
 };
 
+/** An application whose icon the host found. */
+const PAINT: DesktopEntry = {
+  command: ["paint"],
+  comment: "",
+  icon: "data:image/png;base64,cm93",
+  id: "paint.desktop",
+  name: "Paint",
+};
+
 /** The host's search over the applications `apps`, by every word of a name. */
-const searchingApps = (apps: readonly (typeof EDITOR)[]) => (query: string) => {
+const searchingApps = (apps: readonly DesktopEntry[]) => (query: string) => {
   const words = query
     .toLowerCase()
     .split(/\s+/)
@@ -99,7 +111,7 @@ const holding = (path: string): FilePreview => {
 const launcher = (
   files: readonly string[] = FILES,
   indexing = false,
-  apps: readonly (typeof EDITOR)[] = [],
+  apps: readonly DesktopEntry[] = [],
 ) => {
   previewed.length = 0;
   const launched: Launch[] = [];
@@ -222,6 +234,27 @@ describe("Launcher", () => {
       "text.md",
       "Search for text",
     ]);
+  });
+
+  it("draws an application with the icon its entry names", async () => {
+    const panel = launcher([], false, [PAINT]);
+
+    await panel.user.type(panel.box(), "paint");
+    const [row] = await screen.findAllByRole("option");
+
+    expect(row?.querySelector("img")?.getAttribute("src")).toBe(PAINT.icon);
+  });
+
+  it("draws an application whose icon was not found with a glyph", async () => {
+    const panel = launcher([], false, [EDITOR]);
+
+    await panel.user.type(panel.box(), "editor");
+    const [row] = await screen.findAllByRole("option");
+
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector("svg")?.innerHTML).toBe(
+      glyphOf(<AppWindowIcon size={16} />),
+    );
   });
 
   it("runs the application chosen", async () => {
@@ -657,6 +690,18 @@ describe("Launcher", () => {
       ).toBeInTheDocument();
       expect(previewPane()).toHaveTextContent("Text Editor");
       expect(previewPane()).toHaveTextContent("Edit text files");
+    });
+
+    it("shows the highlighted application's icon", async () => {
+      const panel = launcher([], false, [PAINT]);
+
+      await panel.user.type(panel.box(), "paint");
+
+      expect(
+        (await within(previewPane()).findByText("Paint")).parentElement
+          ?.querySelector("img")
+          ?.getAttribute("src"),
+      ).toBe(PAINT.icon);
     });
 
     it("says what to do while there is no row to highlight", async () => {

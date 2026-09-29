@@ -38,7 +38,6 @@ import type {
   DomicileBatteryEvent,
   DomicileClipboardEntry,
   DomicileClipboardEvent,
-  DomicileDesktopEntry,
   DomicileDisplay,
   DomicileExtensionsEvent,
   DomicileFilePreviewEvent,
@@ -255,7 +254,19 @@ export type FoundFilesMessage = {
 export type FoundAppsMessage = {
   /** The query this answers. */
   query: string;
-  apps: readonly DomicileDesktopEntry[];
+  apps: readonly DesktopEntry[];
+};
+
+/** An application a desktop entry offers, as a launcher draws and runs it. */
+export type DesktopEntry = {
+  id: string;
+  name: string;
+  /** Empty for an entry that has none. */
+  comment: string;
+  /** The argv, for {@link DomicileClient.spawn}. */
+  command: readonly string[];
+  /** A `data:` URL to draw, or `undefined` for an icon that was not found. */
+  icon: string | undefined;
 };
 
 /**
@@ -527,11 +538,16 @@ export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
 });
 
 /**
- * What applications matched, passed through like {@link foundFiles}: the
- * engine's entries are already what a shell draws and what it spawns.
+ * What applications matched, with the engine's empty icon read as none.
  */
 export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
-  apps: event.apps,
+  apps: event.apps.map((entry) => ({
+    command: entry.command,
+    comment: entry.comment,
+    icon: named(entry.icon),
+    id: entry.id,
+    name: entry.name,
+  })),
   query: event.query,
 });
 

@@ -1,5 +1,7 @@
-import type { DomicileDesktopEntry } from "@domicile/chrome-sdk/domicile-host";
-import type { FoundAppsMessage } from "@domicile/chrome-sdk/host-message";
+import type {
+  DesktopEntry,
+  FoundAppsMessage,
+} from "@domicile/chrome-sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**
@@ -13,8 +15,8 @@ import { useEffect, useState } from "react";
 export const useFoundApps = (
   searchApps: (query: string) => Promise<FoundAppsMessage>,
   query: string,
-): readonly DomicileDesktopEntry[] => {
-  const [apps, setApps] = useState<readonly DomicileDesktopEntry[]>([]);
+): readonly DesktopEntry[] => {
+  const [apps, setApps] = useState<readonly DesktopEntry[]>([]);
 
   useEffect(() => {
     let current = true;
