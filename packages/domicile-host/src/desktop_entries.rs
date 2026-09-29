@@ -29,14 +29,36 @@ pub struct Entry {
     pub entry: DesktopEntry,
     /// `Name`, `GenericName` and `Keywords`, in lower case.
     words: String,
+    /// `Icon`, as the entry names it: a theme name, or an absolute path.
+    icon_name: Option<String>,
 }
 
-/// The directories entries are read from, the one that wins first.
+impl Entry {
+    /// The icon this entry names, for `crate::app_icons` to find.
+    pub fn icon_name(&self) -> Option<&str> {
+        self.icon_name.as_deref()
+    }
+}
+
+/// The directories entries are read from, the one that wins first: `data_dirs`
+/// with `applications/` under each.
+pub fn application_dirs(
+    data_home: Option<OsString>,
+    data_dirs: Option<OsString>,
+    home: Option<&Path>,
+) -> Vec<PathBuf> {
+    self::data_dirs(data_home, data_dirs, home)
+        .into_iter()
+        .map(|dir| dir.join("applications"))
+        .collect()
+}
+
+/// The XDG data directories, the one that wins first.
 ///
 /// `data_home` and `data_dirs` are `XDG_DATA_HOME` and `XDG_DATA_DIRS`; unset
 /// and empty are the same thing, which is the spec's rule. With neither a data
 /// home nor a home to default it under, there is no data home to read.
-pub fn application_dirs(
+pub fn data_dirs(
     data_home: Option<OsString>,
     data_dirs: Option<OsString>,
     home: Option<&Path>,
@@ -51,7 +73,6 @@ pub fn application_dirs(
     data_home
         .into_iter()
         .chain(std::env::split_paths(&data_dirs))
-        .map(|dir| dir.join("applications"))
         .collect()
 }
 
@@ -116,8 +137,11 @@ pub fn parse(id: &str, text: &str) -> Option<Entry> {
             name,
             comment: unescaped(keys.get("Comment").unwrap_or(&"")),
             command,
+            // Found and drawn later, and only for what a search sends.
+            icon: None,
         },
         words,
+        icon_name: keys.get("Icon").map(|icon| unescaped(icon)),
     })
 }
 
@@ -158,24 +182,24 @@ pub fn command(exec: &str) -> Option<Vec<String>> {
 /// generic name or a keyword — the file search's rule, so the two halves of a
 /// launcher agree about what matching is. A name that starts with the query
 /// is best; after that, by name.
-pub fn find(entries: &[Entry], query: &str, limit: usize) -> Vec<DesktopEntry> {
+pub fn find<'a>(entries: &'a [Entry], query: &str, limit: usize) -> Vec<&'a Entry> {
     let query = query.trim().to_lowercase();
     let words: Vec<&str> = query.split_whitespace().collect();
-    let mut matched: Vec<(bool, String, &DesktopEntry)> = entries
+    let mut matched: Vec<(bool, String, &Entry)> = entries
         .iter()
         .filter(|entry| words.iter().all(|word| entry.words.contains(word)))
         .map(|entry| {
             let name = entry.entry.name.to_lowercase();
-            (!name.starts_with(&query), name, &entry.entry)
+            (!name.starts_with(&query), name, entry)
         })
         .collect();
     // The ID last, so two entries of one name come out in the same order
     // whatever order the directories listed them in.
-    matched.sort_by(|a, b| (a.0, &a.1, &a.2.id).cmp(&(b.0, &b.1, &b.2.id)));
+    matched.sort_by(|a, b| (a.0, &a.1, &a.2.entry.id).cmp(&(b.0, &b.1, &b.2.entry.id)));
     matched
         .into_iter()
         .take(limit)
-        .map(|(_, _, entry)| entry.clone())
+        .map(|(_, _, entry)| entry)
         .collect()
 }
 

@@ -165,9 +165,10 @@ use crate::which_engine::another_engine;
 use domicile_config::{
     Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
 };
+use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
-use domicile_host::desktop_entries::{application_dirs, find, installed};
+use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
@@ -175,7 +176,7 @@ use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
+use domicile_protocol::{ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
 
@@ -482,6 +483,9 @@ struct ChromeHub {
     /// [`answer_on_the_connection`]. The lock's own state, set once at startup
     /// on a desk that can lock and never on one that cannot.
     lock: OnceLock<Seen>,
+    /// The icons a launcher's applications are drawn with, found once each.
+    /// Behind a lock of its own because every connection answers searches.
+    app_icons: Mutex<AppIcons>,
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
@@ -511,6 +515,11 @@ impl ChromeHub {
             offered: Mutex::new(None),
             home: OnceLock::new(),
             lock: OnceLock::new(),
+            app_icons: Mutex::new(AppIcons::new(data_dirs(
+                std::env::var_os("XDG_DATA_HOME"),
+                std::env::var_os("XDG_DATA_DIRS"),
+                home_directory().as_deref(),
+            ))),
             appearance,
         });
         (hub, outbound_rx)
@@ -963,6 +972,10 @@ const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 /// of a launcher, they type another letter, and `matched` still says how many
 /// there were in all.
 const FOUND: usize = 200;
+
+/// How many applications a search sends. Fewer than files, because each
+/// carries its icon and every one of them crosses on every keystroke.
+const FOUND_APPS: usize = 50;
 
 /// How often the writer thread reports. Long enough that the line is not noise,
 /// short enough to watch while typing.
@@ -1579,16 +1592,25 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         // installed a moment ago is offered on the next keystroke. Answered
         // even when nothing matched, because no application is an ordinary
         // answer where no home is not.
+        //
+        // Each carries its icon, drawn out of a cache that lives as long as
+        // the compositor -- see `domicile_host::app_icons`.
         ConnectionRequest::SearchApps { query } => {
             let dirs = application_dirs(
                 std::env::var_os("XDG_DATA_HOME"),
                 std::env::var_os("XDG_DATA_DIRS"),
                 home_directory().as_deref(),
             );
-            vec![HostMessage::FoundApps {
-                apps: find(&installed(&dirs), &query, FOUND),
-                query,
-            }]
+            let installed = installed(&dirs);
+            let mut icons = hub.app_icons.lock().unwrap();
+            let apps = find(&installed, &query, FOUND_APPS)
+                .into_iter()
+                .map(|found| DesktopEntry {
+                    icon: found.icon_name().and_then(|name| icons.icon(name)),
+                    ..found.entry.clone()
+                })
+                .collect();
+            vec![HostMessage::FoundApps { apps, query }]
         }
     }
 }
