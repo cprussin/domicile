@@ -16,7 +16,6 @@ import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FilePicker } from "./browser/FilePicker";
 import { useFileRequest } from "./browser/useFileRequest";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
-import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { useHistoryAvailability } from "./useHistoryAvailability";
@@ -86,17 +85,6 @@ type Props = {
    */
   motion: WindowMotion;
   /**
-   * Called when the pointer crosses into this window, with the place on the
-   * page it crossed at.
-   *
-   * Focus follows the cursor in this shell, so arriving over a window is the
-   * user starting to work in it — where the pointer is what did the arriving,
-   * which is what the place is for: see `usePointerWarp`. The chrome is what
-   * hears it: a pointer inside the page is the guest's, the same way a click
-   * there is.
-   */
-  onHover: (at: Spot) => void;
-  /**
    * Called with the address this window was sent to, whenever the shell sends
    * it somewhere.
    *
@@ -129,17 +117,18 @@ type Props = {
    */
   onOpenWindow: (url: string) => void;
   /**
-   * Called when the user clicks into this window — the page, the address bar,
-   * anywhere in it.
+   * Called when the focus lands anywhere in this window — the page, the
+   * address bar — without this window having put it there.
    *
-   * A click inside the *page* is one the shell never sees: the view hosts a
+   * A press on the chrome is the frame's to report — see `WindowFrame` — but a
+   * click inside the *page* is one the shell never sees: the view hosts a
    * browsing context of its own, so no pointer event crosses back out of it,
    * and neither does the focus that click takes — Blink dispatches no focus
    * event across a remote frame's boundary, and `focusin` fires only while the
    * page is focused, which is exactly what a guest taking focus ends. So the
    * element says so itself, in {@link WEBVIEW_GUEST_FOCUS_EVENT}, and the
-   * window listens for that as well as for its own chrome's pointer events.
-   * Whichever arrives, this is the window the user is now working in.
+   * window listens for that as well as for focus reaching its own chrome from
+   * the keyboard.
    *
    * Reported for every click, including one in the window the user is already
    * in: focus follows the cursor here, so the pointer has already made this
@@ -177,7 +166,6 @@ export const BrowserWindow = ({
   frame,
   fullscreen,
   motion,
-  onHover,
   onMotionEnded,
   onNavigate,
   onOpenWindow,
@@ -447,14 +435,12 @@ export const BrowserWindow = ({
     withView(command);
   };
 
-  // A click anywhere in this window is the user starting to work in it, and
-  // the two halves of the window say so differently — a pointer event from the
-  // chrome, and from the page nothing but the focus it took. Both land here.
+  // Focus arriving anywhere in this window is the user starting to work in it.
   const reach = () => {
-    // Every press, whichever window was the active one: focus follows the
-    // cursor here, so the pointer made this window the active one on its way
-    // in and a click is still what raises it. The one reach that is not the
-    // user's is the focus this window gives its own page — see `focusing`.
+    // Whichever window was the active one: focus follows the cursor here, so
+    // the pointer made this window the active one on its way in and a click is
+    // still what raises it. The one reach that is not the user's is the focus
+    // this window gives its own page — see `focusing`.
     if (!focusing.current) {
       onReach();
     }
@@ -497,7 +483,7 @@ export const BrowserWindow = ({
   }, [onNavigate, shown.url]);
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control and is not being made into one — these say the user clicked into it, which is what raises a window in any desktop, and there is no interactive element that could carry them: the page half of this window sends no pointer events at all
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a window is not a control and is not being made into one — these say the user moved the focus into it, which is what raises a window in any desktop, and answer a browser's chords pressed in its chrome
     <section
       aria-label="Browser"
       className={cx(
@@ -532,10 +518,9 @@ export const BrowserWindow = ({
           onMotionEnded();
         }
       }}
-      // Focus as well as the press, for the chrome's own controls: pressing
-      // the address bar is a pointer event, and reaching it with the keyboard
-      // is not. What happens in the page arrives on the element instead — see
-      // `onReach`, and the effect above.
+      // Focus rather than the press, which is the frame's: reaching the address
+      // bar with the keyboard is no pointer event. What happens in the page
+      // arrives on the element instead — see `onReach`, and the effect above.
       onFocus={reach}
       // The chrome's half of the keyboard: the same chords, pressed in the
       // address bar. Taken from the field once answered, so Ctrl+R in the bar
@@ -546,13 +531,6 @@ export const BrowserWindow = ({
           event.preventDefault();
           run(command);
         }
-      }}
-      onPointerDown={reach}
-      // Focus follows the cursor: arriving anywhere in this window is the user
-      // starting to work in it — the page excepted, because a pointer in there
-      // is the guest's, the same way a click in it is.
-      onPointerOver={(event) => {
-        onHover([event.clientX, event.clientY]);
       }}
       ref={element}
       // Inline because the box is a runtime number and Panda reads literals;
