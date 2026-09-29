@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 28 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a launcher offers the applications installed
+
+Registers a member of the control protocol that answers a question, the
+third after searchFiles() and previewFile(): DomicileHost.searchApps() goes
+down with words, and an `apps` event comes back with the desktop entries they
+matched -- each a DomicileDesktopEntry carrying its id, name, comment and the
+argv it runs, for spawn().
+
+Three lists Chromium owns, and nothing else. The method, the event, its init
+dictionary and the entry interface are new files under src/; what cannot be a
+new file is a name in a generated-bindings list.
+
+Words, like searchFiles(): which directories hold the desktop entries is the
+compositor's to read, and nothing here names one.
+---
+ .../blink/renderer/bindings/generated_in_modules.gni        | 6 ++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni      | 3 +++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 8e08d34d86..483d85014c 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -327,6 +327,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
+@@ -2410,6 +2412,10 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 264723ca2a..bb37e94d82 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -296,6 +296,9 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_file_preview_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_files_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_files_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_apps_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_apps_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_desktop_entry.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
