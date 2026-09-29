@@ -19,6 +19,9 @@ trap 'rm -rf "$WORK"' EXIT
 export DOMICILE_COMPILE_SLOT="$WORK/slot"
 # No waiting unless a case asks for it.
 export DOMICILE_COMPILE_SLOT_WAIT=0 DOMICILE_COMPILE_SLOT_POLL=0.1 DOMICILE_COMPILE_SLOT_RECHECK=0
+# A person's build unless a case says otherwise: on a runner every taker would
+# be that runner, and the cases below are about two different holders.
+unset RUNNER_NAME
 
 FAILED=0
 expect() {
@@ -209,6 +212,25 @@ expect "a yield with nobody waiting just drops" ok \
   "$(status "$(slot yield victor)")"
 contains "and leaves it free" "nobody is compiling" "$(slot who)"
 expect "only the holder can yield" refused "$(status "$(slot yield xavier)")"
+
+# A HOLD LEFT BY A RUNNER'S LAST JOB IS DEAD. A runner runs one job at a time
+# and kills what that job left running before the next, so a runner taking the
+# slot from a holder on that same runner is taking it from a job that is over:
+# on 2026-09-28 a runner restart skipped the `always()` drop and every compile
+# waited ten hours behind it. Any other holder is still refused.
+rm -rf "$WORK/slot" "$WORK/slot.waiting"
+RUNNER_NAME=crux-two slot take yvonne >/dev/null
+expect "a holder on another runner is refused" refused \
+  "$(status "$(RUNNER_NAME=crux slot take zelda)")"
+expect "a person's build is refused" refused "$(status "$(slot take abe)")"
+cleared="$(RUNNER_NAME=crux-two slot take bea)"
+expect "a holder on this runner is cleared" ok "$(status "$cleared")"
+contains "naming whose hold it cleared" "'yvonne' left on this runner" "$cleared"
+slot drop bea >/dev/null
+slot take cyd >/dev/null
+expect "a runner never clears a person's build" refused \
+  "$(status "$(RUNNER_NAME=crux-two slot take dot)")"
+slot drop cyd >/dev/null
 
 # WHETHER A RUN WILL COMPILE. A tree can carry the series while its
 # out/Release is cold -- built under other args, or never -- and a cold build
