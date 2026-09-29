@@ -1,8 +1,9 @@
-// What the launcher does once a row has been chosen: open a file, or browse
-// to a URL. Which rows there are is `choices.ts`'s to decide.
+// What the launcher does once a row has been chosen: run an application, open
+// a file, or browse to a URL. Which rows there are is `choices.ts`'s to decide.
 
-/** Which of the two things the launcher can do with a query. */
+/** Which of the three things the launcher can do with a query. */
 export enum LaunchKind {
+  Ran,
   Opened,
   Browsed,
 }
@@ -18,6 +19,11 @@ export const Launch = {
    * into one command.
    */
   Opened: (path: string) => ({ kind: LaunchKind.Opened as const, path }),
+  /** Run `command`, the argv a desktop entry names, as the host parsed it. */
+  Ran: (command: readonly string[]) => ({
+    command,
+    kind: LaunchKind.Ran as const,
+  }),
 };
 
 export type Launch = ReturnType<(typeof Launch)[keyof typeof Launch]>;

@@ -7,8 +7,8 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo,
+    DisplayTransform, FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -71,6 +71,9 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::PreviewFile {
         path: "Notes/today.org".into(),
     });
+    chrome_round_trip(&ChromeMessage::SearchApps {
+        query: "fire".into(),
+    });
     chrome_round_trip(&ChromeMessage::Unlock {
         passphrase: Passphrase::from("open sesame"),
     });
@@ -91,6 +94,48 @@ fn searching_for_something_to_open_names_no_directory() {
     assert_eq!(
         v,
         serde_json::json!({"type": "search_files", "query": "plan"})
+    );
+}
+
+/// The launcher's ask for applications is words, like its ask for files.
+#[test]
+fn searching_for_an_application_names_no_directory() {
+    let v = serde_json::to_value(ChromeMessage::SearchApps {
+        query: "fire".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({"type": "search_apps", "query": "fire"})
+    );
+}
+
+/// A desktop entry arrives as the argv it runs, so a shell hands it straight
+/// to `spawn` and nothing on the page parses an `Exec` line.
+#[test]
+fn a_desktop_entry_carries_the_command_it_runs() {
+    let v = serde_json::to_value(HostMessage::FoundApps {
+        query: "fire".into(),
+        apps: vec![DesktopEntry {
+            id: "firefox.desktop".into(),
+            name: "Firefox".into(),
+            comment: "Browse the web".into(),
+            command: vec!["firefox".into()],
+        }],
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "found_apps",
+            "query": "fire",
+            "apps": [{
+                "id": "firefox.desktop",
+                "name": "Firefox",
+                "comment": "Browse the web",
+                "command": ["firefox"],
+            }],
+        })
     );
 }
 
@@ -217,6 +262,15 @@ fn host_messages_round_trip() {
         files: vec!["Notes/today.org".into(), "src/".into()],
         matched: 2,
         indexing: false,
+    });
+    host_round_trip(&HostMessage::FoundApps {
+        query: "fire".into(),
+        apps: vec![DesktopEntry {
+            id: "firefox.desktop".into(),
+            name: "Firefox".into(),
+            comment: String::new(),
+            command: vec!["firefox".into(), "--new-window".into()],
+        }],
     });
     for preview in [
         FilePreview::Text {
