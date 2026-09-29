@@ -263,6 +263,21 @@ describe("placementsOf", () => {
     });
   });
 
+  // A DEPTH BETWEEN THEM. A tab switch holds the window it hides there while
+  // the one it shows fades in over it (`windowConcealing`): at the depth every
+  // other hidden tab has, one of those could be drawn over it instead, and
+  // show through the fade.
+  it("leaves a depth free between the hidden tabs and the tiled windows", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+
+    expect(
+      contentsOf(placementFor(state, "kitty"))?.depth ?? TILED,
+    ).toBeLessThan(TILED - 1);
+  });
+
   it("draws nothing for a window that is not on screen", () => {
     expect(contentsOf(undefined)).toBeUndefined();
   });

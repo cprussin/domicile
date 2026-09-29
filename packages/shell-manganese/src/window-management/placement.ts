@@ -85,8 +85,13 @@ export type Screenful = {
  * Under the page's own stack rather than at the bottom of it, and still over
  * the wallpaper: that sits at this depth too and comes first in the document,
  * and two elements at one `z-index` are decided by the order they come in it.
+ *
+ * Two under the tiling rather than one, which leaves the depth between for
+ * the window a tab switch is hiding while the one it shows fades in over it
+ * (`windowConcealing`). Level with the other hidden tabs, whichever of them
+ * came later in the document would be drawn over it and show through the fade.
  */
-const COVERED = -1;
+const COVERED = -2;
 
 /** The `z-index` the tiled windows share: the bottom of the page's stack. */
 export const TILED = 0;
