@@ -760,8 +760,8 @@ hide your panels for the lock to hold, though a lock screen that covers them is
 still the one that reads as locked. There is no answer on the wire either way:
 the refusal is a line in the compositor's log, like a wrong passphrase.
 
-**And nothing is read out of the home for you.** `searchFiles` and `previewFile`
-at a locked desk never settle — the same nothing a desktop with no index
+**And nothing is read out of the machine for you.** `searchFiles`,
+`previewFile` and `searchApps` at a locked desk never settle — the same nothing a desktop with no index
 answers, whatever the query or path, so it says nothing about what is on the
 disk. Ask again on `locked: false`. `setTheme` is still taken: it opens nothing
 and reads nothing.

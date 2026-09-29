@@ -1,0 +1,25 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// An application a desktop entry offers, as a launcher draws and runs it.
+//
+// An interface rather than a dictionary for DomicileClipboardEntry's reason:
+// these are read off a DomicileAppsEvent's array attribute.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileDesktopEntry {
+  // The desktop file ID: its path under `applications/`, `/` read as `-`.
+  readonly attribute DOMString id;
+
+  // `Name`, unlocalized.
+  readonly attribute DOMString name;
+
+  // `Comment`, or empty for an entry that has none.
+  readonly attribute DOMString comment;
+
+  // `Exec`, as the argv it runs -- unquoted and with its field codes dropped
+  // by the compositor. A shell hands it to DomicileHost.spawn().
+  readonly attribute FrozenArray<DOMString> command;
+};

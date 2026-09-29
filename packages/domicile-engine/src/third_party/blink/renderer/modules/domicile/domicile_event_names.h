@@ -34,6 +34,7 @@
   X(modifiers, Modifiers)                \
   X(files, Files)                        \
   X(filepreview, Filepreview)            \
+  X(apps, Apps)                          \
   X(battery, Battery)                    \
   X(clipboard, Clipboard)                \
   X(theme, Theme)                        \
