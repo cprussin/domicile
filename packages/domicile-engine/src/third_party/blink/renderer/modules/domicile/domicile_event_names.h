@@ -42,7 +42,8 @@
   X(focuschanged, Focuschanged)          \
   X(focusrequested, Focusrequested)      \
   X(displayschanged, Displayschanged)    \
-  X(locked, Locked)
+  X(locked, Locked)                      \
+  X(extensions, Extensions)
 
 namespace blink::domicile_event_names {
 

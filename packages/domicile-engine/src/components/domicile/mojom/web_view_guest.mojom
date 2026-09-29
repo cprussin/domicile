@@ -288,6 +288,23 @@ interface WebViewGuestClient {
                        array<string> accept,
                        string suggested_name)
       => (array<string>? paths);
+
+  // The page called window.close(), and its renderer allowed it.
+  //
+  // THE BROWSER CLOSES NOTHING. A guest's WebContents is owned by the outer
+  // one it is attached to, and the <webview> is the shell's element: taking it
+  // out of the document is what ends the guest, and that is the shell's
+  // answer to give. An extension's popup closes itself this way, which is what
+  // a tray that opens one in a <webview> waits for.
+  //
+  // WHICH CLOSES ARRIVE is the renderer's rule, not this one's: DOMWindow::Close
+  // lets a page not opened by script close only while its history is one
+  // entry long -- the HTML spec's "script-closable". A guest the user has
+  // navigated in is refused there, and nothing is sent.
+  //
+  // ONE MESSAGE PER CALL. An event, like NewWindowRequested, so nothing is
+  // compared against what was last sent.
+  CloseRequested();
 };
 
 // One guest, for as long as the element that asked for it lives.

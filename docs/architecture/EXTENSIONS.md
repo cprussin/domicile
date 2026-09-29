@@ -69,8 +69,8 @@ interface DomicileExtension {
   title: string;              // the action's tooltip
   icon: string;               // data:image/png, rendered at the page's DPR
   badgeText: string;
-  badgeColor: string;         // CSS color
-  popup: string | undefined;  // chrome-extension://<id>/popup.html
+  badgeColor: string;         // CSS color, #rrggbbaa
+  popup: string | null;       // chrome-extension://<id>/popup.html; the SDK says undefined
   enabled: boolean;
 }
 ```
@@ -132,10 +132,11 @@ Slice 1: extensions run, and show in a tray.
 - [x] `[extensions]` in `domicile-config`
 - [x] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
 - [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
-- [ ] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`
-- [ ] `WebViewGuestClient.CloseRequested` and `domicile-close`
-- [ ] `ExtensionTray` mojo, `onextensions`, `activateExtension`
-- [ ] the chrome-sdk client, and manganese's tray and popup panel
+- [x] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`: `chrome/browser/domicile/domicile_tab_helpers.h`, handed to `BindWebViewGuestHost` by patch 0056 because the guest's target cannot depend on `//chrome`
+- [x] `WebViewGuestClient.CloseRequested` and `domicile-close`
+- [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
+- [x] the chrome-sdk client: `DomicileClient.on("extensions")`, `activateExtension`, `WEBVIEW_CLOSE_EVENT`
+- [ ] manganese's tray and popup panel
 - [ ] *Extensions* in `docs/WRITING-A-SHELL.md`
 
 Slice 2: tabs.

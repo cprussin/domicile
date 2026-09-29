@@ -68,10 +68,11 @@ class WebViewGuestHost final
       public content::WebContentsObserver {
  public:
   WebViewGuestHost(content::RenderFrameHost& frame,
-                   mojo::PendingReceiver<mojom::WebViewGuestHost> receiver)
+                   mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
+                   GuestCreatedCallback created)
       : DocumentService(frame, std::move(receiver)),
-        WebContentsObserver(content::WebContents::FromRenderFrameHost(&frame)) {
-  }
+        WebContentsObserver(content::WebContents::FromRenderFrameHost(&frame)),
+        created_(std::move(created)) {}
 
  private:
   // A CreateGuest whose placeholder the browser has not seen yet.
@@ -124,7 +125,8 @@ class WebViewGuestHost final
     }
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
-                                  std::move(guest), std::move(client));
+                                  std::move(guest), std::move(client),
+                                  created_);
   }
 
   // content::WebContentsObserver:
@@ -172,7 +174,7 @@ class WebViewGuestHost final
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
                                   std::move(request.guest),
-                                  std::move(request.client));
+                                  std::move(request.client), created_);
   }
 
   // The frame `placeholder_frame` names, or null if the browser has none.
@@ -191,6 +193,9 @@ class WebViewGuestHost final
   // leak: the element keeps this pipe for its own life. See
   // HTMLWebViewElement::RequestGuest.
   std::optional<WaitingRequest> waiting_;
+
+  // The embedder's helpers, for every guest this document makes.
+  const GuestCreatedCallback created_;
 
   base::WeakPtrFactory<WebViewGuestHost> weak_factory_{this};
 };
@@ -369,7 +374,8 @@ void WebViewGuest::CreateAndAttach(
     content::RenderFrameHost& owner,
     content::RenderFrameHost& placeholder,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
-    mojo::PendingRemote<mojom::WebViewGuestClient> client) {
+    mojo::PendingRemote<mojom::WebViewGuestClient> client,
+    const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
       new WebViewGuest(owner, std::move(receiver), std::move(client)));
 
@@ -391,6 +397,10 @@ void WebViewGuest::CreateAndAttach(
   guest->owned_guest_contents_ = std::move(contents);
   guest->Observe(guest->guest_contents_);
   guest->guest_contents_->SetDelegate(guest.get());
+
+  // The embedder's helpers, now: after the delegate, which some of them ask
+  // for, and before the first navigation, which some of them record.
+  created.Run(*guest->guest_contents_);
 
   // Unretained because the subscription is a member: it is dropped with this
   // object, and before that with the WebContents -- see WebContentsDestroyed.
@@ -978,6 +988,11 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
                << "; the shell was asked to open one instead.";
 }
 
+void WebViewGuest::CloseContents(content::WebContents* source) {
+  LOG(INFO) << "domicile: a <webview>'s page asked to close.";
+  client_->CloseRequested();
+}
+
 void WebViewGuest::WebContentsDestroyed() {
   zoom_subscription_ = {};
   guest_contents_ = nullptr;
@@ -988,10 +1003,11 @@ void WebViewGuest::WebContentsDestroyed() {
 
 void BindWebViewGuestHost(
     content::RenderFrameHost* frame,
-    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver) {
+    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
+    GuestCreatedCallback created) {
   // Owns itself and goes with the document. `new` with no matching delete is
   // what DocumentService is.
-  new WebViewGuestHost(*frame, std::move(receiver));
+  new WebViewGuestHost(*frame, std::move(receiver), std::move(created));
 }
 
 }  // namespace domicile

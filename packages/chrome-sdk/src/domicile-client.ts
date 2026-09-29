@@ -88,6 +88,7 @@ import {
   appTitled,
   battery,
   clipboard,
+  extensions,
   filePreview,
   focusChanged,
   focusRequested,
@@ -293,6 +294,9 @@ export class DomicileClient {
     });
     host.addEventListener("locked", (event) => {
       this.#deliver("locked", locked(event));
+    });
+    host.addEventListener("extensions", (event) => {
+      this.#deliver("extensions", extensions(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
@@ -589,6 +593,15 @@ export class DomicileClient {
    */
   copyClipboardEntry(entry: number): void {
     this.#host.copyClipboardEntry(entry);
+  }
+
+  /**
+   * Click an extension's action that has no popup, which dispatches its
+   * `action.onClicked`. One with a popup is the shell's to open, as a
+   * `<webview>` at its `popup`.
+   */
+  activateExtension(id: string): void {
+    this.#host.activateExtension(id);
   }
 
   /**

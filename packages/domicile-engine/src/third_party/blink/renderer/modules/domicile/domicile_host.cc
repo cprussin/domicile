@@ -27,6 +27,8 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_extension.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_extensions_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_file_preview_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
@@ -48,7 +50,9 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       // Chromium builds -Wreorder -Werror, so a list out of order is a build
       // failure rather than a warning.
       channel_(&window),
-      client_receiver_(this, &window) {}
+      client_receiver_(this, &window),
+      tray_(&window),
+      tray_receiver_(this, &window) {}
 
 DomicileHost::~DomicileHost() = default;
 
@@ -71,6 +75,14 @@ bool DomicileHost::EnsureBound() {
   // inbound message would be dropped in the browser with no way to tell.
   channel_->SetClient(
       client_receiver_.BindNewPipeAndPassRemote(task_runner));
+
+  // AND THE TRAY, IN THE SAME BREATH, for the same reason: listening is what
+  // binds, and a page listening for `extensions` is told the tray as soon as
+  // this pipe carries its client. Its own pipe because an action is this
+  // browser's, not the compositor's -- see extension_tray.mojom.
+  window_->GetBrowserInterfaceBroker().GetInterface(
+      tray_.BindNewPipeAndPassReceiver(task_runner));
+  tray_->SetClient(tray_receiver_.BindNewPipeAndPassRemote(task_runner));
   return true;
 }
 
@@ -306,6 +318,21 @@ void DomicileHost::grabShortcut(ScriptState*, const DomicileShortcut* shortcut,
   }
 }
 
+// Through the tray's pipe rather than the channel's: see the IDL. Ready()
+// because EnsureBound binds the two together, so a bound channel is a bound
+// tray.
+void DomicileHost::activateExtension(ScriptState*,
+                                     const String& id,
+                                     ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    tray_->Activate(id);
+  }
+}
+
 void DomicileHost::key(ScriptState*, const String& app_id, uint32_t keycode,
                        bool pressed, ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
@@ -467,6 +494,24 @@ void DomicileHost::Displays(
   DispatchEvent(*Event::Create(domicile_event_names::Displayschanged()));
 }
 
+// The whole tray, as rows a shell draws. An empty popup is WebIDL's null --
+// see DomicileExtension -- because an action with no popup is one the shell
+// activates rather than opens, and "" is not an address to open.
+void DomicileHost::ExtensionsChanged(
+    Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) {
+  HeapVector<Member<DomicileExtension>> tray;
+  tray.reserve(extensions.size());
+  for (const auto& extension : extensions) {
+    tray.push_back(MakeGarbageCollected<DomicileExtension>(
+        extension->id, extension->name, extension->title, extension->icon,
+        extension->badge_text, extension->badge_color,
+        extension->popup.empty() ? String() : extension->popup,
+        extension->enabled));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileExtensionsEvent>(
+      domicile_event_names::Extensions(), std::move(tray)));
+}
+
 // The one message on this channel that answers a question. It is an event
 // rather than a promise because the page reads every other one as an event --
 // and the query it carries is what lets `DomicileClient` settle the search
@@ -619,6 +664,8 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);
+  visitor->Trace(tray_);
+  visitor->Trace(tray_receiver_);
   EventTarget::Trace(visitor);
 }
 
