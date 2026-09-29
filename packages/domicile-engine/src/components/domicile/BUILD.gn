@@ -395,6 +395,7 @@ source_set("unit_tests") {
     ":theme",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
+    "//components/domicile/engine:surface_alpha_unit_tests",
     "//components/domicile/engine:surface_crop_unit_tests",
     "//components/autofill/core/common",
     "//components/password_manager/core/common",
