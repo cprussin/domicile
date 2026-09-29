@@ -10,12 +10,14 @@ namespace blink {
 DomicileDesktopEntry::DomicileDesktopEntry(const String& id,
                                            const String& name,
                                            const String& comment,
-                                           Vector<String> command)
+                                           Vector<String> command,
+                                           const String& icon)
     : id_(id),
       name_(name),
       comment_(comment),
       command_(MakeGarbageCollected<FrozenArray<IDLString>>(
-          std::move(command))) {}
+          std::move(command))),
+      icon_(icon) {}
 
 DomicileDesktopEntry::~DomicileDesktopEntry() = default;
 

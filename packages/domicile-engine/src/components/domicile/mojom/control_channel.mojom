@@ -177,11 +177,16 @@ struct ClipboardEntry {
 // `command` is the argv, already unquoted and with its field codes dropped by
 // the compositor, so the page hands it to Spawn and nothing on this side
 // parses an Exec line. `comment` is empty for an entry that has none.
+//
+// `icon` is a `data:` URL, for the reason a song's `cover` is one: the page
+// may draw what the compositor read and cannot read it for itself. Empty for
+// an entry whose icon the compositor did not find.
 struct DesktopEntry {
   string id;
   string name;
   string comment;
   array<string> command;
+  string icon;
 };
 
 // Page -> browser -> compositor.

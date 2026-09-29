@@ -305,10 +305,12 @@ const foundFilesSchema = z.looseObject({
 });
 
 // The applications a `search_apps` matched, best first. Each carries the argv
-// it runs, for `spawn`, and a `comment` that is empty when the entry has none.
+// it runs, for `spawn`, a `comment` that is empty when the entry has none, and
+// an `icon` as a `data:` URL when the compositor found one.
 const desktopEntrySchema = z.looseObject({
   command: z.array(z.string()),
   comment: z.string(),
+  icon: z.string().optional(),
   id: z.string(),
   name: z.string(),
 });

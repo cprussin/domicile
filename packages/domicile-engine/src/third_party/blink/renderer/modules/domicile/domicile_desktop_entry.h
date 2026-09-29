@@ -23,13 +23,15 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   DomicileDesktopEntry(const String& id,
                        const String& name,
                        const String& comment,
-                       Vector<String> command);
+                       Vector<String> command,
+                       const String& icon);
   ~DomicileDesktopEntry() override;
 
   const String& id() const { return id_; }
   const String& name() const { return name_; }
   const String& comment() const { return comment_; }
   const FrozenArray<IDLString>& command() const { return *command_; }
+  const String& icon() const { return icon_; }
 
   void Trace(Visitor*) const override;
 
@@ -41,6 +43,8 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   // The argv, never empty: the browser drops an entry with no command before
   // it gets here.
   Member<FrozenArray<IDLString>> command_;
+  // A `data:` URL, or empty for an entry whose icon was not found.
+  String icon_;
 };
 
 }  // namespace blink

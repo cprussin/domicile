@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme};
 
+pub mod app_icons;
 pub mod battery;
 pub mod clipboard;
 mod data_url;
