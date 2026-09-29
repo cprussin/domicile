@@ -130,18 +130,33 @@ class ShellWindowPlaces {
   // The display each of `live` is on, in the order given, which is what
   // `ShellWindowsFor` takes as `windowed`. A window seen for the first time is
   // recorded where its rectangle is -- there is nothing else to go on, and a
-  // desk is not moving when the window startup opened is first read. Records
-  // for windows not in `live` are forgotten.
-  std::vector<int64_t> Update(const std::vector<SightedShellWindow>& live);
+  // desk is not moving when the window startup opened is first read.
+  //
+  // `loading` is every other window the browser has: no shell page committed
+  // in it. A window `Place`d and still loading its FIRST shell page keeps its
+  // record, and `Of` still answers for it -- it is a window this side asked
+  // for, and forgetting it in that gap read its display as bare and opened a
+  // second window there. Every other record for a window not in `live` is
+  // forgotten.
+  std::vector<int64_t> Update(const std::vector<SightedShellWindow>& live,
+                              const std::vector<uintptr_t>& loading);
 
   // The display `window` is on, or `display::kInvalidDisplayId` for a window
-  // no `Update` has seen. What names a page's screen -- the same answer the
-  // reconciliation works from, because a page told one monitor and a window
-  // opened for another is a monitor showing another monitor's desktop.
+  // neither `Place`d nor seen by an `Update`. What names a page's screen -- the
+  // same answer the reconciliation works from, because a page told one monitor
+  // and a window opened for another is a monitor showing another monitor's
+  // desktop.
   int64_t Of(uintptr_t window) const;
 
  private:
-  base::flat_map<uintptr_t, int64_t> placed_;
+  struct Record {
+    int64_t display = display::kInvalidDisplayId;
+    // Whether an `Update` has had it in `live`. Until then it is loading its
+    // first shell page, which is the one gap a record outlives `live` for.
+    bool seen = false;
+  };
+
+  base::flat_map<uintptr_t, Record> placed_;
 };
 
 }  // namespace domicile

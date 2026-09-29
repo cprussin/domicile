@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "base/check.h"
@@ -73,6 +74,14 @@ void TurnAndScale(display::Display& screen,
   screen.set_size_in_pixels(pixels);
 }
 
+// The size a snapshot takes on the desktop: its native mode, or the
+// displayless bounds for a connector that reported none. See
+// `DisplayFromSnapshot` for why a modeless connector still takes room.
+gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
+  const display::DisplayMode* native_mode = snapshot.native_mode();
+  return native_mode ? native_mode->size() : kDisplaylessBounds;
+}
+
 }  // namespace
 
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
@@ -81,8 +90,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
   // with empty bounds is one no window can be placed on -- so it gets the same
   // bounds a machine with nothing plugged in gets, rather than nothing.
   const display::DisplayMode* native_mode = snapshot.native_mode();
-  const gfx::Size size =
-      native_mode ? native_mode->size() : kDisplaylessBounds;
+  const gfx::Size size = SizeOf(snapshot);
   // Not named `display`: that is the namespace half of this function's own
   // names are in, and a local by that name makes `display::kInchInMm` below
   // fail to compile.
@@ -181,19 +189,51 @@ std::vector<display::Display> DisplaysFromSnapshots(
                              gfx::Rect(kDisplaylessBounds))};
   }
 
+  const std::vector<gfx::Point> origins = OriginsForLayout(snapshots, layout);
   std::vector<display::Display> displays;
   displays.reserve(snapshots.size());
-  for (const display::DisplaySnapshot* snapshot : snapshots) {
+  for (size_t index = 0; index < snapshots.size(); ++index) {
+    const display::DisplaySnapshot* snapshot = snapshots[index];
+    display::Display screen = DisplayFromSnapshot(*snapshot, origins[index]);
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
-    display::Display screen = DisplayFromSnapshot(
-        *snapshot, wanted ? wanted->origin : snapshot->origin());
     if (wanted) {
       TurnAndScale(screen, *wanted);
     }
     displays.push_back(screen);
   }
   return displays;
+}
+
+std::vector<gfx::Point> OriginsForLayout(
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout) {
+  // The right edge of everything the layout placed, which is where the rest
+  // start. Zero where it placed nothing, so an empty layout is a row from the
+  // desk's own corner.
+  int next_x = 0;
+  for (const display::DisplaySnapshot* snapshot : snapshots) {
+    const DomicileDisplayLayout* wanted =
+        WantedFor(layout, snapshot->display_id());
+    if (wanted) {
+      next_x = std::max(next_x, wanted->origin.x() + SizeOf(*snapshot).width());
+    }
+  }
+
+  std::vector<gfx::Point> origins;
+  origins.reserve(snapshots.size());
+  for (const display::DisplaySnapshot* snapshot : snapshots) {
+    const DomicileDisplayLayout* wanted =
+        WantedFor(layout, snapshot->display_id());
+    if (wanted) {
+      origins.push_back(wanted->origin);
+    } else {
+      origins.emplace_back(next_x, 0);
+      next_x += SizeOf(*snapshot).width();
+    }
+  }
+  return origins;
 }
 
 size_t PrimaryIndexForLayout(

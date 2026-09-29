@@ -461,6 +461,52 @@ TEST(DrmScreenTest, ADisplayTakesTheCornerTheLayoutGivesIt) {
   EXPECT_EQ(BoundsOf(screen, 12), gfx::Rect(0, 0, 3840, 2160));
 }
 
+// THREE IDENTICAL MONITORS ON ONE HUB, and the corner the card gives them. A
+// connector ozone has not read before arrives at (0, 0), and a desk whose
+// monitors are still arriving matches no profile, so it has no layout: every
+// new panel was put on top of the first. Two displays on one rectangle share
+// one window, and the other CRTC stays black.
+TEST(DrmScreenTest, WithNoLayoutTheConnectorsAreARowInConnectorOrder) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  for (const int64_t id : {11, 12, 13}) {
+    snapshots.push_back(SnapshotBuilder()
+                            .Id(id)
+                            .Origin(gfx::Point(0, 0))
+                            .NativeMode(gfx::Size(3840, 2160), 60.f)
+                            .Build());
+  }
+
+  EXPECT_EQ(OriginsForLayout(Pointers(snapshots), {}),
+            std::vector<gfx::Point>(
+                {gfx::Point(0, 0), gfx::Point(3840, 0), gfx::Point(7680, 0)}));
+}
+
+// A monitor plugged in between the reading the compositor answered and this
+// one. It is still a display, and the corner the card gave it is on top of one
+// the layout placed.
+TEST(DrmScreenTest, AConnectorTheLayoutDoesNotNameGoesPastEverythingItDoes) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+  snapshots.push_back(
+      SnapshotBuilder().Id(12).NativeMode(gfx::Size(3840, 2160), 60.f).Build());
+  snapshots.push_back(SnapshotBuilder()
+                          .Id(13)
+                          .Origin(gfx::Point(0, 0))
+                          .NativeMode(gfx::Size(3840, 2160), 60.f)
+                          .Build());
+  snapshots.push_back(SnapshotBuilder().Id(14).NoNativeMode().Build());
+
+  EXPECT_EQ(OriginsForLayout(
+                Pointers(snapshots),
+                {{.id = 11, .enabled = true, .origin = gfx::Point(2160, 0)},
+                 {.id = 12, .enabled = true, .origin = gfx::Point(0, 0)}}),
+            std::vector<gfx::Point>({gfx::Point(2160, 0), gfx::Point(0, 0),
+                                     gfx::Point(6000, 0), gfx::Point(9840, 0)}))
+      << "past the right edge of everything the layout placed, in connector "
+         "order";
+}
+
 display::Display DisplayOf(const DrmScreen& screen, int64_t id) {
   for (const display::Display& display : screen.GetAllDisplays()) {
     if (display.id() == id) {
