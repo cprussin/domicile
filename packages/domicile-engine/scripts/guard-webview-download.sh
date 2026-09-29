@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# A download started inside a browser window, the shell asked where it goes,
+# and the file arriving there.
+#
+#   nix develop .#full --command \
+#     ./packages/domicile-engine/scripts/guard-webview-download.sh /build/chromium/src
+#
+# Headless, like the other webview guards: nothing here is measured in pixels.
+#
+# WHY THIS EXISTS. Chrome's answer to "where does this download go?" is a save
+# dialog it draws through the desktop portal, which is desktop UI the shell did
+# not choose. Patch 0053 hands a guest's download to
+# WebViewGuest::ChooseDownloadPath instead, which asks the element the same
+# question an `<input type="file">` does, in save mode -- and turns on
+# `download.prompt_for_download`, so every download asks.
+#
+# WHAT IT ASSERTS, in order:
+#
+#   the shell page ran                or nothing here was ever set up
+#   a press reached the shell's        the harness can deliver a click at all
+#     document
+#   the page in the window ran         a guest was made, attached, navigated
+#   the press landed in the guest      on the link, which fills the page
+#   the file was fetched               the link started a download
+#   the browser asked                  ChromeDownloadManagerDelegate reached
+#                                      ChooseDownloadPath -- patch 0053
+#   the shell was asked, in save mode  the question crossed to the element,
+#     with the site's file name        carrying the name the site gave it
+#   the shell answered                 its answer did not throw
+#   the file is where it said          THE CLAIM: on the disk, at the path the
+#                                      shell chose, with the bytes the site sent
+#
+# HOW IT CAN FAIL. NEGATIVE=1 runs the same download with a shell that CANCELS.
+# Nothing may land anywhere in the home -- which separates "the file went where
+# the shell said" from "the browser saves it somewhere whatever the shell says".
+#
+# THE HOME IS THIS GUARD'S OWN, and it starts with nothing in it but the folder
+# the shell picks. So the site's bytes found anywhere in it after the run are
+# this run's download. The browser's own files there -- its NSS database -- are
+# not, and are told apart by what is in them.
+set -u
+
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
+. "$SCRIPTS/lib-annotate.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
+. "$SCRIPTS/lib-ports.sh"
+
+CHROMIUM="${1:-}"
+if [ -z "$CHROMIUM" ]; then
+  annotate "guard-webview-download: no path to chromium/src was given"
+  exit 1
+fi
+
+NEGATIVE="${NEGATIVE:-0}"
+
+OUT="${OUT:-out/Domicile}"
+BROKER="${BROKER:-/tmp/domicile-webview-download-broker}"
+PROFILE="${PROFILE:-/tmp/domicile-webview-download-profile}"
+HOME_DIR="${HOME_DIR:-/tmp/domicile-webview-download-home}"
+WIDTH="${WIDTH:-1024}"
+HEIGHT="${HEIGHT:-768}"
+# Not `STRIP`, which a build shell exports as a program -- see
+# guard-webview-new-window.sh.
+STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
+CHROME_X=$((WIDTH / 2))
+CHROME_Y=$((STRIP_HEIGHT / 2))
+# The middle of the guest, which the link fills.
+WINDOW_X=$((WIDTH / 2))
+WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
+
+FOR_SECONDS="${FOR_SECONDS:-90}"
+
+# What the site calls the file and what is in it -- guard-webview-file-chooser-
+# server.py's FILE_NAME and FILE_TEXT -- and where the shell puts it.
+NAME="guard-download.txt"
+TEXT="a file the shell was asked where to put"
+PICK="saved/renamed-by-the-shell.txt"
+
+WHICH=""
+[ "$NEGATIVE" = "1" ] && WHICH="-negative"
+ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-download$WHICH-engine.log}"
+HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-download$WHICH-http.log}"
+CLICK_LOG="${CLICK_LOG:-/tmp/domicile-webview-download$WHICH-mouse.log}"
+
+ANSWER="choose"
+[ "$NEGATIVE" = "1" ] && ANSWER="cancel"
+
+STARTED=()
+cleanup() {
+  if [ ${#STARTED[@]} -gt 0 ]; then
+    kill "${STARTED[@]}" 2>/dev/null
+  fi
+  rm -rf "$PROFILE" "$HOME_DIR"
+}
+trap cleanup EXIT
+
+[ -x "$CHROMIUM/$OUT/chrome" ] || {
+  annotate "guard-webview-download: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
+  exit 1
+}
+command -v python3 >/dev/null || {
+  skip "guard-webview-download: no python3, and the page in the window and the click are both driven by one"
+  exit 77
+}
+
+rm -f "$BROKER"; rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
+mkdir -p "$HOME_DIR/$(dirname "$PICK")"
+
+wait_for_line() { # $1 tries, $2 pattern, $3 file
+  for _ in $(seq 1 "$1"); do
+    grep -qF "$2" "$3" 2>/dev/null && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+# 1. The page in the window.
+python3 "$SCRIPTS/guard-webview-file-chooser-server.py" --port 0 \
+  >"$HTTP_LOG" 2>&1 &
+STARTED+=($!)
+wait_for_line 240 "serving" "$HTTP_LOG" || {
+  annotate_from "guard-webview-download: its page server never came up" "$HTTP_LOG"
+  exit 1
+}
+PORT="$(served_port "$HTTP_LOG")" || {
+  annotate_from "guard-webview-download: its page server never said which port it took" "$HTTP_LOG"
+  exit 1
+}
+SITE="http://127.0.0.1:$PORT"
+
+# 2. The engine, on a domicile:// document, with this guard's home.
+HOME="$HOME_DIR" "$CHROMIUM/$OUT/chrome" \
+  --ozone-platform=headless \
+  --disable-gpu \
+  --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SITE/download&answer=$ANSWER&pick=$PICK" \
+  --domicile-shell-root="$SCRIPTS" \
+  --domicile-shell-module="guard-webview-file-chooser.js" \
+  --remote-debugging-port=0 \
+  --no-sandbox --password-store=basic --no-first-run \
+  --user-data-dir="$PROFILE" \
+  --window-size="$WIDTH,$HEIGHT" \
+  --enable-logging=stderr --log-level=0 \
+  --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
+STARTED+=($!)
+
+TRIES=$((FOR_SECONDS * 4))
+wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" || {
+  annotate_from "guard-webview-download: the shell page never ran, so nothing here was ever set up" "$ENGINE_LOG"
+  exit 1
+}
+DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
+  annotate_from "guard-webview-download: the engine never said which debugging port it took" "$ENGINE_LOG"
+  exit 1
+}
+
+# 3. A page in the window, and a settle for its first frame.
+wait_for_line "$TRIES" "GUARD download-loaded" "$ENGINE_LOG" ||
+  echo "nothing ever loaded in the window" >&2
+sleep 3
+
+# 4. THE BEFORE: a press on the shell's own strip.
+python3 "$SCRIPTS/guard-webview-click-mouse.py" \
+  --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
+  >"$CLICK_LOG" 2>&1 ||
+  echo "the first click could not be driven; see $CLICK_LOG" >&2
+wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
+  echo "the shell's document never reported the first click" >&2
+
+# 5. THE CLICK THIS GUARD IS ABOUT, on the link.
+python3 "$SCRIPTS/guard-webview-click-mouse.py" \
+  --port "$DEBUG_PORT" --x "$WINDOW_X" --y "$WINDOW_Y" \
+  >>"$CLICK_LOG" 2>&1 ||
+  echo "the click into the window could not be driven; see $CLICK_LOG" >&2
+
+# A fixed wait, because the control's readings are absences -- long enough for
+# the fetch, the question, the answer and a few bytes written and renamed.
+sleep 10
+
+saw() { # $1 pattern
+  grep -qF "$1" "$ENGINE_LOG" && echo 1 || echo 0
+}
+
+SAW_SHELL=$(saw "GUARD shell-loaded")
+SAW_PAGE=$(saw "GUARD download-loaded")
+SAW_CHROME=$(saw "GUARD chrome-mousedown")
+SAW_GUEST=$(saw "GUARD guest-mousedown")
+SAW_FETCHED=$(grep -qF "GET /file " "$HTTP_LOG" && echo 1 || echo 0)
+# The browser's own line, from WebViewGuest::ChooseDownloadPath: it separates
+# "the download never asked" from "it asked and the shell was never told".
+SAW_BROWSER=$(saw "domicile: a <webview>'s download asked the shell where to go.")
+SAW_ASKED=$(saw "GUARD file-chooser mode=save ")
+SAW_SUGGESTED=$(saw "GUARD file-chooser mode=save suggested=$NAME ")
+SAW_ANSWERED=$(saw "GUARD answered")
+SAVED=$([ "$(cat "$HOME_DIR/$PICK" 2>/dev/null)" = "$TEXT" ] && echo 1 || echo 0)
+# The download anywhere in the home: a file holding the site's bytes, or a
+# `.crdownload` partial of one -- saved somewhere the shell did not say, or saved
+# at all after a cancel.
+#
+# BY WHAT IS IN IT, NOT BY WHETHER ANYTHING IS THERE. The browser writes its own
+# files under `HOME` whatever the shell answers -- `~/.pki/nssdb` among them --
+# and engine run 36494493835's control read those as a download. What that run
+# found is printed below, so the next reading can be checked against it.
+FOUND="$(
+  {
+    grep -rlF -- "$TEXT" "$HOME_DIR" 2>/dev/null
+    find "$HOME_DIR" -type f -name '*.crdownload' 2>/dev/null
+  } | sort -u
+)"
+SAVED_ANYWHERE=$([ -n "$FOUND" ] && echo 1 || echo 0)
+
+echo
+echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST fetched=$SAW_FETCHED"
+echo "the browser asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED with the name=$SAW_SUGGESTED and answered=$SAW_ANSWERED"
+echo "on the disk: where the shell said=$SAVED anywhere=$SAVED_ANYWHERE"
+[ -n "$FOUND" ] && printf '  %s\n' $FOUND
+echo "everything in the home, for the record:"
+find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
+echo
+
+# WHICH END TO BLAME, run directly by `scripts/test-webview-download-guard.sh`.
+FAILURE=""
+PASSED=""
+if [ "$SAW_SHELL" != "1" ]; then
+  FAILURE="the shell page never ran, so nothing here was ever set up. This is \
+the harness: the module did not load, or it threw"
+elif [ "$SAW_CHROME" != "1" ]; then
+  FAILURE="no press reached the shell's document at all, so every reading \
+below is about a desktop nobody touched. This is the harness"
+elif [ "$SAW_PAGE" != "1" ]; then
+  FAILURE="nothing ever loaded in the window, so there was no link to press. \
+That is the guest: not made, not attached, or not navigated"
+elif [ "$SAW_GUEST" != "1" ]; then
+  FAILURE="the press never reached the page in the window. That is this \
+harness or the element's box rather than anything about downloads"
+elif [ "$SAW_FETCHED" != "1" ]; then
+  FAILURE="the press landed and the file was never fetched: the link started \
+no download. That is the fixture or the guest's navigation, and the http log \
+says what was asked for"
+elif [ "$SAW_BROWSER" != "1" ]; then
+  FAILURE="THE DOWNLOAD NEVER ASKED: the file was fetched and \
+WebViewGuest::ChooseDownloadPath never ran. Either download.prompt_for_download \
+is off -- patch 0053's PostProfileInit -- or ShowFilePickerForDownload did not \
+find this guest from the download's WebContents"
+elif [ "$SAW_ASKED" != "1" ]; then
+  FAILURE="THE BROWSER ASKED AND THE SHELL WAS NOT TOLD: ChooseDownloadPath \
+ran and no domicile-file-chooser in save mode reached this document. That is \
+FileChooserRequested on WebViewGuestClient, the dispatch in \
+HTMLWebViewElement, or the event's name"
+elif [ "$SAW_SUGGESTED" != "1" ]; then
+  FAILURE="the shell was asked with the wrong name: the site called the file \
+$NAME and the question did not carry it. The suggestion is the base name of \
+the path //chrome proposed -- see ChooseDownloadPath"
+elif [ "$SAW_ANSWERED" != "1" ]; then
+  FAILURE="the shell was asked and its answer threw: this guard's page called \
+choose() or cancel() and never got past it. The engine log has the exception"
+elif [ "$NEGATIVE" = "1" ]; then
+  if [ "$SAVED_ANYWHERE" = "1" ]; then
+    FAILURE="THE CONTROL SAVED A FILE: the shell canceled and the download \
+landed in the home anyway, so the positive run's file is not the shell's \
+answer being followed"
+  else
+    PASSED="the control is sharp: the shell canceled, and nothing landed \
+anywhere in the home. So what the positive run reads is the shell's answer"
+  fi
+elif [ "$SAVED" = "1" ]; then
+  PASSED="a download started inside a browser window asked the shell where it \
+goes -- carrying the site's name for it -- and landed at the path the shell \
+answered with, relative to the home, with the bytes the site sent"
+elif [ "$SAVED_ANYWHERE" = "1" ]; then
+  FAILURE="THE FILE LANDED SOMEWHERE ELSE: the shell chose $PICK and the \
+download is elsewhere in the home. The path is resolved under the home in the \
+browser -- see PathInHome in file_choice.h -- and handed back in \
+ChromeDownloadManagerDelegate"
+else
+  FAILURE="the shell answered and nothing landed: the download was canceled \
+or never finished. The browser refused the answer -- a bad message, which the \
+engine log names -- or //chrome dropped the confirmation"
+fi
+
+if [ -n "$PASSED" ]; then
+  echo "PASS: $PASSED"
+  exit 0
+fi
+
+annotate "guard-webview-download: $FAILURE"
+echo "the engine's last words:" >&2
+tail -40 "$ENGINE_LOG" >&2
+echo "what the server was asked for:" >&2
+tail -20 "$HTTP_LOG" >&2
+exit 1

@@ -60,6 +60,22 @@ enum WebViewSecurity {
   kDangerous,
 };
 
+// What a page in a <webview> needs picked.
+//
+// BLINK'S FIVE MODES NARROWED TO THE FOUR A PICKER DRAWS DIFFERENTLY. A folder
+// uploaded and a folder opened are one question to the user -- which folder --
+// and what the browser then does with it is the browser's.
+enum WebViewFileChooserMode {
+  // One existing file.
+  kOpen,
+  // One or more existing files.
+  kOpenMultiple,
+  // One existing directory.
+  kOpenFolder,
+  // One path to write, which need not exist.
+  kSave,
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Give `placeholder_frame` a guest page.
@@ -249,6 +265,29 @@ interface WebViewGuestClient {
   // the shell is what shows the user what it did -- so the wheel and Ctrl+plus
   // take one path, and the indicator a shell draws for one it draws for both.
   ZoomRequested(bool zoom_in);
+
+  // The page needs a file picked: an `<input type="file">` clicked, or a
+  // download that needs somewhere to go.
+  //
+  // THE SHELL DRAWS THE PICKER, NOT THE BROWSER. Chrome would open a dialog of
+  // its own here -- GTK's, through the desktop portal -- and a dialog the
+  // browser draws is desktop UI the shell did not choose, which is the rule a
+  // right click and a password bubble are already refused under. So the
+  // question travels, and the element turns it into an event a shell answers.
+  //
+  // `accept` is extensions, lower case and without the dot: the browser has
+  // already turned `image/*` into them, because a picker has a name to match
+  // and nothing else. Empty is anything. `suggested_name` is a save's
+  // suggestion and empty otherwise.
+  //
+  // `paths` ARE RELATIVE TO THE HOME, the vocabulary `found_files` already
+  // speaks -- see components/domicile/browser/file_choice.h. Null is a cancel,
+  // and so is a shell that never took the event: the element answers for it.
+  // A pipe that closes first -- the element gone -- is a cancel too.
+  FileChooserRequested(WebViewFileChooserMode mode,
+                       array<string> accept,
+                       string suggested_name)
+      => (array<string>? paths);
 };
 
 // One guest, for as long as the element that asked for it lives.

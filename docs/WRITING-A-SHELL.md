@@ -1005,6 +1005,34 @@ whole, and a link is what this is for.
 
 **A middle click needs nothing from you beyond what you already wrote.** Middle-clicking a link asks for it in a second window, and a page cannot open one — the browser has to. Your `<webview>` announces it with the same `domicile-new-window` event a `target="_blank"` link fires, carrying the same `url`, so the handler you already have covers it. The guest does not navigate itself; opening the window is yours, exactly as it is for `_blank`.
 
+### A file the page asks for
+
+An `<input type="file">` clicked, or a download that needs somewhere to go —
+both a file picker, and a picker is yours to draw: the browser opens no dialog
+of its own. The element asks with `domicile-file-chooser`, and you answer on
+the event.
+
+```ts
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
+  event.preventDefault(); // "I'm answering" — see below
+  showPicker(event.mode, event.accept, event.suggestedName).then(
+    (paths) => event.choose(paths),
+    () => event.cancel(),
+  );
+});
+```
+
+- **`preventDefault()` takes it.** One nobody takes is canceled when the
+  dispatch returns, so an upload is refused rather than left waiting.
+- **Paths are relative to the home**, as `searchFiles` names them, so a picker
+  built on it hands back what it showed. Absolute, empty or `..` is a
+  `TypeError`.
+- **`mode`** is `open`, `open-multiple`, `open-folder` or `save`; `accept` is
+  extensions without the dot (empty is anything); `suggestedName` is a save's.
+- **Every download asks**, in `save` mode. Cancel it and nothing is saved.
+
 ### What a guest still refuses
 
 Permissions and dialogs are answered by the default, which is no. Each is a

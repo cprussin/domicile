@@ -13,6 +13,8 @@ import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
+import { FilePicker } from "./browser/FilePicker";
+import { useFileRequest } from "./browser/useFileRequest";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
@@ -222,14 +224,29 @@ export const BrowserWindow = ({
   // because that is the span it has to tell apart — the engine dispatches from
   // inside `focus()`, and so does the DOM.
   const focusing = useRef(false);
+  // THE FILE THE PAGE IS WAITING ON, which is this window's to pick: the
+  // engine draws no dialog of its own and refuses a question nobody takes —
+  // see `useFileRequest`. Picked from the launcher's search, one function for
+  // the life of the client for the launcher's reason: a new one is a new
+  // search.
+  const asking = useFileRequest(view);
+  const search = useCallback(
+    (query: string) => domicile.searchFiles(query),
+    [domicile],
+  );
+  // The picker's box, while there is a picker: where this window's keyboard
+  // goes instead of the page, which is waiting on it. `null` for the ref API's
+  // reason, as the view's is.
+  const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
 
-  // Every focus this window puts in its own page goes through here, because
-  // each of them comes back as the announcement a click there makes and the
-  // window has to spend the ones it caused. Bracketing the call is what tells
-  // them apart: the element says so from inside `focus()`, and so does the DOM.
-  const focusPage = useCallback((page: HTMLWebViewElement) => {
+  // Every focus this window puts in its own page — or in the picker over it —
+  // goes through here, because each of them comes back as the announcement a
+  // click there makes and the window has to spend the ones it caused.
+  // Bracketing the call is what tells them apart: the element says so from
+  // inside `focus()`, and so does the DOM.
+  const focusOwn = useCallback((target: HTMLElement) => {
     focusing.current = true;
-    page.focus();
+    target.focus();
     focusing.current = false;
   }, []);
 
@@ -374,14 +391,21 @@ export const BrowserWindow = ({
   // caret lands in the bar and is pulled into the page a moment later, which
   // is an address bar that cannot be typed into at all. What the user reached
   // for is already in this window, so there is nothing for this to move.
+  //
+  // A PICKER IS THE EXCEPTION, AND TAKES THE KEYBOARD WHEREVER IN THIS WINDOW
+  // IT IS. The page is waiting on it, so a keyboard left in the page or in the
+  // bar is typing into something that cannot go on until the picker is
+  // answered. Once it is, the page has it back.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
       focusChrome(domicile);
-      if (!holdsFocus(element.current)) {
-        focusPage(view);
+      if (pickerBox !== null) {
+        focusOwn(pickerBox);
+      } else if (!holdsFocus(element.current)) {
+        focusOwn(view);
       }
     }
-  }, [domicile, focusPage, holdsKeyboard, view]);
+  }, [domicile, focusOwn, holdsKeyboard, pickerBox, view]);
 
   // AND GIVES IT BACK WHEN THE USER MOVES ON, which nothing else in the
   // desktop can do for this window. Every key the compositor delivers arrives
@@ -404,7 +428,9 @@ export const BrowserWindow = ({
   // off the page long after that without this window hearing anything. Closing
   // another window is the case that costs the user their keyboard — see
   // `useReclaimFocus`.
-  useReclaimFocus(view, holdsKeyboard, focusPage);
+  //
+  // Into the picker while there is one, for the reason above.
+  useReclaimFocus<HTMLElement>(pickerBox ?? view, holdsKeyboard, focusOwn);
 
   // Every control here drives the view element, which is rendered by this
   // component and so is attached by the time anyone can press one. A press
@@ -574,7 +600,22 @@ export const BrowserWindow = ({
         zoom={zoom}
         zoomsAnnounced={zoomsAnnounced}
       />
-      <webview className={viewStyles} ref={setView} src={src} />
+      {/*
+        The page, and the picker it is waiting on over it: a box of their own
+        so the picker covers the page and leaves the bar above it alone.
+      */}
+      <div className={pageStyles}>
+        <webview className={viewStyles} ref={setView} src={src} />
+        {asking !== undefined && (
+          <FilePicker
+            // A picker per question, so a second one starts on an empty box.
+            key={asking.serial}
+            ref={setPickerBox}
+            request={asking}
+            search={search}
+          />
+        )}
+      </div>
     </section>
   );
 };
@@ -622,9 +663,20 @@ const browserStyles = flex({
   overflow: "hidden",
 });
 
-// The view takes whatever height the address bar leaves, which it has to be
-// told to do: a `<webview>` is a replaced element with an intrinsic size, so
-// one left to itself is 300x150 inside however tall a window it is put in.
+// The page's box takes whatever height the address bar leaves, and is what
+// the picker over the page is positioned in. A flex column of its own so the
+// view inside it stretches the same way.
+const pageStyles = flex({
+  direction: "column",
+  flex: 1,
+  minBlockSize: 0,
+  minInlineSize: 0,
+  position: "relative",
+});
+
+// The view takes the whole of the page's box, which it has to be told to do:
+// a `<webview>` is a replaced element with an intrinsic size, so one left to
+// itself is 300x150 inside however tall a window it is put in.
 //
 // `min-block-size: 0` because `auto` on a flex item refuses to shrink below
 // that intrinsic size, which is what would put the bottom of the page under the

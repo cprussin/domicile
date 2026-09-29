@@ -19,7 +19,8 @@ ok() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
 TOGETHER="webview-framing webview-content-script webview-keyboard webview-escape
-  webview-history webview-click webview-new-window webview-routed-link control-arrival"
+  webview-history webview-click webview-new-window webview-routed-link
+  webview-upload webview-download control-arrival"
 
 # A repository holding check.sh and a stand-in for every engine check: each
 # writes when it started and ended. `bun` is stubbed because the group installs.
