@@ -1039,6 +1039,84 @@ Permissions and dialogs are answered by the default, which is no. Each is a
 piece of work rather than a limit of the design; [ROADMAP.md](/ROADMAP.md)
 keeps the list.
 
+## Extensions
+
+A desk's config names Chrome extensions, and the engine installs them into the
+profile browser windows use. Their content scripts and network rules need
+nothing from you. Their actions — Chrome's toolbar buttons — are yours to draw,
+in a tray.
+
+```toml
+[extensions]
+web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]  # uBlock Origin Lite
+unpacked = ["/home/you/src/my-extension"]         # absolute: `~` is not expanded
+```
+
+**The config is the consent.** There is no install prompt and no permission
+bubble: a named extension gets the permissions its manifest declares, and one
+dropped from the list is uninstalled on the reload.
+
+**What your shell sees** is `extensions`: the whole list on every change, and
+once when the page connects.
+
+```ts
+domicile.on("extensions", ({ extensions }) => {
+  drawTray(extensions.filter(({ enabled }) => enabled));
+});
+```
+
+| Field | What |
+|---|---|
+| `id` | What `activateExtension` takes |
+| `name` | The extension's name |
+| `title` | The action's tooltip, and the icon's accessible name |
+| `icon` | A `data:image/png` URL at the page's device pixel ratio |
+| `badgeText`, `badgeColor` | The badge. `badgeColor` is `#rrggbbaa`, transparent when unset |
+| `popup` | The popup's `chrome-extension://` URL, or `undefined` |
+| `enabled` | `false` after `action.disable()` |
+
+The row type is `Extension`, from `@domicile/chrome-sdk/extension`.
+
+**A click is one of two things**, and the row says which:
+
+- **No `popup`:** `domicile.activateExtension(id)`, which dispatches the
+  extension's `action.onClicked`.
+- **A `popup`:** open a `<webview>` at it in a panel under the icon. The page
+  gets the extension API from its origin, not from the view. Close the panel on
+  a press outside it, on Escape, and on `domicile-close`, which is the popup
+  calling `window.close()`:
+
+```ts
+import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+const view = document.createElement("webview");
+view.setAttribute("src", extension.popup);
+view.addEventListener(WEBVIEW_CLOSE_EVENT, closePanel);
+panel.append(view);
+```
+
+- **Give the view a size.** Chrome fits its popup to the document; a guest
+  reports none, so a panel here is a fixed box.
+- **The panel is a thing to type into**, like a launcher: take the keyboard
+  for it with `focusChrome` and give it back when it closes (see
+  [Who gets the keyboard](#who-gets-the-keyboard)).
+- **Escape reaches your page only while your page has the focus.** A key
+  pressed in the popup's page never arrives
+  ([The keyboard](#the-keyboard-which-is-the-part-that-bites)), so Escape there
+  closes nothing. An outside press still does.
+
+**What is not there yet**, both slice 2 of
+[EXTENSIONS.md](/docs/architecture/EXTENSIONS.md):
+
+- **Action state is the default tab's.** A title, badge or icon an extension
+  sets for one tab is not in the list.
+- **`chrome.tabs`.** A `<webview>` is not a tab to extensions yet, so
+  `tabs.query` finds nothing, and `action.onClicked` names the shell's own page
+  as its tab.
+
+[`extensions/ExtensionTray.tsx`](/packages/shell-manganese/src/extensions/ExtensionTray.tsx)
+is manganese's.
+
 ## Bundling
 
 One build, from your module rather than from a document, emitting one file

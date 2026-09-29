@@ -78,7 +78,7 @@ interface DomicileExtension {
 - **`extensions` is the whole list, on every change.** Like `Displays`, a page that reloads is told again rather than having had to be listening. The source is `ExtensionRegistryObserver` plus `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **The icon is a data URL, not a `chrome-extension://` URL.** `action.setIcon({imageData})` sets an icon that has no URL.
 - **Action state is per tab**, so the list reports it for the active tab. That needs slice 2; until then it reports the default state (tab `-1`).
-- **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on blur. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
+- **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
 - **A click without a popup** calls `activateExtension(id)`, which dispatches `action.onClicked` with the active tab.
 
 The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
@@ -136,8 +136,8 @@ Slice 1: extensions run, and show in a tray.
 - [x] `WebViewGuestClient.CloseRequested` and `domicile-close`
 - [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
 - [x] the chrome-sdk client: `DomicileClient.on("extensions")`, `activateExtension`, `WEBVIEW_CLOSE_EVENT`
-- [ ] manganese's tray and popup panel
-- [ ] *Extensions* in `docs/WRITING-A-SHELL.md`
+- [x] manganese's tray and popup panel
+- [x] *Extensions* in `docs/WRITING-A-SHELL.md`
 
 Slice 2: tabs.
 

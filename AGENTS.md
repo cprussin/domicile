@@ -133,7 +133,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md) | `domicile` itself: how `domicile-launch` is split, why the flake only places files, the control socket a running desktop answers, and what is left before `domicile load-shell` works. |
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
 | [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop draws on a bare tty, and this is how: the Ozone DRM embedder that had to be written, who opens the card and holds DRM master, where input comes from, and what a console switch does. Read it before touching the DRM platform, `platform.rs`, or anything that assumes a display server. |
-| [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions on a desk: installed from the config, their actions in the shell's tray, and every `<webview>` a tab to `chrome.tabs`. Two slices; the first is started. |
+| [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions on a desk: installed from the config, their actions in the shell's tray, and every `<webview>` a tab to `chrome.tabs`. Two slices; the first is done. |
 
 [`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
 item pointing at the doc above that carries its detail. Read it before starting
@@ -147,7 +147,7 @@ work on it, and carry no authority level.
 | Doc | Covers |
 |---|---|
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | How to run one of the desktops the flake ships: a window inside a Wayland session or the screen on a bare tty, the engine the flake pins, launching a client into the desktop, and the home-manager module that describes a desk on NixOS. |
-| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, why there is nothing to await, who gets the keyboard, the browser window `<webview>` makes and the keyboard it has to hand back, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
+| [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | How to write a shell that lives outside this repo: that a shell is one built module `domicile` is pointed at, the document Domicile writes rather than the shell, the config a shell owns, why there is nothing to await, who gets the keyboard, the browser window `<webview>` makes and the keyboard it has to hand back, extensions' actions and their popups, and the bundling rules that fail quietly. Read it before changing anything a shell can see — the module's name, the document, the SDK's public surface — because it is the contract those changes break. Its worked example is `examples/minimal-shell`. |
 
 ## Checking your work
 

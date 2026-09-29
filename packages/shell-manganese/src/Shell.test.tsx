@@ -213,6 +213,9 @@ class FakeDomicile {
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
+  activateExtension(id: string): void {
+    this.calls.push(["activateExtension", id]);
+  }
 }
 
 let domicile: FakeDomicile;
@@ -588,6 +591,43 @@ const copied = (entries: readonly { id: number; preview: string }[]): void => {
   domicile.emit("clipboard", { entries });
 };
 
+/** An extension whose click is `action.onClicked`. */
+const CLICKED = "abcdefghijklmnopabcdefghijklmnop";
+
+/** And one whose click opens its popup. */
+const POPPED = "ponmlkjihgfedcbaponmlkjihgfedcba";
+
+/**
+ * The engine saying which extensions have an action: those two, the second
+ * `action.disable()`d when `popped` is false.
+ */
+const extensionsInstalled = (popped = true): void => {
+  domicile.emit("extensions", {
+    extensions: [
+      {
+        badgeColor: "#00000000",
+        badgeText: "",
+        enabled: true,
+        icon: "data:image/png;base64,iVBORw0KGgo=",
+        id: CLICKED,
+        name: "Clicked",
+        popup: undefined,
+        title: "Clicked",
+      },
+      {
+        badgeColor: "#00000000",
+        badgeText: "",
+        enabled: popped,
+        icon: "data:image/png;base64,iVBORw0KGgo=",
+        id: POPPED,
+        name: "Popped",
+        popup: `chrome-extension://${POPPED}/popup.html`,
+        title: "Popped",
+      },
+    ],
+  });
+};
+
 beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
@@ -867,6 +907,56 @@ describe("Shell", () => {
       });
 
       expect(domicile.calls).toContainEqual(["copyClipboardEntry", 7]);
+    });
+  });
+
+  describe("the extension tray", () => {
+    it("is on the bar, and a click on one with no popup activates it", async () => {
+      renderShell();
+      extensionsInstalled();
+
+      await userEvent.click(screen.getByRole("button", { name: "Clicked" }));
+
+      expect(domicile.calls).toContainEqual(["activateExtension", CLICKED]);
+    });
+
+    it("takes the keyboard off the window while a popup is up, and gives it back", async () => {
+      // A popup is a page to type into that no client knows about, the
+      // launcher's case — see `AppWindow`.
+      renderShell();
+      extensionsInstalled();
+      clientAppears("one");
+      domicile.emit("focus_changed", { app_id: "one" });
+      domicile.calls.length = 0;
+
+      await userEvent.click(screen.getByRole("button", { name: "Popped" }));
+
+      expect(domicile.calls).toContainEqual(["focusChrome"]);
+
+      domicile.emit("focus_changed", { app_id: undefined });
+      domicile.calls.length = 0;
+      await userEvent.keyboard("{Escape}");
+
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
+    });
+
+    it("forgets a popup whose action was disabled while it was open", async () => {
+      // Its panel went with it, so an `action.enable()` later is not a click:
+      // the popup stays shut until the icon is pressed again.
+      const { container } = renderShell();
+      extensionsInstalled();
+      await userEvent.click(screen.getByRole("button", { name: "Popped" }));
+      await waitFor(() => {
+        expect(container.ownerDocument.querySelector("webview")).not.toBeNull();
+      });
+
+      extensionsInstalled(false);
+      extensionsInstalled(true);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Popped" })).toBeVisible();
+      });
+      expect(container.ownerDocument.querySelector("webview")).toBeNull();
     });
   });
 
