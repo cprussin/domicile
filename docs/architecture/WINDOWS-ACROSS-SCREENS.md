@@ -65,13 +65,21 @@ usual. The others draw an `<app mirror>`:
 | Pointer over it | forwarded (`pointer-input.ts`) | forwarded, same path |
 | Pixels | native | resampled if its scale differs |
 
-Engine, in `BrokeredFrameSink`:
+Engine:
 
-- `parent_frame_sink_id_` becomes a set. `Embed` adds a parent; a page that
-  unembeds removes its own parent and nobody else's.
-- The broker allocates the window's `LocalSurfaceId`, not each page. Every
-  page embeds the same `SurfaceId`, so none of them makes another's stale.
-- An embed marked `mirror` registers a parent and nothing else.
+- `ExternalSurfaceProvider.Mirror(app_id, parent, client)`
+  (`external_surface.mojom`): a mirror adds its page as a parent and gets
+  `ExternalSurfaceClient.OnSurfaceChanged` with the owner's surface, now and
+  on every owner embed. It never reaches `SurfaceObserver.OnSurfaceEmbedded`,
+  so it never configures the client. Dropping the pipe removes its parent.
+- `BrokeredFrameSink` keeps a refcounted `parents_`: the owner's embed parent
+  plus one per mirror. One page can be both while a window is handed over.
+- The owner's page still allocates the `LocalSurfaceId`. A page taking a
+  window over allocates a newer one (`reallocate_` in `HTMLAppElement`). The
+  late-arrival check only compares ids from the same allocator
+  (`embed_token`).
+- `SurfaceLayerBridge` already stretches a surface to its layer, so a mirror
+  at another scale resamples it.
 
 ### Browser windows stop at the edge
 
@@ -83,6 +91,9 @@ is clamped to its screen.
 
 - **Center over pointer** for ownership. It matches sway, and a window
   dragged by its far edge does not change owner the moment the hand crosses.
+- **The owner's page allocates, not the broker.** It keeps the embed token
+  the capability it already was (`external_surface.mojom`), and a mirror only
+  needs to be told the result.
 - **Mirror in the engine, not a snapshot in the page.** Both halves stay live,
   input included, and `fullscreen global` gets the same fix.
 - **Owner's scale for the buffer.** Configuring at the highest overlapping
@@ -100,8 +111,8 @@ then.
 
 Phase 2, engine plus shell. The window spans screens.
 
-- [ ] `BrokeredFrameSink`: a set of parents, and a `LocalSurfaceId` the broker owns
-- [ ] `<app mirror>`: embed without configuring (chrome-sdk `app-element.ts`)
+- [x] `BrokeredFrameSink`: a set of parents, and mirrors told the owner's surface
+- [x] `<app mirror>`: embed without configuring (chrome-sdk `app-element.ts`)
 - [ ] Overhangs in `placementsOf`
 - [ ] `fullscreen global` drawn on every screen through the same mirrors
 

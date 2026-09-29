@@ -16,6 +16,7 @@
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/test/compositor_frame_helpers.h"
@@ -43,6 +44,10 @@ constexpr uint32_t kBrowserClientId = 0u;
 // BeginFrames travel down from. Client id 1 because a renderer's is its child
 // process id and those start at 1.
 constexpr viz::FrameSinkId kPageFrameSinkId(1u, 1u);
+
+// Another monitor's page. A desk of several monitors is several pages, each in
+// a renderer of its own, and a window across two of them is under both.
+constexpr viz::FrameSinkId kSecondPageFrameSinkId(2u, 1u);
 
 
 // The app the test's sinks are brokered for. `BrokerASink` passes it to
@@ -88,6 +93,28 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
 
  private:
   mojo::Receiver<mojom::SurfaceObserver> receiver_{this};
+};
+
+// Stands in for a page mirroring a window it does not configure.
+class FakeExternalSurfaceClient : public mojom::ExternalSurfaceClient {
+ public:
+  mojo::PendingRemote<mojom::ExternalSurfaceClient> BindRemote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+  void Disconnect() { receiver_.reset(); }
+
+  // mojom::ExternalSurfaceClient implementation.
+  void OnSurfaceChanged(const viz::FrameSinkId& frame_sink_id,
+                        const viz::LocalSurfaceId& local_surface_id) override {
+    shown_.emplace_back(frame_sink_id, local_surface_id);
+  }
+
+  // Every surface the page was told to show, in order.
+  std::vector<viz::SurfaceId> shown_;
+
+ private:
+  mojo::Receiver<mojom::ExternalSurfaceClient> receiver_{this};
 };
 
 // Stands in for the producer's other half: the compositor being told what the
@@ -209,6 +236,9 @@ class FrameSinkBrokerTest : public testing::Test {
     host_frame_sink_manager_->RegisterFrameSinkId(
         kPageFrameSinkId, &page_frame_sink_client_,
         viz::ReportFirstSurfaceActivation::kNo);
+    host_frame_sink_manager_->RegisterFrameSinkId(
+        kSecondPageFrameSinkId, &second_page_frame_sink_client_,
+        viz::ReportFirstSurfaceActivation::kNo);
 
     broker_ = std::make_unique<FrameSinkBroker>(
         host_frame_sink_manager_.get(),
@@ -241,6 +271,8 @@ class FrameSinkBrokerTest : public testing::Test {
     RunUntilIdle();
     host_frame_sink_manager_->InvalidateFrameSinkId(
         kPageFrameSinkId, &page_frame_sink_client_, {});
+    host_frame_sink_manager_->InvalidateFrameSinkId(
+        kSecondPageFrameSinkId, &second_page_frame_sink_client_, {});
     frame_sink_manager_->SetLocalClient(nullptr);
     host_frame_sink_manager_.reset();
     frame_sink_manager_.reset();
@@ -259,6 +291,7 @@ class FrameSinkBrokerTest : public testing::Test {
   viz::FrameSinkIdAllocator allocator_{kBrowserClientId};
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
   viz::FakeHostFrameSinkClient page_frame_sink_client_;
+  viz::FakeHostFrameSinkClient second_page_frame_sink_client_;
 
   base::test::SingleThreadTaskEnvironment task_environment_;
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
@@ -821,6 +854,194 @@ TEST_F(FrameSinkBrokerTest, AHotplugReachesEveryObserver) {
   ASSERT_EQ(second.lists_.size(), 1u);
   EXPECT_EQ(first.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
   EXPECT_EQ(second.lists_[0][0]->bounds, gfx::Rect(1920, 1080));
+}
+
+// A window across two monitors is shown by both pages, and so it is under
+// both: BeginFrames reach the producer from either.
+TEST_F(FrameSinkBrokerTest, AMirrorHangsTheSinkUnderItsPageToo) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  RunUntilIdle();
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  FakeExternalSurfaceClient mirror;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, mirror.BindRemote());
+  RunUntilIdle();
+
+  EXPECT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+  EXPECT_TRUE(VizHasHierarchy(kSecondPageFrameSinkId, frame_sink_id));
+}
+
+// Only the page the window is on says what size it is. A mirror configuring
+// it too would resize the client to each page's box in turn.
+TEST_F(FrameSinkBrokerTest, AMirrorDoesNotConfigureTheClient) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  RunUntilIdle();
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  FakeExternalSurfaceClient mirror;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, mirror.BindRemote());
+  RunUntilIdle();
+
+  EXPECT_EQ(1u, observer.told_.size());
+}
+
+// A mirror shows whatever the embedder chose: the surface there is when it
+// starts, and each one after it.
+TEST_F(FrameSinkBrokerTest, AMirrorIsToldEverySurfaceTheEmbedderChooses) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  RunUntilIdle();
+
+  const viz::LocalSurfaceId first = AllocateLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, first, kEmbeddedSize,
+                  kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  FakeExternalSurfaceClient mirror;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, mirror.BindRemote());
+  RunUntilIdle();
+
+  const viz::LocalSurfaceId resized = AllocateLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> reembedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, resized, kEmbeddedSize,
+                  kEmbeddedScale, reembedded.GetCallback());
+  ASSERT_TRUE(reembedded.Wait());
+  RunUntilIdle();
+
+  EXPECT_THAT(mirror.shown_,
+              testing::ElementsAre(viz::SurfaceId(frame_sink_id, first),
+                                   viz::SurfaceId(frame_sink_id, resized)));
+}
+
+// A page that stops mirroring takes its own parent and nobody else's -- not
+// even the same page's embed, which a window handed from one page to the
+// other passes through.
+TEST_F(FrameSinkBrokerTest, AMirrorThatGoesTakesOnlyItsOwnReference) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  RunUntilIdle();
+
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  FakeExternalSurfaceClient same_page;
+  broker()->Mirror(kTestApp, kPageFrameSinkId, same_page.BindRemote());
+  FakeExternalSurfaceClient other_page;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, other_page.BindRemote());
+  RunUntilIdle();
+
+  same_page.Disconnect();
+  other_page.Disconnect();
+  RunUntilIdle();
+
+  EXPECT_TRUE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+  EXPECT_FALSE(VizHasHierarchy(kSecondPageFrameSinkId, frame_sink_id));
+}
+
+// A mirror on a page that laid the window out before its client connected
+// waits for it, as an embed does.
+TEST_F(FrameSinkBrokerTest, AMirrorWaitsForAProducer) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeExternalSurfaceClient mirror;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, mirror.BindRemote());
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
+  broker()->Embed(kTestApp, kPageFrameSinkId, local_surface_id, kEmbeddedSize,
+                  kEmbeddedScale, embedded.GetCallback());
+  RunUntilIdle();
+
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  RunUntilIdle();
+
+  EXPECT_THAT(mirror.shown_, testing::ElementsAre(viz::SurfaceId(
+                                 frame_sink_id, local_surface_id)));
+  EXPECT_TRUE(VizHasHierarchy(kSecondPageFrameSinkId, frame_sink_id));
+}
+
+// A window handed to the next monitor is embedded there by that page's own
+// allocator, whose first id is no newer than the last one the other page
+// allocated. It is not a late arrival, and the producer submits to it.
+TEST_F(FrameSinkBrokerTest, AnEmbedFromAnotherPageIsNotLate) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  RunUntilIdle();
+
+  AllocateLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> here;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, here.GetCallback());
+  ASSERT_TRUE(here.Wait());
+
+  viz::ParentLocalSurfaceIdAllocator next_page;
+  next_page.GenerateId();
+  const viz::LocalSurfaceId there = next_page.GetCurrentLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> handed;
+  broker()->Embed(kTestApp, kSecondPageFrameSinkId, there, kEmbeddedSize,
+                  kEmbeddedScale, handed.GetCallback());
+  ASSERT_TRUE(handed.Wait());
+  RunUntilIdle();
+
+  EXPECT_EQ(there, observer.told_.back());
+  EXPECT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+  EXPECT_TRUE(VizHasHierarchy(kSecondPageFrameSinkId, frame_sink_id));
+}
+
+// A producer that goes away leaves no page with a dangling child, however
+// many pages it was shown on.
+TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersEveryParent) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
+  ASSERT_TRUE(embedded.Wait());
+  FakeExternalSurfaceClient mirror;
+  broker()->Mirror(kTestApp, kSecondPageFrameSinkId, mirror.BindRemote());
+  RunUntilIdle();
+
+  remote->DestroyFrameSink(frame_sink_id);
+  RunUntilIdle();
+
+  EXPECT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
+  EXPECT_FALSE(VizHasHierarchy(kSecondPageFrameSinkId, frame_sink_id));
 }
 
 }  // namespace domicile
