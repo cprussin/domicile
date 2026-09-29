@@ -160,6 +160,22 @@ export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
 
 /**
+ * Fired when the page inside the view calls `window.close()`.
+ *
+ * THE ENGINE DISPATCHES THIS, and it carries nothing. The browser closes
+ * nothing: the view is the shell's element, so removing it is the shell's
+ * answer. An extension's popup closes itself this way, which is what a tray
+ * that opens one in a `<webview>` listens for.
+ *
+ * Only a page the browser lets close fires it: one whose history is a single
+ * entry, per the HTML spec's "script-closable". A page the user has navigated
+ * in is told no by its own renderer, and nothing reaches the shell.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_CLOSE_EVENT = "domicile-close";
+
+/**
  * Fired when the page inside the view leaves a chord alone: a key pressed with
  * Ctrl, Alt or Meta held that the page did not `preventDefault`.
  *

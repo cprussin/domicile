@@ -19,10 +19,14 @@ source_set("domicile") {
     "domicile_command_socket.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
+    "domicile_extension_tray.cc",
+    "domicile_extension_tray.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
     "domicile_shell_windows.cc",
     "domicile_shell_windows.h",
+    "domicile_tab_helpers.cc",
+    "domicile_tab_helpers.h",
   ]
 
   deps = [
@@ -49,6 +53,22 @@ source_set("domicile") {
     "//extensions/browser",
     "//extensions/common",
     "//extensions/common:mojom",
+    # The shell's tray: the actions of the extensions above, read out of
+    # ExtensionActionManager and heard changing through ExtensionActionDispatcher
+    # (both in //chrome/browser/extensions and //extensions/browser, named
+    # above), spelled for the page by :extension_tray_entry, and an icon
+    # encoded to a PNG.
+    "//components/domicile:extension_tray_entry",
+    "//components/domicile/mojom",
+    "//mojo/public/cpp/bindings",
+    "//skia",
+    "//ui/gfx",
+    "//ui/gfx/codec",
+    "//url",
+    # And a <webview>'s guest made a tab: SessionTabHelper through Chrome's own
+    # factory, which is //chrome/browser/sessions, and extensions::TabHelper,
+    # which is //chrome/browser/extensions above.
+    "//chrome/browser/sessions",
     # The window a page's view is in, and the host that owns its cursor. Here
     # and not in //components/domicile for the reason the whole of this
     # directory is here: a cursor is moved through an aura WindowTreeHost, and

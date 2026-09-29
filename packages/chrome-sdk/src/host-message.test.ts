@@ -6,6 +6,8 @@ import type {
   DomicileAppTitledEvent,
   DomicileBatteryEvent,
   DomicileClipboardEvent,
+  DomicileExtension,
+  DomicileExtensionsEvent,
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileIdleEvent,
@@ -22,6 +24,7 @@ import {
   appTitled,
   battery,
   clipboard,
+  extensions,
   filePreview,
   focusChanged,
   foundFiles,
@@ -403,6 +406,77 @@ describe("the clipboard", () => {
     );
 
     expect(history).toStrictEqual({ entries: [] });
+  });
+});
+
+describe("the extensions in the tray", () => {
+  const ID = "abcdefghijklmnopabcdefghijklmnop";
+  const ICON = "data:image/png;base64,iVBORw0KGgo=";
+
+  /** One row as the engine hands it over, with a popup it names. */
+  const row = (fields: Partial<DomicileExtension>): DomicileExtension => ({
+    badgeColor: "#1c3a2eff",
+    badgeText: "7",
+    enabled: true,
+    icon: ICON,
+    id: ID,
+    name: "A tray guard",
+    popup: `chrome-extension://${ID}/popup.html`,
+    title: "Open the guard",
+    ...fields,
+  });
+
+  const extensionsEvent = (
+    rows: readonly DomicileExtension[],
+  ): DomicileExtensionsEvent =>
+    Object.assign(new Event("extensions"), { extensions: rows });
+
+  it("arrives as the rows a tray draws, a missing popup as undefined", () => {
+    // The engine's `USVString?` is `null` for an action with no popup, which a
+    // shell reads as "activate it" -- and `undefined` is how this SDK spells
+    // an absence.
+    expect(
+      extensions(extensionsEvent([row({}), row({ popup: null })])),
+    ).toStrictEqual({
+      extensions: [
+        {
+          badgeColor: "#1c3a2eff",
+          badgeText: "7",
+          enabled: true,
+          icon: ICON,
+          id: ID,
+          name: "A tray guard",
+          popup: `chrome-extension://${ID}/popup.html`,
+          title: "Open the guard",
+        },
+        {
+          badgeColor: "#1c3a2eff",
+          badgeText: "7",
+          enabled: true,
+          icon: ICON,
+          id: ID,
+          name: "A tray guard",
+          popup: undefined,
+          title: "Open the guard",
+        },
+      ],
+    });
+  });
+
+  it("refuses an icon that is not a PNG it can draw", () => {
+    // The engine renders every icon to a PNG data URL. Anything else is an
+    // engine and an SDK that disagree, and an <img> would draw it as nothing.
+    expect(() =>
+      extensions(
+        extensionsEvent([row({ icon: `chrome-extension://${ID}/icon.png` })]),
+      ),
+    ).toThrow();
+  });
+
+  it("refuses an id that is not an extension's", () => {
+    // What `activateExtension` is handed back. An id the engine would not
+    // recognize is a click that does nothing, said nowhere.
+    expect(() => extensions(extensionsEvent([row({ id: "" })]))).toThrow();
   });
 });
 

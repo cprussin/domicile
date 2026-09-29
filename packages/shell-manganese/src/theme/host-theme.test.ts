@@ -55,6 +55,7 @@ class Host implements DomicileHost {
     this.captured.push(theme);
   };
 
+  readonly activateExtension = ignored;
   readonly closeApp = ignored;
   readonly copyClipboardEntry = ignored;
   readonly focusApp = ignored;

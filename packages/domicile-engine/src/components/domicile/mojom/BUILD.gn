@@ -12,6 +12,7 @@ mojom("mojom") {
 
   sources = [
     "control_channel.mojom",
+    "extension_tray.mojom",
     "external_surface.mojom",
     "frame_sink_broker.mojom",
     "web_view_guest.mojom",
