@@ -3,8 +3,11 @@
 
 #include "components/domicile/browser/control_channel.h"
 
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -36,11 +39,13 @@ ControlChannel::ControlChannel(
     KeymapSink keymap_sink,
     PointerWarpSink warp_sink,
     ThemeSink theme_sink,
+    ExtensionsSink extensions_sink,
     const std::string& screen)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
       theme_sink_(std::move(theme_sink)),
+      extensions_sink_(std::move(extensions_sink)),
       screen_(screen),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
@@ -233,6 +238,28 @@ mojom::DisplayTransform TransformNamed(const std::string* named) {
   }
   return DisplayTransformFromWire<mojom::DisplayTransform>(*named).value_or(
       mojom::DisplayTransform::kNormal);
+}
+
+// `key` in `message`, if it is a list of strings and nothing else. One entry
+// that is not a string refuses the whole list: a list with an entry quietly
+// missing is a desk whose installer uninstalls what that entry named.
+std::optional<std::vector<std::string>> Strings(
+    const base::DictValue& message,
+    std::string_view key) {
+  const base::ListValue* list = message.FindList(key);
+  if (!list) {
+    return std::nullopt;
+  }
+  std::vector<std::string> strings;
+  strings.reserve(list->size());
+  for (const base::Value& entry : *list) {
+    const std::string* text = entry.GetIfString();
+    if (!text) {
+      return std::nullopt;
+    }
+    strings.push_back(*text);
+  }
+  return strings;
 }
 
 }  // namespace
@@ -559,6 +586,27 @@ void ControlChannel::DispatchLine(const std::string& line,
                     "keymap in it. The layout engine keeps what it had, which "
                     "on this platform is nothing, and printable keys will "
                     "carry no character.";
+    }
+    return;
+  }
+
+  // THE OTHER ONE THAT IS NOT THE PAGE'S, for the keymap's reason: what it
+  // configures is this process's profile, which installs the extensions the
+  // desk's config names. See components/domicile/browser/extension_installer.h.
+  // Logged when malformed, like `keymap`: dropped quietly, the desk would run
+  // with whatever extensions it had and nothing would say why.
+  if (*type == "extensions") {
+    std::optional<std::vector<std::string>> web_store =
+        Strings(message, "web_store");
+    std::optional<std::vector<std::string>> unpacked =
+        Strings(message, "unpacked");
+    if (web_store && unpacked) {
+      extensions_sink_.Run(ExtensionList{.web_store = std::move(*web_store),
+                                         .unpacked = std::move(*unpacked)});
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent an `extensions` message "
+                    "whose `web_store` or `unpacked` is not a list of "
+                    "strings. The profile keeps the extensions it had.";
     }
     return;
   }
@@ -974,6 +1022,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
+                        ExtensionsSink extensions_sink,
                         const std::string& screen) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -990,7 +1039,8 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
-                     std::move(warp_sink), std::move(theme_sink), screen);
+                     std::move(warp_sink), std::move(theme_sink),
+                     std::move(extensions_sink), screen);
 }
 
 }  // namespace domicile
