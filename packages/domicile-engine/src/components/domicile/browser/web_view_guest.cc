@@ -644,9 +644,15 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   // HANDLED rather than NOT_HANDLED, and that is the half that makes a claim a
   // claim: the guest's page never sees the key, so a site that binds Alt+Tab
   // for itself cannot take the desktop's chord away from the user.
+  //
+  // And told to the page this `<webview>` is in, rather than to every page of
+  // the desk: each monitor is a page with a channel of its own, and a chord
+  // told to all of them was run once per monitor.
   return ShortcutRegistry::Get().Press(
              Chord{static_cast<uint32_t>(evdev), held.alt, held.ctrl,
-                   held.shift, held.meta})
+                   held.shift, held.meta},
+             Page{owner_rfh_id_.child_id.value(),
+                  owner_rfh_id_.frame_routing_id})
              ? content::KeyboardEventProcessingResult::HANDLED
              : content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
