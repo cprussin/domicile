@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Whether a console's mouse is libinput's, and its wheel a wheel.
+#
+# Left to `EventConverterEvdevImpl` a mouse is raw -- one count to one pixel,
+# no acceleration -- and its wheel does nothing, because that converter has no
+# `REL_WHEEL` case. Patch 0059 routes a mouse to libinput behind
+# `kLibinputHandleMouse`, the launcher enables it, and the converter
+# dispatches a wheel's clicks through `WheelTicks`. Any one missing is the
+# sluggish pointer back, with nothing in any log to say so.
+#
+# NO CHROMIUM TREE. The series and `src/` are the source of truth, so this
+# runs in the shell group on every push.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENGINE="$ROOT/packages/domicile-engine"
+PATCHES="$ENGINE/patches"
+DOMICILE="$ENGINE/src/ui/events/ozone/evdev/domicile"
+LAUNCH="$ROOT/packages/domicile-launch/src/spawn.rs"
+[ -d "$PATCHES" ] || { echo "no patch series at $PATCHES" >&2; exit 1; }
+
+FAILED=0
+ok()   { printf '  ok    %s\n' "$1"; }
+fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
+
+added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
+in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
+
+for f in wheel_ticks.h wheel_ticks.cc wheel_ticks_unittest.cc; do
+  if [ -f "$DOMICILE/$f" ]; then
+    ok "domicile/$f exists"
+  else
+    fail "domicile/$f exists" "no such file under src/ui/events/ozone/evdev/domicile"
+  fi
+done
+
+if in_patches "BASE_FEATURE(kLibinputHandleMouse"; then
+  ok "the series defines kLibinputHandleMouse"
+else
+  fail "the series defines kLibinputHandleMouse" \
+    "no patch defines the feature, so nothing can route a mouse to libinput"
+fi
+
+if in_patches "base::FeatureList::IsEnabled(ui::kLibinputHandleMouse)"; then
+  ok "UseLibinput routes a mouse by the feature"
+else
+  fail "UseLibinput routes a mouse by the feature" \
+    "UseLibinput never reads kLibinputHandleMouse, so a mouse stays raw"
+fi
+
+if in_patches "LIBINPUT_POINTER_AXIS_SOURCE_WHEEL" && in_patches "DispatchMouseWheelEvent("; then
+  ok "a wheel is dispatched as a mouse wheel"
+else
+  fail "a wheel is dispatched as a mouse wheel" \
+    "HandlePointerAxis dispatches a wheel as a touchpad scroll of 15 pixels a click"
+fi
+
+if in_patches '"domicile/wheel_ticks.cc"'; then
+  ok "WheelTicks is in the evdev component"
+else
+  fail "WheelTicks is in the evdev component" \
+    "no patch adds domicile/wheel_ticks.cc to ui/events/ozone/evdev/BUILD.gn"
+fi
+
+# Registered, or it does not link and a `--gtest_filter` matching nothing
+# exits zero.
+if in_patches '"//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc"'; then
+  ok "the unit test is in ozone_unittests"
+else
+  fail "the unit test is in ozone_unittests" \
+    "no patch adds wheel_ticks_unittest.cc to ui/ozone/platform/drm/BUILD.gn"
+fi
+
+FLOORS="$ROOT/scripts/engine-drm-unit-tests.sh"
+if grep -qE "^ *WheelTicksTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
+  ok "the DRM suite list carries a floor for the suite"
+else
+  fail "the DRM suite list carries a floor for the suite" \
+    "no 'WheelTicksTest:<n>' in scripts/engine-drm-unit-tests.sh, so the suite can stop linking and nothing says so"
+fi
+
+if grep -qE -- '--enable-features=[^"]*LibinputHandleMouse' "$LAUNCH"; then
+  ok "the launcher routes a mouse to libinput"
+else
+  fail "the launcher routes a mouse to libinput" \
+    "spawn.rs does not enable LibinputHandleMouse, so the feature is off"
+fi
+
+if [ "$FAILED" -gt 0 ]; then
+  echo "$FAILED failed"
+  exit 1
+fi
+echo "all ok"
