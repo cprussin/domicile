@@ -32,7 +32,9 @@
 //! session was started with. Setting the variable on the clients this
 //! compositor spawns does nothing for it. [`say_which_desktop`] is the other
 //! half, and it is what every Wayland compositor does at startup under the
-//! name `dbus-update-activation-environment --systemd`.
+//! name `dbus-update-activation-environment --systemd`. On a tty it puts this
+//! desk's `WAYLAND_DISPLAY` there too, or an activated app opens on whichever
+//! other session said so last — see [`activation_environment`].
 //!
 //! What that cannot do is re-route a frontend that is **already running**
 //! under another desktop's name: the environment reaches services activated
@@ -49,6 +51,7 @@
 //! will not start on a machine where the previous build ran fine.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
@@ -171,19 +174,22 @@ impl Appearance {
 }
 
 /// Start answering the settings portal, with `theme` as the desk's current
-/// one.
+/// one, and say which desktop — and, on a tty, which display — activated
+/// services belong to. See [`activation_environment`] for `ours` and
+/// `nested_in`.
 ///
 /// Returns as soon as the thread is spawned rather than when the name is
 /// taken: whether a bus answers is not something a desktop's startup should
 /// wait on, and the first client to ask arrives long after either way.
-pub fn serve(theme: Theme) -> Appearance {
+pub fn serve(theme: Theme, ours: &str, nested_in: Option<&OsStr>) -> Appearance {
+    let environment = activation_environment(ours, nested_in);
     let (told, changes) = channel();
     thread::spawn(move || {
         // Every failure below is the same failure from the caller's side --
         // the desk runs, its clients do not follow the theme -- so they are
         // one arm rather than four, and the message names what was being
         // attempted rather than only what went wrong.
-        if let Err(why) = answer(theme, &changes) {
+        if let Err(why) = answer(theme, &environment, &changes) {
             warn!(
                 %why,
                 "the settings portal is not being answered; this desktop's \
@@ -194,19 +200,28 @@ pub fn serve(theme: Theme) -> Appearance {
     Appearance { told }
 }
 
-/// Take the name, serve the interface, and restate the theme whenever it
-/// moves. Returns only on failure, or when the compositor has gone.
-fn answer(theme: Theme, changes: &Receiver<Theme>) -> Result<(), zbus::Error> {
-    let connection = zbus::blocking::connection::Builder::session()?
-        .name(BUS_NAME)?
-        .serve_at(OBJECT_PATH, Settings { theme })?
-        .build()?;
+/// Say which desktop this is, take the name, serve the interface, and restate
+/// the theme whenever it moves. Returns only on failure, or when the
+/// compositor has gone.
+///
+/// Said before the name is taken, because a name another desk already holds
+/// is no reason for this one's apps to open on that desk.
+fn answer(
+    theme: Theme,
+    environment: &[(&str, String)],
+    changes: &Receiver<Theme>,
+) -> Result<(), zbus::Error> {
+    let connection = zbus::blocking::Connection::session()?;
+    say_which_desktop(&connection, environment);
+    connection
+        .object_server()
+        .at(OBJECT_PATH, Settings { theme })?;
+    connection.request_name(BUS_NAME)?;
     debug!(
         name = BUS_NAME,
         scheme = color_scheme(theme),
         "this desktop answers the settings portal, so its clients follow its theme"
     );
-    say_which_desktop(&connection);
     let served = connection
         .object_server()
         .interface::<_, Settings>(OBJECT_PATH)?;
@@ -233,7 +248,31 @@ fn answer(theme: Theme, changes: &Receiver<Theme>) -> Result<(), zbus::Error> {
     Ok(())
 }
 
-/// Put `XDG_CURRENT_DESKTOP` where a portal frontend will be activated from.
+/// What [`say_which_desktop`] puts where activated services are started from.
+///
+/// `XDG_CURRENT_DESKTOP` always, for the portal. `WAYLAND_DISPLAY` — `ours` —
+/// only when this desk is not a window inside a session (`nested_in`, the
+/// compositor's own `WAYLAND_DISPLAY`): the bus and the systemd user manager
+/// are one per *user*, not per session, so another session on another tty has
+/// put *its* display there, and an app they start — `gnome-terminal`'s
+/// server, anything D-Bus activated — would open on it. A desk in a window
+/// leaves the display alone, because the session it is inside is the one
+/// that owns those apps. Empty is unset, as `domicile_launch::platform` reads
+/// it.
+///
+/// **The last session to start wins**, which is how every compositor that
+/// runs `dbus-update-activation-environment` already behaves: back on the
+/// other tty, its activated apps open here until it says so again.
+fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'static str, String)> {
+    let desktop = ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string());
+    match nested_in.filter(|display| !display.is_empty()) {
+        Some(_) => vec![desktop],
+        None => vec![desktop, ("WAYLAND_DISPLAY", ours.to_string())],
+    }
+}
+
+/// Put [`activation_environment`] where a portal frontend — and every other
+/// activated service — will be started from.
 ///
 /// **Without this the backend above is never chosen**, however correctly it
 /// answers. `xdg-desktop-portal` reads its own environment to decide which
@@ -250,7 +289,7 @@ fn answer(theme: Theme, changes: &Receiver<Theme>) -> Result<(), zbus::Error> {
 /// head. Said at `debug` rather than `warn` for that reason: the thing worth a
 /// warning is the portal not being answered at all, and that is
 /// [`serve`]'s line.
-fn say_which_desktop(connection: &zbus::blocking::Connection) {
+fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&str, String)]) {
     // The bus's own activation environment, for a service it starts directly.
     let bus = zbus::blocking::Proxy::new(
         connection,
@@ -261,7 +300,10 @@ fn say_which_desktop(connection: &zbus::blocking::Connection) {
     let told_the_bus = bus.and_then(|bus| {
         bus.call::<_, _, ()>(
             "UpdateActivationEnvironment",
-            &(HashMap::from([("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)]),),
+            &(environment
+                .iter()
+                .map(|(key, value)| (*key, value.as_str()))
+                .collect::<HashMap<_, _>>(),),
         )
     });
     if let Err(why) = told_the_bus {
@@ -281,7 +323,10 @@ fn say_which_desktop(connection: &zbus::blocking::Connection) {
     let told_systemd = systemd.and_then(|systemd| {
         systemd.call::<_, _, ()>(
             "SetEnvironment",
-            &(vec![format!("XDG_CURRENT_DESKTOP={CURRENT_DESKTOP}")],),
+            &(environment
+                .iter()
+                .map(|(key, value)| format!("{key}={value}"))
+                .collect::<Vec<_>>(),),
         )
     });
     if let Err(why) = told_systemd {
@@ -383,6 +428,41 @@ mod tests {
         // deciding for itself.
         assert_eq!(color_scheme(Theme::Dark), 1);
         assert_eq!(color_scheme(Theme::Light), 2);
+    }
+
+    #[test]
+    fn a_desk_that_is_the_session_is_where_activated_apps_open() {
+        // An app the bus or the systemd user manager starts -- a D-Bus
+        // activated one, or `gnome-terminal`'s server -- opens on whatever
+        // `WAYLAND_DISPLAY` they hold, and another session on another tty put
+        // its own there. Not saying ours is every such app opening over there.
+        assert_eq!(
+            activation_environment("wayland-1", None),
+            [
+                ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string()),
+                ("WAYLAND_DISPLAY", "wayland-1".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_desk_in_a_window_leaves_its_sessions_display_alone() {
+        // The session this desk is a window inside of is the one the person
+        // started it from, and its activated apps belong on it.
+        assert_eq!(
+            activation_environment("wayland-1", Some(OsStr::new("wayland-0"))),
+            [("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string())]
+        );
+    }
+
+    #[test]
+    fn an_empty_display_is_no_session() {
+        // `domicile_launch::platform`'s rule: `WAYLAND_DISPLAY=` took the
+        // drm platform, so this desk is the session.
+        assert_eq!(
+            activation_environment("wayland-1", Some(OsStr::new(""))),
+            activation_environment("wayland-1", None)
+        );
     }
 
     #[test]

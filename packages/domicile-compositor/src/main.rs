@@ -6382,9 +6382,12 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
 
 /// The home directory whose files a launcher is offered.
 ///
-/// **The one thing this compositor reads from its environment that is not
-/// instrumentation.** Everything a desktop is *configured* with arrives on the
-/// command line, because a program writes it; a home directory is not a
+/// **One of two things this compositor reads from its environment that are
+/// not instrumentation** — the other is its own `WAYLAND_DISPLAY`, which says
+/// whether it is a window inside a session (see
+/// `appearance::activation_environment`). Everything a desktop is
+/// *configured* with arrives on the command line, because a program writes
+/// it; a home directory is not a
 /// setting but a fact about the user this process is running as, and it is the
 /// same one [`spawn_client`] hands every client it starts. Taking it on a flag
 /// would be asking the supervisor to tell us which user we are.
@@ -6759,7 +6762,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // asked the frontend for a color scheme while this was still
         // starting would be answered by whatever other backend the desk
         // has, and would not be asked again.
-        appearance::serve(theme_on_the_wire(config.theme.mode)),
+        appearance::serve(
+            theme_on_the_wire(config.theme.mode),
+            &socket_name.to_string_lossy(),
+            std::env::var_os("WAYLAND_DISPLAY").as_deref(),
+        ),
     );
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
