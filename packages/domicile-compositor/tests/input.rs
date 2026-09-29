@@ -101,6 +101,10 @@ const BTN_LEFT: u32 = 0x110;
 /// turns it into an X keycode, which is what a `wl_keyboard` keymap speaks.
 const EVDEV_KEY_A: u32 = 30;
 
+/// `b` and `c`, for keys that are not the one `drive` types.
+const EVDEV_KEY_B: u32 = 48;
+const EVDEV_KEY_C: u32 = 46;
+
 /// Take the keyboard to the window, then move, click and type.
 ///
 /// No placement first: the chrome no longer reports where its boxes are, and
@@ -228,6 +232,44 @@ fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
             client.trace()
         );
     }
+}
+
+/// A release nobody pressed is not a key.
+///
+/// A desk of several monitors is several pages, and the engine hands the keys
+/// to whichever one the pointer is on — so a key pressed on one monitor comes
+/// up on the next when the pointer crosses while it is held, and that page
+/// sends the release without having sent the press. Which means every page
+/// sends every release it hears, and the seat is what knows which of them
+/// were ever down: a key the page typed into its own launcher comes up the
+/// same way, and it is not the window's.
+#[test]
+fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let (mut chrome, mut client, app) = a_client_being_typed_at(&compositor);
+
+    for (keycode, pressed) in [(EVDEV_KEY_B, false), (EVDEV_KEY_C, true)] {
+        chrome
+            .say(&ChromeMessage::Key {
+                app_id: app.clone(),
+                keycode,
+                pressed,
+            })
+            .expect("the chrome socket takes a key");
+    }
+
+    // The press after it is what says the release was handled: the seat is
+    // one queue, so a release it forwarded is traced ahead of this.
+    assert!(
+        client.wait_for_trace(&format!(", {EVDEV_KEY_C}, 1)"), 1),
+        "the key pressed after the stray release never arrived; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        !client.trace().contains(&format!(", {EVDEV_KEY_B}, 0)")),
+        "a key nobody pressed was released at the client; it traced:\n{}",
+        client.trace()
+    );
 }
 
 /// A focus the chrome asked for comes back to it over the socket.

@@ -2624,6 +2624,14 @@ impl DomicileCompositor {
         };
         // wl keymaps use X keycodes (evdev + 8); callers speak evdev.
         let key: Keycode = (keycode + 8).into();
+        // A release for a key the seat does not hold is not the window's. On a
+        // desk of several monitors the page that hears a release is the one
+        // under the pointer, not the one that sent the press, so every page
+        // sends every release it hears — and the seat is what knows which of
+        // them were ever down here.
+        if !pressed && !keyboard.pressed_keys().contains(&key) {
+            return;
+        }
         keyboard.input::<(), _>(self, key, state, serial, time, |_, _, _| {
             FilterResult::Forward
         });
