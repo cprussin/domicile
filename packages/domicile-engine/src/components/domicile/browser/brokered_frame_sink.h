@@ -14,6 +14,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_timing_details_map.h"
@@ -29,6 +30,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -120,10 +122,23 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   //
   // A `local_surface_id` older than the one already embedded is ignored: it is
   // a late arrival, and passing it on would get the sink closed by viz.
+  //
+  // Every mirror is told the new surface.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale);
+
+  // Another page shows this sink's surface as well, under
+  // `parent_frame_sink_id`, without configuring it: `client` is told the
+  // surface the embedder chose, now if there is one and whenever it changes.
+  // Until `client` disconnects, which takes this parent with it.
+  //
+  // A DESK OF SEVERAL MONITORS IS SEVERAL PAGES, and a window across two of
+  // them is embedded by both. Only one of them may say what size the client
+  // is -- the one the shell says the window is on -- so the rest mirror.
+  void Mirror(const viz::FrameSinkId& parent_frame_sink_id,
+              mojo::PendingRemote<mojom::ExternalSurfaceClient> client);
 
   // Imports a dmabuf and returns the id to name it by, or 0. This is the
   // components/exo/buffer.cc path: a GpuMemoryBufferHandle becomes a
@@ -193,9 +208,29 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   const mojo::ReceiverId owner_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
 
-  // Whichever frame sink this one was last embedded under, invalid until some
-  // page has embedded it.
-  viz::FrameSinkId parent_frame_sink_id_;
+  // Under `parent` as well, or once more if it already is. Each page showing
+  // the surface is a parent, and one page may show it twice -- it embeds it
+  // and mirrors it on the way from one to the other -- so viz is told of a
+  // parent on its first reference and its last.
+  void AddParent(const viz::FrameSinkId& parent);
+  void RemoveParent(const viz::FrameSinkId& parent);
+
+  // A mirror went away; its page stops being a parent.
+  void OnMirrorGone(mojo::RemoteSetElementId id);
+
+  // Tells every mirror the surface the embedder chose.
+  void TellMirrors();
+
+  // Whichever frame sink the embedder last embedded this one under, invalid
+  // until some page has embedded it.
+  viz::FrameSinkId embedder_parent_;
+
+  // Every page this surface is shown on, and how many times each.
+  base::flat_map<viz::FrameSinkId, int> parents_;
+
+  // The pages mirroring the surface, and the parent each one added.
+  mojo::RemoteSet<mojom::ExternalSurfaceClient> mirrors_;
+  base::flat_map<mojo::RemoteSetElementId, viz::FrameSinkId> mirror_parents_;
 
   // Where the producer's frames go when the browser owns the sink. Unbound when
   // the producer kept its own.

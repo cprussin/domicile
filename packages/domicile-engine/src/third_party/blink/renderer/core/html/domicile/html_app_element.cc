@@ -36,6 +36,17 @@ void HTMLAppElement::ParseAttribute(
     // A different window in the same box. The surface the layer is pointed at
     // is replaced rather than torn down, so the element keeps its box and its
     // place in the layer tree across the change.
+    ForgetEmbedIfMirroring();
+    Embed();
+    return;
+  }
+  if (params.name == html_names::kMirrorAttr) {
+    // Handed from one page to another: the window's middle crossed the edge
+    // between two monitors, so the page it left mirrors it and the page it
+    // reached configures it. Either way what was asked before is the wrong
+    // question now.
+    reallocate_ = params.new_value.IsNull();
+    ForgetEmbed();
     Embed();
     return;
   }
@@ -110,8 +121,14 @@ void HTMLAppElement::Embed() {
     return;
   }
 
-  const bool reconfiguring = !!external_surface_embedder_;
-  if (!reconfiguring) {
+  if (FastHasAttribute(html_names::kMirrorAttr)) {
+    Mirror(app_id, *frame);
+    return;
+  }
+
+  const bool reconfiguring = !!external_surface_embedder_ || reallocate_;
+  reallocate_ = false;
+  if (!external_surface_embedder_) {
     external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
   }
   embed_in_flight_ = true;
@@ -143,6 +160,42 @@ void HTMLAppElement::OnEmbedded(
     // app-id or the box moved while this was outstanding, so what just landed
     // is the answer to a question no longer being asked.
     Embed();
+  }
+}
+
+void HTMLAppElement::Mirror(const AtomicString& app_id, LocalFrame& frame) {
+  // Asked once; the browser tells it every surface after that.
+  if (external_surface_embedder_) {
+    return;
+  }
+  external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
+  external_surface_embedder_->Mirror(
+      app_id, frame.GetPage()->GetChromeClient().GetFrameSinkId(&frame),
+      BindRepeating(&HTMLAppElement::OnMirrored, WrapWeakPersistent(this)));
+}
+
+void HTMLAppElement::OnMirrored(const viz::SurfaceId& surface_id) {
+  // The surface is the size the other page configured it at, and the layer
+  // stretches it to this box: a monitor at another scale draws the same
+  // window at its own density rather than resizing the client to it.
+  if (surface_layer_bridge_) {
+    surface_layer_bridge_->EmbedSurface(surface_id);
+  }
+}
+
+void HTMLAppElement::ForgetEmbed() {
+  // Dropping the embedder closes its pipes, which is how the browser hears a
+  // mirror stop, and an answer still in flight goes with them -- so nothing
+  // is waiting for it either.
+  external_surface_embedder_.reset();
+  embed_in_flight_ = false;
+  embed_stale_ = false;
+}
+
+void HTMLAppElement::ForgetEmbedIfMirroring() {
+  // A mirror is asked once for one app; a different app is a different ask.
+  if (FastHasAttribute(html_names::kMirrorAttr)) {
+    ForgetEmbed();
   }
 }
 
