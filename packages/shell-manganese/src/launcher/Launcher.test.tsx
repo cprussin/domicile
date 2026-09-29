@@ -107,7 +107,16 @@ const holding = (path: string): FilePreview => {
   }
 };
 
-/** The panel open over a home with those files in it, recording what it launched. */
+/**
+ * The panel open over a home with those files in it, recording what it
+ * launched.
+ *
+ * Held with `using`, which takes the panel down as the test's last statement
+ * returns. The shared `afterEach` cleanup comes too late: the panel always has
+ * something in flight — the host's answer, the highlight settling into a
+ * preview — and a timer that comes due between a test and its `afterEach`
+ * updates the panel outside `act`.
+ */
 const launcher = (
   files: readonly string[] = FILES,
   indexing = false,
@@ -116,7 +125,7 @@ const launcher = (
   previewed.length = 0;
   const launched: Launch[] = [];
   const dismissed: true[] = [];
-  render(
+  const { unmount } = render(
     <Launcher
       here
       onClosed={() => undefined}
@@ -133,6 +142,7 @@ const launcher = (
     />,
   );
   return {
+    [Symbol.dispose]: unmount,
     box: () =>
       screen.getByRole("combobox", {
         name: "Open an app, a file, a URL, or search",
@@ -175,7 +185,7 @@ describe("Launcher", () => {
   });
 
   it("opens wide, so the rows and a preview both have room", () => {
-    launcher();
+    using _panel = launcher();
 
     expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("xl");
   });
@@ -188,7 +198,7 @@ describe("Launcher", () => {
     // which leaves the row's width to the preview beside it. Nothing
     // separates them in `textContent` because what separates them on screen
     // is the row's own lines.
-    const panel = launcher();
+    using panel = launcher();
 
     expect(await panel.rows()).toStrictEqual([
       "Notes/2026april.org",
@@ -199,7 +209,7 @@ describe("Launcher", () => {
   });
 
   it("asks the host about what the box says", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
 
@@ -213,7 +223,7 @@ describe("Launcher", () => {
   it("offers a URL above the file it names, and a search below both", async () => {
     // A URL typed whole is a URL meant, so it is on top — but the file of the
     // same name and a search for the words are both still one arrow away.
-    const panel = launcher(["example.com"]);
+    using panel = launcher(["example.com"]);
 
     await panel.user.type(panel.box(), "example.com");
 
@@ -225,7 +235,7 @@ describe("Launcher", () => {
   });
 
   it("offers the applications above the files, and a search below both", async () => {
-    const panel = launcher(["text.md"], false, [EDITOR]);
+    using panel = launcher(["text.md"], false, [EDITOR]);
 
     await panel.user.type(panel.box(), "text");
 
@@ -258,7 +268,7 @@ describe("Launcher", () => {
   });
 
   it("runs the application chosen", async () => {
-    const panel = launcher([], false, [EDITOR]);
+    using panel = launcher([], false, [EDITOR]);
 
     await panel.user.type(panel.box(), "editor");
     await panel.rows();
@@ -270,7 +280,7 @@ describe("Launcher", () => {
   });
 
   it("offers a tagged search on its engine above the rows the line gets", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "!wiki notes");
 
@@ -281,7 +291,7 @@ describe("Launcher", () => {
   });
 
   it("offers the page a !gh name goes to, then a search for it on GitHub", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "!gh cprussin");
 
@@ -301,7 +311,7 @@ describe("Launcher", () => {
   ])(
     "draws a %s search with the logo of the site it searches",
     async (tag, logo) => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), `${tag} kate bush`);
       const [tagged] = await screen.findAllByRole("option");
@@ -311,7 +321,7 @@ describe("Launcher", () => {
   );
 
   it("searches for a name that matched a file, when that row is chosen", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "today");
     await panel.rows();
@@ -323,7 +333,7 @@ describe("Launcher", () => {
   });
 
   it("edits the file that was clicked", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.click(
       await screen.findByRole("option", { name: "todo.txt" }),
@@ -333,7 +343,7 @@ describe("Launcher", () => {
   });
 
   it("edits a directory without the slash the host marked it with", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.click(await screen.findByRole("option", { name: "src" }));
 
@@ -344,7 +354,7 @@ describe("Launcher", () => {
     // The whole reason the list is ranked at all: a person types enough of a
     // name to see it at the top and presses Enter without ever looking at the
     // keyboard again.
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "today");
     await panel.rows();
@@ -354,7 +364,7 @@ describe("Launcher", () => {
   });
 
   it("edits the row the arrow keys walked to instead", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
     await panel.rows();
@@ -364,7 +374,7 @@ describe("Launcher", () => {
   });
 
   it("highlights the first row as it opens", async () => {
-    const panel = launcher();
+    using panel = launcher();
     await panel.rows();
 
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
@@ -376,7 +386,7 @@ describe("Launcher", () => {
   it("moves the highlight to the row the pointer is over", async () => {
     // One highlight rather than a hover beside it: the row the pointer is on
     // is the row Enter takes.
-    const panel = launcher();
+    using panel = launcher();
     await panel.rows();
 
     await panel.user.hover(screen.getByText("todo.txt"));
@@ -386,7 +396,7 @@ describe("Launcher", () => {
   });
 
   it("browses a URL that matched no file", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "example.com{Enter}");
 
@@ -396,7 +406,7 @@ describe("Launcher", () => {
   });
 
   it("searches for words that are neither a file nor a URL", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "!yt kate bush{Enter}");
 
@@ -408,7 +418,7 @@ describe("Launcher", () => {
   });
 
   it("goes to the repository a !gh name is", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "!gh cprussin/domicile{Enter}");
 
@@ -420,7 +430,7 @@ describe("Launcher", () => {
   it("counts how much of the home is still answering", async () => {
     // The one number that says whether another letter is worth typing, in the
     // field doing the narrowing.
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
 
@@ -429,7 +439,7 @@ describe("Launcher", () => {
 
   describe("the preview", () => {
     it("shows what the highlighted file holds", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
 
@@ -439,7 +449,7 @@ describe("Launcher", () => {
     });
 
     it("scrolls with the wheel", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
       await within(previewPane()).findByText("contents of Notes/today.org");
@@ -449,7 +459,7 @@ describe("Launcher", () => {
     });
 
     it("lets the pointer into a site, so it can be scrolled", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "example.com");
       const view = await within(previewPane()).findByTitle(
@@ -460,7 +470,7 @@ describe("Launcher", () => {
     });
 
     it("gives the keyboard back to the box when a site takes it", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "example.com");
       const view = await within(previewPane()).findByTitle(
@@ -477,7 +487,7 @@ describe("Launcher", () => {
     it("waits for the typing to settle before it asks", async () => {
       // Every keystroke moves the highlight, and a preview per keystroke is a
       // file read, or a page loaded, and thrown away per keystroke.
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
       await within(previewPane()).findByText("contents of Notes/today.org");
@@ -488,7 +498,7 @@ describe("Launcher", () => {
     it("shows the highlighted image as itself, served from home", async () => {
       // The engine draws what the host cannot send: `domicile://home/` is the
       // home, to the shell's own document only.
-      const panel = launcher(["Pictures/cat.png"]);
+      using panel = launcher(["Pictures/cat.png"]);
 
       await panel.user.type(panel.box(), "cat");
 
@@ -500,7 +510,7 @@ describe("Launcher", () => {
     it("shows the highlighted PDF bare, without the viewer's toolbar or sidebar", async () => {
       // A preview is a glance at the page, and the viewer's chrome is most of
       // a pane this size.
-      const panel = launcher(["Scratch/DS11_Complete.pdf"]);
+      using panel = launcher(["Scratch/DS11_Complete.pdf"]);
 
       await panel.user.type(panel.box(), "DS11");
 
@@ -514,7 +524,7 @@ describe("Launcher", () => {
     it("lights a file's code by what each piece of it is", async () => {
       // A word for what the text is, and the pane's own colors for the word,
       // so a light desk and a dark one both read.
-      const panel = launcher(["src/main.ts"]);
+      using panel = launcher(["src/main.ts"]);
 
       await panel.user.type(panel.box(), "main");
 
@@ -529,7 +539,7 @@ describe("Launcher", () => {
     });
 
     it("heads a folder with its name and what it holds, folders first", async () => {
-      const panel = launcher(["Pictures/"]);
+      using panel = launcher(["Pictures/"]);
 
       await panel.user.type(panel.box(), "Pictures");
 
@@ -545,7 +555,7 @@ describe("Launcher", () => {
     });
 
     it("draws the pictures in a folder as themselves", async () => {
-      const panel = launcher(["Pictures/"]);
+      using panel = launcher(["Pictures/"]);
 
       await panel.user.type(panel.box(), "Pictures");
 
@@ -557,7 +567,7 @@ describe("Launcher", () => {
     });
 
     it("shows a song by what it says of itself, and offers to play it", async () => {
-      const panel = launcher(["Music/song.flac"]);
+      using panel = launcher(["Music/song.flac"]);
 
       await panel.user.type(panel.box(), "song");
 
@@ -577,7 +587,7 @@ describe("Launcher", () => {
     });
 
     it("still offers to play a song that says nothing of itself", async () => {
-      const panel = launcher(["Music/noise.mp3"]);
+      using panel = launcher(["Music/noise.mp3"]);
 
       await panel.user.type(panel.box(), "noise");
 
@@ -592,7 +602,7 @@ describe("Launcher", () => {
     });
 
     it("shows a song the host heard, whatever its name says", async () => {
-      const panel = launcher(["Music/take"]);
+      using panel = launcher(["Music/take"]);
 
       await panel.user.type(panel.box(), "take");
 
@@ -602,7 +612,7 @@ describe("Launcher", () => {
     });
 
     it("shows a video that does not say how long it is from its start", async () => {
-      const panel = launcher(["Videos/clip.webm"]);
+      using panel = launcher(["Videos/clip.webm"]);
 
       await panel.user.type(panel.box(), "clip");
       const video = await within(previewPane()).findByLabelText("clip.webm");
@@ -618,7 +628,7 @@ describe("Launcher", () => {
     it("shows a video as a still from a way into it, not playing", async () => {
       // The first frame of most videos is black, and a preview that starts
       // playing is not a preview.
-      const panel = launcher(["Videos/clip.mp4"]);
+      using panel = launcher(["Videos/clip.mp4"]);
 
       await panel.user.type(panel.box(), "clip");
       const video = await within(previewPane()).findByLabelText("clip.mp4");
@@ -634,7 +644,7 @@ describe("Launcher", () => {
     });
 
     it("shows what the highlighted directory holds", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "src");
 
@@ -646,7 +656,7 @@ describe("Launcher", () => {
     it("says so for a directory with nothing in it", async () => {
       // An empty list is an answer, and a blank pane would read as one still
       // on its way.
-      const panel = launcher(["empty/"]);
+      using panel = launcher(["empty/"]);
 
       await panel.user.type(panel.box(), "empty");
 
@@ -656,7 +666,7 @@ describe("Launcher", () => {
     });
 
     it("shows the highlighted site in a view of its own", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "example.com");
 
@@ -667,7 +677,7 @@ describe("Launcher", () => {
     });
 
     it("follows the highlight onto a search", async () => {
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
       await panel.rows();
@@ -681,7 +691,7 @@ describe("Launcher", () => {
     });
 
     it("says what the highlighted application is and what it runs", async () => {
-      const panel = launcher([], false, [EDITOR]);
+      using panel = launcher([], false, [EDITOR]);
 
       await panel.user.type(panel.box(), "editor");
 
@@ -706,7 +716,7 @@ describe("Launcher", () => {
 
     it("says what to do while there is no row to highlight", async () => {
       // The pane is never blank, because a blank pane reads as a broken one.
-      launcher([]);
+      using _panel = launcher([]);
 
       expect(
         await within(previewPane()).findByText("Nothing selected"),
@@ -714,7 +724,7 @@ describe("Launcher", () => {
     });
 
     it("names a file it cannot draw, and says why", async () => {
-      const panel = launcher(["firmware.bin"]);
+      using panel = launcher(["firmware.bin"]);
 
       await panel.user.type(panel.box(), "firmware");
 
@@ -727,7 +737,7 @@ describe("Launcher", () => {
     it("names the file while its preview is on the way", async () => {
       // Before the typing settles and before the host answers, the row it
       // will be is already known.
-      const panel = launcher();
+      using panel = launcher();
 
       await panel.user.type(panel.box(), "todo");
 
@@ -737,7 +747,7 @@ describe("Launcher", () => {
     it("names a file the engine could not draw after all", async () => {
       // An extension is a guess: a `.png` that is not one is an image that
       // fails to load, and a pane showing a broken image is a blank pane.
-      const panel = launcher(["Pictures/cat.png"]);
+      using panel = launcher(["Pictures/cat.png"]);
 
       await panel.user.type(panel.box(), "cat");
       fireEvent.error(await within(previewPane()).findByRole("img"));
@@ -759,7 +769,7 @@ describe("Launcher", () => {
     ).mockImplementation(function (this: Element) {
       scrolled.push(this.textContent);
     });
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.rows();
     await panel.user.type(panel.box(), "{ArrowDown}");
@@ -773,7 +783,7 @@ describe("Launcher", () => {
     // home looks exactly like a home with a third as much in it, so a person
     // who types the name of a file the walk has not reached is told they do
     // not have it — and the evidence that they are wrong is nowhere on screen.
-    launcher(["src"], true);
+    using _panel = launcher(["src"], true);
 
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Still finding your files",
@@ -783,7 +793,7 @@ describe("Launcher", () => {
   it("says so under the last row, not under the panel", async () => {
     // It is about the rows, so it sits where the rows run out: the end of the
     // list is where a person looking for a file that is not there yet looks.
-    const panel = launcher(["src", "Notes/today.org"], true);
+    using panel = launcher(["src", "Notes/today.org"], true);
     await panel.rows();
 
     const status = await screen.findByRole("status");
@@ -799,7 +809,7 @@ describe("Launcher", () => {
   it("says nothing about an index that is not being built", async () => {
     // Which is every launcher after the first seconds of a session. A notice
     // that stayed up would be a panel that never stops apologizing.
-    const panel = launcher();
+    using panel = launcher();
     await panel.rows();
 
     expect(screen.queryByRole("status")).toBeNull();
@@ -811,7 +821,7 @@ describe("Launcher", () => {
     // anybody meant, so it needs no list to be confident about — and a person
     // who knows where their file is should never have to wait for a walk to
     // agree with them.
-    const panel = launcher([], true);
+    using panel = launcher([], true);
 
     await panel.user.type(panel.box(), "~/Scratch{Enter}");
 
@@ -825,7 +835,7 @@ describe("Launcher", () => {
     // box says how many there really are, so the front is never mistaken for
     // the answer.
     const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
-    const panel = launcher(home);
+    using panel = launcher(home);
 
     expect(await panel.rows()).toHaveLength(200);
     expect(screen.getByText("500 matched")).toBeInTheDocument();
@@ -834,7 +844,7 @@ describe("Launcher", () => {
   it("keeps the arrow keys inside the rows it drew", async () => {
     // Clamped rather than wrapped, at both ends: an Up press past the top of
     // two hundred rows that jumped to the bottom would lose the user's place.
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.rows();
     await panel.user.keyboard("{ArrowUp}{Enter}");
@@ -848,7 +858,7 @@ describe("Launcher", () => {
 
   it("walks the rows with ctrl+n and ctrl+p as well as the arrow keys", async () => {
     // The Emacs and readline walk, for hands that never leave the home row.
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.rows();
     await panel.user.keyboard(
@@ -859,7 +869,7 @@ describe("Launcher", () => {
   });
 
   it("keeps the keyboard in the box on Tab", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "today");
     await within(previewPane()).findByText("contents of Notes/today.org");
@@ -870,7 +880,7 @@ describe("Launcher", () => {
   });
 
   it("keeps the keyboard in the box when the panel is clicked", async () => {
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.type(panel.box(), "today");
     await panel.user.click(
@@ -885,7 +895,7 @@ describe("Launcher", () => {
     // dialog reports the press and the desktop decides. A panel that closed
     // itself would be a second copy of that state, and the two would part
     // company the first time `mod+space` was pressed over a closed one.
-    const panel = launcher();
+    using panel = launcher();
 
     await panel.user.keyboard("{Escape}");
 
