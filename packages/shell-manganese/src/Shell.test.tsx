@@ -2204,6 +2204,32 @@ describe("Shell", () => {
       });
     });
 
+    it("takes the pointer to the middle of an empty screen a key moved to", () => {
+      // sway's `focus right` onto an output with nothing on it. The pointer
+      // left on the screen the keyboard came from would take it straight back.
+      renderShell([LEFT, RIGHT]);
+      clientAppears("one");
+      domicile.calls.length = 0;
+
+      press("l");
+
+      expect(domicile.calls).toContainEqual(["warpPointer", [2560, 512]]);
+    });
+
+    it("leaves the warp to another monitor to the page that is that monitor", () => {
+      // A page can only move the pointer over its own window: the engine
+      // clamps anything else to that window's edge, where the next pointer
+      // event would take the keyboard straight back.
+      renderingShell([{ ...LEFT, fillsTheWindow: true }, RIGHT]);
+      domicile.calls.length = 0;
+
+      press("l");
+
+      expect(domicile.calls.filter(([kind]) => kind === "warpPointer")).toEqual(
+        [],
+      );
+    });
+
     it("gives the keyboard to the window the pointer moves into", () => {
       const { container } = renderShell();
       clientAppears("one");
@@ -2306,7 +2332,16 @@ describe("Shell", () => {
             reduceWindows(
               reduceWindows(
                 NO_WINDOWS,
-                WindowAction.ScreensDescribed(["left", "right"]),
+                WindowAction.ScreensDescribed([
+                  {
+                    box: { height: 1080, width: 1920, x: -1920, y: 0 },
+                    name: "left",
+                  },
+                  {
+                    box: { height: 1080, width: 1920, x: 0, y: 0 },
+                    name: "right",
+                  },
+                ]),
               ),
               WindowAction.ScreenHovered("right"),
             ),

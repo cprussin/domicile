@@ -74,16 +74,25 @@ export const Monitor = ({
   // pointer did not make — a key, or a window opening — would be undone by the
   // next pointer event. `pointer-warp.ts` has the whole of it.
   //
-  // Per monitor, and only by the page that covers it. `focusOn` reads this
-  // screen's own placements, so it answers `undefined` on every monitor but
-  // the one the window is on — but every page lays every monitor out, and the
-  // engine keeps a warp inside the page that asked for it: one asked for by
-  // the page next door lands on that page's own edge, where the next pointer
-  // event hands the keyboard straight back.
+  // Per monitor, and only by the page that covers it, for the one the
+  // keyboard is on. Every page lays every monitor out, and the engine keeps a
+  // warp inside the page that asked for it: one asked for by the page next
+  // door lands on that page's own edge, where the next pointer event hands
+  // the keyboard straight back.
   const covered = coveredHere(display, desk);
   const focus = useMemo(
-    () => (covered ? focusOn(screenful, windows.activeId) : undefined),
-    [covered, screenful, windows.activeId],
+    () =>
+      covered && windows.focused === display.name
+        ? focusOn(screenful, windows.activeId, geometry.screen)
+        : undefined,
+    [
+      covered,
+      display.name,
+      geometry.screen,
+      screenful,
+      windows.activeId,
+      windows.focused,
+    ],
   );
   const open = useMemo(
     () => windows.windows.map(({ id }) => id),
@@ -193,8 +202,12 @@ export const Monitor = ({
 };
 
 /**
- * The window the keyboard is in on THIS monitor and the box a pointer over it
- * would be in, or `undefined` when the keyboard is somewhere else.
+ * The window the keyboard is in on this monitor and the box a pointer over it
+ * would be in — or the whole screen, when there is no window to be in.
+ *
+ * The screen's middle is where sway puts the pointer on an output with nothing
+ * on it, and a pointer left on the screen the keyboard came from would take it
+ * straight back.
  *
  * Its contents rather than its whole frame, and that is the box the question
  * is about: what a `pointerover` moves the focus to is the `<app>` element —
@@ -205,14 +218,16 @@ export const Monitor = ({
 const focusOn = (
   screenful: Screenful,
   activeId: string | undefined,
-): Focus | undefined => {
+  screen: Rect,
+): Focus => {
   const placement = screenful.placements.find(({ id }) => id === activeId);
-  return placement === undefined
-    ? undefined
-    : {
-        box: placement.surface ?? placement.bar,
-        id: placement.id,
-      };
+  if (activeId === undefined) {
+    return { box: screen, id: undefined };
+  } else if (placement === undefined) {
+    throw new Error(`shell: window ${activeId} is not laid out on its screen`);
+  } else {
+    return { box: placement.surface ?? placement.bar, id: placement.id };
+  }
 };
 
 /**

@@ -16,6 +16,8 @@
 
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
+import type { PlacedScreen } from "../screens/screen-toward";
+import { screenToward } from "../screens/screen-toward";
 import type { Axis, Direction } from "./direction";
 import { floatHolds, limitedTo } from "./floating/float";
 import type { Popup } from "./popup";
@@ -31,11 +33,13 @@ import {
   containerLaidOut,
   containerSplit,
   emptyWorkspace,
+  enteredBy,
   floatMoved,
   floatOn,
   floatSized,
   floatToggled,
   focusedOn,
+  focusLeaves,
   focusStepped,
   fullscreenToggled,
   holds,
@@ -96,10 +100,11 @@ export const WORKSPACES: readonly string[] = [
  */
 export const UNDESCRIBED_SCREEN = "";
 
+/** Where {@link UNDESCRIBED_SCREEN} is, which is nowhere. */
+const NOWHERE: Rect = { height: 0, width: 0, x: 0, y: 0 };
+
 /** One screen of the desk, and the workspace it is showing. */
-export type DeskScreen = {
-  /** The display's name, which is what a `<Screen name>` matches. */
-  name: string;
+export type DeskScreen = PlacedScreen & {
   /** The workspace drawn on it. No two screens show the same one. */
   current: string;
 };
@@ -221,7 +226,7 @@ export const NO_WINDOWS: WindowState = {
   pressed: { count: 0, on: undefined },
   previous: undefined,
   scratchpad: [],
-  screens: [{ current: "1", name: UNDESCRIBED_SCREEN }],
+  screens: [{ box: NOWHERE, current: "1", name: UNDESCRIBED_SCREEN }],
   windows: [],
   workspaces: WORKSPACES.map((name) => emptyWorkspace(name)),
 };
@@ -595,9 +600,9 @@ export const WindowAction = {
    * was showing, and a monitor that is new to the desk gets a workspace
    * nobody else is on.
    */
-  ScreensDescribed: (names: readonly string[]) => ({
+  ScreensDescribed: (screens: readonly PlacedScreen[]) => ({
     kind: WindowActionKind.ScreensDescribed as const,
-    names,
+    screens,
   }),
 
   /** `layout toggle split`. */
@@ -865,9 +870,7 @@ const reduceAction = (
       return reachWindow(state, appWindowId(action.appId));
     }
     case WindowActionKind.FocusStepped: {
-      return onCurrent(state, (workspace) =>
-        focusStepped(workspace, action.direction),
-      );
+      return stepFocus(state, action.direction);
     }
     case WindowActionKind.FullscreenToggled: {
       return onCurrent(state, (workspace) =>
@@ -1003,7 +1006,7 @@ const reduceAction = (
       return pointAtScreen(state, action.name);
     }
     case WindowActionKind.ScreensDescribed: {
-      return describeScreens(state, action.names);
+      return describeScreens(state, action.screens);
     }
     case WindowActionKind.WorkspaceSelected: {
       return selectWorkspace(state, action.name);
@@ -1041,6 +1044,25 @@ const onWorkspaceWith = (
   return workspace === undefined
     ? state
     : onWorkspace(state, workspace.name, into);
+};
+
+/**
+ * `focus <direction>`: through the workspace on screen, and on to the screen
+ * that way once there is nowhere left to go on this one — before wrapping
+ * round, which is sway's order. A screen with nothing on it is still a screen
+ * to go to: it is where the next window opens.
+ */
+const stepFocus = (state: WindowState, direction: Direction): WindowState => {
+  const beyond = screenToward(state.screens, state.focused, direction);
+  if (beyond !== undefined && focusLeaves(workspaceHere(state), direction)) {
+    return onWorkspace(
+      { ...state, focused: beyond },
+      currentOn(state, beyond),
+      (workspace) => enteredBy(workspace, direction),
+    );
+  } else {
+    return onCurrent(state, (workspace) => focusStepped(workspace, direction));
+  }
 };
 
 // A client the shell already has a window for is the host re-announcing it,
@@ -1277,19 +1299,23 @@ const renameWindow = (
  */
 const describeScreens = (
   state: WindowState,
-  names: readonly string[],
+  described: readonly PlacedScreen[],
 ): WindowState => {
-  const kept = names.length === 0 ? [UNDESCRIBED_SCREEN] : names;
+  const kept =
+    described.length === 0
+      ? [{ box: NOWHERE, name: UNDESCRIBED_SCREEN }]
+      : described;
+  const names = kept.map(({ name }) => name);
   // The screens that are not in the new desk, in order: what a display new to
   // the desk takes over from. Read before anything is placed, because a name
   // that is in both is not a screen anybody replaces.
   const replaced = state.screens
-    .filter((screen) => !kept.includes(screen.name))
+    .filter((screen) => !names.includes(screen.name))
     .map(({ current }) => current);
   const screens = kept.reduce<readonly DeskScreen[]>(
-    (placed, name) => [
+    (placed, { box, name }) => [
       ...placed,
-      { current: showing(state, placed, replaced, name), name },
+      { box, current: showing(state, placed, replaced, name), name },
     ],
     [],
   );

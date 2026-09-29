@@ -8,11 +8,16 @@
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
 import type { LayoutNode } from "./node";
-import { axisOf } from "./node";
+import { axisOf, NodeKind, showsOneChild } from "./node";
 import type { Ancestor, Path } from "./path";
 import { ancestorsOf, nodeAt } from "./path";
 import type { Tiling } from "./tiling";
-import { focusedWindowIn, focusPathOf, withFocusOn } from "./tiling";
+import {
+  focusedIdOf,
+  focusedWindowIn,
+  focusPathOf,
+  withFocusOn,
+} from "./tiling";
 
 /**
  * The tiling with the focus moved one window `direction`.
@@ -34,6 +39,48 @@ export const focusMoved = (tiling: Tiling, direction: Direction): Tiling => {
 };
 
 /**
+ * Whether `focus <direction>` goes off the side of the tiling: nothing lies
+ * that way before the focus would wrap, or nothing is tiled at all.
+ *
+ * Which is where sway goes on to the screen that way, if there is one — it
+ * wraps only when there is not.
+ */
+export const leavesBy = (tiling: Tiling, direction: Direction): boolean => {
+  const { root } = tiling;
+  return (
+    root === undefined ||
+    neighboring(root, focusPathOf(root, tiling.depth), direction) === undefined
+  );
+};
+
+/**
+ * The window the focus lands on coming into the tiling from another screen,
+ * moving `direction`, or `undefined` when nothing is tiled.
+ *
+ * sway's: the child on the near edge of a split that runs that way, and the
+ * tiling's own focus otherwise — by the window each last had the focus in. A
+ * tabbed or stacked tiling keeps the tab it is showing.
+ */
+export const enteredFrom = (
+  tiling: Tiling,
+  direction: Direction,
+): string | undefined => {
+  const { root } = tiling;
+  if (root === undefined) {
+    return undefined;
+  } else if (
+    root.kind === NodeKind.Container &&
+    !showsOneChild(root.layout) &&
+    axisOf(root.layout) === axisOfDirection(direction)
+  ) {
+    const edge = isForward(direction) ? 0 : root.children.length - 1;
+    return focusedWindowIn(nodeAt(root, [edge]));
+  } else {
+    return focusedIdOf(tiling);
+  }
+};
+
+/**
  * What the focus crosses into, or `undefined` when nothing around it runs that
  * way at all.
  *
@@ -47,18 +94,35 @@ const crossing = (
   path: Path,
   direction: Direction,
 ): Path | undefined => {
-  const along = ancestorsOf(root, path).filter(
+  const innermost = alongOf(root, path, direction)[0];
+  return (
+    neighboring(root, path, direction) ??
+    (innermost === undefined
+      ? undefined
+      : into(innermost, wrapped(innermost, direction)))
+  );
+};
+
+/** Where the focus goes `direction` without wrapping, if anywhere. */
+const neighboring = (
+  root: LayoutNode,
+  path: Path,
+  direction: Direction,
+): Path | undefined =>
+  alongOf(root, path, direction)
+    .map((ancestor) => into(ancestor, neighbor(ancestor, direction)))
+    .find((candidate) => candidate !== undefined);
+
+/** The containers around `path` that run along `direction`, innermost first. */
+const alongOf = (
+  root: LayoutNode,
+  path: Path,
+  direction: Direction,
+): readonly Ancestor[] =>
+  ancestorsOf(root, path).filter(
     (ancestor) =>
       axisOf(ancestor.container.layout) === axisOfDirection(direction),
   );
-  const tried = [
-    ...along.map((ancestor) => into(ancestor, neighbor(ancestor, direction))),
-    ...along
-      .slice(0, 1)
-      .map((ancestor) => into(ancestor, wrapped(ancestor, direction))),
-  ];
-  return tried.find((candidate) => candidate !== undefined);
-};
 
 const into = (
   { path }: Ancestor,

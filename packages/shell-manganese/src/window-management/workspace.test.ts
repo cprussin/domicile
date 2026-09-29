@@ -11,8 +11,10 @@ import {
   containerLaidOut,
   containerSplit,
   emptyWorkspace,
+  enteredBy,
   floatToggled,
   focusedOn,
+  focusLeaves,
   focusStepped,
   fullscreenToggled,
   holds,
@@ -251,6 +253,65 @@ describe("reached", () => {
 
   it("makes a tiled window the one being worked in", () => {
     expect(focusedOn(reached(cascaded(), "a"))).toBe("a");
+  });
+});
+
+describe("focusLeaves", () => {
+  it("is off the edge of the tiling", () => {
+    expect(focusLeaves(tiling("a", "b"), Direction.Right)).toBe(true);
+    expect(focusLeaves(tiling("a", "b"), Direction.Left)).toBe(false);
+  });
+
+  it("is every way out of a window filling the screen", () => {
+    // sway's: the tiling behind it is not what the user can see.
+    const full = fullscreenToggled(tiling("a", "b"), false);
+
+    expect(focusLeaves(full, Direction.Left)).toBe(true);
+  });
+
+  it("is no way out of a window filling every screen", () => {
+    // sway's: there is no other screen to see.
+    const global = fullscreenToggled(tiling("a", "b"), true);
+
+    expect(focusLeaves(global, Direction.Right)).toBe(false);
+  });
+
+  it("is never from a floating window", () => {
+    // sway keeps `focus <direction>` among the floats on their workspace.
+    expect(focusLeaves(floatToggled(tiling("a")), Direction.Right)).toBe(false);
+  });
+});
+
+describe("enteredBy", () => {
+  it("puts the keyboard on the near edge of the tiling", () => {
+    const split = containerLaidOut(tiling("a", "b"), Layout.SplitH);
+
+    expect(focusedOn(enteredBy(split, Direction.Right))).toBe("a");
+  });
+
+  it("puts the commands back on a window", () => {
+    // A `focus parent` made before the keyboard left is not what the next
+    // key acts on once it comes back — sway lands the focus on a window.
+    const selected = parentFocused(
+      containerLaidOut(tiling("a", "b"), Layout.SplitH),
+    );
+
+    const entered = enteredBy(selected, Direction.Left);
+
+    expect(focusedOn(entered)).toBe("b");
+    expect(focusedNodeOf(entered.tiling).kind).toBe(NodeKind.Window);
+  });
+
+  it("leaves it on a window filling the screen", () => {
+    const full = fullscreenToggled(tiling("a", "b"), false);
+
+    expect(enteredBy(full, Direction.Right)).toBe(full);
+  });
+
+  it("leaves an empty workspace as it is", () => {
+    const empty = emptyWorkspace("1");
+
+    expect(enteredBy(empty, Direction.Right)).toBe(empty);
   });
 });
 

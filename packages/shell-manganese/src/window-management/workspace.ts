@@ -27,7 +27,7 @@ import {
 import { gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { droppedOn } from "./tree/drop";
-import { focusMoved } from "./tree/focus-direction";
+import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
 import { movedBy } from "./tree/move";
@@ -252,6 +252,55 @@ export const focusStepped = (
   workspace: Workspace,
   direction: Direction,
 ): Workspace => inLayer(workspace, (tiling) => focusMoved(tiling, direction));
+
+/**
+ * Whether `focus <direction>` goes off the side of the workspace, which is on
+ * to the screen that way — see `tree/focus-direction.ts`.
+ *
+ * Always from a window filling its screen, which is all of the workspace the
+ * user can see — but never from one filling every screen, which leaves no
+ * other to see. Otherwise never from a floating window, because sway keeps
+ * the focus among the floats.
+ */
+export const focusLeaves = (
+  workspace: Workspace,
+  direction: Direction,
+): boolean => {
+  const { fullscreen } = workspace;
+  if (fullscreen === undefined) {
+    return (
+      workspace.floatFocus === undefined &&
+      leavesBy(workspace.tiling, direction)
+    );
+  } else {
+    return !fullscreen.global;
+  }
+};
+
+/**
+ * The workspace `focus <direction>` came into from the screen beside it.
+ *
+ * A window filling the screen keeps the keyboard, because it is the one
+ * window there is to see; and a workspace with nothing tiled is come into as
+ * it is. Otherwise the commands land on a window, as sway's do: a `focus
+ * parent` made before the keyboard left is not what it comes back to.
+ */
+export const enteredBy = (
+  workspace: Workspace,
+  direction: Direction,
+): Workspace => {
+  const id = enteredFrom(workspace.tiling, direction);
+  if (workspace.fullscreen !== undefined || id === undefined) {
+    return workspace;
+  } else {
+    return {
+      ...workspace,
+      floatFocus: undefined,
+      floats: onWindows(workspace.floats),
+      tiling: withFocusOn(workspace.tiling, id),
+    };
+  }
+};
 
 /**
  * `focus parent` and `focus child`, in the tiling or in a floating group. A

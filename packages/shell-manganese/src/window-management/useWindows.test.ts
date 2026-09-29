@@ -200,8 +200,16 @@ describe("the desktop the pages of a desk share", () => {
     const answer = desk.said.at(-1);
     expect(answer?.type).toBe("desk");
     expect(answer?.type === "desk" && answer.desk.screens).toEqual([
-      { current: "1", name: "left" },
-      { current: "2", name: "right" },
+      {
+        box: { height: 1080, width: 1920, x: 0, y: 0 },
+        current: "1",
+        name: "left",
+      },
+      {
+        box: { height: 1080, width: 1920, x: 1920, y: 0 },
+        current: "2",
+        name: "right",
+      },
     ]);
   });
 
@@ -247,7 +255,12 @@ describe("the desktop the pages of a desk share", () => {
     // the desk would be gone.
     const { desk, result } = desktop([covering(LEFT), RIGHT], waiting().wait);
     const elsewhere = {
-      ...reduceWindows(NO_WINDOWS, WindowAction.ScreensDescribed(["right"])),
+      ...reduceWindows(
+        NO_WINDOWS,
+        WindowAction.ScreensDescribed([
+          { box: { height: 1080, width: 1920, x: 1920, y: 0 }, name: "right" },
+        ]),
+      ),
       scratchpad: ["browser:1"],
     };
 

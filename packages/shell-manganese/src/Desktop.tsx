@@ -60,8 +60,8 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // Whether the press that put the launcher up was heard on this page, which
   // is the page its box can be typed into. The engine hands the keys to the
   // monitor the pointer is on, and that need not be the monitor the
-  // desktop's focus is on: a key can move the focus to another screen and
-  // leave the pointer — and so the keyboard — where it was.
+  // desktop's focus is on: a key can move the focus to another screen before
+  // the pointer — and so the keyboard — follows it there.
   //
   // Forgotten once the panel has finished closing rather than as it starts
   // to: the panel is only drawn while this holds, and one taken away with the

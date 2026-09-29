@@ -33,7 +33,9 @@ and is the only bar that lists it; an empty one comes to the screen the keyboard
 is on; and a window opens where the keyboard is. Only the screen the keyboard is
 on fills its workspace on the bar. The keyboard follows the pointer across
 monitors, empty ones included, so moving your hand to the other screen is how
-you get there.
+you get there — and so does `focus <direction>`: off the edge of a workspace,
+or out of a fullscreen window, it goes on to the screen that way, empty or not,
+before it wraps round.
 
 **A desk of several monitors is several pages of this shell**, because one
 browser window cannot span two CRTCs — the engine opens one per display and
@@ -113,8 +115,9 @@ that stationary pointer, and the `pointerover` that fires as it arrives hands
 the focus straight back. So a keyed focus change puts the pointer in the middle
 of the window it moved to — unless the pointer is over that window already,
 which is every press that moved nothing the pointer is near: a split, a layout,
-a tab of the container it is sitting on. The page cannot move a pointer; the
-engine can, and `warpPointer` is what asks it to.
+a tab of the container it is sitting on. A screen with nothing on it takes the
+pointer to its middle. The page cannot move a pointer; the engine can, and
+`warpPointer` is what asks it to.
 
 Across monitors the page that warps is the one covering the screen the focus
 went to, not the one that heard the key: a warp is kept inside the page that
@@ -757,6 +760,7 @@ shell that wants its own pictures owns its own list.
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
 | `src/screens/Monitor.tsx` | Everything one screen of the desk shows: its bar, its windows, and the rectangles they are laid out in. Rendered once per screen by every page; drawn by the page whose window covers it. |
+| `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
 | `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
 | `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
 | `src/keyboard/programmers-dvorak.ts` | Which physical key each keysym is on, which is what the table above is resolved through. |
