@@ -1,0 +1,35 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# The colors a views browser draws its pointer in, chosen from the desk's
+# theme. Linked into //ui/views by patch 0061, which is also what makes GN
+# load this file; tested from //components/domicile:unit_tests.
+source_set("cursor_color_scheme") {
+  sources = [
+    "cursor_color_scheme.cc",
+    "cursor_color_scheme.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//skia",
+    "//ui/native_theme",
+  ]
+
+  deps = [ "//ui/base/cursor" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "cursor_color_scheme_unittest.cc" ]
+
+  deps = [
+    ":cursor_color_scheme",
+    "//base",
+    "//skia",
+    "//testing/gtest",
+    "//ui/base/cursor",
+    "//ui/native_theme",
+  ]
+}
