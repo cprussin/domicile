@@ -37,6 +37,21 @@ FrameSinkBroker::PendingEmbed& FrameSinkBroker::PendingEmbed::operator=(
 
 FrameSinkBroker::PendingEmbed::~PendingEmbed() = default;
 
+FrameSinkBroker::PendingMirror::PendingMirror(
+    const std::string& app_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    mojo::PendingRemote<mojom::ExternalSurfaceClient> client)
+    : app_id(app_id),
+      parent_frame_sink_id(parent_frame_sink_id),
+      client(std::move(client)) {}
+
+FrameSinkBroker::PendingMirror::PendingMirror(PendingMirror&&) = default;
+
+FrameSinkBroker::PendingMirror& FrameSinkBroker::PendingMirror::operator=(
+    PendingMirror&&) = default;
+
+FrameSinkBroker::PendingMirror::~PendingMirror() = default;
+
 FrameSinkBroker::FrameSinkBroker(
     viz::HostFrameSinkManager* host_frame_sink_manager,
     FrameSinkIdAllocator allocate_frame_sink_id,
@@ -83,6 +98,20 @@ void FrameSinkBroker::Embed(const std::string& app_id,
   std::move(callback).Run(frame_sink->frame_sink_id());
 }
 
+void FrameSinkBroker::Mirror(
+    const std::string& app_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    mojo::PendingRemote<mojom::ExternalSurfaceClient> client) {
+  BrokeredFrameSink* frame_sink = SinkForApp(app_id);
+  if (!frame_sink) {
+    // Held against the app id, for Embed's reason.
+    pending_mirrors_.emplace_back(app_id, parent_frame_sink_id,
+                                  std::move(client));
+    return;
+  }
+  frame_sink->Mirror(parent_frame_sink_id, std::move(client));
+}
+
 void FrameSinkBroker::CreateFrameSink(
     mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
     mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
@@ -120,6 +149,19 @@ void FrameSinkBroker::CreateFrameSink(
     std::move(embed.callback).Run(frame_sink_id);
   }
   pending_embeds_ = std::move(still_waiting);
+
+  // And the pages mirroring it, after the embeds so that a mirror is handed
+  // the surface the embedder chose rather than nothing.
+  std::vector<PendingMirror> mirrors_waiting;
+  for (PendingMirror& mirror : pending_mirrors_) {
+    if (mirror.app_id != app_id) {
+      mirrors_waiting.push_back(std::move(mirror));
+      continue;
+    }
+    raw_frame_sink->Mirror(mirror.parent_frame_sink_id,
+                           std::move(mirror.client));
+  }
+  pending_mirrors_ = std::move(mirrors_waiting);
 }
 
 void FrameSinkBroker::DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) {

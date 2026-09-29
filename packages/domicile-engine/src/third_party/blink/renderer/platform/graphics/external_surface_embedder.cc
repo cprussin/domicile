@@ -76,10 +76,7 @@ void ExternalSurfaceEmbedder::Embed(
     double scale,
     Allocation allocation,
     EmbeddedCallback callback) {
-  if (!provider_) {
-    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
-        provider_.BindNewPipeAndPassReceiver());
-  }
+  BindProvider();
 
   // Resolved before the round trip rather than after it: this half of the
   // SurfaceId is ours, and the browser needs it in order to hand it to the
@@ -106,6 +103,32 @@ void ExternalSurfaceEmbedder::Embed(
       base::BindOnce(&ExternalSurfaceEmbedder::OnEmbedded,
                      base::Unretained(this), std::move(callback), app_id,
                      local_surface_id));
+}
+
+void ExternalSurfaceEmbedder::Mirror(
+    const String& app_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    MirroredCallback callback) {
+  DCHECK(!client_.is_bound());
+  BindProvider();
+  mirrored_ = std::move(callback);
+  LOG(INFO) << "domicile: mirroring \"" << app_id.Utf8() << "\" under "
+            << parent_frame_sink_id.ToString();
+  provider_->Mirror(app_id, parent_frame_sink_id,
+                    client_.BindNewPipeAndPassRemote());
+}
+
+void ExternalSurfaceEmbedder::OnSurfaceChanged(
+    const viz::FrameSinkId& frame_sink_id,
+    const viz::LocalSurfaceId& local_surface_id) {
+  mirrored_.Run(viz::SurfaceId(frame_sink_id, local_surface_id));
+}
+
+void ExternalSurfaceEmbedder::BindProvider() {
+  if (!provider_) {
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+        provider_.BindNewPipeAndPassReceiver());
+  }
 }
 
 void ExternalSurfaceEmbedder::OnEmbedded(

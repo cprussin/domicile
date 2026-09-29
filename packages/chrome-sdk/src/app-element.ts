@@ -113,6 +113,17 @@ declare global {
      * `DOMString` does.
      */
     appId: string;
+    /**
+     * Whether this element shows the window without configuring it. Reflected
+     * as a boolean attribute.
+     *
+     * A desk of several monitors is several pages, and a window across two of
+     * them is an `<app>` on each. Only one of them says what size the client
+     * is — the page the window is on; the others set `mirror` and show that
+     * page's surface, stretched to their own box. Moving it from one page's
+     * element to the other's hands the window over.
+     */
+    mirror: boolean;
   }
 
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do

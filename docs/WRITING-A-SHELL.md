@@ -459,7 +459,7 @@ tooltip — arrives as `popup_placed`: its own `app_id`, the `parent` it is over
 pixels from the top-left of that parent's box. Mount an `<app>` for it there,
 above its window, and take it down on `app_closed` like any other. It is not a
 window: give it no frame, do not tile it, and draw it only where its window is
-drawn — an `<app>` embedded on two pages takes its pixels from the first. The
+drawn — see *A window on two monitors* below. The
 SDK already routes a click on one to its window's keyboard
 (`DomicileClient.windowOf`), and the compositor dismisses a menu when the
 keyboard leaves its window. The example does it in a dozen lines; a popup the
@@ -543,6 +543,28 @@ with `undefined` for no limit. A box outside them gets a frame that does not
 fill it: cut off at the box's edge where the client will not shrink, stretched
 where it will not grow. `shell-manganese` holds its floating windows inside
 them; a tiling layout that cannot is left with the cut-off edge.
+
+### A window on two monitors
+
+On a tty each monitor is a page of its own, and an `<app>` embedding a window
+configures it: its box is the size the client draws at. Two pages each doing
+that would resize the client to one box and then the other. So a window you
+draw across two monitors is an `<app>` on each page, and **every one but the
+page the window is on sets `mirror`**:
+
+```html
+<app app-id="app-3"></app>          <!-- the page the window is on -->
+<app app-id="app-3" mirror></app>   <!-- the page next door -->
+```
+
+A mirror shows the surface the other page configured, stretched to its own
+box, and hears the pointer like any `<app>`. Moving `mirror` from one page's
+element to the other's hands the window over. A page with no `mirror` on it
+where another already embeds the window takes the window off that page.
+A menu goes where its window is, as a mirror too where the window is one. A
+`<webview>` cannot be mirrored: another page's is another page load.
+`shell-manganese` mirrors a floating window across the edge it is dragged over
+— [WINDOWS-ACROSS-SCREENS.md](architecture/WINDOWS-ACROSS-SCREENS.md).
 
 ## Who gets the keyboard
 
