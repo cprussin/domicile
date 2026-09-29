@@ -364,6 +364,45 @@ mode = "system"
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
+// ---- applications ---------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_applications_offers_every_one() {
+    let omit = Config::parse("").unwrap().applications.omit;
+    assert!(!omit.omits("firefox.desktop"));
+    assert!(!omit.omits(".hidden.desktop"));
+}
+
+#[test]
+fn a_desk_can_omit_every_application_but_the_ones_it_names() {
+    // The launcher's own rows and nothing a package happened to install:
+    // everything left out, then taken back by name, the last match deciding.
+    let omit = Config::parse(
+        r#"
+[applications]
+omit = ["*", "!launcher-*", "!org.gnome.Nautilus.desktop"]
+"#,
+    )
+    .unwrap()
+    .applications
+    .omit;
+    assert!(omit.omits("firefox.desktop"));
+    assert!(!omit.omits("launcher-btop.desktop"));
+    assert!(!omit.omits("org.gnome.Nautilus.desktop"));
+}
+
+#[test]
+fn an_application_pattern_that_is_not_a_glob_is_refused() {
+    let err = Config::parse(
+        r#"
+[applications]
+omit = ["[unclosed"]
+"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
 // ---- files ----------------------------------------------------------------
 
 #[test]

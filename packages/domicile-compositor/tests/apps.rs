@@ -427,3 +427,38 @@ fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
         }]
     );
 }
+
+/// A desk that omits applications is offered only the ones it takes back.
+#[test]
+fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
+    let home = tempfile::tempdir().expect("a home to lay out");
+    let applications = home.path().join(".local/share/applications");
+    std::fs::create_dir_all(&applications).expect("the directory");
+    for name in ["editor", "browser"] {
+        std::fs::write(
+            applications.join(format!("{name}.desktop")),
+            format!("[Desktop Entry]\nType=Application\nName={name}\nExec={name}\n"),
+        )
+        .expect("the entry");
+    }
+    let config = format!("{ONE_DISPLAY}\n[applications]\nomit = [\"*\", \"!editor.desktop\"]\n");
+
+    let compositor = Compositor::started_in_a_home(&config, Some(home.path()));
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SearchApps {
+            query: String::new(),
+        })
+        .expect("it asks");
+
+    let answer = chrome
+        .wait_for(|message| matches!(message, HostMessage::FoundApps { .. }))
+        .expect("the compositor answers");
+    let HostMessage::FoundApps { apps, .. } = answer else {
+        panic!("that is not a search's answer: {answer:?}");
+    };
+    assert_eq!(
+        apps.iter().map(|app| app.id.as_str()).collect::<Vec<_>>(),
+        ["editor.desktop"]
+    );
+}
