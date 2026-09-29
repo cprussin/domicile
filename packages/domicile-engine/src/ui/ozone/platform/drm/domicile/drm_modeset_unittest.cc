@@ -129,15 +129,31 @@ TEST(DrmModesetTest, AModesetAsksForTheSnapshotsNativeMode) {
   EXPECT_EQ(params[0].mode->size(), gfx::Size(2560, 1440));
 }
 
-TEST(DrmModesetTest, AModesetPlacesADisplayAtItsSnapshotsOrigin) {
+// NOT AT THE SNAPSHOT'S ORIGIN, which is (0, 0) for every connector ozone has
+// not read before: three identical monitors arriving on one hub were lit on
+// one rectangle. And where the display list puts them, or a window sized to
+// its display is on no CRTC's rectangle.
+TEST(DrmModesetTest, WithNoLayoutTheModesetLightsWhereTheDisplayListSays) {
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
-  owned.push_back(
-      SnapshotBuilder().Id(3).Origin(gfx::Point(1920, 0)).Build());
+  for (const int64_t id : {11, 12, 13}) {
+    owned.push_back(SnapshotBuilder()
+                        .Id(id)
+                        .Origin(gfx::Point(0, 0))
+                        .NativeMode(gfx::Size(3840, 2160), 60.f)
+                        .Build());
+  }
 
   const auto params = ModesetParamsFromSnapshots(Pointers(owned), {});
+  const std::vector<display::Display> displays =
+      DisplaysFromSnapshots(Pointers(owned), {});
 
-  ASSERT_EQ(params.size(), 1u);
-  EXPECT_EQ(params[0].origin, gfx::Point(1920, 0));
+  ASSERT_EQ(params.size(), 3u);
+  ASSERT_EQ(displays.size(), 3u);
+  EXPECT_EQ(params[2].origin, gfx::Point(7680, 0));
+  for (size_t i = 0; i < params.size(); ++i) {
+    EXPECT_EQ(params[i].origin, displays[i].bounds().origin())
+        << "connector " << params[i].id;
+  }
 }
 
 // The opposite of what DisplaysFromSnapshots does with the same input, and the
@@ -204,9 +220,7 @@ TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
   // A monitor plugged in between the reading the compositor answered and this
   // one. It lights on the next round trip -- the modeset makes the kernel
   // emit a CHANGE, the display list goes over the ABI again, and the answer
-  // that comes back names it -- and a connector lit at an origin nothing
-  // chose could land on top of one that was chosen, which is the exact-rect
-  // mismatch that scans out nothing at all.
+  // that comes back names it.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
   owned.push_back(SnapshotBuilder().Id(1).Build());
   owned.push_back(SnapshotBuilder().Id(8).Build());

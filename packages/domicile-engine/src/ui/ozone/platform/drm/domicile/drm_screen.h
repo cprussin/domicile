@@ -96,12 +96,26 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 //
 // `layout` IS THE COMPOSITOR'S, and it reaches the display list as well as the
 // modeset because a dark connector is still a connector the browser has to
-// place somewhere. A display the layout names takes the corner the layout gave
-// it, lit or not: leaving a dark one where the CARD stacked it is how two
-// displays end up claiming one rectangle, and the first of those wins every
-// lookup `GetDisplayMatching` makes -- including the one that sizes a
-// fullscreen window, which would then be a window on a screen that is off.
+// place somewhere. Each display is at the corner `OriginsForLayout` gives it.
 std::vector<display::Display> DisplaysFromSnapshots(
+    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+        snapshots,
+    const std::vector<DomicileDisplayLayout>& layout);
+
+// Where each of `snapshots` goes on this process's desktop, in the order
+// given. THE ONE ANSWER BOTH THE MODESET AND THE DISPLAY LIST READ: a window is
+// sized to its display and bound to a CRTC on an exact rectangle match, so the
+// two disagreeing is a black screen.
+//
+// A connector the layout names takes the layout's corner, lit or not. EVERY
+// OTHER ONE GOES PAST THE RIGHT EDGE of everything the layout placed, one
+// after another in connector order -- and with no layout at all, that is the
+// whole desk. NEVER THE SNAPSHOT'S OWN ORIGIN: ozone gives a connector it has
+// not read before (0, 0), so three monitors arriving on one hub were three
+// displays on one rectangle. Two displays on one rectangle share one window,
+// the other CRTC stays black, and the first of the two wins every lookup
+// `GetDisplayMatching` makes.
+std::vector<gfx::Point> OriginsForLayout(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
