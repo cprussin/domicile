@@ -240,6 +240,32 @@ describe("a command on a desk of several pages", () => {
     expect(currentHere(result.current)).toBe("4");
   });
 
+  it("hands a key's press over with it, where it was heard", () => {
+    const { desk, result } = desktop([LEFT, covering(RIGHT)]);
+
+    act(() => {
+      result.current.act(WindowAction.WorkspaceSelected("4"), { on: "right" });
+    });
+
+    expect(desk.said).toContainEqual(
+      Message.Acted(WindowAction.WorkspaceSelected("4"), { on: "right" }),
+    );
+  });
+
+  it("counts a key's press in the same desktop as the command it ran", () => {
+    // One desktop, not two in a row: the page that answers the press with the
+    // pointer reads where the focus went and that a key sent it there off the
+    // same render, and a render with only the first would warp nothing.
+    const { desk, result } = desktop([covering(LEFT), RIGHT]);
+
+    desk.say(
+      Message.Acted(WindowAction.WorkspaceSelected("4"), { on: "right" }),
+    );
+
+    expect(currentHere(result.current)).toBe("4");
+    expect(result.current.pressed).toEqual({ count: 1, on: "right" });
+  });
+
   it("takes what only the compositor can do with it", () => {
     // A terminal is a process the compositor starts, and the page that asked
     // may not be the page that reduces — so the ask travels with the command

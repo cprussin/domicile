@@ -36,10 +36,17 @@ const deskMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("asked") }),
   z.object({
     action: z.custom<WindowAction>(anObject),
+    press: z.object({ on: z.string().optional() }).optional(),
     type: z.literal("acted"),
   }),
   z.object({ desk: z.custom<WindowState>(anObject), type: z.literal("desk") }),
 ]);
+
+/**
+ * A key that ran a command, and the screen the page that heard it covers —
+ * `undefined` on a page that is the whole desktop.
+ */
+export type KeyPress = { on?: string | undefined };
 
 /** What one page of a desk says to the others. */
 export type DeskMessage = z.infer<typeof deskMessageSchema>;
@@ -53,9 +60,13 @@ export const DeskMessage = {
    *
    * The command itself rather than its outcome: every page runs the same
    * reduction, so what a press means is settled in one place and the page that
-   * heard it does not have to work out what it did.
+   * heard it does not have to work out what it did. With the key that ran it,
+   * where one did — see `WindowState.pressed`.
    */
-  Acted: (action: WindowAction): Said<"acted"> => ({ action, type: "acted" }),
+  Acted: (action: WindowAction, press?: KeyPress): Said<"acted"> =>
+    press === undefined
+      ? { action, type: "acted" }
+      : { action, press, type: "acted" },
 
   /** A page asking what the desktop is, because it has just come up. */
   Asked: (): Said<"asked"> => ({ type: "asked" }),

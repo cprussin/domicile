@@ -2144,6 +2144,20 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["warpPointer", [480, 301]]);
     });
 
+    it("leaves a window on another monitor to the page that covers it", () => {
+      // A page is one monitor, and the engine keeps a warp inside the page
+      // that asked for it: one asked for a window on the next monitor would
+      // pin the pointer to this monitor's edge, where the next pointer event
+      // hands the keyboard straight back to this screen.
+      renderShell([SCANOUT, { ...RIGHT, x: 960 }]);
+      press("parenright");
+      domicile.calls.length = 0;
+
+      clientAppears("one");
+
+      expect(domicile.calls.map(([kind]) => kind)).not.toContain("warpPointer");
+    });
+
     it("takes the pointer to a window that has just opened", () => {
       // Nobody pressed a key for this one: the client finished starting and
       // its window took the keyboard. The pointer is wherever it was — over

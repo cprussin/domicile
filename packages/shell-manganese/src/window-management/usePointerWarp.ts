@@ -1,9 +1,9 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
 import { warpTo } from "./pointer-warp";
+import type { WindowState } from "./window-state";
 
 /**
  * How many places asked for may be outstanding at once.
@@ -33,20 +33,25 @@ type Options = {
   /** The window the keyboard is in and the box it is drawn in, or none. */
   focus: Focus | undefined;
   /**
-   * Whether a key ran the command this render is the answer to, which is the
-   * press this spends. Nothing but the keyboard path may set it: a focus the
-   * pointer itself moved is one the warp must leave alone, or the desktop
-   * chases its own cursor.
+   * The desk's count of keyed presses — `WindowState.pressed`. One this hook
+   * has not seen yet is a key having run the command this render answers,
+   * which is the press this spends. Nothing but the keyboard path counts one:
+   * a focus the pointer itself moved is one the warp must leave alone, or the
+   * desktop chases its own cursor.
    *
-   * A ref handed in rather than a callback handed back, because the desk is
-   * one keyboard and several monitors. The keys are read once per page and
-   * the windows are laid out once per screen, so the press happens above
-   * every copy of this hook and is spent by whichever of them the focus
-   * landed on. Cleared by the desk once every monitor has had its look —
-   * `Desktop` — rather than here, which is what stops the first monitor to
-   * run its effect from spending a press meant for the second.
+   * The desk's rather than the page's because the desk is one keyboard and
+   * several monitors: the page that heard the key need not be the page
+   * covering the screen the focus landed on, and that page is the one that
+   * can put the pointer there.
    */
-  keyed: RefObject<boolean>;
+  pressed: WindowState["pressed"];
+  /**
+   * The screen this page covers, which is what `pressed` is read against:
+   * the keys go to the monitor the pointer is on, so a press heard on another
+   * screen says the pointer is there. `undefined` on a page that is the whole
+   * desktop, which is where every press is heard.
+   */
+  screen: string | undefined;
   /**
    * Every window the desktop has, by id.
    *
@@ -153,7 +158,8 @@ export type Pointer = {
 export const usePointerWarp = ({
   domicile,
   focus,
-  keyed,
+  pressed,
+  screen,
   windows,
 }: Options): Pointer => {
   // Refs rather than state, every one of them: none is drawn, and a pointer
@@ -168,6 +174,9 @@ export const usePointerWarp = ({
   const sent = useRef<readonly Spot[]>([]);
   const held = useRef<Focus | undefined>(undefined);
   const open = useRef<readonly string[]>([]);
+  // The presses this page has answered, from the count it came up to: a desk
+  // adopted mid-session is not a press.
+  const answered = useRef(pressed.count);
 
   // Something turned up at `to`: the cursor, or a window at the cursor. Which
   // of the two it was, is {@link Pointer.pointing}'s question, and answering
@@ -227,8 +236,16 @@ export const usePointerWarp = ({
     // went. Nobody pressed anything for that one either.
     const was = held.current;
     const gone = was !== undefined && !windows.includes(was.id);
+    const keyed = pressed.count !== answered.current;
+    answered.current = pressed.count;
+    if (keyed && pressed.on !== screen) {
+      // Heard on another monitor, which is where the pointer is: wherever this
+      // page last saw it, and wherever it last sent it, it has left since.
+      pointer.current = undefined;
+      sent.current = [];
+    }
     const to =
-      keyed.current || opened || gone
+      keyed || opened || gone
         ? warpTo({
             from: held.current,
             // Where the cursor is as far as this page can tell, which is

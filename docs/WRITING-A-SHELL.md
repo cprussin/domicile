@@ -676,6 +676,12 @@ change of its own — a keyed one, and a window opening with the keyboard, which
 is the same problem with nobody pressing anything — and only when the pointer
 is not over the window already.
 
+On a desk of several monitors each page is one of them, and the clamp is to
+that page: a page cannot put the pointer on the monitor next door. So the page
+covering the monitor the focus landed on is the one that asks, whichever page
+heard the key — which makes the press part of the desk every page is shown
+rather than a fact about the page it happened on.
+
 ## When nobody is at the desk
 
 A desk that has gone untouched for `idle.blank_after_seconds` turns its screens

@@ -187,6 +187,20 @@ export type WindowState = {
    * oldest first. Not windows: see `popup.ts`.
    */
   popups: readonly Popup[];
+  /**
+   * How many commands a key has run, and the screen the last of them was
+   * heard on.
+   *
+   * **THE PRESS IS THE DESK'S, NOT THE PAGE'S.** A key is what takes the
+   * pointer with the keyboard (`usePointerWarp`), and the page that moves the
+   * pointer is the one covering the screen the keyboard went to — which,
+   * for a key that sends a window to the next monitor, is not the page that
+   * heard it. Counted rather than flagged so every page can tell a press it
+   * has not answered from one it has; and where, because the keys go to the
+   * monitor the pointer is on, so a press heard on another screen says the
+   * pointer is there rather than wherever this page last saw it.
+   */
+  pressed: { count: number; on: string | undefined };
   /** The windows in the scratchpad, the most recently hidden last. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
@@ -204,6 +218,7 @@ export const NO_WINDOWS: WindowState = {
   launcherOpen: false,
   mode: BindingMode.Default,
   popups: [],
+  pressed: { count: 0, on: undefined },
   previous: undefined,
   scratchpad: [],
   screens: [{ current: "1", name: UNDESCRIBED_SCREEN }],
@@ -299,6 +314,7 @@ export enum WindowActionKind {
   FocusRequested,
   FocusStepped,
   FullscreenToggled,
+  KeyPressed,
   LauncherDismissed,
   LauncherToggled,
   LayoutSet,
@@ -500,6 +516,16 @@ export const WindowAction = {
   FullscreenToggled: (global: boolean) => ({
     global,
     kind: WindowActionKind.FullscreenToggled as const,
+  }),
+
+  /**
+   * A key ran the command handed over with this, on `on` — the screen the
+   * page that heard it covers, or `undefined` for a page that is the whole
+   * desktop. See {@link WindowState.pressed}.
+   */
+  KeyPressed: (on: string | undefined) => ({
+    kind: WindowActionKind.KeyPressed as const,
+    on,
   }),
 
   /**
@@ -847,6 +873,12 @@ const reduceAction = (
       return onCurrent(state, (workspace) =>
         fullscreenToggled(workspace, action.global),
       );
+    }
+    case WindowActionKind.KeyPressed: {
+      return {
+        ...state,
+        pressed: { count: state.pressed.count + 1, on: action.on },
+      };
     }
     case WindowActionKind.LauncherDismissed: {
       return { ...state, launcherOpen: false };
