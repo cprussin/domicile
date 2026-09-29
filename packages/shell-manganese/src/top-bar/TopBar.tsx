@@ -1,10 +1,12 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Extension } from "@domicile/chrome-sdk/extension";
 import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
 import { Clock } from "../clock/Clock";
+import { ExtensionTray } from "../extensions/ExtensionTray";
 import { BindingMode } from "../window-management/window-state";
 import { Workspaces } from "./Workspaces";
 
@@ -21,20 +23,29 @@ export const TOP_BAR = 32;
 type Props = {
   /** The workspace on screen, which the bar marks. */
   current: string;
-  /** Where the charge comes from — the bar reads nothing off the machine. */
+  /**
+   * Where the charge comes from — the bar reads nothing off the machine — and
+   * what an extension's action is clicked through.
+   */
   domicile: DomicileClient;
+  /** The extensions with an action, which the tray shows. */
+  extensions: readonly Extension[];
   /** Whether the keyboard is on this screen. */
   focused: boolean;
   /** Which bindings are live, which the bar says when it is not the usual set. */
   mode: BindingMode;
+  /** Open an extension's popup, or close the open one with `undefined`. */
+  onOpenExtension: (id: string | undefined) => void;
   onSelectWorkspace: (name: string) => void;
+  /** The extension whose popup is open, or `undefined`. */
+  openedExtension: string | undefined;
   /** The workspaces this screen has, which are the ones shown. */
   workspaces: readonly string[];
 };
 
 /**
- * The bar across the top of the screen the chrome is on: the workspaces, the
- * clock, and the charge.
+ * The bar across the top of the screen the chrome is on: the workspaces and the
+ * extensions' tray, the clock, and the charge.
  *
  * **It launches nothing.** Everything this desktop does is on a key, and two
  * buttons for two of those keys were a ranking nobody made — the terminal is
@@ -44,8 +55,13 @@ type Props = {
  * be pressed to ask: which workspace this is, what time it is, how much charge
  * is left, and which way round the desk is drawn.
  *
- * **The theme toggle is the one control here, and it is not a launcher.** It
- * changes what is already on screen rather than putting something new on it,
+ * **The extensions' tray is beside the workspaces**, where a panel's tray
+ * sits, and it launches nothing of the desktop's either: each icon is the
+ * extension's own toolbar button, which is Chrome's and has no key.
+ *
+ * **The theme toggle is the desktop's one control here, and it is not a
+ * launcher.** It changes what is already on screen rather than putting
+ * something new on it,
  * which is the line the paragraph above draws — and there is no key to press
  * instead, because a theme is not a thing a desk does often enough to spend a
  * chord on. It has two positions rather than three: this bar *is* the system,
@@ -74,18 +90,29 @@ type Props = {
 export const TopBar = ({
   current,
   domicile,
+  extensions,
   focused,
   mode,
+  onOpenExtension,
   onSelectWorkspace,
+  openedExtension,
   workspaces,
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-    <Workspaces
-      current={current}
-      focused={focused}
-      onSelect={onSelectWorkspace}
-      workspaces={workspaces}
-    />
+    <div className={startStyles}>
+      <Workspaces
+        current={current}
+        focused={focused}
+        onSelect={onSelectWorkspace}
+        workspaces={workspaces}
+      />
+      <ExtensionTray
+        domicile={domicile}
+        extensions={extensions}
+        onOpen={onOpenExtension}
+        opened={openedExtension}
+      />
+    </div>
     <div className={middleStyles}>
       <Clock />
     </div>
@@ -150,6 +177,8 @@ const barStyles = grid({
   position: "absolute",
   textShadow: "textOverPhoto",
 });
+
+const startStyles = hstack({ gap: 2 });
 
 const middleStyles = css({ justifySelf: "center" });
 

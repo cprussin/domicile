@@ -1,7 +1,8 @@
 # @domicile/shell-manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
-under a transparent bar carrying the workspaces, a clock and the charge. It is
+under a transparent bar carrying the workspaces, the extensions' tray, a clock
+and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
@@ -526,9 +527,9 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of every screen: the workspaces at one end, the clock in the
-middle, and at the other end the charge, behind the name of the binding mode
-whenever it is not the usual one. Each screen's bar marks the workspace that
+Across the top of every screen: the workspaces and the extensions' tray at one
+end, the clock in the middle, and at the other end the charge, behind the name
+of the binding mode whenever it is not the usual one. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
 that is a fact about the desk.
 
@@ -671,6 +672,24 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
+### The extensions' tray
+
+Beside the workspaces: each extension the config names that has an action, as
+its icon, named by its title, with its badge over the corner.
+
+- **A click on one with a popup** opens it in a panel under the icon, as a
+  `<webview>` of the popup's address. A press outside it, Escape, or the popup's
+  own `window.close()` (`domicile-close`) closes it.
+- **A click on one without** is `activateExtension(id)`: the extension's
+  `action.onClicked`.
+- **The panel takes the keyboard off the windows** while it is up, as the
+  launcher does, and they take it back when it closes.
+- **Escape is heard only while this page has the keyboard.** Once the popup's
+  page has the focus, a key pressed there never reaches this document.
+- A disabled action is not drawn, and the state is the action's default, not
+  the focused page's, until slice 2 of
+  [EXTENSIONS.md](../../docs/architecture/EXTENSIONS.md).
+
 ## The wallpaper
 
 A photograph behind the whole desktop, and the next one a minute later.
@@ -719,7 +738,8 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
+| `src/top-bar/` | The bar: the workspaces, the extensions' tray, the clock and the charge. |
+| `src/extensions/` | The extensions' tray on the bar, the popup panel under an icon, and the engine's list it draws. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — it searches its index of the whole home and sends back only the front of what matched — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the files, then a search, always. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds; an image, video, audio file or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |
