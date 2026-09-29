@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { FLOAT_STEP } from "./floating/float";
-import { Layout, NodeKind } from "./tree/node";
-import { focusedNodeOf, windowsOf } from "./tree/tiling";
+import { Layout, NodeKind, windowsIn } from "./tree/node";
+import { focusedNodeOf, focusedWindowIn, windowsOf } from "./tree/tiling";
 import {
   closed,
   containerLaidOut,
@@ -72,7 +72,9 @@ describe("floatToggled", () => {
     const workspace = floatToggled(tiling("a", "b"));
 
     expect(windowsOf(workspace.tiling)).toEqual(["a"]);
-    expect(workspace.floats.map(({ id }) => id)).toEqual(["b"]);
+    expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
+      "b",
+    ]);
     expect(focusedOn(workspace)).toBe("b");
   });
 
@@ -82,6 +84,56 @@ describe("floatToggled", () => {
     expect(workspace.floats).toEqual([]);
     expect(windowsOf(workspace.tiling)).toEqual(["a", "b"]);
     expect(focusedOn(workspace)).toBe("b");
+  });
+
+  it("floats the whole container `focus parent` selected", () => {
+    // `mod+a` then `mod+Shift+Tab`, as in sway: the group leaves the tiling
+    // as one float, laid out inside it the way it was tiled.
+    const workspace = floatToggled(parentFocused(grouped()));
+
+    expect(windowsOf(workspace.tiling)).toEqual(["a"]);
+    expect(workspace.floats.map(({ root }) => root)).toEqual([
+      focusedNodeOf(parentFocused(grouped()).tiling),
+    ]);
+    expect(focusedOn(workspace)).toBe("c");
+  });
+
+  it("puts the whole group back, still a group", () => {
+    const workspace = floatToggled(floatToggled(parentFocused(grouped())));
+
+    expect(workspace.floats).toEqual([]);
+    expect(windowsOf(workspace.tiling)).toEqual(["a", "b", "c"]);
+    expect(focusedOn(workspace)).toBe("c");
+    expect(focusedNodeOf(parentFocused(workspace).tiling)).toMatchObject({
+      kind: NodeKind.Container,
+      layout: Layout.SplitV,
+    });
+  });
+});
+
+/** `a` tiled beside `b` and `c`, which share a vertical split; `c` focused. */
+const grouped = () =>
+  opened(containerSplit(tiling("a", "b"), Axis.Vertical), "c");
+
+describe("a floating group", () => {
+  const floated = () => floatToggled(parentFocused(grouped()));
+
+  it("keeps floating what is left when one of its windows closes", () => {
+    const workspace = closed(floated(), "c");
+
+    expect(workspace.floats.map(({ root }) => windowsIn(root))).toEqual([
+      ["b"],
+    ]);
+    expect(focusedOn(workspace)).toBe("b");
+  });
+
+  it("gives the keyboard to the window in it that is reached", () => {
+    const workspace = reached(floated(), "b");
+
+    expect(focusedOn(workspace)).toBe("b");
+    expect(workspace.floats.map(({ root }) => focusedWindowIn(root))).toEqual([
+      "b",
+    ]);
   });
 });
 
@@ -120,7 +172,10 @@ describe("reached", () => {
   it("brings a floating window to the front", () => {
     const workspace = reached(cascaded(), "c");
 
-    expect(workspace.floats.map(({ id }) => id)).toEqual(["b", "c"]);
+    expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
+      "b",
+      "c",
+    ]);
     expect(focusedOn(workspace)).toBe("c");
   });
 
@@ -133,7 +188,10 @@ describe("pointedAt", () => {
   it("gives a floating window the keyboard without raising it", () => {
     const workspace = pointedAt(cascaded(), "c");
 
-    expect(workspace.floats.map(({ id }) => id)).toEqual(["c", "b"]);
+    expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
+      "c",
+      "b",
+    ]);
     expect(focusedOn(workspace)).toBe("c");
   });
 });

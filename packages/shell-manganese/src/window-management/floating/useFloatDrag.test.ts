@@ -2,12 +2,13 @@ import { describe, expect, it, mock } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
+import { LayoutNode } from "../tree/node";
 import type { Float } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 const FLOAT: Float = {
   height: 200,
-  id: "w1",
+  root: LayoutNode.Window("w1"),
   scratchpad: false,
   width: 300,
   x: 10,

@@ -96,6 +96,21 @@ export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
 };
 
 /**
+ * `root` with the focus on the window `id`, container by container on the way
+ * to it — what a floating group's own tree does when a window in it is
+ * reached. Throws for a window `root` does not hold, as {@link withFocusOn}
+ * does.
+ */
+export const withFocusIn = (root: LayoutNode, id: string): LayoutNode => {
+  const path = pathTo(root, id);
+  if (path === undefined) {
+    throw new Error(`layout tree: no window ${id} to focus`);
+  } else {
+    return pointedAt(root, path);
+  }
+};
+
+/**
  * The same tree with the focus on the window inside `node`, and the commands
  * still pointed at `node` itself.
  *

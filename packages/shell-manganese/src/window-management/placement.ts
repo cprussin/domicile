@@ -12,6 +12,7 @@ import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { Frame, Tab, TabLayout } from "./tree/frames";
 import { framesOf } from "./tree/frames";
+import { withCommandsOnWindow } from "./tree/tiling";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
@@ -67,6 +68,9 @@ export type Geometry = {
   workspace: Rect;
 };
 
+/** A container's tab, and how it stacks: with the float it is in, if any. */
+export type PlacedTab = Tab & { depth: number };
+
 /** Everything the screen shows: the windows, and the tabs of any container. */
 export type Screenful = {
   placements: readonly Placement[];
@@ -75,7 +79,7 @@ export type Screenful = {
    * are pointed at a window — see `tree/frames.ts`.
    */
   selection: Rect | undefined;
-  tabs: readonly Tab[];
+  tabs: readonly PlacedTab[];
 };
 
 /**
@@ -151,20 +155,20 @@ export const placementsOf = (
     geometry.workspace,
     gapOf(workspace.tiling),
   );
+  // Over them, in the order the workspace stacks them: each float's own tree
+  // laid out in its box, with no gaps — a floating group is one box.
+  const floating = workspace.floats.map((float, at) => ({
+    depth: FLOATING + at,
+    ...framesOf(
+      withCommandsOnWindow({ depth: 0, root: float.root }),
+      rectOf(float),
+      0,
+    ),
+  }));
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
-    // Over them, in the order the workspace stacks them.
-    ...workspace.floats.map((float, at) =>
-      placed(
-        {
-          bar: barOf(rectOf(float)),
-          behind: undefined,
-          id: float.id,
-          surface: surfaceOf(rectOf(float)),
-          tabbed: undefined,
-        },
-        FLOATING + at,
-      ),
+    ...floating.flatMap(({ depth, frames: inFloat }) =>
+      inFloat.map((frame) => placed(frame, depth)),
     ),
   ];
   const full = fullscreen(workspace, geometry);
@@ -174,7 +178,16 @@ export const placementsOf = (
     full === undefined
       ? laidOut
       : [...laidOut.filter(({ id }) => id !== full.id), full];
-  return { placements, selection, tabs };
+  return {
+    placements,
+    selection,
+    tabs: [
+      ...tabs.map((tab) => ({ ...tab, depth: TILED })),
+      ...floating.flatMap(({ depth, tabs: inFloat }) =>
+        inFloat.map((tab) => ({ ...tab, depth })),
+      ),
+    ],
+  };
 };
 
 /**

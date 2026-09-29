@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
 import { TITLE_BAR } from "../rect";
+import { LayoutNode } from "../tree/node";
 import type { Float } from "./float";
 import {
   FLOAT_STEP,
@@ -16,7 +17,7 @@ import {
 
 const AT: Float = {
   height: 420,
-  id: "w1",
+  root: LayoutNode.Window("w1"),
   scratchpad: false,
   width: 640,
   x: 100,
@@ -25,7 +26,7 @@ const AT: Float = {
 
 describe("floatFor", () => {
   it("opens the first window in from the corner", () => {
-    const first = floatFor("w1", 0);
+    const first = floatFor(LayoutNode.Window("w1"), 0);
     expect(first.x).toBeGreaterThan(0);
     expect(first.y).toBeGreaterThan(0);
   });
@@ -33,8 +34,8 @@ describe("floatFor", () => {
   it("cascades each window past the ones already out", () => {
     // Not on top of them: a window that opened exactly over the last one looks
     // like the last one moved, and there is nothing to grab to find out.
-    const first = floatFor("w1", 0);
-    const second = floatFor("w2", 1);
+    const first = floatFor(LayoutNode.Window("w1"), 0);
+    const second = floatFor(LayoutNode.Window("w2"), 1);
     expect(second.x).toBeGreaterThan(first.x);
     expect(second.y).toBeGreaterThan(first.y);
   });
@@ -42,15 +43,18 @@ describe("floatFor", () => {
   it("cascades by the count rather than by where the last one ended up", () => {
     // Dragging a window into the corner must not put the next one off the
     // screen, so the count is what says how many are already out.
-    expect(floatFor("w3", 2)).toStrictEqual({
-      ...floatFor("other", 2),
-      id: "w3",
+    expect(floatFor(LayoutNode.Window("w3"), 2)).toStrictEqual({
+      ...floatFor(LayoutNode.Window("other"), 2),
+      root: LayoutNode.Window("w3"),
     });
   });
 
   it("opens every window at the same size", () => {
-    const { height, width } = floatFor("w1", 0);
-    expect(floatFor("w2", 5)).toMatchObject({ height, width });
+    const { height, width } = floatFor(LayoutNode.Window("w1"), 0);
+    expect(floatFor(LayoutNode.Window("w2"), 5)).toMatchObject({
+      height,
+      width,
+    });
   });
 });
 

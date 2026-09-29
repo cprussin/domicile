@@ -17,10 +17,11 @@
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
-import { limitedTo } from "./floating/float";
+import { floatHolds, limitedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
+import { NodeKind } from "./tree/node";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
@@ -1406,6 +1407,9 @@ const homeOf = (
  * see `limitedTo`. After every action rather than in each that moves a float,
  * because a client can say its limits after it was floated, and every way a
  * float is sized would otherwise have to remember to ask.
+ *
+ * A window alone in its box only: a floating group's box is shared out among
+ * its windows, so no one client's limits are the box's.
  */
 const limited = (before: WindowState, after: WindowState): WindowState => {
   const workspaces = after.workspaces.map((workspace) =>
@@ -1424,11 +1428,15 @@ const limitedFloats = (
   workspace: Workspace,
 ): Workspace => {
   const floats = workspace.floats.map((float) => {
-    const window = after.windows.find(({ id }) => id === float.id);
+    const { root } = float;
+    const window =
+      root.kind === NodeKind.Window
+        ? after.windows.find(({ id }) => id === root.id)
+        : undefined;
     return window?.kind === WindowKind.App
       ? limitedTo(
           float,
-          floatBefore(before, float.id),
+          floatBefore(before, window.id),
           window.minSize,
           window.maxSize,
         )
@@ -1443,4 +1451,4 @@ const limitedFloats = (
 const floatBefore = (state: WindowState, id: string) =>
   state.workspaces
     .flatMap(({ floats }) => floats)
-    .find((float) => float.id === id);
+    .find((float) => floatHolds(float, id));
