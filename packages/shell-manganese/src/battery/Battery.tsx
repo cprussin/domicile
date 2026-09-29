@@ -48,7 +48,9 @@ export const Battery = ({ domicile, watch = watchBattery }: Props) => {
 const Meter = ({ reading }: { reading: BatteryMessage }) => {
   const percent = Math.round(reading.charge * 100);
   return (
-    <div className={rootStyles({ charge: chargeOf(percent) })}>
+    <div
+      className={rootStyles({ charge: chargeOf(percent, reading.charging) })}
+    >
       {reading.charging && (
         <LightningIcon
           aria-label="Charging"
@@ -154,13 +156,16 @@ const percentStyles = css({
  * Off the *percentage* rather than off the level behind it, so the color and
  * the figures cannot disagree: a tenth and a bit reads as `10%`, and a readout
  * saying ten while looking comfortable would be two answers to one question.
+ *
+ * Always `fine` with the lead in: a battery on AC is filling rather than
+ * running out, so there is nothing to warn about.
  */
-const chargeOf = (percent: number) => {
-  if (percent <= FLASHING_PERCENT) {
-    return "flashing";
-  } else if (percent <= DANGEROUS_PERCENT) {
-    return "dangerous";
-  } else {
+const chargeOf = (percent: number, charging: boolean) => {
+  if (charging || percent > DANGEROUS_PERCENT) {
     return "fine";
+  } else if (percent <= FLASHING_PERCENT) {
+    return "flashing";
+  } else {
+    return "dangerous";
   }
 };
