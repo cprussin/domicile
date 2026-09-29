@@ -99,6 +99,12 @@ export default defineConfig({
           "50%": { opacity: "{opacity.pulseMin}" },
           "100%": { opacity: "1" },
         },
+        // A bar of the launcher's meter beside a song that is playing: up
+        // from its floor and back, each bar on an offset of its own.
+        equalizer: {
+          "0%": { transform: "scaleY(0.3)" },
+          "100%": { transform: "scaleY(1)" },
+        },
         // A workspace slides in from the side it was on, and it is the whole
         // workspace that moves: every window on it goes the same distance, so
         // they arrive together rather than scatter.

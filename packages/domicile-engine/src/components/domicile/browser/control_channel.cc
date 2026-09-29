@@ -800,12 +800,13 @@ void ControlChannel::DispatchLine(const std::string& line,
     const std::string* kind = message.FindString("kind");
     // The path and the kind or nothing, as `found_files` above: an answer
     // without its path cannot be told from the answer to the row before, and a
-    // kind that is not one of the four is a word the page would have to guess
-    // at. A missing `text` or `entries` is an empty one, which is what every
-    // kind but its own carries anyway.
+    // kind that is not one of the five is a word the page would have to guess
+    // at. A missing `text`, `entries` or tag is an empty one, which is what
+    // every kind but its own carries anyway -- and what a song that does not
+    // say its title carries too.
     if (!path || !kind ||
-        (*kind != "text" && *kind != "directory" && *kind != "binary" &&
-         *kind != "unreadable")) {
+        (*kind != "text" && *kind != "directory" && *kind != "audio" &&
+         *kind != "binary" && *kind != "unreadable")) {
       return;
     }
     const std::string* text = message.FindString("text");
@@ -819,8 +820,16 @@ void ControlChannel::DispatchLine(const std::string& line,
         }
       }
     }
+    const std::string* title = message.FindString("title");
+    const std::string* artist = message.FindString("artist");
+    const std::string* album = message.FindString("album");
+    const std::string* cover = message.FindString("cover");
     client_->FilePreview(*path, *kind, text ? *text : std::string(),
-                         std::move(entries), arrival);
+                         std::move(entries), title ? *title : std::string(),
+                         artist ? *artist : std::string(),
+                         album ? *album : std::string(),
+                         message.FindDouble("duration").value_or(0),
+                         cover ? *cover : std::string(), arrival);
     return;
   }
 
