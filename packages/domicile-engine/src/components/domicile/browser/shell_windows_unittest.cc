@@ -131,7 +131,7 @@ TEST(ShellWindowPlacesTest, AWindowNobodyHasSeenIsWhereItsRectangleIs) {
   // the only answer there is and it is the right one.
   ShellWindowPlaces places;
 
-  EXPECT_EQ(places.Update({Seen(1, 100), Seen(2, 200)}),
+  EXPECT_EQ(places.Update({Seen(1, 100), Seen(2, 200)}, {}),
             std::vector<int64_t>({100, 200}));
 }
 
@@ -145,9 +145,9 @@ TEST(ShellWindowPlacesTest, AWindowStaysOnTheDisplayItWasFirstSeenOn) {
   // exactly, and the pages that result each claim a monitor that is not
   // theirs.
   ShellWindowPlaces places;
-  places.Update({Seen(1, 100)});
+  places.Update({Seen(1, 100)}, {});
 
-  EXPECT_EQ(places.Update({Seen(1, 200), Seen(2, 200)}),
+  EXPECT_EQ(places.Update({Seen(1, 200), Seen(2, 200)}, {}),
             std::vector<int64_t>({100, 200}));
 }
 
@@ -157,11 +157,11 @@ TEST(ShellWindowPlacesTest, AWindowThatIsGoneIsForgotten) {
   // its window would place the next window at the last one's display -- which
   // is a monitor this believes is covered and leaves dark.
   ShellWindowPlaces places;
-  places.Update({Seen(1, 100)});
+  places.Update({Seen(1, 100)}, {});
 
-  places.Update({});
+  places.Update({}, {});
 
-  EXPECT_EQ(places.Update({Seen(1, 200)}), std::vector<int64_t>({200}));
+  EXPECT_EQ(places.Update({Seen(1, 200)}, {}), std::vector<int64_t>({200}));
 }
 
 TEST(ShellWindowPlacesTest, AWindowOpenedForADisplayIsOnItBeforeItIsSeen) {
@@ -174,7 +174,34 @@ TEST(ShellWindowPlacesTest, AWindowOpenedForADisplayIsOnItBeforeItIsSeen) {
 
   places.Place(1, 100);
 
-  EXPECT_EQ(places.Update({Seen(1, 200)}), std::vector<int64_t>({100}));
+  EXPECT_EQ(places.Update({Seen(1, 200)}, {}), std::vector<int64_t>({100}));
+}
+
+TEST(ShellWindowPlacesTest, AWindowStillLoadingItsPageKeepsItsPlace) {
+  // THE DUPLICATE. A window arrives before its page commits, and a window with
+  // no shell page is not a shell window yet -- so a reconciliation in that gap
+  // forgot the record, read the display as bare, and opened a second window
+  // on it.
+  ShellWindowPlaces places;
+  places.Place(1, 100);
+
+  EXPECT_TRUE(places.Update({}, /*loading=*/{1}).empty());
+
+  EXPECT_EQ(places.Of(1), 100);
+  EXPECT_EQ(places.Update({Seen(1, 200)}, {}), std::vector<int64_t>({100}));
+}
+
+TEST(ShellWindowPlacesTest, AWindowThatLeftItsShellIsNotStillLoadingIt) {
+  // Loading is the gap before a window's first shell page, and nothing after
+  // it. A shell that navigated away has left its display without a shell, and
+  // a record kept for it would leave that monitor dark.
+  ShellWindowPlaces places;
+  places.Place(1, 100);
+  places.Update({Seen(1, 100)}, {});
+
+  places.Update({}, /*loading=*/{1});
+
+  EXPECT_EQ(places.Of(1), display::kInvalidDisplayId);
 }
 
 TEST(ShellWindowPlacesTest, TheDisplayAWindowIsOnCanBeAskedForOnItsOwn) {
@@ -182,7 +209,7 @@ TEST(ShellWindowPlacesTest, TheDisplayAWindowIsOnCanBeAskedForOnItsOwn) {
   // works from, and it has to be: a page told one monitor and a window opened
   // for another is a monitor showing another monitor's desktop.
   ShellWindowPlaces places;
-  places.Update({Seen(1, 100)});
+  places.Update({Seen(1, 100)}, {});
 
   EXPECT_EQ(places.Of(1), 100);
   EXPECT_EQ(places.Of(2), display::kInvalidDisplayId);
