@@ -19,7 +19,7 @@ ok() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
 TOGETHER="webview-framing webview-content-script extension-installer
-  webview-keyboard webview-escape webview-history webview-click
+  extension-tray webview-keyboard webview-escape webview-history webview-click
   webview-new-window webview-routed-link webview-upload webview-download
   control-arrival"
 
@@ -37,7 +37,7 @@ for script in "$ROOT"/scripts/engine-*.sh; do
 #!/usr/bin/env bash
 date +%s.%N >"$WORK/$name.start"
 cat "$WORK"/noise/*/owner >"$WORK/$name.noise" 2>/dev/null
-case "$name" in (engine-guard-webview-*|engine-guard-control-arrival|engine-guard-extension-installer) sleep 1 ;; esac
+case "$name" in (engine-guard-webview-*|engine-guard-control-arrival|engine-guard-extension-installer|engine-guard-extension-tray) sleep 1 ;; esac
 [ "\${FAIL:-}" = "$name" ] && { echo "$name broke"; exit 1; }
 date +%s.%N >"$WORK/$name.end"
 STUB

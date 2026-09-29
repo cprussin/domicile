@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 29 Sep 2026 12:00:00 +0000
+Subject: [PATCH] domicile: every webview is a tab, and the shell has a tray
+
+Three things docs/architecture/EXTENSIONS.md's slice 1 needs from files
+Chromium owns, and nothing else:
+
+- The frame binders hand BindWebViewGuestHost
+  `domicile::AttachTabHelpers`, which gives every <webview>'s guest the
+  SessionTabHelper and extensions::TabHelper a Chrome tab has. The
+  helpers are //chrome's and //components/domicile:web_view_guest must
+  not depend on //chrome, so they cross as a callback.
+- They bind ExtensionTray for the shell, gated at bind time on the
+  domicile:// origin exactly as ControlChannel and WebViewGuestHost are.
+  `domicile::BindExtensionTray` is in //chrome/browser/domicile.
+- `idl_in_modules.gni` and `generated_in_modules.gni` name the three new
+  IDL files -- DomicileExtension, DomicileExtensionsEvent and its init --
+  and the bindings they generate.
+
+Everything else is new files under src/: the mojom, the tray, the tab
+helpers, the Blink event and element halves, and
+WebViewGuest::CloseContents, which sends WebViewGuestClient.CloseRequested
+so a <webview> dispatches `domicile-close`.
+
+WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT: the file
+each hunk applies to was rebuilt from the pin and the patches before it,
+and both blobs are that file's.
+---
+ chrome/browser/chrome_browser_interface_binders.cc           | 29 ++++++++++++++++++++++++++++-
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 6 ++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 3 +++
+ 3 files changed, 37 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 59ff02e6c5..3dd96f2e3f 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -6,8 +6,10 @@
+ 
+ #include "base/task/bind_post_task.h"
+ #include "chrome/browser/domicile/domicile_extension_installer.h"
++#include "chrome/browser/domicile/domicile_extension_tray.h"
+ #include "chrome/browser/domicile/domicile_pointer_warp.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
++#include "chrome/browser/domicile/domicile_tab_helpers.h"
+ #include "components/domicile/browser/color_scheme.h"
+ #include "components/domicile/browser/control_channel.h"
+ #include "components/domicile/browser/keyboard_layout.h"
+@@ -572,7 +574,32 @@
+               "domicile: only a domicile:// document may ask for a guest.");
+           return;
+         }
+-        domicile::BindWebViewGuestHost(frame, std::move(receiver));
++        // AND EVERY GUEST IS A TAB. The helpers an extension finds a tab by
++        // are //chrome's, which the guest's own target cannot depend on, so
++        // they are handed in here -- see domicile_tab_helpers.h.
++        domicile::BindWebViewGuestHost(
++            frame, std::move(receiver),
++            base::BindRepeating(&domicile::AttachTabHelpers));
++      }));
++
++  // Domicile's engine fork: the extensions' tray, for the shell.
++  //
++  // Registered unconditionally and gated at BIND time, exactly as the two
++  // above and for their reason. The check is the same one, and the same whole
++  // of the access control: an extension's popup is a chrome-extension:// page
++  // in a <webview>, and a page that could reach this could click any other
++  // extension's action.
++  map->Add<domicile::mojom::ExtensionTray>(base::BindRepeating(
++      [](content::RenderFrameHost* frame,
++         mojo::PendingReceiver<domicile::mojom::ExtensionTray> receiver) {
++        if (frame->GetLastCommittedOrigin().scheme() !=
++            domicile::kDomicileScheme) {
++          mojo::ReportBadMessage(
++              "domicile: only a domicile:// document may hold the extension "
++              "tray.");
++          return;
++        }
++        domicile::BindExtensionTray(frame, std::move(receiver));
+       }));
+ 
+   map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 8e08d34d86..05e31ef43c 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -323,6 +323,8 @@
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extensions_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extensions_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.cc",
+@@ -2406,6 +2408,10 @@
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_entry.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extensions_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extensions_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 264723ca2a..5429129b60 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -292,6 +292,9 @@
+   "//third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_extension.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_extensions_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_extensions_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_file_preview_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_file_preview_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_files_event.idl",

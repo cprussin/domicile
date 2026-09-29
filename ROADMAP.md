@@ -172,7 +172,9 @@ The evidence for each of those is in the doc that made the claim —
    `<webview>` a tab to `chrome.tabs`. Started: a guard proves a content script
    reaches a `<webview>`, the compositor sends the config's list to the
    browser as `HostMessage::Extensions`, and the fork installs what it names.
-   Next is a tab helper on every `WebViewGuest`.
+   Every `WebViewGuest` has a tab's helpers, the shell hears the actions as
+   `window.domicile`'s `extensions` event, and a popup's `window.close()` is
+   `domicile-close`. Next is manganese's tray and popup panel.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 ## In the engine fork — the agent on `crux`

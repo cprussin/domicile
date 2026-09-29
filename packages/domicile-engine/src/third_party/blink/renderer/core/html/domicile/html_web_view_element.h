@@ -301,6 +301,12 @@ class CORE_EXPORT HTMLWebViewElement final
       const String& suggested_name,
       FileChooserRequestedCallback callback) override;
 
+  // And the browser saying the page inside called window.close(), which its
+  // renderer allowed. Dispatched as `domicile-close`: the browser closes
+  // nothing, and removing this element is the shell's answer. An event, like
+  // NewWindowRequested, so nothing is stored.
+  void CloseRequested() override;
+
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the
   // placeholder frame does, and the browser holds it on this pipe until the

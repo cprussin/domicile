@@ -1,0 +1,40 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// One extension with an action, as a shell's tray draws it.
+//
+// An interface rather than a dictionary for DomicileClipboardEntry's reason:
+// WebIDL will not have a dictionary as the element type of an attribute's
+// array, and these are read off a DomicileExtensionsEvent.
+//
+// The state is the action's default -- Chrome's tab -1 -- until a <webview>
+// can be the active tab. See docs/architecture/EXTENSIONS.md.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileExtension {
+  // What DomicileHost.activateExtension() names it by.
+  readonly attribute DOMString id;
+  readonly attribute DOMString name;
+
+  // The action's tooltip.
+  readonly attribute DOMString title;
+
+  // data:image/png;base64,..., drawn at this page's device pixel ratio. Not a
+  // chrome-extension:// URL: action.setIcon({imageData}) sets an icon that has
+  // none.
+  readonly attribute USVString icon;
+
+  readonly attribute DOMString badgeText;
+
+  // A CSS color, #rrggbbaa. Fully transparent when the extension set none.
+  readonly attribute DOMString badgeColor;
+
+  // The popup a click opens, in a <webview> the shell draws; null for an
+  // action whose click is activateExtension().
+  readonly attribute USVString? popup;
+
+  // False after the extension's action.disable().
+  readonly attribute boolean enabled;
+};
