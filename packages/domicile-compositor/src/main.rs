@@ -6437,6 +6437,10 @@ fn home_directory() -> Option<std::path::PathBuf> {
 /// the host desktop instead of on Domicile. `DISPLAY` is removed so a toolkit
 /// with both backends prefers Wayland over any outer X server.
 ///
+/// **There is no Xwayland**, so a toolkit that still defaults to X11 does not
+/// fall back to Wayland but fails to start. [`WAYLAND_PREFERENCE`] tells each
+/// in the variable it reads, overriding any it inherited from an X session.
+///
 /// `DOMICILE_SOCK` is the other way round and is deliberately *not* named
 /// here: the launcher puts this desktop's control socket in the compositor's
 /// environment (`domicile_launch::spawn::compositor`), which is the desktop
@@ -6454,9 +6458,29 @@ fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command
         // matched against the *frontend's* own environment, which
         // `appearance::say_which_desktop` is what reaches.
         .env("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)
+        .envs(WAYLAND_PREFERENCE)
         .env_remove("DISPLAY");
     Some(child)
 }
+
+/// What each toolkit reads to choose Wayland over X11; see [`client_command`].
+///
+/// - `XDG_SESSION_TYPE`: what `--ozone-platform=auto` (Electron 38 and later,
+///   and Chromium), Qt and GLFW look at when nothing more specific is set.
+/// - `ELECTRON_OZONE_PLATFORM_HINT`: Electron 28 through 37, which otherwise
+///   default to X11 — `element-desktop`, VS Code, Slack.
+/// - `NIXOS_OZONE_WL`: nixpkgs' Electron and Chromium wrappers, which add the
+///   Wayland flags only when it is set.
+/// - `QT_QPA_PLATFORM`, `SDL_VIDEODRIVER`: Qt5 and SDL2, both X11 by default.
+/// - `MOZ_ENABLE_WAYLAND`: Firefox before 121.
+const WAYLAND_PREFERENCE: [(&str, &str); 6] = [
+    ("XDG_SESSION_TYPE", "wayland"),
+    ("ELECTRON_OZONE_PLATFORM_HINT", "wayland"),
+    ("NIXOS_OZONE_WL", "1"),
+    ("QT_QPA_PLATFORM", "wayland"),
+    ("SDL_VIDEODRIVER", "wayland"),
+    ("MOZ_ENABLE_WAYLAND", "1"),
+];
 
 /// Advertise `zwp_linux_dmabuf_v1`, with feedback whenever we can name the DRM
 /// node we import on.
@@ -8494,6 +8518,28 @@ mod tests {
     #[test]
     fn a_spawned_client_gets_no_x_display() {
         assert_eq!(child_env(&kitty(), "wayland-7", "DISPLAY"), None);
+    }
+
+    #[test]
+    fn a_spawned_client_is_told_to_speak_wayland() {
+        // There is no Xwayland here, so a toolkit that defaults to X11 --
+        // Electron above all, and SDL2 -- does not fall back but fails to
+        // start. Each is told Wayland in the variable it reads, and one the
+        // compositor inherited from an X session is overridden.
+        for (name, value) in [
+            ("XDG_SESSION_TYPE", "wayland"),
+            ("ELECTRON_OZONE_PLATFORM_HINT", "wayland"),
+            ("NIXOS_OZONE_WL", "1"),
+            ("QT_QPA_PLATFORM", "wayland"),
+            ("SDL_VIDEODRIVER", "wayland"),
+            ("MOZ_ENABLE_WAYLAND", "1"),
+        ] {
+            assert_eq!(
+                child_env(&kitty(), "wayland-7", name),
+                Some(OsString::from(value)),
+                "{name}",
+            );
+        }
     }
 
     #[test]
