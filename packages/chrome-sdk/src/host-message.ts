@@ -393,8 +393,8 @@ export type LockedMessage = {
  * connects: a reloaded shell is told rather than drawing an empty tray. The
  * state is each action's default until actions are per browser window.
  *
- * A click on one is the shell's: a `<webview>` at `popup` when there is one,
- * and `activateExtension(id)` when there is not.
+ * A click on one is `activateExtension(id)`, and then a `<webview>` at `popup`
+ * when there is one.
  */
 export type ExtensionsMessage = {
   extensions: readonly Extension[];

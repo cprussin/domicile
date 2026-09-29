@@ -29,6 +29,7 @@
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "extensions/browser/permissions/active_tab_permission_granter.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
@@ -77,6 +78,13 @@ std::string IconOf(ExtensionAction& action, int tab, float scale) {
   }
   CHECK(icon.has_value());
   return *std::move(icon);
+}
+
+// The id an action keeps `tab`'s state under: the default where there is no
+// tab, which ExtensionAction also falls back to for anything a tab has not set.
+int TabIdOf(content::WebContents* tab) {
+  return tab == nullptr ? ExtensionAction::kDefaultTabId
+                        : sessions::SessionTabHelper::IdForTab(tab).id();
 }
 
 // One row of the tray, as tab `tab` has it. See TrayExtension in the mojom.
@@ -164,12 +172,40 @@ class ExtensionTray final
       return;
     }
 
-    // THE ACTIVE TAB IS THE TAB onClicked NAMES: the <webview> that last had
-    // focus. A desk with no browser window has none, and then it is the
-    // shell's own page, which is the one that was clicked in --
-    // `DispatchExtensionActionClicked` builds a tab object out of the
-    // WebContents it is handed, so it has to be handed one.
+    // THE ACTIVE TAB IS THE TAB THE CLICK IS ABOUT: the <webview> that last
+    // had focus.
     content::WebContents* tab = ActiveDeskTab(context_);
+
+    // activeTab FIRST, as ExtensionActionRunner::RunAction grants it before it
+    // dispatches anything or a popup opens: onClicked's listener and the
+    // popup's first line both expect the page to be theirs already. Only a
+    // desk tab's: with none, the page clicked in is the shell's own, and an
+    // extension is granted nothing on the desktop itself.
+    if (tab != nullptr) {
+      extensions::ActiveTabPermissionGranter* granter =
+          extensions::ActiveTabPermissionGranter::FromWebContents(tab);
+      // extensions::TabHelper makes one, and AttachTabHelpers gives every
+      // guest a TabHelper before it is a tab.
+      CHECK(granter);
+      granter->GrantIfRequested(extension);
+      // Said only when it held: an extension that asks for no activeTab is
+      // granted nothing, and guard-webview-active-tab.sh reads this line.
+      if (granter->IsGranted(extension)) {
+        LOG(INFO) << "domicile: the tray granted " << id
+                  << " activeTab on tab " << TabIdOf(tab) << ".";
+      }
+    }
+
+    // A POPUP IS THE SHELL'S TO OPEN, and Chrome dispatches no onClicked for
+    // an action that has one: the click is the grant, and nothing more.
+    if (action->HasPopup(TabIdOf(tab))) {
+      LOG(INFO) << "domicile: the tray opened " << id << "'s popup.";
+      return;
+    }
+
+    // With no desk tab, onClicked names the shell's own page, which is the one
+    // that was clicked in -- `DispatchExtensionActionClicked` builds a tab
+    // object out of the WebContents it is handed, so it has to be handed one.
     LOG(INFO) << "domicile: the tray activated " << id << ".";
     extensions::ExtensionActionDispatcher::Get(context_)
         ->DispatchExtensionActionClicked(
@@ -231,13 +267,8 @@ class ExtensionTray final
     const float scale = view == nullptr ? 1.0f : view->GetDeviceScaleFactor();
 
     // THE ACTIVE TAB'S STATE, which is what Chrome's toolbar shows: a badge an
-    // extension set for one tab is that tab's. The default where there is no
-    // active tab, and ExtensionAction falls back to it for anything a tab has
-    // not set.
-    content::WebContents* active = ActiveDeskTab(context_);
-    const int tab = active == nullptr
-                        ? ExtensionAction::kDefaultTabId
-                        : sessions::SessionTabHelper::IdForTab(active).id();
+    // extension set for one tab is that tab's.
+    const int tab = TabIdOf(ActiveDeskTab(context_));
 
     extensions::ExtensionActionManager* actions =
         extensions::ExtensionActionManager::Get(context_);
