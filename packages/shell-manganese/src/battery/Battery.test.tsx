@@ -169,9 +169,9 @@ describe("Battery", () => {
       expect(readout(container).className).toContain(css({ color: "danger" }));
     });
 
-    it("goes on saying so with the lead in", () => {
-      // The bolt says the lead is in. What the color is about is the cell,
-      // and a machine that cannot be unplugged is not a machine that is fine.
+    it("stops saying so once the lead is in", () => {
+      // A battery on AC is filling rather than running out, so there is
+      // nothing left to warn about.
       const battery = heldBattery();
       const { container } = render(
         <Battery domicile={NO_HOST} watch={battery.watch} />,
@@ -179,8 +179,10 @@ describe("Battery", () => {
 
       battery.report({ charge: 0.04, charging: true });
 
-      expect(readout(container).className).toContain(css({ color: "danger" }));
-      expect(readout(container).className).toContain(
+      expect(readout(container).className).not.toContain(
+        css({ color: "danger" }),
+      );
+      expect(readout(container).className).not.toContain(
         css({ animationName: "chargeFlashing" }),
       );
     });
