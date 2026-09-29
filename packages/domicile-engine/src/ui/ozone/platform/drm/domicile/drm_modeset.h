@@ -43,18 +43,18 @@ class DrmScreen;
 // CRTCs live here, because this is the process holding DRM master. So the
 // answer crosses the engine's C ABI and arrives as this.
 //
-// EMPTY MEANS THE HARDWARE DECIDES, which is what every desktop but a matched
-// profile's says and what this did before a layout could be stated at all:
-// every readable connector, at the origin the card stacked it at.
+// EMPTY MEANS THE HARDWARE DECIDES WHAT IS LIT, which is what every desktop but
+// a matched profile's says and what this did before a layout could be stated
+// at all: every readable connector. WHERE is `OriginsForLayout`'s, the same
+// corners the display list has -- one row in connector order, never the
+// snapshot's own origin, which is (0, 0) for a connector ozone has not read
+// before.
 //
 // A NON-EMPTY LAYOUT IS THE WHOLE TRUTH. A connector it does not name is left
-// dark rather than lit where the card put it, because an origin nothing chose
-// can land on top of one that was chosen -- and two controllers claiming one
-// rectangle is the exact-rect mismatch `ScreenManager::FindWindowAt` answers
-// by binding no window at all. That case is a monitor plugged in between the
-// reading the compositor answered and this one, and it lights on the next
-// round trip: this modeset makes the kernel emit a CHANGE, the display list
-// crosses again, and the answer that comes back names it.
+// dark. That case is a monitor plugged in between the reading the compositor
+// answered and this one, and it lights on the next round trip: this modeset
+// makes the kernel emit a CHANGE, the display list crosses again, and the
+// answer that comes back names it.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,

@@ -3,6 +3,7 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <string>
@@ -17,6 +18,7 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
 namespace ui {
@@ -44,9 +46,13 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
+  // The display list's corners, from the one place both read them. See
+  // `OriginsForLayout` for why they are never the snapshot's own.
+  const std::vector<gfx::Point> origins = OriginsForLayout(snapshots, layout);
   std::vector<display::DisplayConfigurationParams> params;
   params.reserve(snapshots.size());
-  for (const auto& snapshot : snapshots) {
+  for (size_t index = 0; index < snapshots.size(); ++index) {
+    const display::DisplaySnapshot* snapshot = snapshots[index];
     const display::DisplayMode* native_mode = snapshot->native_mode();
     if (!native_mode) {
       // Connected and unreadable. See the header: a connector that advertised
@@ -58,16 +64,13 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
         layout.empty() ? nullptr : WantedFor(layout, snapshot->display_id());
     if (!layout.empty() && (!wanted || !wanted->enabled)) {
       // Dark: either the compositor turned this connector off, or it has not
-      // heard of it yet. The header argues why the second is not lit where the
-      // card put it.
+      // heard of it yet. The header argues why the second is not lit at all.
       continue;
     }
     // The mode is passed as a borrowed pointer: DisplayConfigurationParams'
     // constructor clones it into its own `mode`, so cloning here as well would
     // leak one DisplayMode per display on every hotplug.
-    params.emplace_back(snapshot->display_id(),
-                        wanted ? wanted->origin : snapshot->origin(),
-                        native_mode);
+    params.emplace_back(snapshot->display_id(), origins[index], native_mode);
   }
   return params;
 }
