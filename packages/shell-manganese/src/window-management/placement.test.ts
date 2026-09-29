@@ -2,7 +2,13 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis } from "./direction";
 import type { Geometry } from "./placement";
-import { contentsOf, LEAVING, placementsOf, TILED } from "./placement";
+import {
+  contentsOf,
+  LEAVING,
+  placementsOf,
+  TILED,
+  withOverhangs,
+} from "./placement";
 import { TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
@@ -42,6 +48,7 @@ const placementFor = (state: WindowState, appId: string) => {
 describe("placementsOf", () => {
   it("places nothing on an empty workspace", () => {
     expect(placementsOf(NO_WINDOWS, GEOMETRY)).toEqual({
+      mirrored: [],
       placements: [],
       selection: undefined,
       tabs: [],
@@ -344,5 +351,63 @@ describe("placementsOf", () => {
 
   it("draws nothing for a window that is not on screen", () => {
     expect(contentsOf(undefined)).toBeUndefined();
+  });
+});
+
+describe("withOverhangs", () => {
+  /** Two screens of 1920 by 1080, each a page with itself at the origin. */
+  const onRight: Geometry = {
+    desktop: { height: 1080, width: 3840, x: -1920, y: 0 },
+    name: "right",
+    screen: { height: 1080, width: 1920, x: 0, y: 0 },
+    workspace: { height: 1048, width: 1920, x: 0, y: 32 },
+  };
+  const twoScreens = (...actions: readonly WindowAction[]) =>
+    reduce(
+      NO_WINDOWS,
+      WindowAction.ScreensDescribed(
+        ["left", "right"].map((name, at) => ({
+          box: { height: 1080, width: 1920, x: at * 1920, y: 0 },
+          name,
+        })),
+      ),
+      ...actions,
+    );
+  const onto = (state: WindowState) =>
+    withOverhangs(placementsOf(state, onRight), state, onRight);
+
+  it("draws the part of a float the next screen has over its edge, mirrored", () => {
+    // 640 wide from 1500 on the left screen: its middle stays there, and 220
+    // of it is over the right one.
+    const state = twoScreens(
+      WindowAction.AppAppeared("kitty", "kitty"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowMoved(appWindowId("kitty"), 1500, 100, "left"),
+    );
+
+    const { mirrored, placements } = onto(state);
+
+    expect(mirrored).toEqual([appWindowId("kitty")]);
+    expect(placements.map(({ frame }) => frame.x)).toEqual([1500 - 1920]);
+  });
+
+  it("draws nothing of a float wholly on its own screen", () => {
+    const state = twoScreens(
+      WindowAction.AppAppeared("kitty", "kitty"),
+      WindowAction.FloatToggled(),
+    );
+
+    expect(onto(state).mirrored).toEqual([]);
+  });
+
+  it("draws nothing of a browser window over the edge", () => {
+    // A `<webview>` on another page is another page load, not a mirror.
+    const state = twoScreens(
+      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowMoved("browser:1", 1500, 100, "left"),
+    );
+
+    expect(onto(state).placements).toEqual([]);
   });
 });

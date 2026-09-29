@@ -27,6 +27,8 @@ declare module "react" {
       /** A Wayland client's window. `app-id` is the host's name for it. */
       app: DetailedHTMLProps<HTMLAttributes<HTMLAppElement>, HTMLAppElement> & {
         "app-id": string;
+        /** Shown here, configured by another page — see `AppWindow`. */
+        mirror?: "" | undefined;
       };
     }
   }

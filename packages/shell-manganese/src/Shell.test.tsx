@@ -1963,6 +1963,72 @@ describe("Shell", () => {
       }
     });
 
+    describe("hanging over the edge onto the next monitor", () => {
+      /**
+       * Kitty floating on the left screen, 220 of it over the right one's
+       * edge — the desk the page that reduces it would say it is.
+       */
+      const overhanging = () =>
+        reduceWindows(
+          reduceWindows(
+            reduceWindows(
+              reduceWindows(
+                NO_WINDOWS,
+                WindowAction.ScreensDescribed([
+                  {
+                    box: { height: 1080, width: 1920, x: -1920, y: 0 },
+                    name: "left",
+                  },
+                  {
+                    box: { height: 1080, width: 1920, x: 0, y: 0 },
+                    name: "right",
+                  },
+                ]),
+              ),
+              WindowAction.AppAppeared("kitty", "kitty"),
+            ),
+            WindowAction.FloatToggled(),
+          ),
+          WindowAction.WindowMoved("app:kitty", 1500, 100, "left"),
+        );
+      const shownApp = (container: HTMLElement) =>
+        container.querySelector(`${APP_TAG_NAME}:not([hidden])`);
+
+      it("draws the part over this monitor, mirrored, on a page that is one", () => {
+        // The page the window is on configures it; this one shows its edge.
+        const { container } = renderingShell(
+          [
+            { ...LEFT, x: -1920 },
+            { ...RIGHT, fillsTheWindow: true, height: 1080, width: 1920, x: 0 },
+          ],
+          overheard(),
+        );
+        act(() => {
+          heard(DeskMessage.Desk(overhanging()));
+        });
+
+        expect(shownApp(container)?.hasAttribute("mirror")).toBe(true);
+      });
+
+      it("mirrors nothing on a page that is the whole desk", () => {
+        // It draws the window whole where it is, over both screens.
+        const { container } = renderingShell(
+          [
+            { ...LEFT, x: 0 },
+            { ...RIGHT, height: 1080, width: 1920, x: 1920 },
+          ],
+          overheard(),
+        );
+        act(() => {
+          heard(DeskMessage.Desk(overhanging()));
+        });
+
+        expect(
+          container.querySelectorAll(`${APP_TAG_NAME}[mirror]`),
+        ).toHaveLength(0);
+      });
+    });
+
     it("draws a fullscreen float's bar at the top of the screen", async () => {
       const user = userEvent.setup();
       const { container } = renderShell();

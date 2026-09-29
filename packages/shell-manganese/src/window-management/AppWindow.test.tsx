@@ -81,6 +81,7 @@ const windowProps = {
   frame: FRAME,
   fullscreen: false,
   hasKeyboard: false,
+  mirror: false,
   motion: "resting",
   onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
@@ -144,6 +145,17 @@ describe("AppWindow", () => {
   it("mounts an element carrying the host's app id", () => {
     const { container } = render(<AppWindow {...windowProps} focused />);
     expect(portal(container).getAttribute("app-id")).toBe("term");
+  });
+
+  it("shows a window another page configures without configuring it", () => {
+    // The part of a window over the edge from the monitor it is on.
+    const { container } = render(<AppWindow {...windowProps} focused mirror />);
+    expect(portal(container).hasAttribute("mirror")).toBe(true);
+  });
+
+  it("configures the window it is on", () => {
+    const { container } = render(<AppWindow {...windowProps} focused />);
+    expect(portal(container).hasAttribute("mirror")).toBe(false);
   });
 
   it("answers a click on the window itself rather than letting the SDK", () => {

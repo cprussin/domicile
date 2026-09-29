@@ -113,7 +113,7 @@ Phase 2, engine plus shell. The window spans screens.
 
 - [x] `BrokeredFrameSink`: a set of parents, and mirrors told the owner's surface
 - [x] `<app mirror>`: embed without configuring (chrome-sdk `app-element.ts`)
-- [ ] Overhangs in `placementsOf`
+- [x] Overhangs (`withOverhangs`, on a page that is one monitor)
 - [ ] `fullscreen global` drawn on every screen through the same mirrors
 
 Phase 3.

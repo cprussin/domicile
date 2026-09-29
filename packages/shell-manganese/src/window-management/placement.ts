@@ -12,8 +12,9 @@ import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { Frame, Tab, TabLayout } from "./tree/frames";
 import { framesOf } from "./tree/frames";
+import { WindowKind } from "./window";
 import type { WindowState } from "./window-state";
-import { workspaceOn } from "./window-state";
+import { windowOf, workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
 
 /** Where one window is drawn, and how it stacks against the others. */
@@ -72,6 +73,12 @@ export type PlacedTab = Tab & { depth: number };
 
 /** Everything the screen shows: the windows, and the tabs of any container. */
 export type Screenful = {
+  /**
+   * The windows among {@link Screenful.placements} that another screen's page
+   * configures, and this one only shows the part of — see
+   * {@link withOverhangs}.
+   */
+  mirrored: readonly string[];
   placements: readonly Placement[];
   /**
    * The container `focus parent` selected, and how it stacks — with the
@@ -182,6 +189,7 @@ export const placementsOf = (
       ? laidOut
       : [...laidOut.filter(({ id }) => id !== full.id), full];
   return {
+    mirrored: [],
     placements,
     selection: selectionIn(selection, floating),
     tabs: [
@@ -190,6 +198,53 @@ export const placementsOf = (
         inFloat.map((tab) => ({ ...tab, depth })),
       ),
     ],
+  };
+};
+
+/**
+ * The screenful with the floats of the other screens that hang over onto this
+ * one: a window dragged across the edge between two monitors, drawn on both.
+ *
+ * **ONLY ON A PAGE THAT IS ONE MONITOR.** On a tty each monitor is a page of
+ * its own, and the page the window is on draws it only as far as its own edge.
+ * The part over the edge is this page's to draw, as a mirror: the window is
+ * the other page's to configure. A page that is the whole desk draws every
+ * window whole already, and needs none of this.
+ *
+ * Over this screen's own floats, as the window being dragged is. Not a
+ * browser window, which another page cannot show without loading it again —
+ * see docs/architecture/WINDOWS-ACROSS-SCREENS.md.
+ */
+export const withOverhangs = (
+  screenful: Screenful,
+  state: WindowState,
+  geometry: Geometry,
+): Screenful => {
+  const here = boxOn(state, geometry.name);
+  const above = FLOATING + workspaceOn(state, geometry.name).floats.length;
+  const overhangs = state.screens
+    .filter(({ name }) => name !== geometry.name)
+    .flatMap(({ box, name }) =>
+      workspaceOn(state, name).floats.flatMap((float) => {
+        // Where that screen is from this page: its box on the desk, from
+        // this screen's, from wherever this page draws this screen.
+        const there = onScreen(float, {
+          ...box,
+          x: box.x - here.x + geometry.screen.x,
+          y: box.y - here.y + geometry.screen.y,
+        });
+        return framesOf(there, rectOf(there), floatingGapOf(float)).frames;
+      }),
+    )
+    .map((frame, at) => placed(frame, above + at))
+    .filter(
+      ({ frame, id }) =>
+        overlaps(frame, geometry.screen) && !isBrowser(state, id),
+    );
+  return {
+    ...screenful,
+    mirrored: overhangs.map(({ id }) => id),
+    placements: [...screenful.placements, ...overhangs],
   };
 };
 
@@ -286,3 +341,23 @@ const spanning = (bar: Rect, surface: Rect): Rect => {
     y,
   };
 };
+
+/** Where the screen `name` is on the desk. */
+const boxOn = (state: WindowState, name: string): Rect => {
+  const screen = state.screens.find((found) => found.name === name);
+  if (screen === undefined) {
+    throw new Error(`shell: no screen ${name}`);
+  } else {
+    return screen.box;
+  }
+};
+
+/** Whether two boxes share any area — an edge alone is not an overlap. */
+const overlaps = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.width &&
+  b.x < a.x + a.width &&
+  a.y < b.y + b.height &&
+  b.y < a.y + a.height;
+
+const isBrowser = (state: WindowState, id: string): boolean =>
+  windowOf(state, id)?.kind === WindowKind.Browser;

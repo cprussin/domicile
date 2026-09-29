@@ -208,8 +208,10 @@ two edges a window dragged past could not be dragged back from.
 onto the workspace showing there, with the keyboard. A float is in its own
 screen's pixels, and the page that was pressed keeps the drag after the pointer
 crosses to the next monitor's page, so a move says which screen it is measured
-from and `floatDragged` converts. Until the middle crosses, a window past a
-screen's edge is cut off there: on a tty the next monitor does not draw it yet.
+from and `floatDragged` converts. On a tty, where each monitor is a page, the
+part over the edge is drawn by the next monitor's page as an `<app mirror>`
+(`withOverhangs` in `placement.ts`): shown there, configured by the page the
+window is on.
 A browser window stays on its screen, its middle held inside it, because a
 `<webview>` on another page is a new guest and a reload. See
 [WINDOWS-ACROSS-SCREENS.md](../../docs/architecture/WINDOWS-ACROSS-SCREENS.md).
