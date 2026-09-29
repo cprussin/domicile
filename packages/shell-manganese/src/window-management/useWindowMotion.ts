@@ -2,12 +2,11 @@ import { useCallback, useState } from "react";
 
 import type { Closing } from "./closing";
 import { departed, withClosing } from "./closing";
-import type { Placement } from "./placement";
+import type { PlacedTab, Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
 import type { Shown } from "./shown";
 import { tabSwitched } from "./tab-switch";
-import type { Tab } from "./tree/frames";
 import type { ShellWindow } from "./window";
 import type { Shuffle, TabFade, WindowMotion } from "./window-motion";
 import { arrivalFrom, departureFor } from "./window-motion";
@@ -41,7 +40,7 @@ export type DrawnWindow = {
 export type DrawnTab = {
   focused: boolean;
   motion: WindowMotion;
-  tab: Tab;
+  tab: PlacedTab;
 };
 
 export type WindowMotions = {

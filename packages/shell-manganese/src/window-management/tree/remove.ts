@@ -21,16 +21,22 @@ import { focusChainOf, NOTHING_TILED } from "./tiling";
 export const removed = (tiling: Tiling, id: string): Tiling => {
   const { root } = tiling;
   const path = root === undefined ? undefined : pathTo(root, id);
-  if (root === undefined || path === undefined) {
-    return tiling;
-  } else {
-    const kept = withoutAt(root, path);
-    return kept === undefined
-      ? NOTHING_TILED
-      : // On a window rather than on whatever container the focus was pointed
-        // at: the shape that container named may not be there any more.
-        { depth: focusChainOf(kept).length, root: kept };
-  }
+  return root === undefined || path === undefined
+    ? tiling
+    : removedAt(root, path);
+};
+
+/**
+ * The tree without the node at `path` — a window, or a whole container, which
+ * is what `floating toggle` takes out when `focus parent` selected one.
+ */
+export const removedAt = (root: LayoutNode, path: Path): Tiling => {
+  const kept = withoutAt(root, path);
+  return kept === undefined
+    ? NOTHING_TILED
+    : // On a window rather than on whatever container the focus was pointed
+      // at: the shape that container named may not be there any more.
+      { depth: focusChainOf(kept).length, root: kept };
 };
 
 /**

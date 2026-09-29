@@ -17,6 +17,8 @@ type Props = {
   onResize: (box: Rect) => void;
   /** Where it is — see `float-borders.ts`. */
   rect: Rect;
+  /** The window it belongs to — see `FloatGrab`. */
+  window: string;
 };
 
 /**
@@ -29,6 +31,7 @@ export const FloatBorder = ({
   float,
   grip,
   rect,
+  window,
   ...handlers
 }: Props) => {
   const events = useFloatBorderDrag({ float, grip, ...handlers });
@@ -41,7 +44,7 @@ export const FloatBorder = ({
       // Which is a border rather than the sheet a held modifier puts up.
       data-border
       // Which window this border belongs to — see `FloatGrab`.
-      data-window={float.id}
+      data-window={window}
       style={placedAt(rect, depth)}
       {...events}
     />

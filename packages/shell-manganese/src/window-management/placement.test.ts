@@ -123,6 +123,40 @@ describe("placementsOf", () => {
     expect(front).toBeGreaterThan(behind);
   });
 
+  it("lays a floating group out inside its box, all at one depth", () => {
+    // `mod+a` then `mod+Shift+Tab` over a vertical split: the split floats
+    // whole, and is still a split.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+    );
+    const editor = placementFor(state, "editor");
+    const mail = placementFor(state, "mail");
+
+    expect(editor?.depth).toBeGreaterThan(TILED);
+    expect(mail?.depth).toBe(editor?.depth);
+    expect(mail?.frame.y).toBeGreaterThan(editor?.frame.y ?? 0);
+    expect(mail?.frame.x).toBe(editor?.frame.x);
+  });
+
+  it("stacks the tabs of a floating group with the group", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+    );
+
+    expect(placementsOf(state, GEOMETRY).tabs).toMatchObject([
+      { depth: placementFor(state, "editor")?.depth },
+    ]);
+  });
+
   it("fills the screen with a fullscreen window", () => {
     const state = reduce(
       desktop("kitty", "editor"),

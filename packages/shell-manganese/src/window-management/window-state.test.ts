@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { TITLE_BAR } from "./rect";
-import { Layout } from "./tree/node";
+import { Layout, windowsIn } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
 import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
@@ -400,9 +400,9 @@ describe("the scratchpad", () => {
     );
 
     expect(state.scratchpad).toEqual([]);
-    expect(workspaceHere(state).floats.map(({ id }) => id)).toEqual([
-      APP("editor"),
-    ]);
+    expect(
+      workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("editor")]);
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
@@ -481,9 +481,9 @@ describe("the keyed commands", () => {
       desktop("kitty", "editor"),
       WindowAction.FloatToggled(),
     );
-    expect(workspaceHere(floated).floats.map(({ id }) => id)).toEqual([
-      APP("editor"),
-    ]);
+    expect(
+      workspaceHere(floated).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("editor")]);
 
     const tiled = reduce(floated, WindowAction.FloatToggled());
     expect(workspaceHere(tiled).floats).toEqual([]);

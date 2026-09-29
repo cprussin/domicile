@@ -5,18 +5,24 @@
 // a kind of window — any window can be floated and put back, and a client's
 // portal is the same portal either way. What changes is where the shell lays
 // it out, which is exactly what this describes.
+//
+// **What floats is a node, not a window.** sway floats whatever `focus parent`
+// selected, so a float holds a tree of its own — one window, most of the time
+// — laid out inside its box the way the tiling lays out a workspace.
 
 import type { Direction } from "../direction";
 import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
 import { TITLE_BAR } from "../rect";
+import type { LayoutNode } from "../tree/node";
+import { windowsIn } from "../tree/node";
 import type { SizeLimit } from "../window";
 
 /** Where a floating window sits, in the desktop's own pixels. */
 export type Float = {
   height: number;
-  /** The window this is the box of. */
-  id: string;
+  /** What floats in the box: a window, or a group of them. */
+  root: LayoutNode;
   /**
    * Whether it is up from the scratchpad, so `scratchpad show` hides it again
    * rather than fetching the next one.
@@ -63,16 +69,20 @@ export const FLOAT_STEP = 10;
  * how many are already out regardless of where the user has since put them.
  */
 export const floatFor = (
-  id: string,
+  root: LayoutNode,
   floating: number,
   scratchpad = false,
 ): Float => ({
   ...OPENS_AT,
-  id,
+  root,
   scratchpad,
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
 });
+
+/** Whether the window `id` is in this box. */
+export const floatHolds = (float: Float, id: string): boolean =>
+  windowsIn(float.root).includes(id);
 
 /**
  * The smallest a window can be dragged down to.

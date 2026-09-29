@@ -12,6 +12,7 @@ import { FloatBorder } from "./floating/FloatBorder";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import type { Float } from "./floating/float";
+import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
 import type { Screenful } from "./placement";
 import { contentsOf, TILED } from "./placement";
@@ -28,6 +29,7 @@ import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
+import { focusedWindowIn } from "./tree/tiling";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
@@ -48,7 +50,7 @@ type Props = {
   domicile: DomicileClient;
   /** The floating window the user has hold of, or `undefined` when none is. */
   draggingId: string | undefined;
-  /** The boxes of the floating windows on screen, by the window they belong to. */
+  /** The boxes of the floating windows on screen, each holding one or a group. */
   floats: readonly Float[];
   /**
    * The window the compositor is typing into, or `undefined` when the chrome
@@ -189,7 +191,7 @@ export const Stage = ({
       {motions.drawn.map(({ motion, placement, restack, window }) =>
         placement !== undefined &&
         window.id !== fullscreenId &&
-        floats.some((float) => float.id === window.id) ? (
+        floats.some((float) => floatHolds(float, window.id)) ? (
           <FloatShadow
             depth={placement.depth}
             dragging={window.id === draggingId}
@@ -201,7 +203,7 @@ export const Stage = ({
         ) : undefined,
       )}
       {motions.drawn.map(({ focused, motion, placement, restack, window }) => {
-        const floating = floats.find((float) => float.id === window.id);
+        const floating = floats.find((float) => floatHolds(float, window.id));
         // While the desktop's modifier is held the pointer belongs to the shell
         // rather than to the client, so a drag can be caught in the page: over
         // every window there is a grab for — a floating one, and a tiled one on
@@ -314,10 +316,13 @@ export const Stage = ({
       {/*
         And the floating windows' borders, the same way: at each one's own
         depth, so a window stacked over it covers its ring too. Not for a float
-        filling the screen, which has no edge to drag.
+        filling the screen, which has no edge to drag. Once a float, by the
+        window its own focus is on: a floating group is one box.
       */}
       {motions.drawn.map(({ placement, window }) => {
-        const floating = floats.find((float) => float.id === window.id);
+        const floating = floats.find(
+          (float) => focusedWindowIn(float.root) === window.id,
+        );
         return placement === undefined ||
           floating === undefined ||
           window.id === fullscreenId
@@ -340,6 +345,7 @@ export const Stage = ({
                   onResize(window.id, box);
                 }}
                 rect={rect}
+                window={window.id}
               />
             ));
       })}
@@ -356,7 +362,7 @@ export const Stage = ({
         hold of a window raises it.
       */}
       {motions.drawn.map(({ focused, motion, placement, restack, window }) => {
-        const floating = floats.find((float) => float.id === window.id);
+        const floating = floats.find((float) => floatHolds(float, window.id));
         const onCloseThis = () => {
           onClose(window.id);
         };
@@ -433,19 +439,26 @@ export const Stage = ({
                     targets={targets}
                   />
                 )}
-              {floating !== undefined && (meta || window.id === draggingId) && (
-                <FloatGrab
-                  depth={placement.depth}
-                  float={floating}
-                  onDrop={onDrop}
-                  onGrab={onGrabThis}
-                  onMove={onMoveThis}
-                  onResize={(box) => {
-                    onResize(window.id, box);
-                  }}
-                  resizes={shift}
-                />
-              )}
+              {/*
+                Once a float, like its borders: a floating group is one box to
+                take hold of, whichever of its windows the drag started over.
+              */}
+              {floating !== undefined &&
+                focusedWindowIn(floating.root) === window.id &&
+                (meta || window.id === draggingId) && (
+                  <FloatGrab
+                    depth={placement.depth}
+                    float={floating}
+                    onDrop={onDrop}
+                    onGrab={onGrabThis}
+                    onMove={onMoveThis}
+                    onResize={(box) => {
+                      onResize(window.id, box);
+                    }}
+                    resizes={shift}
+                    window={window.id}
+                  />
+                )}
             </Fragment>
           );
         }
@@ -458,9 +471,10 @@ export const Stage = ({
       */}
       {motions.tabs.map(({ focused, motion, tab }) => (
         <TitleBar
-          depth={0}
-          // Nothing drags a tab: it belongs to a container, and a container is
-          // tiled.
+          // With the float it is in, if it is in one.
+          depth={tab.depth}
+          // Nothing drags a tab: it belongs to a container, which moves with
+          // its float or not at all.
           dragging={false}
           // The tab of a container the keyboard is not in is still the open
           // one, and saying so with the fill would be a second window claiming

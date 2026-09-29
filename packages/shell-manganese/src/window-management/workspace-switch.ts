@@ -12,9 +12,8 @@
 // from the side the new workspace was on and the ones leaving go the other
 // way, so the two pass each other.
 
-import type { Placement } from "./placement";
+import type { PlacedTab, Placement } from "./placement";
 import type { Shown } from "./shown";
-import type { Tab } from "./tree/frames";
 import type { Towards } from "./window-motion";
 import { WORKSPACES } from "./window-state";
 
@@ -23,7 +22,7 @@ export type WorkspaceSwitch = {
   /** The window the keyboard was in, which its bar goes on saying. */
   activeId: string | undefined;
   placements: readonly Placement[];
-  tabs: readonly Tab[];
+  tabs: readonly PlacedTab[];
   towards: Towards;
 };
 

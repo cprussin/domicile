@@ -78,7 +78,7 @@ the screen it is on.
 | **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it, lit inside by a wash of the same accent — sway's indicator. |
 | **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
-| **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
+| **Mod+Shift+Tab** | `floating toggle`: take the window (or the container Mod+a selected) out of the tiling, or put it back. |
 | **Mod+Minus / Mod+Shift+Minus** | `scratchpad show` / `move scratchpad`. |
 | **Mod+R** | Resize mode — see below. |
 | **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
@@ -170,6 +170,10 @@ container cannot mean); a floating one by ten pixels.
 floats over the rest in a box of its own; pressing it again puts it back where
 the tiling focus is. Each float opens cascaded past the ones already out, and
 comes to the front when it is clicked.
+
+After **Mod+a**, it floats the whole container selected instead, as sway does:
+the group keeps its layout inside one box, moves and resizes as one, and goes
+back into the tiling whole.
 
 The Shift that floats a window is spent on the chord. Shift is also the resize
 modifier, and you are still holding both when the window lands — so until you
