@@ -11,9 +11,19 @@ import { windowsOf } from "./tree/tiling";
 const INNER_GAP = 20;
 
 /**
+ * Between the windows of a floating group: narrower than the tiling's, since
+ * the group shares one box, but still enough to tell its windows apart.
+ */
+const FLOATING_GAP = 10;
+
+/**
  * The gap between the windows of `tiling` — `gaps.inner`, with
  * `gaps.smartGaps`: a workspace showing one window has nothing to space it
  * away from, so it gets the screen.
  */
 export const gapOf = (tiling: Tiling): number =>
   windowsOf(tiling).length > 1 ? INNER_GAP : 0;
+
+/** The same, inside a floating group's box. */
+export const floatingGapOf = (tiling: Tiling): number =>
+  windowsOf(tiling).length > 1 ? FLOATING_GAP : 0;

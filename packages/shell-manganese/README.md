@@ -1,7 +1,8 @@
 # @domicile/shell-manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
-under a transparent bar carrying the workspaces, a clock and the charge. It is
+under a transparent bar carrying the workspaces, the extensions' tray, a clock
+and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
@@ -78,7 +79,7 @@ the screen it is on.
 | **Mod+A / Mod+Shift+A** | `focus parent` / `focus child`: point the commands at the container around the focus, or back at the window. The selected container is drawn with a dashed accent line around it, lit inside by a wash of the same accent — sway's indicator. |
 | **Mod+F / Mod+Shift+F** | Fill the screen with the window being worked in, or every screen there is. The button on a window's own title bar is the first of the two, on the window whose bar it is. |
 | **Mod+Tab** | `focus mode_toggle`: swap the keyboard between the floating windows and the tiled ones. |
-| **Mod+Shift+Tab** | `floating toggle`: take the window out of the tiling, or put it back. |
+| **Mod+Shift+Tab** | `floating toggle`: take the window (or the container Mod+a selected) out of the tiling, or put it back. |
 | **Mod+Minus / Mod+Shift+Minus** | `scratchpad show` / `move scratchpad`. |
 | **Mod+R** | Resize mode — see below. |
 | **Mod+( ) } + { ] [ ! = \*** | Go to a workspace. **With Shift**, send the window being worked in there and stay. |
@@ -170,6 +171,14 @@ container cannot mean); a floating one by ten pixels.
 floats over the rest in a box of its own; pressing it again puts it back where
 the tiling focus is. Each float opens cascaded past the ones already out, and
 comes to the front when it is clicked.
+
+After **Mod+a**, it floats the whole container selected instead, as sway does:
+the group keeps its layout inside one box, moves and resizes as one, and goes
+back into the tiling whole. Inside it the tiling's keys work as they do on the
+workspace — focus, Mod+a/Mod+Shift+a, splits, layouts, and moving or resizing a
+window within the group — while a lone floating window, or a group Mod+a has
+selected, moves and resizes its box. A window opened while the keyboard is in a
+floating group opens into that group.
 
 The Shift that floats a window is spent on the chord. Shift is also the resize
 modifier, and you are still holding both when the window lands — so until you
@@ -518,9 +527,9 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of every screen: the workspaces at one end, the clock in the
-middle, and at the other end the charge, behind the name of the binding mode
-whenever it is not the usual one. Each screen's bar marks the workspace that
+Across the top of every screen: the workspaces and the extensions' tray at one
+end, the clock in the middle, and at the other end the charge, behind the name
+of the binding mode whenever it is not the usual one. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
 that is a fact about the desk.
 
@@ -663,6 +672,24 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
+### The extensions' tray
+
+Beside the workspaces: each extension the config names that has an action, as
+its icon, named by its title, with its badge over the corner.
+
+- **A click on one with a popup** opens it in a panel under the icon, as a
+  `<webview>` of the popup's address. A press outside it, Escape, or the popup's
+  own `window.close()` (`domicile-close`) closes it.
+- **A click on one without** is `activateExtension(id)`: the extension's
+  `action.onClicked`.
+- **The panel takes the keyboard off the windows** while it is up, as the
+  launcher does, and they take it back when it closes.
+- **Escape is heard only while this page has the keyboard.** Once the popup's
+  page has the focus, a key pressed there never reaches this document.
+- A disabled action is not drawn, and the state is the action's default, not
+  the focused page's, until slice 2 of
+  [EXTENSIONS.md](../../docs/architecture/EXTENSIONS.md).
+
 ## The wallpaper
 
 A photograph behind the whole desktop, and the next one a minute later.
@@ -711,7 +738,8 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the workspaces, the clock and the charge. |
+| `src/top-bar/` | The bar: the workspaces, the extensions' tray, the clock and the charge. |
+| `src/extensions/` | The extensions' tray on the bar, the popup panel under an icon, and the engine's list it draws. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the three things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — it searches its index of the whole home and sends back only the front of what matched — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the files, then a search, always. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |

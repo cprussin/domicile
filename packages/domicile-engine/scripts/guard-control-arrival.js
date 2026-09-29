@@ -122,6 +122,7 @@ const EVENT_NAMES = [
   "focusrequested",
   "displayschanged",
   "locked",
+  "extensions",
 ];
 const missing = EVENT_NAMES.flatMap((name) => {
   const heard = { handler: false, listener: false };

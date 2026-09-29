@@ -64,6 +64,12 @@ It provides these:
   state the element already holds: the browser process opens no window for a
   guest, so a shell that ignores it is a desktop where such a link does
   nothing.
+  `domicile-close` is the page calling `window.close()` — an extension's popup
+  closing itself — and removing the view is the shell's answer.
+- **`Extension`** (`./extension`) — one row of the tray, as
+  `DomicileClient.on("extensions", …)` delivers it, and the Zod schema it is
+  parsed with. A click on one with a `popup` is a `<webview>` at that address;
+  one without is `DomicileClient.activateExtension(id)`.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.

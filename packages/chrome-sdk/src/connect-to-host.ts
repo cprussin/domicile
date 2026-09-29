@@ -132,6 +132,7 @@ const compositorOn = (global: HostGlobal): DomicileHost | undefined =>
  * it, which is a description, and nothing here has described anything.
  */
 const absentHost = (): DomicileHost => ({
+  activateExtension: () => undefined,
   addEventListener: () => undefined,
   closeApp: () => undefined,
   copyClipboardEntry: () => undefined,

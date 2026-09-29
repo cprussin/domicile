@@ -126,6 +126,9 @@ class FakeHost implements DomicileHost {
   grabShortcut(shortcut: DomicileShortcut): void {
     this.calls.push(["grabShortcut", shortcut]);
   }
+  activateExtension(id: string): void {
+    this.calls.push(["activateExtension", id]);
+  }
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
   }
@@ -315,6 +318,48 @@ describe("DomicileClient", () => {
 
       expect(seen).toStrictEqual([
         { entries: [{ id: 3, preview: "ssh-rsa AAAA" }] },
+      ]);
+    });
+
+    it("delivers the extensions in the tray, parsed", () => {
+      const seen: unknown[] = [];
+      domicile.on("extensions", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "extensions",
+        Object.assign(new Event("extensions"), {
+          extensions: [
+            {
+              badgeColor: "#00000000",
+              badgeText: "",
+              enabled: true,
+              icon: "data:image/png;base64,iVBORw0KGgo=",
+              id: "abcdefghijklmnopabcdefghijklmnop",
+              name: "A tray guard",
+              popup: null,
+              title: "A tray guard",
+            },
+          ],
+        }),
+      );
+
+      expect(seen).toStrictEqual([
+        {
+          extensions: [
+            {
+              badgeColor: "#00000000",
+              badgeText: "",
+              enabled: true,
+              icon: "data:image/png;base64,iVBORw0KGgo=",
+              id: "abcdefghijklmnopabcdefghijklmnop",
+              name: "A tray guard",
+              popup: undefined,
+              title: "A tray guard",
+            },
+          ],
+        },
       ]);
     });
 
@@ -600,6 +645,12 @@ describe("DomicileClient", () => {
 
       domicile.copyClipboardEntry(3);
       expect(host.lastCall()).toStrictEqual(["copyClipboardEntry", 3]);
+
+      domicile.activateExtension("abcdefghijklmnopabcdefghijklmnop");
+      expect(host.lastCall()).toStrictEqual([
+        "activateExtension",
+        "abcdefghijklmnopabcdefghijklmnop",
+      ]);
 
       domicile.setDevicePixelRatio(2);
       expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);

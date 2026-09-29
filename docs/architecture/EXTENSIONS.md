@@ -32,16 +32,24 @@ unpacked = ["/home/you/src/my-extension"]         # absolute: `~` is not expande
 | Parse `[extensions]`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
 | Send the list as a fact that rides the handshake, like `Keymap`, and again on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
 | Intercept it in the browser process, as `Keymap` is | `components/domicile/browser/control_channel.cc` |
-| Reconcile the profile against the list | `components/domicile/browser/extension_installer.{h,cc}` |
+| Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
+| Carry it out in the page's profile | `chrome/browser/domicile/domicile_extension_installer.{h,cc}`, bound by patch 0055 |
 
-Reconciling does three things:
+Reconciling does three things, once `ExtensionSystem::ready()`:
 
-- A Web Store id goes to `PendingExtensionManager` with the Web Store's update URL (`https://clients2.google.com/service/update2/crx`). It installs from the Store and updates from it.
-- An unpacked directory goes to `UnpackedInstaller::Load`.
-- An extension this installer added that the list no longer names gets uninstalled. Anything else in the profile is left alone.
+- A Web Store id not installed goes to `PendingExtensionManager::AddFromExternalUpdateUrl` with `extension_urls::GetWebstoreUpdateUrl()`, as `kExternalPrefDownload`, acknowledged. It installs from the Store and updates from it.
+- A directory not already loaded goes to `UnpackedInstaller::Load`, silent on failure (the error is logged). Directories are compared after `base::MakeAbsoluteFilePath`, as the installer records them.
+- An extension this installer added that the list no longer names is uninstalled with `UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION`, which neither asks policy nor marks it user-removed. What it added is the profile pref `domicile.extensions.added`. Anything else in the profile is left alone.
 
 Naming an extension in the config is the consent. There is no install prompt,
 and the manifest's permissions are granted as declared.
+
+Two things Chromium does to an extension installed this way, at the pin:
+
+| Chromium | On a desk |
+|---|---|
+| `ExtensionRegistrar` disables an unacknowledged external extension (`DISABLE_EXTERNAL_EXTENSION`) only where `FeatureSwitch::prompt_for_external_extensions` is on: Windows and macOS. | Never applies on Linux. The Web Store add passes `mark_acknowledged` anyway. |
+| `StandardManagementPolicyProvider` disables a `kUnpacked` extension in a profile not in developer mode (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). | The installer sets `prefs::kExtensionsUIDeveloperMode` before loading a directory, and leaves it on. |
 
 ### The tray: engine to page
 
@@ -61,8 +69,8 @@ interface DomicileExtension {
   title: string;              // the action's tooltip
   icon: string;               // data:image/png, rendered at the page's DPR
   badgeText: string;
-  badgeColor: string;         // CSS color
-  popup: string | undefined;  // chrome-extension://<id>/popup.html
+  badgeColor: string;         // CSS color, #rrggbbaa
+  popup: string | null;       // chrome-extension://<id>/popup.html; the SDK says undefined
   enabled: boolean;
 }
 ```
@@ -70,7 +78,7 @@ interface DomicileExtension {
 - **`extensions` is the whole list, on every change.** Like `Displays`, a page that reloads is told again rather than having had to be listening. The source is `ExtensionRegistryObserver` plus `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **The icon is a data URL, not a `chrome-extension://` URL.** `action.setIcon({imageData})` sets an icon that has no URL.
 - **Action state is per tab**, so the list reports it for the active tab. That needs slice 2; until then it reports the default state (tab `-1`).
-- **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on blur. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
+- **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
 - **A click without a popup** calls `activateExtension(id)`, which dispatches `action.onClicked` with the active tab.
 
 The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
@@ -123,12 +131,13 @@ Slice 1: extensions run, and show in a tray.
 - [x] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
 - [x] `[extensions]` in `domicile-config`
 - [x] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
-- [ ] `extension_installer` in the fork, and the control channel handing it the list
-- [ ] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`
-- [ ] `WebViewGuestClient.CloseRequested` and `domicile-close`
-- [ ] `ExtensionTray` mojo, `onextensions`, `activateExtension`
-- [ ] the chrome-sdk client, and manganese's tray and popup panel
-- [ ] *Extensions* in `docs/WRITING-A-SHELL.md`
+- [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
+- [x] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`: `chrome/browser/domicile/domicile_tab_helpers.h`, handed to `BindWebViewGuestHost` by patch 0056 because the guest's target cannot depend on `//chrome`
+- [x] `WebViewGuestClient.CloseRequested` and `domicile-close`
+- [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
+- [x] the chrome-sdk client: `DomicileClient.on("extensions")`, `activateExtension`, `WEBVIEW_CLOSE_EVENT`
+- [x] manganese's tray and popup panel
+- [x] *Extensions* in `docs/WRITING-A-SHELL.md`
 
 Slice 2: tabs.
 
@@ -137,7 +146,3 @@ Slice 2: tabs.
 - [ ] the mutations table, each to where it goes
 - [ ] per-tab action state in `onextensions`
 - [ ] a guard: a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`
-
-## Open questions
-
-- **Does the pin disable an externally added extension until someone approves it?** `ExternalInstallManager` does this on some platforms, and a desk has no bubble to approve it from. Recommendation: verify on `crux` with the first installer build. If it does, clear the disable reason in `ExtensionPrefs` from the installer rather than patching the prompt.

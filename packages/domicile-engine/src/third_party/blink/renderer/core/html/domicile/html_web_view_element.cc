@@ -76,6 +76,10 @@ constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 // domicile_file_chooser_event.h.
 constexpr char kFileChooserEvent[] = "domicile-file-chooser";
 
+// And what it says when the page inside calls window.close(). Carries nothing:
+// what is closing is this element's page, and the element is the target.
+constexpr char kCloseEvent[] = "domicile-close";
+
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
 // named here so the element and the SDK have one spelling between them.
@@ -422,6 +426,12 @@ void HTMLWebViewElement::FileChooserRequested(
   if (!event->defaultPrevented()) {
     event->CancelIfUnanswered();
   }
+}
+
+// Bubbling, for the reason the others bubble: a shell hangs one handler on the
+// panel it drew and hears everything its parts say through it.
+void HTMLWebViewElement::CloseRequested() {
+  DispatchEvent(*Event::CreateBubble(AtomicString(kCloseEvent)));
 }
 
 void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {

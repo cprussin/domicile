@@ -169,11 +169,11 @@ The evidence for each of those is in the doc that made the claim —
 
 4. **Chrome extensions.** Installed from `[extensions]` in the config, their
    actions in the shell's tray with popups in a `<webview>`, and every
-   `<webview>` a tab to `chrome.tabs`. Started: a guard proves a content script
-   reaches a `<webview>`, and the compositor sends the config's list to the
-   browser as `HostMessage::Extensions`. Next is the fork's installer that
-   reads it.
-   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
+   `<webview>` a tab to `chrome.tabs`. Slice 1 is done: the fork installs what
+   the config names, and manganese draws the actions in a tray on its bar and
+   opens their popups in a `<webview>` under them. Left is slice 2, tabs:
+   `tabs.query` finds no `<webview>` yet, and an action's state is its default
+   tab's. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 ## In the engine fork — the agent on `crux`
 

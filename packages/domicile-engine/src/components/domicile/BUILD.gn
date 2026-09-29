@@ -314,6 +314,39 @@ source_set("color_scheme") {
   ]
 }
 
+# Which extensions to install, load and uninstall so a profile holds what the
+# desk's config names.
+#
+# A target of its own for :pointer_warp's reason: the decision is here, where a
+# test reaches it with no profile, and carrying it out is in
+# //chrome/browser/domicile, which is where a Profile and its ExtensionService
+# are. Also the shape :control_channel parses the `extensions` message into.
+# The standard library only.
+source_set("extension_installer") {
+  sources = [
+    "browser/extension_installer.cc",
+    "browser/extension_installer.h",
+  ]
+}
+
+# How an extension's action is spelled for the shell's tray: a badge color as
+# CSS and an icon as a data: URL.
+#
+# A target of its own for :extension_installer's reason: the spelling is here,
+# where a test reaches it with no profile, and reading an ExtensionAction is in
+# //chrome/browser/domicile, which is where one is. //base and SkColor.
+source_set("extension_tray_entry") {
+  sources = [
+    "browser/extension_tray_entry.cc",
+    "browser/extension_tray_entry.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//skia",
+  ]
+}
+
 # What Chrome offers a profile's user that a desktop has no place for, off.
 # Only the pref names are wanted of the three components, and a pref name is
 # the contract, so it is theirs rather than a string spelled here.
@@ -357,6 +390,7 @@ source_set("control_channel") {
     ":cursor_shape",
     ":desk_lock",
     ":display_transform",
+    ":extension_installer",
     ":line_framer",
     ":shortcut_registry",
     ":theme",
@@ -375,6 +409,8 @@ source_set("unit_tests") {
     "browser/command_protocol_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
     "browser/display_list_unittest.cc",
+    "browser/extension_installer_unittest.cc",
+    "browser/extension_tray_entry_unittest.cc",
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/line_framer_unittest.cc",
@@ -408,6 +444,8 @@ source_set("unit_tests") {
     ":cursor_shape",
     ":desktop_prefs",
     ":display_transform",
+    ":extension_installer",
+    ":extension_tray_entry",
     ":file_choice",
     ":keyboard_layout",
     ":line_framer",

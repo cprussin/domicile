@@ -1,13 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
+import { LayoutNode } from "../tree/node";
 import { GrabCursor } from "../useGrabCursor";
 import type { Float } from "./float";
 import { floatBordersOf } from "./float-borders";
 
 const AT: Float = {
+  depth: 0,
   height: 400,
-  id: "w1",
+  root: LayoutNode.Window("w1"),
   scratchpad: false,
   width: 600,
   x: 100,

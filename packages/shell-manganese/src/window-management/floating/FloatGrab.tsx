@@ -17,6 +17,11 @@ type Props = {
   onResize: (box: Rect) => void;
   /** Whether taking hold now would resize the window rather than move it. */
   resizes: boolean;
+  /**
+   * The window it belongs to: the one the float's own focus is on, which is
+   * the float's only window unless a group floats in it.
+   */
+  window: string;
 };
 
 /**
@@ -34,7 +39,13 @@ type Props = {
  * surface alone, so a drag started on the title bar resizes like one started
  * anywhere else.
  */
-export const FloatGrab = ({ depth, float, resizes, ...moves }: Props) => {
+export const FloatGrab = ({
+  depth,
+  float,
+  resizes,
+  window,
+  ...moves
+}: Props) => {
   const { drag, ...handlers } = useFloatDrag({
     float,
     resizes,
@@ -56,7 +67,7 @@ export const FloatGrab = ({ depth, float, resizes, ...moves }: Props) => {
       // rather than a styling hook: a press here lands off every `<app>`, and
       // left unanswered that is the chrome taking the keyboard off the window
       // the user has just taken hold of. See `AppWindow`.
-      data-window={float.id}
+      data-window={window}
       onPointerMove={onPointerMove}
       style={placedAt(rectOf(float), depth)}
       {...handlers}

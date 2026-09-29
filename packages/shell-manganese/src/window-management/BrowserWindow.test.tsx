@@ -43,10 +43,6 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
     },
   }) as unknown as DomicileClient;
 
-const noHover = () => {
-  // Nothing in the case moves the pointer into the window.
-};
-
 const noWindows = () => {
   // Nothing in the case asks for a window of its own.
 };
@@ -222,7 +218,6 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onHover={() => undefined}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -250,7 +245,6 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen
         motion="resting"
-        onHover={() => undefined}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -267,45 +261,6 @@ describe("BrowserWindow", () => {
     expect(style.borderTopWidth).not.toBe("1px");
   });
 
-  it("reports where the pointer crossed into it", async () => {
-    // The place is the whole of what says whether the pointer went to the
-    // window or the window came to the pointer — see `usePointerWarp` — so
-    // it is the event that carries it rather than the element the crossing
-    // was heard on. A browser window hears its own from whichever of its
-    // parts the pointer reached, the page inside it included.
-    const at = await new Promise<readonly [number, number]>((resolve) => {
-      const { container } = render(
-        <BrowserWindow
-          clickThrough={false}
-          depth={0}
-          domicile={silentDomicile}
-          dragging={false}
-          focused
-          frame={FRAME}
-          fullscreen={false}
-          motion="resting"
-          onHover={resolve}
-          onMotionEnded={nothingEnded}
-          onNavigate={() => undefined}
-          onOpenWindow={noWindows}
-          onReach={() => undefined}
-          rect={ON_SCREEN}
-          src="https://example.com"
-        />,
-      );
-
-      view(container).dispatchEvent(
-        new MouseEvent("pointerover", {
-          bubbles: true,
-          clientX: 640,
-          clientY: 415,
-        }),
-      );
-    });
-
-    expect(at).toStrictEqual([640, 415]);
-  });
-
   it("points its view at the address it opened with", () => {
     const { container } = render(
       <BrowserWindow
@@ -317,7 +272,6 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onHover={noHover}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -342,7 +296,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -374,7 +327,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={(url) => {
             seen.push(url);
@@ -407,7 +359,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onOpenWindow: noWindows,
         onReach: () => undefined,
@@ -443,7 +394,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -473,7 +423,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -509,7 +458,6 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={resolve}
@@ -537,7 +485,6 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
-      onHover: noHover,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
       onOpenWindow: noWindows,
@@ -645,7 +592,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -684,7 +630,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -708,7 +653,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -748,7 +692,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -774,7 +717,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -807,7 +749,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -844,7 +785,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -876,7 +816,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -917,7 +856,6 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -944,7 +882,6 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -956,36 +893,6 @@ describe("BrowserWindow", () => {
           />,
         );
         fireEvent.focusIn(view(container));
-      });
-    });
-
-    it("reports a reach when the chrome around the page is clicked", async () => {
-      // Pressed where nothing takes the focus — the bar behind the controls —
-      // so the pointer is the only thing that could have said this. A window
-      // is reached by being clicked, not by having something in it focused.
-      await new Promise<void>((resolve) => {
-        render(
-          <BrowserWindow
-            clickThrough={false}
-            depth={0}
-            domicile={silentDomicile}
-            dragging={false}
-            focused={false}
-            frame={FRAME}
-            fullscreen={false}
-            motion="resting"
-            onHover={noHover}
-            onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenWindow={noWindows}
-            onReach={() => {
-              resolve();
-            }}
-            rect={ON_SCREEN}
-            src="https://example.com"
-          />,
-        );
-        fireEvent.pointerDown(browser());
       });
     });
 
@@ -1006,7 +913,6 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
-            onHover={noHover}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
             onOpenWindow={noWindows}
@@ -1018,34 +924,6 @@ describe("BrowserWindow", () => {
           />,
         );
         view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
-      });
-    });
-
-    it("reports a click on the chrome of the window it is already in", async () => {
-      // The other half of the same window, and the same rule.
-      await new Promise<void>((resolve) => {
-        render(
-          <BrowserWindow
-            clickThrough={false}
-            depth={0}
-            domicile={silentDomicile}
-            dragging={false}
-            focused
-            frame={FRAME}
-            fullscreen={false}
-            motion="resting"
-            onHover={noHover}
-            onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenWindow={noWindows}
-            onReach={() => {
-              resolve();
-            }}
-            rect={ON_SCREEN}
-            src="https://example.com"
-          />,
-        );
-        fireEvent.pointerDown(browser());
       });
     });
 
@@ -1064,7 +942,6 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
-        onHover: noHover,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
         onOpenWindow: noWindows,
@@ -1107,7 +984,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1136,35 +1012,6 @@ describe("BrowserWindow", () => {
 
       expect(reaches).toStrictEqual([]);
     });
-
-    it("reports the window the pointer moves into", async () => {
-      // Focus follows the cursor, and a browser window hears the pointer
-      // arrive the way any other chrome does.
-      await new Promise<void>((resolve) => {
-        render(
-          <BrowserWindow
-            clickThrough={false}
-            depth={0}
-            domicile={silentDomicile}
-            dragging={false}
-            focused={false}
-            frame={FRAME}
-            fullscreen={false}
-            motion="resting"
-            onHover={() => {
-              resolve();
-            }}
-            onMotionEnded={nothingEnded}
-            onNavigate={() => undefined}
-            onOpenWindow={noWindows}
-            onReach={() => undefined}
-            rect={ON_SCREEN}
-            src="https://example.com"
-          />,
-        );
-        fireEvent.pointerOver(browser());
-      });
-    });
   });
 
   // A CONTROL THAT WOULD DO NOTHING SAYS SO BEFORE IT IS PRESSED. `goBack()`
@@ -1183,7 +1030,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1211,7 +1057,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1242,7 +1087,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1272,7 +1116,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1309,7 +1152,6 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
-          onHover={noHover}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
           onOpenWindow={noWindows}
@@ -1420,7 +1262,6 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
-        onHover={noHover}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
         onOpenWindow={noWindows}
@@ -1445,7 +1286,6 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
-      onHover: noHover,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
       onOpenWindow: noWindows,

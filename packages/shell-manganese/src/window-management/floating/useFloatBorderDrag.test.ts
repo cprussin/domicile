@@ -3,12 +3,14 @@ import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
+import { LayoutNode } from "../tree/node";
 import type { Float, Grip } from "./float";
 import { useFloatBorderDrag } from "./useFloatBorderDrag";
 
 const AT: Float = {
+  depth: 0,
   height: 400,
-  id: "w1",
+  root: LayoutNode.Window("w1"),
   scratchpad: false,
   width: 600,
   x: 100,

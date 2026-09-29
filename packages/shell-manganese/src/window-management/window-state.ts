@@ -17,10 +17,11 @@
 import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 
 import type { Axis, Direction } from "./direction";
-import { limitedTo } from "./floating/float";
+import { floatHolds, limitedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
+import { NodeKind } from "./tree/node";
 import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
@@ -41,11 +42,11 @@ import {
   modeToggled,
   opened,
   parentFocused,
-  pointedAt,
   reached,
   shown,
   splitFlipped,
   tiledDropped,
+  tiledIn,
   tiledStretched,
   windowGrown,
   windowMoved,
@@ -1140,10 +1141,11 @@ const showWorkspace = (state: WindowState, name: string): WindowState => {
 };
 
 // The window under the pointer is the window the keyboard is in, which is the
-// whole of this shell's focus policy. What it does not do is raise: a window
-// that came to the front for being crossed would cover the one the user was
-// heading for, and the pointer would have rearranged the desktop on the way
-// there.
+// whole of this shell's focus policy — and a float the pointer crosses into
+// comes to the front, as a click would bring it. Here rather than left to the
+// compositor: a client's window used to come up only because the focus this
+// moves came back from the host as a reach, and a browser window, which names
+// no client, never did.
 const pointAtWindow = (state: WindowState, id: string): WindowState => {
   // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A desk of
   // several monitors is several pages, each drawing its own screen's windows,
@@ -1164,7 +1166,7 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
     return state;
   } else {
     return onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
-      pointedAt(found, id),
+      reached(found, id),
     );
   }
 };
@@ -1316,7 +1318,7 @@ const sendToWorkspace = (state: WindowState, name: string): WindowState => {
     return onWorkspace(
       onCurrent(state, (workspace) => closed(workspace, id)),
       name,
-      (workspace) => opened(workspace, id),
+      (workspace) => tiledIn(workspace, id),
     );
   }
 };
@@ -1406,6 +1408,9 @@ const homeOf = (
  * see `limitedTo`. After every action rather than in each that moves a float,
  * because a client can say its limits after it was floated, and every way a
  * float is sized would otherwise have to remember to ask.
+ *
+ * A window alone in its box only: a floating group's box is shared out among
+ * its windows, so no one client's limits are the box's.
  */
 const limited = (before: WindowState, after: WindowState): WindowState => {
   const workspaces = after.workspaces.map((workspace) =>
@@ -1424,11 +1429,15 @@ const limitedFloats = (
   workspace: Workspace,
 ): Workspace => {
   const floats = workspace.floats.map((float) => {
-    const window = after.windows.find(({ id }) => id === float.id);
+    const { root } = float;
+    const window =
+      root.kind === NodeKind.Window
+        ? after.windows.find(({ id }) => id === root.id)
+        : undefined;
     return window?.kind === WindowKind.App
       ? limitedTo(
           float,
-          floatBefore(before, float.id),
+          floatBefore(before, window.id),
           window.minSize,
           window.maxSize,
         )
@@ -1443,4 +1452,4 @@ const limitedFloats = (
 const floatBefore = (state: WindowState, id: string) =>
   state.workspaces
     .flatMap(({ floats }) => floats)
-    .find((float) => float.id === id);
+    .find((float) => floatHolds(float, id));

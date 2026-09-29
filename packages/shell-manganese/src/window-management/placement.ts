@@ -7,7 +7,7 @@
 // knows, so it is an argument rather than a field.
 
 import { rectOf } from "./floating/float";
-import { gapOf } from "./gaps";
+import { floatingGapOf, gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { Frame, Tab, TabLayout } from "./tree/frames";
@@ -67,15 +67,19 @@ export type Geometry = {
   workspace: Rect;
 };
 
+/** A container's tab, and how it stacks: with the float it is in, if any. */
+export type PlacedTab = Tab & { depth: number };
+
 /** Everything the screen shows: the windows, and the tabs of any container. */
 export type Screenful = {
   placements: readonly Placement[];
   /**
-   * The container `focus parent` selected, or `undefined` while the commands
-   * are pointed at a window — see `tree/frames.ts`.
+   * The container `focus parent` selected, and how it stacks — with the
+   * float it is in, if any — or `undefined` while the commands are pointed at
+   * a window. See `tree/frames.ts`.
    */
-  selection: Rect | undefined;
-  tabs: readonly Tab[];
+  selection: { depth: number; rect: Rect } | undefined;
+  tabs: readonly PlacedTab[];
 };
 
 /**
@@ -85,8 +89,13 @@ export type Screenful = {
  * Under the page's own stack rather than at the bottom of it, and still over
  * the wallpaper: that sits at this depth too and comes first in the document,
  * and two elements at one `z-index` are decided by the order they come in it.
+ *
+ * Two under the tiling rather than one, which leaves the depth between for
+ * the window a tab switch is hiding while the one it shows fades in over it
+ * (`windowConcealing`). Level with the other hidden tabs, whichever of them
+ * came later in the document would be drawn over it and show through the fade.
  */
-const COVERED = -1;
+const COVERED = -2;
 
 /** The `z-index` the tiled windows share: the bottom of the page's stack. */
 export const TILED = 0;
@@ -151,20 +160,16 @@ export const placementsOf = (
     geometry.workspace,
     gapOf(workspace.tiling),
   );
+  // Over them, in the order the workspace stacks them: each float's own tree
+  // laid out in its box.
+  const floating = workspace.floats.map((float, at) => ({
+    depth: FLOATING + at,
+    ...framesOf(float, rectOf(float), floatingGapOf(float)),
+  }));
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
-    // Over them, in the order the workspace stacks them.
-    ...workspace.floats.map((float, at) =>
-      placed(
-        {
-          bar: barOf(rectOf(float)),
-          behind: undefined,
-          id: float.id,
-          surface: surfaceOf(rectOf(float)),
-          tabbed: undefined,
-        },
-        FLOATING + at,
-      ),
+    ...floating.flatMap(({ depth, frames: inFloat }) =>
+      inFloat.map((frame) => placed(frame, depth)),
     ),
   ];
   const full = fullscreen(workspace, geometry);
@@ -174,7 +179,16 @@ export const placementsOf = (
     full === undefined
       ? laidOut
       : [...laidOut.filter(({ id }) => id !== full.id), full];
-  return { placements, selection, tabs };
+  return {
+    placements,
+    selection: selectionIn(selection, floating),
+    tabs: [
+      ...tabs.map((tab) => ({ ...tab, depth: TILED })),
+      ...floating.flatMap(({ depth, tabs: inFloat }) =>
+        inFloat.map((tab) => ({ ...tab, depth })),
+      ),
+    ],
+  };
 };
 
 /**
@@ -239,6 +253,25 @@ const placed = (
   surface,
   tabbed,
 });
+
+/**
+ * The group `focus parent` selected, in the tiling or in a float: one of them
+ * at most, since the keyboard leaving a layer takes its selection with it —
+ * see `workspace.ts`.
+ */
+const selectionIn = (
+  tiled: Rect | undefined,
+  floating: readonly { depth: number; selection: Rect | undefined }[],
+): Screenful["selection"] => {
+  const float = floating.find(({ selection }) => selection !== undefined);
+  if (tiled !== undefined) {
+    return { depth: TILED, rect: tiled };
+  } else if (float?.selection === undefined) {
+    return undefined;
+  } else {
+    return { depth: float.depth, rect: float.selection };
+  }
+};
 
 /** The smallest box holding both of them. */
 const spanning = (bar: Rect, surface: Rect): Rect => {

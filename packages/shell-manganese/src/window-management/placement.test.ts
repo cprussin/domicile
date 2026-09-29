@@ -51,7 +51,10 @@ describe("placementsOf", () => {
       WindowAction.ParentFocused(),
     );
 
-    expect(placementsOf(state, GEOMETRY).selection).toEqual(GEOMETRY.workspace);
+    expect(placementsOf(state, GEOMETRY).selection).toEqual({
+      depth: TILED,
+      rect: GEOMETRY.workspace,
+    });
   });
 
   it("gives a lone tiled window the whole workspace, with no gaps", () => {
@@ -121,6 +124,45 @@ describe("placementsOf", () => {
     const front = placementFor(state, "kitty")?.depth ?? 0;
     const behind = placementFor(state, "editor")?.depth ?? 0;
     expect(front).toBeGreaterThan(behind);
+  });
+
+  it("lays a floating group out inside its box, all at one depth", () => {
+    // `mod+a` then `mod+Shift+Tab` over a vertical split: the split floats
+    // whole, and is still a split.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+    );
+    const editor = placementFor(state, "editor");
+    const mail = placementFor(state, "mail");
+
+    expect(editor?.depth).toBeGreaterThan(TILED);
+    expect(mail?.depth).toBe(editor?.depth);
+    expect(mail?.frame.x).toBe(editor?.frame.x);
+    // A gap between them, narrower than the tiling's.
+    const gap =
+      (mail?.frame.y ?? 0) -
+      ((editor?.frame.y ?? 0) + (editor?.frame.height ?? 0));
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(20);
+  });
+
+  it("stacks the tabs of a floating group with the group", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+    );
+
+    expect(placementsOf(state, GEOMETRY).tabs).toMatchObject([
+      { depth: placementFor(state, "editor")?.depth },
+    ]);
   });
 
   it("fills the screen with a fullscreen window", () => {
@@ -261,6 +303,21 @@ describe("placementsOf", () => {
       depth: TILED,
       rect: shown?.surface ?? GEOMETRY.screen,
     });
+  });
+
+  // A DEPTH BETWEEN THEM. A tab switch holds the window it hides there while
+  // the one it shows fades in over it (`windowConcealing`): at the depth every
+  // other hidden tab has, one of those could be drawn over it instead, and
+  // show through the fade.
+  it("leaves a depth free between the hidden tabs and the tiled windows", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+
+    expect(
+      contentsOf(placementFor(state, "kitty"))?.depth ?? TILED,
+    ).toBeLessThan(TILED - 1);
   });
 
   it("draws nothing for a window that is not on screen", () => {

@@ -4,7 +4,7 @@ import type { LayoutNode } from "./node";
 import { Layout, LayoutNode as Node, NodeKind, withChildAt } from "./node";
 import { nodeAt, replacedAt } from "./path";
 import type { Tiling } from "./tiling";
-import { focusPathOf, withFocusOn } from "./tiling";
+import { focusedWindowIn, focusPathOf, withFocusOn } from "./tiling";
 
 /**
  * The layout a workspace's first container has: sway's `workspace_layout`,
@@ -19,17 +19,22 @@ const WORKSPACE_LAYOUT = Layout.Tabbed;
  * window gets a sibling beside it, and a container that `focus parent`
  * selected gets a child of its own.
  */
-export const inserted = (tiling: Tiling, id: string): Tiling => {
+export const inserted = (tiling: Tiling, id: string): Tiling =>
+  insertedNode(tiling, Node.Window(id));
+
+/**
+ * The same, for a whole node: a floating group rejoining the tiling, with the
+ * focus on the window it was in.
+ */
+export const insertedNode = (tiling: Tiling, node: LayoutNode): Tiling => {
   const { root } = tiling;
-  const opened = Node.Window(id);
-  if (root === undefined) {
-    return { depth: 0, root: opened };
-  } else {
-    return withFocusOn(
-      { ...tiling, root: besideFocus(root, tiling.depth, opened) },
-      id,
-    );
-  }
+  return withFocusOn(
+    {
+      ...tiling,
+      root: root === undefined ? node : besideFocus(root, tiling.depth, node),
+    },
+    focusedWindowIn(node),
+  );
 };
 
 const besideFocus = (

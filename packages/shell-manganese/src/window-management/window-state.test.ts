@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { TITLE_BAR } from "./rect";
-import { Layout } from "./tree/node";
+import { Layout, windowsIn } from "./tree/node";
 import { windowsOf } from "./tree/tiling";
 import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
@@ -310,6 +310,26 @@ describe("the workspaces", () => {
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
+  it("tiles it there even while a floating group has the keyboard", () => {
+    // Only a window that opens joins the floating group; one sent over lands
+    // tiled, however that workspace was left.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("term", "term"),
+      WindowAction.WindowSentToWorkspace("1"),
+    );
+
+    expect(windowsOf(workspaceNamed(state, "1").tiling)).toEqual([
+      APP("kitty"),
+      APP("term"),
+    ]);
+  });
+
   it("keeps a window that closes on a workspace nobody is looking at", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -400,9 +420,9 @@ describe("the scratchpad", () => {
     );
 
     expect(state.scratchpad).toEqual([]);
-    expect(workspaceHere(state).floats.map(({ id }) => id)).toEqual([
-      APP("editor"),
-    ]);
+    expect(
+      workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("editor")]);
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
@@ -481,9 +501,9 @@ describe("the keyed commands", () => {
       desktop("kitty", "editor"),
       WindowAction.FloatToggled(),
     );
-    expect(workspaceHere(floated).floats.map(({ id }) => id)).toEqual([
-      APP("editor"),
-    ]);
+    expect(
+      workspaceHere(floated).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("editor")]);
 
     const tiled = reduce(floated, WindowAction.FloatToggled());
     expect(workspaceHere(tiled).floats).toEqual([]);
@@ -556,6 +576,23 @@ describe("the pointer", () => {
     );
 
     expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("raises a floating window it crosses into", () => {
+    // Every kind of window the same way: a client's window used to come up
+    // only because the compositor echoed the focus back as a reach, and a
+    // browser window, which names no client, never did.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowHovered(APP("kitty")),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowHovered(APP("editor")),
+    );
+
+    expect(
+      workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toEqual([APP("kitty"), APP("editor")]);
   });
 
   it("reports a window on another workspace as nothing at all", () => {

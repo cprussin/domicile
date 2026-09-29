@@ -6,6 +6,7 @@
 
 #include "base/time/time.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
+#include "components/domicile/mojom/extension_tray.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -43,7 +44,8 @@ class LocalDOMWindow;
 // and it should not be".
 class MODULES_EXPORT DomicileHost final
     : public EventTarget,
-      public domicile::mojom::blink::ControlChannelClient {
+      public domicile::mojom::blink::ControlChannelClient,
+      public domicile::mojom::blink::ExtensionTrayClient {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -96,6 +98,7 @@ class MODULES_EXPORT DomicileHost final
   void grabShortcut(ScriptState*,
                     const DomicileShortcut* shortcut,
                     ExceptionState&);
+  void activateExtension(ScriptState*, const String& id, ExceptionState&);
   void key(ScriptState*,
            const String& app_id,
            uint32_t keycode,
@@ -221,6 +224,10 @@ class MODULES_EXPORT DomicileHost final
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 
+  // domicile::mojom::blink::ExtensionTrayClient:
+  void ExtensionsChanged(
+      Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
+
   void Trace(Visitor*) const override;
 
  protected:
@@ -261,6 +268,11 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;
+  // The extensions' tray: the browser's own pipe, not the compositor's, bound
+  // beside the channel -- see EnsureBound.
+  HeapMojoRemote<domicile::mojom::blink::ExtensionTray> tray_;
+  HeapMojoReceiver<domicile::mojom::blink::ExtensionTrayClient, DomicileHost>
+      tray_receiver_;
 };
 
 }  // namespace blink

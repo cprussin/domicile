@@ -42,6 +42,8 @@ same reason.
 | `scripts/guard-shell-shortcuts.sh`, `guard-shell-shortcuts.js`, `guard-shell-shortcuts-reload.py` | Chrome's reload, back, fullscreen, zoom, close and quit chords pressed at a shell that handles none of them, and the shell neither reloaded, navigated, resized nor closed — patch 0047. Headless. Its control reloads the shell over the debugging port instead, because the claim is an absence |
 | `scripts/guard-webview-framing.sh`, `guard-webview-framing.js`, `guard-webview-framing-server.py` | a site that refuses framing, shown in a `<webview>`. The one guard here that runs headless and needs no compositor: what it measures is a page against itself, so there is no client and nothing to import |
 | `scripts/guard-webview-content-script.sh`, `guard-webview-content-script.js`, `guard-webview-content-script-server.py`, `guard-webview-content-script-extension/` | an unpacked extension's content script marking a page in a `<webview>`, loaded by `--load-extension` with `DisableLoadExtensionCommandLineSwitch` disabled — the assumption `EXTENSIONS.md` rests on. Headless. Its control marks the page top-level first, then shows the `<webview>` without the extension, which must stay unmarked |
+| `scripts/guard-extension-installer.sh`, `guard-extension-installer.js`, `guard-extension-installer-compositor.py` | the content-script fixture above named only by an `extensions` message from a stand-in for the compositor, with no `--load-extension`: the installer (patch 0055) loads it and its mark shows in a `<webview>`. Headless. Its control sends the list empty, and the page must stay unmarked |
+| `scripts/guard-extension-tray.sh`, `guard-extension-tray.js`, `guard-extension-tray-extension/` | the tray (patch 0056): a fixture named by the same stand-in, whose action has a title, a badge its service worker sets and a popup, reaches the shell as an `extensions` event carrying all of it; the popup opens in a `<webview>` and its `window.close()` arrives as `domicile-close`. Headless. Its control sends the list empty and opens a page that never closes: the tray must still arrive without the fixture, and the page must not close |
 | `scripts/guard-webview-history.sh`, `guard-webview-history.js`, `guard-webview-history-server.py` | the four history controls of a `<webview>`, driven at the guest behind it: two pages, then back, forward, reload and a stop, read as the order the guest showed them in — plus what the element says back and forward can do, whether it says a page is still arriving, and **where it says the page is** with the browser's verdict on the connection behind it — which the same schedule already builds the pages for. The address reading at `after-back` is the sharp one: nothing in the shell navigated there, so an element that still names the old page is a chrome that cannot follow its own window. Headless too, and its control drives none of the four |
 | `scripts/guard-webview-keyboard.sh`, `guard-webview-keyboard.js`, `guard-webview-keyboard-socket.py`, `guard-webview-keyboard-key.py` | a desktop chord pressed while a browser window holds the keyboard, caught in the guest's own delegate; then Ctrl+R, which nobody claimed, handed back to the shell as `domicile-guest-keydown`, and the 150% zoom the shell answers it with, read off the element and off the page's own width. Headless, like the framing guard above. Ctrl+wheel is not driven: the debugging port's wheel is precise-pixel, which content never zooms on (`WebMouseWheelEvent::GetPlatformSpecificDefaultEventAction`) |
 | `scripts/guard-webview-escape.sh`, `guard-webview-escape.js` | a plain Escape pressed at the shell with a browser window on the page — the key that took a desktop down through `BrowserPluginEmbedder::HandleKeyboardEvent`, and the assertion that patch 0037 closed it. The keyboard guard's mirror: the window is left unfocused, because the crash is on the embedder's WebContents and a focused guest answers for its own. Its control kills the browser with SIGSEGV instead of pressing the key, because a claim that nothing crashed needs a run where something did. Headless, and it drives its keys through `guard-webview-keyboard-key.py` |
@@ -152,7 +154,7 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `battery`, `clipboard`, `theme`, `focus_changed`,
-`focus_requested`, `displays`, `keymap`.
+`focus_requested`, `displays`, `keymap`, `extensions`.
 
 `preview_file` is the one outbound member that names a path, which
 `search_files` exists not to. The path is relative to the home, as a
@@ -169,8 +171,18 @@ opinion about the same box, and it disagreed by a border. The host no longer
 reads the message and the SDK no longer calls the method; taking the member out
 of the IDL is an engine change, and an engine change is a release.
 
-`keymap` is the one inbound message that stops in the browser process. It
-carries the keymap the compositor compiled from `input.keyboard`, in the text
+**The tray is not the control channel.** `window.domicile`'s `extensions`
+event and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,
+a pipe of the browser's own bound beside the channel and gated the same way:
+an action's state is this browser's, and the compositor has never heard of it.
+See `src/chrome/browser/domicile/domicile_extension_tray.h`.
+
+`keymap` and `extensions` are the two inbound messages that stop in the
+browser process. `extensions` is the desk's `[extensions]`, installed into the
+profile by `src/chrome/browser/domicile/domicile_extension_installer.h`; see
+`docs/architecture/EXTENSIONS.md`.
+
+`keymap` carries the keymap the compositor compiled from `input.keyboard`, in the text
 `wl_keyboard.keymap` hands a client, and what wants it is this process's own
 `KeyboardLayoutEngine` — which off ChromeOS nothing else ever gives one, so
 without it every printable key decodes to `DomKey::UNIDENTIFIED` and a shell

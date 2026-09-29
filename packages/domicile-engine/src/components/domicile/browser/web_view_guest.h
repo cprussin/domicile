@@ -9,7 +9,7 @@
 
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
-#include "base/functional/callback_forward.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
@@ -84,6 +84,17 @@ namespace domicile {
 // WebContents in WebContentsImpl::CreateNewWindow, which is why
 // IsWebContentsCreationOverridden below returns true unconditionally: refusing
 // the window is what keeps that CHECK unreached.
+// What the embedder hangs on a guest's WebContents as it is made, before it is
+// attached.
+//
+// A CALLBACK RATHER THAN THE HELPERS THEMSELVES, because the helpers are
+// //chrome's -- SessionTabHelper's factory and extensions::TabHelper -- and
+// this target must not depend on //chrome. The binder in //chrome hands one in
+// with the WebViewGuestHost it binds; see //chrome/browser/domicile/
+// domicile_tab_helpers.h for what it attaches and why.
+using GuestCreatedCallback =
+    base::RepeatingCallback<void(content::WebContents&)>;
+
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -95,11 +106,17 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The guest exists from here on whether or not the attach completes: an
   // attach that is refused destroys it again, which is why this hands
   // ownership through the callback rather than keeping it anywhere.
+  //
+  // `created` runs once, on the guest's WebContents, before anything is
+  // attached or navigated -- the moment a tab's helpers are attached in
+  // Chrome, and for the same reason: a helper that keys on the tab's id has to
+  // be there before the first navigation it would record.
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
-      mojo::PendingRemote<mojom::WebViewGuestClient> client);
+      mojo::PendingRemote<mojom::WebViewGuestClient> client,
+      const GuestCreatedCallback& created);
 
   WebViewGuest(const WebViewGuest&) = delete;
   WebViewGuest& operator=(const WebViewGuest&) = delete;
@@ -313,6 +330,15 @@ class WebViewGuest : public mojom::WebViewGuest,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
 
+  // THE PAGE CALLED window.close(), and its renderer let it. Content's
+  // default does nothing, so a popup that closed itself -- an extension's,
+  // which is how every one of them says it is done -- sat open until the user
+  // clicked away. The element is told instead, and removing it is the shell's
+  // answer: the guest's WebContents is owned by the outer one it is attached
+  // to, and destroying it from here would pull a frame out from under the
+  // shell's document. See CloseRequested in the mojom.
+  void CloseContents(content::WebContents* source) override;
+
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
 
@@ -454,9 +480,12 @@ class WebViewGuest : public mojom::WebViewGuest,
 // not. The caller decides who may reach it -- registering it only for a
 // document whose origin is domicile:// -- and that decision is the whole of
 // the security property. See PopulateChromeFrameBinders.
+//
+// `created` is run on every guest this host makes -- see GuestCreatedCallback.
 void BindWebViewGuestHost(
     content::RenderFrameHost* frame,
-    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver);
+    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
+    GuestCreatedCallback created);
 
 }  // namespace domicile
 

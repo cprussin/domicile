@@ -101,7 +101,7 @@ describe("Wallpaper", () => {
     const { container } = render(<Wallpaper />);
 
     expect(container.firstElementChild?.className).toContain(
-      css({ zIndex: -1 }),
+      css({ zIndex: -2 }),
     );
   });
 

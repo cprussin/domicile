@@ -1,9 +1,11 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Extension } from "@domicile/chrome-sdk/extension";
 import type { Display } from "@domicile/component-library/display-source";
 import { Screen } from "@domicile/component-library/Screen";
 import type { RefObject } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { popupShown } from "../extensions/shown";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { TOP_BAR, TopBar } from "../top-bar/TopBar";
 import type { Geometry, Screenful } from "../window-management/placement";
@@ -29,6 +31,8 @@ type Props = {
   /** The desk it is one of — what a window filling every screen fills. */
   desk: readonly Display[];
   domicile: DomicileClient;
+  /** The extensions with an action, for the tray on this monitor's bar. */
+  extensions: readonly Extension[];
   /**
    * Whether a key ran the command this render is the answer to, which is what
    * takes the pointer with the keyboard — see {@link usePointerWarp}. The
@@ -61,6 +65,7 @@ export const Monitor = ({
   desk,
   display,
   domicile,
+  extensions,
   keyed,
   modifiers,
   windows,
@@ -97,24 +102,40 @@ export const Monitor = ({
     windows: open,
   });
 
+  // The extension whose popup is open under this bar's tray. This monitor's
+  // rather than the desk's: the panel hangs off one bar, and the windows it
+  // takes the keyboard from are the ones this monitor draws.
+  const [opened, setOpened] = useState<string | undefined>(undefined);
+  // And forgotten once the tray stops drawing it — its action disabled or its
+  // extension dropped — so an `action.enable()` later does not reopen a panel
+  // nobody clicked. Set during render, React's pattern for state that follows
+  // a prop, so no frame draws the stale answer.
+  const popupOpen = popupShown(extensions, opened);
+  if (opened !== undefined && !popupOpen) {
+    setOpened(undefined);
+  }
+
   return (
     <Screen name={display.name}>
       <TopBar
         current={current}
         domicile={domicile}
+        extensions={extensions}
         focused={windows.focused === display.name}
         mode={windows.mode}
+        onOpenExtension={setOpened}
         onSelectWorkspace={(name) => {
           act(WindowAction.WorkspaceSelected(name));
         }}
+        openedExtension={opened}
         workspaces={workspacesOn(windows, display.name)}
       />
       <Stage
         activeId={windows.activeId}
         // A panel of the desktop's own is a thing to type into that no
         // window knows about, so for as long as one is up the keyboard
-        // is the page's — see `AppWindow`.
-        behindPanel={windows.launcherOpen || windows.clipboardOpen}
+        // is the page's — see `AppWindow`. An extension's popup is one.
+        behindPanel={windows.launcherOpen || windows.clipboardOpen || popupOpen}
         current={current}
         domicile={domicile}
         draggingId={windows.draggingId}

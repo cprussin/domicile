@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
+import { useExtensions } from "./extensions/useExtensions";
 import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
@@ -93,6 +94,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // opened rather than fetched when it is.
   const clipboard = useClipboard(domicile);
 
+  // And the extensions' actions, pushed for the same reason. Once for the desk
+  // rather than once per bar: `on` is a single slot, and a page that is the
+  // whole desktop draws a bar per monitor.
+  const extensions = useExtensions(domicile);
+
   // And whether the desk is locked, which is pushed for a harder reason: it is
   // the compositor's state rather than this page's, because the compositor is
   // what refuses to put a forwarded keystroke into the seat. So there is nothing
@@ -168,6 +174,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
             desk={displays ?? []}
             display={display}
             domicile={domicile}
+            extensions={extensions}
             key={display.name}
             keyed={keyed}
             modifiers={modifiers}

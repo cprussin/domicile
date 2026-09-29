@@ -26,6 +26,8 @@
 // disagree — so the association lives in {@link HostMessageMap} instead, and a
 // payload carries only what its own event means.
 
+import { z } from "zod";
+
 import type { CursorShape } from "./cursor-shape";
 import { cursorShapeSchema } from "./cursor-shape";
 import type {
@@ -36,6 +38,7 @@ import type {
   DomicileClipboardEntry,
   DomicileClipboardEvent,
   DomicileDisplay,
+  DomicileExtensionsEvent,
   DomicileFilePreviewEvent,
   DomicileFilesEvent,
   DomicileIdleEvent,
@@ -44,6 +47,8 @@ import type {
   DomicileShortcutEvent,
   DomicileThemeEvent,
 } from "./domicile-host";
+import type { Extension } from "./extension";
+import { extensionSchema } from "./extension";
 import {
   FilePreview,
   FilePreviewKind,
@@ -358,6 +363,20 @@ export type LockedMessage = {
   locked: boolean;
 };
 
+/**
+ * The extensions with an action, as a tray draws them.
+ *
+ * The whole list every time, like the clipboard, and once more when the page
+ * connects: a reloaded shell is told rather than drawing an empty tray. The
+ * state is each action's default until actions are per browser window.
+ *
+ * A click on one is the shell's: a `<webview>` at `popup` when there is one,
+ * and `activateExtension(id)` when there is not.
+ */
+export type ExtensionsMessage = {
+  extensions: readonly Extension[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -378,6 +397,7 @@ export type HostMessageMap = {
   theme: ThemeMessage;
   idle: IdleMessage;
   locked: LockedMessage;
+  extensions: ExtensionsMessage;
   /**
    * Which way round the desk's windows are drawn: `theme`'s other half,
    * arriving once they have turned. See {@link DomicileHost.themeCaptured}.
@@ -592,6 +612,21 @@ export const idle = (event: DomicileIdleEvent): IdleMessage => ({
  */
 export const locked = (event: DomicileLockedEvent): LockedMessage => ({
   locked: event.locked,
+});
+
+/**
+ * The tray's rows, parsed.
+ *
+ * Parsed rather than passed through, for `appCursor`'s reason: the engine and
+ * this SDK ship apart, and a row this SDK cannot draw -- an icon that is not a
+ * PNG, an id `activateExtension` would not recognize -- should be a stack
+ * rather than a button that does nothing. It is also where WebIDL's `null`
+ * popup becomes `undefined`.
+ */
+export const extensions = (
+  event: DomicileExtensionsEvent,
+): ExtensionsMessage => ({
+  extensions: z.array(extensionSchema).parse(event.extensions),
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

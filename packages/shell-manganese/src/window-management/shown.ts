@@ -7,8 +7,7 @@
 // that difference the page has to keep. `closing.ts` and `workspace-switch.ts`
 // are what read it.
 
-import type { Placement } from "./placement";
-import type { Tab } from "./tree/frames";
+import type { PlacedTab, Placement } from "./placement";
 import type { ShellWindow } from "./window";
 
 export type Shown = {
@@ -17,6 +16,6 @@ export type Shown = {
   /** The workspace that was on screen. */
   current: string;
   placements: readonly Placement[];
-  tabs: readonly Tab[];
+  tabs: readonly PlacedTab[];
   windows: readonly ShellWindow[];
 };
