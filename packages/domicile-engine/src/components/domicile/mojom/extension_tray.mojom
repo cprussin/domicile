@@ -49,9 +49,12 @@ interface ExtensionTray {
   // tray until an extension happens to move. A second client is a bad message.
   SetClient(pending_remote<ExtensionTrayClient> client);
 
-  // The action with no popup was clicked: dispatch its `action.onClicked`. An
-  // id that names no enabled extension with an action is a click that raced
-  // an uninstall, and does nothing.
+  // The action was clicked, whether or not it has a popup: what Chrome's
+  // ExtensionActionRunner::RunAction does for a toolbar click. It grants the
+  // extension activeTab on the active tab, then dispatches `action.onClicked`
+  // -- unless the action has a popup, which the shell opens itself and which
+  // is then the whole of the click. An id that names no enabled extension
+  // with an action is a click that raced an uninstall, and does nothing.
   Activate(string id);
 };
 

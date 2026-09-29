@@ -14,8 +14,8 @@ class RenderFrameHost;
 namespace domicile {
 
 // Bind ExtensionTray for `frame`: the extensions with an action in the page's
-// profile, sent whole on binding and on every change, and a click on one with
-// no popup.
+// profile, sent whole on binding and on every change, and a click on one: the
+// activeTab grant a toolbar click makes, and onClicked for one with no popup.
 //
 // THIS IS NOT THE ACCESS CONTROL, for BindControlChannel's reason. The caller
 // registers it only for a document whose origin is domicile:// -- see
