@@ -905,10 +905,11 @@ void ControlChannel::DispatchLine(const std::string& line,
       }
       // An entry with no id or name is one nothing could draw, and one with
       // no command is one nothing could run: dropped, like a clipboard row
-      // with no preview. A missing comment is an empty one.
+      // with no preview. A missing comment or icon is an empty one.
       const std::string* id = entry->FindString("id");
       const std::string* name = entry->FindString("name");
       const std::string* comment = entry->FindString("comment");
+      const std::string* icon = entry->FindString("icon");
       const base::ListValue* listed = entry->FindList("command");
       if (!id || !name || !listed) {
         continue;
@@ -924,7 +925,8 @@ void ControlChannel::DispatchLine(const std::string& line,
         continue;
       }
       apps.push_back(mojom::DesktopEntry::New(
-          *id, *name, comment ? *comment : std::string(), std::move(command)));
+          *id, *name, comment ? *comment : std::string(), std::move(command),
+          icon ? *icon : std::string()));
     }
     // Sent even when it is empty, for the reason `found_files` is.
     client_->Apps(*query, std::move(apps), arrival);

@@ -9,6 +9,7 @@ import { Launch } from "./launch";
 const EDITOR = {
   command: ["gedit", "--new-window"],
   comment: "Edit text files",
+  icon: undefined,
   id: "org.gnome.gedit.desktop",
   name: "Text Editor",
 };

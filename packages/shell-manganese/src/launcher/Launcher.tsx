@@ -1,6 +1,6 @@
-import type { DomicileDesktopEntry } from "@domicile/chrome-sdk/domicile-host";
 import { FilePreviewKind } from "@domicile/chrome-sdk/file-preview";
 import type {
+  DesktopEntry,
   FilePreviewMessage,
   FoundAppsMessage,
   FoundFilesMessage,
@@ -418,7 +418,7 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
     case ChoiceKind.App: {
       return (
         <>
-          <RowTile icon={AppWindowIcon} />
+          <AppTile icon={choice.entry.icon} />
           <span className={rowNameStyles}>
             <Marked marks={marked(choice.entry.name, query)} />
           </span>
@@ -512,6 +512,22 @@ const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
 );
 
 /**
+ * An application's tile: the icon its entry names, or a generic glyph for one
+ * the host did not find.
+ *
+ * One picture rather than RowTile's pair: an application's icon is its own,
+ * and there is no second weight of it to swap to when the row is reached.
+ */
+const AppTile = ({ icon }: { icon: string | undefined }) =>
+  icon === undefined ? (
+    <RowTile icon={AppWindowIcon} />
+  ) : (
+    <span className={rowTileStyles} data-row-tile="">
+      <img alt="" className={rowPictureStyles} src={icon} />
+    </span>
+  );
+
+/**
  * What the pane shows, which is never nothing: a blank pane reads as a broken
  * one. With no row highlighted it says how to choose one, and while the typing
  * has not settled it names the row it is about to preview.
@@ -589,7 +605,7 @@ const Pending = ({ choice }: { choice: Choice }) => {
  * Enter runs — which is the one thing a launcher's row cannot show and the
  * thing that tells two entries of the same name apart.
  */
-const AppPreview = ({ entry }: { entry: DomicileDesktopEntry }) => (
+const AppPreview = ({ entry }: { entry: DesktopEntry }) => (
   <Placeholder
     icon={AppWindowIcon}
     note={
@@ -598,6 +614,7 @@ const AppPreview = ({ entry }: { entry: DomicileDesktopEntry }) => (
         <code className={commandStyles}>{entry.command.join(" ")}</code>
       </span>
     }
+    picture={entry.icon}
     title={entry.name}
   />
 );
@@ -611,18 +628,27 @@ const NamedFile = ({ note, row }: { note?: string; row: FileRow }) => (
   />
 );
 
-/** A large glyph over a title and a quieter line: a pane with no picture. */
+/**
+ * A large glyph over a title and a quieter line: a pane with no picture — or
+ * with only a small one, `picture`, drawn in the glyph's place.
+ */
 const Placeholder = ({
   icon: Icon,
   note,
+  picture,
   title,
 }: {
   icon: typeof FileIcon;
   note?: ReactNode;
+  picture?: string | undefined;
   title: string;
 }) => (
   <div className={placeholderStyles}>
-    <Icon size={EMPTY_ICON_SIZE} weight="thin" />
+    {picture === undefined ? (
+      <Icon size={EMPTY_ICON_SIZE} weight="thin" />
+    ) : (
+      <img alt="" className={placeholderPictureStyles} src={picture} />
+    )}
     <span className={placeholderTitleStyles}>{title}</span>
     {note !== undefined && (
       <span className={placeholderNoteStyles}>{note}</span>
@@ -1043,6 +1069,13 @@ const placeholderStyles = vstack({
   textAlign: "center",
 });
 
+// An application's icon at the glyph's size, whatever size the file is.
+const placeholderPictureStyles = css({
+  blockSize: 16,
+  inlineSize: 16,
+  objectFit: "contain",
+});
+
 const placeholderTitleStyles = css({
   color: "foreground",
   fontSize: "md",
@@ -1125,6 +1158,13 @@ const rowTileStyles = css({
   placeItems: "center",
   transition:
     "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
+});
+
+// An application's icon at the glyph's size, whatever size the file is.
+const rowPictureStyles = css({
+  blockSize: 4,
+  inlineSize: 4,
+  objectFit: "contain",
 });
 
 // Both weights in the one cell the tile has, so the swap moves nothing and

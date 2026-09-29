@@ -564,7 +564,8 @@ void DomicileHost::Apps(const String& query,
   entries.reserve(apps.size());
   for (auto& app : apps) {
     entries.push_back(MakeGarbageCollected<DomicileDesktopEntry>(
-        app->id, app->name, app->comment, std::move(app->command)));
+        app->id, app->name, app->comment, std::move(app->command),
+        app->icon));
   }
   DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
       domicile_event_names::Apps(), query, std::move(entries),
