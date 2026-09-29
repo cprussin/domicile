@@ -8,9 +8,11 @@ import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
+import { FloatBorder } from "./floating/FloatBorder";
 import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import type { Float } from "./floating/float";
+import { floatBordersOf } from "./floating/float-borders";
 import type { Screenful } from "./placement";
 import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
@@ -309,6 +311,38 @@ export const Stage = ({
           rect={rect}
         />
       ))}
+      {/*
+        And the floating windows' borders, the same way: at each one's own
+        depth, so a window stacked over it covers its ring too. Not for a float
+        filling the screen, which has no edge to drag.
+      */}
+      {motions.drawn.map(({ placement, window }) => {
+        const floating = floats.find((float) => float.id === window.id);
+        return placement === undefined ||
+          floating === undefined ||
+          window.id === fullscreenId
+          ? undefined
+          : floatBordersOf(floating).map(({ cursor, grip, rect }) => (
+              <FloatBorder
+                cursor={cursor}
+                depth={placement.depth}
+                float={floating}
+                grip={grip}
+                key={`${window.id}-${grip.horizontal?.toString() ?? ""}-${grip.vertical?.toString() ?? ""}`}
+                onDrop={() => {
+                  setStretching(false);
+                }}
+                onGrab={() => {
+                  setStretching(true);
+                  onSelect(window.id);
+                }}
+                onResize={(box) => {
+                  onResize(window.id, box);
+                }}
+                rect={rect}
+              />
+            ));
+      })}
       {/*
         After every window, so that a window's chrome and the window itself tie
         on `z-index` and the chrome wins on document order — while a window one

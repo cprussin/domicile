@@ -186,6 +186,12 @@ jumping to wherever the pointer got to. A window is never dragged smaller than
 the grab it is dragged by, and its top-left corner stays on the desktop — the
 two edges a window dragged past could not be dragged back from.
 
+**Its edges resize it with no modifier held.** A ring around a floating window
+— a strip a little inside and a little outside each edge, and a bigger square
+at each corner — drags that edge or corner, the others staying put. Over the
+bar only the part outside the window is a border: the bar keeps its own pixels
+for a move. See `floating/float-borders.ts`.
+
 Two things have to be true for that drag to be seen at all, and both are worth
 knowing about:
 
@@ -761,6 +767,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/useWindowMotion.ts` | Which windows are drawn and what each of them is doing, worked out from the difference between two renders. |
 | `src/window-management/floating/float.ts` | A window that has left the tiling: where it sits and how big. Its own module because floating is not a kind of window. |
 | `src/window-management/floating/useFloatDrag.ts`, `FloatGrab.tsx`, `FloatTitleBar.tsx` | Dragging and resizing a floating window, the pointer's travel read in the pixels the window was laid out in, and the furniture that offers it. |
+| `src/window-management/floating/float-borders.ts`, `useFloatBorderDrag.ts`, `FloatBorder.tsx` | The ring around a floating window that resizes it with no modifier held: where each edge and corner is, and the drag on one. |
 | `src/window-management/floating/FloatShadow.tsx` | The shadow a floating window casts, drawn under the whole frame and moving with it. |
 | `src/wallpaper/Wallpaper.tsx` | The photograph behind the desktop, and the crossfade to the next one. |
 | `src/wallpaper/photos.ts` | Which photographs those are, and where they come from. |

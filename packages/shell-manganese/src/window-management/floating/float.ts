@@ -10,7 +10,6 @@ import type { Direction } from "../direction";
 import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
 import { TITLE_BAR } from "../rect";
-import type { Corner } from "../tiled/aim";
 import type { SizeLimit } from "../window";
 
 /** Where a floating window sits, in the desktop's own pixels. */
@@ -26,6 +25,15 @@ export type Float = {
   width: number;
   x: number;
   y: number;
+};
+
+/**
+ * The edges a resize drags: a corner's two, or one edge's one with the other
+ * axis `undefined`. A `Corner` is one of these.
+ */
+export type Grip = {
+  horizontal: Direction | undefined;
+  vertical: Direction | undefined;
 };
 
 /** How big a window is when it first leaves the tiling. */
@@ -138,8 +146,9 @@ export const sizedTo = (
 });
 
 /**
- * The same box with its `corner` dragged `dx`, `dy`: the two edges on that
- * corner move and the two across from it stay put.
+ * The same box with its `grip` dragged `dx`, `dy`: the edges it holds move and
+ * the ones across from them stay put. An axis the grip has no side on does not
+ * move at all.
  *
  * Stopped where {@link sizedTo} and {@link movedTo} would stop it, but by the
  * dragged edge: a window dragged from the left to its smallest must not start
@@ -147,22 +156,28 @@ export const sizedTo = (
  */
 export const stretched = (
   float: Float,
-  corner: Corner,
+  { horizontal, vertical }: Grip,
   dx: number,
   dy: number,
 ): Float => {
-  const across = spanStretched(
-    { size: float.width, start: float.x },
-    isForward(corner.horizontal),
-    dx,
-    SMALLEST.width,
-  );
-  const down = spanStretched(
-    { size: float.height, start: float.y },
-    isForward(corner.vertical),
-    dy,
-    SMALLEST.height,
-  );
+  const across =
+    horizontal === undefined
+      ? { size: float.width, start: float.x }
+      : spanStretched(
+          { size: float.width, start: float.x },
+          isForward(horizontal),
+          dx,
+          SMALLEST.width,
+        );
+  const down =
+    vertical === undefined
+      ? { size: float.height, start: float.y }
+      : spanStretched(
+          { size: float.height, start: float.y },
+          isForward(vertical),
+          dy,
+          SMALLEST.height,
+        );
   return {
     ...float,
     height: down.size,

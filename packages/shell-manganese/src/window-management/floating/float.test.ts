@@ -135,6 +135,17 @@ describe("stretched", () => {
     expect(squashed.y).toBe(0);
     expect(squashed.height).toBe(AT.y + AT.height);
   });
+
+  it("drags one edge alone when the grip has no side on the other axis", () => {
+    expect(
+      stretched(
+        AT,
+        { horizontal: Direction.Left, vertical: undefined },
+        30,
+        20,
+      ),
+    ).toStrictEqual({ ...AT, width: AT.width - 30, x: AT.x + 30 });
+  });
 });
 
 describe("rectOf", () => {
