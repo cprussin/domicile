@@ -17,6 +17,7 @@
 #include "base/supports_user_data.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/common/extensions/api/tabs.h"
 #include "components/domicile/browser/desk_tabs.h"
 #include "components/sessions/core/session_id.h"
 #include "ui/base/base_window.h"
@@ -64,6 +65,11 @@ class DeskWindow final : public ui::BaseWindow {
   ui::ZOrderLevel GetZOrderLevel() const override;
   void SetZOrderLevel(ui::ZOrderLevel order) override;
 };
+
+// Every desk tab's zoom settings. A guest's zoom is HostZoomMap's, per site:
+// Chrome's automatic, per-origin mode, and the only one a desk tab takes (see
+// //components/domicile:desk_tabs's DeskTakesZoomSettings).
+extensions::api::tabs::ZoomSettings DeskZoomSettings();
 
 // A profile's desk, as chrome.windows sees it: one window, whose tabs are the
 // profile's <webview>s. See domicile_desk.h.
@@ -137,6 +143,7 @@ class DomicileWindowController final : public extensions::WindowController,
   // What a tab says about itself, each from its guest.
   void Focused(int tab_id, content::WebContents& tab);
   void Updated(int tab_id, std::set<std::string> changed);
+  void Zoomed(int tab_id, double old_factor, double new_factor);
   // Deletes the Tab calling it.
   void Removed(int tab_id);
 

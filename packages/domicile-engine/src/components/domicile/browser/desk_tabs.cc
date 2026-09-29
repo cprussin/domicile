@@ -21,10 +21,6 @@ constexpr auto kRefused = std::to_array<const char*>({
     "tabs.duplicate",
     "tabs.createSplit",
     "tabs.unsplit",
-    "tabs.setZoom",
-    "tabs.getZoom",
-    "tabs.setZoomSettings",
-    "tabs.getZoomSettings",
     "windows.create",
     "windows.remove",
 });
@@ -44,6 +40,22 @@ bool IsRefusedOnDesk(std::string_view function_name) {
   return std::ranges::any_of(kRefused, [function_name](const char* refused) {
     return function_name == refused;
   });
+}
+
+std::optional<double> DeskZoomFactor(double asked,
+                                     double default_factor,
+                                     double minimum,
+                                     double maximum) {
+  if (asked <= 0) {
+    return default_factor;
+  }
+  return asked >= minimum && asked <= maximum ? std::optional(asked)
+                                              : std::nullopt;
+}
+
+bool DeskTakesZoomSettings(std::string_view mode, std::string_view scope) {
+  return (mode.empty() || mode == "automatic") &&
+         (scope.empty() || scope == "per-origin");
 }
 
 bool TakesActiveOnFocus(std::string_view scheme) {

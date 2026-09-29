@@ -63,17 +63,42 @@ TEST(DeskTabsTest, AnExtensionPageNeverTakesTheActiveTab) {
 TEST(DeskTabsTest, WhatHasNoDesktopMeaningIsRefused) {
   for (const char* refused :
        {"tabs.move", "tabs.group", "tabs.ungroup", "tabs.discard",
-        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit", "tabs.setZoom",
-        "tabs.getZoom", "tabs.setZoomSettings", "tabs.getZoomSettings",
-        "windows.create", "windows.remove"}) {
+        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit", "windows.create",
+        "windows.remove"}) {
     EXPECT_TRUE(IsRefusedOnDesk(refused)) << refused;
   }
   for (const char* answered :
        {"tabs.query", "tabs.get", "tabs.update", "tabs.create", "tabs.remove",
-        "tabs.reload", "windows.get", "windows.update"}) {
+        "tabs.reload", "tabs.setZoom", "tabs.getZoom", "tabs.setZoomSettings",
+        "tabs.getZoomSettings", "windows.get", "windows.update"}) {
     EXPECT_FALSE(IsRefusedOnDesk(answered)) << answered;
   }
-  EXPECT_EQ(RefusedOnDesk().size(), 13u);
+  EXPECT_EQ(RefusedOnDesk().size(), 9u);
+}
+
+TEST(DeskTabsTest, ZeroZoomsToTheDefaultAndOutOfRangeIsRefused) {
+  // tabs.setZoom's 0 is the default, as in Chrome. Outside the range the
+  // <webview> element holds its own setZoom to is refused, not stored.
+  EXPECT_EQ(DeskZoomFactor(1.5, 1.25, 0.25, 5.0), 1.5);
+  EXPECT_EQ(DeskZoomFactor(0, 1.25, 0.25, 5.0), 1.25);
+  EXPECT_EQ(DeskZoomFactor(-1, 1.25, 0.25, 5.0), 1.25);
+  EXPECT_EQ(DeskZoomFactor(0.25, 1.0, 0.25, 5.0), 0.25);
+  EXPECT_EQ(DeskZoomFactor(5.0, 1.0, 0.25, 5.0), 5.0);
+  EXPECT_EQ(DeskZoomFactor(0.1, 1.0, 0.25, 5.0), std::nullopt);
+  EXPECT_EQ(DeskZoomFactor(10, 1.0, 0.25, 5.0), std::nullopt);
+}
+
+TEST(DeskTabsTest, OnlyAutomaticPerOriginZoomIsTaken) {
+  // A guest's zoom is HostZoomMap's, per site: Chrome's automatic, per-origin
+  // mode. "" is a field left out, which defaults to it.
+  EXPECT_TRUE(DeskTakesZoomSettings("", ""));
+  EXPECT_TRUE(DeskTakesZoomSettings("automatic", ""));
+  EXPECT_TRUE(DeskTakesZoomSettings("", "per-origin"));
+  EXPECT_TRUE(DeskTakesZoomSettings("automatic", "per-origin"));
+  EXPECT_FALSE(DeskTakesZoomSettings("automatic", "per-tab"));
+  EXPECT_FALSE(DeskTakesZoomSettings("", "per-tab"));
+  EXPECT_FALSE(DeskTakesZoomSettings("manual", ""));
+  EXPECT_FALSE(DeskTakesZoomSettings("disabled", "per-origin"));
 }
 
 DeskTabFacts Facts() {

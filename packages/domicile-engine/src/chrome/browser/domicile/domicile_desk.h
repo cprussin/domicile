@@ -31,11 +31,11 @@ namespace domicile {
 // the patch series: ExtensionTabUtil::GetTabById, CreateTabObject and
 // ForEachTab, and ChromeExtensionFunctionDetails::GetCurrentWindowController.
 //
-// WHAT IS NOT A LOOKUP IS NOT PATCHED. chrome.tabs.query, update, create and
-// remove, and chrome.windows.get* and update, are this desk's own
-// ExtensionFunctions, registered over Chrome's under the same names -- see
-// domicile_desk_functions.h -- and so are the refusals. Tab events come from
-// the guests' own lifecycle, dispatched through the profile's EventRouter
+// WHAT IS NOT A LOOKUP IS NOT PATCHED. chrome.tabs.query, update, create,
+// remove and the zoom four, and chrome.windows.get* and update, are this
+// desk's own ExtensionFunctions, registered over Chrome's under the same names
+// -- see domicile_desk_functions.h -- and so are the refusals. Tab events come
+// from the guests' own lifecycle, dispatched through the profile's EventRouter
 // exactly as TabsEventRouter dispatches them, rather than from a tab strip.
 
 // Install the desk: the lookups' hooks, the functions over Chrome's, and

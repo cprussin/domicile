@@ -25,9 +25,10 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 8,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # LineFramer 4, DesktopPrefs 1, SurfaceCrop 3, ExtensionInstaller 3,
-# ExtensionTrayEntry 3, DeskTabs 10.
+# ExtensionTrayEntry 3, DeskTabs 12.
 #
-# 114, and it was 104 — which <webview> is the active tab, what is refused
+# 116, and it was 114 — the factor tabs.setZoom sets and the zoom settings a
+# desk tab takes are two more DeskTabs cases. Before that 114, and it was 104 — which <webview> is the active tab, what is refused
 # and which tabs a query names is ten DeskTabs cases. Before that 104, and it
 # was 101 — how the tray spells a badge color and an icon is three
 # ExtensionTrayEntry cases. Before that 101, and it was 98 — which extensions a profile installs, loads and
@@ -47,7 +48,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=114
+FLOOR=116
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
