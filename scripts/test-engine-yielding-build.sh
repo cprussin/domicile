@@ -25,6 +25,10 @@ export DOMICILE_COMPILE_SLOT_POLL=0.1 DOMICILE_COMPILE_SLOT_WAIT=10
 export DOMICILE_YIELD_POLL=0.1
 export DOMICILE_RENDER_NODE_LOCK="$WORK/node" DOMICILE_RENDER_NODE_NOISE="$WORK/noise"
 export DOMICILE_RENDER_NODE_POLL=1 DOMICILE_RENDER_NODE_NOISE_BEAT=1
+# The production build and the waiter are two jobs, so two runners: on a CI
+# runner both would share its name, and the waiter would clear the build's
+# hold as a dead job's -- see engine-compile-slot.sh.
+unset RUNNER_NAME
 
 FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
