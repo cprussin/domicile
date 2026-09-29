@@ -42,7 +42,6 @@ import {
   modeToggled,
   opened,
   parentFocused,
-  pointedAt,
   reached,
   shown,
   splitFlipped,
@@ -1142,10 +1141,11 @@ const showWorkspace = (state: WindowState, name: string): WindowState => {
 };
 
 // The window under the pointer is the window the keyboard is in, which is the
-// whole of this shell's focus policy. What it does not do is raise: a window
-// that came to the front for being crossed would cover the one the user was
-// heading for, and the pointer would have rearranged the desktop on the way
-// there.
+// whole of this shell's focus policy — and a float the pointer crosses into
+// comes to the front, as a click would bring it. Here rather than left to the
+// compositor: a client's window used to come up only because the focus this
+// moves came back from the host as a reach, and a browser window, which names
+// no client, never did.
 const pointAtWindow = (state: WindowState, id: string): WindowState => {
   // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A desk of
   // several monitors is several pages, each drawing its own screen's windows,
@@ -1166,7 +1166,7 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
     return state;
   } else {
     return onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
-      pointedAt(found, id),
+      reached(found, id),
     );
   }
 };

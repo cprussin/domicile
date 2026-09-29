@@ -19,7 +19,6 @@ import {
   modeToggled,
   opened,
   parentFocused,
-  pointedAt,
   reached,
   windowGrown,
   windowMoved,
@@ -193,7 +192,7 @@ describe("a floating group", () => {
     // again constantly; that must not undo `focus parent`.
     const selected = parentFocused(floated());
 
-    expect(selectedIn(pointedAt(selected, "c"))).toMatchObject({
+    expect(selectedIn(reached(selected, "c"))).toMatchObject({
       kind: NodeKind.Container,
     });
   });
@@ -252,18 +251,6 @@ describe("reached", () => {
 
   it("makes a tiled window the one being worked in", () => {
     expect(focusedOn(reached(cascaded(), "a"))).toBe("a");
-  });
-});
-
-describe("pointedAt", () => {
-  it("gives a floating window the keyboard without raising it", () => {
-    const workspace = pointedAt(cascaded(), "c");
-
-    expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
-      "c",
-      "b",
-    ]);
-    expect(focusedOn(workspace)).toBe("c");
   });
 });
 
@@ -333,7 +320,7 @@ describe("the keyed commands", () => {
     const floated = floatToggled(tiling("a", "b", "c"));
     const selected = parentFocused(modeToggled(floated));
 
-    const crossed = pointedAt(selected, "c");
+    const crossed = reached(selected, "c");
 
     expect(focusedNodeOf(crossed.tiling)).toMatchObject({
       kind: NodeKind.Window,

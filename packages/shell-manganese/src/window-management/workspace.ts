@@ -168,11 +168,10 @@ export const closed = (workspace: Workspace, id: string): Workspace => {
 };
 
 /**
- * The user reached for the window `id` — a click, or its tab.
+ * The user reached for the window `id` — a click, its tab, or the pointer
+ * crossing into it.
  *
- * A floating window comes to the front as well as taking the keyboard, which
- * is the difference between this and {@link pointedAt}: a click raises and the
- * pointer crossing a window does not.
+ * A floating window comes to the front as well as taking the keyboard.
  */
 export const reached = (workspace: Workspace, id: string): Workspace => {
   if (floatOn(workspace, id) === undefined) {
@@ -188,18 +187,6 @@ export const reached = (workspace: Workspace, id: string): Workspace => {
     };
   }
 };
-
-/**
- * The pointer moved into the window `id`, which is the user working in it.
- *
- * Focus follows the cursor in this shell, and it does not raise: a window that
- * came to the front for being crossed would cover the one the user was
- * heading for.
- */
-export const pointedAt = (workspace: Workspace, id: string): Workspace =>
-  floatOn(workspace, id) === undefined
-    ? focusedTiled(workspace, id)
-    : floatFocused(workspace, id);
 
 /**
  * `floating toggle`: what the commands are pointed at leaves the tiling — the
