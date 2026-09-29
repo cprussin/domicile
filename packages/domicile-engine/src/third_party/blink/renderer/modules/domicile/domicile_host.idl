@@ -153,6 +153,18 @@
   [CallWith=ScriptState, RaisesException] undefined grabShortcut(
       DomicileShortcut shortcut);
 
+  // Click an extension's action that has no popup: its `action.onClicked` is
+  // dispatched. An action with a popup is the shell's to open, as a <webview>
+  // at the `popup` an `extensions` event named.
+  //
+  // NOT THE COMPOSITOR'S. An action lives in this browser, so the call goes no
+  // further than the browser process, over the tray's own pipe -- see
+  // components/domicile/mojom/extension_tray.mojom. An id that names no
+  // extension with an action now is a click that raced an uninstall, and does
+  // nothing; an empty one throws.
+  [CallWith=ScriptState, RaisesException] undefined activateExtension(
+      DOMString id);
+
   // Input forwarding. Surface-local coordinates and evdev keycodes, because
   // that is what a Wayland client expects to be handed.
   [CallWith=ScriptState, RaisesException] undefined key(
@@ -305,4 +317,13 @@
   // The desktop changed: a screen arrived or left, a display was resized, or
   // its density moved. Read `displays` for what it is now.
   attribute EventHandler ondisplayschanged;
+
+  // The extensions with an action, as a DomicileExtensionsEvent: the whole
+  // tray, whenever any of it changes and once as soon as this page listens.
+  //
+  // THE BROWSER'S, NOT THE COMPOSITOR'S. The extensions are the desk's config,
+  // installed by this browser into its profile, and what their actions say is
+  // this browser's to tell -- so it arrives over a pipe of its own rather than
+  // the compositor's socket.
+  attribute EventHandler onextensions;
 };

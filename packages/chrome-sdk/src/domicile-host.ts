@@ -574,6 +574,49 @@ export type DomicileLockedEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/**
+ * One extension with an action, as the tray draws it.
+ *
+ * An interface on the engine's side rather than a plain object, for
+ * {@link DomicileClipboardEntry}'s reason. The state is the action's default
+ * — Chrome's tab `-1` — until actions are per browser window.
+ */
+export type DomicileExtension = {
+  /** What {@link DomicileHost.activateExtension} names it by. */
+  readonly id: string;
+  readonly name: string;
+  /** The action's tooltip. */
+  readonly title: string;
+  /**
+   * A `data:image/png` URL, rendered at the page's device pixel ratio. Not a
+   * `chrome-extension://` URL: `action.setIcon({imageData})` sets an icon that
+   * has none.
+   */
+  readonly icon: string;
+  readonly badgeText: string;
+  /** A CSS color, `#rrggbbaa`. Fully transparent when the extension set none. */
+  readonly badgeColor: string;
+  /**
+   * The popup to open in a `<webview>` when the action is clicked, or `null`
+   * for an action whose click is {@link DomicileHost.activateExtension}.
+   */
+  readonly popup: string | null;
+  /** Whether the action is enabled: `action.disable()` makes it `false`. */
+  readonly enabled: boolean;
+};
+
+/**
+ * The extensions with an action, whole, whenever any of them changes — and
+ * once to a page that has just connected, so a reload is told rather than left
+ * with an empty tray.
+ *
+ * No `arrival`, unlike the compositor's events: the browser process is where
+ * an action's state lives, so there is no socket read to stamp.
+ */
+export type DomicileExtensionsEvent = Event & {
+  readonly extensions: readonly DomicileExtension[];
+};
+
 /** Every event `window.domicile` fires, and what each one carries. */
 export type DomicileHostEventMap = {
   appappeared: DomicileAppEvent;
@@ -633,6 +676,11 @@ export type DomicileHostEventMap = {
    * and on connecting.
    */
   windowstheme: DomicileThemeEvent;
+  /**
+   * The extensions with an action, whole, whenever one changes and once on
+   * connecting.
+   */
+  extensions: DomicileExtensionsEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -810,6 +858,13 @@ export type DomicileHost = {
    * shell compares what it grabbed against what fired without parsing a string.
    */
   grabShortcut(shortcut: DomicileShortcut): void;
+
+  /**
+   * Click an extension's action that has no popup: dispatches its
+   * `action.onClicked`. An action with a popup is opened by the shell instead,
+   * as a `<webview>` at {@link DomicileExtension.popup}.
+   */
+  activateExtension(id: string): void;
 
   key(appId: string, keycode: number, pressed: boolean): void;
   pointerMotion(appId: string, x: number, y: number): void;
