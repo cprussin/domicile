@@ -7444,6 +7444,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
         &arguments.session,
     )?;
+    // What the desk starts with, once it is live. Only here, and so not on a
+    // reload: see `StartupConfig`.
+    for command in &config.startup.commands {
+        spawn_client(command, &socket_name);
+    }
 
     // Flush after every loop iteration so events queued while handling input
     // (which arrives off the wayland fd) reach clients promptly.

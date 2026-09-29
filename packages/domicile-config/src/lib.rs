@@ -20,11 +20,13 @@ mod applications;
 mod desktop;
 mod files;
 mod profile;
+mod startup;
 
 pub use applications::ApplicationsConfig;
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
+pub use startup::StartupConfig;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -792,6 +794,7 @@ pub struct Config {
     pub input: InputConfig,
     pub lock: LockConfig,
     pub output: OutputConfig,
+    pub startup: StartupConfig,
     pub theme: ThemeConfig,
 }
 
@@ -851,6 +854,7 @@ impl Config {
         self.idle.validate()?;
         self.input.keyboard.validate()?;
         self.lock.validate()?;
+        self.startup.validate()?;
         self.output.validate()
     }
 }

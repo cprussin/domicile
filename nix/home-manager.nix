@@ -394,6 +394,18 @@ in {
             };
           };
 
+          startup.commands = lib.mkOption {
+            description = ''
+              What the desk runs as it comes up, each an argv — the program,
+              then its arguments, with no shell between. They run on the
+              desk's own display, once, when it starts: a reload does not run
+              them again.
+            '';
+            type = lib.types.listOf (lib.types.nonEmptyListOf lib.types.str);
+            default = [];
+            example = [["emacsclient" "-e" "t"]];
+          };
+
           theme.mode = lib.mkOption {
             description = ''
               Which way round the desktop is drawn: light text on a dark

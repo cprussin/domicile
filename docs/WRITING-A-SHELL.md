@@ -241,9 +241,10 @@ offers, a new `[extensions]` list installs and uninstalls what it names (see
 [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
 and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
-edit replaced. One section is read at startup and not on a reload:
+edit replaced. Two sections are read at startup and not on a reload:
 `[lock]`, because whether the desk is *locked* is not something that file says
-— see [A locked desk](#a-locked-desk).
+— see [A locked desk](#a-locked-desk) — and `[startup]`, because running its
+commands again would be a second copy of each.
 
 Two edits are refused rather than applied, and each says so in the log: a file
 that will not parse, which leaves the last one that did in place, and a keyboard

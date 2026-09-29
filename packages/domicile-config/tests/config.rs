@@ -403,6 +403,41 @@ omit = ["[unclosed"]
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
+// ---- startup --------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_startup_runs_nothing() {
+    assert!(Config::parse("").unwrap().startup.commands.is_empty());
+}
+
+#[test]
+fn a_startup_command_is_an_argv() {
+    let commands = Config::parse(
+        r#"
+[startup]
+commands = [["emacsclient", "-e", "t"], ["mako"]]
+"#,
+    )
+    .unwrap()
+    .startup
+    .commands;
+    assert_eq!(commands, [vec!["emacsclient", "-e", "t"], vec!["mako"]]);
+}
+
+#[test]
+fn an_empty_startup_command_is_refused() {
+    // Nothing to run is a mistake in the file, not a command that ran and
+    // did nothing.
+    let err = Config::parse(
+        r#"
+[startup]
+commands = [[]]
+"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
 // ---- files ----------------------------------------------------------------
 
 #[test]
