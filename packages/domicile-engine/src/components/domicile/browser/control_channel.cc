@@ -285,6 +285,14 @@ void ControlChannel::PreviewFile(const std::string& path) {
   SendMessage(std::move(message));
 }
 
+// Words to match, like SearchFiles: which directories hold the desktop
+// entries is the compositor's to read.
+void ControlChannel::SearchApps(const std::string& query) {
+  base::DictValue message = Typed("search_apps");
+  message.Set("query", query);
+  SendMessage(std::move(message));
+}
+
 // The one member that names a row of the clipboard, and the whole of what a
 // page may do to the seat's selection: it says which of the things already
 // copied to put back, and cannot say what was copied.
@@ -869,6 +877,48 @@ void ControlChannel::DispatchLine(const std::string& line,
     }
     client_->FilePreview(*path, *kind, text ? *text : std::string(),
                          std::move(entries), arrival);
+    return;
+  }
+
+  if (*type == "found_apps") {
+    const std::string* query = message.FindString("query");
+    const base::ListValue* found = message.FindList("apps");
+    // The query or nothing, for `found_files`'s reason above.
+    if (!query || !found) {
+      return;
+    }
+    std::vector<mojom::DesktopEntryPtr> apps;
+    apps.reserve(found->size());
+    for (const base::Value& row : *found) {
+      const base::DictValue* entry = row.GetIfDict();
+      if (!entry) {
+        continue;
+      }
+      // An entry with no id or name is one nothing could draw, and one with
+      // no command is one nothing could run: dropped, like a clipboard row
+      // with no preview. A missing comment is an empty one.
+      const std::string* id = entry->FindString("id");
+      const std::string* name = entry->FindString("name");
+      const std::string* comment = entry->FindString("comment");
+      const base::ListValue* listed = entry->FindList("command");
+      if (!id || !name || !listed) {
+        continue;
+      }
+      std::vector<std::string> command;
+      command.reserve(listed->size());
+      for (const base::Value& argument : *listed) {
+        if (const std::string* word = argument.GetIfString()) {
+          command.push_back(*word);
+        }
+      }
+      if (command.empty()) {
+        continue;
+      }
+      apps.push_back(mojom::DesktopEntry::New(
+          *id, *name, comment ? *comment : std::string(), std::move(command)));
+    }
+    // Sent even when it is empty, for the reason `found_files` is.
+    client_->Apps(*query, std::move(apps), arrival);
     return;
   }
 

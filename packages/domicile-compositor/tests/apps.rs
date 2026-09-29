@@ -10,7 +10,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, DesktopEntry, HostMessage};
 
 use crate::running::Compositor;
 
@@ -382,4 +382,43 @@ fn a_client_that_limits_its_size_has_the_chrome_told() {
     };
     // A `0` is no limit on that axis, and is passed on as one.
     assert_eq!(size, [1920.0, 0.0]);
+}
+
+/// A launcher's search for applications reads the desktop entries under the
+/// home's data directory, and answers with the command each one runs.
+#[test]
+fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
+    let home = tempfile::tempdir().expect("a home to lay out");
+    let applications = home.path().join(".local/share/applications");
+    std::fs::create_dir_all(&applications).expect("the directory");
+    std::fs::write(
+        applications.join("editor.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\n",
+    )
+    .expect("the entry");
+
+    let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SearchApps {
+            query: "edit".into(),
+        })
+        .expect("it asks");
+
+    let answer = chrome
+        .wait_for(|message| matches!(message, HostMessage::FoundApps { .. }))
+        .expect("the compositor answers");
+    let HostMessage::FoundApps { query, apps } = answer else {
+        panic!("that is not a search's answer: {answer:?}");
+    };
+    assert_eq!(query, "edit");
+    assert_eq!(
+        apps,
+        vec![DesktopEntry {
+            id: "editor.desktop".into(),
+            name: "Editor".into(),
+            comment: String::new(),
+            command: vec!["editor".into()],
+        }]
+    );
 }

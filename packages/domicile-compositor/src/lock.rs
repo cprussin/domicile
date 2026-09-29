@@ -410,10 +410,10 @@ pub enum Asked<'a> {
 /// open. A client's copy is a client's, not the shell's, and refusing it would
 /// leave the history disagreeing with what a paste produces.
 ///
-/// **A LAUNCHER'S SEARCH AND PREVIEW ARE REFUSED, WHERE THEY ARE ANSWERED.**
-/// Both read the home for whoever is at the desk — a list of names, and the
-/// front of a file — which is the desktop acting for somebody a locked desk
-/// does not have. They are answered on the chrome connection, so they are
+/// **A LAUNCHER'S SEARCHES AND PREVIEW ARE REFUSED, WHERE THEY ARE ANSWERED.**
+/// They read the machine for whoever is at the desk — a list of names, the
+/// front of a file, the applications installed — which is the desktop acting
+/// for somebody a locked desk does not have. They are answered on the chrome connection, so they are
 /// asked there, as [`Asked::OnTheConnection`]; the answer to a refused one is
 /// no answer at all, whatever the query or path, so it says nothing about what
 /// is on the disk.
@@ -437,7 +437,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::CopyClipboardEntry { .. },
         )
         | Asked::OnTheConnection(
-            ConnectionRequest::SearchFiles { .. } | ConnectionRequest::PreviewFile { .. },
+            ConnectionRequest::SearchFiles { .. }
+            | ConnectionRequest::PreviewFile { .. }
+            | ConnectionRequest::SearchApps { .. },
         ) => Some(Refusal::Command),
         Asked::OnTheWaylandThread(
             ClientRequest::KeyboardFocus { .. }
@@ -825,6 +827,12 @@ mod tests {
                 "a preview of a file in it",
                 ConnectionRequest::PreviewFile {
                     path: "plan.org".into(),
+                },
+            ),
+            (
+                "a search of the applications installed",
+                ConnectionRequest::SearchApps {
+                    query: "fire".into(),
                 },
             ),
         ] {
