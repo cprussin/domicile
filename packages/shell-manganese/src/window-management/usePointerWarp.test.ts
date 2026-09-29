@@ -11,14 +11,14 @@ type Pressed = WindowState["pressed"];
 /** The screen this page covers. */
 const HERE = "left";
 
-const LEFT: Focus = {
+const LEFT = {
   box: { height: 500, width: 400, x: 0, y: 100 },
   id: "kitty",
-};
-const RIGHT: Focus = {
+} satisfies Focus;
+const RIGHT = {
   box: { height: 500, width: 400, x: 400, y: 100 },
   id: "emacs",
-};
+} satisfies Focus;
 
 let warps: Spot[] = [];
 
@@ -468,5 +468,24 @@ describe("usePointerWarp", () => {
     rerender(desktopOf({ box: RIGHT.box, id: "firefox" }, all));
 
     expect(warps).toStrictEqual([[600, 350]]);
+  });
+
+  describe("a screen with nothing on it", () => {
+    /** This page's screen, with no window on it: the screen is the focus. */
+    const EMPTY: Focus = {
+      box: { height: 600, width: 800, x: 0, y: 0 },
+      id: undefined,
+    };
+
+    it("takes the pointer to its middle when a key brings the keyboard", () => {
+      const { press, rerender } = warping({ focus: undefined, windows: BOTH });
+
+      act(() => {
+        press("right");
+      });
+      rerender({ focus: EMPTY, windows: BOTH });
+
+      expect(warps).toStrictEqual([[400, 300]]);
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { openCommand } from "../launcher/open-command";
+import type { PlacedScreen } from "../screens/screen-toward";
 import type { DeskChannel, KeyPress } from "./desk-channel";
 import { DeskMessage } from "./desk-channel";
 import { appIdOf } from "./window";
@@ -251,7 +252,7 @@ export const useWindows = (
   // told the same desk and would only reach the same answer a beat earlier.
   useEffect(() => {
     if (displays !== undefined && reducing.current) {
-      dispatch(Action.ScreensDescribed(displays.map(({ name }) => name)));
+      dispatch(Action.ScreensDescribed(placedOf(displays)));
     }
   }, [displays]);
 
@@ -293,11 +294,7 @@ export const useWindows = (
             // it took was described by a page that did not know about this
             // page's monitor.
             if (reducing.current && described.current !== undefined) {
-              dispatch(
-                Action.ScreensDescribed(
-                  described.current.map(({ name }) => name),
-                ),
-              );
+              dispatch(Action.ScreensDescribed(placedOf(described.current)));
             }
           }
           break;
@@ -347,3 +344,10 @@ const waitAWhile = (heard: () => void): (() => void) => {
     clearTimeout(timer);
   };
 };
+
+/** The desk's displays as the screens the desktop is told of. */
+const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
+  displays.map(({ name, position, size }) => ({
+    box: { height: size[1], width: size[0], x: position[0], y: position[1] },
+    name,
+  }));

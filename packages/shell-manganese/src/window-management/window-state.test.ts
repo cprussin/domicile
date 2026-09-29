@@ -35,6 +35,13 @@ const desktop = (...appIds: readonly string[]): WindowState =>
 
 const APP = appWindowId;
 
+/** Screens of 1920 by 1080, left to right in the order named. */
+const sideBySide = (...names: readonly string[]) =>
+  names.map((name, at) => ({
+    box: { height: 1080, width: 1920, x: at * 1920, y: 0 },
+    name,
+  }));
+
 describe("the windows a host announces", () => {
   it("opens a window for each client, tiled on the workspace on screen", () => {
     const state = desktop("kitty", "editor");
@@ -123,7 +130,13 @@ describe("the screens", () => {
     // A window can open before the handshake is answered, so there is always
     // somewhere for one to be. No display is called "", so nothing is drawn
     // on this screen -- it is where the desktop is while nobody can see it.
-    expect(NO_WINDOWS.screens).toEqual([{ current: "1", name: "" }]);
+    expect(NO_WINDOWS.screens).toEqual([
+      {
+        box: { height: 0, width: 0, x: 0, y: 0 },
+        current: "1",
+        name: "",
+      },
+    ]);
     expect(NO_WINDOWS.focused).toBe("");
   });
 
@@ -134,7 +147,7 @@ describe("the screens", () => {
     // a window that has already been lost.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
     );
 
     expect(currentOn(state, "left")).toBe("1");
@@ -148,8 +161,8 @@ describe("the screens", () => {
     // embedded twice, and the second embedding takes the first's pixels.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left"]),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left")),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
     );
 
     expect(currentOn(state, "left")).toBe("1");
@@ -161,13 +174,28 @@ describe("the screens", () => {
     // nothing to do with it must not have its workspace taken away.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("5"),
-      WindowAction.ScreensDescribed(["left", "right", "third"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right", "third")),
     );
 
     expect(currentOn(state, "left")).toBe("5");
     expect(currentOn(state, "right")).toBe("2");
+  });
+
+  it("keeps where each screen is on the desk, as the host last said", () => {
+    // What `focus left` reads to find the screen beside this one, and a
+    // monitor dragged about in the display settings is one re-described.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.ScreensDescribed(sideBySide("right", "left")),
+    );
+
+    expect(state.screens.map(({ box, name }) => [name, box.x])).toEqual([
+      ["right", 0],
+      ["left", 1920],
+    ]);
   });
 
   it("hands a swapped monitor what the one it replaced was showing", () => {
@@ -176,11 +204,11 @@ describe("the screens", () => {
     // rather than every monitor coming back on workspace 1.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       // To the right-hand monitor, and then to some workspace on it.
       WindowAction.WorkspaceSelected("2"),
       WindowAction.WorkspaceSelected("7"),
-      WindowAction.ScreensDescribed(["left", "docked"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "docked")),
     );
 
     expect(currentOn(state, "docked")).toBe("7");
@@ -190,9 +218,9 @@ describe("the screens", () => {
   it("moves the keyboard to the first screen when the one it was on goes", () => {
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("2"),
-      WindowAction.ScreensDescribed(["left"]),
+      WindowAction.ScreensDescribed(sideBySide("left")),
     );
 
     expect(state.focused).toBe("left");
@@ -204,11 +232,17 @@ describe("the screens", () => {
     // is a different thing and is what the empty name says.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left"]),
-      WindowAction.ScreensDescribed([]),
+      WindowAction.ScreensDescribed(sideBySide("left")),
+      WindowAction.ScreensDescribed(sideBySide()),
     );
 
-    expect(state.screens).toEqual([{ current: "1", name: "" }]);
+    expect(state.screens).toEqual([
+      {
+        box: { height: 0, width: 0, x: 0, y: 0 },
+        current: "1",
+        name: "",
+      },
+    ]);
     expect(windowsOn(workspaceOn(state, ""))).toEqual([APP("kitty")]);
   });
 });
@@ -221,7 +255,7 @@ describe("the desktop another page of the desk reduced", () => {
     // page that has been listening all along take the same thing.
     const reduced = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("2"),
     );
 
@@ -278,7 +312,7 @@ describe("the workspaces", () => {
     // one workspace.
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("2"),
     );
 
@@ -290,7 +324,7 @@ describe("the workspaces", () => {
   it("shows a workspace nobody is showing on the screen the keyboard is on", () => {
     const state = reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("9"),
     );
 
@@ -305,7 +339,7 @@ describe("the workspaces", () => {
     // is a desk of one monitor with two dark ones beside it.
     const state = reduce(
       desktop(),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("2"),
       WindowAction.AppAppeared("kitty", "kitty"),
     );
@@ -366,7 +400,7 @@ describe("the workspaces each screen has", () => {
   const twoScreens = (): WindowState =>
     reduce(
       desktop("kitty"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WorkspaceSelected("2"),
       WindowAction.AppAppeared("editor", "editor"),
       WindowAction.WorkspaceSelected("3"),
@@ -396,7 +430,7 @@ describe("the workspaces each screen has", () => {
   it("puts a window sent to an empty workspace on the screen it was sent from", () => {
     const state = reduce(
       desktop("kitty", "editor"),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.WindowSentToWorkspace("5"),
     );
 
@@ -408,7 +442,7 @@ describe("the workspaces each screen has", () => {
     const state = reduce(
       twoScreens(),
       WindowAction.WorkspaceSelected("1"),
-      WindowAction.ScreensDescribed(["left"]),
+      WindowAction.ScreensDescribed(sideBySide("left")),
     );
 
     expect(workspacesOn(state, "left")).toEqual(["1", "2"]);
@@ -469,6 +503,76 @@ describe("the scratchpad", () => {
 
     expect(state.scratchpad).toEqual([]);
     expect(state.windows).toHaveLength(1);
+  });
+});
+
+describe("focus across screens", () => {
+  /** Kitty on the left screen, the editor and a terminal on the right. */
+  const twoScreens = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.AppAppeared("term", "term"),
+    );
+
+  it("goes on to the screen that way from the edge of the tiling", () => {
+    // sway's order: a window that way, then a screen that way, and only then
+    // the wrap round.
+    const state = reduce(
+      twoScreens(),
+      WindowAction.FocusStepped(Direction.Left),
+      WindowAction.FocusStepped(Direction.Left),
+    );
+
+    expect(state.focused).toBe("left");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("comes in by the window on the near edge", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ScreenHovered("left"),
+      WindowAction.FocusStepped(Direction.Right),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
+  it("goes on to a screen with nothing on it", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.FocusStepped(Direction.Right),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBeUndefined();
+  });
+
+  it("leaves a screen with nothing on it", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.ScreenHovered("right"),
+      WindowAction.FocusStepped(Direction.Left),
+    );
+
+    expect(state.focused).toBe("left");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("wraps round where no screen lies that way", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.FocusStepped(Direction.Right),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBe(APP("editor"));
   });
 });
 
@@ -663,7 +767,7 @@ describe("the pointer", () => {
     // windows, so the page that saw the pointer is the one that says this.
     const state = reduce(
       desktop(),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.AppAppeared("kitty", "kitty"),
       WindowAction.WorkspaceSelected("2"),
       WindowAction.AppAppeared("editor", "editor"),
@@ -679,7 +783,7 @@ describe("the pointer", () => {
     // with nothing on it is still where the next window should open.
     const state = reduce(
       desktop(),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
       WindowAction.AppAppeared("kitty", "kitty"),
       WindowAction.ScreenHovered("right"),
     );
@@ -693,7 +797,7 @@ describe("the pointer", () => {
     // cost the desktop nothing.
     const state = reduce(
       desktop(),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
     );
 
     expect(reduceWindows(state, WindowAction.ScreenHovered("left"))).toBe(
@@ -706,7 +810,7 @@ describe("the pointer", () => {
     // before the page that reduces has been told the screen is there.
     const state = reduce(
       desktop(),
-      WindowAction.ScreensDescribed(["left", "right"]),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
     );
 
     expect(reduceWindows(state, WindowAction.ScreenHovered("docked"))).toBe(

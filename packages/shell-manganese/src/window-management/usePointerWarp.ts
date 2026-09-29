@@ -229,13 +229,13 @@ export const usePointerWarp = ({
   useEffect(() => {
     // A window nobody has seen before, holding the keyboard: the one focus
     // change that announces itself in the render rather than in a press.
-    const opened = focus !== undefined && !open.current.includes(focus.id);
+    const opened = focus?.id !== undefined && !open.current.includes(focus.id);
     // And the third: the window the keyboard was in has closed, the tiling
     // has shut over it, and the keyboard has landed somewhere the pointer is
     // not — with whatever filled the gap arriving under the pointer as it
     // went. Nobody pressed anything for that one either.
     const was = held.current;
-    const gone = was !== undefined && !windows.includes(was.id);
+    const gone = was?.id !== undefined && !windows.includes(was.id);
     const keyed = pressed.count !== answered.current;
     answered.current = pressed.count;
     if (keyed && pressed.on !== screen) {

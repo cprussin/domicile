@@ -18,10 +18,14 @@ import type { Rect } from "./rect";
  */
 export type Spot = readonly [x: number, y: number];
 
-/** The window the keyboard is in, and the box it is drawn in. */
+/**
+ * The window the keyboard is in and the box it is drawn in — or, on a screen
+ * with nothing on it, the screen itself.
+ */
 export type Focus = {
   box: Rect;
-  id: string;
+  /** The window, or `undefined` for a screen with no window to be in. */
+  id: string | undefined;
 };
 
 type Move = {
