@@ -1101,10 +1101,13 @@ domicile.on("extensions", ({ extensions }) => {
 
 The row type is `Extension`, from `@domicile/chrome-sdk/extension`.
 
-**A click is one of two things**, and the row says which:
+**Every click is `domicile.activateExtension(id)`**, popup or not. It is
+Chrome's toolbar click: the extension gets `activeTab` on the focused browser
+window, so its `scripting.executeScript` and `tab.url` work there. A shell that
+opens a popup without it hands the popup a page it cannot touch. Then the row
+says what else:
 
-- **No `popup`:** `domicile.activateExtension(id)`, which dispatches the
-  extension's `action.onClicked`.
+- **No `popup`:** nothing. The engine dispatches `action.onClicked`.
 - **A `popup`:** open a `<webview>` at it in a panel under the icon. The page
   gets the extension API from its origin, not from the view. Close the panel on
   a press outside it, on Escape, and on `domicile-close`, which is the popup

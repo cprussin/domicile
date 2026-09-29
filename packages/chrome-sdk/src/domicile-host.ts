@@ -657,7 +657,8 @@ export type DomicileExtension = {
   readonly badgeColor: string;
   /**
    * The popup to open in a `<webview>` when the action is clicked, or `null`
-   * for an action whose click is {@link DomicileHost.activateExtension}.
+   * for an action whose click is its `action.onClicked`. Either way the click
+   * is {@link DomicileHost.activateExtension}.
    */
   readonly popup: string | null;
   /** Whether the action is enabled: `action.disable()` makes it `false`. */
@@ -930,9 +931,10 @@ export type DomicileHost = {
   grabShortcut(shortcut: DomicileShortcut): void;
 
   /**
-   * Click an extension's action that has no popup: dispatches its
-   * `action.onClicked`. An action with a popup is opened by the shell instead,
-   * as a `<webview>` at {@link DomicileExtension.popup}.
+   * Click an extension's action, popup or not: grants it `activeTab` on the
+   * active tab, then dispatches `action.onClicked` for an action with no
+   * popup. One with a popup is opened by the shell, as a `<webview>` at
+   * {@link DomicileExtension.popup}.
    */
   activateExtension(id: string): void;
 

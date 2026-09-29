@@ -625,9 +625,10 @@ export class DomicileClient {
   }
 
   /**
-   * Click an extension's action that has no popup, which dispatches its
-   * `action.onClicked`. One with a popup is the shell's to open, as a
-   * `<webview>` at its `popup`.
+   * Click an extension's action, popup or not: Chrome's toolbar click. The
+   * extension gets `activeTab` on the focused browser window, and an action
+   * with no popup has its `action.onClicked` dispatched. One with a popup is
+   * the shell's to open, as a `<webview>` at its `popup`, after this call.
    */
   activateExtension(id: string): void {
     this.#host.activateExtension(id);
