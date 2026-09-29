@@ -134,7 +134,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork itself: the design, the C ABI between the compositor and the engine, the measurements, and the plan — phase 1 shipped, phases 2 and 3 have items left. |
 | [/docs/architecture/A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md) | A desktop draws on a bare tty, and this is how: the Ozone DRM embedder that had to be written, who opens the card and holds DRM master, where input comes from, and what a console switch does. Read it before touching the DRM platform, `platform.rs`, or anything that assumes a display server. |
 | [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions on a desk: installed from the config, their actions in the shell's tray, and every `<webview>` a tab to `chrome.tabs`. Two slices, both done; one follow-up left: tabs' zoom. |
-| [/docs/architecture/WINDOWS-ACROSS-SCREENS.md](/docs/architecture/WINDOWS-ACROSS-SCREENS.md) | Dragging a floating window from one monitor to another in `shell-manganese`: ownership follows the center, and an `<app>` embedded by every page it overlaps. Phase 1 shipped; the engine half and browser windows are left. |
+| [/docs/architecture/WINDOWS-ACROSS-SCREENS.md](/docs/architecture/WINDOWS-ACROSS-SCREENS.md) | Dragging a floating window from one monitor to another in `shell-manganese`: ownership follows the center, and an `<app>` embedded by every page it overlaps. Phase 1 and `<app mirror>` shipped; drawing the overhangs and browser windows are left. |
 
 [`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
 item pointing at the doc above that carries its detail. Read it before starting

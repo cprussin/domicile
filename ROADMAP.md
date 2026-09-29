@@ -177,9 +177,10 @@ The evidence for each of those is in the doc that made the claim —
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 5. **A floating window across monitors.** A float goes to the screen its
-   middle is dragged onto. Left: drawing it on both while it crosses — a client
-   window can be embedded by only one page — and browser windows, which stay
-   on their screen because a `<webview>` on another page reloads.
+   middle is dragged onto, and the engine has `<app mirror>` for drawing it on
+   both while it crosses. Left: manganese drawing those overhangs, and browser
+   windows, which stay on their screen because a `<webview>` on another page
+   reloads.
    [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
 
 ## In the engine fork — the agent on `crux`
