@@ -120,7 +120,7 @@ const sheetStyles = css({
   // `COVERED` in `placement.ts` — which comes later in the document and so is
   // drawn over it. Left at the page's own level it would cover those windows,
   // and show through a window opening or closing in front of one.
-  zIndex: -1,
+  zIndex: -2,
 });
 
 // `contents`, so a rotation is no box of its own: its layers stay positioned
