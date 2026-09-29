@@ -11,6 +11,10 @@
 //   GUARD focused name=…       this page focused that window, `?focus=`
 //   GUARD answer active=…      the popup's tabs.query answer, read off the
 //                              popup's own address. THE CLAIM
+//   GUARD answer zoom=…        what the popup's tabs.getZoom read after its
+//                              tabs.setZoom on that tab
+//   GUARD zoom name=… factor=… window `a` or `b`'s element heard its zoom
+//                              change, to two places
 //
 // THE ORDER IS THE POINT. Both windows are made first and the popup last, and
 // the popup's <webview> is never focused: so a desk whose active tab were the
@@ -81,9 +85,11 @@ const openPopupOnceReady = () => {
     opened = true;
     setTimeout(() => {
       view(popup, (url) => {
-        const active = new URL(url).searchParams.get("active");
+        const answered = new URL(url).searchParams;
+        const active = answered.get("active");
         if (active !== null) {
           say(`answer active=${active}`);
+          say(`answer zoom=${answered.get("zoom")}`);
         }
       });
     }, SETTLE_MS);
@@ -105,6 +111,13 @@ const windows = Object.fromEntries(
     }),
   ]),
 );
+
+// Only the popup zooms anything, so a window that hears a zoom heard its.
+for (const [name, element] of Object.entries(windows)) {
+  element.addEventListener("domicile-zoom-change", () => {
+    say(`zoom name=${name} factor=${element.zoom.toFixed(2)}`);
+  });
+}
 
 host.addEventListener("extensions", (event) => {
   const row = event.extensions.find((extension) => extension.id === expected);
