@@ -99,6 +99,20 @@ omit = ["*/*", "!Scratch/*"]
 
 On NixOS that is `programs.domicile.settings.files.omit`.
 
+It also offers the applications the machine's desktop entries name, and
+`[applications] omit` leaves some out by the same rules, as globs over desktop
+file IDs (`firefox.desktop`). Leaving it out offers every entry; a desk that
+wants only its own says so:
+
+```toml
+[applications]
+# Everything left out, then the launcher's own entries taken back.
+omit = ["*", "!launcher-*"]
+```
+
+On NixOS that is `programs.domicile.settings.applications.omit`, and a reload
+takes it up at the next keystroke.
+
 ## The screen going dark
 
 A desktop left alone turns its screens off — if you ask it to. Nothing blanks

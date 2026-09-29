@@ -163,7 +163,8 @@ use crate::timing_window::TimingWindow;
 use crate::viewport::{surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
-    Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
+    ApplicationsConfig, Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig,
+    KeyboardConfig, Omit, ThemeMode,
 };
 use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
@@ -483,6 +484,10 @@ struct ChromeHub {
     /// [`answer_on_the_connection`]. The lock's own state, set once at startup
     /// on a desk that can lock and never on one that cannot.
     lock: OnceLock<Seen>,
+    /// Which desktop entries a launcher is offered: `applications.omit`, as
+    /// the config last said it. Set at startup and on every reload that moves
+    /// it, and read by every connection that answers a search.
+    applications: Mutex<Omit>,
     /// The icons a launcher's applications are drawn with, found once each.
     /// Behind a lock of its own because every connection answers searches.
     app_icons: Mutex<AppIcons>,
@@ -497,6 +502,13 @@ struct ChromeHub {
 }
 
 impl ChromeHub {
+    /// Take up `applications.omit`: which desktop entries the next search
+    /// offers. Nothing is told — a launcher asks on every keystroke, so the
+    /// next one is answered under it.
+    fn offer_the_applications(&self, applications: &ApplicationsConfig) {
+        *self.applications.lock().unwrap() = applications.omit.clone();
+    }
+
     fn new(
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
@@ -515,6 +527,7 @@ impl ChromeHub {
             offered: Mutex::new(None),
             home: OnceLock::new(),
             lock: OnceLock::new(),
+            applications: Mutex::new(ApplicationsConfig::default().omit),
             app_icons: Mutex::new(AppIcons::new(data_dirs(
                 std::env::var_os("XDG_DATA_HOME"),
                 std::env::var_os("XDG_DATA_DIRS"),
@@ -1601,7 +1614,13 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                 std::env::var_os("XDG_DATA_DIRS"),
                 home_directory().as_deref(),
             );
-            let installed = installed(&dirs);
+            // Out of the lock before the search, like the file index: a reload
+            // replacing the rule must not wait on a disk.
+            let omit = hub.applications.lock().unwrap().clone();
+            let installed: Vec<_> = installed(&dirs)
+                .into_iter()
+                .filter(|found| !omit.omits(&found.entry.id))
+                .collect();
             let mut icons = hub.app_icons.lock().unwrap();
             let apps = find(&installed, &query, FOUND_APPS)
                 .into_iter()
@@ -4155,6 +4174,9 @@ impl DomicileCompositor {
         }
         if let Some(omit) = &restated.omit {
             self.omit_from_the_index(omit);
+        }
+        if let Some(applications) = &restated.applications {
+            self.hub.offer_the_applications(applications);
         }
         if let Some(extensions) = &restated.extensions {
             // Retained and then broadcast, in that order, for the reason
@@ -6825,6 +6847,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
         ),
     );
+    // Before any chrome can connect, so the first search a launcher makes is
+    // already answered under the desk's rule.
+    hub.offer_the_applications(&config.applications);
     // Before any chrome can connect: the desktop rides with the handshake, so
     // a page that arrives in the same millisecond as the socket still gets it.
     {

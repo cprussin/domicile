@@ -242,6 +242,22 @@ in {
       type = lib.types.submodule {
         freeformType = toml.type;
         options = {
+          applications.omit = lib.mkOption {
+            description = ''
+              Which applications the launcher leaves out, as globs over desktop
+              file IDs (`firefox.desktop`; an entry under a subdirectory of
+              `applications/` has its `/` read as `-`), by `files.omit`'s
+              rules: a pattern starting with `!` takes an ID back, and the
+              last pattern to match one decides it. So `["*" "!launcher-*"]`
+              offers only the entries whose IDs start `launcher-`.
+
+              The default offers every entry. Followed on a reload.
+            '';
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            example = ["*" "!launcher-*"];
+          };
+
           extensions = {
             web_store = lib.mkOption {
               description = ''

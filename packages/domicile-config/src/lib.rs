@@ -16,10 +16,12 @@
 //! [`ConfigStore`]; the store is the single source of truth for the live
 //! configuration. All of this is pure logic and unit-tested.
 
+mod applications;
 mod desktop;
 mod files;
 mod profile;
 
+pub use applications::ApplicationsConfig;
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
@@ -783,6 +785,7 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub applications: ApplicationsConfig,
     pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
     pub idle: IdleConfig,
