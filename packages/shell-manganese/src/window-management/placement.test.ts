@@ -51,7 +51,10 @@ describe("placementsOf", () => {
       WindowAction.ParentFocused(),
     );
 
-    expect(placementsOf(state, GEOMETRY).selection).toEqual(GEOMETRY.workspace);
+    expect(placementsOf(state, GEOMETRY).selection).toEqual({
+      depth: TILED,
+      rect: GEOMETRY.workspace,
+    });
   });
 
   it("gives a lone tiled window the whole workspace, with no gaps", () => {
@@ -138,8 +141,13 @@ describe("placementsOf", () => {
 
     expect(editor?.depth).toBeGreaterThan(TILED);
     expect(mail?.depth).toBe(editor?.depth);
-    expect(mail?.frame.y).toBeGreaterThan(editor?.frame.y ?? 0);
     expect(mail?.frame.x).toBe(editor?.frame.x);
+    // A gap between them, narrower than the tiling's.
+    const gap =
+      (mail?.frame.y ?? 0) -
+      ((editor?.frame.y ?? 0) + (editor?.frame.height ?? 0));
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(20);
   });
 
   it("stacks the tabs of a floating group with the group", () => {

@@ -7,12 +7,11 @@
 // knows, so it is an argument rather than a field.
 
 import { rectOf } from "./floating/float";
-import { gapOf } from "./gaps";
+import { floatingGapOf, gapOf } from "./gaps";
 import type { Rect } from "./rect";
 import { barOf, surfaceOf } from "./rect";
 import type { Frame, Tab, TabLayout } from "./tree/frames";
 import { framesOf } from "./tree/frames";
-import { withCommandsOnWindow } from "./tree/tiling";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
@@ -75,10 +74,11 @@ export type PlacedTab = Tab & { depth: number };
 export type Screenful = {
   placements: readonly Placement[];
   /**
-   * The container `focus parent` selected, or `undefined` while the commands
-   * are pointed at a window — see `tree/frames.ts`.
+   * The container `focus parent` selected, and how it stacks — with the
+   * float it is in, if any — or `undefined` while the commands are pointed at
+   * a window. See `tree/frames.ts`.
    */
-  selection: Rect | undefined;
+  selection: { depth: number; rect: Rect } | undefined;
   tabs: readonly PlacedTab[];
 };
 
@@ -161,14 +161,10 @@ export const placementsOf = (
     gapOf(workspace.tiling),
   );
   // Over them, in the order the workspace stacks them: each float's own tree
-  // laid out in its box, with no gaps — a floating group is one box.
+  // laid out in its box.
   const floating = workspace.floats.map((float, at) => ({
     depth: FLOATING + at,
-    ...framesOf(
-      withCommandsOnWindow({ depth: 0, root: float.root }),
-      rectOf(float),
-      0,
-    ),
+    ...framesOf(float, rectOf(float), floatingGapOf(float)),
   }));
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
@@ -185,7 +181,7 @@ export const placementsOf = (
       : [...laidOut.filter(({ id }) => id !== full.id), full];
   return {
     placements,
-    selection,
+    selection: selectionIn(selection, floating),
     tabs: [
       ...tabs.map((tab) => ({ ...tab, depth: TILED })),
       ...floating.flatMap(({ depth, tabs: inFloat }) =>
@@ -257,6 +253,25 @@ const placed = (
   surface,
   tabbed,
 });
+
+/**
+ * The group `focus parent` selected, in the tiling or in a float: one of them
+ * at most, since the keyboard leaving a layer takes its selection with it —
+ * see `workspace.ts`.
+ */
+const selectionIn = (
+  tiled: Rect | undefined,
+  floating: readonly { depth: number; selection: Rect | undefined }[],
+): Screenful["selection"] => {
+  const float = floating.find(({ selection }) => selection !== undefined);
+  if (tiled !== undefined) {
+    return { depth: TILED, rect: tiled };
+  } else if (float?.selection === undefined) {
+    return undefined;
+  } else {
+    return { depth: float.depth, rect: float.selection };
+  }
+};
 
 /** The smallest box holding both of them. */
 const spanning = (bar: Rect, surface: Rect): Rect => {

@@ -20,6 +20,7 @@ import {
   floatHolds,
   grown,
   movedTo,
+  retiled,
   shifted,
   sizedTo,
 } from "./floating/float";
@@ -46,7 +47,6 @@ import {
   NOTHING_TILED,
   windowsOf,
   withCommandsOnWindow,
-  withFocusIn,
   withFocusOn,
 } from "./tree/tiling";
 
@@ -229,35 +229,29 @@ export const modeToggled = (workspace: Workspace): Workspace => {
     // And back into the tiling, if there is anything tiled to go back to.
     return focusedIdOf(workspace.tiling) === undefined
       ? workspace
-      : { ...workspace, floatFocus: undefined };
+      : {
+          ...workspace,
+          floatFocus: undefined,
+          floats: onWindows(workspace.floats),
+        };
   }
 };
 
-/** `focus <direction>`: through the tiling, or between the floats in front. */
+/** `focus <direction>`: through the tiling, or through a floating group. */
 export const focusStepped = (
   workspace: Workspace,
   direction: Direction,
-): Workspace =>
-  workspace.floatFocus === undefined
-    ? { ...workspace, tiling: focusMoved(workspace.tiling, direction) }
-    : workspace;
+): Workspace => inLayer(workspace, (tiling) => focusMoved(tiling, direction));
 
 /**
- * `focus parent` and `focus child`, which only the tiling has.
- *
- * A floating window has left the tree, so there is no container around it to
- * point the commands at and the keys do nothing — the same answer
- * {@link focusStepped} gives, and for the same reason.
+ * `focus parent` and `focus child`, in the tiling or in a floating group. A
+ * lone floating window has no container around it, so there they do nothing.
  */
 export const parentFocused = (workspace: Workspace): Workspace =>
-  workspace.floatFocus === undefined
-    ? { ...workspace, tiling: focusedParent(workspace.tiling) }
-    : workspace;
+  inLayer(workspace, focusedParent);
 
 export const childFocused = (workspace: Workspace): Workspace =>
-  workspace.floatFocus === undefined
-    ? { ...workspace, tiling: focusedChild(workspace.tiling) }
-    : workspace;
+  inLayer(workspace, focusedChild);
 
 /** `move <direction>`: through the tree, or ten pixels across the desktop. */
 export const windowMoved = (
@@ -282,22 +276,18 @@ export const windowGrown = (
   );
 
 /** `splith` / `splitv` on the focused window's own box. */
-export const containerSplit = (
-  workspace: Workspace,
-  axis: Axis,
-): Workspace => ({ ...workspace, tiling: split(workspace.tiling, axis) });
+export const containerSplit = (workspace: Workspace, axis: Axis): Workspace =>
+  inLayer(workspace, (tiling) => split(tiling, axis));
 
 /** `layout tabbed` / `layout stacking` on the container around the focus. */
 export const containerLaidOut = (
   workspace: Workspace,
   layout: Layout,
-): Workspace => ({ ...workspace, tiling: laidOut(workspace.tiling, layout) });
+): Workspace => inLayer(workspace, (tiling) => laidOut(tiling, layout));
 
 /** `layout toggle split`. */
-export const splitFlipped = (workspace: Workspace): Workspace => ({
-  ...workspace,
-  tiling: splitToggled(workspace.tiling),
-});
+export const splitFlipped = (workspace: Workspace): Workspace =>
+  inLayer(workspace, splitToggled);
 
 /** `fullscreen` / `fullscreen toggle global` on the window being worked in. */
 export const fullscreenToggled = (
@@ -373,16 +363,22 @@ export const tiledStretched = (
 // A floating window taking the keyboard, which is the keyboard out of the
 // tree: whatever `focus parent` had selected in there goes with it, so coming
 // back lands on the window the tiling was in rather than on a container the
-// user chose before they left it. In a floating group, the group's own focus
-// follows it, so a tabbed one shows the window reached.
+// user chose before they left it — and so does any other float's. In a
+// floating group, the group's own focus follows it, so a tabbed one shows the
+// window reached; unless it is already there, which is the pointer resting in
+// the window being worked in and must not undo a `focus parent`.
 const floatFocused = (workspace: Workspace, id: string): Workspace => ({
   ...workspace,
   floatFocus: id,
-  floats: workspace.floats.map((float) =>
-    floatHolds(float, id)
-      ? { ...float, root: withFocusIn(float.root, id) }
-      : float,
-  ),
+  floats: workspace.floats.map((float) => {
+    if (!floatHolds(float, id)) {
+      return retiled(float, withCommandsOnWindow);
+    } else if (workspace.floatFocus === id) {
+      return float;
+    } else {
+      return retiled(float, (tiling) => withFocusOn(tiling, id));
+    }
+  }),
   tiling: withCommandsOnWindow(workspace.tiling),
 });
 
@@ -408,11 +404,13 @@ const focusedTiled = (workspace: Workspace, id: string): Workspace =>
     : {
         ...workspace,
         floatFocus: undefined,
+        floats: onWindows(workspace.floats),
         tiling: withFocusOn(workspace.tiling, id),
       };
 
 // Whichever layer the keyboard is in answers a keyed command: the box while a
-// float is being worked in, and the tree otherwise.
+// float is being worked in as a whole — a lone window, or a group `focus
+// parent` selected — and the tree it is in otherwise.
 const reshaped = (
   workspace: Workspace,
   float: (float: Float) => Float,
@@ -422,9 +420,36 @@ const reshaped = (
   if (floating === undefined) {
     return { ...workspace, tiling: tiling(workspace.tiling) };
   } else {
-    return withFloat(workspace, floating, float);
+    const box = floatHolding(workspace, floating);
+    return box.depth === 0 || windowsIn(box.root).length === 1
+      ? withFloat(workspace, floating, float)
+      : inLayer(workspace, tiling);
   }
 };
+
+// A tree command on the layer the keyboard is in: the tiling, or the tree of
+// the float being worked in — whose focus the keyboard follows, since a
+// command like `focus left` moves it.
+const inLayer = (
+  workspace: Workspace,
+  into: (tiling: Tiling) => Tiling,
+): Workspace => {
+  const floating = workspace.floatFocus;
+  if (floating === undefined) {
+    return { ...workspace, tiling: into(workspace.tiling) };
+  } else {
+    const changed = retiled(floatHolding(workspace, floating), into);
+    return {
+      ...withFloat(workspace, floating, () => changed),
+      floatFocus: focusedWindowIn(changed.root),
+    };
+  }
+};
+
+// Every float with its commands back on its window: the keyboard has left them,
+// so a group one of them selected is not what the next key acts on.
+const onWindows = (floats: readonly Float[]): readonly Float[] =>
+  floats.map((float) => retiled(float, withCommandsOnWindow));
 
 const withFloat = (
   workspace: Workspace,
@@ -452,8 +477,8 @@ const floatHolding = (workspace: Workspace, id: string): Float => {
 
 /** The float without the window `id`, or `undefined` when it held no other. */
 const floatWithout = (float: Float, id: string): Float | undefined => {
-  const { root } = removed({ depth: 0, root: float.root }, id);
-  return root === undefined ? undefined : { ...float, root };
+  const { depth, root } = removed(float, id);
+  return root === undefined ? undefined : { ...float, depth, root };
 };
 
 /** The window a float's own focus is on, or `undefined` for no float. */

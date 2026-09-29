@@ -173,7 +173,10 @@ comes to the front when it is clicked.
 
 After **Mod+a**, it floats the whole container selected instead, as sway does:
 the group keeps its layout inside one box, moves and resizes as one, and goes
-back into the tiling whole.
+back into the tiling whole. Inside it the tiling's keys work as they do on the
+workspace — focus, Mod+a/Mod+Shift+a, splits, layouts, and moving or resizing a
+window within the group — while a lone floating window, or a group Mod+a has
+selected, moves and resizes its box.
 
 The Shift that floats a window is spent on the chord. Shift is also the resize
 modifier, and you are still holding both when the window lands — so until you

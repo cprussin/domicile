@@ -4,7 +4,9 @@ import { Axis, Direction } from "./direction";
 import { FLOAT_STEP } from "./floating/float";
 import { Layout, NodeKind, windowsIn } from "./tree/node";
 import { focusedNodeOf, focusedWindowIn, windowsOf } from "./tree/tiling";
+import type { Workspace } from "./workspace";
 import {
+  childFocused,
   closed,
   containerLaidOut,
   containerSplit,
@@ -111,6 +113,16 @@ describe("floatToggled", () => {
   });
 });
 
+/** What the commands are pointed at in the one float on `workspace`. */
+const selectedIn = (workspace: Workspace) => {
+  const [float] = workspace.floats;
+  if (float === undefined) {
+    throw new Error("test: nothing is floating");
+  } else {
+    return focusedNodeOf(float);
+  }
+};
+
 /** `a` tiled beside `b` and `c`, which share a vertical split; `c` focused. */
 const grouped = () =>
   opened(containerSplit(tiling("a", "b"), Axis.Vertical), "c");
@@ -125,6 +137,55 @@ describe("a floating group", () => {
       ["b"],
     ]);
     expect(focusedOn(workspace)).toBe("b");
+  });
+
+  it("moves the focus through the group", () => {
+    expect(focusedOn(focusStepped(floated(), Direction.Up))).toBe("b");
+  });
+
+  it("selects the group with `focus parent`, and comes back down", () => {
+    const selected = parentFocused(floated());
+
+    expect(selectedIn(selected)).toMatchObject({ kind: NodeKind.Container });
+    expect(selectedIn(childFocused(selected))).toEqual({
+      id: "c",
+      kind: NodeKind.Window,
+    });
+  });
+
+  it("lays out the container the focus is in", () => {
+    const workspace = containerLaidOut(floated(), Layout.Tabbed);
+
+    expect(workspace.floats[0]?.root).toMatchObject({ layout: Layout.Tabbed });
+  });
+
+  it("moves a window through the group rather than the box", () => {
+    const before = floated();
+    const workspace = windowMoved(before, Direction.Up);
+
+    expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
+      "c",
+      "b",
+    ]);
+    expect(workspace.floats[0]?.x).toBe(before.floats[0]?.x);
+  });
+
+  it("moves the whole box once the group is selected", () => {
+    const selected = parentFocused(floated());
+
+    expect(windowMoved(selected, Direction.Right).floats[0]?.x).toBe(
+      (selected.floats[0]?.x ?? 0) + FLOAT_STEP,
+    );
+  });
+
+  it("keeps the group selected while the pointer rests in it", () => {
+    // Focus follows the cursor, so the window being worked in is reported
+    // again constantly; that must not undo `focus parent`.
+    const selected = parentFocused(floated());
+
+    expect(selectedIn(pointedAt(selected, "c"))).toMatchObject({
+      kind: NodeKind.Container,
+    });
   });
 
   it("gives the keyboard to the window in it that is reached", () => {
@@ -239,7 +300,7 @@ describe("the keyed commands", () => {
     // one anyway would draw a line round a group nothing is pointed at.
     const floating = floatToggled(tiling("a", "b", "c"));
 
-    expect(parentFocused(floating)).toBe(floating);
+    expect(parentFocused(floating).tiling).toBe(floating.tiling);
   });
 
   it("takes the commands out of the tiling with the keyboard", () => {
