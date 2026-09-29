@@ -176,6 +176,18 @@ export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
 export const WEBVIEW_CLOSE_EVENT = "domicile-close";
 
 /**
+ * Fired when an extension asks for this browser window to be the one in
+ * front: `chrome.tabs.update(id, {active: true})` or
+ * `chrome.windows.update(id, {focused: true})`. Every `<webview>` is a tab to
+ * `chrome.tabs`, and which window is in front is the shell's, so the browser
+ * raises nothing and asks.
+ *
+ * THE ENGINE DISPATCHES THIS, and it carries nothing: the element is the
+ * window asked for. A shell raises and focuses it. It bubbles.
+ */
+export const WEBVIEW_FOCUS_REQUEST_EVENT = "domicile-focus-request";
+
+/**
  * Fired when the page inside the view leaves a chord alone: a key pressed with
  * Ctrl, Alt or Meta held that the page did not `preventDefault`.
  *

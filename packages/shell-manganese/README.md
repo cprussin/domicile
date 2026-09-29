@@ -686,9 +686,11 @@ its icon, named by its title, with its badge over the corner.
   launcher does, and they take it back when it closes.
 - **Escape is heard only while this page has the keyboard.** Once the popup's
   page has the focus, a key pressed there never reaches this document.
-- A disabled action is not drawn, and the state is the action's default, not
-  the focused page's, until slice 2 of
-  [EXTENSIONS.md](../../docs/architecture/EXTENSIONS.md).
+- A disabled action is not drawn, and the state is the focused browser
+  window's: every `<webview>` is a tab
+  ([EXTENSIONS.md](../../docs/architecture/EXTENSIONS.md)), and one an
+  extension asks for in front (`domicile-focus-request`) is raised like a
+  click in it.
 
 ## The wallpaper
 

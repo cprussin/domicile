@@ -77,7 +77,7 @@ interface DomicileExtension {
 
 - **`extensions` is the whole list, on every change.** Like `Displays`, a page that reloads is told again rather than having had to be listening. The source is `ExtensionRegistryObserver` plus `ExtensionActionDispatcher::Observer::OnExtensionActionUpdated`.
 - **The icon is a data URL, not a `chrome-extension://` URL.** `action.setIcon({imageData})` sets an icon that has no URL.
-- **Action state is per tab**, so the list reports it for the active tab. That needs slice 2; until then it reports the default state (tab `-1`).
+- **Action state is per tab**, so the list reports it for the active tab, and is sent again when the active tab changes. With no active tab it is the default state (tab `-1`).
 - **A click with a popup** is the shell opening `<webview src={popup}>` in a panel under the icon. A browser-initiated navigation to `chrome-extension://` is allowed, and the page gets the full extension API because of its origin, not because of the view it is in. The shell closes the panel on an outside press or Escape. When the popup calls `window.close()`, the new `WebViewGuestClient.CloseRequested()` makes the element dispatch `domicile-close`.
 - **A click without a popup** calls `activateExtension(id)`, which dispatches `action.onClicked` with the active tab.
 
@@ -90,24 +90,37 @@ The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
 |---|---|
 | Tab | A `WebViewGuest`. It gets `SessionTabHelper` (the tab id, also what `declarativeNetRequest`'s `tabIds` and `webRequest` read) and `extensions::TabHelper` (`activeTab` grants, `scripting.executeScript`) when it is created. |
 | Window | One `DomicileWindowController : extensions::WindowController`, registered in `WindowControllerList`. Its tabs are the live guests, in creation order. |
-| Active tab | The guest that last held focus: the shell already moves focus with `view.focus()`, and the browser sees it as the focused inner `WebContents`. |
+| Active tab | The guest whose element last took focus: the shell already moves focus with `view.focus()`. The browser has no notification for an inner `WebContents` gaining focus, so the element says so (`WebViewGuest.Focused`). An extension page never takes it: a popup is in a `<webview>` too, and would name itself. |
 
-Lookups (`ExtensionTabUtil::GetTabById`, `tabs.query`, `ForEachTab`) walk
-Chrome's browser windows. Each one gets a single hook call that also consults
-`DomicileWindowController`. This is the one edit to code Chromium owns, and the
-price of each pin move. Tab events (`onCreated`, `onUpdated`, `onRemoved`,
-`onActivated`) come from `WebViewGuest`'s lifecycle and go through
-`TabsEventRouter`'s dispatch, not its `TabStripModel` observer.
+Lookups walk Chrome's browser windows. Four get one hook call each into
+`chrome/browser/extensions/domicile_desk_hooks.h` (patch 0057, 27 lines):
+
+| Lookup | The desk's answer |
+|---|---|
+| `ExtensionTabUtil::GetTabById` | the guest, the desk's controller, its index |
+| `ExtensionTabUtil::CreateTabObject` | its index and `active`, which no tab strip gives |
+| `ExtensionTabUtil::ForEachTab` | every guest too |
+| `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the desk: the shell's window is not one, and its active tab is the shell |
+
+`tabs.query` is not patched: it and every mutation below are the desk's own
+`ExtensionFunction`s, registered over Chrome's by name
+(`ExtensionFunctionRegistry::Register` replaces an entry). Tab events
+(`onCreated`, `onUpdated`, `onRemoved`, `onActivated`) come from the guests'
+lifecycle, broadcast through the profile's `EventRouter` exactly as
+`TabsEventRouter` builds them; its dispatch is private, and its tab entries
+`CHECK` a `TabInterface` a guest does not have.
 
 Mutations go where the thing they change lives:
 
 | Call | Goes to |
 |---|---|
-| `tabs.create({url})` | The shell, as a new-window request: the same path as `domicile-new-window` |
-| `tabs.update(id, {url})` | The guest; the browser already holds its `WebContents` |
-| `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | The shell, as a focus request |
-| `tabs.remove(id)` | The shell, as `domicile-close` on that element |
-| `tabs.move`, `tabs.group`, `tabs.discard`, `windows.create`, `windows.remove` | An error: `not supported on a Domicile desk` |
+| `tabs.create({url})` | The shell, as `domicile-new-window` on the active tab's element. Answered with the next tab the desk gains |
+| `tabs.update(id, {url})`, `{muted}` | The guest; the browser already holds its `WebContents` |
+| `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | The shell, as `domicile-focus-request` on that element |
+| `tabs.remove(id)` | The shell, as `domicile-close` on that element. Answered once asked |
+| `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
+| `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`, `windows.create`, `windows.remove`; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update`'s bounds and state | An error: `not supported on a Domicile desk` |
+| `tabs.setZoom`, `getZoom`, `setZoomSettings`, `getZoomSettings` | The same error, for now: Chrome's reach for a `ZoomController` a guest lacks. A follow-up |
 
 ## Key decisions
 
@@ -141,8 +154,10 @@ Slice 1: extensions run, and show in a tray.
 
 Slice 2: tabs.
 
-- [ ] `DomicileWindowController` and the lookup hooks
-- [ ] tab events from `WebViewGuest`'s lifecycle
-- [ ] the mutations table, each to where it goes
-- [ ] per-tab action state in `onextensions`
-- [ ] a guard: a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`
+- [x] `DomicileWindowController` and the lookup hooks: patch 0057, `chrome/browser/domicile/domicile_desk.h`
+- [x] tab events from `WebViewGuest`'s lifecycle
+- [x] the mutations table, each to where it goes. `domicile-focus-request` is the element's new event, and manganese raises the window on it
+- [x] per-tab action state in `onextensions`, and `action.onClicked` naming the active tab
+- [x] a guard: `guard-webview-tabs.sh`, a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`; its control focuses the other one
+
+Left: tabs' zoom, `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses), and manganese closing a browser window on `domicile-close`.

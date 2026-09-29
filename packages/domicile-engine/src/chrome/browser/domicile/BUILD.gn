@@ -17,6 +17,10 @@ source_set("domicile") {
   sources = [
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
+    "domicile_desk.cc",
+    "domicile_desk.h",
+    "domicile_desk_functions.cc",
+    "domicile_desk_functions.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
     "domicile_extension_tray.cc",
@@ -27,6 +31,8 @@ source_set("domicile") {
     "domicile_shell_windows.h",
     "domicile_tab_helpers.cc",
     "domicile_tab_helpers.h",
+    "domicile_window_controller.cc",
+    "domicile_window_controller.h",
   ]
 
   deps = [
@@ -69,6 +75,18 @@ source_set("domicile") {
     # factory, which is //chrome/browser/sessions, and extensions::TabHelper,
     # which is //chrome/browser/extensions above.
     "//chrome/browser/sessions",
+    # And every guest a tab of the desk's one window, to chrome.tabs: the
+    # decisions in :desk_tabs, the guest the desk asks the shell through, the
+    # tab's id and window id (SessionTabHelper, in //components/sessions),
+    # the generated chrome.tabs and chrome.windows types, and the window's
+    # show state.
+    "//chrome/common/extensions/api",
+    "//components/domicile:desk_tabs",
+    "//components/domicile:web_view_guest",
+    "//components/sessions",
+    "//components/sessions:session_id",
+    "//ui/base/mojom:ui_base_types",
+    "//ui/gfx/geometry",
     # The window a page's view is in, and the host that owns its cursor. Here
     # and not in //components/domicile for the reason the whole of this
     # directory is here: a cursor is moved through an aura WindowTreeHost, and

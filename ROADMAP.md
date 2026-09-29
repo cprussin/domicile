@@ -171,9 +171,11 @@ The evidence for each of those is in the doc that made the claim —
    actions in the shell's tray with popups in a `<webview>`, and every
    `<webview>` a tab to `chrome.tabs`. Slice 1 is done: the fork installs what
    the config names, and manganese draws the actions in a tray on its bar and
-   opens their popups in a `<webview>` under them. Left is slice 2, tabs:
-   `tabs.query` finds no `<webview>` yet, and an action's state is its default
-   tab's. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
+   opens their popups in a `<webview>` under them. Slice 2 is in the fork:
+   every `<webview>` is a tab and the desk one window. Left: tabs' zoom
+   (refused for now), `activeTab` granted on a tray click, and manganese
+   closing a browser window on `domicile-close`.
+   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 ## In the engine fork — the agent on `crux`
 

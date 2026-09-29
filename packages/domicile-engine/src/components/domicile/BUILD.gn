@@ -347,6 +347,21 @@ source_set("extension_tray_entry") {
   ]
 }
 
+# What chrome.tabs sees of a desk: which <webview> is the active tab, which
+# calls are refused, and which tabs a query names.
+#
+# A target of its own for :extension_installer's reason: the decisions are
+# here, where a test reaches them with no profile, and the window controller
+# that carries them out is in //chrome/browser/domicile. //base only.
+source_set("desk_tabs") {
+  sources = [
+    "browser/desk_tabs.cc",
+    "browser/desk_tabs.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # What Chrome offers a profile's user that a desktop has no place for, off.
 # Only the pref names are wanted of the three components, and a pref name is
 # the contract, so it is theirs rather than a string spelled here.
@@ -407,6 +422,7 @@ source_set("unit_tests") {
   sources = [
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
+    "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
     "browser/display_list_unittest.cc",
     "browser/extension_installer_unittest.cc",
@@ -442,6 +458,7 @@ source_set("unit_tests") {
     ":color_scheme",
     ":command_protocol",
     ":cursor_shape",
+    ":desk_tabs",
     ":desktop_prefs",
     ":display_transform",
     ":extension_installer",
