@@ -113,6 +113,7 @@ const EVENT_NAMES = [
   "modifiers",
   "files",
   "filepreview",
+  "apps",
   "battery",
   "clipboard",
   "theme",

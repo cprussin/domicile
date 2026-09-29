@@ -1,12 +1,15 @@
+import type { DomicileDesktopEntry } from "@domicile/chrome-sdk/domicile-host";
 import { FilePreviewKind } from "@domicile/chrome-sdk/file-preview";
 import type {
   FilePreviewMessage,
+  FoundAppsMessage,
   FoundFilesMessage,
 } from "@domicile/chrome-sdk/host-message";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
+import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
@@ -32,12 +35,13 @@ import type { Mark } from "./marked";
 import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
 import { useFound } from "./useFound";
+import { useFoundApps } from "./useFoundApps";
 import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 /** What the box asks for, as its placeholder and as its accessible name. */
-const PROMPT = "Open a file, a URL, or search";
+const PROMPT = "Open an app, a file, a URL, or search";
 
 /**
  * How long the highlight has to stay on a row before it is previewed: long
@@ -81,19 +85,25 @@ type Props = {
    * home, and all a page is ever told is what one query found in it.
    */
   search: Search;
+  /** Which installed applications match a query, answered by the host. */
+  searchApps: SearchApps;
 };
 
 /** How the panel asks what matches what is in its box. */
 type Search = (query: string) => Promise<FoundFilesMessage>;
 
+/** How the panel asks which applications match what is in its box. */
+type SearchApps = (query: string) => Promise<FoundAppsMessage>;
+
 /** How the panel asks what the highlighted file holds. */
 type Preview = (path: string) => Promise<FilePreviewMessage>;
 
 /**
- * One box, over a backdrop, that opens a file, a URL or a search.
+ * One box, over a backdrop, that runs an application or opens a file, a URL
+ * or a search.
  *
  * `mod+space` is what puts it up. What goes in is a query rather than a
- * command — there is nothing to choose between first — and which of the three
+ * command — there is nothing to choose between first — and which of the
  * things it means is `launch.ts`'s to decide, on evidence rather than on a
  * prefix the user has to remember.
  *
@@ -112,6 +122,7 @@ export const Launcher = ({
   open,
   preview,
   search,
+  searchApps,
 }: Props) => (
   <ModalDialog
     // Escape and the backdrop are what put it away, and the footer says the
@@ -149,7 +160,12 @@ export const Launcher = ({
       only while it is open, which is what makes every open start on an empty
       box and a full list without an effect anywhere to clear them.
     */}
-    <Query onLaunch={onLaunch} preview={preview} search={search} />
+    <Query
+      onLaunch={onLaunch}
+      preview={preview}
+      search={search}
+      searchApps={searchApps}
+    />
   </ModalDialog>
 );
 
@@ -157,6 +173,7 @@ type QueryProps = {
   onLaunch: (launch: Launch) => void;
   preview: Preview;
   search: Search;
+  searchApps: SearchApps;
 };
 
 /**
@@ -168,7 +185,7 @@ type QueryProps = {
  * actually is — a person types, watches the list narrow, and presses Enter
  * without having looked at the screen for the last two of those.
  */
-const Query = ({ onLaunch, preview, search }: QueryProps) => {
+const Query = ({ onLaunch, preview, search, searchApps }: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
   // Where the arrow keys or the pointer have taken the highlight, from the
@@ -177,9 +194,11 @@ const Query = ({ onLaunch, preview, search }: QueryProps) => {
   const [stepped, setStepped] = useState(0);
 
   const found = useFound(search, query);
-  // Every row is a thing Enter can do — the files, and a site and a search
-  // around them — so the list is the whole answer to what it will do.
-  const choices = choicesFor(query, found.files);
+  const apps = useFoundApps(searchApps, query);
+  // Every row is a thing Enter can do — the applications and the files, and a
+  // site and a search around them — so the list is the whole answer to what
+  // it will do.
+  const choices = choicesFor(query, found.files, apps);
   const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
   // Keyed rather than the choice itself, because a choice is a new object on
@@ -391,6 +410,16 @@ const scrollOnWheel = (pane: HTMLElement): (() => void) => {
 /** What one row says, by the kind of thing Enter on it would do. */
 const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
   switch (choice.kind) {
+    case ChoiceKind.App: {
+      return (
+        <>
+          <RowTile icon={AppWindowIcon} />
+          <span className={rowNameStyles}>
+            <Marked marks={marked(choice.entry.name, query)} />
+          </span>
+        </>
+      );
+    }
     case ChoiceKind.File: {
       return <FileChoice query={query} row={choice.row} />;
     }
@@ -495,7 +524,7 @@ const PreviewOf = ({
     return (
       <Placeholder
         icon={MagnifyingGlassIcon}
-        note="Type to find a file, a site or a search"
+        note="Type to find an app, a file, a site or a search"
         title="Nothing selected"
       />
     );
@@ -511,6 +540,9 @@ const PreviewOf = ({
 /** The row a preview is on its way for, named and drawn as its kind. */
 const Pending = ({ choice }: { choice: Choice }) => {
   switch (choice.kind) {
+    case ChoiceKind.App: {
+      return <AppPreview entry={choice.entry} />;
+    }
     case ChoiceKind.File: {
       return <NamedFile row={choice.row} />;
     }
@@ -546,6 +578,24 @@ const Pending = ({ choice }: { choice: Choice }) => {
     }
   }
 };
+
+/**
+ * An application: its name, what its entry says it is for, and the command
+ * Enter runs — which is the one thing a launcher's row cannot show and the
+ * thing that tells two entries of the same name apart.
+ */
+const AppPreview = ({ entry }: { entry: DomicileDesktopEntry }) => (
+  <Placeholder
+    icon={AppWindowIcon}
+    note={
+      <span className={appNoteStyles}>
+        {entry.comment !== "" && <span>{entry.comment}</span>}
+        <code className={commandStyles}>{entry.command.join(" ")}</code>
+      </span>
+    }
+    title={entry.name}
+  />
+);
 
 /** A file by name and kind alone, with `note` saying why that is all. */
 const NamedFile = ({ note, row }: { note?: string; row: FileRow }) => (
@@ -593,6 +643,11 @@ const ChoicePreview = ({
   preview: Preview;
 }) => {
   switch (choice.kind) {
+    // Everything there is to say about one arrived with the row, so there is
+    // nothing to wait for.
+    case ChoiceKind.App: {
+      return <AppPreview entry={choice.entry} />;
+    }
     case ChoiceKind.File: {
       const media = mediaIn(choice.row);
       // Keyed on the path, so what one row learned — an image that would not
@@ -863,6 +918,9 @@ const steppedTo = (from: number, by: number, count: number): number =>
 /** What tells one row from the others across a keystroke. */
 const keyOf = (choice: Choice): string => {
   switch (choice.kind) {
+    case ChoiceKind.App: {
+      return `app:${choice.entry.id}`;
+    }
     case ChoiceKind.File: {
       return `file:${choice.row.path}`;
     }
@@ -1032,6 +1090,19 @@ const placeholderTitleStyles = css({
 
 const placeholderNoteStyles = css({
   fontSize: "sm",
+});
+
+// An application's comment over its command, each a line of its own.
+const appNoteStyles = vstack({
+  gap: 2,
+});
+
+// The command as it will be run: monospaced, and broken anywhere rather than
+// run off the pane, because a path in it has no spaces to break at.
+const commandStyles = css({
+  color: "textTertiary",
+  fontFamily: "mono",
+  wordBreak: "break-all",
 });
 
 // The page a URL is, drawn small. The pointer reaches it so the wheel scrolls

@@ -172,6 +172,18 @@ struct ClipboardEntry {
   string preview;
 };
 
+// An application a desktop entry offers, as a launcher draws and runs it.
+//
+// `command` is the argv, already unquoted and with its field codes dropped by
+// the compositor, so the page hands it to Spawn and nothing on this side
+// parses an Exec line. `comment` is empty for an entry that has none.
+struct DesktopEntry {
+  string id;
+  string name;
+  string comment;
+  array<string> command;
+};
+
 // Page -> browser -> compositor.
 interface ControlChannel {
   // Hand the browser the page's end of the other direction.
@@ -216,6 +228,13 @@ interface ControlChannel {
   // named, and a renderer that wanted more of the disk than that already has
   // `Spawn`.
   PreviewFile(string path);
+
+  // Ask which installed applications match `query`. Answered with
+  // ControlChannelClient::Apps, carrying the same query.
+  //
+  // Words, like SearchFiles: which directories hold the desktop entries is
+  // the compositor's to read, and nothing here names one.
+  SearchApps(string query);
 
   // Put a row of the clipboard's history back on the clipboard.
   //
@@ -439,6 +458,13 @@ interface ControlChannelClient {
               string text,
               array<string> entries,
               mojo_base.mojom.TimeTicks arrival);
+
+  // The applications a SearchApps matched, best first. An answer like Files,
+  // so the query comes back for the page to tell answers apart; an empty
+  // array is a query that matched nothing.
+  Apps(string query,
+       array<DesktopEntry> apps,
+       mojo_base.mojom.TimeTicks arrival);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`
   // is whether a lead is in.
