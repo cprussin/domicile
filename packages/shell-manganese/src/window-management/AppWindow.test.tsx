@@ -41,10 +41,6 @@ const stubMeasure: Measure = () => ({
   transform: [1, 0, 0, 1, 0, 0],
 });
 
-const noHover = () => {
-  // Nothing in the case moves the pointer into the window.
-};
-
 /** Where a window on screen is, which no case here is about. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
@@ -86,14 +82,9 @@ const windowProps = {
   fullscreen: false,
   hasKeyboard: false,
   motion: "resting",
-  onHover: noHover,
   onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
 } as const;
-
-const noReach = () => {
-  // Nothing in the case reaches for the window.
-};
 
 // The real stylesheet, because what a window's arrival and its settling
 // resolve to is decided by the emitted CSS rather than by any one `css(...)`
@@ -128,9 +119,7 @@ beforeEach(() => {
 
 describe("AppWindow", () => {
   it("rounds its bottom corners, and leaves its top ones to the bar", () => {
-    const { container } = render(
-      <AppWindow {...windowProps} focused onReach={noReach} />,
-    );
+    const { container } = render(<AppWindow {...windowProps} focused />);
     const style = globalThis.getComputedStyle(portal(container));
 
     expect(style.borderEndStartRadius).not.toBe("");
@@ -142,7 +131,7 @@ describe("AppWindow", () => {
 
   it("squares its corners and drops its edge while it fills the screen", () => {
     const { container } = render(
-      <AppWindow {...windowProps} focused fullscreen onReach={noReach} />,
+      <AppWindow {...windowProps} focused fullscreen />,
     );
     const style = globalThis.getComputedStyle(portal(container));
 
@@ -153,9 +142,7 @@ describe("AppWindow", () => {
   });
 
   it("mounts an element carrying the host's app id", () => {
-    const { container } = render(
-      <AppWindow {...windowProps} focused onReach={noReach} />,
-    );
+    const { container } = render(<AppWindow {...windowProps} focused />);
     expect(portal(container).getAttribute("app-id")).toBe("term");
   });
 
@@ -163,84 +150,23 @@ describe("AppWindow", () => {
     // The SDK focuses a clicked client unless something says otherwise, and
     // this shell says otherwise: which window the user is working in is one
     // fact, and it has one owner. Left to the SDK the keyboard would move
-    // while the desktop went on drawing the window before it as focused — the same
-    // split a browser window had before `onReach`.
-    const reached: string[] = [];
+    // while the desktop went on drawing the window before it as focused.
     const { container } = render(
-      <AppWindow
-        {...windowProps}
-        focused={false}
-        onReach={() => {
-          reached.push("term");
-        }}
-      />,
+      <AppWindow {...windowProps} focused={false} />,
     );
 
     portal(container).dispatchEvent(
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
 
-    expect(reached).toStrictEqual(["term"]);
-    // And the SDK did not take the keyboard on its own account. It moves when
-    // the shell says so, which is the `focused` prop coming back.
+    // It moves when the shell says so, which is the `focused` prop coming
+    // back.
     expect(focused).toStrictEqual([]);
-  });
-
-  it("reports a click in the window it is already in", async () => {
-    // Focus follows the cursor here, so the window under the pointer is the
-    // one being worked in before the press lands — and a window that answered
-    // only presses in a window it was not already in could never be raised by
-    // a click. What keeps that from re-rendering the desktop on every press is
-    // the reduction, which returns the state it was given when a reach moves
-    // nothing.
-    await new Promise<void>((resolve) => {
-      const { container } = render(
-        <AppWindow
-          {...windowProps}
-          focused
-          onReach={() => {
-            resolve();
-          }}
-        />,
-      );
-
-      portal(container).dispatchEvent(
-        new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
-      );
-    });
-  });
-
-  it("reports the window the pointer moves into", async () => {
-    // Focus follows the cursor: the window under the pointer is the window
-    // the keyboard is in, and this element is where the page hears that the
-    // pointer arrived — the client behind it is sent the same motion by the
-    // SDK, which is a different question with the same answer.
-    await new Promise<void>((resolve) => {
-      const { container } = render(
-        <AppWindow
-          {...windowProps}
-          focused={false}
-          onHover={() => {
-            resolve();
-          }}
-          onReach={noReach}
-        />,
-      );
-
-      portal(container).dispatchEvent(
-        new MouseEvent("pointerover", { bubbles: true }),
-      );
-    });
   });
 
   it("hides the element when the window is not on screen", () => {
     const { container } = render(
-      <AppWindow
-        {...windowProps}
-        focused={false}
-        onReach={noReach}
-        rect={undefined}
-      />,
+      <AppWindow {...windowProps} focused={false} rect={undefined} />,
     );
     expect(portal(container)).not.toBeVisible();
   });
@@ -250,7 +176,7 @@ describe("AppWindow", () => {
     // or brought to the front. The shell names one window and this is what
     // carries that to the compositor — and to the SDK, which is what routes the
     // keystrokes that follow.
-    render(<AppWindow {...windowProps} focused onReach={noReach} />);
+    render(<AppWindow {...windowProps} focused />);
     expect(focused).toStrictEqual(["term"]);
   });
 
@@ -258,9 +184,7 @@ describe("AppWindow", () => {
     // The compositor answers every `focusApp` with a `focus_changed` saying it
     // carried it out, and a window that asked again on the strength of that
     // would ask for ever.
-    render(
-      <AppWindow {...windowProps} focused hasKeyboard onReach={noReach} />,
-    );
+    render(<AppWindow {...windowProps} focused hasKeyboard />);
     expect(focused).toStrictEqual([]);
   });
 
@@ -272,19 +196,12 @@ describe("AppWindow", () => {
     // so before this the desktop went on drawing a window as focused that every
     // keystroke was missing.
     const { rerender } = render(
-      <AppWindow {...windowProps} focused hasKeyboard onReach={noReach} />,
+      <AppWindow {...windowProps} focused hasKeyboard />,
     );
     // What the window asked for on the way in is not what this is about.
     focused = [];
 
-    rerender(
-      <AppWindow
-        {...windowProps}
-        focused
-        hasKeyboard={false}
-        onReach={noReach}
-      />,
-    );
+    rerender(<AppWindow {...windowProps} focused hasKeyboard={false} />);
 
     expect(focused).toStrictEqual(["term"]);
   });
@@ -293,7 +210,7 @@ describe("AppWindow", () => {
     // Only that way round: "this window has it" is an instruction the compositor
     // can carry out and "this window does not" is not one, so an unfocused
     // window says nothing rather than handing the keyboard back.
-    render(<AppWindow {...windowProps} focused={false} onReach={noReach} />);
+    render(<AppWindow {...windowProps} focused={false} />);
     expect(focused).toStrictEqual([]);
   });
 
@@ -301,12 +218,7 @@ describe("AppWindow", () => {
     // Ordinary CSS on an element this shell owns, which is what a cursor always
     // was — the SDK used to write it only because it owned the element class.
     const { container } = render(
-      <AppWindow
-        {...windowProps}
-        cursor="text"
-        focused={false}
-        onReach={noReach}
-      />,
+      <AppWindow {...windowProps} cursor="text" focused={false} />,
     );
     expect(portal(container)).toHaveStyle({ cursor: "text" });
   });
@@ -316,12 +228,7 @@ describe("AppWindow", () => {
       // A transform rather than the box, so the client is not reconfigured on
       // every frame of it — see the keyframes in `panda.config.ts`.
       const { container } = render(
-        <AppWindow
-          {...windowProps}
-          focused={false}
-          motion="opening"
-          onReach={noReach}
-        />,
+        <AppWindow {...windowProps} focused={false} motion="opening" />,
       );
 
       expect(
@@ -334,12 +241,7 @@ describe("AppWindow", () => {
     // pull away from the other by a fraction of the window's height.
     it("turns about the middle of its whole frame rather than its own", () => {
       const { container } = render(
-        <AppWindow
-          {...windowProps}
-          focused={false}
-          motion="opening"
-          onReach={noReach}
-        />,
+        <AppWindow {...windowProps} focused={false} motion="opening" />,
       );
 
       // The frame's middle is (600, 417), which is 385 above the top of the
@@ -355,12 +257,7 @@ describe("AppWindow", () => {
     // a desktop that had finished rearranging itself around it.
     it("leaves in the time the layout takes to close over it", () => {
       const { container } = render(
-        <AppWindow
-          {...windowProps}
-          focused={false}
-          motion="closing"
-          onReach={noReach}
-        />,
+        <AppWindow {...windowProps} focused={false} motion="closing" />,
       );
       const style = globalThis.getComputedStyle(portal(container));
 
@@ -369,7 +266,7 @@ describe("AppWindow", () => {
 
     it("eases to a new box rather than jumping to it", () => {
       const { container } = render(
-        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+        <AppWindow {...windowProps} focused={false} />,
       );
 
       expect(
@@ -381,12 +278,7 @@ describe("AppWindow", () => {
       // A drag writes a new box on every pointer move, and a window easing
       // towards each of them trails the pointer instead of following it.
       const { container } = render(
-        <AppWindow
-          {...windowProps}
-          dragging
-          focused={false}
-          onReach={noReach}
-        />,
+        <AppWindow {...windowProps} dragging focused={false} />,
       );
 
       expect(
@@ -399,12 +291,7 @@ describe("AppWindow", () => {
     // blinked.
     it("fades to see-through as it is taken hold of", () => {
       const { container } = render(
-        <AppWindow
-          {...windowProps}
-          dragging
-          focused={false}
-          onReach={noReach}
-        />,
+        <AppWindow {...windowProps} dragging focused={false} />,
       );
 
       expect(
@@ -414,7 +301,7 @@ describe("AppWindow", () => {
 
     it("fades back to solid as it is let go", () => {
       const { container } = render(
-        <AppWindow {...windowProps} focused={false} onReach={noReach} />,
+        <AppWindow {...windowProps} focused={false} />,
       );
 
       expect(
@@ -432,7 +319,6 @@ describe("AppWindow", () => {
             onMotionEnded={() => {
               resolve();
             }}
-            onReach={noReach}
           />,
         );
         fireEvent.animationEnd(portal(container));
@@ -445,14 +331,7 @@ describe("AppWindow", () => {
   // take it back from the window the user is now working in.
   describe("while it is leaving", () => {
     it("does not ask for the keyboard it had", () => {
-      render(
-        <AppWindow
-          {...windowProps}
-          focused
-          motion="closing"
-          onReach={noReach}
-        />,
-      );
+      render(<AppWindow {...windowProps} focused motion="closing" />);
 
       expect(focused).toStrictEqual([]);
     });
@@ -463,7 +342,6 @@ describe("AppWindow", () => {
           {...windowProps}
           focused={false}
           motion="leaving-to-start"
-          onReach={noReach}
         />,
       );
 

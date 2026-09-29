@@ -1214,6 +1214,43 @@ describe("Shell", () => {
       expect(barFor(container, "app:two").dataset.focus).toBe("resting");
     });
 
+    it("moves the keyboard to a window whose bar the pointer crosses into", () => {
+      // Focus follows the cursor over the whole window, and the bar is part of
+      // it: crossing onto a bar on the way to the window below it is already
+      // arriving there.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      pointerAt(1440, 800);
+
+      crossInto(barFor(container, "app:one"), 300, TOP_BAR + 10);
+
+      expect(barFor(container, "app:one").dataset.focus).toBe("focused");
+    });
+
+    it("moves the keyboard to a browser window whose page the pointer crosses into", async () => {
+      // The same rule as a client's window: the page is a guest, and what the
+      // shell hears is the pointer arriving over the element that holds it.
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+      clientAppears("one");
+      pointerAt(1440, 800);
+      const view = container.querySelector<HTMLElement>("webview");
+      if (view === null) {
+        throw new Error("test: no browser window");
+      }
+
+      crossInto(view, 300, 500);
+
+      expect(titleBars(container).map((bar) => bar.dataset.focus)).toEqual([
+        "focused",
+        "resting",
+      ]);
+    });
+
     it("draws the focused window's own frame in the accent as well", () => {
       // The bar is one edge of the window; a frame that stayed the resting
       // color would say something different from the bar above it.
@@ -1901,8 +1938,8 @@ describe("Shell", () => {
         ),
       ).toEqual([
         appElement(container, "one"),
-        appElement(container, "two"),
         barFor(container, "app:one"),
+        appElement(container, "two"),
         barFor(container, "app:two"),
       ]);
       for (const element of raised) {

@@ -44,7 +44,6 @@ const barProps = {
   onClose: () => undefined,
   onFullscreen: () => undefined,
   onMotionEnded: nothingEnded,
-  onReach: () => undefined,
   rect: ON_SCREEN,
   title: "kitty",
   window: "app:term",

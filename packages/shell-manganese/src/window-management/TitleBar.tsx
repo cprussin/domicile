@@ -70,10 +70,11 @@ type Props = {
   /** Called when it has played that motion all the way out. */
   onMotionEnded: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
-  /** How a drag of the bar starts, for a window that can be dragged by it. */
+  /**
+   * A press on the bar: how a drag of it starts, for a window that can be
+   * dragged by it, and the user reaching for the window a tab names.
+   */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
-  /** The user reached for this window by pressing its bar. */
-  onReach: () => void;
   rect: Rect;
   /**
    * The shuffle the window it names is playing while it trades places with another float in
@@ -121,7 +122,6 @@ export const TitleBar = ({
   onFullscreen,
   onMotionEnded,
   onPointerDown,
-  onReach,
   rect,
   restack,
   tabbed,
@@ -162,10 +162,7 @@ export const TitleBar = ({
       }
     }}
     onContextMenu={onContextMenu}
-    onPointerDown={(event) => {
-      onReach();
-      onPointerDown?.(event);
-    }}
+    onPointerDown={onPointerDown}
     style={{
       ...placedAt(rect, depth),
       ...scaledAbout(frame, rect),

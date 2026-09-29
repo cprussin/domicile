@@ -10,7 +10,6 @@ import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
-import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { appWindowId } from "./window";
@@ -101,29 +100,6 @@ type Props = {
    */
   onMotionEnded: () => void;
   /**
-   * Called when the pointer crosses into this window, with the place on the
-   * page it crossed at.
-   *
-   * Focus follows the cursor in this shell, so arriving over a window is the
-   * user starting to work in it — where the pointer is what did the arriving,
-   * which is what the place is for: see `usePointerWarp`. The pointer over a
-   * client's surface belongs to the client, and this is not that question:
-   * the page hit-tests the element to decide who the pointer is for, so it
-   * knows the pointer is here whether or not the client is about to be sent
-   * it.
-   */
-  onHover: (at: Spot) => void;
-  /**
-   * Called when the user clicks into this window.
-   *
-   * The SDK would move the keyboard here by itself — a click on a client's
-   * window is a request for it, and left alone the SDK grants one. This shell
-   * takes that back: which window the user is working in is one fact with one
-   * owner, and a keyboard that moved without the shell saying so is one
-   * window's title bar drawn as focused while another is typed into.
-   */
-  onReach: () => void;
-  /**
    * Where the window's contents go, or `undefined` when it is not on screen
    * at all — on another workspace, or inside a container behind a tab.
    */
@@ -168,9 +144,7 @@ export const AppWindow = ({
   fullscreen,
   hasKeyboard,
   motion,
-  onHover,
   onMotionEnded,
-  onReach,
   rect,
   restack,
 }: Props) => {
@@ -227,34 +201,24 @@ export const AppWindow = ({
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
   // A click on a client's window asks for the keyboard, and the SDK grants it
-  // unless something answers first. This answers first: the request becomes the
-  // shell's to decide, and `focused` above is what carries the decision back to
-  // the same element a render later.
+  // unless something answers first. This answers first, and unconditionally:
+  // which window the user is working in is one fact with one owner, and the
+  // press that asked is the frame's to report — see `WindowFrame`. `focused`
+  // above is what carries the decision back to the same element a render
+  // later.
   useEffect(() => {
     if (element === null) {
       return undefined;
     } else {
       const asked = (event: Event) => {
-        // Unconditionally: the keyboard stays where the shell put it whether or
-        // not this particular click moves anything, which is the difference
-        // between a shell that owns focus and one that owns it except where it
-        // agrees with the SDK.
         event.preventDefault();
-        // And every press is reported, including one in the window the user is
-        // already in. Focus follows the cursor here, so the pointer has made
-        // this the active window before the press lands — a window that
-        // answered only the presses that found it inactive could never be
-        // raised by a click. The reduction is what keeps that from re-rendering
-        // the desktop: a reach that moves nothing returns the state it was
-        // given.
-        onReach();
       };
       element.addEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
       return () => {
         element.removeEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
       };
     }
-  }, [element, onReach]);
+  }, [element]);
 
   // And the other direction. The SDK gives the keyboard back to the page for a
   // press that lands off every `<app>`, which a float's own title bar and grab
@@ -313,20 +277,12 @@ export const AppWindow = ({
       hidden={rect === undefined}
       // Nothing a keyboard can reach, for as long as it is only being drawn.
       inert={leaving}
-      // React's own event rather than a listener on the ref: `pointerover` is
-      // one it has heard of, unlike the two the SDK invented above. It rather
-      // than `pointerenter` because it is the one the page is actually given —
-      // an `<app>` is a replaced element with no rendered children, so nothing
-      // distinguishes the two here anyway.
       // Its own rather than one of the chrome's on its way up the document:
       // a window is told it has finished when *it* has.
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) {
           onMotionEnded();
         }
-      }}
-      onPointerOver={(event) => {
-        onHover([event.clientX, event.clientY]);
       }}
       ref={setElement}
       // Inline because the box is a runtime number and Panda reads literals;
