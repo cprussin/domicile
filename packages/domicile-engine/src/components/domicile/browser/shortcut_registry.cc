@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/no_destructor.h"
 
 namespace domicile {
@@ -21,12 +22,13 @@ ShortcutRegistry::ShortcutRegistry() = default;
 ShortcutRegistry::~ShortcutRegistry() = default;
 
 ShortcutRegistry::ChannelId ShortcutRegistry::AddChannel(
+    Page page,
     ShortcutCallback on_shortcut,
     ModifiersCallback on_modifiers) {
   base::AutoLock held(lock_);
   const ChannelId id = next_id_++;
   channels_.push_back(
-      Channel{id, std::move(on_shortcut), std::move(on_modifiers)});
+      Channel{id, page, std::move(on_shortcut), std::move(on_modifiers)});
   return id;
 }
 
@@ -44,7 +46,7 @@ void ShortcutRegistry::Grab(const Chord& chord) {
   }
 }
 
-bool ShortcutRegistry::Press(const Chord& chord) {
+bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
   // Copied out under the lock and run outside it. A channel's callback is
   // whatever the page's end of the pipe wanted to do next, and running it with
   // this held would make every one of those a place the lock can be taken
@@ -55,12 +57,18 @@ bool ShortcutRegistry::Press(const Chord& chord) {
     if (!IsGrabbed(chord)) {
       return false;
     }
-    tell.reserve(channels_.size());
     for (const Channel& channel : channels_) {
-      tell.push_back(channel.on_shortcut);
+      if (channel.page == page) {
+        tell.push_back(channel.on_shortcut);
+      }
     }
   }
 
+  // Still the desktop's key, and still swallowed: the claim is the process's.
+  // But a press nobody is told about is a key that did nothing, so say so.
+  LOG_IF(WARNING, tell.empty())
+      << "domicile: a claimed chord was pressed in a page with no control "
+         "channel; nothing answers it";
   for (const ShortcutCallback& channel : tell) {
     channel.Run(chord);
   }
