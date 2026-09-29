@@ -687,11 +687,12 @@ and a bar that drew `100%` for one would be the same lie in a different hat.
 Beside the workspaces: each extension the config names that has an action, as
 its icon, named by its title, with its badge over the corner.
 
-- **A click on one with a popup** opens it in a panel under the icon, as a
+- **Every click is `activateExtension(id)`**: the extension gets `activeTab`
+  on the focused browser window, as a click on Chrome's toolbar gives it.
+- **A click on one with a popup** also opens it in a panel under the icon, as a
   `<webview>` of the popup's address. A press outside it, Escape, or the popup's
   own `window.close()` (`domicile-close`) closes it.
-- **A click on one without** is `activateExtension(id)`: the extension's
-  `action.onClicked`.
+- **A click on one without** is then the extension's `action.onClicked`.
 - **The panel takes the keyboard off the windows** while it is up, as the
   launcher does, and they take it back when it closes.
 - **Escape is heard only while this page has the keyboard.** Once the popup's
