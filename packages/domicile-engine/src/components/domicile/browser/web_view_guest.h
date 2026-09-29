@@ -142,8 +142,23 @@ class WebViewGuest : public mojom::WebViewGuest,
       const base::FilePath& suggested_path,
       base::OnceCallback<void(std::optional<base::FilePath>)> chosen);
 
+  // WHAT chrome.tabs ASKS OF A BROWSER WINDOW, which is the shell's to carry
+  // out: a window in front, a window closed, a second window opened. Each is
+  // the element's event -- `domicile-focus-request`, `domicile-close`,
+  // `domicile-new-window` -- exactly as if the page had asked. See
+  // //chrome/browser/domicile/domicile_desk.h.
+  void RequestFocus();
+  void RequestClose();
+  void RequestWindow(const GURL& url);
+
+  // Hear the element take focus, for as long as the subscription is held.
+  // What makes this guest the active tab.
+  base::CallbackListSubscription AddFocusedCallback(
+      base::RepeatingClosure focused);
+
   // mojom::WebViewGuest:
   void Navigate(const GURL& url) override;
+  void Focused() override;
 
   // THE HISTORY A BROWSER WINDOW'S ADDRESS BAR DRIVES, and the reason it has
   // to be driven from here. `<webview>` is a frame owner, so the element has a
@@ -469,6 +484,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // window on the same site moves this one. Dropped with the guest's
   // WebContents, because a report is read off that.
   base::CallbackListSubscription zoom_subscription_;
+
+  // Who hears the element take focus. See AddFocusedCallback.
+  base::RepeatingClosureList focused_callbacks_;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };

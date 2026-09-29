@@ -993,6 +993,29 @@ void WebViewGuest::CloseContents(content::WebContents* source) {
   client_->CloseRequested();
 }
 
+void WebViewGuest::RequestFocus() {
+  LOG(INFO) << "domicile: an extension asked for a <webview> in front.";
+  client_->FocusRequested();
+}
+
+void WebViewGuest::RequestClose() {
+  LOG(INFO) << "domicile: an extension asked to close a <webview>.";
+  client_->CloseRequested();
+}
+
+void WebViewGuest::RequestWindow(const GURL& url) {
+  ReportNewWindow(url);
+}
+
+base::CallbackListSubscription WebViewGuest::AddFocusedCallback(
+    base::RepeatingClosure focused) {
+  return focused_callbacks_.Add(std::move(focused));
+}
+
+void WebViewGuest::Focused() {
+  focused_callbacks_.Notify();
+}
+
 void WebViewGuest::WebContentsDestroyed() {
   zoom_subscription_ = {};
   guest_contents_ = nullptr;

@@ -1105,14 +1105,21 @@ panel.append(view);
   ([The keyboard](#the-keyboard-which-is-the-part-that-bites)), so Escape there
   closes nothing. An outside press still does.
 
-**What is not there yet**, both slice 2 of
-[EXTENSIONS.md](/docs/architecture/EXTENSIONS.md):
+**Every `<webview>` is a tab**, and the desktop is one `chrome.windows`
+window ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)). The active tab is
+the view that last took focus, so `view.focus()` is also what a popup's
+`tabs.query({active: true, currentWindow: true})` answers with, and the tray's
+state is that tab's. What an extension asks of the desktop arrives on the
+element, as the page's own asks do:
 
-- **Action state is the default tab's.** A title, badge or icon an extension
-  sets for one tab is not in the list.
-- **`chrome.tabs`.** A `<webview>` is not a tab to extensions yet, so
-  `tabs.query` finds nothing, and `action.onClicked` names the shell's own page
-  as its tab.
+| Extension call | Event on the `<webview>` |
+|---|---|
+| `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
+| `tabs.remove(id)` | `domicile-close` |
+| `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request`: raise that window (`WEBVIEW_FOCUS_REQUEST_EVENT`) |
+
+`tabs.move`, `tabs.group`, `tabs.discard`, `windows.create` and the rest
+without a desktop meaning answer `not supported on a Domicile desk`.
 
 [`extensions/ExtensionTray.tsx`](/packages/shell-manganese/src/extensions/ExtensionTray.tsx)
 is manganese's.

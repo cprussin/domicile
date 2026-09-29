@@ -244,7 +244,7 @@ says "and one with a note says what it read" '3s'
 GUARDS="$ROOT/packages/domicile-engine/scripts"
 for guard in guard-client-window guard-shell guard-webview-framing \
   guard-webview-content-script guard-extension-installer \
-  guard-extension-tray; do
+  guard-extension-tray guard-webview-tabs; do
   file="$GUARDS/$guard.sh"
   if [ ! -f "$file" ]; then
     printf '  FAIL  %s is a guard this repository has

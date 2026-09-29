@@ -34,6 +34,9 @@ namespace domicile {
 // gets: `AttachUniversalWebContentsObservers` gives it an
 // ExtensionWebContentsObserver, which TabHelper's constructor needs.
 //
+// Then it adds the guest to its profile's desk -- domicile_desk.h, slice 2 --
+// which is what makes it a tab chrome.tabs can find.
+//
 // Run by WebViewGuest on each guest it makes, as the GuestCreatedCallback the
 // frame binders hand BindWebViewGuestHost -- here and not in
 // //components/domicile because both helpers are //chrome's.

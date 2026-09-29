@@ -4,6 +4,7 @@ import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_FILE_CHOOSER_EVENT,
+  WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
@@ -924,6 +925,35 @@ describe("BrowserWindow", () => {
           />,
         );
         view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+    });
+
+    it("reports a reach when an extension asks for the window in front", async () => {
+      // `chrome.tabs.update(id, {active: true})` and `chrome.windows.update(id,
+      // {focused: true})` arrive on the view, and raising a window is what a
+      // reach does.
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            clickThrough={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused={false}
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onMotionEnded={nothingEnded}
+            onNavigate={() => undefined}
+            onOpenWindow={noWindows}
+            onReach={() => {
+              resolve();
+            }}
+            rect={ON_SCREEN}
+            src="https://example.com"
+          />,
+        );
+        view(container).dispatchEvent(new Event(WEBVIEW_FOCUS_REQUEST_EVENT));
       });
     });
 

@@ -1,0 +1,12 @@
+{
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Domicile tabs guard"
+  },
+  "description": "A popup that asks tabs.query for the active tab of the current window and says what it heard, for guard-webview-tabs.sh.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqVMr3zlzY9hKSklQvXhUGBqI7Ep2s1nW0VzUFK83U9b8QNFMlGJdU5UjLqhJ2QwJRH/Qx/h8s+Mos/cktr062FKhKhNJTDQ4RDYFtPyLTnZ89Ew+k/eaFGLr1iABAI/TNEEcvTHPn7YdgvBflyydqv5HR3NIGxWT1+5YfZPhPEBZb5QkpAaiN8DoyYo2Ob9MPEdybB9K+Q0FwCYYAlg9JiOSx1DHyn0lle4Mf06Xs1o8qM3XS6ejXJ0psIm64OiX/20nEptfb8cs2pETlacoC/hOmoG2PdMyw38KWOrQxDovTKxd006iV/NJz95e4eiHkGEYSVdAwZhj9bCoVzwlhwIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile tabs guard",
+  "permissions": ["tabs"],
+  "version": "1"
+}

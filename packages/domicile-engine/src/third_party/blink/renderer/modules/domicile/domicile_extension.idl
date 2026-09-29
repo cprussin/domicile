@@ -7,8 +7,8 @@
 // WebIDL will not have a dictionary as the element type of an attribute's
 // array, and these are read off a DomicileExtensionsEvent.
 //
-// The state is the action's default -- Chrome's tab -1 -- until a <webview>
-// can be the active tab. See docs/architecture/EXTENSIONS.md.
+// The state is the active tab's -- the <webview> that last had focus -- or the
+// action's default where there is none. See docs/architecture/EXTENSIONS.md.
 
 [
     Exposed=Window,

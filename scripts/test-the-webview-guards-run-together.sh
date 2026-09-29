@@ -21,7 +21,7 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 TOGETHER="webview-framing webview-content-script extension-installer
   extension-tray webview-keyboard webview-escape webview-history webview-click
   webview-new-window webview-routed-link webview-upload webview-download
-  control-arrival"
+  webview-tabs control-arrival"
 
 # A repository holding check.sh and a stand-in for every engine check: each
 # writes when it started and ended. `bun` is stubbed because the group installs.
@@ -51,6 +51,16 @@ check() { # FAIL=<check to fail>
 }
 
 check
+
+# Every name above is a check that exists and ran: a name with no script is a
+# guard that quietly never joined the batch, and the timing below cannot see it.
+absent=""
+for g in $TOGETHER; do
+  [ -e "$WORK/engine-guard-$g.start" ] || absent="$absent $g"
+done
+[ -z "$absent" ] && ok "every guard named to run together ran" ||
+  fail "every guard named to run together ran" "never started:$absent"
+
 starts=""; ends=""
 for g in $TOGETHER; do
   starts="$starts $(cat "$WORK/engine-guard-$g.start" 2>/dev/null)"
