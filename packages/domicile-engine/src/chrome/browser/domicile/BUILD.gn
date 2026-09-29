@@ -85,6 +85,8 @@ source_set("domicile") {
     "//components/domicile:web_view_guest",
     "//components/sessions",
     "//components/sessions:session_id",
+    # And a tab's zoom, as blink's factors and range.
+    "//third_party/blink/public/common",
     "//ui/base/mojom:ui_base_types",
     "//ui/gfx/geometry",
     # The window a page's view is in, and the host that owns its cursor. Here

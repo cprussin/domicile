@@ -105,8 +105,8 @@ Lookups walk Chrome's browser windows. Four get one hook call each into
 `tabs.query` is not patched: it and every mutation below are the desk's own
 `ExtensionFunction`s, registered over Chrome's by name
 (`ExtensionFunctionRegistry::Register` replaces an entry). Tab events
-(`onCreated`, `onUpdated`, `onRemoved`, `onActivated`) come from the guests'
-lifecycle, broadcast through the profile's `EventRouter` exactly as
+(`onCreated`, `onUpdated`, `onRemoved`, `onActivated`, `onZoomChange`) come
+from the guests' lifecycle, broadcast through the profile's `EventRouter` exactly as
 `TabsEventRouter` builds them; its dispatch is private, and its tab entries
 `CHECK` a `TabInterface` a guest does not have.
 
@@ -120,7 +120,8 @@ Mutations go where the thing they change lives:
 | `tabs.remove(id)` | The shell, as `domicile-close` on that element. Answered once asked |
 | `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
 | `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`, `windows.create`, `windows.remove`; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update`'s bounds and state | An error: `not supported on a Domicile desk` |
-| `tabs.setZoom`, `getZoom`, `setZoomSettings`, `getZoomSettings` | The same error, for now: Chrome's reach for a `ZoomController` a guest lacks. A follow-up |
+| `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, the element's own zoom path, per site through `HostZoomMap`. The element hears it as `domicile-zoom-change`. `0` is the default; outside blink's browser range is refused |
+| `tabs.getZoomSettings`, `setZoomSettings` | The desk: `automatic`, `per-origin`, the guest's one mode. Setting it is answered; any other is refused with the error above |
 
 ## Key decisions
 
@@ -160,5 +161,6 @@ Slice 2: tabs.
 - [x] manganese closes a browser window on `domicile-close`, as its Close button does
 - [x] per-tab action state in `onextensions`, and `action.onClicked` naming the active tab
 - [x] a guard: `guard-webview-tabs.sh`, a popup's `tabs.query({active: true, currentWindow: true})` names the focused `<webview>`; its control focuses the other one
+- [x] tabs' zoom: the zoom four and `onZoomChange`, through the guest's own zoom. `guard-webview-tabs.sh`'s popup zooms the tab it named, and only that window's element hears it; its control zooms the other
 
-Left: tabs' zoom, and `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses).
+Left: `activeTab` granted on a tray click (Chrome grants it in `ExtensionActionRunner`, which the tray bypasses).

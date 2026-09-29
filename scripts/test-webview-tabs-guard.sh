@@ -7,7 +7,9 @@
 # that is the other <webview> is a desk whose active tab is not the focused
 # one -- the first made, or the last -- and only the control, which focuses the
 # other window, can tell a desk that follows focus from one that happens to
-# agree with it.
+# agree with it. The same goes for the zoom the popup then sets: only the
+# control can tell a desk that zooms the tab named from one that zooms a fixed
+# one.
 #
 # Plus what the guard cannot check at runtime: the id it expects is the one the
 # fixture's key makes, and the fixture asks what the guard reads.
@@ -68,49 +70,86 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered> <named-a>
-# <named-b>": whether the stand-in sent the list, whether the fixture's popup
-# was in the tray, whether both windows showed their pages, whether the shell
-# focused its window, whether the popup answered at all, and whether that
-# answer named window a's page, or window b's.
-echo "the claim — window a focused, and the popup names it"
-expect "a is the pass" "pass" "$(verdict "tabs 1 1 1 1 1 1 0")"
-expect "a list never sent is a failure" "fail" "$(verdict "tabs 0 0 0 0 0 0 0")"
+# <named-b> <zoomed-a> <zoomed-b> <read>": whether the stand-in sent the list,
+# whether the fixture's popup was in the tray, whether both windows showed
+# their pages, whether the shell focused its window, whether the popup answered
+# at all, whether that answer named window a's page, or window b's, whether
+# window a's element heard the popup's tabs.setZoom, or window b's, and whether
+# the popup's tabs.getZoom read it back.
+echo "the claim — window a focused, and the popup names it and zooms it"
+expect "a, zoomed and read back, is the pass" "pass" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 1 0 1")"
+expect "a list never sent is a failure" "fail" \
+  "$(verdict "tabs 0 0 0 0 0 0 0 0 0 0")"
 expect "and blames the control channel" "yes" \
-  "$(says "tabs 0 0 0 0 0 0 0" "control channel")"
+  "$(says "tabs 0 0 0 0 0 0 0 0 0 0" "control channel")"
 expect "no popup in the tray is a failure" "fail" \
-  "$(verdict "tabs 1 0 1 0 0 0 0")"
+  "$(verdict "tabs 1 0 1 0 0 0 0 0 0 0")"
 expect "windows that never showed are a failure" "fail" \
-  "$(verdict "tabs 1 1 0 0 0 0 0")"
+  "$(verdict "tabs 1 1 0 0 0 0 0 0 0 0")"
 expect "a popup that never answered is a failure" "fail" \
-  "$(verdict "tabs 1 1 1 1 0 0 0")"
+  "$(verdict "tabs 1 1 1 1 0 0 0 0 0 0")"
 expect "and blames the lookups" "yes" \
-  "$(says "tabs 1 1 1 1 0 0 0" "tabs.query")"
+  "$(says "tabs 1 1 1 1 0 0 0 0 0 0" "tabs.query")"
 expect "an answer naming neither is a failure" "fail" \
-  "$(verdict "tabs 1 1 1 1 1 0 0")"
+  "$(verdict "tabs 1 1 1 1 1 0 0 0 0 0")"
 expect "and says the desk found no tab" "yes" \
-  "$(says "tabs 1 1 1 1 1 0 0" "no active tab")"
+  "$(says "tabs 1 1 1 1 1 0 0 0 0 0" "no active tab")"
 
 # THE CASE THE GUARD IS FOR: an answer, and the wrong window.
-expect "naming b is a failure" "fail" "$(verdict "tabs 1 1 1 1 1 0 1")"
+expect "naming b is a failure" "fail" "$(verdict "tabs 1 1 1 1 1 0 1 0 1 1")"
 expect "and says focus was not followed" "yes" \
-  "$(says "tabs 1 1 1 1 1 0 1" "focus")"
+  "$(says "tabs 1 1 1 1 1 0 1 0 1 1" "focus")"
+
+# And the zoom: the named tab, and only it, zoomed where its element hears it.
+expect "a zoom no element heard is a failure" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 0 0 0")"
+expect "and blames the desk's tabs.setZoom" "yes" \
+  "$(says "tabs 1 1 1 1 1 1 0 0 0 0" "tabs.setZoom")"
+expect "a zoom read back that no element heard is a failure" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 0 0 1")"
+expect "and blames the element's report" "yes" \
+  "$(says "tabs 1 1 1 1 1 1 0 0 0 1" "ZoomChanged")"
+expect "zooming both windows is a failure" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 1 1 1")"
+expect "and says it spread" "yes" \
+  "$(says "tabs 1 1 1 1 1 1 0 1 1 1" "other window")"
+expect "zooming the window not named is a failure" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 0 1 1")"
+expect "a zoom getZoom does not read back is a failure" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0 1 0 0")"
+expect "and blames tabs.getZoom" "yes" \
+  "$(says "tabs 1 1 1 1 1 1 0 1 0 0" "tabs.getZoom")"
 
 echo
-echo "the control — window b focused, and the popup must not name a"
-expect "b is the pass" "pass" "$(verdict "control 1 1 1 1 1 0 1")"
+echo "the control — window b focused, and the popup must not name or zoom a"
+expect "b, zoomed and read back, is the pass" "pass" \
+  "$(verdict "control 1 1 1 1 1 0 1 0 1 1")"
 # INVERTED: a is the failure, because it is the claim's reading.
-expect "naming a is a failure" "fail" "$(verdict "control 1 1 1 1 1 1 0")"
+expect "naming a is a failure" "fail" \
+  "$(verdict "control 1 1 1 1 1 1 0 1 0 1")"
 expect "and says the claim's answer is not focus's" "yes" \
-  "$(says "control 1 1 1 1 1 1 0" "first made")"
+  "$(says "control 1 1 1 1 1 1 0 1 0 1" "first made")"
+# INVERTED too, and the control's reason to be: naming b and zooming a is a
+# desk whose setZoom lands on one tab whichever it is asked for.
+expect "naming b and zooming a is a failure" "fail" \
+  "$(verdict "control 1 1 1 1 1 0 1 1 0 1")"
+expect "and says the zoom is not the named tab's" "yes" \
+  "$(says "control 1 1 1 1 1 0 1 1 0 1" "whichever")"
+expect "an unzoomed control is a failure" "fail" \
+  "$(verdict "control 1 1 1 1 1 0 1 0 0 0")"
 expect "no answer is a failure, not a pass" "fail" \
-  "$(verdict "control 1 1 1 1 0 0 0")"
+  "$(verdict "control 1 1 1 1 0 0 0 0 0 0")"
 expect "an unfocused control is a failure" "fail" \
-  "$(verdict "control 1 1 1 0 0 0 0")"
+  "$(verdict "control 1 1 1 0 0 0 0 0 0 0")"
 
 echo
 echo "a run that measured nothing at all"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
-expect "and so is a leg nobody runs" "fail" "$(verdict "elephant 1 1 1 1 1 1 0")"
+expect "and so is a leg nobody runs" "fail" \
+  "$(verdict "elephant 1 1 1 1 1 1 0 1 0 1")"
+expect "and so is the old shape, without the zoom" "fail" \
+  "$(verdict "tabs 1 1 1 1 1 1 0")"
 
 echo
 echo "the fixture"
@@ -122,6 +161,15 @@ expect "and it is the one the fixture's key makes" "$ID" "$MADE"
 expect "the popup asks the question the guard is about" "yes" \
   "$(grep -qF 'query({ active: true, currentWindow: true })' \
     "$FIXTURE/popup.js" && echo yes || echo no)"
+expect "and zooms the tab it names, then reads it back" "yes" \
+  "$(grep -qF '.setZoom(tab.id, ZOOM)' "$FIXTURE/popup.js" &&
+    grep -qF '.getZoom(tab.id)' "$FIXTURE/popup.js" && echo yes || echo no)"
+expect "by the factor the guard reads" "yes" \
+  "$(grep -qF 'const ZOOM = 1.5;' "$FIXTURE/popup.js" &&
+    grep -qF 'readonly ZOOM="1.50"' "$GUARD" && echo yes || echo no)"
+expect "and the two windows are two sites, so a site's zoom is one's" "yes" \
+  "$(grep -qF 'A="http://127.0.0.1:$PORT/page?a"' "$GUARD" &&
+    grep -qF 'B="http://localhost:$PORT/page?b"' "$GUARD" && echo yes || echo no)"
 expect "and may read the answer's url" "yes" \
   "$(grep -qF '"permissions": ["tabs"]' "$FIXTURE/manifest.json" &&
     echo yes || echo no)"
