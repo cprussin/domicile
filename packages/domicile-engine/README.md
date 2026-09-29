@@ -160,7 +160,9 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `search_files` exists not to. The path is relative to the home, as a
 `found_files` answer named it, and the compositor answers only for a path in
 its own index of the home — anything else is `unreadable` — so it reads nothing
-a search could not already have named.
+a search could not already have named. A song comes back `audio`, with the tags
+it carries and its cover as a `data:` URL: the page may draw from
+`domicile://home/` but not read it.
 
 `resize_app` is implemented here and nothing sends it. An `<app>`'s layout box
 *is* the client's `xdg_toplevel.configure` — `LayoutAppSurface` reports it and

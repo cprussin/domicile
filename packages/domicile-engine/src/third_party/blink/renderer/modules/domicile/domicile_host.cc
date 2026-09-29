@@ -532,10 +532,15 @@ void DomicileHost::FilePreview(const String& path,
                                const String& kind,
                                const String& text,
                                const Vector<String>& entries,
+                               const String& title,
+                               const String& artist,
+                               const String& album,
+                               double duration,
+                               const String& cover,
                                base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileFilePreviewEvent>(
-      domicile_event_names::Filepreview(), path, kind, text, entries,
-      Arrival(arrival)));
+      domicile_event_names::Filepreview(), path, kind, text, entries, title,
+      artist, album, duration, cover, Arrival(arrival)));
 }
 
 // Pushed, so there is no ask for this to be the answer to. The compositor

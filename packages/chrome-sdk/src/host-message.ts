@@ -538,6 +538,15 @@ const previewOf = (event: DomicileFilePreviewEvent): FilePreview => {
     case FilePreviewKind.Directory: {
       return FilePreview.Directory(event.entries);
     }
+    case FilePreviewKind.Audio: {
+      return FilePreview.Audio({
+        album: said(event.album),
+        artist: said(event.artist),
+        cover: said(event.cover),
+        duration: event.duration,
+        title: said(event.title),
+      });
+    }
     case FilePreviewKind.Binary: {
       return FilePreview.Binary();
     }
@@ -546,6 +555,10 @@ const previewOf = (event: DomicileFilePreviewEvent): FilePreview => {
     }
   }
 };
+
+/** A tag the engine carries as empty, which is a song that did not say it. */
+const said = (tag: string): string | undefined =>
+  tag === "" ? undefined : tag;
 
 /** The charge, with the SDK's own `arrival` left behind: no shell draws it. */
 export const battery = (event: DomicileBatteryEvent): BatteryMessage => ({

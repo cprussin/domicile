@@ -299,11 +299,16 @@ describe("what a file holds", () => {
     fields: Partial<Omit<DomicileFilePreviewEvent, keyof Event>>,
   ): DomicileFilePreviewEvent =>
     Object.assign(new Event("filepreview"), {
+      album: "",
       arrival: 0,
+      artist: "",
+      cover: "",
+      duration: 0,
       entries: [],
       kind: "unreadable",
       path: "Notes",
       text: "",
+      title: "",
       ...fields,
     });
 
@@ -318,6 +323,25 @@ describe("what a file holds", () => {
     ).toStrictEqual(FilePreview.Directory(["2026/", "today.org"]));
     expect(filePreview(previewEvent({ kind: "binary" })).preview).toStrictEqual(
       FilePreview.Binary(),
+    );
+    expect(
+      filePreview(
+        previewEvent({
+          artist: "Band",
+          cover: "data:image/png;base64,AQID",
+          duration: 61.5,
+          kind: "audio",
+          title: "Song",
+        }),
+      ).preview,
+    ).toStrictEqual(
+      FilePreview.Audio({
+        album: undefined,
+        artist: "Band",
+        cover: "data:image/png;base64,AQID",
+        duration: 61.5,
+        title: "Song",
+      }),
     );
     expect(
       filePreview(previewEvent({ kind: "unreadable" })).preview,
