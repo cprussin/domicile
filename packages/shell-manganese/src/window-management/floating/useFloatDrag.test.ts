@@ -57,7 +57,7 @@ const dragging = (resizes = false) => {
     onMove: mock(() => undefined),
     onResize: mock(() => undefined),
   };
-  const { rerender, result } = renderHook(
+  const { rerender, result, unmount } = renderHook(
     (props: { resizes: boolean }) =>
       useFloatDrag({ float: FLOAT, ...calls, ...props }),
     { initialProps: { resizes } },
@@ -67,7 +67,7 @@ const dragging = (resizes = false) => {
       result.current.onPointerDown(press(x, y));
     });
   };
-  return { calls, grab, rerender, result };
+  return { calls, grab, rerender, result, unmount };
 };
 
 describe("useFloatDrag", () => {
@@ -186,6 +186,34 @@ describe("useFloatDrag", () => {
       expect(result.current.drag).toStrictEqual({
         corner: { horizontal: Direction.Right, vertical: Direction.Down },
       });
+    });
+  });
+
+  describe("a window that leaves the screen it was pressed on", () => {
+    // Its middle crossed onto the next monitor, so this page stops drawing it
+    // and the element the press landed on goes. The hand has not let go.
+    it("goes on following the pointer", () => {
+      const { calls, grab, unmount } = dragging();
+      grab();
+      unmount();
+      act(() => {
+        moveTo(70, 30);
+      });
+      expect(calls.onMove).toHaveBeenCalledWith(FLOAT.x + 70, FLOAT.y + 30);
+    });
+
+    it("drops the window where the pointer lets go, and then listens no more", () => {
+      const { calls, grab, unmount } = dragging();
+      grab();
+      unmount();
+      act(() => {
+        release();
+      });
+      act(() => {
+        moveTo(500, 500);
+      });
+      expect(calls.onDrop).toHaveBeenCalledTimes(1);
+      expect(calls.onMove).not.toHaveBeenCalled();
     });
   });
 

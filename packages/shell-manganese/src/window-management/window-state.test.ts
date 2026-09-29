@@ -13,6 +13,7 @@ import {
   currentOn,
   NO_WINDOWS,
   reduceWindows,
+  UNDESCRIBED_SCREEN,
   WindowAction,
   workspaceHere,
   workspaceNamed,
@@ -868,7 +869,7 @@ describe("the pointer", () => {
     const state = reduce(
       desktop("kitty"),
       WindowAction.FloatToggled(),
-      WindowAction.WindowMoved(APP("kitty"), 300, 200),
+      WindowAction.WindowMoved(APP("kitty"), 300, 200, UNDESCRIBED_SCREEN),
       WindowAction.WindowResized(APP("kitty"), {
         height: 600,
         width: 800,
@@ -884,6 +885,77 @@ describe("the pointer", () => {
       x: 250,
       y: 150,
     });
+  });
+});
+
+describe("a floating window dragged across screens", () => {
+  /** Kitty floating on the left of two screens, taken hold of. */
+  const held = () =>
+    reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowGrabbed(APP("kitty")),
+    );
+
+  it("goes to the screen its middle crosses onto, in that screen's pixels", () => {
+    // 640 wide from 1700 puts its middle at 2020, a hundred past the edge.
+    const state = reduce(
+      held(),
+      WindowAction.WindowMoved(APP("kitty"), 1700, 100, "left"),
+    );
+
+    expect(windowsOn(workspaceOn(state, "left"))).toEqual([]);
+    expect(workspaceOn(state, "right").floats[0]).toMatchObject({
+      x: -220,
+      y: 100,
+    });
+    expect(state.focused).toBe("right");
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(state.draggingId).toBe(APP("kitty"));
+  });
+
+  it("goes on taking the drag in the pixels of the screen it started on", () => {
+    // The page that was pressed keeps the drag, and it measures from its own
+    // screen whichever screen the window has since gone to.
+    const state = reduce(
+      held(),
+      WindowAction.WindowMoved(APP("kitty"), 1700, 100, "left"),
+      WindowAction.WindowMoved(APP("kitty"), 1800, 120, "left"),
+    );
+
+    expect(workspaceOn(state, "right").floats[0]).toMatchObject({
+      x: -120,
+      y: 120,
+    });
+  });
+
+  it("stays on its screen while its middle is on no screen at all", () => {
+    const state = reduce(
+      held(),
+      WindowAction.WindowMoved(APP("kitty"), 1700, -1000, "left"),
+    );
+
+    expect(workspaceOn(state, "left").floats[0]).toMatchObject({
+      x: 1700,
+      y: -1000,
+    });
+    expect(state.focused).toBe("left");
+  });
+
+  it("keeps a browser window's middle on its own screen", () => {
+    // A `<webview>` on another page is a new guest, which is the site loaded
+    // again from scratch. See docs/architecture/WINDOWS-ACROSS-SCREENS.md.
+    const state = reduce(
+      desktop(),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.BrowserOpened("https://example.com"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowMoved("browser:1", 1700, 100, "left"),
+    );
+
+    expect(workspaceOn(state, "left").floats[0]).toMatchObject({ x: 1600 });
+    expect(state.focused).toBe("left");
   });
 });
 

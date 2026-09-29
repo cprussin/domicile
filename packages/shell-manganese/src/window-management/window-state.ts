@@ -19,7 +19,8 @@ import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
 import type { PlacedScreen } from "../screens/screen-toward";
 import { screenToward } from "../screens/screen-toward";
 import type { Axis, Direction } from "./direction";
-import { floatHolds, limitedTo } from "./floating/float";
+import type { Float } from "./floating/float";
+import { floatHolds, limitedTo, movedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
@@ -34,6 +35,8 @@ import {
   containerSplit,
   emptyWorkspace,
   enteredBy,
+  floatLanded,
+  floatLifted,
   floatMoved,
   floatOn,
   floatSized,
@@ -699,10 +702,16 @@ export const WindowAction = {
   /** `kill`: close the window being worked in. */
   WindowKilled: () => ({ kind: WindowActionKind.WindowKilled as const }),
 
-  /** The user dragged a floating window to a new corner of the desktop. */
-  WindowMoved: (id: string, x: number, y: number) => ({
+  /**
+   * The user dragged a floating window to a new corner of the desktop: `x`,
+   * `y` in the pixels of the screen `on`, which is the one the drag started
+   * on. That need not be the screen the window is on by the time this is
+   * reduced — see `floatDragged`.
+   */
+  WindowMoved: (id: string, x: number, y: number, on: string) => ({
     id,
     kind: WindowActionKind.WindowMoved as const,
+    on,
     x,
     y,
   }),
@@ -965,9 +974,7 @@ const reduceAction = (
       return id === undefined ? state : killWindow(state, id);
     }
     case WindowActionKind.WindowMoved: {
-      return onWorkspaceWith(state, action.id, (workspace) =>
-        floatMoved(workspace, action.id, action.x, action.y),
-      );
+      return floatDragged(state, action.id, action.x, action.y, action.on);
     }
     case WindowActionKind.WindowRenamed: {
       return renameWindow(state, action.id, action.title);
@@ -1379,6 +1386,137 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
     return showWorkspace(state, state.previous);
   }
 };
+
+/**
+ * A floating window dragged to `x`, `y` in the pixels of the screen `on`, and
+ * handed to the screen its middle is now over — sway's
+ * `floating_fix_coordinates`.
+ *
+ * **THE DRAG IS MEASURED FROM THE SCREEN IT STARTED ON.** A desk of several
+ * monitors is several pages, and the page that was pressed keeps the drag
+ * after the pointer has crossed onto the next one, so what it says is in its
+ * own screen's pixels however far the window has gone. A float is in the
+ * pixels of the screen showing its workspace, and the boxes of the two are
+ * what converts one to the other.
+ *
+ * A middle over no screen at all — the gap an L of monitors leaves — keeps
+ * the screen it has. A browser window never leaves its own: a `<webview>` on
+ * another page is a new guest, and a site loaded again from scratch is not a
+ * window moving. So its middle is kept on its screen instead. See
+ * docs/architecture/WINDOWS-ACROSS-SCREENS.md.
+ *
+ * A window on a workspace no screen is showing is not one a pointer can have
+ * hold of, so a move that names one — a drag the keyboard switched the
+ * workspace out from under — moves nothing.
+ */
+const floatDragged = (
+  state: WindowState,
+  id: string,
+  x: number,
+  y: number,
+  on: string,
+): WindowState => {
+  const workspace = workspaceHolding(state, id);
+  const home =
+    workspace === undefined ? undefined : screenShowing(state, workspace.name);
+  if (workspace === undefined || home === undefined) {
+    return state;
+  } else {
+    const from = boxOf(state, on);
+    const here = boxOf(state, home);
+    const moved = movedTo(
+      floatHeld(workspace, id),
+      x + from.x - here.x,
+      y + from.y - here.y,
+    );
+    const onto = holdsBrowser(state, moved)
+      ? home
+      : (screenAt(state, middleOf(moved, here)) ?? home);
+    if (onto === home) {
+      const kept = holdsBrowser(state, moved) ? keptOn(moved, here) : moved;
+      return onWorkspace(state, workspace.name, (found) =>
+        floatMoved(found, id, kept.x, kept.y),
+      );
+    } else {
+      const there = boxOf(state, onto);
+      const arrived = movedTo(
+        moved,
+        moved.x + here.x - there.x,
+        moved.y + here.y - there.y,
+      );
+      // The keyboard comes too: the pointer is already over there, and the
+      // window the user has hold of is the one they are working in.
+      return onWorkspace(
+        onWorkspace({ ...state, focused: onto }, workspace.name, (found) =>
+          floatLifted(found, id),
+        ),
+        currentOn(state, onto),
+        (found) => floatLanded(found, arrived),
+      );
+    }
+  }
+};
+
+/** Where the screen `name` is on the desk. */
+const boxOf = (state: WindowState, name: string): Rect => {
+  const screen = state.screens.find((found) => found.name === name);
+  if (screen === undefined) {
+    throw new Error(`shell: no screen ${name}`);
+  } else {
+    return screen.box;
+  }
+};
+
+/** The box the window `id` floats in. Throws for a window that is tiled. */
+const floatHeld = (workspace: Workspace, id: string): Float => {
+  const float = floatOn(workspace, id);
+  if (float === undefined) {
+    throw new Error(`shell: window ${id} is not floating`);
+  } else {
+    return float;
+  }
+};
+
+/** Whether any window in the box is a browser window. */
+const holdsBrowser = (state: WindowState, float: Float): boolean =>
+  state.windows.some(
+    (window) =>
+      window.kind === WindowKind.Browser && floatHolds(float, window.id),
+  );
+
+/** The middle of a float on the screen at `box`, in the desk's pixels. */
+const middleOf = (float: Float, box: Rect): readonly [number, number] => [
+  box.x + float.x + float.width / 2,
+  box.y + float.y + float.height / 2,
+];
+
+/**
+ * The screen at `point`, or `undefined` off every one. Left and top edges and
+ * not right and bottom, as `screenUnder`, so the column two screens share is
+ * the one that starts there.
+ */
+const screenAt = (
+  state: WindowState,
+  [x, y]: readonly [number, number],
+): string | undefined =>
+  state.screens.find(
+    ({ box }) =>
+      x >= box.x &&
+      x < box.x + box.width &&
+      y >= box.y &&
+      y < box.y + box.height,
+  )?.name;
+
+/** The float moved as little as it takes to keep its middle on `box`. */
+const keptOn = (float: Float, box: Rect): Float =>
+  movedTo(
+    float,
+    Math.min(Math.max(float.x, -float.width / 2), box.width - float.width / 2),
+    Math.min(
+      Math.max(float.y, -float.height / 2),
+      box.height - float.height / 2,
+    ),
+  );
 
 // `move container to workspace <name>`: the window goes and the user stays,
 // which is sway's default. It lands tiled there however it was laid out here.

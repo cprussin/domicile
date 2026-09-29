@@ -7,7 +7,12 @@ import { TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
-import { NO_WINDOWS, reduceWindows, WindowAction } from "./window-state";
+import {
+  NO_WINDOWS,
+  reduceWindows,
+  WindowAction,
+  workspaceHere,
+} from "./window-state";
 
 const GEOMETRY: Geometry = {
   desktop: { height: 1080, width: 3200, x: 0, y: 0 },
@@ -111,6 +116,23 @@ describe("placementsOf", () => {
 
     expect(placementFor(state, "kitty")?.depth).toBe(0);
     expect(placementFor(state, "editor")?.depth).toBeGreaterThan(0);
+  });
+
+  it("puts a float where it is on its own screen, wherever that screen is", () => {
+    // A float is in its screen's pixels, and a page that is the whole desk
+    // has that screen somewhere other than its own corner.
+    const state = reduce(desktop("kitty"), WindowAction.FloatToggled());
+    const right = { ...GEOMETRY.screen, x: 1920 };
+
+    const { placements } = placementsOf(state, {
+      ...GEOMETRY,
+      screen: right,
+      workspace: { ...GEOMETRY.workspace, x: 1920 },
+    });
+
+    expect(placements.map(({ frame }) => frame.x)).toEqual(
+      workspaceHere(state).floats.map(({ x }) => 1920 + x),
+    );
   });
 
   it("stacks each float over the one behind it", () => {

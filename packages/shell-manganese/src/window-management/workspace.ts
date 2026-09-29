@@ -372,6 +372,32 @@ export const floatMoved = (
   y: number,
 ): Workspace => withFloat(workspace, id, (float) => movedTo(float, x, y));
 
+/**
+ * The workspace without the float the window `id` is in, group and all: it has
+ * been dragged onto another screen. The keyboard, if it was in there, goes to
+ * the float in front, and to the tiling when none is left.
+ */
+export const floatLifted = (workspace: Workspace, id: string): Workspace => {
+  const float = floatHolding(workspace, id);
+  const floats = workspace.floats.filter((found) => found !== float);
+  const focus = workspace.floatFocus;
+  return {
+    ...workspace,
+    floatFocus:
+      focus !== undefined && floatHolds(float, focus)
+        ? focusIn(floats.at(-1))
+        : focus,
+    floats,
+  };
+};
+
+/** A float dragged in from another screen: in front, with the keyboard. */
+export const floatLanded = (workspace: Workspace, float: Float): Workspace =>
+  floatFocused(
+    { ...workspace, floats: [...workspace.floats, float] },
+    focusedWindowIn(float.root),
+  );
+
 /** A floating window dragged by a corner to a new box. */
 export const floatSized = (
   workspace: Workspace,
