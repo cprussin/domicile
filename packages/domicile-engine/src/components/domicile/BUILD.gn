@@ -500,6 +500,9 @@ source_set("unit_tests") {
     "//ui/events/keycodes:xkb",
     "//ui/events/ozone/layout",
     "//ui/gfx/geometry",
+    # The pointer's colors are views' and live beside it, not here: //ui may
+    # not depend on //components. Its tests run with the fork's anyway.
+    "//ui/views/widget/desktop_aura/domicile:unit_tests",
   ]
 }
 
