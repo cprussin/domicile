@@ -1,13 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileDesktopEntry } from "@domicile/chrome-sdk/domicile-host";
-import type { FoundAppsMessage } from "@domicile/chrome-sdk/host-message";
+import type {
+  DesktopEntry,
+  FoundAppsMessage,
+} from "@domicile/chrome-sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { useFoundApps } from "./useFoundApps";
 
-const EDITOR: DomicileDesktopEntry = {
+const EDITOR: DesktopEntry = {
   command: ["gedit"],
   comment: "",
+  icon: undefined,
   id: "gedit.desktop",
   name: "Text Editor",
 };
@@ -23,7 +26,7 @@ const host = () => {
   return {
     answers: async (
       at: number,
-      apps: readonly DomicileDesktopEntry[],
+      apps: readonly DesktopEntry[],
     ): Promise<void> => {
       const asking = asked[at];
       if (asking === undefined) {

@@ -833,6 +833,7 @@ describe("DomicileClient", () => {
     const editor = {
       command: ["editor"],
       comment: "Edit text",
+      icon: "",
       id: "editor.desktop",
       name: "Editor",
     };
@@ -853,7 +854,10 @@ describe("DomicileClient", () => {
       answer("ed", [editor]);
       answer("e", []);
 
-      expect(await longer).toStrictEqual({ apps: [editor], query: "ed" });
+      expect(await longer).toStrictEqual({
+        apps: [{ ...editor, icon: undefined }],
+        query: "ed",
+      });
       expect((await shorter).apps).toStrictEqual([]);
     });
   });

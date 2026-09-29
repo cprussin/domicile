@@ -4,7 +4,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use domicile_host::desktop_entries::{application_dirs, command, find, installed, parse};
+use domicile_host::desktop_entries::{
+    application_dirs, command, data_dirs, find, installed, parse, Entry,
+};
 use domicile_protocol::DesktopEntry;
 
 /// An application directory holding `entries`, each a relative path and its
@@ -23,8 +25,11 @@ fn entry(name: &str, exec: &str) -> String {
     format!("[Desktop Entry]\nType=Application\nName={name}\nExec={exec}\n")
 }
 
-fn names(found: &[DesktopEntry]) -> Vec<&str> {
-    found.iter().map(|entry| entry.name.as_str()).collect()
+fn names<'a>(found: &[&'a Entry]) -> Vec<&'a str> {
+    found
+        .iter()
+        .map(|found| found.entry.name.as_str())
+        .collect()
 }
 
 mod parsing {
@@ -41,6 +46,7 @@ mod parsing {
              Name[de]=Feuerfuchs\n\
              Comment = Browse the web\n\
              Exec=firefox %u\n\
+             Icon=firefox\n\
              [Desktop Action new-window]\n\
              Name=New Window\n\
              Exec=firefox --new-window\n",
@@ -54,8 +60,10 @@ mod parsing {
                 name: "Firefox".into(),
                 comment: "Browse the web".into(),
                 command: vec!["firefox".into()],
+                icon: None,
             }
         );
+        assert_eq!(parsed.icon_name(), Some("firefox"));
     }
 
     #[test]
@@ -143,6 +151,18 @@ mod directories {
                 PathBuf::from("/a/share/applications"),
                 PathBuf::from("/b/share/applications"),
             ]
+        );
+    }
+
+    #[test]
+    fn the_data_directories_are_the_same_list_without_applications() {
+        assert_eq!(
+            data_dirs(
+                Some(OsString::from("/data/home")),
+                Some(OsString::from("/a/share")),
+                None,
+            ),
+            vec![PathBuf::from("/data/home"), PathBuf::from("/a/share")]
         );
     }
 

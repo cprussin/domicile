@@ -121,6 +121,7 @@ fn a_desktop_entry_carries_the_command_it_runs() {
             name: "Firefox".into(),
             comment: "Browse the web".into(),
             command: vec!["firefox".into()],
+            icon: Some("data:image/png;base64,cm93".into()),
         }],
     })
     .unwrap();
@@ -134,6 +135,7 @@ fn a_desktop_entry_carries_the_command_it_runs() {
                 "name": "Firefox",
                 "comment": "Browse the web",
                 "command": ["firefox"],
+                "icon": "data:image/png;base64,cm93",
             }],
         })
     );
@@ -270,6 +272,7 @@ fn host_messages_round_trip() {
             name: "Firefox".into(),
             comment: String::new(),
             command: vec!["firefox".into(), "--new-window".into()],
+            icon: None,
         }],
     });
     for preview in [

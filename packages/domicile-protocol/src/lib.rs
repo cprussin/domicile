@@ -790,6 +790,10 @@ pub struct DesktopEntry {
     pub comment: String,
     /// `Exec`, unquoted and with its field codes dropped.
     pub command: Vec<String>,
+    /// `Icon`, as a `data:` URL a page can draw without being able to read
+    /// the file, or nothing when the entry names none the compositor found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// One thing that was copied, as the shell is told about it.

@@ -22,4 +22,9 @@
   // `Exec`, as the argv it runs -- unquoted and with its field codes dropped
   // by the compositor. A shell hands it to DomicileHost.spawn().
   readonly attribute FrozenArray<DOMString> command;
+
+  // The icon the entry names, as a `data:` URL to draw, or empty for one the
+  // compositor did not find. A URL rather than a path: the page may draw what
+  // the compositor read and has no way to read it for itself.
+  readonly attribute DOMString icon;
 };

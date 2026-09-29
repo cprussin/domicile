@@ -15,7 +15,7 @@
 // disagree about `localhost:5173` is one where the user has to remember which
 // box they are in.
 
-import type { DomicileDesktopEntry } from "@domicile/chrome-sdk/domicile-host";
+import type { DesktopEntry } from "@domicile/chrome-sdk/host-message";
 
 import type { TaggedSearch, TaggedSite } from "../address/search";
 import { googleUrl, taggedSearch, taggedSite } from "../address/search";
@@ -35,7 +35,7 @@ export enum ChoiceKind {
 
 export const Choice = {
   /** An application a desktop entry offers, as the host found it. */
-  App: (entry: DomicileDesktopEntry) => ({
+  App: (entry: DesktopEntry) => ({
     entry,
     kind: ChoiceKind.App as const,
   }),
@@ -81,7 +81,7 @@ export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
 export const choicesFor = (
   query: string,
   found: readonly string[],
-  apps: readonly DomicileDesktopEntry[],
+  apps: readonly DesktopEntry[],
 ): Choice[] => {
   const site = taggedSite(query);
   const tagged = taggedSearch(query);
@@ -113,7 +113,7 @@ export const launchOf = (choice: Choice): Launch => {
 const plainChoicesFor = (
   query: string,
   found: readonly string[],
-  apps: readonly DomicileDesktopEntry[],
+  apps: readonly DesktopEntry[],
 ): Choice[] => {
   const typed = query.trim();
   const address = typedAddress(typed);
