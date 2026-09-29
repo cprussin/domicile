@@ -43,6 +43,16 @@ struct Modifiers {
   friend bool operator==(const Modifiers&, const Modifiers&) = default;
 };
 
+// A shell page, as the browser names its frame: a render process and a frame
+// in it. Plain ints rather than content's id, so this stays a //base target
+// that the unit tests can build without a browser.
+struct Page {
+  int process = 0;
+  int frame = 0;
+
+  friend bool operator==(const Page&, const Page&) = default;
+};
+
 // The chords the shell claimed for the desktop, and who to tell when one fires.
 //
 // WHY THE BROWSER PROCESS HOLDS THESE. The compositor used to, and it is the
@@ -63,11 +73,11 @@ struct Modifiers {
 // registers them -- this invokes them on the sequence a press arrived on, and
 // never holds the lock while it does.
 //
-// THE CLAIMS ARE THE PROCESS'S, not a document's, and that is the shape rather
-// than an oversight: a `ControlChannel` is bound without a frame, so there is
-// nothing here to key them on. One shell per browser is the arrangement
-// Domicile ships; a second shell in the same process would hear the first
-// one's chords.
+// THE CLAIMS ARE THE PROCESS'S, the presses are a page's. Every page of a
+// desk claims the same chords, so which page claimed one says nothing; but a
+// press is one keystroke, heard by one `<webview>` in one page, and told to
+// every page it would be run once per monitor. So a channel is registered for
+// its page and a press names the page that heard it.
 class ShortcutRegistry {
  public:
   using ShortcutCallback = base::RepeatingCallback<void(Chord)>;
@@ -87,9 +97,10 @@ class ShortcutRegistry {
 
   ~ShortcutRegistry();
 
-  // Start delivering to a page. Both callbacks may be run on any sequence, so
+  // Start delivering to `page`. Both callbacks may be run on any sequence, so
   // both are expected to be posted back to the caller's own.
-  ChannelId AddChannel(ShortcutCallback on_shortcut,
+  ChannelId AddChannel(Page page,
+                       ShortcutCallback on_shortcut,
                        ModifiersCallback on_modifiers);
 
   // Stop. `channel` is the id AddChannel returned; the claims it made stay,
@@ -101,10 +112,11 @@ class ShortcutRegistry {
   // one claim, which is what the shell's own effect relies on when it re-runs.
   void Grab(const Chord& chord);
 
-  // A key went down. Tells every channel when `chord` is one of the claims, and
-  // answers whether it was -- the caller swallows the key exactly when this is
-  // true, so that a window never sees a key the desktop took.
-  bool Press(const Chord& chord);
+  // A key went down in a `<webview>` of `page`. Tells that page's channels
+  // when `chord` is one of the claims, and answers whether it was -- the
+  // caller swallows the key exactly when this is true, so that a window never
+  // sees a key the desktop took.
+  bool Press(const Chord& chord, const Page& page);
 
   // The modifiers held now. Delivered only when they differ from the last set
   // delivered, including the first time: a shell assumes nothing is held until
@@ -120,6 +132,7 @@ class ShortcutRegistry {
 
   struct Channel {
     ChannelId id;
+    Page page;
     ShortcutCallback on_shortcut;
     ModifiersCallback on_modifiers;
   };
