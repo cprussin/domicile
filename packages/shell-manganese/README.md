@@ -116,6 +116,12 @@ which is every press that moved nothing the pointer is near: a split, a layout,
 a tab of the container it is sitting on. The page cannot move a pointer; the
 engine can, and `warpPointer` is what asks it to.
 
+Across monitors the page that warps is the one covering the screen the focus
+went to, not the one that heard the key: a warp is kept inside the page that
+asks, so the press is counted in the desk every page is shown
+(`WindowState.pressed`), with the screen it was heard on — which is where the
+pointer is, whatever the target page last saw.
+
 **The other half of that is a rule rather than a move: the pointer moves the
 focus when the pointer has moved.** A warp is a render late and aimed at a box
 the window is still easing towards, so between the press and the settle the

@@ -2,7 +2,6 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Extension } from "@domicile/chrome-sdk/extension";
 import type { Display } from "@domicile/component-library/display-source";
 import { Screen } from "@domicile/component-library/Screen";
-import type { RefObject } from "react";
 import { useMemo, useState } from "react";
 
 import { popupShown } from "../extensions/shown";
@@ -33,13 +32,6 @@ type Props = {
   domicile: DomicileClient;
   /** The extensions with an action, for the tray on this monitor's bar. */
   extensions: readonly Extension[];
-  /**
-   * Whether a key ran the command this render is the answer to, which is what
-   * takes the pointer with the keyboard — see {@link usePointerWarp}. The
-   * desk is one keyboard and several monitors, so the press is read a screen
-   * above this and spent on whichever monitor the focus landed on.
-   */
-  keyed: RefObject<boolean>;
   /** What the user is holding down, which decides who gets the pointer. */
   modifiers: Modifiers;
   windows: Windows;
@@ -66,7 +58,6 @@ export const Monitor = ({
   display,
   domicile,
   extensions,
-  keyed,
   modifiers,
   windows,
 }: Props) => {
@@ -83,13 +74,16 @@ export const Monitor = ({
   // pointer did not make — a key, or a window opening — would be undone by the
   // next pointer event. `pointer-warp.ts` has the whole of it.
   //
-  // Per monitor, and it answers `undefined` on every one but the monitor the
-  // window is on: a page cannot put the pointer on somebody else's screen, and
-  // `focusOn` reads this screen's own placements, which is where the answer
-  // comes from.
+  // Per monitor, and only by the page that covers it. `focusOn` reads this
+  // screen's own placements, so it answers `undefined` on every monitor but
+  // the one the window is on — but every page lays every monitor out, and the
+  // engine keeps a warp inside the page that asked for it: one asked for by
+  // the page next door lands on that page's own edge, where the next pointer
+  // event hands the keyboard straight back.
+  const covered = coveredHere(display, desk);
   const focus = useMemo(
-    () => focusOn(screenful, windows.activeId),
-    [screenful, windows.activeId],
+    () => (covered ? focusOn(screenful, windows.activeId) : undefined),
+    [covered, screenful, windows.activeId],
   );
   const open = useMemo(
     () => windows.windows.map(({ id }) => id),
@@ -98,7 +92,8 @@ export const Monitor = ({
   const { pointing } = usePointerWarp({
     domicile,
     focus,
-    keyed,
+    pressed: windows.pressed,
+    screen: desk.find(({ scanout }) => scanout !== undefined)?.name,
     windows: open,
   });
 
@@ -268,3 +263,12 @@ const boundingBox = (desk: readonly Display[]): Rect => {
     y,
   };
 };
+
+/**
+ * Whether this page is the one drawing `display`: the one its window covers,
+ * or any display at all on a page that covers none, which is the whole
+ * desktop in one window.
+ */
+const coveredHere = (display: Display, desk: readonly Display[]): boolean =>
+  display.scanout !== undefined ||
+  desk.every(({ scanout }) => scanout === undefined);

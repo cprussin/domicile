@@ -1,6 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
@@ -56,13 +56,6 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // keystrokes handed back short — and off the engine's word for a browser
   // window's page, whose keys this page never hears.
   const { modifiers, spendShift } = useModifiers(domicile);
-
-  // A key ran the last command, which is what takes the pointer with the
-  // keyboard — see `usePointerWarp`, which spends it. Here rather than in a
-  // monitor because the desk is one keyboard and several screens: the press
-  // happens once and the monitor the focus lands on is the one that answers
-  // it.
-  const keyed = useRef(false);
 
   // Whether the press that put the launcher up was heard on this page, which
   // is the page its box can be typed into. The engine hands the keys to the
@@ -120,17 +113,21 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // hands back — go through it.
   const onAction = useCallback(
     (action: WindowAction) => {
-      // Before the action, though either would do: what the press is
-      // remembered for is the render that follows it, and no render happens
-      // in the middle of an event handler.
-      keyed.current = true;
       spendShift();
       if (action.kind === WindowActionKind.LauncherToggled) {
         setLaunchedHere(true);
       }
-      act(action);
+      // With the key that ran it, which is what takes the pointer with the
+      // keyboard — see `usePointerWarp`. Counted in the desktop rather than
+      // on this page, because the page that answers it is the one covering
+      // the screen the focus lands on, and that need not be this one; and
+      // with this page's screen, because the keys are heard where the
+      // pointer is.
+      act(action, {
+        on: displays?.find(({ scanout }) => scanout !== undefined)?.name,
+      });
     },
-    [act, spendShift],
+    [act, displays, spendShift],
   );
 
   useShortcuts({
@@ -144,14 +141,6 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // none: the engine hands the keys to the monitor the pointer is on, and the
   // desktop's focus goes with them.
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
-
-  // And the press is spent here rather than in the monitor that answered it.
-  // A parent's effect runs after its children's, so by the time this one does
-  // every monitor has had its look — where clearing it in the hook would let
-  // the first monitor to run spend a press the second was meant to answer.
-  useEffect(() => {
-    keyed.current = false;
-  });
 
   return (
     <>
@@ -182,7 +171,6 @@ export const Desktop = ({ desk, domicile }: Props) => {
             domicile={domicile}
             extensions={extensions}
             key={display.name}
-            keyed={keyed}
             modifiers={modifiers}
             windows={windows}
           />

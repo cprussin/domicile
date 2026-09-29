@@ -3,7 +3,7 @@ import type { Display } from "@domicile/component-library/display-source";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import { openCommand } from "../launcher/open-command";
-import type { DeskChannel } from "./desk-channel";
+import type { DeskChannel, KeyPress } from "./desk-channel";
 import { DeskMessage } from "./desk-channel";
 import { appIdOf } from "./window";
 import type { WindowAction, WindowState } from "./window-state";
@@ -27,8 +27,11 @@ export type Windows = WindowState & {
    * bindings are a table of exactly these: what a key does is data, and this
    * is what runs it. The two things the *state* cannot do on its own happen
    * here as well — see the `kill` and the terminal below.
+   *
+   * `press` is the key that ran it, where one did, which is counted in the
+   * same desktop as the command — see `WindowState.pressed`.
    */
-  act: (action: WindowAction) => void;
+  act: (action: WindowAction, press?: KeyPress) => void;
   /** The window the user is working in, floating or tiled. */
   activeId: string | undefined;
 };
@@ -118,8 +121,12 @@ export const useWindows = (
   // says it went. Both are still actions, so that the bindings stay one table
   // and the reduction stays pure.
   const run = useCallback(
-    (action: WindowAction) => {
+    (action: WindowAction, press?: KeyPress) => {
       dispatch(action);
+      // In the same turn, so the two are one render and one desktop said.
+      if (press !== undefined) {
+        dispatch(Action.KeyPressed(press.on));
+      }
       if (action.kind === WindowActionKind.TerminalLaunched) {
         domicile.spawn(TERMINAL_COMMAND);
       }
@@ -216,7 +223,7 @@ export const useWindows = (
           // A press on another monitor's chrome, or a key read by the page
           // that does not reduce. Run here or nowhere.
           if (reducing.current) {
-            running.current(message.action);
+            running.current(message.action, message.press);
           }
           break;
         }
@@ -254,11 +261,11 @@ export const useWindows = (
   }, [desk, leads, state]);
 
   const act = useCallback(
-    (action: WindowAction) => {
+    (action: WindowAction, press?: KeyPress) => {
       if (reducing.current) {
-        running.current(action);
+        running.current(action, press);
       } else {
-        desk.post(DeskMessage.Acted(action));
+        desk.post(DeskMessage.Acted(action, press));
       }
     },
     [desk],

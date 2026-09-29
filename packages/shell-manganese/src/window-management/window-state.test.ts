@@ -231,6 +231,22 @@ describe("the desktop another page of the desk reduced", () => {
   });
 });
 
+describe("a key pressed on the desk", () => {
+  it("is counted, with the screen it was heard on", () => {
+    // Part of the desktop rather than of the page that heard it, because the
+    // page that answers it by moving the pointer is the one covering the
+    // screen the keyboard went to — which a key that sends a window to the
+    // next monitor makes a different page.
+    const pressed = reduce(
+      NO_WINDOWS,
+      WindowAction.KeyPressed("left"),
+      WindowAction.KeyPressed("right"),
+    ).pressed;
+
+    expect(pressed).toEqual({ count: 2, on: "right" });
+  });
+});
+
 describe("the workspaces", () => {
   it("starts on the first one", () => {
     expect(currentHere(NO_WINDOWS)).toBe("1");
