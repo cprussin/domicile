@@ -156,6 +156,21 @@ class WebViewGuest : public mojom::WebViewGuest,
   base::CallbackListSubscription AddFocusedCallback(
       base::RepeatingClosure focused);
 
+  // THE PAGE'S ZOOM, as a factor, for chrome.tabs: what SetZoom below sets and
+  // WebViewGuestClient.ZoomChanged reports, read and set by the browser rather
+  // than the element. ZoomTo takes a factor already inside blink's range --
+  // the desk refuses the rest (//components/domicile:desk_tabs's
+  // DeskZoomFactor) -- and the element hears it as it would its own.
+  double GetZoomFactor() const;
+  void ZoomTo(double factor);
+
+  // Hear the zoom the element is told change, from what it was to what it is,
+  // for as long as the subscription is held. tabs.onZoomChange.
+  using ZoomChangedCallback =
+      base::RepeatingCallback<void(double old_factor, double new_factor)>;
+  base::CallbackListSubscription AddZoomChangedCallback(
+      ZoomChangedCallback changed);
+
   // mojom::WebViewGuest:
   void Navigate(const GURL& url) override;
   void Focused() override;
@@ -487,6 +502,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Who hears the element take focus. See AddFocusedCallback.
   base::RepeatingClosureList focused_callbacks_;
+
+  // Who hears the zoom change. See AddZoomChangedCallback.
+  base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };

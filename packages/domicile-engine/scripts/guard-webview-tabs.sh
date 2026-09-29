@@ -18,14 +18,21 @@
 # the fixture's popup -- in a third <webview>, never focused -- which writes its
 # answer into its own address.
 #
+# The popup then zooms the tab it found with `tabs.setZoom(id, 1.5)` and reads
+# it back with `tabs.getZoom`. The two windows are two sites -- 127.0.0.1 and
+# localhost -- because a desk tab's zoom is its site's, as in Chrome.
+#
 # WHAT IT ASSERTS. That the popup's answer is the address of window `a`, the
-# one the shell focused.
+# one the shell focused; that `a`'s element, and not `b`'s, heard the zoom
+# (WebViewGuestClient.ZoomChanged, as `domicile-zoom-change`); and that
+# getZoom read back 1.5.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, focusing window
-# `b` instead. The answer must be `b`'s and NOT `a`'s. That is what makes the
-# claim's reading focus's: a desk whose active tab were the first window made
-# names `a` both times, and one whose active tab were the last made names the
-# popup's own window, or `b`, in the claim.
+# `b` instead. The answer must be `b`'s and NOT `a`'s, and so must the zoom.
+# That is what makes the claim's reading focus's: a desk whose active tab were
+# the first window made names `a` both times, and one whose active tab were the
+# last made names the popup's own window, or `b`, in the claim. And a setZoom
+# that zoomed one fixed tab, whichever it was asked for, zooms `a` both times.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -48,6 +55,9 @@ NEGATIVE="${NEGATIVE:-0}"
 # `scripts/test-webview-tabs-guard.sh` holds the id to the manifest's `key`.
 readonly ID="almpdkloglkdomnhghbmejhddjoajijj"
 readonly POPUP="chrome-extension://$ID/popup.html"
+# The factor the popup zooms to, as the shell and the popup both print it.
+# `scripts/test-webview-tabs-guard.sh` holds it to the fixture's.
+readonly ZOOM="1.50"
 
 EXTENSION="$SCRIPTS/guard-webview-tabs-extension"
 
@@ -99,7 +109,9 @@ mkdir -p "$PROFILE"
 
 # 1. The two windows' page: one server, one page, two addresses. The server
 #    answers `/page` whatever its query, and the query is what tells the two
-#    windows -- and so the popup's answer -- apart.
+#    windows -- and so the popup's answer -- apart. Two hosts, because a
+#    zoom is a host's: `localhost` is the browser's own name for loopback,
+#    and the server's 127.0.0.1 is one of the addresses it tries.
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color 25A8F9 >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -113,7 +125,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
   exit 1
 }
 A="http://127.0.0.1:$PORT/page?a"
-B="http://127.0.0.1:$PORT/page?b"
+B="http://localhost:$PORT/page?b"
 
 # The claim focuses `a`; the control, `b`.
 if [ "$NEGATIVE" = "1" ]; then
@@ -168,7 +180,12 @@ else
   fi
 fi
 
-# A moment for anything already dispatched to be written out.
+# The zoom reaches the focused window's element over its own pipe, so it may
+# land after the popup's answer. Bounded: the answer has already arrived.
+wait_for_line 20 "\"GUARD zoom name=$FOCUS factor=" "$ENGINE_LOG"
+
+# A moment for anything already dispatched to be written out -- a zoom on the
+# other window, too.
 sleep 1
 
 # THE READINGS, each anchored on the quote Chromium puts after a console
@@ -189,27 +206,32 @@ FOCUSED=$(saw "\"GUARD focused name=$FOCUS\"")
 ANSWERED=$(saw '"GUARD answer active=')
 NAMED_A=$(saw "\"GUARD answer active=$A\"")
 NAMED_B=$(saw "\"GUARD answer active=$B\"")
+ZOOMED_A=$(saw "\"GUARD zoom name=a factor=$ZOOM\"")
+ZOOMED_B=$(saw "\"GUARD zoom name=b factor=$ZOOM\"")
+READ=$(saw "\"GUARD answer zoom=$ZOOM\"")
 
-MEASURED="$LEG $SENT $TRAY $SHOWN $FOCUSED $ANSWERED $NAMED_A $NAMED_B"
+MEASURED="$LEG $SENT $TRAY $SHOWN $FOCUSED $ANSWERED $NAMED_A $NAMED_B \
+$ZOOMED_A $ZOOMED_B $READ"
 echo
 echo "measured: $MEASURED"
-echo "what the popup answered:"
-grep -F '"GUARD answer ' "$ENGINE_LOG" | tail -3 || true
+echo "what the popup answered, and the zoom the windows heard:"
+grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -6 || true
 
 # WHICH END TO BLAME. `scripts/test-webview-tabs-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered>
-# <named-a> <named-b>".
+# <named-a> <named-b> <zoomed-a> <zoomed-b> <read>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"tabs 1 1 1 1 1 1 0")
+"tabs 1 1 1 1 1 1 0 1 0 1")
   PASSED="the popup's tabs.query({active: true, currentWindow: true}) named \
-the <webview> the shell focused"
+the <webview> the shell focused, its tabs.setZoom zoomed that window and no \
+other, and tabs.getZoom read it back"
   ;;
-"control 1 1 1 1 1 0 1")
+"control 1 1 1 1 1 0 1 0 1 1")
   PASSED="the control is sharp: with the other window focused, the same \
-popup named that one and not the claim's -- so the claim's answer is focus's, \
-not the first window's or the last's"
+popup named and zoomed that one and not the claim's -- so the claim's answer \
+is focus's, not the first window's or the last's, and its zoom the named tab's"
   ;;
 "tabs 0 "* | "control 0 "*)
   FAILURE="the list was never sent: the browser did not connect to the \
@@ -233,21 +255,49 @@ to name. The shell module"
 return, or its page did not reach the <webview>. The desk's tabs.query, or \
 the popup's navigation"
   ;;
-"tabs 1 1 1 1 1 0 0" | "control 1 1 1 1 1 0 0")
+"tabs 1 1 1 1 1 0 0 "* | "control 1 1 1 1 1 0 0 "*)
   FAILURE="the popup answered, naming neither window -- the GUARD answer \
 line above says what: count-0 is a desk with no active tab, so the element's \
 focus never reached the browser (WebViewGuest::Focused) or the lookups do not \
 find a guest; an error is the function refusing"
   ;;
-"tabs 1 1 1 1 1 0 1")
+"tabs 1 1 1 1 1 0 1 "*)
   FAILURE="the popup named window b with window a focused: the active tab \
 does not follow focus -- the last window made, or the focus the element \
 reported was not a"
   ;;
-"control 1 1 1 1 1 1 0")
+"control 1 1 1 1 1 1 0 "*)
   FAILURE="the control named window a with window b focused: the active tab \
 is the first made, not the focused one, so the claim's pass was an accident \
 of order"
+  ;;
+# The right window named. What is left is the zoom.
+"tabs 1 1 1 1 1 1 0 0 0 0" | "control 1 1 1 1 1 0 1 0 0 0")
+  FAILURE="the popup named the right window and no window heard a zoom, nor \
+did getZoom read one -- the GUARD answer zoom= line says what: an error is \
+the desk's tabs.setZoom refusing, or Chrome's own still registered over it"
+  ;;
+"tabs 1 1 1 1 1 1 0 0 0 1" | "control 1 1 1 1 1 0 1 0 0 1")
+  FAILURE="getZoom read the zoom back and the named window's element never \
+heard it: the guest set it and did not report it (WebViewGuest::ReportZoom, \
+WebViewGuestClient.ZoomChanged)"
+  ;;
+"tabs 1 1 1 1 1 1 0 1 1 "* | "control 1 1 1 1 1 0 1 1 1 "*)
+  FAILURE="the zoom reached the other window too: the two are two sites, so \
+the desk zoomed every tab, or the windows' pages share a host"
+  ;;
+"tabs 1 1 1 1 1 1 0 0 1 "*)
+  FAILURE="the popup named window a and window b was zoomed: tabs.setZoom \
+zoomed a tab other than the one it was given"
+  ;;
+"control 1 1 1 1 1 0 1 1 0 "*)
+  FAILURE="the control named window b and window a was zoomed: tabs.setZoom \
+zooms one tab whichever it is asked for, so the claim's zoom was an accident \
+of order"
+  ;;
+"tabs 1 1 1 1 1 1 0 1 0 0" | "control 1 1 1 1 1 0 1 0 1 0")
+  FAILURE="the named window was zoomed and tabs.getZoom did not read it back \
+-- the GUARD answer zoom= line says what it read instead"
   ;;
 *)
   FAILURE="there is no measurement here of any kind ($MEASURED) -- the run did \

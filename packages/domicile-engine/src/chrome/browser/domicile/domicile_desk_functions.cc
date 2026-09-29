@@ -22,14 +22,18 @@
 #include "chrome/common/extensions/api/windows.h"
 #include "components/domicile/browser/desk_tabs.h"
 #include "components/domicile/browser/web_view_guest.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/common/error_utils.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/url_pattern.h"
 #include "extensions/common/url_pattern_set.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -47,16 +51,44 @@ constexpr char kTabNotFoundError[] = "No tab with id: *.";
 constexpr char kNoWindowToAskError[] =
     "No browser window on this Domicile desk to ask the shell through.";
 
+// A zoom factor outside blink's browser range, which Chrome would store and a
+// desk refuses: the <webview> element holds its own setZoom to that range.
+constexpr char kZoomOutOfRangeError[] =
+    "Zoom factor * is outside the range a Domicile desk zooms to.";
+
 // The desk of the profile `function` was called from, or null where there is
 // none.
 DomicileWindowController* DeskOf(ExtensionFunction& function) {
   return DomicileWindowController::Find(function.browser_context());
 }
 
+// The tab named, or with no id the active one: Chrome's default for every
+// tabs call whose id is optional is the current window's active tab. Null
+// where the desk has neither.
+content::WebContents* TabOrActive(ExtensionFunction& function,
+                                  std::optional<int> tab_id) {
+  DomicileWindowController* desk = DeskOf(function);
+  if (desk == nullptr) {
+    return nullptr;
+  }
+  return tab_id ? desk->TabWithId(*tab_id) : desk->GetActiveTab();
+}
+
+std::string TabNotFound(std::optional<int> tab_id) {
+  return extensions::ErrorUtils::FormatErrorMessage(
+      kTabNotFoundError, base::NumberToString(tab_id.value_or(-1)));
+}
+
 WebViewGuest& GuestOf(content::WebContents& tab) {
   WebViewGuest* guest = WebViewGuest::FromWebContents(&tab);
   CHECK(guest);
   return *guest;
+}
+
+// The profile's default zoom, where `tabs.setZoom(id, 0)` puts a tab back.
+double DefaultZoomFactor(content::WebContents& tab) {
+  return blink::ZoomLevelToZoomFactor(
+      content::HostZoomMap::GetForWebContents(&tab)->GetDefaultZoomLevel());
 }
 
 base::Value TabValue(ExtensionFunction& function, content::WebContents& tab) {
@@ -202,11 +234,9 @@ class DeskTabsUpdateFunction : public ExtensionFunction {
       return RespondNow(Error(kNotOnADesk));
     }
 
-    content::WebContents* tab = TabToUpdate(params->tab_id);
+    content::WebContents* tab = TabOrActive(*this, params->tab_id);
     if (tab == nullptr) {
-      return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
-          kTabNotFoundError,
-          base::NumberToString(params->tab_id.value_or(-1)))));
+      return RespondNow(Error(TabNotFound(params->tab_id)));
     }
 
     std::optional<GURL> url;
@@ -233,16 +263,6 @@ class DeskTabsUpdateFunction : public ExtensionFunction {
       GuestOf(*tab).RequestFocus();
     }
     return RespondNow(WithArguments(TabValue(*this, *tab)));
-  }
-
-  // The tab named, or with no id the active one, as Chrome's default is the
-  // current window's active tab.
-  content::WebContents* TabToUpdate(std::optional<int> tab_id) {
-    DomicileWindowController* desk = DeskOf(*this);
-    if (desk == nullptr) {
-      return nullptr;
-    }
-    return tab_id ? desk->TabWithId(*tab_id) : desk->GetActiveTab();
   }
 };
 
@@ -334,6 +354,114 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
       GuestOf(*tab).RequestClose();
     }
     return RespondNow(NoArguments());
+  }
+};
+
+// THE ZOOM FOUR. A desk tab's zoom is its guest's -- the one the element's own
+// setZoom sets, per site through HostZoomMap -- so the element hears every
+// change an extension makes, and tabs.onZoomChange is the guest's report too.
+class DeskTabsSetZoomFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabs.setZoom", TABS_SETZOOM)
+
+ private:
+  ~DeskTabsSetZoomFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<tabs::SetZoom::Params> params =
+        tabs::SetZoom::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    content::WebContents* tab = TabOrActive(*this, params->tab_id);
+    if (tab == nullptr) {
+      return RespondNow(Error(TabNotFound(params->tab_id)));
+    }
+    // Chrome's rule: a page no extension may touch is not one it may zoom.
+    std::string error;
+    if (extension()->permissions_data()->IsRestrictedUrl(
+            tab->GetLastCommittedURL(), &error)) {
+      return RespondNow(Error(std::move(error)));
+    }
+    const std::optional<double> factor = DeskZoomFactor(
+        params->zoom_factor, DefaultZoomFactor(*tab),
+        blink::kMinimumBrowserZoomFactor, blink::kMaximumBrowserZoomFactor);
+    if (!factor.has_value()) {
+      return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
+          kZoomOutOfRangeError, base::NumberToString(params->zoom_factor))));
+    }
+    GuestOf(*tab).ZoomTo(*factor);
+    return RespondNow(NoArguments());
+  }
+};
+
+class DeskTabsGetZoomFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabs.getZoom", TABS_GETZOOM)
+
+ private:
+  ~DeskTabsGetZoomFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<tabs::GetZoom::Params> params =
+        tabs::GetZoom::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    content::WebContents* tab = TabOrActive(*this, params->tab_id);
+    if (tab == nullptr) {
+      return RespondNow(Error(TabNotFound(params->tab_id)));
+    }
+    return RespondNow(ArgumentList(
+        tabs::GetZoom::Results::Create(GuestOf(*tab).GetZoomFactor())));
+  }
+};
+
+// Answered, and changes nothing, for the one mode a desk tab is already in;
+// refused for any other.
+class DeskTabsSetZoomSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabs.setZoomSettings", TABS_SETZOOMSETTINGS)
+
+ private:
+  ~DeskTabsSetZoomSettingsFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<tabs::SetZoomSettings::Params> params =
+        tabs::SetZoomSettings::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    content::WebContents* tab = TabOrActive(*this, params->tab_id);
+    if (tab == nullptr) {
+      return RespondNow(Error(TabNotFound(params->tab_id)));
+    }
+    std::string error;
+    if (extension()->permissions_data()->IsRestrictedUrl(
+            tab->GetLastCommittedURL(), &error)) {
+      return RespondNow(Error(std::move(error)));
+    }
+    const tabs::ZoomSettings& settings = params->zoom_settings;
+    return RespondNow(DeskTakesZoomSettings(tabs::ToString(settings.mode),
+                                            tabs::ToString(settings.scope))
+                          ? NoArguments()
+                          : Error(kNotOnADesk));
+  }
+};
+
+class DeskTabsGetZoomSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabs.getZoomSettings", TABS_GETZOOMSETTINGS)
+
+ private:
+  ~DeskTabsGetZoomSettingsFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<tabs::GetZoomSettings::Params> params =
+        tabs::GetZoomSettings::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    content::WebContents* tab = TabOrActive(*this, params->tab_id);
+    if (tab == nullptr) {
+      return RespondNow(Error(TabNotFound(params->tab_id)));
+    }
+    tabs::ZoomSettings settings = DeskZoomSettings();
+    settings.default_zoom_factor = DefaultZoomFactor(*tab);
+    return RespondNow(
+        ArgumentList(tabs::GetZoomSettings::Results::Create(settings)));
   }
 };
 
@@ -482,6 +610,10 @@ void RegisterDeskFunctions() {
   registry.RegisterFunction<DeskTabsUpdateFunction>();
   registry.RegisterFunction<DeskTabsCreateFunction>();
   registry.RegisterFunction<DeskTabsRemoveFunction>();
+  registry.RegisterFunction<DeskTabsSetZoomFunction>();
+  registry.RegisterFunction<DeskTabsGetZoomFunction>();
+  registry.RegisterFunction<DeskTabsSetZoomSettingsFunction>();
+  registry.RegisterFunction<DeskTabsGetZoomSettingsFunction>();
   registry.RegisterFunction<DeskWindowsGetFunction>();
   registry.RegisterFunction<DeskWindowsGetCurrentFunction>();
   registry.RegisterFunction<DeskWindowsGetLastFocusedFunction>();
