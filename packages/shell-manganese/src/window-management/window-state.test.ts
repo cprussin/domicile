@@ -310,6 +310,26 @@ describe("the workspaces", () => {
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
+  it("tiles it there even while a floating group has the keyboard", () => {
+    // Only a window that opens joins the floating group; one sent over lands
+    // tiled, however that workspace was left.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("term", "term"),
+      WindowAction.WindowSentToWorkspace("1"),
+    );
+
+    expect(windowsOf(workspaceNamed(state, "1").tiling)).toEqual([
+      APP("kitty"),
+      APP("term"),
+    ]);
+  });
+
   it("keeps a window that closes on a workspace nobody is looking at", () => {
     const state = reduce(
       desktop("kitty", "editor"),

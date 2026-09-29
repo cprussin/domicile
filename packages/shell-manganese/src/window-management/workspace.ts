@@ -32,7 +32,7 @@ import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
 import { movedBy } from "./tree/move";
 import type { Layout } from "./tree/node";
-import { LayoutNode as Node, windowsIn } from "./tree/node";
+import { LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
 import { removed, removedAt } from "./tree/remove";
 import { resized } from "./tree/resize";
 import { stretched } from "./tree/stretch";
@@ -107,10 +107,33 @@ export const focusedOn = (workspace: Workspace): string | undefined =>
 export const floatOn = (workspace: Workspace, id: string): Float | undefined =>
   workspace.floats.find((float) => floatHolds(float, id));
 
-/** A window opening on the workspace: tiled beside the focus, and focused. */
-export const opened = (workspace: Workspace, id: string): Workspace => ({
+/**
+ * A window opening on the workspace, focused: into the floating group the
+ * keyboard is in, if it is in one, and tiled beside the focus otherwise —
+ * which is also where it goes over a lone floating window, as in sway.
+ */
+export const opened = (workspace: Workspace, id: string): Workspace => {
+  const floating = workspace.floatFocus;
+  if (floating === undefined) {
+    return tiledIn(workspace, id);
+  } else {
+    const float = floatHolding(workspace, floating);
+    return float.root.kind === NodeKind.Container
+      ? {
+          ...withFloat(workspace, floating, () =>
+            retiled(float, (tiling) => inserted(tiling, id)),
+          ),
+          floatFocus: id,
+        }
+      : tiledIn(workspace, id);
+  }
+};
+
+/** A window arriving in the tiling beside its focus, and focused. */
+export const tiledIn = (workspace: Workspace, id: string): Workspace => ({
   ...workspace,
   floatFocus: undefined,
+  floats: onWindows(workspace.floats),
   tiling: inserted(workspace.tiling, id),
 });
 

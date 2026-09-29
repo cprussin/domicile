@@ -47,6 +47,7 @@ import {
   shown,
   splitFlipped,
   tiledDropped,
+  tiledIn,
   tiledStretched,
   windowGrown,
   windowMoved,
@@ -1317,7 +1318,7 @@ const sendToWorkspace = (state: WindowState, name: string): WindowState => {
     return onWorkspace(
       onCurrent(state, (workspace) => closed(workspace, id)),
       name,
-      (workspace) => opened(workspace, id),
+      (workspace) => tiledIn(workspace, id),
     );
   }
 };

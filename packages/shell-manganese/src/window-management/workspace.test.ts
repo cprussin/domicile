@@ -45,6 +45,16 @@ describe("opened", () => {
     expect(windowsOf(workspace.tiling)).toEqual(["b"]);
     expect(focusedOn(workspace)).toBe("b");
   });
+
+  it("opens into the floating group the keyboard is in", () => {
+    const workspace = opened(floatToggled(parentFocused(grouped())), "d");
+
+    expect(windowsOf(workspace.tiling)).toEqual(["a"]);
+    expect(workspace.floats.map(({ root }) => windowsIn(root))).toEqual([
+      ["b", "c", "d"],
+    ]);
+    expect(focusedOn(workspace)).toBe("d");
+  });
 });
 
 describe("closed", () => {
