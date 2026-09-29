@@ -83,6 +83,12 @@ export const Desktop = ({ desk, domicile }: Props) => {
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
+  // And the applications installed, which the compositor reads from the
+  // machine's desktop entries for the same reason: a page has no filesystem.
+  const searchApps = useCallback(
+    (query: string) => domicile.searchApps(query),
+    [domicile],
+  );
   // And its preview, of the same index, for the same reason.
   const preview = useCallback(
     (path: string) => domicile.previewFile(path),
@@ -195,6 +201,10 @@ export const Desktop = ({ desk, domicile }: Props) => {
         }}
         onLaunch={(launch) => {
           switch (launch.kind) {
+            case LaunchKind.Ran: {
+              act(WindowAction.AppLaunched(launch.command));
+              break;
+            }
             case LaunchKind.Opened: {
               act(WindowAction.FileOpened(launch.path));
               break;
@@ -208,6 +218,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
         open={windows.launcherOpen}
         preview={preview}
         search={search}
+        searchApps={searchApps}
       />
       {/* Over the whole desktop, like the launcher and for its reason. */}
       <Clipboard

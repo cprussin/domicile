@@ -107,6 +107,10 @@ impl Compositor {
             // does to one survives into the next.
             .env("HOME", home.unwrap_or(&empty_home))
             .env("XDG_CACHE_HOME", directory.path().join("cache"))
+            // Where a launcher's applications are read from: the home's own,
+            // and none of the machine running the test.
+            .env_remove("XDG_DATA_HOME")
+            .env("XDG_DATA_DIRS", directory.path().join("no-data"))
             // A decoy, and load-bearing. The compositor aims what it spawns
             // by setting `WAYLAND_DISPLAY`, and a child that inherited the
             // compositor's instead would open on whatever session the runner

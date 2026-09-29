@@ -15,6 +15,28 @@ import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
 
+/** An application the machine has installed, as the host would describe it. */
+const EDITOR = {
+  command: ["gedit", "--new-window"],
+  comment: "Edit text files",
+  id: "org.gnome.gedit.desktop",
+  name: "Text Editor",
+};
+
+/** The host's search over the applications `apps`, by every word of a name. */
+const searchingApps = (apps: readonly (typeof EDITOR)[]) => (query: string) => {
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== "");
+  return Promise.resolve({
+    apps: apps.filter((app) =>
+      words.every((word) => app.name.toLowerCase().includes(word)),
+    ),
+    query,
+  });
+};
+
 /**
  * The host's search over a home of `files`, sending at most two hundred of
  * what matched the way the compositor does — every word, any order, any case.
@@ -74,7 +96,11 @@ const holding = (path: string): FilePreview => {
 };
 
 /** The panel open over a home with those files in it, recording what it launched. */
-const launcher = (files: readonly string[] = FILES, indexing = false) => {
+const launcher = (
+  files: readonly string[] = FILES,
+  indexing = false,
+  apps: readonly (typeof EDITOR)[] = [],
+) => {
   previewed.length = 0;
   const launched: Launch[] = [];
   const dismissed: true[] = [];
@@ -91,11 +117,14 @@ const launcher = (files: readonly string[] = FILES, indexing = false) => {
       open
       preview={previewing}
       search={searching(files, indexing)}
+      searchApps={searchingApps(apps)}
     />,
   );
   return {
     box: () =>
-      screen.getByRole("combobox", { name: "Open a file, a URL, or search" }),
+      screen.getByRole("combobox", {
+        name: "Open an app, a file, a URL, or search",
+      }),
     dismissed,
     launched,
     /** The rows, as they read, once the host has answered what the box says. */
@@ -126,6 +155,7 @@ describe("Launcher", () => {
         open={false}
         preview={previewing}
         search={searching(FILES, false)}
+        searchApps={searchingApps([])}
       />,
     );
 
@@ -179,6 +209,30 @@ describe("Launcher", () => {
       "Go to https://example.com",
       "example.com",
       "Search for example.com",
+    ]);
+  });
+
+  it("offers the applications above the files, and a search below both", async () => {
+    const panel = launcher(["text.md"], false, [EDITOR]);
+
+    await panel.user.type(panel.box(), "text");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Text Editor",
+      "text.md",
+      "Search for text",
+    ]);
+  });
+
+  it("runs the application chosen", async () => {
+    const panel = launcher([], false, [EDITOR]);
+
+    await panel.user.type(panel.box(), "editor");
+    await panel.rows();
+    await panel.user.keyboard("{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Ran(["gedit", "--new-window"]),
     ]);
   });
 
@@ -591,6 +645,18 @@ describe("Launcher", () => {
           "https://google.com/search?q=today",
         ),
       ).toBeInTheDocument();
+    });
+
+    it("says what the highlighted application is and what it runs", async () => {
+      const panel = launcher([], false, [EDITOR]);
+
+      await panel.user.type(panel.box(), "editor");
+
+      expect(
+        await within(previewPane()).findByText("gedit --new-window"),
+      ).toBeInTheDocument();
+      expect(previewPane()).toHaveTextContent("Text Editor");
+      expect(previewPane()).toHaveTextContent("Edit text files");
     });
 
     it("says what to do while there is no row to highlight", async () => {
