@@ -6,17 +6,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
@@ -28,6 +31,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/window_open_disposition.h"
@@ -35,8 +40,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
-#include "ui/aura/window.h"
-#include "ui/aura/window_tree_host.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
 #include "url/gurl.h"
 
@@ -81,6 +85,13 @@ uintptr_t Identity(BrowserWindowInterface* window) {
   return reinterpret_cast<uintptr_t>(window);
 }
 
+// Whether a shell page has committed in `browser`.
+bool ShowsAShell(BrowserWindowInterface* browser) {
+  tabs::TabInterface* tab = browser->GetActiveTabInterface();
+  return tab != nullptr &&
+         tab->GetContents()->GetLastCommittedURL().SchemeIs(kDomicileScheme);
+}
+
 // Every shell window the browser has, with the display each one's rectangle
 // reads as.
 //
@@ -97,9 +108,7 @@ std::vector<ShellWindow> ShellWindowsNow() {
   std::vector<ShellWindow> found;
   GlobalBrowserCollection::GetInstance()->ForEach(
       [&found](BrowserWindowInterface* browser) {
-        tabs::TabInterface* tab = browser->GetActiveTabInterface();
-        if (tab == nullptr || !tab->GetContents()->GetLastCommittedURL().SchemeIs(
-                                  kDomicileScheme)) {
+        if (!ShowsAShell(browser)) {
           return true;
         }
         ui::BaseWindow* window = browser->GetWindow();
@@ -115,6 +124,42 @@ std::vector<ShellWindow> ShellWindowsNow() {
       },
       BrowserCollection::Order::kCreation);
   return found;
+}
+
+// Every browser window with no shell page committed in it: among them, one
+// this opened whose page is still loading. `ShellWindowPlaces::Update` takes
+// these as `loading`.
+std::vector<BrowserWindowInterface*> WindowsStillLoading() {
+  std::vector<BrowserWindowInterface*> found;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&found](BrowserWindowInterface* browser) {
+        if (!ShowsAShell(browser)) {
+          found.push_back(browser);
+        }
+        return true;
+      },
+      BrowserCollection::Order::kCreation);
+  return found;
+}
+
+std::vector<uintptr_t> IdentitiesOf(
+    const std::vector<BrowserWindowInterface*>& windows) {
+  std::vector<uintptr_t> identities;
+  identities.reserve(windows.size());
+  for (BrowserWindowInterface* window : windows) {
+    identities.push_back(Identity(window));
+  }
+  return identities;
+}
+
+// Puts `window` on `pixels`, a display's bounds.
+//
+// IN PIXELS, AND STRAIGHT TO THE HOST. A display's bounds are its CRTC's on
+// this platform, scale or no scale -- drm_screen.h says why -- and
+// `BaseWindow::SetBounds` takes DIPs, which it would multiply by the scale
+// into a rectangle no CRTC has.
+void FitTo(BrowserWindowInterface* window, const gfx::Rect& pixels) {
+  window->GetWindow()->GetNativeWindow()->GetHost()->SetBoundsInPixels(pixels);
 }
 
 // The sightings above, in the shape `ShellWindowPlaces` reads.
@@ -166,9 +211,9 @@ class ShellWindows : public display::DisplayObserver {
   }
 
   // display::DisplayObserver:
-  void OnDisplayAdded(const display::Display&) override { Reconcile(); }
+  void OnDisplayAdded(const display::Display&) override { ReconcileSoon(); }
 
-  void OnDisplaysRemoved(const display::Displays&) override { Reconcile(); }
+  void OnDisplaysRemoved(const display::Displays&) override { ReconcileSoon(); }
 
   // A DISPLAY THAT MOVED OR CHANGED MODE IS A WINDOW THAT HAS TO FOLLOW IT.
   // The window is bound to its controller on an exact rectangle match, so a
@@ -182,40 +227,76 @@ class ShellWindows : public display::DisplayObserver {
       return;
     }
     const std::vector<ShellWindow> held = ShellWindowsNow();
+    const std::vector<BrowserWindowInterface*> loading = WindowsStillLoading();
     // Through the places rather than off the sighting, because the sighting is
     // exactly what a bounds change has just invalidated: the display moved,
     // and the window that belongs on it is still where it was.
-    const std::vector<int64_t> windowed = places_.Update(SightingsOf(held));
-    for (size_t index = 0; index < held.size(); ++index) {
-      if (windowed[index] == display.id()) {
-        // IN PIXELS, AND STRAIGHT TO THE HOST. A display's bounds are its
-        // CRTC's on this platform, scale or no scale -- drm_screen.h says why
-        // -- and `BaseWindow::SetBounds` takes DIPs, which it would multiply
-        // by the scale into a rectangle no CRTC has.
-        held[index]
-            .window->GetWindow()
-            ->GetNativeWindow()
-            ->GetHost()
-            ->SetBoundsInPixels(display.bounds());
+    places_.Update(SightingsOf(held), IdentitiesOf(loading));
+    // A WINDOW STILL LOADING ITS PAGE FOLLOWS TOO. A monitor arriving is a
+    // display added and then moved, once the compositor's layout names it --
+    // and the window opened for it is loading its page in between.
+    std::vector<BrowserWindowInterface*> windows = loading;
+    for (const ShellWindow& one : held) {
+      windows.push_back(one.window);
+    }
+    for (BrowserWindowInterface* window : windows) {
+      if (places_.Of(Identity(window)) == display.id()) {
+        FitTo(window, display.bounds());
       }
     }
   }
 
  private:
+  // Reconciles once the display list has finished changing.
+  //
+  // NOT FROM INSIDE THE CHANGE. `DrmScreen` lays a reading into its list one
+  // display at a time and removes the unplugged ones last, and it is from the
+  // middle of that that `OnDisplayAdded` is called: a reconciliation there
+  // reads a desk that is half the old one, and opens a window at a rectangle
+  // the next line moves. One task later the whole reading is in, and a burst
+  // of additions is one reconciliation.
+  void ReconcileSoon() {
+    if (reconcile_posted_) {
+      return;
+    }
+    reconcile_posted_ = true;
+    // `base::Unretained` for the reason `Open` gives: a NoDestructor that
+    // lives as long as the browser.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ShellWindows::ReconcilePosted, base::Unretained(this)));
+  }
+
+  void ReconcilePosted() {
+    reconcile_posted_ = false;
+    Reconcile();
+  }
+
   void Reconcile() {
     CHECK_CURRENTLY_ON(content::BrowserThread::UI);
     if (!display::Screen::HasScreen()) {
       return;
     }
     const std::vector<ShellWindow> held = ShellWindowsNow();
+    const std::vector<BrowserWindowInterface*> loading = WindowsStillLoading();
     // THE DISPLAY EACH WINDOW IS ON, WHICH IS NOT THE DISPLAY ITS RECTANGLE
     // READS AS. A hotplug moves the desk's origins before the windows follow
     // them; reading the rectangles here is what used to open a second window
     // on one monitor and leave another dark. `ShellWindowPlaces` says why at
     // length.
-    const std::vector<int64_t> placed = places_.Update(SightingsOf(held));
+    const std::vector<int64_t> placed =
+        places_.Update(SightingsOf(held), IdentitiesOf(loading));
     std::vector<int64_t> windowed = placed;
-    windowed.reserve(held.size() + opening_.size());
+    windowed.reserve(held.size() + loading.size() + opening_.size());
+    // A WINDOW LOADING ITS PAGE COUNTS AS A WINDOW, for the reason the one
+    // being made does below: its display is covered, and read as bare it got
+    // a second window.
+    for (BrowserWindowInterface* window : loading) {
+      const int64_t on = places_.Of(Identity(window));
+      if (on != display::kInvalidDisplayId) {
+        windowed.push_back(on);
+      }
+    }
     // A WINDOW BEING MADE COUNTS AS A WINDOW. `CreateBrowserWindow` is
     // asynchronous here -- the synchronous form does not promise an
     // initialized window, and `OpenGURL` on one of those is documented to
@@ -335,6 +416,21 @@ class ShellWindows : public display::DisplayObserver {
     // the window is placed on `id` by its bounds, and a hotplug between now
     // and the next reading would make that rectangle say something else.
     places_.Place(Identity(window), id);
+    // WHERE THE DISPLAY IS NOW, not where it was when the window was asked
+    // for. A monitor arriving moves while its window is being made -- it is
+    // added, then placed once the compositor's layout names it -- and a
+    // window left at the rectangle it was asked for is on no CRTC's --
+    // `OnDisplayMetricsChanged` cannot move a window that did not exist yet.
+    const std::vector<display::Display> displays =
+        display::Screen::Get()->GetAllDisplays();
+    const auto now = std::ranges::find(displays, id, &display::Display::id);
+    if (now == displays.end()) {
+      // Gone before its window came. The window is still recorded as its, so
+      // the reconciliation its page asks for closes it.
+      VLOG(1) << "domicile: display " << id << " went before its window came";
+    } else {
+      FitTo(window, now->bounds());
+    }
     window->OpenGURL(url, WindowOpenDisposition::CURRENT_TAB);
   }
 
@@ -353,6 +449,8 @@ class ShellWindows : public display::DisplayObserver {
 
   // Displays whose window has been asked for and has not arrived yet.
   std::vector<int64_t> opening_;
+  // Whether a `ReconcilePosted` is already on its way.
+  bool reconcile_posted_ = false;
   // Which display each window is on. Read by `ScreenOf` as well, through
   // `TheShellWindows` below: a page told one monitor and a window opened for
   // another is a monitor showing another monitor's desktop.
