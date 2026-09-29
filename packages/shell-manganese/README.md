@@ -176,7 +176,8 @@ the group keeps its layout inside one box, moves and resizes as one, and goes
 back into the tiling whole. Inside it the tiling's keys work as they do on the
 workspace — focus, Mod+a/Mod+Shift+a, splits, layouts, and moving or resizing a
 window within the group — while a lone floating window, or a group Mod+a has
-selected, moves and resizes its box.
+selected, moves and resizes its box. A window opened while the keyboard is in a
+floating group opens into that group.
 
 The Shift that floats a window is spent on the chord. Shift is also the resize
 modifier, and you are still holding both when the window lands — so until you
