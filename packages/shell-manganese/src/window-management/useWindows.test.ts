@@ -10,6 +10,7 @@ import { appWindowId } from "./window";
 import {
   currentHere,
   NO_WINDOWS,
+  reduceWindows,
   WindowAction,
   workspaceOn,
 } from "./window-state";
@@ -95,11 +96,42 @@ const others = () => {
   };
 };
 
-const desktop = (displays: readonly Display[] | undefined) => {
+/**
+ * How long a page waits to hear whether the desk already has a desktop: not at
+ * all, unless a test says otherwise, because a page on a desk nobody else is
+ * on hears nothing whatever it waits for.
+ */
+const AT_ONCE = (heard: () => void) => {
+  heard();
+  return () => undefined;
+};
+
+/** A wait that ends when the test says so. */
+const waiting = () => {
+  let ended: (() => void) | undefined;
+  return {
+    end: () => {
+      act(() => {
+        ended?.();
+      });
+    },
+    wait: (heard: () => void) => {
+      ended = heard;
+      return () => {
+        ended = undefined;
+      };
+    },
+  };
+};
+
+const desktop = (
+  displays: readonly Display[] | undefined,
+  wait: (heard: () => void) => () => void = AT_ONCE,
+) => {
   const host = client();
   const desk = others();
   const view = renderHook(() =>
-    useWindows(host.domicile, displays, desk.channel),
+    useWindows(host.domicile, displays, desk.channel, wait),
   );
   return { ...view, desk, host };
 };
@@ -191,6 +223,59 @@ describe("the desktop the pages of a desk share", () => {
     desk.say(Message.Desk(elsewhere));
 
     expect(result.current.scratchpad).toEqual(["browser:1"]);
+  });
+
+  it("is answered by a page that does not lead, once it has one", () => {
+    // The page that led may have just stopped leading — a monitor plugged in
+    // ahead of it — and the page that leads now is the one asking.
+    const { desk } = desktop([LEFT, covering(RIGHT)]);
+    const elsewhere = { ...NO_WINDOWS, scratchpad: ["browser:1"] };
+    desk.say(Message.Desk(elsewhere));
+
+    desk.say(Message.Asked());
+
+    const answer = desk.said.at(-1);
+    expect(answer?.type === "desk" && answer.desk.scratchpad).toEqual([
+      "browser:1",
+    ]);
+  });
+
+  it("is taken from the other pages by a page that has just come up to lead", () => {
+    // A monitor plugged in ahead of the others: its page is new, it leads,
+    // and the desktop is the one the pages already there have. Told its own
+    // empty one instead, every other page would take that and every window on
+    // the desk would be gone.
+    const { desk, result } = desktop([covering(LEFT), RIGHT], waiting().wait);
+    const elsewhere = {
+      ...reduceWindows(NO_WINDOWS, WindowAction.ScreensDescribed(["right"])),
+      scratchpad: ["browser:1"],
+    };
+
+    desk.say(Message.Desk(elsewhere));
+
+    expect(result.current.scratchpad).toEqual(["browser:1"]);
+    // And brought up to the desk this page was told, which has a screen the
+    // one it took did not.
+    expect(result.current.screens.map(({ name }) => name)).toEqual([
+      "left",
+      "right",
+    ]);
+    const said = desk.said.at(-1);
+    expect(said?.type === "desk" && said.desk.scratchpad).toEqual([
+      "browser:1",
+    ]);
+  });
+
+  it("is not said by a page that leads until it has heard whether there is one", () => {
+    const wait = waiting();
+    const { desk } = desktop([covering(LEFT), RIGHT], wait.wait);
+
+    expect(desk.said.some(({ type }) => type === "desk")).toBe(false);
+
+    // A desk that came up all at once, where nobody has anything to say.
+    wait.end();
+
+    expect(desk.said.some(({ type }) => type === "desk")).toBe(true);
   });
 
   it("is left alone by a page that leads, whatever another page says", () => {

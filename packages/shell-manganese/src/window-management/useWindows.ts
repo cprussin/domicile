@@ -1,6 +1,13 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Display } from "@domicile/component-library/display-source";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import { openCommand } from "../launcher/open-command";
 import type { DeskChannel, KeyPress } from "./desk-channel";
@@ -17,6 +24,12 @@ import {
 
 /** What the terminal launcher asks the compositor to run. */
 const TERMINAL_COMMAND = ["kitty"] as const;
+
+/**
+ * How long a page that has just come up waits to be told the desktop before
+ * deciding there is none — see {@link useWindows}' `wait`.
+ */
+const HEARD_BY = 250;
 
 export type Windows = WindowState & {
   /**
@@ -91,16 +104,43 @@ export const leadsTheDesk = (
  *
  * @param displays - the desk the host described, which says which page this
  *   is. `undefined` until it has described one.
+ * **A PAGE THAT HAS JUST COME UP KNOWS NOTHING, EVEN WHEN IT LEADS.** A
+ * monitor plugged in ahead of the others opens a new page on the first
+ * display, and the desktop is the one the pages already there are showing.
+ * So a page takes the first desk it hears whether or not it leads, and says
+ * nothing until it has one: said at once, its empty desktop would be taken by
+ * every other page and every window on the desk would go with it. A page
+ * that hears nothing within `wait` is on a desk that came up all at once, and
+ * its own desktop is the desktop.
+ *
+ * @param displays - the desk the host described, which says which page this
+ *   is. `undefined` until it has described one.
  * @param desk - the other pages of this desk, which is a connection and so is
  *   passed in rather than made here — the same reason `displays` is.
+ * @param wait - how long to listen for a desktop the other pages already
+ *   have. Calls `heard` once that is over and returns the cancel.
  */
 export const useWindows = (
   domicile: DomicileClient,
   displays: readonly Display[] | undefined,
   desk: DeskChannel,
+  wait: (heard: () => void) => () => void = waitAWhile,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
   const leads = leadsTheDesk(displays);
+
+  // Whether this page has a desktop to speak for: one it was told, or the
+  // one it made after nobody told it anything.
+  const [caughtUp, setCaughtUp] = useState(false);
+  const knows = useRef(caughtUp);
+  knows.current = caughtUp;
+  useEffect(
+    () =>
+      wait(() => {
+        setCaughtUp(true);
+      }),
+    [wait],
+  );
 
   // Read where it is spent rather than closed over: the host's handlers are
   // registered once per client and a monitor plugged in must not re-register
@@ -215,6 +255,11 @@ export const useWindows = (
     }
   }, [displays]);
 
+  // Read by the listener below, which is registered once, for the same
+  // reason `reducing` is a ref.
+  const described = useRef(displays);
+  described.current = displays;
+
   // What the other pages say, and what they are told.
   useEffect(() => {
     const stop = desk.listen((message) => {
@@ -228,7 +273,9 @@ export const useWindows = (
           break;
         }
         case "asked": {
-          if (reducing.current) {
+          // By any page that has a desktop, not only the one that leads: the
+          // page asking may be the one that leads now.
+          if (knows.current) {
             desk.post(DeskMessage.Desk(latest.current));
           }
           break;
@@ -236,9 +283,22 @@ export const useWindows = (
         case "desk": {
           // Whatever this page thought, the page that reduces has said. A
           // page that has just stopped reducing takes this too, which is what
-          // makes a monitor unplugged out from under the desktop survivable.
-          if (!reducing.current) {
+          // makes a monitor unplugged out from under the desktop survivable —
+          // and so does one that has just come up to lead, which is what makes
+          // one plugged in ahead of the others survivable.
+          if (!reducing.current || !knows.current) {
             dispatch(Action.DeskAdopted(message.desk));
+            setCaughtUp(true);
+            // And described again by a page that leads, because the desktop
+            // it took was described by a page that did not know about this
+            // page's monitor.
+            if (reducing.current && described.current !== undefined) {
+              dispatch(
+                Action.ScreensDescribed(
+                  described.current.map(({ name }) => name),
+                ),
+              );
+            }
           }
           break;
         }
@@ -255,10 +315,10 @@ export const useWindows = (
   // else would leave the other monitors on the desktop as it was when they
   // came up.
   useEffect(() => {
-    if (leads === true) {
+    if (leads === true && caughtUp) {
       desk.post(DeskMessage.Desk(state));
     }
-  }, [desk, leads, state]);
+  }, [caughtUp, desk, leads, state]);
 
   const act = useCallback(
     (action: WindowAction, press?: KeyPress) => {
@@ -279,4 +339,11 @@ export const useWindows = (
     }),
     [act, state],
   );
+};
+
+const waitAWhile = (heard: () => void): (() => void) => {
+  const timer = setTimeout(heard, HEARD_BY);
+  return () => {
+    clearTimeout(timer);
+  };
 };
