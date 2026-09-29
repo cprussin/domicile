@@ -3,6 +3,7 @@
 
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 
+#include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "content/public/browser/web_contents.h"
@@ -20,6 +21,9 @@ void AttachTabHelpers(content::WebContents& guest) {
   // session would be a different feature, and the shell's.
   CreateSessionServiceTabHelper(&guest);
   extensions::TabHelper::CreateForWebContents(&guest);
+
+  // And a tab of the desk's one window, now that it has an id to be one by.
+  AddToDesk(guest);
 }
 
 }  // namespace domicile

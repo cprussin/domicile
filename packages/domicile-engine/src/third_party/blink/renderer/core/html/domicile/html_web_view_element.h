@@ -307,6 +307,11 @@ class CORE_EXPORT HTMLWebViewElement final
   // NewWindowRequested, so nothing is stored.
   void CloseRequested() override;
 
+  // And an extension asking for this browser window to be the one in front.
+  // Dispatched as `domicile-focus-request`: which window is in front is the
+  // shell's, so the browser raises nothing. An event, like CloseRequested.
+  void FocusRequested() override;
+
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the
   // placeholder frame does, and the browser holds it on this pipe until the

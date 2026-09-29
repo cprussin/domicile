@@ -305,6 +305,14 @@ interface WebViewGuestClient {
   // ONE MESSAGE PER CALL. An event, like NewWindowRequested, so nothing is
   // compared against what was last sent.
   CloseRequested();
+
+  // An extension asked for this browser window to be the one in front:
+  // `chrome.tabs.update(id, {active: true})` or `chrome.windows.update(id,
+  // {focused: true})`. Which window is in front is the shell's, so the browser
+  // raises nothing and asks. See //chrome/browser/domicile/domicile_desk.h.
+  //
+  // An event, like CloseRequested.
+  FocusRequested();
 };
 
 // One guest, for as long as the element that asked for it lives.
@@ -364,4 +372,11 @@ interface WebViewGuest {
   // that arrives here anyway did not come from the element, and is a bad
   // message.
   SetZoom(double factor);
+
+  // The element took focus: the shell's `view.focus()`, or a click in the page.
+  // What makes this guest the active tab to chrome.tabs -- the browser has no
+  // notification of its own when an inner WebContents gains focus, and the
+  // element is where the shell's focus lands. See
+  // HTMLWebViewElement::SetFocused.
+  Focused();
 };

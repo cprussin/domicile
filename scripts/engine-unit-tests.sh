@@ -18,16 +18,18 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 17,
 # WindowDiff 7, EngineEventQueue 6, ShortcutRegistry 7, ShellURLLoaderFactory
 # 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 8,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # LineFramer 4, DesktopPrefs 1, SurfaceCrop 3, ExtensionInstaller 3,
-# ExtensionTrayEntry 3.
+# ExtensionTrayEntry 3, DeskTabs 10.
 #
-# 104, and it was 101 — how the tray spells a badge color and an icon is three
+# 114, and it was 104 — which <webview> is the active tab, what is refused
+# and which tabs a query names is ten DeskTabs cases. Before that 104, and it
+# was 101 — how the tray spells a badge color and an icon is three
 # ExtensionTrayEntry cases. Before that 101, and it was 98 — which extensions a profile installs, loads and
 # uninstalls is three ExtensionInstaller cases. Before that 98, and it was 95 — the part of a client's buffer its window geometry names
 # is three SurfaceCrop cases. Before that 95, and it was 94 — the browser's offers turned off is one DesktopPrefs
@@ -45,7 +47,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=104
+FLOOR=114
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

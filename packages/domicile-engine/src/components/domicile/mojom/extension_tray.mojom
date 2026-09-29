@@ -18,8 +18,9 @@ module domicile.mojom;
 //
 // See docs/architecture/EXTENSIONS.md in the Domicile repository.
 
-// One extension, as the tray draws it. The state is the action's default --
-// Chrome's tab -1 -- until the tray reports per <webview>.
+// One extension, as the tray draws it. The state is the active tab's -- the
+// <webview> that last had focus -- or the action's default where there is
+// none. The list is sent again when the active tab changes.
 struct TrayExtension {
   // What Activate names it by.
   string id;

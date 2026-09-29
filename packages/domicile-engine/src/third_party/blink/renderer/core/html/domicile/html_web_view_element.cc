@@ -80,6 +80,10 @@ constexpr char kFileChooserEvent[] = "domicile-file-chooser";
 // what is closing is this element's page, and the element is the target.
 constexpr char kCloseEvent[] = "domicile-close";
 
+// And what it says when an extension asks for this window to be in front.
+// Carries nothing: the element is the target.
+constexpr char kFocusRequestEvent[] = "domicile-focus-request";
+
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
 // named here so the element and the SDK have one spelling between them.
@@ -216,6 +220,12 @@ void HTMLWebViewElement::SetFocused(bool received,
 
   HTMLFrameElementBase::SetFocused(received, type, blur_event_behavior);
   if (received) {
+    // The browser first, so the active tab has moved before a shell handling
+    // the event below asks an extension anything. Unbound is an element with
+    // no guest yet, for NavigateGuest's reason: nothing to make active.
+    if (guest_.is_bound()) {
+      guest_->Focused();
+    }
     DispatchGuestFocus();
   }
 }
@@ -432,6 +442,11 @@ void HTMLWebViewElement::FileChooserRequested(
 // panel it drew and hears everything its parts say through it.
 void HTMLWebViewElement::CloseRequested() {
   DispatchEvent(*Event::CreateBubble(AtomicString(kCloseEvent)));
+}
+
+// Bubbling, for CloseRequested's reason.
+void HTMLWebViewElement::FocusRequested() {
+  DispatchEvent(*Event::CreateBubble(AtomicString(kFocusRequestEvent)));
 }
 
 void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {

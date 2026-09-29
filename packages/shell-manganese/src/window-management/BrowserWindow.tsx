@@ -1,6 +1,7 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
 import {
+  WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
@@ -253,6 +254,21 @@ export const BrowserWindow = ({
       view.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
       return () => {
         view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
+      };
+    }
+  }, [onReach, view]);
+
+  // An extension asking for this window in front — `chrome.tabs.update` with
+  // `active`, or `chrome.windows.update` with `focused` — which is a reach the
+  // user did not make: the engine raises nothing, and asks. See
+  // `WEBVIEW_FOCUS_REQUEST_EVENT`.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      view.addEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onReach);
+      return () => {
+        view.removeEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onReach);
       };
     }
   }, [onReach, view]);
