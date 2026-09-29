@@ -75,20 +75,34 @@ const forwardPress =
     }
   };
 
+// Every release this page hears, not only the ones for a press it forwarded.
+// A desk of several monitors is several pages and the engine hands the keys to
+// the one the pointer is on, so a key held while the pointer crosses — Super,
+// while a window is sent to the next monitor — comes up on a page that never
+// saw it go down. Kept back, it stays down in the seat and every key after it
+// reaches the client with Super held. The compositor drops a release for a key
+// its seat does not hold, which is what makes sending them all safe: a key
+// typed into the page's own launcher comes up as a release nobody pressed.
+//
+// Except a chord the desktop claimed, the mirror of the press: its release is
+// the desktop's too.
 const forwardRelease =
   (context: ElementContext) =>
   (event: KeyboardEvent): void => {
     const keycode = evdevFromCode(event.code);
-    if (keycode !== undefined) {
-      const appId = heldKeys.get(keycode);
-      if (appId !== undefined) {
+    if (keycode !== undefined && !isClaimed(press(event, keycode))) {
+      const held = heldKeys.get(keycode);
+      if (held !== undefined) {
         event.preventDefault();
         heldKeys.delete(keycode);
-        // Whatever is bound now, rather than what took the press: the context
-        // is one cell that a rebind writes through, and what the release is
-        // for is the compositor's seat — this is the connection to it.
-        context.domicile.key(appId, keycode, false);
       }
+      // Whatever is bound now, rather than what took the press: the context
+      // is one cell that a rebind writes through, and what the release is
+      // for is the compositor's seat — this is the connection to it. The app
+      // id is the one the press was sent for where this page sent it, and
+      // otherwise the window the desk says has the keyboard; the compositor
+      // reads neither, and the empty one is a desk where no window has it.
+      context.domicile.key(held ?? focusedApp() ?? "", keycode, false);
     }
   };
 

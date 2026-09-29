@@ -491,24 +491,21 @@ describe("registerElements", () => {
       );
     });
 
-    it("does not release a key it never forwarded a press for", () => {
-      // Pressed while the chrome had the keyboard: the client never saw the key
-      // go down, and a release for it is a key event that never happened.
-      const element = mountApp("term");
-      // The chrome has the keyboard, said rather than assumed: which window has
-      // it is one cell that outlives any single window.
-      document.body.dispatchEvent(pointer("pointerdown", { button: 0 }));
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
-      );
-      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+    it("releases a key another page of the desk pressed", () => {
+      // A desk of several monitors is several pages, and the engine hands the
+      // keys to the one the pointer is on: Super held while a window is sent
+      // to the next monitor comes up on a page that never saw it go down. Kept
+      // back, it stays down in the compositor's seat, and every key after it
+      // reaches the client as Super+key. So every release is sent, and the
+      // seat — which knows what it holds — drops one it never saw pressed.
+      mountApp("term").dispatchEvent(pointer("pointerdown", { button: 0 }));
       domicile.calls.length = 0;
 
       document.dispatchEvent(
-        new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
+        new KeyboardEvent("keyup", { bubbles: true, code: "MetaLeft" }),
       );
 
-      expect(domicile.calls).toEqual([]);
+      expect(domicile.calls).toEqual([["key", "term", 125, false]]);
     });
 
     it("keeps the keyboard where it is when the shell cancels the release", () => {
