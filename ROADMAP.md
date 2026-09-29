@@ -331,6 +331,11 @@ these is one run, and each has a line to look for.
   an injected desk. The failure this replaces was three monitors with two pages
   on one of them, a third with none, and a terminal that answered the keyboard
   and drew nothing.
+  Also: three identical monitors on one MST hub, plugged in together and one at
+  a time, each lit with one window and no crash — the engine now places a
+  connector no layout names past everything placed rather than at `(0, 0)`,
+  and counts a window as its display's while its page loads, but nothing here
+  has watched that on a desk.
 - **The first real `./scripts/dev-shell.sh <name>`.** Its reload is asserted
   against a `domicile` the test writes — `scripts/test-dev-shell.sh` drives the
   watch loop, the coalescing and a refusal — so what is left is a real engine
