@@ -40,7 +40,8 @@ ControlChannel::ControlChannel(
     PointerWarpSink warp_sink,
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
-    const std::string& screen)
+    const std::string& screen,
+    const Page& page)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
@@ -59,6 +60,7 @@ ControlChannel::ControlChannel(
   // thread, in the guest's delegate -- so what it is handed is posted back
   // here, where `client_` is bound and where this object may be touched at all.
   channel_ = ShortcutRegistry::Get().AddChannel(
+      page,
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverShortcutNow, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
@@ -1082,7 +1084,8 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
-                        const std::string& screen) {
+                        const std::string& screen,
+                        const Page& page) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kDomicileControlSocketSwitch);
@@ -1099,7 +1102,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
                      std::move(warp_sink), std::move(theme_sink),
-                     std::move(extensions_sink), screen);
+                     std::move(extensions_sink), screen, page);
 }
 
 }  // namespace domicile

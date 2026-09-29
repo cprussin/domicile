@@ -79,13 +79,16 @@ class ControlChannel : public mojom::ControlChannel {
   // `screen` is the display this page's window covers, by the name the
   // compositor describes it under -- `drm-<id>` for the engine's own displays.
   // Empty where the window is the whole desktop, which is a nested run.
+  // `page` is the frame the channel was bound for, which is what a chord
+  // pressed in one of its `<webview>`s is delivered by -- see ShortcutRegistry.
   ControlChannel(const std::string& socket_path,
                  mojo::PendingReceiver<mojom::ControlChannel> receiver,
                  KeymapSink keymap_sink,
                  PointerWarpSink warp_sink,
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
-                 const std::string& screen);
+                 const std::string& screen,
+                 const Page& page);
 
   ControlChannel(const ControlChannel&) = delete;
   ControlChannel& operator=(const ControlChannel&) = delete;
@@ -234,7 +237,8 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
-                        const std::string& screen);
+                        const std::string& screen,
+                        const Page& page);
 
 }  // namespace domicile
 
