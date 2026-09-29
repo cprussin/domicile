@@ -22,6 +22,10 @@ namespace domicile {
 //                                 tab the desk gains
 //   tabs.remove                   the shell, as `domicile-close`. Answered at
 //                                 once: the shell is asked, not waited for
+//   tabs.setZoom, getZoom         the guest's zoom, as its element's setZoom
+//                                 sets it: per site, through HostZoomMap
+//   tabs.getZoomSettings,         automatic and per-origin, the guest's one
+//   setZoomSettings               mode; setting any other is refused
 //   windows.get, getCurrent,      the desk, which is the one window
 //   getLastFocused, getAll
 //   RefusedOnDesk()               `not supported on a Domicile desk`
