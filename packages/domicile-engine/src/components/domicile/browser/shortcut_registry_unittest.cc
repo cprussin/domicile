@@ -20,14 +20,19 @@ Chord AltTab() {
                /*meta=*/false};
 }
 
+// The shell's page on the first monitor, and the one on the second.
+constexpr Page kLeft{/*process=*/1, /*frame=*/1};
+constexpr Page kRight{/*process=*/2, /*frame=*/1};
+
 // A channel that keeps what it was told, in order. Registered against a
 // registry built on the stack rather than the process-wide one: what is under
 // test here is the matching and the bookkeeping, and neither wants a singleton
 // to be reset between tests.
 class RecordingChannel {
  public:
-  explicit RecordingChannel(ShortcutRegistry& registry)
+  explicit RecordingChannel(ShortcutRegistry& registry, Page page = kLeft)
       : id_(registry.AddChannel(
+            page,
             base::BindRepeating(&RecordingChannel::OnShortcut,
                                 base::Unretained(this)),
             base::BindRepeating(&RecordingChannel::OnModifiers,
@@ -50,7 +55,7 @@ TEST(ShortcutRegistryTest, AKeyNobodyClaimedIsNotTheDesktops) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
 
-  EXPECT_FALSE(registry.Press(AltTab()));
+  EXPECT_FALSE(registry.Press(AltTab(), kLeft));
   EXPECT_TRUE(channel.presses().empty());
 }
 
@@ -59,7 +64,7 @@ TEST(ShortcutRegistryTest, AClaimedChordFiresOnTheChannelThatClaimedIt) {
   RecordingChannel channel(registry);
   registry.Grab(AltTab());
 
-  EXPECT_TRUE(registry.Press(AltTab()));
+  EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   ASSERT_EQ(1u, channel.presses().size());
   EXPECT_EQ(AltTab(), channel.presses()[0]);
 }
@@ -75,13 +80,16 @@ TEST(ShortcutRegistryTest, AChordIsEveryModifierAndNotJustTheKey) {
 
   EXPECT_FALSE(registry.Press(
       Chord{kTab, /*alt=*/false, /*ctrl=*/false, /*shift=*/false,
-            /*meta=*/false}));
+            /*meta=*/false},
+      kLeft));
   EXPECT_FALSE(registry.Press(
       Chord{kTab, /*alt=*/true, /*ctrl=*/false, /*shift=*/true,
-            /*meta=*/false}));
+            /*meta=*/false},
+      kLeft));
   EXPECT_FALSE(registry.Press(
       Chord{kEnter, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
-            /*meta=*/false}));
+            /*meta=*/false},
+      kLeft));
   EXPECT_TRUE(channel.presses().empty());
 }
 
@@ -94,7 +102,7 @@ TEST(ShortcutRegistryTest, ClaimingOneChordTwiceIsOneClaim) {
   registry.Grab(AltTab());
   registry.Grab(AltTab());
 
-  EXPECT_TRUE(registry.Press(AltTab()));
+  EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   EXPECT_EQ(1u, channel.presses().size());
 }
 
@@ -109,8 +117,23 @@ TEST(ShortcutRegistryTest, AChannelThatLeftIsToldNothing) {
 
   // Still the desktop's key -- the claim outlives the channel that made it,
   // which is what stops a reload from handing chords back to the focused page.
-  EXPECT_TRUE(registry.Press(AltTab()));
+  EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   EXPECT_TRUE(channel.presses().empty());
+}
+
+// A DESK OF SEVERAL MONITORS IS SEVERAL PAGES, one channel each, and a press
+// in a browser window is one press: told to every page, every page ran it, and
+// one Meta+Return opened a terminal per monitor. So it goes to the page whose
+// <webview> heard it, which is also the page the keys went to.
+TEST(ShortcutRegistryTest, AChordIsToldOnlyToThePageThatHeardIt) {
+  ShortcutRegistry registry;
+  RecordingChannel left(registry, kLeft);
+  RecordingChannel right(registry, kRight);
+  registry.Grab(AltTab());
+
+  EXPECT_TRUE(registry.Press(AltTab(), kRight));
+  EXPECT_TRUE(left.presses().empty());
+  EXPECT_EQ(1u, right.presses().size());
 }
 
 // Modifiers are a state, not a stream: the shell re-renders on every one it is
