@@ -2419,7 +2419,7 @@ describe("the launcher", () => {
   });
 
   it("shows the files the host answered with", async () => {
-    renderShell();
+    const { unmount } = renderShell();
     press("space");
 
     await homeHolds("Notes/today.org", "todo.txt");
@@ -2430,6 +2430,10 @@ describe("the launcher", () => {
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
     ).toStrictEqual(["Notestoday.org", "todo.txt"]);
+    // Taken down here rather than by the shared `afterEach`: the highlight
+    // settles into a preview on a timer, and one that comes due between this
+    // test and its cleanup updates the panel outside `act`.
+    unmount();
   });
 
   it("opens a file with the user's default application and puts the panel away", async () => {

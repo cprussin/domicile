@@ -11,17 +11,15 @@ import { mountPoint } from "./mount-point";
 // What matters about it is the absence: a `<body>` with a script in it and
 // nothing else. `shell-document.ts` says so in prose ("what is in it is only
 // what a desktop cannot do without") and the shape below is that list.
-const domicilesDocument = () => {
-  const written = document.implementation.createHTMLDocument("Domicile");
-  // Built as a node rather than parsed from a string: the body Domicile writes
-  // holds a script tag, and handing that to `innerHTML` makes happy-dom's
-  // parser complain about a detached document on every run.
-  const loads = written.createElement("script");
-  loads.setAttribute("src", "shell.js");
-  loads.setAttribute("type", "module");
-  written.body.append(loads);
-  return written;
-};
+//
+// Parsed, because a parsed document never runs its scripts. Built node by node
+// with `createHTMLDocument`, happy-dom tries to load the script the moment it
+// is appended, and logs that it cannot on every run.
+const domicilesDocument = () =>
+  new DOMParser().parseFromString(
+    `<!doctype html><title>Domicile</title><body><script src="shell.js" type="module"></script></body>`,
+    "text/html",
+  );
 
 describe("mountPoint", () => {
   // THE BUG THIS EXISTS FOR. The entry point used to be

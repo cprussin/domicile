@@ -1,15 +1,24 @@
 import { afterEach, expect } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
+import { registerAppElement } from "./app-element";
 import { registerNodeInspection } from "./node-inspection";
 
 // `register()` has to run before `@testing-library/jest-dom` and
 // `@testing-library/react` load, because both access DOM globals when their
 // modules evaluate. Static imports are hoisted above this call, so they are
 // deferred to dynamic imports.
-GlobalRegistrator.register();
+//
+// Frames are left at the address they were sent to rather than fetched: what
+// a shell puts in one is a `domicile://` page only the engine serves, and
+// fetching it is I/O a unit test must not do — which happy-dom fails at, and
+// logs, on every frame a test renders.
+GlobalRegistrator.register({
+  settings: { navigation: { disableChildFrameNavigation: true } },
+});
 
 registerNodeInspection();
+registerAppElement();
 
 const { default: _, ...matchers } = await import(
   "@testing-library/jest-dom/matchers"

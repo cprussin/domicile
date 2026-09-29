@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { standaloneThemeSource } from "./standalone-theme-source";
@@ -201,8 +201,12 @@ describe(ThemeProvider, () => {
         ]),
       ).toBe("held");
 
-      turning.done?.();
-      await update;
+      // Letting the windows finish ends the wipe, and the end of the wipe is
+      // what commits the theme -- a state update, so it goes inside `act`.
+      await act(async () => {
+        turning.done?.();
+        await update;
+      });
     });
   });
 });
