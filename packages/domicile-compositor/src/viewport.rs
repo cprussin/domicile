@@ -55,9 +55,32 @@ pub fn surface_size(
     crate::scale::logical_size(buffer, buffer_scale)
 }
 
+/// The part of a `buffer`-pixel buffer at `buffer_scale` that a viewport's
+/// `source` names, in the buffer's pixels, or `None` where it names none.
+///
+/// Chromium relies on it mid-resize: it keeps drawing into the buffer it had,
+/// larger than the window now is, and names the part that is this frame. The
+/// rest is stale, and showing it stretches the window over it.
+///
+/// A source arrives from a client, so it is not trusted: one that is empty or
+/// reaches past the buffer is a protocol error, and is treated as none.
+pub fn source_pixels(
+    buffer: (u32, u32),
+    buffer_scale: i32,
+    source: Option<(f64, f64, f64, f64)>,
+) -> Option<(f64, f64, f64, f64)> {
+    let scale = f64::from(buffer_scale.max(1));
+    let (x, y, width, height) = source?;
+    let (x, y, width, height) = (x * scale, y * scale, width * scale, height * scale);
+    let fits = |start: f64, length: f64, pixels: u32| {
+        start >= 0.0 && length > 0.0 && start + length <= f64::from(pixels)
+    };
+    (fits(x, width, buffer.0) && fits(y, height, buffer.1)).then_some((x, y, width, height))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::surface_size;
+    use super::{source_pixels, surface_size};
 
     #[test]
     fn a_surface_with_no_viewport_is_its_buffer_over_its_scale() {
@@ -93,5 +116,34 @@ mod tests {
         // required to keep the protocol.
         assert_eq!(surface_size((800, 600), 1, Some((0, 0))), (800, 600));
         assert_eq!(surface_size((800, 600), 1, Some((-4, 300))), (800, 600));
+    }
+
+    #[test]
+    fn a_source_is_in_the_buffers_pixels_once_scaled() {
+        // Stated in the buffer's logical units, so a scale-2 buffer's source
+        // is twice as many pixels.
+        assert_eq!(
+            source_pixels((1000, 800), 2, Some((10.0, 20.0, 400.0, 300.0))),
+            Some((20.0, 40.0, 800.0, 600.0))
+        );
+        assert_eq!(source_pixels((1000, 800), 1, None), None);
+    }
+
+    #[test]
+    fn a_source_the_buffer_cannot_supply_is_refused_rather_than_believed() {
+        // Empty, or reaching past the buffer: the protocol forbids both, and
+        // a client is not required to keep the protocol.
+        assert_eq!(
+            source_pixels((1000, 800), 1, Some((0.0, 0.0, 0.0, 300.0))),
+            None
+        );
+        assert_eq!(
+            source_pixels((1000, 800), 1, Some((600.0, 0.0, 500.0, 300.0))),
+            None
+        );
+        assert_eq!(
+            source_pixels((1000, 800), 1, Some((-1.0, 0.0, 500.0, 300.0))),
+            None
+        );
     }
 }

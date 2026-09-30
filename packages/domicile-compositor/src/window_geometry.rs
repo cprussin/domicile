@@ -18,6 +18,9 @@
 /// than squeezed into it. A window smaller than its box is still stretched:
 /// a crop cannot add pixels.
 ///
+/// The surface is `source` of the buffer, in its pixels, where a viewport
+/// names one — see `viewport::source_pixels` — and the whole buffer where not.
+///
 /// An empty rectangle is the whole buffer, the engine's own convention and
 /// what a surface with no geometry is. A geometry reaching past the surface is
 /// clipped to it, as xdg-shell says; one that misses it entirely is not a
@@ -27,6 +30,7 @@ pub fn crop(
     configured: Option<(i32, i32)>,
     surface: (u32, u32),
     buffer: (u32, u32),
+    source: Option<(f64, f64, f64, f64)>,
 ) -> (i32, i32, i32, i32) {
     let (surface_width, surface_height) = (surface.0 as i32, surface.1 as i32);
     let (x, y, width, height) = geometry.unwrap_or((0, 0, surface_width, surface_height));
@@ -36,25 +40,31 @@ pub fn crop(
     let (left, top) = (x.max(0), y.max(0));
     let right = x.saturating_add(width).min(surface_width);
     let bottom = y.saturating_add(height).min(surface_height);
-    if right <= left
-        || bottom <= top
-        || (left, top, right, bottom) == (0, 0, surface_width, surface_height)
-    {
-        return (0, 0, 0, 0);
-    }
+    let (source_x, source_y, source_width, source_height) =
+        source.unwrap_or((0.0, 0.0, f64::from(buffer.0), f64::from(buffer.1)));
+    let (left, top, right, bottom) = if right <= left || bottom <= top {
+        (0, 0, surface_width, surface_height)
+    } else {
+        (left, top, right, bottom)
+    };
     // Per axis, because a viewport can scale the two differently.
-    let across = |logical: i32, pixels: u32, units: i32| {
-        (f64::from(logical) * f64::from(pixels) / f64::from(units)).round() as i32
+    let across = |logical: i32, origin: f64, pixels: f64, units: i32| {
+        (origin + f64::from(logical) * pixels / f64::from(units)).round() as i32
     };
     let (x0, y0) = (
-        across(left, buffer.0, surface_width),
-        across(top, buffer.1, surface_height),
+        across(left, source_x, source_width, surface_width),
+        across(top, source_y, source_height, surface_height),
     );
     let (x1, y1) = (
-        across(right, buffer.0, surface_width),
-        across(bottom, buffer.1, surface_height),
+        across(right, source_x, source_width, surface_width),
+        across(bottom, source_y, source_height, surface_height),
     );
-    (x0, y0, x1 - x0, y1 - y0)
+    let whole = (x0, y0, x1, y1) == (0, 0, buffer.0 as i32, buffer.1 as i32);
+    if whole {
+        (0, 0, 0, 0)
+    } else {
+        (x0, y0, x1 - x0, y1 - y0)
+    }
 }
 
 /// Where a point `(x, y)` in the `<app>` element's box is on the surface: the
@@ -70,14 +80,14 @@ mod tests {
 
     #[test]
     fn a_surface_with_no_geometry_is_shown_whole() {
-        assert_eq!(crop(None, None, (800, 600), (800, 600)), (0, 0, 0, 0));
+        assert_eq!(crop(None, None, (800, 600), (800, 600), None), (0, 0, 0, 0));
     }
 
     #[test]
     fn a_shadow_outside_the_geometry_is_cropped_away() {
         // Bitwarden's shape: a 25-unit shadow on every side of the window.
         assert_eq!(
-            crop(Some((25, 25, 800, 600)), None, (850, 650), (850, 650)),
+            crop(Some((25, 25, 800, 600)), None, (850, 650), (850, 650), None),
             (25, 25, 800, 600)
         );
     }
@@ -87,7 +97,13 @@ mod tests {
         // A scale-2 buffer, or one a viewport scales: the geometry is logical
         // and the crop is not.
         assert_eq!(
-            crop(Some((25, 25, 800, 600)), None, (850, 650), (1700, 1300)),
+            crop(
+                Some((25, 25, 800, 600)),
+                None,
+                (850, 650),
+                (1700, 1300),
+                None
+            ),
             (50, 50, 1600, 1200)
         );
     }
@@ -96,12 +112,18 @@ mod tests {
     fn a_geometry_past_the_surface_is_clipped_to_it() {
         // xdg-shell: "the geometry is clipped to the extents of the surface".
         assert_eq!(
-            crop(Some((-10, 20, 900, 600)), None, (800, 600), (800, 600)),
+            crop(
+                Some((-10, 20, 900, 600)),
+                None,
+                (800, 600),
+                (800, 600),
+                None
+            ),
             (0, 20, 800, 580)
         );
         // And one that misses it is no window: shown whole, not as nothing.
         assert_eq!(
-            crop(Some((900, 0, 100, 100)), None, (800, 600), (800, 600)),
+            crop(Some((900, 0, 100, 100)), None, (800, 600), (800, 600), None),
             (0, 0, 0, 0)
         );
     }
@@ -112,7 +134,7 @@ mod tests {
         // gets a 680x500 frame. Squeezed, the window warps; cropped, it is
         // cut off at the box's edge, as on any other desktop.
         assert_eq!(
-            crop(None, Some((640, 420)), (680, 500), (680, 500)),
+            crop(None, Some((640, 420)), (680, 500), (680, 500), None),
             (0, 0, 640, 420)
         );
         // From the geometry's origin, in the buffer's pixels.
@@ -121,13 +143,53 @@ mod tests {
                 Some((25, 25, 680, 500)),
                 Some((640, 420)),
                 (730, 550),
-                (1460, 1100)
+                (1460, 1100),
+                None
             ),
             (50, 50, 1280, 840)
         );
         // A box the window fits in crops nothing.
         assert_eq!(
-            crop(None, Some((1000, 1000)), (800, 600), (800, 600)),
+            crop(None, Some((1000, 1000)), (800, 600), (800, 600), None),
+            (0, 0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn a_viewport_source_is_the_part_of_the_buffer_the_surface_is() {
+        // Chromium mid-resize: it keeps drawing into the buffer it had,
+        // oversized, and names the valid part with `set_source`. The rest is
+        // stale, so it is not shown, and the surface maps onto the part.
+        assert_eq!(
+            crop(
+                None,
+                Some((1008, 709)),
+                (1008, 709),
+                (2304, 1536),
+                Some((0.0, 0.0, 2016.0, 1418.0))
+            ),
+            (0, 0, 2016, 1418)
+        );
+        // A geometry inside it is from the source's origin, at its scale.
+        assert_eq!(
+            crop(
+                Some((10, 10, 400, 300)),
+                None,
+                (420, 320),
+                (1000, 1000),
+                Some((100.0, 50.0, 840.0, 640.0))
+            ),
+            (120, 70, 800, 600)
+        );
+        // A source that is the whole buffer crops nothing.
+        assert_eq!(
+            crop(
+                None,
+                None,
+                (400, 300),
+                (800, 600),
+                Some((0.0, 0.0, 800.0, 600.0))
+            ),
             (0, 0, 0, 0)
         );
     }
