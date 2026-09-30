@@ -90,6 +90,7 @@ on:
       - packages/domicile-engine/**
       - "!packages/domicile-engine/**/*.md"
       - "!packages/domicile-engine/engine-release.nix"
+      - "!packages/domicile-engine/engine-official.nix"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
       - scripts/check.sh
@@ -100,6 +101,7 @@ on:
       - packages/domicile-engine/**
       - "!packages/domicile-engine/**/*.md"
       - "!packages/domicile-engine/engine-release.nix"
+      - "!packages/domicile-engine/engine-official.nix"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
       - scripts/check.sh

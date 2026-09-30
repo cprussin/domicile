@@ -154,7 +154,14 @@
       # a 517 MB binary buys nothing here. `autoPatchelfIgnoreMissingDeps` is
       # not set: a library Chromium needs and this list lacks should fail the
       # build rather than the desktop.
-      engineRelease = import ./packages/domicile-engine/engine-release.nix;
+      # The production build when there is one of this series, the checked
+      # build otherwise. See engine-pin.nix.
+      engineRelease = import ./packages/domicile-engine/engine-pin.nix {
+        checked = import ./packages/domicile-engine/engine-release.nix;
+        official =
+          let file = ./packages/domicile-engine/engine-official.nix;
+          in if builtins.pathExists file then import file else null;
+      };
       domicileEngine = pkgs.stdenv.mkDerivation {
         pname = "domicile-engine";
         version = builtins.substring 0 7 engineRelease.commit;

@@ -9,8 +9,9 @@ name: Engine release
 #
 # NIGHTLY, NOT PER MERGE. It ran on every engine merge to main: 10-12 official
 # builds in 24h, 9.4 runner-hours of Build, one of crux's two runners ~40% of
-# the day, ~2.2h of runner queue for pull requests' engine jobs. Nothing pins
-# `engine-official-*`, so no merge needs a build of its own. A schedule builds
+# the day, ~2.2h of runner queue for pull requests' engine jobs. Main pins
+# `engine-official-*` only after the fact, and runs the checked engine until
+# then (engine-pin.nix), so no merge needs a build of its own. A schedule builds
 # the newest main once a night; a dispatch builds it now. The concurrency group
 # below holds one run and one pending, and a newer pending run replaces an
 # older one, so a dispatch during a build is one build after it, of the newest
@@ -23,8 +24,9 @@ name: Engine release
 # loses only the steps that were running.
 #
 # It publishes as `engine-official-`, beside what engine.yml publishes rather
-# than over it, and nothing pins it yet: this is how long it takes, measured,
-# before anything depends on it.
+# than over it, and then lands `engine-official.nix` on main through a pull
+# request of its own (engine-official-repin.sh). The flake runs that engine
+# while it is of the series the checked pin names; see engine-pin.nix.
 #
 # The engine workflow proves a change; this publishes the result of it. They
 # are separate because they want different builds: that one is a component
@@ -55,9 +57,11 @@ concurrency:
   group: engine-release-${{ github.ref }}
   cancel-in-progress: false
 
-# To create the release and upload to it.
+# To create the release and upload to it, and to open and merge the pull
+# request that pins it.
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -285,6 +289,19 @@ jobs:
         run: |
           set -euo pipefail
           .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
+
+      # Only from main: a tag's release is pinned by hand, and a dispatch on a
+      # branch is not what main runs.
+      - name: Point main's flake at this engine
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
+        run: |
+          set -euo pipefail
+          identity="$(.github/scripts/engine-series-stamp.sh identity)"
+          DOMICILE_ENGINE_TAG="engine-official-s${identity:0:12}" \
+            .github/scripts/engine-official-repin.sh
 
       - name: What the guard wrote down
         if: ${{ failure() }}
