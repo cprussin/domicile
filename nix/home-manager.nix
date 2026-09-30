@@ -274,6 +274,16 @@ in {
                   description = "What choosing it opens.";
                   type = lib.types.str;
                 };
+                shortcodes = lib.mkOption {
+                  description = ''
+                    Words a search can hold, each with the URL choosing the
+                    bookmark opens instead of `url`. The word is not matched
+                    against the name or URL.
+                  '';
+                  type = lib.types.attrsOf lib.types.str;
+                  default = {};
+                  example = {"!work" = "https://calendar.google.com?authuser=me@work.example";};
+                };
               };
             });
             default = [];
@@ -281,6 +291,7 @@ in {
               {
                 name = "Calendar";
                 url = "https://calendar.google.com";
+                shortcodes."!work" = "https://calendar.google.com?authuser=me@work.example";
               }
             ];
           };

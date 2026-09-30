@@ -485,7 +485,8 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
     );
 }
 
-/// A search offers the desk's bookmarks beside its applications.
+/// A search offers the desk's bookmarks beside its applications, a shortcode
+/// in it picking the URL its bookmark names.
 #[test]
 fn a_search_for_applications_offers_the_bookmarks_it_matches() {
     let config = format!(
@@ -497,6 +498,7 @@ url = \"https://mail.example.com\"
 [[applications.bookmarks]]
 name = \"Calendar\"
 url = \"https://calendar.example.com\"
+shortcodes = {{ \"!work\" = \"https://calendar.example.com?user=work\" }}
 "
     );
 
@@ -504,7 +506,7 @@ url = \"https://calendar.example.com\"
     let mut chrome = compositor.chrome();
     chrome
         .say(&ChromeMessage::SearchApps {
-            query: "cal".into(),
+            query: "cal !work".into(),
         })
         .expect("it asks");
 
@@ -518,7 +520,7 @@ url = \"https://calendar.example.com\"
         bookmarks,
         vec![Bookmark {
             name: "Calendar".into(),
-            url: "https://calendar.example.com".into(),
+            url: "https://calendar.example.com?user=work".into(),
         }]
     );
 }

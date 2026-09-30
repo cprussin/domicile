@@ -1,24 +1,33 @@
 //! What a launcher is offered of the desk's bookmarks.
 
-use domicile_host::bookmarks::find;
+use std::collections::BTreeMap;
+
+use domicile_host::bookmarks::{find, Offered};
 use domicile_protocol::Bookmark;
 
-fn bookmark(name: &str, url: &str) -> Bookmark {
-    Bookmark {
+fn bookmark(name: &str, url: &str) -> Offered {
+    Offered {
         name: name.into(),
         url: url.into(),
+        shortcodes: BTreeMap::new(),
     }
 }
 
-fn offered() -> Vec<Bookmark> {
+fn offered() -> Vec<Offered> {
     vec![
         bookmark("Mail", "https://mail.google.com"),
-        bookmark("Calendar", "https://calendar.google.com"),
+        Offered {
+            shortcodes: BTreeMap::from([(
+                "!work".into(),
+                "https://calendar.google.com?authuser=work".into(),
+            )]),
+            ..bookmark("Calendar", "https://calendar.google.com")
+        },
         bookmark("Code Review", "https://github.com/pulls"),
     ]
 }
 
-fn names(found: &[&Bookmark]) -> Vec<String> {
+fn names(found: &[Bookmark]) -> Vec<String> {
     found.iter().map(|found| found.name.clone()).collect()
 }
 
@@ -45,5 +54,27 @@ fn no_more_than_the_limit_is_offered() {
     assert_eq!(
         names(&find(&offered(), "", 2)),
         vec!["Calendar", "Code Review"]
+    );
+}
+
+#[test]
+fn a_bookmark_without_a_shortcode_offers_its_url() {
+    assert_eq!(
+        find(&offered(), "cal", 10),
+        vec![Bookmark {
+            name: "Calendar".into(),
+            url: "https://calendar.google.com".into(),
+        }]
+    );
+}
+
+#[test]
+fn a_shortcode_in_the_query_offers_its_url_and_is_not_matched_as_a_word() {
+    assert_eq!(
+        find(&offered(), "cal !WORK", 10),
+        vec![Bookmark {
+            name: "Calendar".into(),
+            url: "https://calendar.google.com?authuser=work".into(),
+        }]
     );
 }
