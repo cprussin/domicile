@@ -173,6 +173,22 @@ fn a_grabbing_popup_is_said_to_grab_and_takes_the_keyboard() {
     );
 }
 
+/// A menu with the keyboard leaves its window the activated one: the window
+/// is still what is being used, and a toolkit closes its menus when its window
+/// stops being active.
+#[test]
+fn a_grabbing_popup_keeps_its_window_activated() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let _chrome = compositor.chrome();
+    let mut client = compositor.client_with("a window with a menu", &["--popup-grab"]);
+
+    assert!(
+        client.wait_for_trace("activated(true)", 1),
+        "the window whose menu has the keyboard was never activated:\n{}",
+        client.trace()
+    );
+}
+
 /// The keyboard moving anywhere but the menu's own window dismisses the menu,
 /// as a click elsewhere does on any desktop. Moving it to that window does
 /// not: a press on the menu is a press on its window to a shell, and a menu
