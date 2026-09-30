@@ -537,8 +537,7 @@ costs nothing.
   non-official build with DCHECKs on, EXPENSIVE_DCHECKs included, because it is
   the same `out/Release` every pull request's checks run against. The plan is
   two builds: pull requests keep that one, and an official build (PGO, ThinLTO,
-  no DCHECKs) runs after merge, always of the newest `main`, and publishes what
-  users get. It is hours long, so it must never hold the slot against a pull
+  no DCHECKs) runs nightly on the newest `main`, and publishes what users get. It is hours long, so it must never hold the slot against a pull
   request: a waiter now leaves a note beside the slot, and a holder can ask
   whether anybody is `wanted` and `yield` to them, resuming its build after.
   `engine-release.yml` is that build now, publishing as `engine-official-`;
