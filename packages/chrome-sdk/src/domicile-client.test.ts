@@ -870,6 +870,7 @@ describe("DomicileClient", () => {
       icon: "",
       id: "editor.desktop",
       name: "Editor",
+      preview: "",
     };
 
     /** The compositor answering `query`, as the engine dispatches it. */
@@ -894,7 +895,7 @@ describe("DomicileClient", () => {
       answer("e", []);
 
       expect(await longer).toStrictEqual({
-        apps: [{ ...editor, icon: undefined }],
+        apps: [{ ...editor, icon: undefined, preview: undefined }],
         bookmarks: [],
         query: "ed",
       });

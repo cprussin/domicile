@@ -14,9 +14,14 @@ const EDITOR: DesktopEntry = {
   icon: undefined,
   id: "gedit.desktop",
   name: "Text Editor",
+  preview: undefined,
 };
 
-const MAIL: Bookmark = { name: "Mail", url: "https://mail.example.com" };
+const MAIL: Bookmark = {
+  label: undefined,
+  name: "Mail",
+  url: "https://mail.example.com",
+};
 
 /** The host's search for applications, answered in whatever order a test says. */
 const host = () => {

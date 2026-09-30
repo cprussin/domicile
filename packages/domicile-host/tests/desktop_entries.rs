@@ -47,6 +47,7 @@ mod parsing {
              Comment = Browse the web\n\
              Exec=firefox %u\n\
              Icon=firefox\n\
+             X-Domicile-Preview=/usr/share/firefox/preview.svg\n\
              [Desktop Action new-window]\n\
              Name=New Window\n\
              Exec=firefox --new-window\n",
@@ -61,9 +62,14 @@ mod parsing {
                 comment: "Browse the web".into(),
                 command: vec!["firefox".into()],
                 icon: None,
+                preview: None,
             }
         );
         assert_eq!(parsed.icon_name(), Some("firefox"));
+        assert_eq!(
+            parsed.preview_name(),
+            Some("/usr/share/firefox/preview.svg")
+        );
     }
 
     #[test]

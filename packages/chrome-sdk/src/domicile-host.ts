@@ -400,6 +400,12 @@ export type DomicileDesktopEntry = {
    * compositor did not find.
    */
   readonly icon: string;
+
+  /**
+   * The picture the entry names for a launcher's preview,
+   * `X-Domicile-Preview`, the same way as {@link icon}.
+   */
+  readonly preview: string;
 };
 
 /** A URL the desk offers by name, from its config. */
@@ -409,6 +415,12 @@ export type DomicileBookmark = {
 
   /** What choosing it opens; the shell opens it itself. */
   readonly url: string;
+
+  /**
+   * Which of the bookmark's URLs `url` is, or empty when the desk did not
+   * say.
+   */
+  readonly label: string;
 };
 
 /**

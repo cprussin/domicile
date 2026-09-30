@@ -202,20 +202,25 @@ enum TrayAction {
 //
 // `icon` is a `data:` URL, for the reason a song's `cover` is one: the page
 // may draw what the compositor read and cannot read it for itself. Empty for
-// an entry whose icon the compositor did not find.
+// an entry whose icon the compositor did not find. `preview` is the picture
+// the entry names for a launcher's preview, the same way and empty the same
+// way.
 struct DesktopEntry {
   string id;
   string name;
   string comment;
   array<string> command;
   string icon;
+  string preview;
 };
 
 // A URL the desk offers by name, from its config: the page opens `url`
-// itself rather than handing it to a program.
+// itself rather than handing it to a program. `label` says which of the
+// bookmark's URLs `url` is, and is empty when the desk did not say.
 struct Bookmark {
   string name;
   string url;
+  string label;
 };
 
 // Page -> browser -> compositor.
