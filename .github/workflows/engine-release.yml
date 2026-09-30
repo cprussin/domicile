@@ -4,13 +4,18 @@ name: Engine release
 #
 # THE PRODUCTION BUILD: official, so PGO and ThinLTO as in Chrome, and no
 # DCHECKs (`DOMICILE_ENGINE_BUILD=official`, see engine-release-build.sh). It
-# runs after a merge to main rather than on a pull request, because it is hours
-# long and a pull request's checks are the checked build's in engine.yml.
+# runs nightly off main rather than on a pull request, because it is hours long
+# and a pull request's checks are the checked build's in engine.yml.
 #
-# ALWAYS THE NEWEST MAIN. The concurrency group below holds one run and one
-# pending, and a newer pending run replaces an older one, so five merges during
-# a build are one build after it, of the fifth. Every merge ships in the next
-# release rather than each in its own.
+# NIGHTLY, NOT PER MERGE. It ran on every engine merge to main: 10-12 official
+# builds in 24h, 9.4 runner-hours of Build, one of crux's two runners ~40% of
+# the day, ~2.2h of runner queue for pull requests' engine jobs. Nothing pins
+# `engine-official-*`, so no merge needs a build of its own. A schedule builds
+# the newest main once a night; a dispatch builds it now. The concurrency group
+# below holds one run and one pending, and a newer pending run replaces an
+# older one, so a dispatch during a build is one build after it, of the newest
+# main, and a running build (maybe mid-publish) is never canceled. See
+# scripts/test-engine-release-coalesces.sh.
 #
 # IT NEVER HOLDS THE COMPILE SLOT AGAINST A PULL REQUEST. The build runs under
 # engine-yielding-build.sh, which stops it whenever somebody is waiting for the
@@ -40,15 +45,10 @@ name: Engine release
 on:
   push:
     tags: [engine-v*]
-    branches: [main]
-    # engine.yml's filter, which is what decides whether a merge moved the
-    # engine; GitHub does not apply it to a tag push.
-    paths:
-      - packages/domicile-engine/**
-      - "!packages/domicile-engine/**/*.md"
-      - "!packages/domicile-engine/engine-release.nix"
-      - .github/workflows/engine-release.yml
-      - .github/scripts/engine-*.sh
+  # 09:17 UTC, the small hours in the Americas, when fewest pull requests want
+  # the compile slot. Off the hour, where scheduled runs are delayed most.
+  schedule:
+    - cron: "17 9 * * *"
   workflow_dispatch:
 
 concurrency:

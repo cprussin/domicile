@@ -348,9 +348,9 @@ are, and both of these have already happened rather than been imagined:
   *except* Markdown under it and `engine-release.nix` — prose cannot change
   what the build produces and the job never reads the repin, and the exclusions
   are asserted by `/scripts/test-engine-path-filter.sh`. `engine-release.yml`
-  fires on an `engine-v*` tag or a dispatch. So most pushes to the fork take
-  the tree, and uncommitted work in the checkout is taken without warning. Take
-  the lock around builds:
+  fires on an `engine-v*` tag, nightly or a dispatch. So most pushes to the
+  fork take the tree, and uncommitted work in the checkout is taken without
+  warning. Take the lock around builds:
   `.github/scripts/engine-tree-lock.sh take /build/chromium/src "<who>"`, and
   drop it with the same owner string when you are done. **The lock is at
   `/build/.domicile-tree-lock-<tree>`, not inside the tree** — one per tree,
