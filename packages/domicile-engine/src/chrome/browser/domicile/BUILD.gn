@@ -19,6 +19,8 @@ source_set("domicile") {
     "domicile_command_socket.h",
     "domicile_desk.cc",
     "domicile_desk.h",
+    "domicile_desk_presenters.cc",
+    "domicile_desk_presenters.h",
     "domicile_desk_functions.cc",
     "domicile_desk_functions.h",
     "domicile_extension_installer.cc",
@@ -101,5 +103,11 @@ source_set("domicile") {
     # label for it and `ui/gfx/native_widget_types.h` is the wrong header --
     # both were true of a Chromium older than this pin, and the build said so.
     "//ui/gfx:native_ui_types",
+    # One page for the desk: its geometry, and a window on every other display
+    # whose layers show the page's (docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
+    "//components/domicile:desk_geometry",
+    "//ui/compositor",
+    "//ui/ozone",
+    "//ui/views",
   ]
 }

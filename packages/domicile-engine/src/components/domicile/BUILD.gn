@@ -65,6 +65,22 @@ source_set("shell_windows") {
   public_deps = [ "//ui/display" ]
 }
 
+# The one page a desk is: its box, its scale, which display hosts it, and what
+# it is told it is on. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md. A target
+# of its own for :shell_windows' reason: the arithmetic is here with its tests,
+# and the windows it places are in //chrome/browser/domicile.
+source_set("desk_geometry") {
+  sources = [
+    "browser/desk_geometry.cc",
+    "browser/desk_geometry.h",
+  ]
+
+  public_deps = [
+    "//ui/display",
+    "//ui/gfx/geometry",
+  ]
+}
+
 # Where the cursor goes when a page asks for it to be moved.
 #
 # A target of its own beside :shell_windows for the same reason that one is
@@ -422,6 +438,7 @@ source_set("unit_tests") {
   sources = [
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
+    "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
     "browser/display_list_unittest.cc",
@@ -458,6 +475,7 @@ source_set("unit_tests") {
     ":color_scheme",
     ":command_protocol",
     ":cursor_shape",
+    ":desk_geometry",
     ":desk_tabs",
     ":desktop_prefs",
     ":display_transform",
