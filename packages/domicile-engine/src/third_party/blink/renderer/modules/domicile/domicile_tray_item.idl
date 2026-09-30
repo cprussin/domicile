@@ -1,0 +1,26 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// One icon in the system tray.
+//
+// An interface rather than a dictionary for DomicileClipboardEntry's reason:
+// WebIDL will not have a dictionary as the element type of an attribute's
+// array, and these are read off a DomicileTrayEvent.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileTrayItem {
+  // What DomicileHost.activateTrayItem() names this icon by: the bus name the
+  // application answers on and the object path it answers at, written together.
+  readonly attribute DOMString id;
+
+  // What the icon is, in words: its tooltip's title, its title, or its id, the
+  // first the application said. Never empty.
+  readonly attribute DOMString title;
+
+  // The picture, as a `data:` URL to draw, or empty for one the compositor
+  // could not draw. A URL rather than a path for DomicileDesktopEntry.icon's
+  // reason: the page may draw what the compositor read and cannot read it.
+  readonly attribute DOMString icon;
+};

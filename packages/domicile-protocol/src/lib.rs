@@ -313,6 +313,18 @@ pub enum ChromeMessage {
     /// The passphrase is a [`Passphrase`] rather than a `String` so that it
     /// cannot be printed by accident — see that type.
     Unlock { passphrase: Passphrase },
+
+    /// A click on one of the system tray's icons: `id` is a
+    /// [`TrayItem::id`] from the last [`HostMessage::Tray`], and `action`
+    /// which button it was.
+    ///
+    /// Answered with nothing. What the click does is the application's — a
+    /// window raised, a menu of its own opened — and a tray whose icon
+    /// changes because of it hears so in the next [`HostMessage::Tray`]. An id
+    /// that names nothing is an icon whose application went away while the
+    /// click was in flight, which is the one way to reach it and says nothing
+    /// worth answering.
+    ActivateTrayItem { id: String, action: TrayAction },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -781,6 +793,26 @@ pub enum HostMessage {
     /// [`HostMessage::Theme`], because the browser has no other way to learn
     /// what its pages should be drawn in.
     WindowsTheme { theme: Theme },
+
+    /// The system tray: every application showing an icon in it, in the
+    /// order they registered.
+    ///
+    /// **StatusNotifierItem, over the session bus.** That is the tray every
+    /// toolkit on a Wayland desktop speaks — the X11 `_NET_SYSTEM_TRAY`
+    /// embedding cannot exist without X — and the compositor is the host that
+    /// answers it: it owns `org.kde.StatusNotifierWatcher`, reads each
+    /// item's properties and follows its signals. See `crate::tray` in
+    /// `domicile-compositor`.
+    ///
+    /// **Pushed, like [`HostMessage::Clipboard`], and the whole list every
+    /// time.** Sent whenever an item arrives, leaves or changes how it looks,
+    /// and to a chrome that has just connected. Empty is a desk no application
+    /// has put an icon on, which is an answer — and every desk with no session
+    /// bus, where nothing ever can.
+    ///
+    /// An item that says it is `Passive` is not in the list: the spec's word
+    /// for an icon that has nothing to say right now, which every tray hides.
+    Tray { items: Vec<TrayItem> },
 }
 
 /// An application a desktop entry offers, as a launcher is told about it.
@@ -1029,6 +1061,40 @@ pub enum Theme {
     Light,
 }
 
+/// One icon in the system tray, as a shell is told about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrayItem {
+    /// What [`ChromeMessage::ActivateTrayItem`] names this icon by: the bus
+    /// name the application answers on and the object path it answers at,
+    /// written together.
+    pub id: String,
+    /// What the icon is, in words: its tooltip's title where it has one, its
+    /// `Title` where it does not, and its `Id` where it has neither — so
+    /// never empty, and what a shell labels the icon with.
+    pub title: String,
+    /// The picture, as a `data:` URL a page can draw without reading a file:
+    /// the attention icon when the item needs attention, and its ordinary one
+    /// otherwise. Absent when the compositor found none it could draw, which
+    /// leaves a shell the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+/// Which button clicked a tray icon, as StatusNotifierItem names the three
+/// things one can be asked to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrayAction {
+    /// `Activate`: the primary button, and what the application does by
+    /// default — usually its window, raised.
+    Primary,
+    /// `SecondaryActivate`: the middle button.
+    Secondary,
+    /// `ContextMenu`: the secondary button, which asks the application for a
+    /// menu of its own.
+    Context,
+}
+
 /// Version negotiation failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("incompatible protocol version: host speaks {host}, chrome speaks {chrome}")]
@@ -1084,6 +1150,21 @@ mod wire_names {
             serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
             ChromeMessage::ThemeCaptured {
                 theme: Theme::Light
+            }
+        );
+    }
+
+    /// The exact JSON the SDK sends when a tray icon is clicked, spelled out,
+    /// for [`the_theme_the_sdk_sends_parses`]'s reason.
+    #[test]
+    fn the_tray_click_the_sdk_sends_parses() {
+        let sent =
+            r#"{"type":"activate_tray_item","id":":1.42/StatusNotifierItem","action":"context"}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::ActivateTrayItem {
+                id: ":1.42/StatusNotifierItem".to_string(),
+                action: TrayAction::Context,
             }
         );
     }

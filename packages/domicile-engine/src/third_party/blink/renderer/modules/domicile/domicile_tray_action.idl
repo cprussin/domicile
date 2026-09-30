@@ -1,0 +1,19 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Which button clicked a tray icon: StatusNotifierItem's Activate,
+// SecondaryActivate and ContextMenu, which are the three things an item can be
+// asked to do.
+//
+// An enum rather than a `DOMString` for DomicileTheme's reason: it is
+// *written* -- activateTrayItem() takes it -- and a string would let a shell
+// hand the compositor a word no item answers, which would travel all the way
+// to the socket before anything asked. The bindings refuse it here instead.
+//
+// ORDER. Written in `mojom::TrayAction`'s, which is numbered by position.
+
+enum DomicileTrayAction {
+  "primary",
+  "secondary",
+  "context",
+};

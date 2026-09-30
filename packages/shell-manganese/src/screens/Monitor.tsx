@@ -1,5 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Extension } from "@domicile/chrome-sdk/extension";
+import type { TrayItem } from "@domicile/chrome-sdk/tray";
 import type { Display } from "@domicile/component-library/display-source";
 import { Screen } from "@domicile/component-library/Screen";
 import { useMemo, useState } from "react";
@@ -35,6 +36,8 @@ type Props = {
   extensions: readonly Extension[];
   /** What the user is holding down, which decides who gets the pointer. */
   modifiers: Modifiers;
+  /** The system tray's icons, for this monitor's bar. */
+  tray: readonly TrayItem[];
   windows: Windows;
 };
 
@@ -60,6 +63,7 @@ export const Monitor = ({
   domicile,
   extensions,
   modifiers,
+  tray,
   windows,
 }: Props) => {
   const geometry = useMemo(() => geometryOf(display, desk), [desk, display]);
@@ -136,6 +140,7 @@ export const Monitor = ({
           act(WindowAction.WorkspaceSelected(name));
         }}
         openedExtension={opened}
+        tray={tray}
         workspaces={workspacesOn(windows, display.name)}
       />
       <Stage

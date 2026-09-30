@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 30 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell has a system tray
+
+A DomicileTrayEvent carries the desk's StatusNotifierItems -- each a
+DomicileTrayItem, an id, a title and a picture -- and activateTrayItem()
+takes an id and a DomicileTrayAction back to the compositor.
+
+The interfaces are new files under src/; what cannot be a new file is a
+name in a generated-bindings list.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 8 ++++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 4 ++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 7c8cbde185..aed9de80ae 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -339,6 +339,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
+@@ -1636,6 +1638,8 @@ generated_enumeration_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
+@@ -2432,6 +2436,10 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 3fff523b79..e2f4b53c6e 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -313,6 +313,10 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_theme.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_theme_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_theme_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_tray_action.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_tray_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_tray_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_tray_item.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_locked_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_locked_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/navigator_domicile.idl",
+-- 
+2.43.0
+

@@ -101,9 +101,11 @@ import {
   popupPlaced,
   shortcut,
   theme,
+  tray,
 } from "./host-message";
 import { claimShortcut } from "./shortcut-claims";
 import type { Theme } from "./theme";
+import type { TrayAction } from "./tray";
 import type { AxisDelta } from "./wheel-axis";
 
 type Handler = (message: never) => void;
@@ -312,6 +314,9 @@ export class DomicileClient {
     });
     host.addEventListener("extensions", (event) => {
       this.#deliver("extensions", extensions(event));
+    });
+    host.addEventListener("tray", (event) => {
+      this.#deliver("tray", tray(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
@@ -632,6 +637,16 @@ export class DomicileClient {
    */
   activateExtension(id: string): void {
     this.#host.activateExtension(id);
+  }
+
+  /**
+   * Click an icon in the system tray: `id` from the last `tray` message, and
+   * which button. There is no answer — what the click does is the
+   * application's, and an icon that changes because of it arrives as the next
+   * `tray` message.
+   */
+  activateTrayItem(id: string, action: TrayAction): void {
+    this.#host.activateTrayItem(id, action);
   }
 
   /**

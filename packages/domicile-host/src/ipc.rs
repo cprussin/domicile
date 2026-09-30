@@ -124,6 +124,11 @@ pub fn apply_chrome_message(
                 // process also reads rather than the page, and which a page
                 // that reloads has to be told again for the keymap's reason.
                 .chain(host.describe_extensions())
+                // And the tray, which is the page's rather than the browser's
+                // and rides for the clipboard's reason: an icon that has not
+                // changed is never sent again, so a page that reloaded would
+                // otherwise draw an empty tray until one did.
+                .chain(host.describe_tray())
                 .collect()
             }
             // Answered, and with *this* build's version rather than nothing.

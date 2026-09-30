@@ -72,6 +72,15 @@
   // is for. An id the history has since dropped sets nothing.
   [CallWith=ScriptState, RaisesException] undefined copyClipboardEntry(unsigned long entry);
 
+  // Click an icon in the system tray, with the button `action` names.
+  //
+  // It names an icon a `tray` event carried and a button, and nothing about
+  // what the click does, for copyClipboardEntry's reason: that is the
+  // application's. An id that names no icon now is a click that raced the
+  // application going away, and does nothing; an empty one throws.
+  [CallWith=ScriptState, RaisesException] undefined activateTrayItem(
+      DOMString id, DomicileTrayAction action);
+
   // Which window has the keyboard. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
@@ -339,4 +348,8 @@
   // this browser's to tell -- so it arrives over a pipe of its own rather than
   // the compositor's socket.
   attribute EventHandler onextensions;
+
+  // The system tray, as a DomicileTrayEvent: every application showing an
+  // icon, whenever any of it changes and once more when this page connects.
+  attribute EventHandler ontray;
 };

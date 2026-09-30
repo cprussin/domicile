@@ -10,7 +10,7 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
-use domicile_protocol::{ChromeMessage, HostMessage, Theme, PROTOCOL_VERSION};
+use domicile_protocol::{ChromeMessage, HostMessage, Theme, TrayItem, PROTOCOL_VERSION};
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
@@ -249,6 +249,57 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
         }),
         "after the keymap, the other fact only the browser process reads"
     );
+}
+
+#[test]
+fn the_tray_rides_with_the_handshake() {
+    // A page that reloads has missed every icon that arrived before it, and
+    // nothing re-sends one that has not changed.
+    let mut session = Session::new();
+    let icon = TrayItem {
+        id: ":1.42/StatusNotifierItem".into(),
+        title: "Network".into(),
+        icon: None,
+    };
+    let told = session.host_mut().set_tray(vec![icon.clone()]);
+    assert_eq!(
+        told,
+        Some(HostMessage::Tray {
+            items: vec![icon.clone()]
+        })
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert_eq!(out.last(), Some(&HostMessage::Tray { items: vec![icon] }));
+}
+
+#[test]
+fn a_tray_that_did_not_change_says_nothing() {
+    // An item's signals fire for all sorts of reasons -- a tooltip that
+    // said the same thing again -- and a broadcast for each would redraw
+    // every bar on the desk over nothing.
+    let mut session = Session::new();
+    session.host_mut().set_tray(vec![]);
+
+    assert_eq!(session.host_mut().set_tray(vec![]), None);
+}
+
+#[test]
+fn a_host_nobody_gave_a_tray_says_nothing_about_one() {
+    // The `domicile` daemon serves this protocol with no bus behind it, and
+    // an empty tray from it would be a claim rather than a silence.
+    let mut session = Session::new();
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(!out
+        .iter()
+        .any(|message| matches!(message, HostMessage::Tray { .. })));
 }
 
 /// Standing in for the real thing, which is some 40 kilobytes of

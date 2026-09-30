@@ -320,7 +320,9 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // what `CloseApp` above is: the click that chose it landed on the
         // shell's own page and never came through here at all.
         | ClientRequest::ClipboardCopied { .. }
-        | ClientRequest::CopyClipboardEntry { .. } => false,
+        | ClientRequest::CopyClipboardEntry { .. }
+        // And a tray click is `CloseApp`'s case exactly.
+        | ClientRequest::ActivateTrayItem { .. } => false,
         // A HAND, AND THE ONE ARM HERE THAT IS NOT A KEY OR A POINTER. Somebody
         // is typing at the lock screen, which is a person at this desk by
         // definition — and the keystrokes that typed it did *not* arrive as
@@ -405,7 +407,7 @@ mod tests {
     use std::rc::Rc;
     use std::time::{Duration, Instant};
 
-    use domicile_protocol::HostMessage;
+    use domicile_protocol::{HostMessage, TrayAction};
 
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::engine::{Clipboard, Connector, Display};
@@ -951,6 +953,13 @@ mod tests {
             (
                 "the shell putting a copy back on the clipboard",
                 ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
+            (
+                "the shell clicking a tray icon",
+                ClientRequest::ActivateTrayItem {
+                    id: ":1.9/StatusNotifierItem".into(),
+                    action: TrayAction::Primary,
+                },
             ),
         ] {
             assert!(

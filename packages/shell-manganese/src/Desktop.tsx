@@ -14,6 +14,7 @@ import { useLocked } from "./lock/useLocked";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
+import { useTray } from "./tray/useTray";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
@@ -98,6 +99,10 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // whole desktop draws a bar per monitor.
   const extensions = useExtensions(domicile);
 
+  // And the system tray's icons, pushed and held once for the desk for the
+  // same reasons.
+  const tray = useTray(domicile);
+
   // And whether the desk is locked, which is pushed for a harder reason: it is
   // the compositor's state rather than this page's, because the compositor is
   // what refuses to put a forwarded keystroke into the seat. So there is nothing
@@ -172,6 +177,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
             extensions={extensions}
             key={display.name}
             modifiers={modifiers}
+            tray={tray}
             windows={windows}
           />
         ))}

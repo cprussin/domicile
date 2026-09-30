@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme, TrayItem};
 
 pub mod app_icons;
 pub mod battery;
@@ -29,7 +29,9 @@ pub mod home_watch;
 pub mod index_file;
 pub mod index_location;
 pub mod ipc;
+mod png;
 pub mod theme_turnover;
+pub mod tray;
 use domicile_scene::{KeyboardTarget, Scene};
 
 /// Identifier for a connected app (Wayland toplevel), assigned by the host.
@@ -132,6 +134,13 @@ pub struct Host {
     /// because the windows turn after the chromes do -- see
     /// [`theme_turnover`] -- and a chrome connecting in between is told each.
     windows_theme: Theme,
+    /// The system tray's icons, as every chrome is told them — on connecting,
+    /// and again whenever they change.
+    ///
+    /// `None` until something sets it, for the keymap's reason: the
+    /// `domicile` daemon has no session bus behind it, and an empty tray from
+    /// it would be a claim about a desk it knows nothing of.
+    tray: Option<Vec<TrayItem>>,
 }
 
 impl Host {
@@ -253,6 +262,29 @@ impl Host {
         HostMessage::WindowsTheme {
             theme: self.windows_theme,
         }
+    }
+
+    /// Take up the tray's icons, and hand back what to tell the chromes — or
+    /// `None` where nothing moved.
+    ///
+    /// [`Host::set_theme`]'s shape, for its reason: an item's signals fire
+    /// whenever the application likes, most of them restating what it already
+    /// said, and a broadcast for each would redraw every bar on the desk over
+    /// nothing.
+    pub fn set_tray(&mut self, items: Vec<TrayItem>) -> Option<HostMessage> {
+        (self.tray.as_ref() != Some(&items)).then(|| {
+            let message = HostMessage::Tray {
+                items: items.clone(),
+            };
+            self.tray = Some(items);
+            message
+        })
+    }
+
+    /// The tray, in the message a chrome is told it as, or `None` from a host
+    /// that has never been given one.
+    pub fn describe_tray(&self) -> Option<HostMessage> {
+        self.tray.clone().map(|items| HostMessage::Tray { items })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the
@@ -544,6 +576,7 @@ impl Host {
             | ChromeMessage::PreviewFile { .. }
             | ChromeMessage::SearchApps { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
+            | ChromeMessage::ActivateTrayItem { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }

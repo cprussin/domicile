@@ -388,6 +388,25 @@ const clipboardSchema = z.looseObject({
   type: z.literal("clipboard"),
 });
 
+// The system tray: every application showing an icon, in the order they
+// registered.
+//
+// Pushed like the clipboard, and the whole list every time: the compositor is
+// the StatusNotifierItem host, and sends this whenever an icon arrives, leaves
+// or changes how it looks, and again to a chrome that has just connected. A
+// click goes back as `activate_tray_item` with the id. `icon` is a `data:` URL,
+// absent for an item the compositor could not draw.
+const trayItemSchema = z.looseObject({
+  icon: z.string().optional(),
+  id: z.string(),
+  title: z.string(),
+});
+
+const traySchema = z.looseObject({
+  items: z.array(trayItemSchema),
+  type: z.literal("tray"),
+});
+
 // Which way round the desktop is drawn now.
 //
 // Pushed like the battery, and the one pushed message a page can cause: a
@@ -504,6 +523,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   filePreviewSchema,
   batterySchema,
   clipboardSchema,
+  traySchema,
   themeMessageSchema,
   idleSchema,
   lockedSchema,
@@ -541,6 +561,7 @@ export type FilePreviewMessage = z.infer<typeof filePreviewSchema>;
 export type FoundAppsMessage = z.infer<typeof foundAppsSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
+export type TrayMessage = z.infer<typeof traySchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
 export type LockedMessage = z.infer<typeof lockedSchema>;
