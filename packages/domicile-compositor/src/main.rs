@@ -1178,9 +1178,9 @@ fn read_chrome_messages(
         // in a frame that misspelled `unlock` itself or sent something that is
         // not a string.
         if matches!(said, Ok(ChromeMessage::Unlock { .. })) {
-            tracing::debug!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
+            tracing::trace!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
         } else {
-            tracing::debug!(chrome_msg = %line.trim(), "chrome -> host");
+            tracing::trace!(chrome_msg = %line.trim(), "chrome -> host");
         }
         let responses = match said {
             // Compositor-level side effects: intercept before the (pure) brain.
@@ -3330,7 +3330,8 @@ impl DomicileCompositor {
         // capture and this would make every round two, so the ratio the guard
         // asserts would sit on its own threshold and fail, blaming the product
         // for the instrument's own readback.
-        if spike_probe_points().is_empty()
+        if spike_center_probe()
+            && spike_probe_points().is_empty()
             && spike_find_colors().is_empty()
             && spike_latency_point().is_none()
         {
@@ -4764,7 +4765,6 @@ impl DomicileCompositor {
                     with_states(&surface, window_geometry),
                     (x, y),
                 );
-                tracing::debug!(%app_id, x, y, "pointer motion -> client");
                 self.pointer_app = Some(app_id);
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
@@ -5632,7 +5632,7 @@ impl CompositorHandler for DomicileCompositor {
             // and any app frame the engine would not take.
             if !engine_holds {
                 buffer.release();
-                tracing::debug!(?committer, "buffer released");
+                tracing::trace!(?committer, "buffer released");
             }
             let done = Instant::now();
             self.hub
@@ -5684,7 +5684,6 @@ impl DmabufHandler for DomicileCompositor {
             .as_mut()
             .expect("the dmabuf global is only advertised alongside a renderer");
         if DmabufImporter::accepts(gpu.renderer(), &dmabuf) {
-            tracing::debug!(format = ?dmabuf.format(), "client dmabuf accepted");
             if let Err(err) = notifier.successful::<DomicileCompositor>() {
                 tracing::debug!(?err, "client went away before its dmabuf was acknowledged");
             }
@@ -7638,13 +7637,25 @@ fn parse_point(entry: &str) -> Option<(i32, i32)> {
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
 }
 
+/// THROWAWAY, with the rest of the spike. Whether to ask what viz drew at the
+/// center of the browser's window, which is where a one-`<app>` page puts its
+/// canvas. Set by `DOMICILE_SPIKE_CENTER`, to anything.
+///
+/// Opt-in because the readback is a `CopyOutputRequest` that forces a draw and
+/// waits, on the submit path. On by default, every desktop paid for one each
+/// `PROBE_EVERY` a client drew, and logged it at `INFO`.
+fn spike_center_probe() -> bool {
+    static CENTER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *CENTER.get_or_init(|| std::env::var_os("DOMICILE_SPIKE_CENTER").is_some())
+}
+
 /// THROWAWAY, with the rest of the spike. Where in the browser's window to
 /// ask what viz drew, from `DOMICILE_SPIKE_PROBE` as `x,y;x,y`.
 ///
-/// Empty -- the ordinary case -- means the window's center, which is where a
-/// one-`<app>` page puts its canvas. A page with two of them has no pixel
-/// inside both, so the two-window guard names one point per canvas. Parsed
-/// once: this is called from the submit path, at the client's frame rate.
+/// Empty -- the ordinary case -- means no point. A page with two `<app>`s has
+/// no pixel inside both, so the two-window guard names one point per canvas.
+/// Parsed once: this is called from the submit path, at the client's frame
+/// rate.
 ///
 /// A malformed entry is dropped with a warning rather than failing the run.
 /// The guard checks for the colors it expects and reports their absence, so

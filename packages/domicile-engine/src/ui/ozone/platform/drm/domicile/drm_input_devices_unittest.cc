@@ -546,7 +546,13 @@ TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
 
-TEST(DrmInputDevicesTest, AResumeForADeviceGivenBackAMomentAgoIsStillTaken) {
+// READ OFF A REAL CONSOLE SWITCH BACK. The activation's `PropertiesChanged`
+// was read first, so `Reclaim` gave every revoked device back and took it
+// again, live -- and only then were the activation's `ResumeDevice`s read.
+// Each carried a descriptor for the `SessionDevice` that release had just
+// freed, so reopening on it closed the live converter and failed on `ENODEV`,
+// thirteen times.
+TEST(DrmInputDevicesTest, AResumeSentBeforeTheDeviceWasGivenBackIsDropped) {
   RecordedRelease release;
   RecordedReopen reopen;
   DrmTakenDevices devices(release.Bind(), reopen.Bind());
@@ -555,21 +561,15 @@ TEST(DrmInputDevicesTest, AResumeForADeviceGivenBackAMomentAgoIsStillTaken) {
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kRevoked);
+  ASSERT_EQ(devices.Reclaim(), 1u);
+  ASSERT_EQ(reopen.calls().size(), 1u);
 
-  // THE WINDOW A MEASURED DESKTOP DIED IN. `GiveBack` is on the way into
-  // every re-take, so a device is not held for as long as it takes to give it
-  // back and ask for it again -- and logind still has it down as this
-  // session's for the whole of that window, so a `ResumeDevice` can land in
-  // it. Answering that from the held table refuses a live descriptor and
-  // leaves the device dead for the rest of the run.
-  EXPECT_TRUE(devices.GiveBack(kKeyboard));
-
-  EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
-  EXPECT_EQ(reopen.calls(),
-            std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath}}));
-  // The descriptor logind sent is the one the reopened device got, rather
-  // than one taken again from a session that is not in front of the user.
-  EXPECT_EQ(ReadOneByte(reopen.descriptor()), 1);
+  // The release's "gone" has not arrived, so this resume was sent before it.
+  EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
+  EXPECT_EQ(reopen.calls().size(), 1u)
+      << "reopening would close the converter Reclaim just built";
+  EXPECT_FALSE(devices.Resumed(base::FilePath(kKeyboardPath)).is_valid());
+  EXPECT_EQ(devices.Reclaim(), 0u) << "the device is still live";
 }
 
 TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
@@ -582,6 +582,8 @@ TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kRevoked);
   EXPECT_TRUE(devices.GiveBack(kKeyboard));
+  // logind's answer to that release, so the resume after it is a current one.
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
 
   // A resume does not just hand a descriptor over, it says logind is holding

@@ -179,10 +179,11 @@ class DrmTakenDevices {
 
   // Follows a `ResumeDevice`: parks `descriptor` for the device's path and
   // asks the factory to close the device and open it again, which is what
-  // re-arms the watch. False only when this session has never been handed
-  // this device at all -- the one case with no path and no id to reopen
-  // under, and one where asking the factory would build a converter on a
-  // descriptor nobody owns.
+  // re-arms the watch. False when this session has never been handed this
+  // device at all -- the one case with no path and no id to reopen under, and
+  // one where asking the factory would build a converter on a descriptor
+  // nobody owns -- and when the resume predates a release this session has
+  // made since, whose descriptor that release revoked.
   //
   // A RESUME IS AUTHORITATIVE AND THE HELD TABLE IS NOT, which is the whole
   // reason `names_` exists beside `devices_`. logind sends `ResumeDevice`
