@@ -75,7 +75,15 @@ lock drop bob >/dev/null
 expect "a run that does not hold it cannot drop it" ok "$(status "$(lock who)")"
 contains "and it is still alice's" "'alice'" "$(lock who)"
 
+# `holds`: whether a job that did not take the tree still has it. engine.yml
+# takes the tree in its build job and runs the checks against it in the next
+# one, so the checks job asks before trusting what is in it.
+expect "the holder holds it" ok "$(status "$(lock holds alice)")"
+expect "somebody else does not" refused "$(status "$(lock holds bob)")"
+contains "and is told who does" "'alice'" "$(lock holds bob)"
+
 expect "the holder can drop it" ok "$(status "$(lock drop alice)")"
+expect "a tree nobody holds is held by nobody" refused "$(status "$(lock holds alice)")"
 contains "and then nothing holds it" "is not locked" "$(lock who)"
 expect "the tree can be taken again" ok "$(status "$(lock take carol)")"
 

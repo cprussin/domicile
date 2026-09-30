@@ -19,6 +19,7 @@
 #
 #   .github/scripts/engine-tree-lock.sh take /build/chromium/src "$WHO"
 #   .github/scripts/engine-tree-lock.sh drop /build/chromium/src "$WHO"
+#   .github/scripts/engine-tree-lock.sh holds /build/chromium/src "$WHO"
 #
 # `mkdir` is the whole mechanism, because it is the one filesystem operation
 # that both creates and tests in the same syscall. A `[ -e ]` followed by a
@@ -39,7 +40,7 @@
 set -u
 
 usage() {
-  echo "usage: $(basename "$0") <take|drop|who|path> <chromium> [owner]" >&2
+  echo "usage: $(basename "$0") <take|drop|holds|who|path> <chromium> [owner]" >&2
   exit 2
 }
 
@@ -158,6 +159,20 @@ case "$action" in
     fi
     rm -rf "$LOCK"
     echo "dropped $chromium"
+    ;;
+
+  # For a job that did not take the tree itself: engine.yml's checks run in the
+  # tree its build job took and kept locked. A tree somebody cleared or took in
+  # the gap may have been reset, and checking it would prove nothing.
+  holds)
+    [ -n "$owner" ] || usage
+    [ -d "$LOCK" ] || { echo "::error::$chromium is not locked, so '$owner' does not hold it" >&2; exit 1; }
+    held="$(holder)"
+    if [ "$held" != "$owner" ]; then
+      echo "::error::$chromium is locked by '$held' ($(age)), not by '$owner'" >&2
+      exit 1
+    fi
+    echo "'$owner' still holds $chromium ($(age))"
     ;;
 
   who)

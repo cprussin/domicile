@@ -55,10 +55,25 @@ position() { # workflow, name
 EARLY="Drop the compile slot, the compile is done"
 FINAL="Drop the compile slot"
 
-# workflow, the step the compile ends with, the first step that must not hold it
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# One job of a workflow, comments kept: from `  <job>:` to the next job.
+job_of() { # workflow, job
+  awk -v j="  $2:" '
+    /^jobs:/ { in_jobs = 1; next }
+    in_jobs && /^  [a-z][a-z-]*:[[:space:]]*$/ { inside = ($0 == j) }
+    inside { print }' "$1"
+}
+
+# workflow, the job that compiles, the step the compile ends with, and the
+# first step that must not hold it -- empty when that is another job's, which
+# is engine.yml's: its checks are a job of their own, and the slot's drop has
+# to come before the build job ends.
 check() {
-  local flow="$1" built="$2" next="$3" file="$WORKFLOWS/$1" body early final
-  echo "$flow"
+  local flow="$1" built="$3" next="$4" file="$WORK/$1.$2" body early final
+  job_of "$WORKFLOWS/$flow" "$2" >"$file"
+  echo "$flow ($2)"
 
   if [ "$(step_after "$file" "$built")" = "$EARLY" ]; then
     ok "drops the compile slot right after '$built'"
@@ -68,7 +83,14 @@ check() {
   fi
 
   early="$(position "$file" "$EARLY")"
-  if [ -n "$early" ] && [ "$early" -lt "$(position "$file" "$next")" ]; then
+  if [ -z "$next" ]; then
+    if [ -n "$early" ] && ! steps "$file" | cut -f2 | grep -qxF "The engine's checks"; then
+      ok "and the checks are not in the job that holds it"
+    else
+      fail "and the checks are not in the job that holds it" \
+        "'$EARLY' is step ${early:-missing} of a job that also runs the checks"
+    fi
+  elif [ -n "$early" ] && [ "$early" -lt "$(position "$file" "$next")" ]; then
     ok "and before '$next'"
   else
     fail "and before '$next'" "'$EARLY' is step ${early:-missing}"
@@ -104,8 +126,8 @@ check() {
   fi
 }
 
-check engine.yml "Write down what out/Release was built from" "The engine's checks"
-check engine-release.yml "Build" "Package"
+check engine.yml build "Write down what out/Release was built from" ""
+check engine-release.yml release "Build" "Package"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

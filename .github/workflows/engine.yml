@@ -115,11 +115,11 @@ on:
 # hands each run a tree nothing else holds, and `engine-compile-slot.sh` keeps
 # the cold builds among them down to one. The queue in front of those is GitHub's runner queue:
 # unbounded, FIFO, and it never throws a run away -- and, for a run that will
-# compile, the engine job's own `crux-compile` group, below.
+# compile, the build job's own `crux-compile` group, below.
 #
 # A CONCURRENCY GROUP IS NOT THAT QUEUE, WHICH IS WHY THIS IS KEYED BY REF. A
 # group holds exactly ONE pending run and evicts it when a newer run arrives,
-# unless it says `queue: max` as the engine job's does.
+# unless it says `queue: max` as the build job's does.
 # Shared across refs — as this was, with `group: engine`, together with
 # engine-release.yml — that makes every branch able to discard every other
 # branch's queued run: runs 176 and 177 were each canceled seconds after they
@@ -160,6 +160,23 @@ permissions:
   contents: write
   actions: write
 
+env:
+  # Who holds the tree and the compile slot, in words a person reading a
+  # held-lock message can act on: it names the workflow to look at and the
+  # run to open. The
+  # attempt is in it because a re-run is a different holder — the first
+  # attempt's `drop` and the second's `take` must not be able to agree.
+  #
+  # FOR THE WHOLE WORKFLOW, because three jobs hold one tree: the build job
+  # takes it, the engine job checks in it and drops it, and drop-tree drops it
+  # when the engine job never got to. `drop` compares owners, so a second copy
+  # of this that drifted would leave the tree locked by a run that has ended.
+  LOCK_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
+  # The one build: what ships, and what the checks run against. ~3G, kept
+  # warm because a clean Chromium build is four hours.
+  OUT_RELEASE: out/Release
+
 jobs:
   # A tree that already passed is not run again: the write-back push, and main
   # after a merge nothing else landed behind. Off crux, so it costs no slot.
@@ -173,7 +190,7 @@ jobs:
       - id: proof
         run: .github/scripts/engine-proof.sh gate
 
-  # WHETHER THIS RUN WILL COMPILE, asked before the engine job takes a runner.
+  # WHETHER THIS RUN WILL COMPILE, asked before the build job takes a runner.
   #
   # `crux` and `crux-two` share one compile slot. A job that took a runner and
   # then waited for the slot held that runner idle for the whole of another
@@ -181,7 +198,7 @@ jobs:
   # queued behind it for a runner -- 36194734502 queued 200 minutes for a
   # 6-minute run, 36205015099 187, 36209486241 152.
   #
-  # So a run that will compile waits on GitHub instead: the engine job's
+  # So a run that will compile waits on GitHub instead: the build job's
   # concurrency group is `crux-compile` unless this said `compile=false`, and
   # a job pending in a group holds no runner. `queue: max` keeps every pending
   # run, up to 100, in order -- the default keeps one and cancels the rest,
@@ -193,10 +210,11 @@ jobs:
   # run guessed cold waits in the group for nothing and then goes straight
   # through. It locks nothing. See `engine-tree-pool.sh compiles`.
   #
-  # WHAT IT COSTS: the group is held for the whole engine job, so a second
-  # compiling run starts once the first run's checks end rather than once
-  # its build does. That is the other runner doing warm runs instead of
-  # sitting idle, which is the trade.
+  # THE GROUP IS HELD FOR THE BUILD JOB ONLY. It was the whole engine job,
+  # checks, packaging, publish and write-back included: over 24h it was held
+  # 10.9h for 5.9h of Build, and one cold 80-minute build kept five pull
+  # requests needing ~2 minutes of compile each waiting 40-86 minutes. So the
+  # checks are a job of their own, outside it; see the engine job.
   plan:
     needs: gate
     if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
@@ -213,13 +231,26 @@ jobs:
           .github/scripts/engine-tree-pool.sh compiles \
             "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
 
-  engine:
+  # THE COMPILE, AND ONLY THE COMPILE, IN THE COMPILE QUEUE: take a tree, put
+  # this series in it, build out/Release, and hand the tree to the engine job
+  # still locked. Everything that proves or ships the build is that job's.
+  build:
     needs: [gate, plan]
     # `!cancelled()`, so a gate that errors runs the engine rather than skipping it.
     if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
+    # What the engine job needs from here: the tree, still locked by this run,
+    # and what this series owes. The job outputs rather than a second decision
+    # there, which could disagree with the one this job acted on.
+    outputs:
+      chromium: ${{ steps.tree.outputs.chromium }}
+      stage: ${{ steps.tree.outputs.stage }}
+      build: ${{ steps.release.outputs.build }}
+      write: ${{ steps.release.outputs.write }}
+      tag: ${{ steps.release.outputs.tag }}
     # The compile queue, unless the plan positively said this run compiles
     # nothing: a plan that failed answers nothing, and queueing is the safe
     # side of that. Otherwise a group of this run's own, which is no queue.
+    # Released when this job ends, which is the point of it being a job.
     concurrency:
       group: ${{ needs.plan.outputs.compile == 'false' && format('crux-warm-{0}-{1}', github.run_id, github.run_attempt) || 'crux-compile' }}
       queue: max
@@ -232,8 +263,8 @@ jobs:
     # It is safe only while fork pull requests cannot run on it — Settings ->
     # Actions -> "Require approval for all external contributors".
     #
-    # THE TOKEN IS `contents: write` NOW, because this job pushes a commit
-    # back onto the branch -- see the release steps below -- and that does not
+    # THE TOKEN IS `contents: write` NOW, because the engine job pushes a
+    # commit back onto the branch -- see its release steps -- and that does not
     # widen what the gate has to cover. GitHub hands a FORK's pull request a
     # read-only token whatever a workflow asks for, and the write-back step
     # refuses any head repository that is not this one, so those two are belt
@@ -300,27 +331,13 @@ jobs:
     # run's. See scripts/test-the-engine-budget-holds-both-builds.sh, which
     # asserts this against that measurement and against
     # `engine-release.yml`'s budget for the strictly smaller job.
+    #
+    # The checks, packaging and publish in that measurement are the engine
+    # job's now, under a budget of their own. This one still holds the slot's
+    # wait and a cold build, which is most of it.
     timeout-minutes: 1200
 
     env:
-      # Who holds the tree and the compile slot, in words a person reading a
-      # held-lock message can act on: it names the workflow to look at and the
-      # run to open. The
-      # attempt is in it because a re-run is a different holder — the first
-      # attempt's `drop` and the second's `take` must not be able to agree.
-      LOCK_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
-
-      # And who holds the render node, which is a different lock over a
-      # different thing and is why it has a name of its own. The tree lock
-      # keeps two writers out of one checkout; this one keeps two clients off
-      # the card while something is being timed. They are held over different
-      # spans and released by different steps.
-      CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
-
-      # The one build: what ships, and what the checks run against. ~3G, kept
-      # warm because a clean Chromium build is four hours.
-      OUT_RELEASE: out/Release
-
       # `apply.sh` ends in `git am`, which writes commits, and git refuses to
       # write one without an identity. The runner's HOME is the work directory
       # — deleted and recreated on every start — so there is no ~/.gitconfig
@@ -336,28 +353,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-
-      # /tmp is this unit's, not this job's: PrivateTmp is per-service, and the
-      # runner service outlives every job it runs. So a guard's log from the
-      # last run is still there when the next one starts, and the failure dump
-      # below will happily print it — which it did, for three reads of a job
-      # that had failed before any guard ran. Numbers from a previous run are
-      # worse than no numbers.
-      # AND THE CONTROL BUDGETS, which are not logs and are the same hazard.
-      # A guard writes down how long it waited so that its control can watch
-      # for a multiple of that rather than a constant; the runner is not
-      # ephemeral, so a number from the last job is sitting there. The library
-      # ignores a note older than ten minutes for exactly this, and a clock is
-      # a worse guarantee than an empty directory. See lib-control-budget.sh.
-      #
-      # Beside the logs and for the same reason: /tmp is what the steps of one
-      # job share. This used to read `${TMPDIR:-/tmp}` and so emptied a third
-      # directory again — `nix develop` gives every `--command` a $TMPDIR of
-      # its own, so no step of this job has the one this step does.
-      - name: Forget the last run's logs
-        run: |
-          rm -f /tmp/domicile-*.log
-          rm -rf /tmp/domicile-control-budgets
 
       # A TEMP DIRECTORY OF THIS JOB'S OWN, as TMPDIR for every step after
       # this. Every `nix-shell` and `nix develop` leaves a `nix-shell.*` behind
@@ -401,15 +396,22 @@ jobs:
       # It does not look inside a tree. Whether the one it took really holds
       # this series is the stamp's question, asked next.
       # See .github/scripts/engine-tree-pool.sh.
+      #
+      # AND IT IS STILL HELD WHEN THIS JOB ENDS, for the engine job to check
+      # in: dropped here, the next run's pick could reset it under the checks.
       - name: Take a tree
+        id: tree
         run: |
           set -euo pipefail
           tree="$(.github/scripts/engine-tree-pool.sh pick \
             "$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')" \
             "$LOCK_OWNER")"
+          stage="$(dirname "$tree")/engine-release"
           echo "this run builds in $tree"
           echo "CHROMIUM=$tree" >>"$GITHUB_ENV"
-          echo "STAGE=$(dirname "$tree")/engine-release" >>"$GITHUB_ENV"
+          echo "STAGE=$stage" >>"$GITHUB_ENV"
+          echo "chromium=$tree" >>"$GITHUB_OUTPUT"
+          echo "stage=$stage" >>"$GITHUB_OUTPUT"
 
       # ASKED HERE, BEFORE ANYTHING IS BUILT OR PROVED, FOR TWO REASONS.
       #
@@ -612,18 +614,130 @@ jobs:
       - name: Write down what out/Release was built from
         run: .github/scripts/engine-compile-slot.sh built "$CHROMIUM"
 
-      # THE SLOT IS FOR THE COMPILE, AND THE COMPILE IS DONE. Nothing below
-      # builds Chromium: packaging is a copy and a tar, and the packaged guard's
-      # `cargo build` is the compositor. Held to the end of the job, the slot
-      # was busy 97% of a day, ~3.5h of it on the checks, while the other
-      # runner's compile waited. The latency guard does not need it either: a
-      # compile runs `noisy` and that guard waits for `quiet` -- see
-      # .github/scripts/engine-render-node-lock.sh. The `always()` drop at the
-      # end still covers a run that fails before here, and `drop` is a no-op
-      # on a slot already dropped or somebody else's.
+      # THE SLOT IS FOR THE COMPILE, AND THE COMPILE IS DONE. Nothing after
+      # this job builds Chromium: packaging is a copy and a tar, and the
+      # packaged guard's `cargo build` is the compositor. Held to the end of
+      # the old single job, the slot was busy 97% of a day, ~3.5h of it on the
+      # checks, while the other runner's compile waited. The latency guard does
+      # not need it either: a compile runs `noisy` and that guard waits for
+      # `quiet` -- see .github/scripts/engine-render-node-lock.sh. The
+      # `always()` drop at the end still covers a run that fails before here,
+      # and `drop` is a no-op on a slot already dropped or somebody else's.
       # See scripts/test-the-compile-slot-covers-only-the-compile.sh.
       - name: Drop the compile slot, the compile is done
         run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
+
+      - name: Drop this job's temp directory
+        # `env.DOMICILE_JOB_TMP != ''` because a job that failed before
+        # making one has none to drop.
+        if: ${{ always() && env.DOMICILE_JOB_TMP != '' }}
+        run: .github/scripts/engine-job-tmp.sh drop "$DOMICILE_JOB_TMP"
+
+      # ONLY WHEN THIS JOB DID NOT FINISH. A build that passed hands its tree to
+      # the engine job still locked, and that job drops it.
+      #
+      # And *only* if it is still ours: the step that fails because the lock is
+      # held by somebody else reaches here too, and an unconditional `rm` there
+      # would release their tree in the middle of their build.
+      - name: Drop the tree, the build did not finish
+        # `env.CHROMIUM != ''` because the pool writes it: a run that found
+        # every tree held never got one, and `drop` with no path is a usage
+        # error printed over the message that says what actually happened.
+        if: ${{ (failure() || cancelled()) && env.CHROMIUM != '' }}
+        run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
+
+      - name: Drop the compile slot
+        if: ${{ always() }}
+        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
+
+  # THE CHECKS, THE RELEASE AND THE WRITE-BACK, OUTSIDE THE COMPILE QUEUE.
+  #
+  # Still called `engine`: it is the job whose result says whether this change
+  # is good, and that name is the check branch protection and every reader of
+  # this workflow's runs already know.
+  #
+  # IN THE TREE THE BUILD JOB TOOK. On any `crux` runner: `crux` and
+  # `crux-two` are one machine sharing /build, so that tree is at the same
+  # path from either. The build job leaves it locked by this run's
+  # `LOCK_OWNER`, which keeps every other run's pick, reset and
+  # `engine-release-room.sh` out of it across the gap, and the first thing
+  # this job does in it is make sure that is still so.
+  #
+  # WHAT THE GAP COSTS: this job queues for a runner after the build ends,
+  # behind whatever was queued first -- which can be the next compiling
+  # run's build.
+  engine:
+    needs: [gate, build]
+    # RED WHEN THE BUILD IS, rather than skipped: a skipped check reads as a
+    # passing one. A build job that failed runs this to fail it in its first
+    # step. A build skipped because the gate proved the tree skips this too,
+    # as the one job this used to be did.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
+    runs-on: [self-hosted, crux]
+
+    # The checks are ~10 minutes and packaging and publishing a few more. The
+    # rest is the latency guard's wait for a quiet machine, which is the
+    # compile slot's wait (DOMICILE_RENDER_NODE_QUIET_WAIT below): the compile
+    # it waits out can be another run's cold repin.
+    timeout-minutes: 720
+
+    env:
+      # The build job's tree and stage, still locked by this run.
+      CHROMIUM: ${{ needs.build.outputs.chromium }}
+      STAGE: ${{ needs.build.outputs.stage }}
+
+      # Who holds the render node, which is a different lock over a
+      # different thing and is why it has a name of its own. The tree lock
+      # keeps two writers out of one checkout; this one keeps two clients off
+      # the card while something is being timed. They are held over different
+      # spans and released by different steps.
+      CARD_OWNER: engine.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
+    steps:
+      - name: The build passed
+        if: ${{ needs.build.result != 'success' }}
+        env:
+          RESULT: ${{ needs.build.result }}
+        run: |
+          echo "::error::the build job ended '$RESULT', so there is nothing to check" >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      # /tmp is this unit's, not this job's: PrivateTmp is per-service, and the
+      # runner service outlives every job it runs. So a guard's log from the
+      # last run is still there when the next one starts, and the failure dump
+      # below will happily print it — which it did, for three reads of a job
+      # that had failed before any guard ran. Numbers from a previous run are
+      # worse than no numbers.
+      # AND THE CONTROL BUDGETS, which are not logs and are the same hazard.
+      # A guard writes down how long it waited so that its control can watch
+      # for a multiple of that rather than a constant; the runner is not
+      # ephemeral, so a number from the last job is sitting there. The library
+      # ignores a note older than ten minutes for exactly this, and a clock is
+      # a worse guarantee than an empty directory. See lib-control-budget.sh.
+      #
+      # Beside the logs and for the same reason: /tmp is what the steps of one
+      # job share. This used to read `${TMPDIR:-/tmp}` and so emptied a third
+      # directory again — `nix develop` gives every `--command` a $TMPDIR of
+      # its own, so no step of this job has the one this step does.
+      - name: Forget the last run's logs
+        run: |
+          rm -f /tmp/domicile-*.log
+          rm -rf /tmp/domicile-control-budgets
+
+      # A TEMP DIRECTORY OF THIS JOB'S OWN, for the build job's reason.
+      - name: A temp directory for this job
+        run: |
+          set -euo pipefail
+          dir="$(.github/scripts/engine-job-tmp.sh make)"
+          echo "TMPDIR=$dir" >>"$GITHUB_ENV"
+          echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+
+      # A tree somebody cleared or took in the gap since the build may have
+      # been reset, and checking it would prove nothing about this change.
+      - name: This run still holds its tree
+        run: .github/scripts/engine-tree-lock.sh holds "$CHROMIUM" "$LOCK_OWNER"
 
       # EVERY ASSERTION THIS JOB MAKES, IN ONE COMMAND, and none of them
       # defined here. `scripts/check.sh engine` runs the artifact check, the two
@@ -715,12 +829,13 @@ jobs:
       # branch and is identical to what the merge would produce. The second is
       # not fixable and does not need to be, because the build happens here.
       #
-      # WHAT IS LEFT HERE IS THE ACTING. The deciding is step 5, up beside the
-      # tree, and `steps.release.outputs` is what every `if:` below reads.
+      # WHAT IS LEFT HERE IS THE ACTING. The deciding is the build job's, up
+      # beside the tree, and `needs.build.outputs` is what every `if:` below
+      # reads.
 
       - name: Package the release
         id: package
-        if: ${{ steps.release.outputs.build == 'true' }}
+        if: ${{ needs.build.outputs.build == 'true' }}
         run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-release-package.sh "$CHROMIUM" "$OUT_RELEASE" "$STAGE"
 
       # THE ARTIFACT IS ASSERTED, NOT ASSUMED. The guards above ran against
@@ -755,7 +870,7 @@ jobs:
       # door into the file that owns the rule, for a saving of twenty-five
       # seconds.
       - name: The packaged release passes the guard
-        if: ${{ steps.release.outputs.build == 'true' }}
+        if: ${{ needs.build.outputs.build == 'true' }}
         run: |
           set -euo pipefail
           rm -rf "$CHROMIUM/out/Release-staged"
@@ -769,7 +884,7 @@ jobs:
             nix develop .#full --command ./scripts/engine-guard-client-window.sh
 
       - name: Publish the release
-        if: ${{ steps.release.outputs.build == 'true' }}
+        if: ${{ needs.build.outputs.build == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARBALL: ${{ steps.package.outputs.tarball }}
@@ -798,7 +913,7 @@ jobs:
       # rewrites the identical file.
       - name: Write engine-release.nix back onto this branch
         if: >-
-          ${{ steps.release.outputs.write == 'true'
+          ${{ needs.build.outputs.write == 'true'
               && github.event_name == 'pull_request'
               && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
@@ -806,7 +921,7 @@ jobs:
           # The series' own tag rather than the rolling one: `engine-nightly`
           # is whatever was published last, and on a busy day that is not
           # necessarily this series.
-          DOMICILE_ENGINE_TAG: ${{ steps.release.outputs.tag }}
+          DOMICILE_ENGINE_TAG: ${{ needs.build.outputs.tag }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           # Optional; without it the write-back's CI waits for an approval.
           DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
@@ -833,8 +948,11 @@ jobs:
       # `PrivateTmp=true` both are inside the runner unit's own /tmp, so they
       # are unreachable once the job ends — they have to be printed here or
       # they are lost.
+      #
+      # Not when the build failed: no guard ran, and what is in /tmp is the
+      # last run's.
       - name: What the guards wrote down
-        if: ${{ failure() }}
+        if: ${{ failure() && needs.build.result == 'success' }}
         run: .github/scripts/engine-diagnostics.sh
 
       - name: Drop this job's temp directory
@@ -843,17 +961,31 @@ jobs:
         if: ${{ always() && env.DOMICILE_JOB_TMP != '' }}
         run: .github/scripts/engine-job-tmp.sh drop "$DOMICILE_JOB_TMP"
 
-      # Even when something above failed, and *only* if it is still ours: the
-      # step that fails because the lock is held by somebody else reaches here
-      # too, and an unconditional `rm` there would release their tree in the
-      # middle of their build.
+      # The tree the build job handed over, even when something above failed,
+      # and *only* if it is still ours: the step that fails because somebody
+      # else took it in the gap reaches here too, and an unconditional `rm`
+      # there would release their tree in the middle of their build.
       - name: Drop the tree
-        # `env.CHROMIUM != ''` because the pool writes it: a run that found
-        # every tree held never got one, and `drop` with no path is a usage
-        # error printed over the message that says what actually happened.
+        # `env.CHROMIUM != ''` because a build job that never got a tree
+        # handed none over, and `drop` with no path is a usage error.
         if: ${{ always() && env.CHROMIUM != '' }}
         run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"
 
-      - name: Drop the compile slot
-        if: ${{ always() }}
-        run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
+  # THE TREE, GIVEN BACK WHEN THE ENGINE JOB NEVER GOT TO: the run was canceled
+  # between the build and the checks, or the engine job was canceled or lost
+  # before its own drop ran. `always()` is what makes GitHub run this on a
+  # canceled run, and `drop` is owner-checked like every drop, so a tree
+  # another run has since taken is left alone. Nothing to do after an engine
+  # job that passed, which dropped it itself, so that costs no runner.
+  drop-tree:
+    needs: [build, engine]
+    if: ${{ always() && needs.build.outputs.chromium != '' && needs.engine.result != 'success' }}
+    runs-on: [self-hosted, crux]
+    # A checkout and an `rm`.
+    timeout-minutes: 10
+    env:
+      CHROMIUM: ${{ needs.build.outputs.chromium }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Drop the tree
+        run: .github/scripts/engine-tree-lock.sh drop "$CHROMIUM" "$LOCK_OWNER"

@@ -348,7 +348,7 @@ expect "with no series match, the least recently used tree at the pin is taken" 
 echo
 echo "== whether the tree pick would take needs a compile =="
 
-# engine.yml asks this before the engine job takes a runner, so a run that
+# engine.yml asks this before the build job takes a runner, so a run that
 # will compile queues on GitHub for the compile slot holding no runner, and a
 # run that will not goes straight through. It asks about the tree `pick`
 # would take now, because that is the tree the job will build in.
