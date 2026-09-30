@@ -51,8 +51,9 @@
 # *claim* about a tree's contents is a green check over code nothing compiled.
 # This script is not in a position to make the second kind of mistake, and that
 # is deliberate. It reads the series stamp beside a tree only to rank the trees,
-# and `compiles` reads it with the built stamp only to guess whether a run will
-# compile; `carries` and `warm` still check the tree the pick names.
+# and `compiles` reads it with the built stamp, and engine-series-diff.sh's
+# answer, only to guess whether a run will compile and whether that is cold;
+# `carries` and `warm` still check the tree the pick names.
 #
 # THE POOL IS THE MACHINE'S, NOT THIS REPOSITORY'S. How many trees fit is a
 # question about a ZFS quota on one machine in a house, so the slots are
@@ -225,6 +226,37 @@ LOCK_SH="$(cd "$(dirname "$0")" && pwd)/engine-tree-lock.sh"
 # slot's own `warm`, so the two cannot disagree.
 SLOT_SH="$(cd "$(dirname "$0")" && pwd)/engine-compile-slot.sh"
 
+# What this series would change in a tree, for `compiles`. Override for tests.
+DIFF_SH="${DOMICILE_SERIES_DIFF:-$(cd "$(dirname "$0")" && pwd)/engine-series-diff.sh}"
+
+# Files whose change recompiles much of Chromium: headers, and what generates
+# them (mojom, IDL, blink's json5 tables) or configures many targets (gni).
+WIDELY_INCLUDED='\.(h|hh|hpp|inc|def|mojom|idl|json5|gni)$'
+
+# Whether a compile in <slot> of this series is cold, printing why when it is.
+#
+# WARM IS AN INCREMENTAL BUILD THAT CCACHE COVERS: a tree at this pin whose
+# out/Release is built from the series it carries, which this series changes
+# in sources only. ccache with CCACHE_BASEDIR/NOHASHDIR hits 95-100% on such a
+# build; one after a widely included header changed hits 1-6% and takes over
+# an hour. It does not count what includes a header -- that is the build
+# graph's to say, and no header this series changes is the proxy. Everything
+# else is cold. A wrong answer changes the queue and never what is built.
+cold_because() { # slot pin
+  local changed wide
+  if [ "$(slot_pin "$1")" != "$2" ]; then
+    echo "it is at another pin"
+  elif [ "$(GITHUB_OUTPUT=/dev/stdout "$SLOT_SH" warm "$1/src")" != "warm=true" ]; then
+    echo "its out/Release is not built from what it carries"
+  elif ! changed="$("$DIFF_SH" "$1/src")"; then
+    echo "what this series changes in it could not be read"
+  elif wide="$(printf '%s\n' "$changed" | grep -E "$WIDELY_INCLUDED")"; then
+    echo "this series changes $(printf '%s\n' "$wide" | wc -l) widely included file(s), $(printf '%s\n' "$wide" | head -1) first"
+  else
+    return 1
+  fi
+}
+
 take_slot() { # slot owner
   "$LOCK_SH" take "$1/src" "$2" >/dev/null 2>&1
 }
@@ -299,20 +331,36 @@ case "$action" in
     # queues the run, which costs it a wait and nobody else a runner. A guess that
     # goes stale before the job runs is caught by the job, which still takes
     # the slot. It locks nothing.
+    #
+    # AND WHETHER THAT COMPILE IS COLD, as `cold=true|false`, so engine.yml
+    # can queue a cold compile apart from the warm ones. See `cold_because`.
+    # With no free tree to ask about, it is cold: that is the queue whose runs
+    # step aside for the others, so a wrong `true` costs only this run.
     pin="${2:-}"
     [ -n "$pin" ] || usage
     series="$("$STAMP_SH" identity)" || exit 1
     compile=true
+    cold=true
     for slot in $(candidates "$pin" "$series"); do
       [ -d "$("$LOCK_SH" path "$slot/src")" ] && continue
       if [ "$(slot_series "$slot")" = "$series" ] &&
          [ "$(GITHUB_OUTPUT=/dev/stdout "$SLOT_SH" warm "$slot/src")" = "warm=true" ]; then
         compile=false
       fi
-      echo "the pick would take ${slot##*/}: compile=$compile"
+      if [ "$compile" = false ]; then
+        cold=false
+        why="it compiles nothing"
+      elif why="$(cold_because "$slot" "$pin")"; then
+        cold=true
+      else
+        cold=false
+        why="it recompiles only sources this series changes"
+      fi
+      echo "the pick would take ${slot##*/}: compile=$compile cold=$cold, because $why"
       break
     done
     echo "compile=$compile" >>"${GITHUB_OUTPUT:-/dev/stdout}"
+    echo "cold=$cold" >>"${GITHUB_OUTPUT:-/dev/stdout}"
     ;;
 
   use)

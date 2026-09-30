@@ -60,6 +60,7 @@ has "engine.yml has a plan job" '^  plan:' "$plan"
 has "on crux, where the trees are" 'runs-on: \[self-hosted, crux\]' "$plan"
 has "that asks the pool whether this run compiles" 'engine-tree-pool\.sh compiles ' "$plan"
 has "and hands the answer on" 'compile: \$\{\{ steps\.[a-z]+\.outputs\.compile \}\}' "$plan"
+has "with whether that compile is cold" 'cold: \$\{\{ steps\.[a-z]+\.outputs\.cold \}\}' "$plan"
 lacks "without taking a tree" 'engine-tree-pool\.sh pick|engine-tree-lock\.sh take' "$plan"
 
 echo "the build job"
@@ -68,8 +69,11 @@ has "needs the plan" 'needs: \[gate, plan\]' "$build"
 queue="$(concurrency_of "$build")"
 # The compile queue unless the plan positively said no compile: a plan that
 # failed or was skipped answers nothing, and queueing is the safe side.
-has "queues on the compile queue unless the plan said it compiles nothing" \
-  "group: \\$\\{\\{ needs\\.plan\\.outputs\\.compile == 'false' && .* \\|\\| 'crux-compile' \\}\\}" "$queue"
+# And the warm queue only when the plan positively said warm, so one cold
+# compile never holds the queue warm ones wait in: 80 minutes of one kept five
+# pull requests needing ~2 minutes of compile each waiting 40-86 minutes.
+has "queues on a compile queue unless the plan said it compiles nothing, the warm one only if it said warm" \
+  "group: \\$\\{\\{ needs\\.plan\\.outputs\\.compile == 'false' && .* \\|\\| needs\\.plan\\.outputs\\.cold == 'false' && 'crux-compile' \\|\\| 'crux-compile-cold' \\}\\}" "$queue"
 has "and otherwise on a group of its own run" \
   "group: .*github\\.run_id.*github\\.run_attempt" "$queue"
 has "keeping every pending run, not the newest" '^[[:space:]]*queue: max$' "$queue"
@@ -79,6 +83,21 @@ lacks "and never canceling a run in progress" 'cancel-in-progress: true' "$queue
 # engine-release.yml, which compiles in the same trees.
 has "and still takes the compile slot before compiling" \
   'engine-compile-slot\.sh take "\$LOCK_OWNER"' "$build"
+
+# THE TWO QUEUES SHARE ONE SLOT, so a warm compile reaching it while a cold one
+# holds it would still wait out the cold one, on a runner. So a cold build
+# steps aside for it -- one compile at a time still -- and only for it: at rank
+# 1, which engine-release.yml's rank-0 build steps aside for in turn.
+has "a cold build ranks 1 for the slot" \
+  "DOMICILE_COMPILE_SLOT_RANK: \\$\\{\\{ needs\\.plan\\.outputs\\.cold != 'false' && '1' \\|\\| '' \\}\\}" "$build"
+step="$(printf '%s\n' "$build" | awk '/^      - / { if (hit) { exit } step = "" }
+  { step = step $0 "\n" } /^      - name: Build$/ { hit = 1 } END { printf "%s", step }')"
+has "and steps aside while it holds the slot" \
+  "STEP_ASIDE: \\$\\{\\{ needs\\.plan\\.outputs\\.cold != 'false' && steps\\.slot\\.outcome == 'success' \\}\\}" "$step"
+has "through the yielding build" 'engine-yielding-build\.sh "\$LOCK_OWNER" --' "$step"
+has "waiting to take it back as long as the slot step waits" 'DOMICILE_COMPILE_SLOT_WAIT: 36000' "$step"
+release="$(grep -v '^[[:space:]]*#' "$ROOT/.github/workflows/engine-release.yml")"
+has "and the production build ranks 0, below it" 'DOMICILE_COMPILE_SLOT_RANK: 0$' "$release"
 
 # THE CRUX WORKFLOWS' OWN GROUPS STAY PER REF (test-engine-concurrency.sh), so
 # no other workflow may queue on this one's name by accident.

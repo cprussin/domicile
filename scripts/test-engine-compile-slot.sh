@@ -213,6 +213,29 @@ expect "a yield with nobody waiting just drops" ok \
 contains "and leaves it free" "nobody is compiling" "$(slot who)"
 expect "only the holder can yield" refused "$(status "$(slot yield xavier)")"
 
+# A HOLDER WITH A RANK YIELDS ONLY TO A HIGHER ONE. engine.yml's cold build
+# steps aside for a warm compile, and engine-release.yml's steps aside for
+# both. Two holders that each yielded to the other would hand the slot back
+# and forth, killing both builds every poll. Unranked is the highest: a waiter
+# that says nothing is a compile that never steps aside.
+rm -rf "$WORK/slot" "$WORK/slot.waiting"
+slot take victor >/dev/null
+( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=2 slot take walter >/dev/null ) &
+sleep 0.5
+expect "a rank-1 holder does not yield to a rank-1 waiter" refused \
+  "$(status "$(DOMICILE_COMPILE_SLOT_RANK=1 slot wanted victor)")"
+expect "a rank-0 holder yields to it" ok \
+  "$(status "$(DOMICILE_COMPILE_SLOT_RANK=0 slot wanted victor)")"
+expect "and an unranked holder yields to everybody" ok \
+  "$(status "$(slot wanted victor)")"
+wait
+( DOMICILE_COMPILE_SLOT_WAIT=2 slot take wendy >/dev/null ) &
+sleep 0.5
+expect "a rank-1 holder yields to an unranked waiter" ok \
+  "$(status "$(DOMICILE_COMPILE_SLOT_RANK=1 slot wanted victor)")"
+wait
+slot drop victor >/dev/null
+
 # A HOLD LEFT BY A RUNNER'S LAST JOB IS DEAD. A runner runs one job at a time
 # and kills what that job left running before the next, so a runner taking the
 # slot from a holder on that same runner is taking it from a job that is over:
