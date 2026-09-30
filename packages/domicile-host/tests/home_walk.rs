@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use domicile_host::home_walk::{walk, walk_within, Directory};
+use domicile_host::home_walk::{walk, walk_within, Directory, Entry};
 
 #[test]
 fn every_path_under_home_is_found_at_every_depth() {
@@ -26,9 +26,9 @@ fn every_path_under_home_is_found_at_every_depth() {
     // down and the old walk stopped at two, so a person who typed `README`
     // was told their home had no such file.
     let home = home([
-        ("/home/you", &["Notes", "src", "todo.txt"][..]),
+        ("/home/you", &["Notes/", "src/", "todo.txt"][..]),
         ("/home/you/Notes", &["today.org"]),
-        ("/home/you/src", &["domicile"]),
+        ("/home/you/src", &["domicile/"]),
         ("/home/you/src/domicile", &["README.md"]),
     ]);
 
@@ -57,8 +57,8 @@ fn the_shallow_paths_come_first_because_a_half_built_index_is_read() {
     // way `~/Notes` and `~/src` are there from the first moment and the deep
     // paths fill in under them.
     let home = home([
-        ("/home/you", &["deep", "shallow.txt"][..]),
-        ("/home/you/deep", &["down"]),
+        ("/home/you", &["deep/", "shallow.txt"][..]),
+        ("/home/you/deep", &["down/"]),
         ("/home/you/deep/down", &["here.txt"]),
     ]);
 
@@ -83,9 +83,9 @@ fn an_omitted_entry_is_neither_offered_nor_walked_at_any_depth() {
     // `target/` too big to be worth reading. A dot is nothing special here:
     // hiding those is the config's default, not the walk's rule.
     let home = home([
-        ("/home/you", &[".config", "src"][..]),
+        ("/home/you", &[".config/", "src/"][..]),
         ("/home/you/.config", &["domicile"]),
-        ("/home/you/src", &["main.rs", "target"]),
+        ("/home/you/src", &["main.rs", "target/"]),
         ("/home/you/src/target", &["debug"]),
     ]);
 
@@ -113,8 +113,8 @@ fn a_walk_within_the_home_names_and_omits_as_one_of_all_of_it_would() {
     // boot walk would have found there, named from the home and omitted by
     // the same rule.
     let home = home([
-        ("/home/you/src", &["new"][..]),
-        ("/home/you/src/new", &["main.rs", "target"]),
+        ("/home/you/src", &["new/"][..]),
+        ("/home/you/src/new", &["main.rs", "target/"]),
         ("/home/you/src/new/target", &["debug"]),
     ]);
 
@@ -130,19 +130,43 @@ fn a_walk_within_the_home_names_and_omits_as_one_of_all_of_it_would() {
 
 #[test]
 fn a_directory_that_will_not_open_is_a_leaf_rather_than_a_failure() {
-    // Which is what a plain file is — nothing in a directory listing says
-    // which of its entries can be read as one, so the walk finds out by
-    // asking. A permission denied on one subdirectory of a home is the same
-    // shape and gets the same answer: the path is still offered, and the walk
-    // carries on with the rest of the home rather than stopping on it.
+    // A permission denied on one subdirectory of a home: the path is still
+    // offered, and the walk carries on with the rest of the home rather than
+    // stopping on it.
     let home = home([
-        ("/home/you", &["locked", "todo.txt"][..]),
+        ("/home/you", &["locked/", "todo.txt"][..]),
         // `locked` names no entry of its own, so reading it fails.
     ]);
 
     let found = found(Path::new("/home/you"), &home);
 
     assert_eq!(found, vec!["locked".to_string(), "todo.txt".to_string()]);
+}
+
+#[test]
+fn only_a_directory_is_walked_so_a_link_is_offered_but_not_followed() {
+    // A LINK IS A NAME, NOT A PLACE THE WALK GOES. A `result` left by
+    // `nix build` points into the store, and a checkout's `node_modules` can
+    // be a farm of links into its own store: followed, each is a walk of
+    // somebody else's tree, or of one that leads back into itself. Offered by
+    // name, it is still a thing to open.
+    let home = home([
+        ("/home/you", &["result", "src/"][..]),
+        ("/home/you/result", &["bin/"]),
+        ("/home/you/result/bin", &["hello"]),
+        ("/home/you/src", &["main.rs"]),
+    ]);
+
+    let found = found(Path::new("/home/you"), &home);
+
+    assert_eq!(
+        found,
+        vec![
+            "result".to_string(),
+            "src".to_string(),
+            "src/main.rs".to_string(),
+        ]
+    );
 }
 
 #[test]
@@ -169,7 +193,16 @@ fn a_name_that_is_not_text_is_left_out_rather_than_ending_the_walk() {
     let home = FakeHome {
         entries: BTreeMap::from([(
             PathBuf::from("/home/you"),
-            vec![not_text("/home/you"), PathBuf::from("/home/you/todo.txt")],
+            vec![
+                Entry {
+                    path: not_text("/home/you"),
+                    directory: false,
+                },
+                Entry {
+                    path: PathBuf::from("/home/you/todo.txt"),
+                    directory: false,
+                },
+            ],
         )]),
     };
 
@@ -192,16 +225,28 @@ fn nothing_omitted(_: &str) -> bool {
 
 /// A filesystem of exactly the directories named, and nothing else.
 ///
-/// Anything absent reads as "not a directory", which is what a plain file is:
-/// `todo.txt` in the tables above is a leaf precisely because no entry names
-/// its contents.
+/// A name ending in `/` is listed as a directory, and anything else as not
+/// one. Reading a path that names no entry fails, which is what a directory
+/// that will not open does.
 fn home<'a>(tree: impl IntoIterator<Item = (&'a str, &'a [&'a str])>) -> FakeHome {
     FakeHome {
         entries: tree
             .into_iter()
             .map(|(path, names)| {
                 let path = PathBuf::from(path);
-                let children = names.iter().map(|name| path.join(name)).collect();
+                let children = names
+                    .iter()
+                    .map(|name| match name.strip_suffix('/') {
+                        Some(name) => Entry {
+                            path: path.join(name),
+                            directory: true,
+                        },
+                        None => Entry {
+                            path: path.join(name),
+                            directory: false,
+                        },
+                    })
+                    .collect();
                 (path, children)
             })
             .collect(),
@@ -215,11 +260,11 @@ fn not_text(parent: &str) -> PathBuf {
 }
 
 struct FakeHome {
-    entries: BTreeMap<PathBuf, Vec<PathBuf>>,
+    entries: BTreeMap<PathBuf, Vec<Entry>>,
 }
 
 impl Directory for FakeHome {
-    fn read(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read(&self, path: &Path) -> io::Result<Vec<Entry>> {
         self.entries.get(path).cloned().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, format!("no {}", path.display()))
         })

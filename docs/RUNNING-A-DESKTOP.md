@@ -94,8 +94,9 @@ desktop *is* the compositor, and the request is not made.
 The launcher searches an index of the home, walked at startup and kept current
 by a watch. What it leaves out is `[files] omit`: globs over paths relative to
 the home, with gitignore's rules — `*` stops at a `/`, `**` does not, `!` takes
-a path back, and the last pattern to match decides. An omitted directory is not
-walked, so nothing under it can be taken back.
+a path back, and the last pattern to match decides. An omitted directory is
+neither walked nor watched, so nothing under it can be taken back. A link is
+offered by name but not followed.
 
 ```toml
 [files]
