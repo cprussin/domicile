@@ -47,6 +47,7 @@ import type {
   DomicileModifiersEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
+  DomicileTrayEvent,
 } from "./domicile-host";
 import type { Extension } from "./extension";
 import { extensionSchema } from "./extension";
@@ -56,6 +57,7 @@ import {
   filePreviewKindSchema,
 } from "./file-preview";
 import type { Theme } from "./theme";
+import type { TrayItem } from "./tray";
 
 /**
  * A window exists.
@@ -407,6 +409,16 @@ export type ExtensionsMessage = {
   extensions: readonly Extension[];
 };
 
+/**
+ * The system tray, as a shell draws it.
+ *
+ * The whole tray every time, like the clipboard, and once more when the page
+ * connects. A click on an icon is `activateTrayItem(id, action)`.
+ */
+export type TrayMessage = {
+  items: readonly TrayItem[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -428,6 +440,7 @@ export type HostMessageMap = {
   idle: IdleMessage;
   locked: LockedMessage;
   extensions: ExtensionsMessage;
+  tray: TrayMessage;
   /**
    * Which way round the desk's windows are drawn: `theme`'s other half,
    * arriving once they have turned. See {@link DomicileHost.themeCaptured}.
@@ -675,6 +688,18 @@ export const extensions = (
   event: DomicileExtensionsEvent,
 ): ExtensionsMessage => ({
   extensions: z.array(extensionSchema).parse(event.extensions),
+});
+
+/**
+ * The tray's icons, with the SDK's own `arrival` left behind and an empty
+ * picture read as none — see {@link named}.
+ */
+export const tray = (event: DomicileTrayEvent): TrayMessage => ({
+  items: event.items.map((item) => ({
+    icon: named(item.icon),
+    id: item.id,
+    title: item.title,
+  })),
 });
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({

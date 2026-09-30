@@ -24,7 +24,7 @@ const SIZES: &[&str] = &[
 ];
 
 /// What a page can draw, and the type it is sent as.
-const KINDS: &[(&str, &str)] = &[("png", "image/png"), ("svg", "image/svg+xml")];
+pub(crate) const KINDS: &[(&str, &str)] = &[("png", "image/png"), ("svg", "image/svg+xml")];
 
 /// The biggest file sent. Every icon a search matched crosses on every
 /// keystroke, so an icon past this is none rather than a stalled launcher.
@@ -78,7 +78,7 @@ impl AppIcons {
 /// `path` as a `data:` URL, if it is a kind a page draws and small enough to
 /// send. A file that is not there is the ordinary answer to most of the paths
 /// a lookup tries.
-fn read(path: &Path) -> Option<String> {
+pub(crate) fn read(path: &Path) -> Option<String> {
     let ext = path.extension()?.to_str()?;
     let (_, mime) = KINDS.iter().find(|(kind, _)| *kind == ext)?;
     let metadata = fs::metadata(path).ok()?;

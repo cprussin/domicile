@@ -182,6 +182,12 @@ The evidence for each of those is in the doc that made the claim —
    stay on their screen because a `<webview>` on another page reloads.
    [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
 
+6. **The system tray's menus.** Icons, titles and clicks work: the compositor
+   hosts StatusNotifierItem and manganese draws the tray left of the
+   extensions'. Left: `com.canonical.dbusmenu`, without which most
+   libappindicator items do nothing on a secondary click.
+   [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM

@@ -133,6 +133,7 @@ const compositorOn = (global: HostGlobal): DomicileHost | undefined =>
  */
 const absentHost = (): DomicileHost => ({
   activateExtension: () => undefined,
+  activateTrayItem: () => undefined,
   addEventListener: () => undefined,
   closeApp: () => undefined,
   copyClipboardEntry: () => undefined,

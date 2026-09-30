@@ -130,6 +130,7 @@ mod scale;
 mod screens;
 mod shm_upload;
 mod timing_window;
+mod tray;
 mod uevents;
 mod uploads;
 mod viewport;
@@ -179,7 +180,7 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme,
+    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme, TrayAction,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
@@ -400,6 +401,13 @@ enum ClientRequest {
     CopyClipboardEntry {
         entry: u32,
     },
+    /// The shell clicked a tray icon: call it on the item. Through this
+    /// thread rather than straight to the tray's worker so that a locked desk
+    /// refuses it, as it refuses a spawn — see [`crate::lock::refused`].
+    ActivateTrayItem {
+        id: String,
+        action: TrayAction,
+    },
     /// Somebody typed a passphrase at the shell's lock screen.
     ///
     /// Here rather than in the brain because the lock is the *seat's*: what
@@ -502,6 +510,12 @@ struct ChromeHub {
     /// its wipe starts from. See [`crate::appearance`], which is also where
     /// the answer to "what if there is no bus" is.
     appearance: Appearance,
+    /// Where a click on a tray icon goes: the watcher's worker, which calls
+    /// it on the item. Set once, just after the hub exists, because the
+    /// watcher publishes the tray *through* the hub — see [`crate::tray`].
+    /// Unset in the unit tests, which have no bus, and a click there is
+    /// nobody's.
+    tray: OnceLock<tray::Tray>,
 }
 
 impl ChromeHub {
@@ -537,6 +551,7 @@ impl ChromeHub {
                 home_directory().as_deref(),
             ))),
             appearance,
+            tray: OnceLock::new(),
         });
         (hub, outbound_rx)
     }
@@ -1287,6 +1302,12 @@ fn read_chrome_messages(
             // copy produces, and the paste it can now make.
             Ok(ChromeMessage::CopyClipboardEntry { entry }) => {
                 hub.send_request(ClientRequest::CopyClipboardEntry { entry });
+                Vec::new()
+            }
+            // To the Wayland thread, where the lock is, like a spawn: a locked
+            // desk raises no application's window.
+            Ok(ChromeMessage::ActivateTrayItem { id, action }) => {
+                hub.send_request(ClientRequest::ActivateTrayItem { id, action });
                 Vec::new()
             }
             Ok(ChromeMessage::SearchFiles { query }) => {
@@ -4878,6 +4899,13 @@ impl DomicileCompositor {
             // row rather than carrying text: a page that could put arbitrary
             // bytes on the seat would be writing the desktop's clipboard
             // rather than choosing among what is already on it.
+            // On to the tray's worker, which calls it on the item: the session
+            // bus is nothing this thread has to do with.
+            ClientRequest::ActivateTrayItem { id, action } => {
+                if let Some(tray) = self.hub.tray.get() {
+                    tray.activate(id, action);
+                }
+            }
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
                 Some(text) => {
                     // The row becomes what a paste produces, which is not the
@@ -6891,6 +6919,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         host.set_theme(theme_on_the_wire(config.theme.mode));
         host.set_windows_theme(theme_on_the_wire(config.theme.mode));
     }
+    // The system tray, published through the hub: every change is taken up
+    // by the host, which says nothing where nothing moved, and broadcast. An
+    // empty tray first, so a desk with no session bus -- whose watcher never
+    // starts -- still tells a page there is nothing in it rather than nothing
+    // at all. See `tray`.
+    hub.host.lock().unwrap().set_tray(Vec::new());
+    let publishing = Arc::clone(&hub);
+    let _ = hub.tray.set(tray::serve(
+        data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home_directory().as_deref(),
+        ),
+        move |items| {
+            // Scoped, so the host is let go of before the broadcast queues.
+            let told = publishing.host.lock().unwrap().set_tray(items);
+            if let Some(message) = told {
+                publishing.broadcast(message);
+            }
+        },
+    ));
     // Bound here rather than in the serving thread, so that a socket that
     // cannot be bound ends the run rather than a thread. The shell is waiting
     // on the session document, which is published long after this — so nothing

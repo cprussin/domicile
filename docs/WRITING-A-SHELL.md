@@ -1176,6 +1176,24 @@ without a desktop meaning answer `not supported on a Domicile desk`.
 [`extensions/ExtensionTray.tsx`](/packages/shell-manganese/src/extensions/ExtensionTray.tsx)
 is manganese's.
 
+## The system tray
+
+Applications' tray icons — StatusNotifierItem, which the compositor hosts on
+the session bus — arrive as `tray`: the whole tray on every change, and once on
+connecting. A click goes back with the button it was.
+
+```ts
+domicile.on("tray", ({ items }) => {
+  drawTray(items); // { id, title, icon: a data: URL or undefined }
+});
+domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
+```
+
+What a click does is the application's. There are no menus yet — see
+[SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
+[`tray/SystemTray.tsx`](/packages/shell-manganese/src/tray/SystemTray.tsx) is
+manganese's.
+
 ## Bundling
 
 One build, from your module rather than from a document, emitting one file
