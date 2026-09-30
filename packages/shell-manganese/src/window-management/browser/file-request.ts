@@ -42,14 +42,20 @@ const modeSchema = z.enum(WEBVIEW_FILE_CHOOSER_MODES).transform((mode) => {
 /**
  * A page waiting for a file: what it asks for, and the two ways to answer.
  *
- * Paths are relative to home, the vocabulary `searchFiles` answers in — see
- * `DomicileFileChooserEvent`.
+ * Paths are absolute, or relative to home — the vocabulary `searchFiles`
+ * answers in, where `""` is home. See `DomicileFileChooserEvent`.
  */
 export type FileRequest = {
   /** Extensions the page will take, lower case and dotless; empty is any. */
   accept: readonly string[];
   cancel: () => void;
   choose: (paths: readonly string[]) => void;
+  /**
+   * What is in the directory at `path`, a directory's ending in `/` — how the
+   * picker reaches what the index never found. Rejects for one the browser
+   * cannot read.
+   */
+  list: (path: string) => Promise<readonly string[]>;
   mode: ChooserMode;
   /** The name the page suggests for a save; `""` otherwise. */
   suggestedName: string;
@@ -65,6 +71,7 @@ export const fileRequestOf = (
   choose: (paths) => {
     event.choose(paths);
   },
+  list: (path) => event.list(path),
   mode: modeSchema.parse(event.mode),
   suggestedName: event.suggestedName,
 });

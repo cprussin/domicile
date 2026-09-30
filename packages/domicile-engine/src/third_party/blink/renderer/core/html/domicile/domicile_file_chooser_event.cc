@@ -6,9 +6,12 @@
 #include <optional>
 #include <utility>
 
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -21,14 +24,26 @@ constexpr char kOpenMultiple[] = "open-multiple";
 constexpr char kOpenFolder[] = "open-folder";
 constexpr char kSave[] = "save";
 
-// A path the browser can put under the home: not empty, not absolute, and not
-// climbing out. The browser refuses the rest as a bad message, so they are
-// refused here first, as the TypeError a shell can read.
-bool IsHomeRelative(const String& path) {
-  if (path.empty() || path.starts_with('/')) {
-    return false;
+// A path that climbs with `..`, which the browser refuses as a bad message --
+// see ResolvedPath in components/domicile/browser/file_choice.h -- so it is
+// refused here first, as the TypeError a shell can read. Anything else is a
+// path: absolute, or relative to the home.
+bool Climbs(const String& path) {
+  return path.Split('/').Contains(String(".."));
+}
+
+constexpr char kClimbs[] = "A path must not climb with `..`.";
+
+// The browser's listing, or its refusal: not a directory, not one it can read,
+// or no chooser waiting -- which is this one answered while it was asked.
+void Listed(ScriptPromiseResolver<IDLSequence<IDLString>>* resolver,
+            const std::optional<Vector<String>>& entries) {
+  if (!entries.has_value()) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kNotReadableError,
+                                     "That is not a directory to list.");
+    return;
   }
-  return !path.Split('/').Contains(String(".."));
+  resolver->Resolve(*entries);
 }
 
 }  // namespace
@@ -84,13 +99,34 @@ void DomicileFileChooserEvent::choose(const Vector<String>& paths,
     return;
   }
   for (const String& path : paths) {
-    if (!IsHomeRelative(path)) {
-      exception_state.ThrowTypeError(
-          "A path must be relative to the home directory, and inside it.");
+    if (Climbs(path)) {
+      exception_state.ThrowTypeError(kClimbs);
       return;
     }
   }
   Reply(paths);
+}
+
+ScriptPromise<IDLSequence<IDLString>> DomicileFileChooserEvent::list(
+    ScriptState* script_state,
+    const String& path,
+    ExceptionState& exception_state) {
+  if (!answer_) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "This file chooser has already been answered.");
+    return EmptyPromise();
+  }
+  if (Climbs(path)) {
+    exception_state.ThrowTypeError(kClimbs);
+    return EmptyPromise();
+  }
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<IDLString>>>(
+          script_state, exception_state.GetContext());
+  ScriptPromise<IDLSequence<IDLString>> promise = resolver->Promise();
+  owner_->ListDirectory(path, BindOnce(&Listed, WrapPersistent(resolver)));
+  return promise;
 }
 
 void DomicileFileChooserEvent::cancel(ExceptionState& exception_state) {

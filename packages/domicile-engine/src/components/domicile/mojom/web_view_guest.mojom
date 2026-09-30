@@ -280,8 +280,10 @@ interface WebViewGuestClient {
   // and nothing else. Empty is anything. `suggested_name` is a save's
   // suggestion and empty otherwise.
   //
-  // `paths` ARE RELATIVE TO THE HOME, the vocabulary `found_files` already
-  // speaks -- see components/domicile/browser/file_choice.h. Null is a cancel,
+  // `paths` ARE ABSOLUTE OR RELATIVE TO THE HOME -- relative is the vocabulary
+  // `found_files` already speaks, absolute is the rest of the filesystem a
+  // picker walks with WebViewGuest.ListDirectory. See
+  // components/domicile/browser/file_choice.h. Null is a cancel,
   // and so is a shell that never took the event: the element answers for it.
   // A pipe that closes first -- the element gone -- is a cancel too.
   FileChooserRequested(WebViewFileChooserMode mode,
@@ -372,6 +374,18 @@ interface WebViewGuest {
   // that arrives here anyway did not come from the element, and is a bad
   // message.
   SetZoom(double factor);
+
+  // The names in the directory at `path`, each a directory's ending in `/`,
+  // for the shell's picker to walk -- so a file the index never found is one
+  // it can still reach. `path` is absolute or relative to the home, as
+  // FileChooserRequested's answer is, and one that climbs with `..` is a bad
+  // message: the element refuses it before sending.
+  //
+  // ONLY WHILE A FILE CHOOSER IS OPEN. The shell reads nothing of the
+  // filesystem beyond what a search finds except to answer a question a page
+  // asked, so with none waiting this answers null -- and null too for a path
+  // that is not a directory this process can read.
+  ListDirectory(string path) => (array<string>? entries);
 
   // The element took focus: the shell's `view.focus()`, or a click in the page.
   // What makes this guest the active tab to chrome.tabs -- the browser has no
