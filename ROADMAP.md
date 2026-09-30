@@ -181,12 +181,19 @@ The evidence for each of those is in the doc that made the claim —
    `fullscreen global` through the same mirrors, and browser windows, which
    stay on their screen because a `<webview>` on another page reloads.
    [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
+   What is left comes free with item 7.
 
 6. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
    extensions'. Left: `com.canonical.dbusmenu`, without which most
    libappindicator items do nothing on a secondary click.
    [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
+
+7. **One page for the desk.** On a tty the shell becomes one page over the
+   desk's bounding box, shown on every monitor at its own density and refresh
+   rate, instead of a page per monitor. Needs the engine (presenters per CRTC,
+   a cc tiling per display scale) before the shells lose their N-page code.
+   [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 ## In the engine fork — the agent on `crux`
 
