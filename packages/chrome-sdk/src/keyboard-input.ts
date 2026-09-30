@@ -47,7 +47,24 @@ export const installKeyboardInput = (context: ElementContext): void => {
   // change, and it is the event a navigation fires reliably.
   window.addEventListener("blur", releaseHeld);
   window.addEventListener("pagehide", releaseHeld);
+  document.addEventListener("focusin", releaseIntoGuest(releaseHeld));
 };
+
+// A key released while a `<webview>` guest has the focus comes up on the site
+// and never in this document, so what this page is holding is let go as the
+// guest takes it. Without that, Super held on a terminal through
+// the chord that focuses a browser window stays down in the seat, and every
+// window afterward takes each key as a Super chord.
+const releaseIntoGuest =
+  (releaseHeld: () => void) =>
+  (event: FocusEvent): void => {
+    if (
+      event.target instanceof Element &&
+      event.target.localName === "webview"
+    ) {
+      releaseHeld();
+    }
+  };
 
 const forwardPress =
   (context: ElementContext) =>
