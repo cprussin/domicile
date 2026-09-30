@@ -108,7 +108,7 @@ broker = socket.socket(socket.AF_UNIX)
 broker.bind(given["--domicile-broker-socket"])
 broker.listen(1)
 
-page = re.search(r"http://127\.0\.0\.1:[0-9]+[^&]*", given["--app"]).group(0)
+page = re.search(r"http://(?:127\.0\.0\.1|localhost):[0-9]+[^&]*", given["--app"]).group(0)
 try:
     with urllib.request.urlopen(page, timeout=5) as answer:
         record("engine.page", "answered")

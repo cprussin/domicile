@@ -650,8 +650,12 @@ known and it is a build-system cost, not a language one.
   swipe past the edge acts. `WebViewGuest` claims a browser window's context
   menu the same way, and hands a chord its page left alone — and Ctrl+wheel,
   as a request — back to the shell, which binds a browser's keys itself. Patch `0048` turns off the password manager, autofill and
-  translate in the profile's prefs and refuses WebAuthn with no UI, with
-  Blink's `WebAuth` off so sites do not offer a passkey. Unconditional: every
+  translate in the profile's prefs and refuses WebAuthn with no UI, and
+  reports no platform authenticator or conditional UI so sites do not offer a
+  passkey. Passkeys are an extension's: `PublicKeyCredential` stays for a
+  content script to wrap, and an origin a `webAuthenticationProxy` extension
+  has taken still gets a request delegate, which is how content reaches it
+  (`guard-webview-passkey-extension.sh`). Unconditional: every
   `Browser` this engine opens is a shell window. `guard-shell-shortcuts.sh` is
   the keyboard half; the context menu and the offers are drawn by the browser
   where no guard can read them.
