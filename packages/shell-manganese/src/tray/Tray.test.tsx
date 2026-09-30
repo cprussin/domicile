@@ -1,0 +1,184 @@
+import { describe, expect, it } from "bun:test";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Extension } from "@domicile/chrome-sdk/extension";
+import type { TrayItem } from "@domicile/chrome-sdk/tray";
+import { fireEvent, render, screen } from "@testing-library/react";
+
+import { Tray } from "./Tray";
+
+/** An application's icon. */
+const sync: TrayItem = {
+  icon: "data:image/png;base64,iVBORw0KGgo=",
+  id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
+  title: "Syncthing",
+};
+
+/** An extension's action, with no popup so a click is one call. */
+const counter: Extension = {
+  badgeColor: "#00000000",
+  badgeText: "",
+  enabled: true,
+  icon: "data:image/png;base64,iVBORw0KGgo=",
+  id: "ponmlkjihgfedcbaponmlkjihgfedcba",
+  name: "Counter",
+  popup: undefined,
+  title: "Counter",
+};
+
+/** And one `action.disable()` turned off. */
+const off: Extension = {
+  ...counter,
+  enabled: false,
+  id: "x".repeat(32),
+  title: "Off",
+};
+
+const SYNC = "status-notifier:Syncthing";
+const COUNTER = `extension:${counter.id}`;
+
+/** A client that keeps every click the tray hands on, in order. */
+const recordingDomicile = (clicked: string[]): DomicileClient =>
+  ({
+    activateExtension: (id: string) => {
+      clicked.push(id);
+    },
+    activateTrayItem: (id: string) => {
+      clicked.push(id);
+    },
+  }) as unknown as DomicileClient;
+
+type Move = [readonly string[], string, string];
+
+type TrayProps = {
+  domicile?: DomicileClient;
+  extensions?: readonly Extension[];
+  items?: readonly TrayItem[];
+  onMove?: (shown: readonly string[], dragged: string, target: string) => void;
+  order?: readonly string[];
+};
+
+const renderTray = ({
+  domicile = recordingDomicile([]),
+  extensions = [counter],
+  items = [sync],
+  onMove = () => undefined,
+  order = [],
+}: TrayProps) =>
+  render(
+    <Tray
+      domicile={domicile}
+      extensions={extensions}
+      items={items}
+      onMove={onMove}
+      onOpen={() => undefined}
+      opened={undefined}
+      order={order}
+    />,
+  );
+
+const labels = () =>
+  screen
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label"));
+
+const button = (name: string) => screen.getByRole("button", { name });
+
+/** Press `from` and move the pointer over `to`. */
+const drag = (from: string, to: string) => {
+  fireEvent.pointerDown(button(from), { button: 0, pointerId: 1 });
+  fireEvent.pointerOver(button(to), { pointerId: 1 });
+};
+
+describe("Tray", () => {
+  describe("rendering", () => {
+    it("draws applications' icons and enabled extensions' actions in one row", () => {
+      // Applications first, as they arrived, until the user says otherwise.
+      renderTray({ extensions: [counter, off] });
+
+      expect(labels()).toStrictEqual(["Syncthing", "Counter"]);
+    });
+
+    it("draws them in the order the user put them in", () => {
+      renderTray({ order: [COUNTER, SYNC] });
+
+      expect(labels()).toStrictEqual(["Counter", "Syncthing"]);
+    });
+
+    it("follows the lists as they change", () => {
+      const { rerender } = renderTray({});
+
+      rerender(
+        <Tray
+          domicile={recordingDomicile([])}
+          extensions={[]}
+          items={[{ ...sync, title: "Syncthing (paused)" }]}
+          onMove={() => undefined}
+          onOpen={() => undefined}
+          opened={undefined}
+          order={[]}
+        />,
+      );
+
+      expect(labels()).toStrictEqual(["Syncthing (paused)"]);
+    });
+
+    it("leaves no picture for the engine to drag instead", () => {
+      // A native drag of an `<img>` cancels the pointer the reorder follows.
+      const { container } = renderTray({});
+
+      // Decorative pictures, which have no role to find them by.
+      expect(
+        [...container.querySelectorAll("img")].map((image) =>
+          image.getAttribute("draggable"),
+        ),
+      ).toStrictEqual(["false", "false"]);
+    });
+  });
+
+  describe("a drag", () => {
+    it("moves the pressed icon to the one the pointer is over", async () => {
+      const moved = new Promise<Move>((resolve) => {
+        renderTray({
+          onMove: (shown, dragged, target) => {
+            resolve([shown, dragged, target]);
+          },
+        });
+      });
+
+      drag("Syncthing", "Counter");
+
+      expect(await moved).toStrictEqual([[SYNC, COUNTER], SYNC, COUNTER]);
+    });
+
+    it("moves nothing once let go, or when pressed with another button", () => {
+      const moves: Move[] = [];
+      renderTray({
+        onMove: (shown, dragged, target) => {
+          moves.push([shown, dragged, target]);
+        },
+      });
+
+      fireEvent.pointerDown(button("Syncthing"), { button: 0, pointerId: 1 });
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      fireEvent.pointerOver(button("Counter"), { pointerId: 1 });
+      fireEvent.pointerDown(button("Syncthing"), { button: 2, pointerId: 1 });
+      fireEvent.pointerOver(button("Counter"), { pointerId: 1 });
+
+      expect(moves).toStrictEqual([]);
+    });
+
+    it("is not a click, and the next press is", () => {
+      const clicked: string[] = [];
+      renderTray({ domicile: recordingDomicile(clicked) });
+
+      drag("Counter", "Syncthing");
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      fireEvent.click(button("Counter"));
+      fireEvent.pointerDown(button("Counter"), { button: 0, pointerId: 1 });
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      fireEvent.click(button("Counter"));
+
+      expect(clicked).toStrictEqual([counter.id]);
+    });
+  });
+});

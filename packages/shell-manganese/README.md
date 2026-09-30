@@ -1,7 +1,7 @@
 # @domicile/shell-manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
-under a transparent bar carrying the system tray, the extensions' tray, the
+under a transparent bar carrying the tray, the
 workspaces, a clock and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
@@ -548,7 +548,7 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of every screen: the system tray, the extensions' tray and the
+Across the top of every screen: the tray and the
 workspaces, in that order, at one end, the clock in the middle, and at the other end the charge, behind the name
 of the binding mode whenever it is not the usual one. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
@@ -694,10 +694,22 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
-### The extensions' tray
+### The tray
 
-Beside the workspaces: each extension the config names that has an action, as
-its icon, named by its title, with its badge over the corner.
+Beside the workspaces, one row: each application's StatusNotifierItem, and each
+extension the config names that has an action, as its icon, named by its title,
+an extension's with its badge over the corner.
+
+- **Drag an icon to reorder the row.** Press it and move over another; it takes
+  that one's place. A press that moved an icon is not a click. The order is
+  kept in `localStorage` (`tray-order:v1`), shared by every monitor's bar, and
+  an icon that goes away comes back where it was — an extension by its id, an
+  application by its title, since its bus name is new every run. Icons never
+  placed go after the rest, applications first.
+- **An application's click is its own**: `Activate`, the middle button
+  `SecondaryActivate`, the secondary `ContextMenu`.
+
+For an extension:
 
 - **Every click is `activateExtension(id)`**: the extension gets `activeTab`
   on the focused browser window, as a click on Chrome's toolbar gives it.
@@ -763,8 +775,9 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the workspaces, the extensions' tray, the clock and the charge. |
-| `src/extensions/` | The extensions' tray on the bar, the popup panel under an icon, and the engine's list it draws. |
+| `src/top-bar/` | The bar: the tray, the workspaces, the clock and the charge. |
+| `src/tray/` | The tray: applications' and extensions' icons in one row, and the order the user dragged them into. |
+| `src/extensions/` | An extension's action on the tray, the popup panel under its icon, and the engine's list it draws. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications, then the desk's bookmarks (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the site's `/favicon.ico` and saying the `label` of the URL a shortcode picked: `Mail for Work`), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |

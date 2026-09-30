@@ -1173,7 +1173,7 @@ element, as the page's own asks do:
 `tabs.move`, `tabs.group`, `tabs.discard`, `windows.create` and the rest
 without a desktop meaning answer `not supported on a Domicile desk`.
 
-[`extensions/ExtensionTray.tsx`](/packages/shell-manganese/src/extensions/ExtensionTray.tsx)
+[`extensions/ExtensionAction.tsx`](/packages/shell-manganese/src/extensions/ExtensionAction.tsx)
 is manganese's.
 
 ## The system tray
@@ -1191,8 +1191,8 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 
 What a click does is the application's. There are no menus yet — see
 [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
-[`tray/SystemTray.tsx`](/packages/shell-manganese/src/tray/SystemTray.tsx) is
-manganese's.
+[`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx) is
+manganese's, drawing both kinds in one row the user can reorder.
 
 ## Bundling
 

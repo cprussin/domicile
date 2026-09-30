@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { popupShown } from "../extensions/shown";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { TOP_BAR, TopBar } from "../top-bar/TopBar";
+import type { TrayOrder } from "../tray/useTrayOrder";
 import { onScreen } from "../window-management/floating/float";
 import type { Geometry, Screenful } from "../window-management/placement";
 import { placementsOf, withOverhangs } from "../window-management/placement";
@@ -38,6 +39,8 @@ type Props = {
   modifiers: Modifiers;
   /** The system tray's icons, for this monitor's bar. */
   tray: readonly TrayItem[];
+  /** The order of this monitor's tray, which is every monitor's. */
+  trayOrder: TrayOrder;
   windows: Windows;
 };
 
@@ -64,6 +67,7 @@ export const Monitor = ({
   extensions,
   modifiers,
   tray,
+  trayOrder,
   windows,
 }: Props) => {
   const geometry = useMemo(() => geometryOf(display, desk), [desk, display]);
@@ -141,6 +145,7 @@ export const Monitor = ({
         }}
         openedExtension={opened}
         tray={tray}
+        trayOrder={trayOrder}
         workspaces={workspacesOn(windows, display.name)}
       />
       <Stage

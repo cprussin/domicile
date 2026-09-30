@@ -3,7 +3,7 @@ import type { TrayItem } from "@domicile/chrome-sdk/tray";
 import { Button } from "@domicile/component-library/Button";
 
 import { css } from "../../styled-system/css";
-import { center, hstack } from "../../styled-system/patterns";
+import { center } from "../../styled-system/patterns";
 
 /** The middle button, as `MouseEvent.button` numbers it. */
 const MIDDLE_BUTTON = 1;
@@ -11,12 +11,12 @@ const MIDDLE_BUTTON = 1;
 type Props = {
   /** What every click asks. */
   domicile: DomicileClient;
-  /** The icons, as the compositor last described them. */
-  items: readonly TrayItem[];
+  /** The icon, as the compositor last described it. */
+  item: TrayItem;
 };
 
 /**
- * The system tray: every application's StatusNotifierItem, on the bar.
+ * An application's StatusNotifierItem, on the bar's tray.
  *
  * **A click is the application's.** The primary button is `Activate` — its
  * window, usually — the middle one `SecondaryActivate`, and the secondary one
@@ -27,40 +27,39 @@ type Props = {
  * An icon with no picture is labeled by the first letter of its title: an
  * application that sent nothing drawable is still one that can be clicked.
  */
-export const SystemTray = ({ domicile, items }: Props) => (
-  <div className={trayStyles}>
-    {items.map(({ icon, id, title }) => (
-      <Button
-        key={id}
-        label={title}
-        onAuxClick={(event) => {
-          if (event.button === MIDDLE_BUTTON) {
-            domicile.activateTrayItem(id, "secondary");
-          }
-        }}
-        onClick={() => {
-          domicile.activateTrayItem(id, "primary");
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          domicile.activateTrayItem(id, "context");
-        }}
-        size="sm"
-        variant="ghost"
-      >
-        {icon === undefined ? (
-          <span className={letterStyles}>{title.slice(0, 1)}</span>
-        ) : (
-          <img alt="" className={imageStyles} src={icon} />
-        )}
-      </Button>
-    ))}
-  </div>
+export const TrayIcon = ({ domicile, item: { icon, id, title } }: Props) => (
+  <Button
+    label={title}
+    onAuxClick={(event) => {
+      if (event.button === MIDDLE_BUTTON) {
+        domicile.activateTrayItem(id, "secondary");
+      }
+    }}
+    onClick={() => {
+      domicile.activateTrayItem(id, "primary");
+    }}
+    onContextMenu={(event) => {
+      event.preventDefault();
+      domicile.activateTrayItem(id, "context");
+    }}
+    size="sm"
+    variant="ghost"
+  >
+    {icon === undefined ? (
+      <span className={letterStyles}>{title.slice(0, 1)}</span>
+    ) : (
+      <img
+        alt=""
+        className={imageStyles}
+        // Not the engine's to drag: a press and a move reorders the tray.
+        draggable={false}
+        src={icon}
+      />
+    )}
+  </Button>
 );
 
-const trayStyles = hstack({ gap: 0.5 });
-
-// The extensions' size beside it, so the two trays read as one row.
+// The extensions' size beside it, so the two kinds read as one row.
 const imageStyles = css({ blockSize: 4, inlineSize: 4 });
 
 // The same box as a picture, so an icon without one does not shift the row.

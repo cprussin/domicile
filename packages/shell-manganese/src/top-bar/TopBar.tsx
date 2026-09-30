@@ -7,8 +7,8 @@ import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
 import { Clock } from "../clock/Clock";
-import { ExtensionTray } from "../extensions/ExtensionTray";
-import { SystemTray } from "../tray/SystemTray";
+import { Tray } from "../tray/Tray";
+import type { TrayOrder } from "../tray/useTrayOrder";
 import { BindingMode } from "../window-management/window-state";
 import { Workspaces } from "./Workspaces";
 
@@ -41,15 +41,17 @@ type Props = {
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
-  /** The system tray's icons. */
+  /** The applications' tray icons. */
   tray: readonly TrayItem[];
+  /** The order the tray is in, and how a drag changes it. */
+  trayOrder: TrayOrder;
   /** The workspaces this screen has, which are the ones shown. */
   workspaces: readonly string[];
 };
 
 /**
- * The bar across the top of the screen the chrome is on: the system tray, the
- * extensions' tray and the workspaces, the clock, and the charge.
+ * The bar across the top of the screen the chrome is on: the tray and the
+ * workspaces, the clock, and the charge.
  *
  * **It launches nothing.** Everything this desktop does is on a key, and two
  * buttons for two of those keys were a ranking nobody made — the terminal is
@@ -59,10 +61,10 @@ type Props = {
  * be pressed to ask: which workspace this is, what time it is, how much charge
  * is left, and which way round the desk is drawn.
  *
- * **The trays are left of the workspaces**, the system tray outermost and the
- * extensions' between it and the switcher, and they launch nothing of the
+ * **The tray is left of the workspaces**, and it launches nothing of the
  * desktop's either: each icon is an application's StatusNotifierItem or an
- * extension's toolbar button, whose clicks are theirs and have no key.
+ * extension's toolbar button, in one row in the order the user dragged them
+ * into, whose clicks are theirs and have no key.
  *
  * **The theme toggle is the desktop's one control here, and it is not a
  * launcher.** It changes what is already on screen rather than putting
@@ -102,16 +104,19 @@ export const TopBar = ({
   onSelectWorkspace,
   openedExtension,
   tray,
+  trayOrder,
   workspaces,
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
     <div className={startStyles}>
-      <SystemTray domicile={domicile} items={tray} />
-      <ExtensionTray
+      <Tray
         domicile={domicile}
         extensions={extensions}
+        items={tray}
+        onMove={trayOrder.move}
         onOpen={onOpenExtension}
         opened={openedExtension}
+        order={trayOrder.order}
       />
       <Workspaces
         current={current}
