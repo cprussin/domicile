@@ -10,7 +10,9 @@
 # WHY THIS EXISTS. A file input in a browser window did nothing: the guest's
 # WebContentsDelegate had content's default RunFileChooser, which cancels. The
 # guest now asks the element, the element dispatches `domicile-file-chooser`,
-# and the shell answers with a path relative to the home.
+# and the shell answers with a path. That path is ABSOLUTE here, and the shell
+# LISTS its directory first with the event's `list()`, as a picker walking the
+# filesystem rather than the home's index does.
 #
 # WHAT IT ASSERTS, in order, because each answer is only worth anything if the
 # one before it holds:
@@ -22,6 +24,8 @@
 #   the press landed in the guest      on the input, which fills the page
 #   the browser was asked              WebViewGuest::RunFileChooser ran
 #   the shell was asked                the question crossed to the element
+#   the shell listed the directory     `list()` crossed to the browser and
+#                                      back with the picked file's name
 #   the shell answered                 its answer did not throw
 #   the page READ the file             THE CLAIM: the name, and the contents --
 #                                      which a renderer can read only if the
@@ -71,8 +75,10 @@ WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# What the shell picks, relative to the home, and what is in it.
-PICK="picked/guard-upload.txt"
+# What the shell picks -- absolute, under this guard's home -- the directory it
+# lists first, and what is in the file.
+PICK="$HOME_DIR/picked/guard-upload.txt"
+LISTED="$(dirname "$PICK")"
 TEXT="a file the shell picked"
 
 WHICH=""
@@ -103,8 +109,8 @@ command -v python3 >/dev/null || {
 }
 
 rm -f "$BROKER"; rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
-mkdir -p "$HOME_DIR/$(dirname "$PICK")"
-printf '%s' "$TEXT" >"$HOME_DIR/$PICK"
+mkdir -p "$LISTED"
+printf '%s' "$TEXT" >"$PICK"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
@@ -134,7 +140,7 @@ rm -f "$ENGINE_LOG"
 HOME="$HOME_DIR" "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
-  --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SITE/upload&answer=$ANSWER&pick=$PICK" \
+  --app="domicile://shell/?strip=$STRIP_HEIGHT&src=$SITE/upload&answer=$ANSWER&pick=$PICK&list=$LISTED" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-file-chooser.js" \
   --remote-debugging-port=0 \
@@ -192,6 +198,7 @@ SAW_GUEST=$(saw "GUARD guest-mousedown")
 # page opened no chooser" from "it did, and the shell was never told".
 SAW_BROWSER=$(saw "domicile: a <webview>'s page asked for a file; asking the shell.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=open ")
+SAW_LISTED=$(saw "GUARD listed $(basename "$PICK")")
 SAW_ANSWERED=$(saw "GUARD answered")
 # Name and contents as one string: the contents are what say the browser
 # granted this renderer the file.
@@ -201,7 +208,7 @@ SAW_NOTHING=$(saw "GUARD picked-nothing")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST"
-echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED and answered=$SAW_ANSWERED"
+echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED, listed=$SAW_LISTED and answered=$SAW_ANSWERED"
 echo "the page got: the file=$SAW_PICKED any file=$SAW_ANY_PICK nothing=$SAW_NOTHING"
 echo
 
@@ -231,6 +238,12 @@ and no domicile-file-chooser in open mode reached this document. That is \
 FileChooserRequested on WebViewGuestClient, the dispatch in \
 HTMLWebViewElement, or the event's name, of which WEBVIEW_FILE_CHOOSER_EVENT \
 in the SDK is the third copy"
+elif [ "$SAW_LISTED" != "1" ]; then
+  FAILURE="THE SHELL COULD NOT LIST THE DIRECTORY IT PICKS FROM: its list() \
+never answered with the file this guard wrote. That is the event's list(), \
+WebViewGuest::ListDirectory -- which answers only while a chooser is open -- \
+or DirectoryEntries in file_choice.h. The engine log has GUARD list-refused \
+if it was refused"
 elif [ "$SAW_ANSWERED" != "1" ]; then
   FAILURE="the shell was asked and its answer threw: this guard's page called \
 choose() or cancel() and never got past it. The engine log has the exception"
@@ -248,12 +261,12 @@ and heard the cancel. So what the positive run reads is the shell's answer"
   fi
 elif [ "$SAW_PICKED" = "1" ]; then
   PASSED="an <input type=\"file\"> clicked inside a browser window asked the \
-shell, and the file the shell answered with -- a path relative to the home -- \
-reached the page, which read its contents"
+shell, which listed its directory and answered with an absolute path, and \
+that file reached the page, which read its contents"
 elif [ "$SAW_ANY_PICK" = "1" ]; then
   FAILURE="THE PAGE GOT THE WRONG FILE: a file arrived and it is not the one \
-the shell picked, by name or by contents. The path is resolved under the home \
-in the browser -- see PathInHome in file_choice.h"
+the shell picked, by name or by contents. The path is resolved in the \
+browser -- see ResolvedPath in file_choice.h"
 elif [ "$SAW_NOTHING" = "1" ]; then
   FAILURE="THE ANSWER BECAME A CANCEL: the shell chose a file and the page \
 heard a cancel. The browser refused the answer -- a bad message, which the \

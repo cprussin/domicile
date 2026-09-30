@@ -17,6 +17,7 @@ const asking = (mode: string, answers: string[] = []) =>
     choose: (paths: readonly string[]) => {
       answers.push(`choose ${paths.join(",")}`);
     },
+    list: (path: string) => Promise.resolve([`${path}/a`, `${path}/b/`]),
     mode,
     suggestedName: "photo.png",
   });
@@ -55,5 +56,12 @@ describe("fileRequestOf", () => {
     fileRequestOf(asking("open", answers)).cancel();
 
     expect(answers).toStrictEqual(["choose a.png,b.jpg", "cancel"]);
+  });
+
+  it("lists a directory through the event", async () => {
+    expect(await fileRequestOf(asking("open")).list("/mnt")).toStrictEqual([
+      "/mnt/a",
+      "/mnt/b/",
+    ]);
   });
 });

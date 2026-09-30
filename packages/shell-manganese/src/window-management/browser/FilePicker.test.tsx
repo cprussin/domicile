@@ -32,6 +32,28 @@ const search = (query: string) => {
   });
 };
 
+/**
+ * The filesystem the engine lists, by the path the picker asks for: absolute,
+ * or relative to home. A directory's name ends in `/`, and a path missing here
+ * is one the browser cannot read.
+ */
+const FILESYSTEM = new Map<string, readonly string[]>([
+  ["", ["Documents/", "Pictures/", "notes.txt"]],
+  ["Pictures", ["cat.png", "dog.png"]],
+  ["/", ["mnt/", "tmp/"]],
+  ["/mnt", ["usb/"]],
+  ["/mnt/usb", ["photo.png", "raw/"]],
+  ["/mnt/usb/raw", []],
+  ["/tmp", []],
+]);
+
+const list = (path: string): Promise<readonly string[]> => {
+  const entries = FILESYSTEM.get(path);
+  return entries === undefined
+    ? Promise.reject(new DOMException(path, "NotReadableError"))
+    : Promise.resolve(entries);
+};
+
 /** The answer a picker gave: the paths chosen, or `undefined` for a cancel. */
 type Answer = readonly string[] | undefined;
 
@@ -52,6 +74,7 @@ const picker = (
             resolve(undefined);
           },
           choose: resolve,
+          list,
           mode,
           suggestedName,
         }}
@@ -216,6 +239,121 @@ describe("FilePicker", () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(await answered).toBeUndefined();
+    });
+  });
+
+  // The index is the home, and a file anywhere else is reached by typing
+  // where it is.
+  describe("walking the filesystem", () => {
+    it("lists a directory typed as a path, and walks into one with Enter", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      await userEvent.type(box(), "/mnt/");
+      expect(await rows()).toStrictEqual(["usb"]);
+      await userEvent.type(box(), "{Enter}");
+
+      expect(box()).toHaveValue("/mnt/usb/");
+      expect(await rows()).toStrictEqual(["raw", "photo.png"]);
+      await userEvent.type(box(), "{ArrowDown}{Enter}");
+      expect(await answered).toStrictEqual(["/mnt/usb/photo.png"]);
+    });
+
+    it("walks into a directory that is clicked", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+      await userEvent.type(box(), "/mnt/");
+      await rows();
+
+      await userEvent.click(screen.getByRole("option", { name: "usb" }));
+
+      expect(box()).toHaveValue("/mnt/usb/");
+      await userEvent.type(box(), "{Escape}");
+      await answered;
+    });
+
+    // A directory is somewhere to walk, not a file to take.
+    it("marks no directory with Tab", async () => {
+      const answered = picker(ChooserMode.OpenMultiple);
+      await rows();
+      await userEvent.type(box(), "/mnt/usb/");
+      await rows();
+
+      await userEvent.type(box(), "{Tab}{Tab}{Enter}");
+
+      expect(await answered).toStrictEqual(["/mnt/usb/photo.png"]);
+    });
+
+    it("narrows a listing to what is typed after the last slash", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      await userEvent.type(box(), "/mnt/usb/pho");
+
+      expect(await rows()).toStrictEqual(["photo.png"]);
+      await userEvent.type(box(), "{Escape}");
+      await answered;
+    });
+
+    it("lists home under a tilde, and answers relative to it", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      await userEvent.type(box(), "~/Pictures/{Enter}");
+
+      expect(await answered).toStrictEqual(["Pictures/cat.png"]);
+    });
+
+    it("walks into a directory with the right arrow, and up with Backspace", async () => {
+      const answered = picker(ChooserMode.OpenFolder);
+      await rows();
+
+      await userEvent.type(box(), "/mnt/");
+      expect(await rows()).toStrictEqual(["/mnt", "usb"]);
+      await userEvent.type(box(), "{ArrowDown}{ArrowRight}");
+      expect(box()).toHaveValue("/mnt/usb/");
+      await userEvent.type(box(), "{Backspace}");
+      expect(box()).toHaveValue("/mnt/");
+
+      await userEvent.type(box(), "{Enter}");
+      expect(await answered).toStrictEqual(["/mnt"]);
+    });
+
+    // A search finds a directory in the home; the right arrow lists it.
+    it("walks into a directory a search found", async () => {
+      const answered = picker(ChooserMode.OpenFolder);
+      await rows();
+
+      await userEvent.type(box(), "pict{ArrowRight}");
+
+      expect(box()).toHaveValue("~/Pictures/");
+      expect(await rows()).toStrictEqual(["~/Pictures"]);
+      await userEvent.type(box(), "{Escape}");
+      await answered;
+    });
+
+    it("saves in a directory typed as a path", async () => {
+      const answered = picker(ChooserMode.Save, {
+        suggestedName: "photo.png",
+      });
+      await rows();
+
+      await userEvent.type(box(), "/tmp/{Enter}");
+
+      expect(await answered).toStrictEqual(["/tmp/photo.png"]);
+    });
+
+    it("says so when a directory cannot be read", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      await userEvent.type(box(), "/root/");
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Can't read /root/",
+      );
+      await userEvent.type(box(), "{Escape}");
+      await answered;
     });
   });
 
