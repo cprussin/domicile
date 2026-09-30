@@ -45,6 +45,7 @@ import {
   focusedWindowIn,
   focusPathOf,
   NOTHING_TILED,
+  shownOver,
   windowsOf,
   withCommandsOnWindow,
   withFocusOn,
@@ -106,6 +107,23 @@ export const focusedOn = (workspace: Workspace): string | undefined =>
 /** The box the floating window `id` sits in, or `undefined` when it is tiled. */
 export const floatOn = (workspace: Workspace, id: string): Float | undefined =>
   workspace.floats.find((float) => floatHolds(float, id));
+
+/**
+ * The window a pointer over `id` is in: `id`, or the tab open in its place
+ * when a container is hiding it — see `shownOver`. Crossing a hidden tab is
+ * arriving at its container, not picking the tab, which is a click's job. A
+ * fullscreen window is on screen whatever the tree says.
+ */
+export const pointedOn = (workspace: Workspace, id: string): string => {
+  const root = floatOn(workspace, id)?.root ?? workspace.tiling.root;
+  if (workspace.fullscreen?.id === id) {
+    return id;
+  } else if (root === undefined) {
+    throw new Error(`workspace ${workspace.name}: no window ${id} to point at`);
+  } else {
+    return shownOver(root, id);
+  }
+};
 
 /**
  * A window opening on the workspace, focused: into the floating group the
