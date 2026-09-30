@@ -122,8 +122,8 @@ APP_ID="${APP_ID:-app-1}"
 # 914.87 ms after the key — 55 display frames — with its pixels one frame
 # behind it, which is `key -> commit -> pixel` with every number positive. The
 # run brackets how long after the key a commit may arrive and still count, in
-# display frames, and gives the round up outside it: `MAX_WAIT_FRAMES` and
-# `MIN_WAIT_FRAME_SHARE`.
+# display frames: it gives the round up past `MAX_WAIT_FRAMES`, and passes over
+# a commit sooner than `MIN_WAIT_FRAME_SHARE` to wait on for the key's answer.
 #
 # AND THEN IT EARNED IT A THIRD TIME, BY SHOWING THAT THE BRACKET IS NOT A
 # SEPARATOR. The control's next failure was a dot committing 121.95 ms after
@@ -370,7 +370,7 @@ echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
 echo "commit to pixel ${OURS:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; moved before the answer ${MOVED:-none};"
-echo "answered too late ${LATE:-none}; answered too soon ${SOON:-none};"
+echo "answered too late ${LATE:-none}; passed over too soon ${SOON:-none};"
 echo "undelivered ${UNDELIVERED:-none};"
 echo "drew again while polling ${REDREW:-none}"
 
@@ -394,14 +394,17 @@ if [ "$NEGATIVE" = "1" ]; then
          "measuring something other than its own keystrokes"
     exit 1
   fi
-  # Any of the four, because what the control asserts is that the guard gave
+  # Any of the three, because what the control asserts is that the guard gave
   # rounds up rather than which bucket they landed in. The client answers no
   # keys, so whether a round ends as abandoned, as a pixel that moved before
-  # the answer, or as a commit too late or too soon to be one is decided by
-  # where the client's own redraw happened to fall — and a control reading only
-  # the bucket that happened to be empty would fail as a flake rather than a
+  # the answer, or as a commit too late to be one is decided by where the
+  # client's own redraw happened to fall — and a control reading only the
+  # bucket that happened to be empty would fail as a flake rather than a
   # finding. The assertion is unchanged: no figure, and the guard noticed.
-  GAVE_UP=$(( ${ABANDONED:-0} + ${MOVED:-0} + ${LATE:-0} + ${SOON:-0} ))
+  #
+  # Not a commit passed over for coming too soon: that round waited on, so it
+  # was not given up.
+  GAVE_UP=$(( ${ABANDONED:-0} + ${MOVED:-0} + ${LATE:-0} ))
   if [ "$GAVE_UP" -lt 1 ]; then
     annotate "guard-latency negative control: no round was given up, so the" \
          "guard would not have noticed a client that answers nothing"
@@ -462,18 +465,11 @@ if [ "${LATE:-0}" -gt 0 ]; then
   exit 1
 fi
 
-# The near end of that same wait, and its own sentence rather than more of the
-# one above. A commit 0.82 ms after the key is not a slow answer, it is a frame
-# the client already had in flight when the key landed — the same stray, caught
-# arriving with the key instead of long after it. See `MIN_WAIT_FRAME_SHARE`.
-if [ "${SOON:-0}" -gt 0 ]; then
-  annotate "guard-latency: $SOON round(s) had the client commit too soon after" \
-       "the key for the key to have caused it, so what would have been timed" \
-       "is a frame the client already had in flight and the run measured fewer" \
-       "rounds than it set out to"
-  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
-  exit 1
-fi
+# NOT the near end of that same wait. A commit 0.82 ms after the key is a frame
+# the client already had in flight, and the round passes over it and waits on
+# for the key's answer, so no round is lost to it. Failing on it here failed
+# engine run 36758359911, and ending the round on it is what made that run's
+# next round look abandoned. See `MIN_WAIT_FRAME_SHARE`.
 
 # The other half of that, and a different end: a round whose key this
 # compositor never delivered. The median would be over whatever rounds

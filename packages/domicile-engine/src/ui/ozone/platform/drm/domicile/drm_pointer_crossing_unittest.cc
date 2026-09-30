@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 #include "ui/display/display.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -114,6 +116,60 @@ TEST(DrmPointerCrossingTest, AnEdgeWithNothingPlacedBesideItHoldsThePointer) {
   EXPECT_FALSE(PointerCrossingFor(RightTwoScreens(), RightTwoLayout(), kLeft,
                                   gfx::PointF(1000, 2166))
                    .has_value());
+}
+
+void ExpectNear(const gfx::PointF& actual, const gfx::PointF& expected) {
+  EXPECT_NEAR(actual.x(), expected.x(), 0.01);
+  EXPECT_NEAR(actual.y(), expected.y(), 0.01);
+}
+
+// A window that was pressed holds the pointer after it crosses to the next
+// monitor -- a float being dragged there -- and hears it where the desk has
+// it, not where the engine's row does: that row puts the turned monitor's
+// pixels straight after the laptop's, sideways, at the top.
+TEST(DrmPointerCrossingTest, ThePressedWindowHearsThePointerWhereTheDeskHasIt) {
+  // Where `APointerArrivesWhereTheProfilePlacedTheScreens` lands, which is
+  // 7.5 of the laptop's pixels past its right edge, halfway down.
+  ExpectNear(PointerInWindow(RightTwoScreens(), RightTwoLayout(),
+                             gfx::PointF(2880 + 3072, 2154), kLaptop),
+             gfx::PointF(2887.5, 960));
+}
+
+TEST(DrmPointerCrossingTest, AndOnATurnedWindowByItsTurnedEdge) {
+  // Ten logical pixels onto the right-hand monitor, a thousand down, heard by
+  // the one beside it: twelve of its pixels past its upright right edge, which
+  // on a panel turned `ROTATE_270` is above its top.
+  ExpectNear(PointerInWindow(RightTwoScreens(), RightTwoLayout(),
+                             gfx::PointF(6720 + 1200, 2148), kLeft),
+             gfx::PointF(1200, -12));
+}
+
+TEST(DrmPointerCrossingTest, OnItsOwnScreenThePointerIsWhereItIs) {
+  ExpectNear(PointerInWindow(RightTwoScreens(), RightTwoLayout(),
+                             gfx::PointF(100, 200), kLaptop),
+             gfx::PointF(100, 200));
+}
+
+// A press holds the pointer in the window it landed in until the last button
+// is let go -- the implicit grab X and Wayland both give, which DRM does not.
+TEST(DrmPointerCrossingTest, APressHoldsThePointerInItsWindowUntilLetGo) {
+  gfx::AcceleratedWidget holder = gfx::kNullAcceleratedWidget;
+  holder = PointerHolderAfter(holder, kLeft, EventType::kMousePressed,
+                              EF_LEFT_MOUSE_BUTTON, EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(holder, kLeft);
+  holder = PointerHolderAfter(holder, kLeft, EventType::kMouseDragged,
+                              EF_LEFT_MOUSE_BUTTON, 0);
+  EXPECT_EQ(holder, kLeft);
+  holder = PointerHolderAfter(holder, kLeft, EventType::kMouseReleased,
+                              EF_LEFT_MOUSE_BUTTON, EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(holder, gfx::kNullAcceleratedWidget);
+}
+
+TEST(DrmPointerCrossingTest, LettingGoOfOneOfTwoButtonsStillHolds) {
+  EXPECT_EQ(PointerHolderAfter(kLeft, kLeft, EventType::kMouseReleased,
+                               EF_LEFT_MOUSE_BUTTON | EF_RIGHT_MOUSE_BUTTON,
+                               EF_RIGHT_MOUSE_BUTTON),
+            kLeft);
 }
 
 // `home-office-center`: the laptop centered under one monitor.

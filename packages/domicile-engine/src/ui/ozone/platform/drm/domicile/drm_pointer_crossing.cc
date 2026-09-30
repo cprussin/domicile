@@ -154,6 +154,53 @@ std::optional<PointerCrossing> PointerCrossingFor(
   return crossing;
 }
 
+gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
+                            const std::vector<DomicileDisplayLayout>& layout,
+                            const gfx::PointF& location,
+                            gfx::AcceleratedWidget window) {
+  const auto to = std::ranges::find(screens, window, &PointerScreen::window);
+  CHECK(to != screens.end());
+  const gfx::PointF by_the_row =
+      location - to->bounds_in_screen.OffsetFromOrigin();
+  const auto on =
+      std::ranges::find_if(screens, [&](const PointerScreen& screen) {
+        return screen.bounds_in_screen.Contains(
+            gfx::ToFlooredPoint(location));
+      });
+  if (on == screens.end() || on == to) {
+    return by_the_row;
+  }
+  const std::optional<Desk> here = DeskOf(*on, layout);
+  const std::optional<Desk> there = DeskOf(*to, layout);
+  if (!here.has_value() || !there.has_value()) {
+    return by_the_row;
+  }
+  const gfx::PointF on_the_desk = here->ToDesk(
+      ToUpright(*on, location - on->bounds_in_screen.OffsetFromOrigin()),
+      UprightSize(*on));
+  return ToPanel(*to, there->FromDesk(on_the_desk, UprightSize(*to)));
+}
+
+gfx::AcceleratedWidget PointerHolderAfter(gfx::AcceleratedWidget holder,
+                                          gfx::AcceleratedWidget window,
+                                          EventType type,
+                                          int flags,
+                                          int changed_button_flags) {
+  constexpr int kButtons = EF_LEFT_MOUSE_BUTTON | EF_MIDDLE_MOUSE_BUTTON |
+                           EF_RIGHT_MOUSE_BUTTON | EF_BACK_MOUSE_BUTTON |
+                           EF_FORWARD_MOUSE_BUTTON;
+  switch (type) {
+    case EventType::kMousePressed:
+      return holder == gfx::kNullAcceleratedWidget ? window : holder;
+    case EventType::kMouseReleased:
+      return (flags & ~changed_button_flags & kButtons) == 0
+                 ? gfx::kNullAcceleratedWidget
+                 : holder;
+    default:
+      return holder;
+  }
+}
+
 bool HasTheKeyboard(const gfx::Rect& bounds_in_screen,
                     const gfx::PointF& pointer) {
   return bounds_in_screen.Contains(gfx::ToFlooredPoint(pointer));

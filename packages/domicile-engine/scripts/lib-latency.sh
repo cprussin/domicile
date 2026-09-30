@@ -119,19 +119,17 @@ latency_late() {
     sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
 }
 
-# How many rounds were given up because the client's commit came too soon after
-# the key to be its answer. Empty when the run never said.
+# How many commits were passed over for coming too soon after the key to be its
+# answer. Empty when the run never said.
 #
-# The near end of the wait the reader above reads the far end of, and its own
-# reader because it is its own reading: a commit 0.82 ms after a key is a frame
-# the client already had in flight, and reporting it as a slow answer would
-# send whoever read it to the wrong end. Anchored on the whole sentence, since
-# the two lines differ by one word.
+# Not a round given up: a commit 0.82 ms after a key is a frame the client
+# already had in flight, and the round waits on past it for the key's answer.
+# Counted in commits, not rounds, for that reason.
 latency_soon() {
   local log="$1"
-  grep -a "round(s) whose commit came too soon to be the key's answer" "$log" 2>/dev/null |
+  grep -a "commit(s) passed over for coming too soon to be the key's answer" "$log" 2>/dev/null |
     tail -1 |
-    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+    sed -n 's/.*latency: \([0-9]*\) commit(s).*/\1/p'
 }
 
 # How many rounds this compositor failed to deliver a key for. Empty when the
