@@ -335,8 +335,8 @@ these is one run, and each has a line to look for.
   The verdict line is the guard's own: `commit to pixel` against the run's
   reported `display frame`, and the answer is the ratio rather than the
   milliseconds. A `PASS` there is the first reading of this taken against a
-  real CRTC's frame. `answered too late` or `answered too soon` above zero
-  means fewer rounds were measured than the run set out to.
+  real CRTC's frame. `answered too late` above zero means fewer rounds
+  were measured than the run set out to.
 
   `OUT=.` because `nix build .#engine` produces a store path that *is* an out
   directory rather than a tree with one inside it, which is the same reading

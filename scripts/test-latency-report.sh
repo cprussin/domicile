@@ -54,7 +54,7 @@ COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.65Z  INFO domicile::engine::spike: latency: 2 round(s) where the client drew again while polling
 2026-09-07T14:00:00.68Z  INFO domicile::engine::spike: latency: 1 round(s) whose pixel moved before the client answered
 2026-09-07T14:00:00.69Z  INFO domicile::engine::spike: latency: 3 round(s) whose commit came too late to be the key's answer
-2026-09-07T14:00:00.695Z  INFO domicile::engine::spike: latency: 4 round(s) whose commit came too soon to be the key's answer
+2026-09-07T14:00:00.695Z  INFO domicile::engine::spike: latency: 4 commit(s) passed over for coming too soon to be the key's answer
 2026-09-07T14:00:00.7Z  INFO domicile::engine::spike: latency: the run completed
 RUN
 )"
@@ -117,9 +117,9 @@ expect "and is none of the other three" \
 # the fourth: a commit 0.82 ms after a key is the same stray arriving with the
 # key instead of long after it, and a report that called it "too late" would
 # send whoever read it looking for a slow client. Both lines end in the same
-# seven words, so this is also what decides whether the two readers anchor on
+# words, so this is also what decides whether the two readers anchor on
 # enough of theirs to tell them apart.
-expect "a run whose commit came too soon says how often" \
+expect "a run that passed over commits too soon says how many" \
   "4" "$(latency_soon "$RUN_LOG")"
 expect "and is not the count of the ones that came too late" \
   "3" "$(latency_late "$RUN_LOG")"
@@ -161,7 +161,7 @@ expect "and none of rounds given up before an answer" \
   "" "$(latency_moved "$EMPTY")"
 expect "and none of rounds whose commit came too late" \
   "" "$(latency_late "$EMPTY")"
-expect "and none of rounds whose commit came too soon" \
+expect "and none of commits passed over too soon" \
   "" "$(latency_soon "$EMPTY")"
 
 # A control's run, where the client answers no keys.
