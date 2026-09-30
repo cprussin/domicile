@@ -122,10 +122,12 @@ fn a_desktop_entry_carries_the_command_it_runs() {
             comment: "Browse the web".into(),
             command: vec!["firefox".into()],
             icon: Some("data:image/png;base64,cm93".into()),
+            preview: Some("data:image/svg+xml;base64,PHN2Zz4=".into()),
         }],
         bookmarks: vec![Bookmark {
             name: "Firefox Add-ons".into(),
             url: "https://addons.mozilla.org".into(),
+            label: Some("Work".into()),
         }],
     })
     .unwrap();
@@ -140,10 +142,12 @@ fn a_desktop_entry_carries_the_command_it_runs() {
                 "comment": "Browse the web",
                 "command": ["firefox"],
                 "icon": "data:image/png;base64,cm93",
+                "preview": "data:image/svg+xml;base64,PHN2Zz4=",
             }],
             "bookmarks": [{
                 "name": "Firefox Add-ons",
                 "url": "https://addons.mozilla.org",
+                "label": "Work",
             }],
         })
     );
@@ -281,10 +285,12 @@ fn host_messages_round_trip() {
             comment: String::new(),
             command: vec!["firefox".into(), "--new-window".into()],
             icon: None,
+            preview: None,
         }],
         bookmarks: vec![Bookmark {
             name: "Fire Drill".into(),
             url: "https://example.com/drill".into(),
+            label: None,
         }],
     });
     for preview in [

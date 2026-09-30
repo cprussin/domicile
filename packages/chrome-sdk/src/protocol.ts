@@ -306,17 +306,20 @@ const foundFilesSchema = z.looseObject({
 
 // The applications a `search_apps` matched, best first. Each carries the argv
 // it runs, for `spawn`, a `comment` that is empty when the entry has none, and
-// an `icon` as a `data:` URL when the compositor found one.
+// an `icon` and a `preview` as `data:` URLs when the compositor found them.
 const desktopEntrySchema = z.looseObject({
   command: z.array(z.string()),
   comment: z.string(),
   icon: z.string().optional(),
   id: z.string(),
   name: z.string(),
+  preview: z.string().optional(),
 });
 
-// A URL the desk offers by name, from `applications.bookmarks`.
+// A URL the desk offers by name, from `applications.bookmarks`, with the
+// `label` the desk gave the URL it opens, if it gave one.
 const bookmarkSchema = z.looseObject({
+  label: z.string().optional(),
   name: z.string(),
   url: z.string(),
 });

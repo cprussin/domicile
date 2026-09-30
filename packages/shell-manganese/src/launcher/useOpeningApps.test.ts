@@ -13,6 +13,7 @@ const EDITOR: DesktopEntry = {
   icon: undefined,
   id: "gedit.desktop",
   name: "Text Editor",
+  preview: undefined,
 };
 
 const PAINT: DesktopEntry = {
@@ -21,6 +22,7 @@ const PAINT: DesktopEntry = {
   icon: undefined,
   id: "paint.desktop",
   name: "Paint",
+  preview: undefined,
 };
 
 /** The host's search for applications, answered in whatever order a test says. */

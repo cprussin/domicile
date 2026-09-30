@@ -1,22 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
- * `value`, once it has stood for `delayMs`: the last settled one until then.
+ * `value`, once its `key` has stood for `delayMs`: the last settled one until
+ * then.
  *
  * What the preview follows rather than the highlight itself, because a
  * preview per keystroke is a page loaded and thrown away per keystroke.
+ *
+ * Waited on by key rather than by value, because a choice is a new object on
+ * every render and would never be seen to stand. Once a key has settled, it
+ * is the value that key has now.
  */
-export const useSettled = <T>(value: T, delayMs: number): T => {
-  const [settled, setSettled] = useState(value);
+export const useSettled = <T>(value: T, key: unknown, delayMs: number): T => {
+  const [settled, setSettled] = useState({ key, value });
+  const latest = useRef(value);
+
+  useEffect(() => {
+    latest.current = value;
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setSettled(value);
+      setSettled({ key, value: latest.current });
     }, delayMs);
     return () => {
       clearTimeout(timer);
     };
-  }, [value, delayMs]);
+  }, [key, delayMs]);
 
-  return settled;
+  // The key it settled on, as the latest render has it.
+  return settled.key === key ? value : settled.value;
 };

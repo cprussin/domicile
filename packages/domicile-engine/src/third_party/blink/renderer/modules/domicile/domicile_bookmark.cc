@@ -5,8 +5,10 @@
 
 namespace blink {
 
-DomicileBookmark::DomicileBookmark(const String& name, const String& url)
-    : name_(name), url_(url) {}
+DomicileBookmark::DomicileBookmark(const String& name,
+                                   const String& url,
+                                   const String& label)
+    : name_(name), url_(url), label_(label) {}
 
 DomicileBookmark::~DomicileBookmark() = default;
 

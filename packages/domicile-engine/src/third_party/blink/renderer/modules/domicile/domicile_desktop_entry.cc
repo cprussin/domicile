@@ -11,13 +11,15 @@ DomicileDesktopEntry::DomicileDesktopEntry(const String& id,
                                            const String& name,
                                            const String& comment,
                                            Vector<String> command,
-                                           const String& icon)
+                                           const String& icon,
+                                           const String& preview)
     : id_(id),
       name_(name),
       comment_(comment),
       command_(MakeGarbageCollected<FrozenArray<IDLString>>(
           std::move(command))),
-      icon_(icon) {}
+      icon_(icon),
+      preview_(preview) {}
 
 DomicileDesktopEntry::~DomicileDesktopEntry() = default;
 

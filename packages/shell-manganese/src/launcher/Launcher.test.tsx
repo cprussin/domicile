@@ -3,6 +3,7 @@ import { FilePreview } from "@domicile/chrome-sdk/file-preview";
 import type { Bookmark, DesktopEntry } from "@domicile/chrome-sdk/host-message";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
+import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
@@ -24,6 +25,7 @@ const EDITOR: DesktopEntry = {
   icon: undefined,
   id: "org.gnome.gedit.desktop",
   name: "Text Editor",
+  preview: undefined,
 };
 
 /** An application whose icon the host found. */
@@ -33,10 +35,15 @@ const PAINT: DesktopEntry = {
   icon: "data:image/png;base64,cm93",
   id: "paint.desktop",
   name: "Paint",
+  preview: undefined,
 };
 
 /** A bookmark the desk offers. */
-const MAIL: Bookmark = { name: "Mail", url: "https://mail.example.com" };
+const MAIL: Bookmark = {
+  label: undefined,
+  name: "Mail",
+  url: "https://mail.example.com",
+};
 
 /**
  * The host's search over the applications `apps` and the bookmarks
@@ -322,6 +329,48 @@ describe("Launcher", () => {
       "mail.txt",
       "Search for mail",
     ]);
+  });
+
+  it("says which of its URLs a bookmark opens, when the desk said", async () => {
+    // One bookmark, several accounts: a shortcode in the query picks another
+    // URL, and the row is where that is seen to have happened.
+    using panel = launcher([], false, [], [{ ...MAIL, label: "Work" }]);
+
+    await panel.user.type(panel.box(), "mail");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Mail for Work",
+      "Search for mail",
+    ]);
+  });
+
+  it("draws a bookmark with its site's icon", async () => {
+    using panel = launcher([], false, [], [MAIL]);
+
+    await panel.user.type(panel.box(), "mail");
+    const [row] = await screen.findAllByRole("option");
+
+    expect(row?.querySelector("img")?.getAttribute("src")).toBe(
+      "https://mail.example.com/favicon.ico",
+    );
+  });
+
+  it("draws a bookmark whose site has no icon with a glyph", async () => {
+    using panel = launcher([], false, [], [MAIL]);
+
+    await panel.user.type(panel.box(), "mail");
+    const [row] = await screen.findAllByRole("option");
+    const icon = row?.querySelector("img");
+    if (icon === null || icon === undefined) {
+      throw new Error("the row drew no icon to fail");
+    } else {
+      fireEvent.error(icon);
+    }
+
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector("svg")?.innerHTML).toBe(
+      glyphOf(<BookmarkSimpleIcon size={16} />),
+    );
   });
 
   it("browses to the bookmark chosen", async () => {
@@ -782,6 +831,23 @@ describe("Launcher", () => {
       ).toBe(PAINT.icon);
     });
 
+    it("shows the picture of itself the highlighted application names", async () => {
+      const picture = "data:image/svg+xml;base64,PHN2Zz4=";
+      using panel = launcher([], false, [{ ...PAINT, preview: picture }]);
+
+      await panel.user.type(panel.box(), "paint");
+
+      expect(
+        (await within(previewPane()).findByRole("img")).getAttribute("src"),
+      ).toBe(picture);
+    });
+
+    it("is most of the screen tall, so there is room to see what it shows", () => {
+      using _panel = launcher();
+
+      expect(globalThis.getComputedStyle(previewPane()).blockSize).toBe("60vh");
+    });
+
     it("says what to do while there is no row to highlight", async () => {
       // The pane is never blank, because a blank pane reads as a broken one.
       using _panel = launcher([]);
@@ -802,14 +868,23 @@ describe("Launcher", () => {
       expect(previewPane()).toHaveTextContent("firmware.bin");
     });
 
-    it("names the file while its preview is on the way", async () => {
-      // Before the typing settles and before the host answers, the row it
-      // will be is already known.
+    it("keeps the last preview until the highlight settles on another row", async () => {
+      // A preview, then the next one: not the next row's name in between, which
+      // is a flash of a pane that says less than the one it replaced.
       using panel = launcher();
 
-      await panel.user.type(panel.box(), "todo");
+      await panel.user.type(panel.box(), "notes");
+      await within(previewPane()).findByText(
+        "contents of Notes/2026/april.org",
+      );
+      await panel.user.keyboard("{ArrowDown}");
 
-      expect(previewPane()).toHaveTextContent("todo.txt");
+      expect(previewPane()).toHaveTextContent(
+        "contents of Notes/2026/april.org",
+      );
+      expect(
+        await within(previewPane()).findByText("contents of Notes/today.org"),
+      ).toBeInTheDocument();
     });
 
     it("names a file the engine could not draw after all", async () => {

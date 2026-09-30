@@ -598,13 +598,13 @@ void DomicileHost::Apps(const String& query,
   for (auto& app : apps) {
     entries.push_back(MakeGarbageCollected<DomicileDesktopEntry>(
         app->id, app->name, app->comment, std::move(app->command),
-        app->icon));
+        app->icon, app->preview));
   }
   HeapVector<Member<DomicileBookmark>> marked;
   marked.reserve(bookmarks.size());
   for (auto& bookmark : bookmarks) {
-    marked.push_back(
-        MakeGarbageCollected<DomicileBookmark>(bookmark->name, bookmark->url));
+    marked.push_back(MakeGarbageCollected<DomicileBookmark>(
+        bookmark->name, bookmark->url, bookmark->label));
   }
   DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
       domicile_event_names::Apps(), query, std::move(entries),
