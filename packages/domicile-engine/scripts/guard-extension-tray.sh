@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # An extension's action in the shell's tray, and its popup in a <webview>
-# closing itself.
+# asking runtime.getContexts and closing itself.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-extension-tray.sh /build/chromium/src
@@ -9,24 +9,29 @@
 # page cannot fake: the browser telling the shell what an action says --
 # `window.domicile`'s `extensions` event, from ExtensionTray -- and a popup in
 # a <webview> saying it is done, which is `window.close()` becoming
-# `domicile-close` on the element (WebViewGuest::CloseContents).
+# `domicile-close` on the element (WebViewGuest::CloseContents). And a popup
+# asking runtime.getContexts, as Bitwarden's does on opening: that call switches
+# on each of the extension's frames' view type, and a guest with none is a
+# NOTREACHED that takes the whole browser down. Chrome gives every tab
+# kTabContents; AttachTabHelpers gives a guest the same.
 #
 # Headless, with guard-extension-installer.sh's stand-in for the compositor
 # naming the fixture as `unpacked`: the fixture has a default title, a badge
-# its service worker sets, and a popup that closes itself a second after it
-# loads.
+# its service worker sets, and a popup that asks runtime.getContexts, writes
+# the answer into its own address, and closes itself a second after that loads.
 #
 # WHAT IT ASSERTS. That the shell heard an `extensions` event carrying the
 # fixture's id with its title, the service worker's badge and color, its popup
 # URL, a PNG icon and `enabled`; that the <webview> the shell then points at
-# that popup URL shows it; and that the popup's `window.close()` reaches the
-# shell as `domicile-close`.
+# that popup URL shows it; that getContexts lists the popup as a `TAB`, as
+# Chrome lists an extension page in a tab; and that the popup's
+# `window.close()` reaches the shell as `domicile-close`.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the list empty, and the
 # <webview> pointed at a served page that never calls `window.close()`. The
 # shell must still hear an `extensions` event -- so the fixture's absence is an
-# answer -- with no fixture in it, and the page must show and NOT close, for as
-# long as the claim took to close.
+# answer -- with no fixture in it, and the page must show, answer nothing, and
+# NOT close, for as long as the claim took to close.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -48,12 +53,13 @@ NEGATIVE="${NEGATIVE:-0}"
 # The fixture, as the tray must report it. Fixed rather than overridable:
 # `scripts/test-extension-tray-guard.sh` holds them to the fixture -- the id to
 # the manifest's `key`, the badge and color to the service worker, the title
-# to the manifest.
+# to the manifest, the context to what Chrome calls an extension page in a tab.
 readonly ID="cobncddhpfhclknjbapgflpohofecjhg"
 readonly TITLE="Domicile tray guard"
 readonly BADGE="7"
 readonly BADGE_COLOR="#8e24aaff"
 readonly POPUP="chrome-extension://$ID/popup.html"
+readonly CONTEXT="TAB"
 
 EXTENSION="$SCRIPTS/guard-extension-tray-extension"
 
@@ -192,23 +198,32 @@ else
   LEG=tray
 fi
 OPENED=$(saw "\"GUARD page url=$SHOWN\"")
-CLOSED=$(saw "\"GUARD closed url=$SHOWN\"")
+if [ "$NEGATIVE" = "1" ]; then
+  # Any answer at all: a page that asked nothing must leave none.
+  CONTEXTS=$(saw "?contexts=")
+  CLOSED=$(saw "\"GUARD closed url=$SHOWN\"")
+else
+  CONTEXTS=$(saw "\"GUARD page url=$SHOWN?contexts=$CONTEXT\"")
+  # After any answer, so a wrong one still tells a crash from a close.
+  CLOSED=$(saw "\"GUARD closed url=$SHOWN?contexts=")
+fi
 
-MEASURED="$LEG $SENT $HEARD $TRAY $OPENED $CLOSED"
+MEASURED="$LEG $SENT $HEARD $TRAY $OPENED $CONTEXTS $CLOSED"
 echo
 echo "measured: $MEASURED"
 echo "what the shell heard of the tray:"
 grep -F '"GUARD tray ' "$ENGINE_LOG" | tail -3 || true
 
 # WHICH END TO BLAME. `scripts/test-extension-tray-guard.sh` runs this block
-# directly. MEASURED is "<leg> <sent> <heard> <tray> <opened> <closed>".
+# directly. MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts>
+# <closed>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"tray 1 1 1 1 1")
+"tray 1 1 1 1 1 1")
   PASSED="the tray reported the fixture's action as its service worker left \
-it, its popup showed in a <webview>, and the popup's window.close() reached \
-the shell as domicile-close"
+it, its popup showed in a <webview>, runtime.getContexts listed the popup as a \
+TAB, and the popup's window.close() reached the shell as domicile-close"
   ;;
 "tray 0 "*)
   FAILURE="the list was never sent: the browser did not connect to the \
@@ -231,15 +246,27 @@ change not reaching the tray"
   FAILURE="the tray named the popup and the <webview> never showed it, so a \
 guest's navigation to chrome-extension:// was refused or never committed"
   ;;
-"tray 1 1 1 1 0")
+"tray 1 1 1 1 0 0")
+  FAILURE="the popup showed and never answered runtime.getContexts: the call \
+switches on each frame's view type and NOTREACHEDs on kInvalid, taking the \
+browser down -- AttachTabHelpers did not give the guest kTabContents, as \
+Chrome's tab_helpers.cc gives every tab"
+  ;;
+"tray 1 1 1 1 0 1")
+  FAILURE="the popup answered runtime.getContexts without listing itself as a \
+TAB -- the address it replaced itself with, in the GUARD page lines, says \
+what it got: a guest's view type other than kTabContents, or an error"
+  ;;
+"tray 1 1 1 1 1 0")
   FAILURE="the popup showed and its window.close() never reached the shell: \
 the renderer refused it, WebViewGuest::CloseContents did not send \
 CloseRequested, or the element did not dispatch domicile-close"
   ;;
-"control 1 1 0 1 0")
+"control 1 1 0 1 0 0")
   PASSED="the control is sharp: an empty list left the fixture out of a tray \
-the shell did hear, and a page that never called window.close() showed and \
-stayed -- so the claim's row is the list's and its close is the popup's"
+the shell did hear, and a page that never asked runtime.getContexts or called \
+window.close() showed, answered nothing, and stayed -- so the claim's row is \
+the list's and its answer and close are the popup's"
   ;;
 "control 0 "*)
   FAILURE="the list was never sent in the control, so its empty tray answers \
@@ -258,7 +285,11 @@ the claim's row proves nothing"
   FAILURE="the control's page never showed in the <webview>, so the missing \
 close is not a reading. The guest, or the page server"
   ;;
-"control 1 1 0 1 1")
+"control 1 1 0 1 1 "*)
+  FAILURE="a page that never asked runtime.getContexts showed an answer, so \
+the claim's answer is not the popup's"
+  ;;
+"control 1 1 0 1 0 1")
   FAILURE="domicile-close fired for a page that never called window.close(), so \
 the claim's close is not the popup's"
   ;;
