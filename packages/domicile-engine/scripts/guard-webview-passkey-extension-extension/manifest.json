@@ -1,0 +1,10 @@
+{
+  "background": {
+    "service_worker": "background.js"
+  },
+  "description": "Takes every WebAuthn request with chrome.webAuthenticationProxy and answers it, for guard-webview-passkey-extension.sh.",
+  "manifest_version": 3,
+  "name": "Domicile passkey-extension guard",
+  "permissions": ["webAuthenticationProxy"],
+  "version": "1"
+}

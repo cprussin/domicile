@@ -976,7 +976,8 @@ client — its page is inside your own. Three things follow, none optional:
   F11, Ctrl+W and the rest — are not bound, in the shell or in a browser
   window, and neither is a right click: the page's `contextmenu` event is all
   there is, so a menu is yours to draw. A swipe does not go back. The browser
-  offers no password saving, autofill, translation or passkeys either.
+  offers no password saving, autofill, translation or passkeys either;
+  passkeys come from a password manager's extension, as on any browser.
 - **Bind a browser's keys yourself.** A chord the page left alone — Ctrl, Alt
   or Meta held, and not `preventDefault`ed — comes back on the element as a
   `KeyboardEvent` of type `domicile-guest-keydown`; a plain key never does.
