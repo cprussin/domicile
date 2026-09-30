@@ -39,6 +39,8 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_locked_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_tray_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_tray_item.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
@@ -295,7 +297,36 @@ V8DomicileTheme PageTheme(domicile::mojom::blink::Theme theme) {
   return *mode;
 }
 
+// A switch rather than a wire name: the button goes no further than this
+// channel's own mojom, which the compositor never reads.
+domicile::mojom::blink::TrayAction MojoTrayAction(V8DomicileTrayAction action) {
+  switch (action.AsEnum()) {
+    case V8DomicileTrayAction::Enum::kPrimary:
+      return domicile::mojom::blink::TrayAction::kPrimary;
+    case V8DomicileTrayAction::Enum::kSecondary:
+      return domicile::mojom::blink::TrayAction::kSecondary;
+    case V8DomicileTrayAction::Enum::kContext:
+      return domicile::mojom::blink::TrayAction::kContext;
+  }
+}
+
 }  // namespace
+
+// An icon and a button, and nothing about what the click does. An empty id
+// throws, as activateExtension's does: it is a shell that forgot to say which
+// icon, rather than one that raced an application going away.
+void DomicileHost::activateTrayItem(ScriptState*,
+                                    const String& id,
+                                    V8DomicileTrayAction action,
+                                    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty tray item id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    channel_->ActivateTrayItem(id, MojoTrayAction(action));
+  }
+}
 
 void DomicileHost::setTheme(ScriptState*, V8DomicileTheme theme,
                             ExceptionState& exception_state) {
@@ -605,6 +636,20 @@ void DomicileHost::Clipboard(
   }
   DispatchEvent(*MakeGarbageCollected<DomicileClipboardEvent>(
       domicile_event_names::Clipboard(), std::move(history), Arrival(arrival)));
+}
+
+// Pushed, like Clipboard: an icon is the session bus's, which the compositor
+// hears without anybody asking.
+void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
+                        base::TimeTicks arrival) {
+  HeapVector<Member<DomicileTrayItem>> tray;
+  tray.reserve(items.size());
+  for (const auto& item : items) {
+    tray.push_back(MakeGarbageCollected<DomicileTrayItem>(item->id, item->title,
+                                                          item->icon));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileTrayEvent>(
+      domicile_event_names::Tray(), std::move(tray), Arrival(arrival)));
 }
 
 // Pushed, like Battery, and the one pushed message this page can cause:

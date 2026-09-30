@@ -71,6 +71,9 @@ It provides these:
   parsed with. A click on one is `DomicileClient.activateExtension(id)`, which
   grants it `activeTab`; one with a `popup` is then a `<webview>` at that
   address.
+- **`TrayItem`, `TrayAction`** (`./tray`) — one icon of the system tray, as
+  `DomicileClient.on("tray", …)` delivers it, and the button a click was. A
+  click is `DomicileClient.activateTrayItem(id, action)`.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.

@@ -148,7 +148,7 @@ a new message.
 
 **Implemented — every member the fork keeps.** Outbound: `spawn`,
 `search_files`, `preview_file`, `search_apps`, `copy_clipboard_entry`,
-`focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
+`activate_tray_item`, `focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
 `set_device_pixel_ratio`, `set_theme`, `grab_shortcut`, `warp_pointer`, `key`,
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
 Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
@@ -156,7 +156,7 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `found_apps`, `battery`, `clipboard`, `theme`,
-`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`.
+`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`.
 
 `preview_file` is the one outbound member that names a path, which
 `search_files` exists not to. The path is relative to the home, as a

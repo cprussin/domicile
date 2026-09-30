@@ -225,6 +225,10 @@ class FakeDomicile {
   activateExtension(id: string): void {
     this.calls.push(["activateExtension", id]);
   }
+
+  activateTrayItem(id: string, action: string): void {
+    this.calls.push(["activateTrayItem", id, action]);
+  }
 }
 
 let domicile: FakeDomicile;
@@ -926,6 +930,47 @@ describe("Shell", () => {
       });
 
       expect(domicile.calls).toContainEqual(["copyClipboardEntry", 7]);
+    });
+  });
+
+  describe("the system tray", () => {
+    it("is on the bar, and a click activates the icon", async () => {
+      renderShell();
+      domicile.emit("tray", {
+        items: [
+          { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
+        ],
+      });
+
+      await userEvent.click(screen.getByRole("button", { name: "Sync" }));
+
+      expect(domicile.calls).toContainEqual([
+        "activateTrayItem",
+        ":1.9/StatusNotifierItem",
+        "primary",
+      ]);
+    });
+
+    it("is left of the extensions, which are left of the workspaces", () => {
+      renderShell();
+      domicile.emit("tray", {
+        items: [
+          { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
+        ],
+      });
+      extensionsInstalled();
+
+      const tray = screen.getByRole("button", { name: "Sync" });
+      const extension = screen.getByRole("button", { name: "Clicked" });
+      const workspace = screen.getByRole("button", { name: "1" });
+      expect(
+        tray.compareDocumentPosition(extension) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        extension.compareDocumentPosition(workspace) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
   });
 

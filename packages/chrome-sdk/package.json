@@ -106,6 +106,10 @@
       "types": "./dist/theme.d.ts",
       "default": "./dist/theme.js"
     },
+    "./tray": {
+      "types": "./dist/tray.d.ts",
+      "default": "./dist/tray.js"
+    },
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"

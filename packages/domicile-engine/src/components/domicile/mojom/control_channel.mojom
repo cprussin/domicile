@@ -172,6 +172,28 @@ struct ClipboardEntry {
   string preview;
 };
 
+// One icon in the system tray: an application's StatusNotifierItem, as the
+// compositor read it off the session bus.
+//
+// `id` is what ActivateTrayItem names it by. `title` is never empty -- the
+// compositor falls back to the item's own id -- and is what a shell labels the
+// icon with. `icon` is a `data:` URL, for DesktopEntry's reason below, and
+// empty for an item whose picture the compositor could not draw.
+struct TrayItem {
+  string id;
+  string title;
+  string icon;
+};
+
+// Which button clicked a tray icon, as StatusNotifierItem names the three
+// things an item can be asked to do: Activate, SecondaryActivate and
+// ContextMenu.
+enum TrayAction {
+  kPrimary,
+  kSecondary,
+  kContext,
+};
+
 // An application a desktop entry offers, as a launcher draws and runs it.
 //
 // `command` is the argv, already unquoted and with its field codes dropped by
@@ -256,6 +278,13 @@ interface ControlChannel {
   // choose among what is already on it. The id is one a Clipboard message
   // carried.
   CopyClipboardEntry(uint32 entry);
+
+  // Click an icon in the system tray. `id` is one a Tray message carried.
+  //
+  // NAMES AN ICON AND CARRIES NOTHING ELSE, for CopyClipboardEntry's reason:
+  // what the click does is the application's, and all a page may do is say
+  // which of the icons already in the tray was clicked, and with which button.
+  ActivateTrayItem(string id, TrayAction action);
 
   // Which window has the keyboard. FocusChrome takes it back to the page.
   FocusApp(string app_id);
@@ -517,6 +546,16 @@ interface ControlChannelClient {
   // clipboard, which on the platform this engine scans out on is connected to
   // no Wayland client at all.
   Clipboard(array<ClipboardEntry> entries, mojo_base.mojom.TimeTicks arrival);
+
+  // The system tray: every application showing an icon, in the order they
+  // registered.
+  //
+  // Pushed like Clipboard, and the whole list every time: sent whenever an
+  // icon arrives, leaves or changes how it looks, and once more to a chrome
+  // that has just connected. The compositor is the StatusNotifierItem host --
+  // the session bus is its, and a page has none. An empty array is a desk no
+  // application has put an icon on, and every desk with no session bus.
+  Tray(array<TrayItem> items, mojo_base.mojom.TimeTicks arrival);
 
   // Which way round the desktop is drawn now.
   //

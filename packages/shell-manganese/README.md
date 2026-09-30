@@ -1,8 +1,8 @@
 # @domicile/shell-manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
-under a transparent bar carrying the workspaces, the extensions' tray, a clock
-and the charge. It is
+under a transparent bar carrying the system tray, the extensions' tray, the
+workspaces, a clock and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
@@ -548,8 +548,8 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of every screen: the workspaces and the extensions' tray at one
-end, the clock in the middle, and at the other end the charge, behind the name
+Across the top of every screen: the system tray, the extensions' tray and the
+workspaces, in that order, at one end, the clock in the middle, and at the other end the charge, behind the name
 of the binding mode whenever it is not the usual one. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
 that is a fact about the desk.
