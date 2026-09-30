@@ -180,6 +180,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # 1. The page a browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -204,6 +205,7 @@ echo "serving a browser window's page at $SUBJECT"
 #    `--remote-debugging-port` is how the click gets in. There is no pointer on
 #    this machine; see guard_webview_devtools.py for why the path it takes is
 #    the one the platform's own press would take.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

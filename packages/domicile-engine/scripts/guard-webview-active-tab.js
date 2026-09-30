@@ -6,7 +6,8 @@
 //
 //   GUARD listening        navigator.domicile exists and a listener is
 //                          registered -- the harness working
-//   GUARD tray id=…        the fixture's row arrived: it is installed
+//   GUARD tray id=…        the fixture's row arrived, badged: it is installed
+//                          and its onClicked listener is registered
 //   GUARD focused          the window finished loading its page and this
 //                          focused it
 //   GUARD activated id=…   this clicked the fixture's action, `?activate=1`
@@ -94,7 +95,9 @@ view.addEventListener("domicile-loading-change", focusOnceArrived);
 host.addEventListener("extensions", (event) => {
   if (
     !installed &&
-    event.extensions.some((extension) => extension.id === expected)
+    event.extensions.some(
+      (extension) => extension.id === expected && extension.badgeText === "on",
+    )
   ) {
     installed = true;
     say(`tray id=${expected}`);

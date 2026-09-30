@@ -112,6 +112,7 @@ mkdir -p "$PROFILE"
 #    windows -- and so the popup's answer -- apart. Two hosts, because a
 #    zoom is a host's: `localhost` is the browser's own name for loopback,
 #    and the server's 127.0.0.1 is one of the addresses it tries.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color 25A8F9 >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -138,6 +139,7 @@ fi
 
 # 2. The compositor's end, naming the fixture in both legs: the control's
 #    difference is the focus and nothing else.
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --unpacked "$EXTENSION" >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -151,6 +153,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 #    first `?` of a URL is the one that starts its query, so `a=…/page?a` is a
 #    value with a `?` in it.
 STARTED_AT="$(date +%s)"
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

@@ -382,6 +382,7 @@ else
   SWITCH=(--domicile-inhibit-host-shortcuts)
   echo "starting the engine with --domicile-inhibit-host-shortcuts"
 fi
+rm -f "$ENGINE_LOG"
 env "$(compositor_env)" "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=wayland \
   --app=domicile://shell/ \

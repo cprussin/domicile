@@ -104,6 +104,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # `--app` because it is what `domicile` runs, and it is the window whose
 # accelerators this is about.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

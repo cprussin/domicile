@@ -16,7 +16,8 @@
 # naming the fixture as `unpacked`. The fixture asks for `activeTab` and
 # `scripting` and no host; a click on its action paints the tab it is handed
 # `COLOR`. The shell shows one <webview> on its witness, focuses it, and once
-# the fixture is in the tray, `?activate=1` clicks it with activateExtension.
+# the fixture is in the tray wearing the badge its worker sets once it listens,
+# `?activate=1` clicks it with activateExtension.
 # The page is served `--still`: a reload would wipe the paint.
 #
 # WHAT IT ASSERTS. That `COLOR` is then in the window, with the shell's
@@ -111,6 +112,7 @@ rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
 # 1. The page, still. Its own server: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" --still >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -139,6 +141,7 @@ fi
 
 # 2. The compositor's end, naming the fixture in both legs: the control's
 #    difference is the click and nothing else.
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --unpacked "$EXTENSION" >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -150,6 +153,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 
 # 3. The engine.
 STARTED_AT="$(date +%s)"
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
@@ -230,8 +234,8 @@ compositor stand-in, so the shell's control channel did not bind and nothing \
 was installed"
   ;;
 "painted 1 1 0 "*)
-  FAILURE="the fixture never reached the tray, so there was nothing to click: \
-the installer, or ExtensionTray"
+  FAILURE="the fixture never reached the tray with its badge, so there was \
+nothing to click: the installer, ExtensionTray, or its service worker never ran"
   ;;
 "painted 1 1 1 0 "*)
   FAILURE="the shell never clicked: its window never showed its page, so it \

@@ -152,6 +152,7 @@ measure() { # $1 which run, $2 the URL to open
   # The shell's root and module are passed whatever the URL is, so that the
   # runs differ in the URL and in nothing else. They are what a domicile://
   # document is served out of; an http one ignores them.
+  rm -f "$engine_log"
   "$CHROMIUM/$OUT/chrome" \
     --ozone-platform=headless \
     --disable-gpu \
@@ -198,6 +199,7 @@ measure() { # $1 which run, $2 the URL to open
 # 1. The pages. Their own server rather than a real site: `crux` reaches no
 #    arbitrary host, and a guard whose subject could change its headers is a
 #    guard that fails for reasons nobody chose.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-framing-server.py" \
   --port 0 --color "$COLOR" --witness "$WITNESS" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
