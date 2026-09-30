@@ -14,6 +14,7 @@ import { focusApp } from "./focus-app";
 import { BTN_LEFT } from "./input";
 import { isClaimed } from "./shortcut-claims";
 import type { Theme } from "./theme";
+import type { TrayAction } from "./tray";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -131,6 +132,9 @@ class FakeHost implements DomicileHost {
   }
   activateExtension(id: string): void {
     this.calls.push(["activateExtension", id]);
+  }
+  activateTrayItem(id: string, action: TrayAction): void {
+    this.calls.push(["activateTrayItem", id, action]);
   }
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
@@ -321,6 +325,29 @@ describe("DomicileClient", () => {
 
       expect(seen).toStrictEqual([
         { entries: [{ id: 3, preview: "ssh-rsa AAAA" }] },
+      ]);
+    });
+
+    it("delivers the system tray nobody asked for", () => {
+      const seen: unknown[] = [];
+      domicile.on("tray", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "tray",
+        Object.assign(new Event("tray"), {
+          arrival: 0,
+          items: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
+        }),
+      );
+
+      expect(seen).toStrictEqual([
+        {
+          items: [
+            { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
+          ],
+        },
       ]);
     });
 
@@ -653,6 +680,13 @@ describe("DomicileClient", () => {
       expect(host.lastCall()).toStrictEqual([
         "activateExtension",
         "abcdefghijklmnopabcdefghijklmnop",
+      ]);
+
+      domicile.activateTrayItem(":1.9/StatusNotifierItem", "context");
+      expect(host.lastCall()).toStrictEqual([
+        "activateTrayItem",
+        ":1.9/StatusNotifierItem",
+        "context",
       ]);
 
       domicile.setDevicePixelRatio(2);

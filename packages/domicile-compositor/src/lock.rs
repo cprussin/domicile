@@ -434,7 +434,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
         Asked::OnTheWaylandThread(
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
-            | ClientRequest::CopyClipboardEntry { .. },
+            | ClientRequest::CopyClipboardEntry { .. }
+            | ClientRequest::ActivateTrayItem { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -474,7 +475,7 @@ pub fn announced(locked: bool) -> HostMessage {
 
 #[cfg(test)]
 mod tests {
-    use domicile_protocol::{HostMessage, Passphrase, Theme};
+    use domicile_protocol::{HostMessage, Passphrase, Theme, TrayAction};
 
     use std::path::Path;
     use std::sync::mpsc;
@@ -803,6 +804,13 @@ mod tests {
             (
                 "a row of the clipboard put back on the seat",
                 ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
+            (
+                "a tray icon clicked",
+                ClientRequest::ActivateTrayItem {
+                    id: ":1.9/StatusNotifierItem".into(),
+                    action: TrayAction::Primary,
+                },
             ),
         ] {
             assert_eq!(

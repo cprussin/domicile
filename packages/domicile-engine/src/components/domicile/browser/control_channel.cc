@@ -304,6 +304,26 @@ void ControlChannel::CopyClipboardEntry(uint32_t entry) {
   SendMessage(std::move(message));
 }
 
+// An icon and a button, and nothing about what the click does: that is the
+// application's. The wire names are `domicile_protocol::TrayAction`'s.
+void ControlChannel::ActivateTrayItem(const std::string& id,
+                                      mojom::TrayAction action) {
+  base::DictValue message = Typed("activate_tray_item");
+  message.Set("id", id);
+  switch (action) {
+    case mojom::TrayAction::kPrimary:
+      message.Set("action", "primary");
+      break;
+    case mojom::TrayAction::kSecondary:
+      message.Set("action", "secondary");
+      break;
+    case mojom::TrayAction::kContext:
+      message.Set("action", "context");
+      break;
+  }
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
 }
@@ -1037,6 +1057,37 @@ void ControlChannel::DispatchLine(const std::string& line,
     // desktop nothing has been copied on is an answer, and a panel that never
     // heard one would wait for a message that has already been sent.
     client_->Clipboard(std::move(entries), arrival);
+    return;
+  }
+
+  if (*type == "tray") {
+    const base::ListValue* listed = message.FindList("items");
+    if (!listed) {
+      return;
+    }
+    std::vector<mojom::TrayItemPtr> items;
+    items.reserve(listed->size());
+    for (const base::Value& row : *listed) {
+      const base::DictValue* item = row.GetIfDict();
+      if (!item) {
+        continue;
+      }
+      // An icon with no id is one no click could reach, and one with no title
+      // is one nothing could label: dropped, like a clipboard row missing
+      // either half. The picture is optional -- the compositor leaves it out
+      // for an item it could not draw -- and is carried as empty.
+      const std::string* id = item->FindString("id");
+      const std::string* title = item->FindString("title");
+      if (!id || !title) {
+        continue;
+      }
+      const std::string* icon = item->FindString("icon");
+      items.push_back(
+          mojom::TrayItem::New(*id, *title, icon ? *icon : std::string()));
+    }
+    // Sent even when it is empty, for `clipboard`'s reason: a tray with
+    // nothing in it is an answer.
+    client_->Tray(std::move(items), arrival);
     return;
   }
 

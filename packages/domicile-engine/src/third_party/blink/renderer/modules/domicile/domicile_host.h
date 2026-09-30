@@ -8,6 +8,7 @@
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
@@ -69,6 +70,10 @@ class MODULES_EXPORT DomicileHost final
   // `apps` event.
   void searchApps(ScriptState*, const String& query, ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
+  void activateTrayItem(ScriptState*,
+                        const String& id,
+                        V8DomicileTrayAction action,
+                        ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);
@@ -220,6 +225,8 @@ class MODULES_EXPORT DomicileHost final
                base::TimeTicks arrival) override;
   void Clipboard(Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
                  base::TimeTicks arrival) override;
+  void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
+            base::TimeTicks arrival) override;
   void ThemeChanged(domicile::mojom::blink::Theme theme,
                     base::TimeTicks arrival) override;
   void Idle(bool idle, base::TimeTicks arrival) override;

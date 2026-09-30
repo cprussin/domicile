@@ -15,6 +15,7 @@ import type {
   DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileShortcutEvent,
+  DomicileTrayEvent,
 } from "./domicile-host";
 import { FilePreview } from "./file-preview";
 import {
@@ -35,6 +36,7 @@ import {
   modifiers,
   popupPlaced,
   shortcut,
+  tray,
 } from "./host-message";
 
 /** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
@@ -472,6 +474,50 @@ describe("the clipboard", () => {
     );
 
     expect(history).toStrictEqual({ entries: [] });
+  });
+});
+
+describe("the system tray", () => {
+  it("arrives as the icons a tray draws, without the hop", () => {
+    const icons = tray(
+      Object.assign(new Event("tray"), {
+        arrival: 0,
+        items: [
+          {
+            icon: "data:image/png;base64,iVBORw0KGgo=",
+            id: ":1.42/StatusNotifierItem",
+            title: "Network",
+          },
+        ],
+      }) as DomicileTrayEvent,
+    );
+
+    expect(icons).toStrictEqual({
+      items: [
+        {
+          icon: "data:image/png;base64,iVBORw0KGgo=",
+          id: ":1.42/StatusNotifierItem",
+          title: "Network",
+        },
+      ],
+    });
+  });
+
+  it("has no icon for an item the engine carries an empty one for", () => {
+    // The compositor found nothing it could draw, and a shell labels it
+    // instead of drawing a broken image.
+    const icons = tray(
+      Object.assign(new Event("tray"), {
+        arrival: 0,
+        items: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
+      }) as DomicileTrayEvent,
+    );
+
+    expect(icons).toStrictEqual({
+      items: [
+        { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
+      ],
+    });
   });
 });
 

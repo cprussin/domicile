@@ -33,3 +33,4 @@
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
+{"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo="},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing"}]}

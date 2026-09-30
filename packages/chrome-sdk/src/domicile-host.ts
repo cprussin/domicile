@@ -42,6 +42,7 @@
 
 import type { CursorShape } from "./cursor-shape";
 import type { Theme } from "./theme";
+import type { TrayAction } from "./tray";
 
 /**
  * A key combination the desktop claims for itself, and the same shape the
@@ -553,6 +554,42 @@ export type DomicileClipboardEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/** One icon in the system tray, as the compositor read it off the bus. */
+export type DomicileTrayItem = {
+  /** What {@link DomicileHost.activateTrayItem} names this icon by. */
+  readonly id: string;
+  /** What it is, in words: never empty. */
+  readonly title: string;
+  /**
+   * The picture, as a `data:` URL, or empty for one the compositor could not
+   * draw.
+   */
+  readonly icon: string;
+};
+
+/**
+ * The system tray: every application showing an icon, in the order they
+ * registered.
+ *
+ * **A page cannot read this for itself.** An icon is a StatusNotifierItem on
+ * the session bus, which the compositor hosts and a page has no way to reach.
+ *
+ * Pushed, like the clipboard, and the whole tray every time: sent whenever an
+ * icon arrives, leaves or changes how it looks, and again to a page that has
+ * just connected. An empty list is a desk no application has put an icon on.
+ */
+export type DomicileTrayEvent = Event & {
+  /** The icons, in the order their applications registered. */
+  readonly items: readonly DomicileTrayItem[];
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /**
  * Which way round the desktop is drawn now.
  *
@@ -756,6 +793,11 @@ export type DomicileHostEventMap = {
    */
   extensions: DomicileExtensionsEvent;
   /**
+   * The system tray, whole, whenever an icon arrives, leaves or changes, and
+   * once on connecting.
+   */
+  tray: DomicileTrayEvent;
+  /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
    * is now.
@@ -949,6 +991,13 @@ export type DomicileHost = {
    * {@link DomicileExtension.popup}.
    */
   activateExtension(id: string): void;
+
+  /**
+   * Click an icon in the system tray, with the button `action` names. What the
+   * click does is the application's; an icon whose application has gone does
+   * nothing, and an empty id throws.
+   */
+  activateTrayItem(id: string, action: TrayAction): void;
 
   key(appId: string, keycode: number, pressed: boolean): void;
   pointerMotion(appId: string, x: number, y: number): void;
