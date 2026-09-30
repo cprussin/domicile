@@ -4,7 +4,8 @@
 // will this do" — there is no second line under it saying so. In order: the
 // page a `!` tag's site has for the words, if it has one; the search the tag
 // names, if the box carries one; a site, if the box holds one; the
-// applications the host found; a path, if it is spelled like one; the files
+// applications the host found, then the desk's bookmarks it matched; a path,
+// if it is spelled like one; the files
 // the host found; and a search on Google for the line as typed, always. A URL
 // typed whole is a URL meant, so it goes on top; an application is above a
 // file, because a launcher is asked for one far more often; the search goes
@@ -15,7 +16,7 @@
 // disagree about `localhost:5173` is one where the user has to remember which
 // box they are in.
 
-import type { DesktopEntry } from "@domicile/chrome-sdk/host-message";
+import type { Bookmark, DesktopEntry } from "@domicile/chrome-sdk/host-message";
 
 import type { TaggedSearch, TaggedSite } from "../address/search";
 import { googleUrl, taggedSearch, taggedSite } from "../address/search";
@@ -23,9 +24,10 @@ import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
-/** Which of the six kinds of row a choice is. */
+/** Which of the seven kinds of row a choice is. */
 export enum ChoiceKind {
   App,
+  Bookmark,
   File,
   Site,
   Search,
@@ -38,6 +40,11 @@ export const Choice = {
   App: (entry: DesktopEntry) => ({
     entry,
     kind: ChoiceKind.App as const,
+  }),
+  /** A URL the desk offers by name, as the host found it. */
+  Bookmark: (bookmark: Bookmark) => ({
+    kind: ChoiceKind.Bookmark as const,
+    ...bookmark,
   }),
   /** A path, as the host named it: a directory ends in `/`. */
   File: (found: string) => ({
@@ -70,8 +77,8 @@ export const Choice = {
 export type Choice = ReturnType<(typeof Choice)[keyof typeof Choice]>;
 
 /**
- * The rows for `query`, given the files and applications the host found for
- * it.
+ * The rows for `query`, given the files, applications and bookmarks the host
+ * found for it.
  *
  * A tagged query gets its tagged search on top — the tag is the user saying
  * where they meant to go — with the page the words name there above it, if
@@ -82,13 +89,14 @@ export const choicesFor = (
   query: string,
   found: readonly string[],
   apps: readonly DesktopEntry[],
+  bookmarks: readonly Bookmark[],
 ): Choice[] => {
   const site = taggedSite(query);
   const tagged = taggedSearch(query);
   return [
     ...(site === undefined ? [] : [Choice.TaggedSite(site)]),
     ...(tagged === undefined ? [] : [Choice.TaggedSearch(tagged)]),
-    ...plainChoicesFor(query, found, apps),
+    ...plainChoicesFor(query, found, apps, bookmarks),
   ];
 };
 
@@ -101,6 +109,7 @@ export const launchOf = (choice: Choice): Launch => {
     case ChoiceKind.File: {
       return Launch.Opened(choice.row.path);
     }
+    case ChoiceKind.Bookmark:
     case ChoiceKind.Site:
     case ChoiceKind.Search:
     case ChoiceKind.TaggedSearch:
@@ -114,10 +123,14 @@ const plainChoicesFor = (
   query: string,
   found: readonly string[],
   apps: readonly DesktopEntry[],
+  bookmarks: readonly Bookmark[],
 ): Choice[] => {
   const typed = query.trim();
   const address = typedAddress(typed);
-  const applications = apps.map((entry) => Choice.App(entry));
+  const applications = [
+    ...apps.map((entry) => Choice.App(entry)),
+    ...bookmarks.map((bookmark) => Choice.Bookmark(bookmark)),
+  ];
   const files = found.map((path) => Choice.File(path));
   return address === undefined
     ? [...applications, ...files]

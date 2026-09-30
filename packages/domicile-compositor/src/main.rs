@@ -168,6 +168,7 @@ use domicile_config::{
 };
 use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
+use domicile_host::bookmarks::find as find_bookmarks;
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
@@ -177,7 +178,9 @@ use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme};
+use domicile_protocol::{
+    Bookmark, ChromeMessage, CursorShape, DesktopEntry, HostMessage, Passphrase, Theme,
+};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportMemWl as _;
 
@@ -484,10 +487,10 @@ struct ChromeHub {
     /// [`answer_on_the_connection`]. The lock's own state, set once at startup
     /// on a desk that can lock and never on one that cannot.
     lock: OnceLock<Seen>,
-    /// Which desktop entries a launcher is offered: `applications.omit`, as
-    /// the config last said it. Set at startup and on every reload that moves
-    /// it, and read by every connection that answers a search.
-    applications: Mutex<Omit>,
+    /// What a launcher is offered: `applications`, as the config last said
+    /// it. Set at startup and on every reload that moves it, and read by every
+    /// connection that answers a search.
+    applications: Mutex<ApplicationsConfig>,
     /// The icons a launcher's applications are drawn with, found once each.
     /// Behind a lock of its own because every connection answers searches.
     app_icons: Mutex<AppIcons>,
@@ -502,11 +505,11 @@ struct ChromeHub {
 }
 
 impl ChromeHub {
-    /// Take up `applications.omit`: which desktop entries the next search
-    /// offers. Nothing is told — a launcher asks on every keystroke, so the
-    /// next one is answered under it.
+    /// Take up `applications`: which desktop entries and bookmarks the next
+    /// search offers. Nothing is told — a launcher asks on every keystroke, so
+    /// the next one is answered under it.
     fn offer_the_applications(&self, applications: &ApplicationsConfig) {
-        *self.applications.lock().unwrap() = applications.omit.clone();
+        *self.applications.lock().unwrap() = applications.clone();
     }
 
     fn new(
@@ -527,7 +530,7 @@ impl ChromeHub {
             offered: Mutex::new(None),
             home: OnceLock::new(),
             lock: OnceLock::new(),
-            applications: Mutex::new(ApplicationsConfig::default().omit),
+            applications: Mutex::new(ApplicationsConfig::default()),
             app_icons: Mutex::new(AppIcons::new(data_dirs(
                 std::env::var_os("XDG_DATA_HOME"),
                 std::env::var_os("XDG_DATA_DIRS"),
@@ -985,6 +988,21 @@ const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 /// of a launcher, they type another letter, and `matched` still says how many
 /// there were in all.
 const FOUND: usize = 200;
+
+/// The desk's bookmarks a search matched, as a launcher is told them.
+fn offered_bookmarks(bookmarks: &[domicile_config::Bookmark], query: &str) -> Vec<Bookmark> {
+    let bookmarks: Vec<Bookmark> = bookmarks
+        .iter()
+        .map(|bookmark| Bookmark {
+            name: bookmark.name.clone(),
+            url: bookmark.url.clone(),
+        })
+        .collect();
+    find_bookmarks(&bookmarks, query, FOUND_APPS)
+        .into_iter()
+        .cloned()
+        .collect()
+}
 
 /// How many applications a search sends. Fewer than files, because each
 /// carries its icon and every one of them crosses on every keystroke.
@@ -1616,10 +1634,10 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
             );
             // Out of the lock before the search, like the file index: a reload
             // replacing the rule must not wait on a disk.
-            let omit = hub.applications.lock().unwrap().clone();
+            let offered = hub.applications.lock().unwrap().clone();
             let installed: Vec<_> = installed(&dirs)
                 .into_iter()
-                .filter(|found| !omit.omits(&found.entry.id))
+                .filter(|found| !offered.omit.omits(&found.entry.id))
                 .collect();
             let mut icons = hub.app_icons.lock().unwrap();
             let apps = find(&installed, &query, FOUND_APPS)
@@ -1629,7 +1647,12 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                     ..found.entry.clone()
                 })
                 .collect();
-            vec![HostMessage::FoundApps { apps, query }]
+            let bookmarks = offered_bookmarks(&offered.bookmarks, &query);
+            vec![HostMessage::FoundApps {
+                apps,
+                bookmarks,
+                query,
+            }]
         }
     }
 }

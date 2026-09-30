@@ -13,6 +13,8 @@ blink_modules_sources("domicile") {
     "domicile_app_titled_event.h",
     "domicile_apps_event.cc",
     "domicile_apps_event.h",
+    "domicile_bookmark.cc",
+    "domicile_bookmark.h",
     "domicile_battery_event.cc",
     "domicile_battery_event.h",
     "domicile_clipboard_entry.cc",

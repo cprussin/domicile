@@ -315,8 +315,15 @@ const desktopEntrySchema = z.looseObject({
   name: z.string(),
 });
 
+// A URL the desk offers by name, from `applications.bookmarks`.
+const bookmarkSchema = z.looseObject({
+  name: z.string(),
+  url: z.string(),
+});
+
 const foundAppsSchema = z.looseObject({
   apps: z.array(desktopEntrySchema),
+  bookmarks: z.array(bookmarkSchema),
   query: z.string(),
   type: z.literal("found_apps"),
 });

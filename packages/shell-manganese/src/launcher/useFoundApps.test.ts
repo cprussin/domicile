@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type {
+  Bookmark,
   DesktopEntry,
   FoundAppsMessage,
 } from "@domicile/chrome-sdk/host-message";
@@ -15,6 +16,8 @@ const EDITOR: DesktopEntry = {
   name: "Text Editor",
 };
 
+const MAIL: Bookmark = { name: "Mail", url: "https://mail.example.com" };
+
 /** The host's search for applications, answered in whatever order a test says. */
 const host = () => {
   const asked: { query: string; settle: (found: FoundAppsMessage) => void }[] =
@@ -27,13 +30,14 @@ const host = () => {
     answers: async (
       at: number,
       apps: readonly DesktopEntry[],
+      bookmarks: readonly Bookmark[] = [],
     ): Promise<void> => {
       const asking = asked[at];
       if (asking === undefined) {
         throw new Error(`nothing was asked at ${at.toString()}`);
       } else {
         await act(async () => {
-          asking.settle({ apps, query: asking.query });
+          asking.settle({ apps, bookmarks, query: asking.query });
           await Promise.resolve();
         });
       }
@@ -49,11 +53,11 @@ describe("useFoundApps", () => {
     const { result } = renderHook(() => useFoundApps(machine.searchApps, "te"));
 
     expect(machine.asked()).toStrictEqual(["te"]);
-    expect(result.current).toStrictEqual([]);
+    expect(result.current).toStrictEqual({ apps: [], bookmarks: [] });
 
-    await machine.answers(0, [EDITOR]);
+    await machine.answers(0, [EDITOR], [MAIL]);
 
-    expect(result.current).toStrictEqual([EDITOR]);
+    expect(result.current).toStrictEqual({ apps: [EDITOR], bookmarks: [MAIL] });
   });
 
   it("keeps the answer to the box when a keystroke ago's arrives after it", async () => {
@@ -65,8 +69,8 @@ describe("useFoundApps", () => {
     rerender({ query: "te" });
 
     await machine.answers(1, []);
-    await machine.answers(0, [EDITOR]);
+    await machine.answers(0, [EDITOR], [MAIL]);
 
-    expect(result.current).toStrictEqual([]);
+    expect(result.current).toStrictEqual({ apps: [], bookmarks: [] });
   });
 });

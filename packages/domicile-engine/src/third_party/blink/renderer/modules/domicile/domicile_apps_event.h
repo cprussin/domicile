@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_bookmark.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_desktop_entry.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -32,11 +33,15 @@ class MODULES_EXPORT DomicileAppsEvent final : public Event {
   DomicileAppsEvent(const AtomicString& type,
                     String query,
                     HeapVector<Member<DomicileDesktopEntry>> apps,
+                    HeapVector<Member<DomicileBookmark>> bookmarks,
                     DOMHighResTimeStamp arrival);
   ~DomicileAppsEvent() override;
 
   const String& query() const { return query_; }
   const FrozenArray<DomicileDesktopEntry>& apps() const { return *apps_; }
+  const FrozenArray<DomicileBookmark>& bookmarks() const {
+    return *bookmarks_;
+  }
 
   // When the browser process had this, on `performance.now()`'s clock. See
   // DomicileAppEvent::arrival.
@@ -50,6 +55,7 @@ class MODULES_EXPORT DomicileAppsEvent final : public Event {
   // Frozen because the IDL says so, and never null: both constructors build
   // one, an empty answer included.
   Member<FrozenArray<DomicileDesktopEntry>> apps_;
+  Member<FrozenArray<DomicileBookmark>> bookmarks_;
   DOMHighResTimeStamp arrival_ = 0;
 };
 

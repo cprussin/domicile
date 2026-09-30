@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
-import type { DesktopEntry } from "@domicile/chrome-sdk/host-message";
+import type { Bookmark, DesktopEntry } from "@domicile/chrome-sdk/host-message";
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
@@ -35,19 +35,28 @@ const PAINT: DesktopEntry = {
   name: "Paint",
 };
 
-/** The host's search over the applications `apps`, by every word of a name. */
-const searchingApps = (apps: readonly DesktopEntry[]) => (query: string) => {
-  const words = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word !== "");
-  return Promise.resolve({
-    apps: apps.filter((app) =>
-      words.every((word) => app.name.toLowerCase().includes(word)),
-    ),
-    query,
-  });
-};
+/** A bookmark the desk offers. */
+const MAIL: Bookmark = { name: "Mail", url: "https://mail.example.com" };
+
+/**
+ * The host's search over the applications `apps` and the bookmarks
+ * `bookmarks`, by every word of a name.
+ */
+const searchingApps =
+  (apps: readonly DesktopEntry[], bookmarks: readonly Bookmark[]) =>
+  (query: string) => {
+    const words = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) => word !== "");
+    const named = (name: string) =>
+      words.every((word) => name.toLowerCase().includes(word));
+    return Promise.resolve({
+      apps: apps.filter((app) => named(app.name)),
+      bookmarks: bookmarks.filter((bookmark) => named(bookmark.name)),
+      query,
+    });
+  };
 
 /**
  * The host's search over a home of `files`, sending at most two hundred of
@@ -121,6 +130,7 @@ const launcher = (
   files: readonly string[] = FILES,
   indexing = false,
   apps: readonly DesktopEntry[] = [],
+  bookmarks: readonly Bookmark[] = [],
 ) => {
   previewed.length = 0;
   const launched: Launch[] = [];
@@ -138,7 +148,7 @@ const launcher = (
       open
       preview={previewing}
       search={searching(files, indexing)}
-      searchApps={searchingApps(apps)}
+      searchApps={searchingApps(apps, bookmarks)}
     />,
   );
   return {
@@ -177,7 +187,7 @@ describe("Launcher", () => {
         open={false}
         preview={previewing}
         search={searching(FILES, false)}
-        searchApps={searchingApps([])}
+        searchApps={searchingApps([], [])}
       />,
     );
 
@@ -276,6 +286,30 @@ describe("Launcher", () => {
 
     expect(panel.launched).toStrictEqual([
       Launch.Ran(["gedit", "--new-window"]),
+    ]);
+  });
+
+  it("offers a bookmark below the applications and above the files", async () => {
+    using panel = launcher(["mail.txt"], false, [], [MAIL]);
+
+    await panel.user.type(panel.box(), "mail");
+
+    expect(await panel.rows()).toStrictEqual([
+      "Mail",
+      "mail.txt",
+      "Search for mail",
+    ]);
+  });
+
+  it("browses to the bookmark chosen", async () => {
+    using panel = launcher([], false, [], [MAIL]);
+
+    await panel.user.type(panel.box(), "mail");
+    await panel.rows();
+    await panel.user.keyboard("{Enter}");
+
+    expect(panel.launched).toStrictEqual([
+      Launch.Browsed("https://mail.example.com"),
     ]);
   });
 
@@ -672,6 +706,17 @@ describe("Launcher", () => {
 
       expect(
         (await within(previewPane()).findByTitle("https://example.com"))
+          .tagName,
+      ).toBe("WEBVIEW");
+    });
+
+    it("shows the highlighted bookmark in a view of its own", async () => {
+      using panel = launcher([], false, [], [MAIL]);
+
+      await panel.user.type(panel.box(), "mail");
+
+      expect(
+        (await within(previewPane()).findByTitle("https://mail.example.com"))
           .tagName,
       ).toBe("WEBVIEW");
     });

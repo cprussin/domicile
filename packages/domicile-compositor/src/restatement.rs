@@ -23,7 +23,7 @@
 //! | `idle.blank_after_seconds` | the clock restarted and its timer re-armed — `reset_the_idle_clock` |
 //! | `theme.mode` | told to every chrome and to the desk's clients — `take_up_the_theme` |
 //! | `files.omit` | handed to the index, which walks the home again under it — `omit_from_the_index` |
-//! | `applications.omit` | the rule the next `search_apps` is answered under — `offer_the_applications` |
+//! | `applications` | the omit rule and bookmarks the next `search_apps` is answered under — `offer_the_applications` |
 //! | `extensions.*` | told to every chrome, whose browser process installs them — `hand_over_the_extensions` |
 //!
 //! Nine rows for the nine fields [`Config`] has: a reload acts on each of them

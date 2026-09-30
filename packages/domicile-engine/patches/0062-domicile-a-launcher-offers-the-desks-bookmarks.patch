@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 28 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a launcher offers the desk's bookmarks
+
+A DomicileAppsEvent carries the bookmarks a searchApps() matched beside the
+applications -- each a DomicileBookmark, a name and the URL the shell opens
+itself.
+
+The interface is a new file under src/; what cannot be a new file is a name
+in a generated-bindings list.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 2 ++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 5b1785da9f..7c8cbde185 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -2422,6 +2422,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_bookmark.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_bookmark.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 19acb2e596..3fff523b79 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -302,6 +302,7 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_apps_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_apps_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_desktop_entry.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_bookmark.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
+-- 
+2.43.0
+
