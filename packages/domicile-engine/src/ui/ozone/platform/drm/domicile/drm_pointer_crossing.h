@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "ui/display/display.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
@@ -62,6 +64,41 @@ std::optional<PointerCrossing> PointerCrossingFor(
     const std::vector<DomicileDisplayLayout>& layout,
     gfx::AcceleratedWidget from,
     const gfx::PointF& location);
+
+// Where a pointer at `location` on the engine's desktop is in `window`'s
+// panel pixels, which is where a window holding the pointer is told it is.
+//
+// A WINDOW THAT WAS PRESSED HOLDS THE POINTER UNTIL IT IS LET GO, wherever the
+// hand takes it -- a float dragged onto the next monitor is dragged by the
+// page it was pressed on. Upstream tells that window the pointer's place on
+// the engine's desktop less its own corner, and the engine's desktop is the
+// row the compositor steps the CRTCs across: it knows nothing of where a
+// profile put the monitors, how they are turned or how dense each is. So the
+// place is read off the screen the pointer is on, onto the desk, and back
+// onto `window` -- unclamped, since a pointer past its edge is the point.
+//
+// On `window` itself, or where the layout places either screen nowhere, it is
+// the engine's arithmetic as upstream does it.
+gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
+                            const std::vector<DomicileDisplayLayout>& layout,
+                            const gfx::PointF& location,
+                            gfx::AcceleratedWidget window);
+
+// Which window holds the pointer once `window` has been sent a mouse event of
+// `type`, given the one that held it before (or none).
+//
+// A PRESS HOLDS THE POINTER IN ITS WINDOW UNTIL THE LAST BUTTON IS LET GO.
+// X and Wayland both give a pressed window every motion until the release --
+// the implicit grab -- and a page counts on it: a drag reads its moves off the
+// window it was pressed in. Upstream DRM routes each event to the window under
+// the pointer unless something called `SetCapture`, so a drag carried onto the
+// next monitor went on in that monitor's page, which had not been pressed,
+// and the page doing the drag heard nothing more.
+gfx::AcceleratedWidget PointerHolderAfter(gfx::AcceleratedWidget holder,
+                                          gfx::AcceleratedWidget window,
+                                          EventType type,
+                                          int flags,
+                                          int changed_button_flags);
 
 // Whether a window at `bounds_in_screen` takes a key, with the pointer at
 // `pointer` on the engine's desktop.
