@@ -40,12 +40,14 @@ stays where it is.
 ### The drag stays with the page that was pressed
 
 The pressing page keeps getting moves after the pointer crosses to another
-CRTC. A button press gives the views widget capture
-(`Widget::OnMouseEvent` → `DrmWindowHost::SetCapture` →
-`DrmWindowHostManager::GrabEvents`), and patch 0050 moves the cursor without
-dropping the grab. So `clientX` keeps going past `innerWidth`, in this page's
-coordinates. The host describes the desk in the same coordinates, so the
-arithmetic above needs no conversion.
+CRTC. On DRM nothing gives it that for free, because upstream routes each event
+to the window under the pointer. Patch 0064 adds the implicit grab X and
+Wayland give: a press holds the pointer in its window until the last button is
+released (`PointerHolderAfter`). The held page is told where the pointer is by
+way of the profile's desk (`PointerInWindow`), not the engine's CRTC row, so
+`clientX` runs past `innerWidth` in this page's own logical pixels, whatever
+the monitors' turn and density. The host describes the desk in the same
+coordinates, so the arithmetic above needs no conversion.
 
 `useFloatDrag` attaches its `window` listeners in the press handler and
 removes them on release, so the drag survives the pressed element unmounting
@@ -122,10 +124,6 @@ Phase 3.
 
 ## Open questions
 
-- **Does capture really cross CRTCs?** Only hardware can confirm it. If it
-  doesn't, the drag has to pass to the page under the pointer: put the grab
-  offset in `WindowState` next to `draggingId`, and let the page that sees
-  `pointermove` with a button held continue it.
 - **Tiled windows.** A tiled drag onto another screen's window could drop
   into that tiling (`WindowDroppedOn` across screens). Recommend: a separate
   item, alongside `move <direction>` crossing screens the way `focus

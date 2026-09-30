@@ -1,0 +1,160 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 30 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a pressed window holds the pointer, where the desk
+ has it
+
+A float dragged onto the next monitor stopped at the edge. Two reasons,
+each enough on its own.
+
+NOTHING HELD THE POINTER. X and Wayland give a pressed window every
+motion until the release -- the implicit grab -- and a page's drag
+counts on it. Upstream DRM routes each event to the window under the
+pointer unless something called SetCapture, so once patch 0050 carried
+the pointer onto the next CRTC, the rest of the drag went to that
+monitor's page, which had not been pressed. `DrmWindowHostManager` now
+keeps a pointer holder: the window a press landed in, until the last
+button is let go (`PointerHolderAfter`).
+
+AND IT WOULD HAVE HEARD THE WRONG PLACE. A window was told a pointer's
+place on the engine's desktop less its own corner, and that desktop is
+the row the compositor steps the CRTCs across -- all at y = 0, in panel
+pixels, landscape. On `home-office-right-two` (a laptop at 1.5 beside
+two monitors at 1.2 on their sides) the laptop's page heard a pointer
+on the monitor beside it thousands of pixels away and turned. Every
+mouse event is now read off the screen the pointer is on, onto the
+desk the profile placed, and back onto the window hearing it
+(`PointerInWindow`); on its own window that is upstream's arithmetic.
+---
+ ui/ozone/platform/drm/host/drm_cursor.cc      |  6 +++++
+ ui/ozone/platform/drm/host/drm_cursor.h       |  6 +++++
+ ui/ozone/platform/drm/host/drm_window_host.cc | 25 +++++++++++++++++--
+ .../drm/host/drm_window_host_manager.cc       |  2 ++
+ .../drm/host/drm_window_host_manager.h        |  8 ++++++
+ 5 files changed, 45 insertions(+), 2 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index fc56bbf..8a6ea18 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -182,6 +182,12 @@ void DrmCursor::SetDomicileDisplayLayout(
+   layout_ = layout;
+ }
+ 
++gfx::PointF DrmCursor::ToWindow(gfx::AcceleratedWidget window,
++                                const gfx::PointF& screen_location) {
++  base::AutoLock lock(lock_);
++  return PointerInWindow(screens_, layout_, screen_location, window);
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index 742a6c4..7678435 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -88,6 +88,12 @@ class DrmCursor : public CursorDelegateEvdev {
+   void SetDomicileDisplayLayout(
+       const std::vector<DomicileDisplayLayout>& layout);
+ 
++  // DOMICILE: where `screen_location`, on the engine's desktop, is in
++  // `window`'s panel pixels -- for a window holding the pointer after it
++  // crossed onto another monitor. See `PointerInWindow`.
++  gfx::PointF ToWindow(gfx::AcceleratedWidget window,
++                       const gfx::PointF& screen_location);
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index 1d1808c..1d4135d 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -377,6 +377,14 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+   if (grabber != gfx::kNullAcceleratedWidget)
+     return grabber == widget_;
+ 
++  // DOMICILE: and a held button keeps the pointer in the window it was
++  // pressed in, the implicit grab X and Wayland give. See
++  // `PointerHolderAfter`.
++  const gfx::AcceleratedWidget holder = window_manager_->pointer_holder();
++  if (event->IsMouseEvent() && holder != gfx::kNullAcceleratedWidget) {
++    return holder == widget_;
++  }
++
+   if (event->IsTouchEvent()) {
+     // Dispatch the event if it is from the touchscreen associated with the
+     // DrmWindowHost. We cannot check the event's location because if the
+@@ -479,14 +487,27 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+     LocatedEvent* located_event = event->AsLocatedEvent();
+ 
+     if (event->IsMouseEvent()) {
++      window_manager_->set_pointer_holder(PointerHolderAfter(
++          window_manager_->pointer_holder(), widget_, event->type(),
++          event->flags(), event->AsMouseEvent()->changed_button_flags()));
+       DrmWindowHost* window_on_mouse =
+           window_manager_->GetWindowAt(located_event->location());
+       if (window_on_mouse)
+         window_manager_->MouseOnWindow(window_on_mouse);
+     }
+ 
+-    gfx::PointF location = located_event->location_f();
+-    location -= gfx::Vector2dF(bounds_.OffsetFromOrigin());
++    // DOMICILE: A WINDOW HOLDING THE POINTER HEARS IT WHERE THE DESK HAS IT.
++    // A press holds the pointer, so a float dragged onto the next monitor goes
++    // on being dragged by the page it was pressed on -- and that page was told
++    // the pointer's place on the engine's row less its own corner, which on
++    // a desk of turned monitors at other densities is somewhere else
++    // entirely: the drag went sideways, or nowhere. On the window the pointer
++    // is on it is the upstream arithmetic. See `PointerInWindow`.
++    const gfx::PointF location =
++        event->IsMouseEvent()
++            ? cursor_->ToWindow(widget_, located_event->location_f())
++            : located_event->location_f() -
++                  gfx::Vector2dF(bounds_.OffsetFromOrigin());
+     located_event->set_location_f(location);
+     located_event->set_root_location_f(location);
+   }
+diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.cc b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
+index 24f44e1..d98da32 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host_manager.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host_manager.cc
+@@ -41,6 +41,8 @@ void DrmWindowHostManager::RemoveWindow(gfx::AcceleratedWidget widget) {
+ 
+   if (event_grabber_ == widget)
+     event_grabber_ = gfx::kNullAcceleratedWidget;
++  if (pointer_holder_ == widget)
++    pointer_holder_ = gfx::kNullAcceleratedWidget;
+ }
+ 
+ DrmWindowHost* DrmWindowHostManager::GetWindow(gfx::AcceleratedWidget widget) {
+diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+index 32c035b..e4924af 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
++++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+@@ -75,6 +75,13 @@ class DrmWindowHostManager {
+   // Gets the current widget recipient of mouse events.
+   gfx::AcceleratedWidget event_grabber() const { return event_grabber_; }
+ 
++  // DOMICILE: the window a held button was pressed in, which every mouse event
++  // goes to until the last button is let go. See `PointerHolderAfter`.
++  gfx::AcceleratedWidget pointer_holder() const { return pointer_holder_; }
++  void set_pointer_holder(gfx::AcceleratedWidget widget) {
++    pointer_holder_ = widget;
++  }
++
+  private:
+   typedef std::map<gfx::AcceleratedWidget, DrmWindowHost*> WidgetToWindowMap;
+ 
+@@ -83,6 +90,7 @@ class DrmWindowHostManager {
+   raw_ptr<DrmWindowHost> window_mouse_currently_on_ = nullptr;
+ 
+   gfx::AcceleratedWidget event_grabber_ = gfx::kNullAcceleratedWidget;
++  gfx::AcceleratedWidget pointer_holder_ = gfx::kNullAcceleratedWidget;
+ };
+ 
+ }  // namespace ui
+-- 
+2.43.0
+

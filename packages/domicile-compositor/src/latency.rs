@@ -55,10 +55,10 @@
 //! whatever it is doing, and that commit lands on a round that is still
 //! waiting. So a round gives up on any commit later than
 //! [`MAX_WAIT_FRAMES`] display frames after the press — see
-//! [`Report::answered_too_late`] — and on any commit sooner after it than one
-//! display frame over [`MIN_WAIT_FRAME_SHARE`], which is the same stray
-//! arriving with the key instead of long after it — see
-//! [`Report::answered_too_soon`].
+//! [`Report::answered_too_late`] — and passes over any commit sooner after it
+//! than one display frame over [`MIN_WAIT_FRAME_SHARE`], which is the same
+//! stray arriving with the key instead of long after it, and waits on for the
+//! key's answer — see [`Report::answered_too_soon`].
 //!
 //! **This brackets the wait; it does not separate the populations.** Commits
 //! that no key caused have been accepted at 0.9, 1.0 and 2.5 frames, which is
@@ -240,14 +240,16 @@ pub struct Report {
     /// The bound is [`MAX_WAIT_FRAMES`] display frames, and it does **not**
     /// separate the two populations — the readings that say so are there.
     pub answered_too_late: usize,
-    /// Rounds given up because the client's commit arrived too soon after the
-    /// key to be an answer to it.
+    /// Commits passed over because they arrived too soon after the key to be
+    /// an answer to it.
     ///
-    /// **Its own count, and not `answered_too_late`.** The same thing happened
-    /// — a client redrawing on its own committed whatever it was doing, and
-    /// the round waiting took it for an answer — but a report that called a
-    /// commit 0.82 ms after the key "too late" would send whoever read it to
-    /// look for a slow client. The bound is [`MIN_WAIT_FRAME_SHARE`].
+    /// **Commits, not rounds given up.** A commit 0.82 ms after the key is a
+    /// frame the client already had in flight, and the key it did not answer
+    /// is still on its way to being answered, so the round waits on for that.
+    /// Ending the round instead pressed the next key while this one was
+    /// unanswered; a client drawing both keys in one frame drew no change, and
+    /// the next round was reported abandoned. The bound is
+    /// [`MIN_WAIT_FRAME_SHARE`].
     pub answered_too_soon: usize,
     /// Rounds whose key was never delivered, because there was no surface to
     /// deliver it to.
@@ -447,8 +449,9 @@ const MAX_WAIT_FRAMES: u32 = 6;
 ///
 /// An eighth, which on a 16.67 ms frame is 2.08 ms. In frames because every
 /// bound here is — a millisecond threshold would be one on whatever else the
-/// runner was doing — and generous because the cost of being wrong is a
-/// flaky positive guard: the fastest press-to-commit ever measured against a
+/// runner was doing — and generous because the cost of being wrong is a real
+/// answer passed over, whose pixel then gives its round up as
+/// [`Report::moved_before_commit`] and fails the guard: the fastest press-to-commit ever measured against a
 /// client that answers keys is 15.93 ms, 7.6 times this.
 const MIN_WAIT_FRAME_SHARE: u32 = 8;
 
@@ -801,8 +804,12 @@ impl Latency {
                     self.answered_too_late += 1;
                     self.end_round();
                 } else if waited < self.frame / MIN_WAIT_FRAME_SHARE {
+                    // Passed over, and the round stays open: the key went in,
+                    // so its answer is still coming. Ending the round here
+                    // pressed the next key while this one was unanswered, and
+                    // a client drawing both at once drew no change at all —
+                    // the next round was then reported abandoned.
                     self.answered_too_soon += 1;
-                    self.end_round();
                 } else {
                     self.key_to_commit.push(waited);
                     self.phase = Phase::Polling {
@@ -1433,44 +1440,55 @@ mod tests {
 
     /// The near end of the same wait, from the same run's report: a commit
     /// 0.82 ms after the key. The clock starts before the key is delivered, so
-    /// a round this fast is the compositor's own dispatch, the client waking,
+    /// a commit this fast is the compositor's own dispatch, the client waking,
     /// a repaint and a commit inside one millisecond — which no toolkit does.
     /// The fastest press-to-commit ever measured against a client that *does*
     /// answer is 15.93 ms.
     ///
-    /// It is the same accusation as the round above, from the other side: a
-    /// client redrawing on its own committed whatever it was doing, and a
-    /// round took it for an answer. A stray landing this close to the key is
-    /// the more dangerous of the two, because the figure it produces looks
-    /// fast rather than absurd.
+    /// **Passed over, and the round keeps waiting for the key's answer.** The
+    /// key went in, so its answer is still coming. Engine run 36758359911
+    /// ended the round here instead and pressed the next key before kitty had
+    /// drawn this one: both flips landed in one frame, the color came back
+    /// where it started, and the next round was reported abandoned.
+    ///
+    /// ```text
+    ///   key to commit    over 59
+    ///   commit to pixel  over 58
+    ///   1 abandoned by the client, 1 whose commit came too soon
+    /// ```
     #[test]
-    fn a_commit_that_arrives_with_the_key_is_not_its_answer() {
+    fn a_commit_that_arrives_with_the_key_is_passed_over_for_its_answer() {
         let mut driver = Driver::new(1, 3, 10);
         driver.reach_first_press(ms(17));
         assert_eq!(driver.tick(ms(0)), Step::Press);
+        let keyed = driver.now;
 
         driver.now += Duration::from_micros(820);
         driver.latency.committed(driver.now);
+        assert_eq!(
+            driver.tick(ms(0)),
+            Step::Sample,
+            "the key's answer is still coming, so the next key must wait for it"
+        );
+        driver.answer(ms(1));
+
+        driver.now = keyed + ms(18);
+        driver.latency.committed(driver.now);
         driver.tick(ms(0));
         driver.color = 0xFF44_4444;
-        driver.answer(Duration::from_micros(38_020));
+        driver.answer(ms(17));
 
         let report = driver.latency.report().unwrap();
         assert_eq!(
-            report.commit_to_pixel, None,
-            "a frame already in flight cannot be timed to the key's pixel"
+            report.key_to_commit.unwrap().median,
+            ms(18),
+            "timed to the answer, not to the frame already in flight"
         );
-        assert_eq!(
-            report.key_to_commit, None,
-            "nor is 0.82 ms a client reading a key and redrawing"
-        );
-        assert_eq!(
-            report.answered_too_late, 0,
-            "and what was wrong with it was not that it came late"
-        );
+        assert_eq!(report.commit_to_pixel.unwrap().median, ms(17));
+        assert_eq!(report.abandoned, 0);
         assert_eq!(
             report.answered_too_soon, 1,
-            "a round given up is counted, not quietly missing from the run"
+            "a stray passed over is counted, not quietly missing from the run"
         );
     }
 
