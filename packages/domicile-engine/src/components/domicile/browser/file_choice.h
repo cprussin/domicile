@@ -23,18 +23,26 @@ namespace domicile {
 // and what comes back is paths. These are the three questions the browser
 // asks of them, kept here because they can be answered with no browser at all.
 
-// `relative`, a path the shell answered with, under `home`.
+// `path`, as a shell named it, as the path it means.
 //
-// RELATIVE TO THE HOME because that is the vocabulary a shell already has: the
-// compositor's `found_files` names every file that way, and a picker built on
-// it hands back what it was shown. A directory may end in `/`, which is how
-// that answer spells one.
+// ABSOLUTE, OR RELATIVE TO THE HOME. Relative is the vocabulary a shell
+// already has -- the compositor's `found_files` names every file that way --
+// and absolute is how a picker walking the whole filesystem names the rest.
+// The empty path is the home. A directory may end in `/`, which is how both
+// that answer and DirectoryEntries below spell one.
 //
-// Nothing for a path that is empty, absolute, or climbs out with `..`. The
-// element refuses all three before sending, so one arriving here did not come
-// from it.
-std::optional<base::FilePath> PathInHome(const base::FilePath& home,
-                                         std::string_view relative);
+// Nothing for a path that climbs with `..`. The element refuses one before
+// sending, so one arriving here did not come from it.
+std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
+                                           std::string_view path);
+
+// The names in `directory`, each a directory's ending in `/` -- the spelling
+// `found_files` uses -- in no order. Nothing for a path that is not a
+// directory this process can read.
+//
+// Blocking, so it runs on the thread pool.
+std::optional<std::vector<std::string>> DirectoryEntries(
+    const base::FilePath& directory);
 
 // Whether `count` paths answer what `mode` asked: one, except for
 // kOpenMultiple, which takes at least one.

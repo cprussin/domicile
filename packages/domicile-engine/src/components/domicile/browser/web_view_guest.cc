@@ -274,11 +274,11 @@ std::optional<std::vector<base::FilePath>> ChosenPaths(
   const base::FilePath home = base::GetHomeDir();
   std::vector<base::FilePath> chosen;
   for (const std::string& path : paths) {
-    std::optional<base::FilePath> in_home = PathInHome(home, path);
-    if (!in_home.has_value()) {
+    std::optional<base::FilePath> resolved = ResolvedPath(home, path);
+    if (!resolved.has_value()) {
       return std::nullopt;
     }
-    chosen.push_back(*in_home);
+    chosen.push_back(*resolved);
   }
   return chosen;
 }
@@ -498,7 +498,7 @@ void WebViewGuest::ChooseDownloadPath(
       mojom::WebViewFileChooserMode::kSave, {},
       suggested_path.BaseName().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&DownloadPathChosen, std::move(chosen)),
+          HeldOpen(base::BindOnce(&DownloadPathChosen, std::move(chosen))),
           std::nullopt));
 }
 
@@ -574,6 +574,29 @@ void WebViewGuest::SetZoom(double factor) {
     return;
   }
   ZoomTo(factor);
+}
+
+void WebViewGuest::ListDirectory(const std::string& path,
+                                 ListDirectoryCallback callback) {
+  const std::optional<base::FilePath> directory =
+      ResolvedPath(base::GetHomeDir(), path);
+  // The element throws a TypeError for this before sending it, as it does for
+  // a SetZoom out of range.
+  if (!directory.has_value()) {
+    std::move(callback).Run(std::nullopt);
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> asked to list a path that climbs with `..`.");
+    return;
+  }
+  // Not a bad message: an answer and a listing travel on different pipes, so a
+  // listing asked for just before the answer can arrive just after it.
+  if (open_choosers_ == 0) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&DirectoryEntries, *directory), std::move(callback));
 }
 
 double WebViewGuest::GetZoomFactor() const {
@@ -730,8 +753,28 @@ void WebViewGuest::RunFileChooser(
       AcceptedExtensions(params.accept_types),
       params.default_file_name.BaseName().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&FilesChosen, std::move(listener), params.mode),
+          HeldOpen(
+              base::BindOnce(&FilesChosen, std::move(listener), params.mode)),
           std::nullopt));
+}
+
+mojom::WebViewGuestClient::FileChooserRequestedCallback WebViewGuest::HeldOpen(
+    mojom::WebViewGuestClient::FileChooserRequestedCallback answer) {
+  ++open_choosers_;
+  return base::BindOnce(&WebViewGuest::ChooserAnswered,
+                        weak_factory_.GetWeakPtr(), std::move(answer));
+}
+
+// static
+void WebViewGuest::ChooserAnswered(
+    base::WeakPtr<WebViewGuest> guest,
+    mojom::WebViewGuestClient::FileChooserRequestedCallback answer,
+    const std::optional<std::vector<std::string>>& paths) {
+  if (guest) {
+    CHECK_GT(guest->open_choosers_, 0u);
+    --guest->open_choosers_;
+  }
+  std::move(answer).Run(paths);
 }
 
 void WebViewGuest::NavigationStateChanged(
