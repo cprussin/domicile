@@ -86,6 +86,11 @@ class DrmCursorFactory : public BitmapCursorFactory {
   // forward. It costs a unit test that holds one of these by its own type,
   // which is how it was found.
   using CursorFactory::GetDefaultCursor;
+
+  // Nothing: these cursors are bitmaps with no platform theme behind them to
+  // change. Upstream's default is `NOTIMPLEMENTED()`, an `ERROR` line on
+  // every start.
+  void ObserveThemeChanges() override;
 };
 
 }  // namespace ui

@@ -153,11 +153,12 @@ pub fn engine(
         // one line about input in it, and an empty log reads as "none of that
         // code ran" rather than "it ran and said so quietly".
         //
-        // ERROR and above, not WARNING. The fork writes that account at
-        // ERROR; WARNING is where upstream Chromium says what a nested run's
-        // host compositor lacks -- an older protocol version, a D-Bus service
-        // nobody runs -- a dozen lines on every start that are not news, and
-        // that bury the one that is. `--log-level=0` or `1` through `extra` is
+        // ERROR and above, not WARNING. The fork writes what is wrong at
+        // ERROR, and a routine console switch at `VLOG(1)`, which `--v=1`
+        // through `extra` shows. WARNING is where upstream Chromium says what
+        // a nested run's host compositor lacks -- an older protocol version,
+        // a D-Bus service nobody runs -- a dozen lines on every start that
+        // are not news, and that bury the one that is. `--log-level=0` or `1` through `extra` is
         // how a run asks for the rest, and it wins because
         // `CommandLine::AppendSwitchNative` keeps the last value of a switch
         // given twice.
