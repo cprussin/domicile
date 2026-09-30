@@ -6,7 +6,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "description": "An action with a title, a badge its service worker sets, and a popup that closes itself, for guard-extension-tray.sh.",
+  "description": "An action with a title, a badge its service worker sets, and a popup that asks runtime.getContexts and closes itself, for guard-extension-tray.sh.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlyF93NACWUOMSMh6Sve+YSGCN0tmxju6bhXlyAnJll6p1gmhrydAV12xD/RGsESz6qApqyxTcy5I62jSmKrEoo9UDE5f1B60mxtfDEFp6QhC8igwwhB1y+OCazpfo7+vA/lBl6fAFCiiKFxxZo5tJBZEdtFRsZ7lL2Pc17O0VCNTGjzE914aswwn4WU1KHckcC3q21CSnv8EQLe+cFr1q5/3ZusLQiCF3OK0sC6/RK89Xor4VXHh3EEKyntjm+oiqPNuzy3GxxM3IS48B05fwKWvXGO4sqe5NTVVNLixs3J9lv+hEyHWwk87lrtMRo0oJjTRtfXQEAdkN25P+g07bQIDAQAB",
   "manifest_version": 3,
   "name": "Domicile tray guard",

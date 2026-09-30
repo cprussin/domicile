@@ -7,6 +7,8 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/view_type_utils.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 
 namespace domicile {
 
@@ -20,6 +22,16 @@ void AttachTabHelpers(content::WebContents& guest) {
   // is none of them. A desk that restored its browser windows from Chrome's
   // session would be a different feature, and the shell's.
   CreateSessionServiceTabHelper(&guest);
+
+  // A tab's view type, as Chrome's tab_helpers.cc gives every tab before its
+  // extensions::TabHelper. Without it a guest is kInvalid, and
+  // runtime.getContexts -- which Bitwarden's popup calls on opening -- switches
+  // on the view type of each of the extension's frames and NOTREACHEDs on it,
+  // taking the browser down.
+  if (extensions::GetViewType(&guest) ==
+      extensions::mojom::ViewType::kInvalid) {
+    extensions::SetViewType(&guest, extensions::mojom::ViewType::kTabContents);
+  }
   extensions::TabHelper::CreateForWebContents(&guest);
 
   // And a tab of the desk's one window, now that it has an id to be one by.

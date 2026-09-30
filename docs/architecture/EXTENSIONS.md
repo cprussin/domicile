@@ -88,7 +88,7 @@ The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
 
 | Chrome's concept | On a desk |
 |---|---|
-| Tab | A `WebViewGuest`. It gets `SessionTabHelper` (the tab id, also what `declarativeNetRequest`'s `tabIds` and `webRequest` read) and `extensions::TabHelper` (`activeTab` grants, `scripting.executeScript`) when it is created. |
+| Tab | A `WebViewGuest`, view type `kTabContents` as Chrome's tabs (`runtime.getContexts` NOTREACHEDs on none). It gets `SessionTabHelper` (the tab id, also what `declarativeNetRequest`'s `tabIds` and `webRequest` read) and `extensions::TabHelper` (`activeTab` grants, `scripting.executeScript`) when it is created. |
 | Window | One `DomicileWindowController : extensions::WindowController`, registered in `WindowControllerList`. Its tabs are the live guests, in creation order. |
 | Active tab | The guest whose element last took focus: the shell already moves focus with `view.focus()`. The browser has no notification for an inner `WebContents` gaining focus, so the element says so (`WebViewGuest.Focused`). An extension page never takes it: a popup is in a `<webview>` too, and would name itself. |
 
@@ -148,7 +148,7 @@ Slice 1: extensions run, and show in a tray.
 - [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
 - [x] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`: `chrome/browser/domicile/domicile_tab_helpers.h`, handed to `BindWebViewGuestHost` by patch 0056 because the guest's target cannot depend on `//chrome`
 - [x] `WebViewGuestClient.CloseRequested` and `domicile-close`
-- [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
+- [x] `ExtensionTray` mojo, `onextensions`, `activateExtension`. `guard-extension-tray.sh` reads a fixture's title, badge and popup off the event, opens the popup in a `<webview>`, reads its `runtime.getContexts` as a `TAB`, and hears its `window.close()` as `domicile-close`. Until slice 2, `action.onClicked` names the shell's own page as its tab
 - [x] the chrome-sdk client: `DomicileClient.on("extensions")`, `activateExtension`, `WEBVIEW_CLOSE_EVENT`
 - [x] manganese's tray and popup panel
 - [x] *Extensions* in `docs/WRITING-A-SHELL.md`
