@@ -31,12 +31,20 @@ pub struct Entry {
     words: String,
     /// `Icon`, as the entry names it: a theme name, or an absolute path.
     icon_name: Option<String>,
+    /// `X-Domicile-Preview`, named as `Icon` is.
+    preview_name: Option<String>,
 }
 
 impl Entry {
     /// The icon this entry names, for `crate::app_icons` to find.
     pub fn icon_name(&self) -> Option<&str> {
         self.icon_name.as_deref()
+    }
+
+    /// The picture this entry names for a launcher's preview, for
+    /// `crate::app_icons` to find as it finds an icon.
+    pub fn preview_name(&self) -> Option<&str> {
+        self.preview_name.as_deref()
     }
 }
 
@@ -139,9 +147,13 @@ pub fn parse(id: &str, text: &str) -> Option<Entry> {
             command,
             // Found and drawn later, and only for what a search sends.
             icon: None,
+            preview: None,
         },
         words,
         icon_name: keys.get("Icon").map(|icon| unescaped(icon)),
+        preview_name: keys
+            .get("X-Domicile-Preview")
+            .map(|preview| unescaped(preview)),
     })
 }
 

@@ -13,8 +13,19 @@ pub struct Offered {
     pub name: String,
     /// What choosing it opens when the query holds none of its shortcodes.
     pub url: String,
-    /// A word, `!mp` say, and the URL a query holding it opens instead.
-    pub shortcodes: BTreeMap<String, String>,
+    /// Which of the bookmark's URLs `url` is, for a launcher's row to say.
+    pub label: Option<String>,
+    /// A word, `!mp` say, and what a query holding it opens instead.
+    pub shortcodes: BTreeMap<String, Shortcode>,
+}
+
+/// What a bookmark opens when a query holds one of its shortcodes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shortcode {
+    /// What choosing the bookmark opens.
+    pub url: String,
+    /// Which of the bookmark's URLs this is, for a launcher's row to say.
+    pub label: Option<String>,
 }
 
 /// The bookmarks `query` matches, best first and no more than `limit`.
@@ -24,8 +35,8 @@ pub struct Offered {
 /// the URL. A name that starts with the query is best; after that, by name.
 ///
 /// A word that is one of a bookmark's shortcodes, ignoring case, is not
-/// matched: it picks the URL that bookmark offers, the first such word
-/// winning, and the other words are matched against that URL and ranked
+/// matched: it picks the URL and label that bookmark offers, the first such
+/// word winning, and the other words are matched against that URL and ranked
 /// without it. To any other bookmark it is a word like the rest.
 pub fn find(bookmarks: &[Offered], query: &str, limit: usize) -> Vec<Bookmark> {
     let query = query.to_lowercase();
@@ -47,10 +58,12 @@ fn matched(bookmark: &Offered, words: &[&str]) -> Option<(bool, String, Bookmark
     let (shortcodes, words): (Vec<&str>, Vec<&str>) = words
         .iter()
         .partition(|word| shortcode(bookmark, word).is_some());
-    let url = shortcodes
+    let (url, label) = shortcodes
         .first()
         .and_then(|word| shortcode(bookmark, word))
-        .unwrap_or(&bookmark.url);
+        .map_or((&bookmark.url, &bookmark.label), |picked| {
+            (&picked.url, &picked.label)
+        });
     let text = format!("{} {}", bookmark.name, url).to_lowercase();
     let name = bookmark.name.to_lowercase();
     words.iter().all(|word| text.contains(word)).then(|| {
@@ -60,16 +73,17 @@ fn matched(bookmark: &Offered, words: &[&str]) -> Option<(bool, String, Bookmark
             Bookmark {
                 name: bookmark.name.clone(),
                 url: url.clone(),
+                label: label.clone(),
             },
         )
     })
 }
 
-/// The URL `word` is `bookmark`'s shortcode for, ignoring case.
-fn shortcode<'a>(bookmark: &'a Offered, word: &str) -> Option<&'a String> {
+/// What `word` is `bookmark`'s shortcode for, ignoring case.
+fn shortcode<'a>(bookmark: &'a Offered, word: &str) -> Option<&'a Shortcode> {
     bookmark
         .shortcodes
         .iter()
         .find(|(code, _)| code.to_lowercase() == word)
-        .map(|(_, url)| url)
+        .map(|(_, picked)| picked)
 }

@@ -122,8 +122,23 @@ wants only its own says so:
 omit = ["*", "!launcher-*"]
 ```
 
+An entry's `Icon` is drawn beside its row, and its `X-Domicile-Preview` — a PNG
+or SVG under 128 KiB, named the way `Icon` is — fills the preview when its row
+is highlighted:
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Agenda
+Exec=agenda
+Icon=/path/to/agenda.svg
+X-Domicile-Preview=/path/to/agenda-preview.svg
+```
+
 It offers the desk's own bookmarks beside them, each a name and a URL the shell
-opens itself rather than handing it to a browser:
+opens itself rather than handing it to a browser, drawn with the icon the site
+serves at `/favicon.ico` — which the launcher fetches from it. A URL is `http`
+or `https`, and anything else is refused:
 
 ```toml
 [[applications.bookmarks]]
@@ -132,13 +147,16 @@ url = "https://calendar.google.com"
 ```
 
 A bookmark's `shortcodes` open another URL when a search holds the word:
-`calendar !work` offers the second URL here, `calendar` the first.
+`calendar !work` offers the second URL here, `calendar` the first. Each
+`label` is optional, and is what the row says after the name — `Calendar for
+Work` and `Calendar for Home` — so which URL Enter opens is on screen.
 
 ```toml
 [[applications.bookmarks]]
 name = "Calendar"
 url = "https://calendar.google.com"
-shortcodes = { "!work" = "https://calendar.google.com?authuser=me@work.example" }
+label = "Home"
+shortcodes."!work" = { url = "https://calendar.google.com?authuser=me@work.example", label = "Work" }
 ```
 
 On NixOS those are `programs.domicile.settings.applications.omit` and

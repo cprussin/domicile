@@ -271,18 +271,45 @@ in {
                   type = lib.types.str;
                 };
                 url = lib.mkOption {
-                  description = "What choosing it opens.";
+                  description = "What choosing it opens: an `http` or `https` URL.";
                   type = lib.types.str;
+                };
+                label = lib.mkOption {
+                  description = ''
+                    Which of the bookmark's URLs `url` is, which the row says
+                    after the name: `Calendar for Home`. `null` says nothing.
+                  '';
+                  type = lib.types.nullOr lib.types.str;
+                  default = null;
+                  example = "Home";
                 };
                 shortcodes = lib.mkOption {
                   description = ''
                     Words a search can hold, each with the URL choosing the
-                    bookmark opens instead of `url`. The word is not matched
-                    against the name or URL.
+                    bookmark opens instead of `url`, and the `label` the row
+                    says for it. The word is not matched against the name or
+                    URL.
                   '';
-                  type = lib.types.attrsOf lib.types.str;
+                  type = lib.types.attrsOf (lib.types.submodule {
+                    options = {
+                      url = lib.mkOption {
+                        description = "What choosing the bookmark opens.";
+                        type = lib.types.str;
+                      };
+                      label = lib.mkOption {
+                        description = "Which of the bookmark's URLs this is, as `label` above.";
+                        type = lib.types.nullOr lib.types.str;
+                        default = null;
+                      };
+                    };
+                  });
                   default = {};
-                  example = {"!work" = "https://calendar.google.com?authuser=me@work.example";};
+                  example = {
+                    "!work" = {
+                      url = "https://calendar.google.com?authuser=me@work.example";
+                      label = "Work";
+                    };
+                  };
                 };
               };
             });
@@ -291,7 +318,11 @@ in {
               {
                 name = "Calendar";
                 url = "https://calendar.google.com";
-                shortcodes."!work" = "https://calendar.google.com?authuser=me@work.example";
+                label = "Home";
+                shortcodes."!work" = {
+                  url = "https://calendar.google.com?authuser=me@work.example";
+                  label = "Work";
+                };
               }
             ];
           };
