@@ -1331,8 +1331,22 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
         // compositor never asked" apart from "it asked and this client kept
         // what it had" — and without `--follow-configure` the second is what
         // always happens.
-        if let xdg_toplevel::Event::Configure { width, height, .. } = event {
+        if let xdg_toplevel::Event::Configure {
+            width,
+            height,
+            ref states,
+        } = event
+        {
             crate::say!(toplevel.id(), "configure({}, {})", width, height);
+            // Whether this window is the active one, on every configure, so a
+            // check can see it both given and taken away. Chromium reads this
+            // as whether its page has focus, and a page that thinks it has
+            // none takes characters but ignores Backspace and every shortcut.
+            let activated = states.chunks_exact(4).any(|state| {
+                u32::from_ne_bytes(state.try_into().unwrap())
+                    == xdg_toplevel::State::Activated as u32
+            });
+            crate::say!(toplevel.id(), "activated({activated})");
             // Zero is a compositor saying "you choose", so there is nothing
             // to follow. Negative cannot happen — the protocol's own type is
             // signed and its values are sizes — but it is a cast to `u32`

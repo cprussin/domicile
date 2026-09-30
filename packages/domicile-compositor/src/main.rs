@@ -5795,6 +5795,54 @@ impl SeatHandler for DomicileCompositor {
         // paste does nothing, which is what this desktop had before it had a
         // primary selection at all.
         set_primary_focus(&self.display_handle, seat, client);
+        self.activate(focused);
+    }
+}
+
+impl DomicileCompositor {
+    /// The window holding the keyboard is the activated one, and no other is.
+    ///
+    /// **Chromium reads `activated` as whether its page has focus.** Never
+    /// sent, an Electron window takes characters — the editable field inserts
+    /// them itself — and ignores Backspace and every shortcut, which a page
+    /// handles only while it thinks it is focused.
+    ///
+    /// A menu holding the keyboard activates its window: the window is still
+    /// the one being used, and a toolkit closes its menus when its window
+    /// stops being active.
+    fn activate(&self, focused: Option<&WlSurface>) {
+        let window = focused.map(|on| self.window_under_menus(on));
+        for (_, toplevel) in &self.toplevels {
+            let active = window.as_ref() == Some(toplevel.wl_surface());
+            toplevel.with_pending_state(|state| {
+                if active {
+                    state.states.set(xdg_toplevel::State::Activated);
+                } else {
+                    state.states.unset(xdg_toplevel::State::Activated);
+                }
+            });
+            // Before its first configure, that configure carries it.
+            if toplevel.is_initial_configure_sent() {
+                toplevel.send_pending_configure();
+            }
+        }
+    }
+
+    /// The surface a menu — or a menu of a menu — was opened over, or
+    /// `surface` itself when it is no menu.
+    ///
+    /// Asked of the shell rather than of `popups`, which holds a menu only
+    /// once it has drawn — and a menu grabs the keyboard before that.
+    fn window_under_menus(&self, surface: &WlSurface) -> WlSurface {
+        self.xdg_shell_state
+            .popup_surfaces()
+            .iter()
+            .find(|popup| popup.wl_surface() == surface)
+            .and_then(|popup| popup.get_parent_surface())
+            .map_or_else(
+                || surface.clone(),
+                |parent| self.window_under_menus(&parent),
+            )
     }
 }
 
