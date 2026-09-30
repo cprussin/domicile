@@ -161,7 +161,7 @@ use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::timing_window::TimingWindow;
-use crate::viewport::{surface_size, Viewport};
+use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
     ApplicationsConfig, Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig,
@@ -5596,6 +5596,7 @@ impl CompositorHandler for DomicileCompositor {
                             configured,
                             surface_size(size, buffer_scale, viewport.destination),
                             size,
+                            source_pixels(size, buffer_scale, viewport.source),
                         )
                     });
                     let published = self.publish_frame(app_id, &buffer, crop);
