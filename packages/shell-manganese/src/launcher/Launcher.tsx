@@ -39,6 +39,7 @@ import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
 import { TextPreview } from "./TextPreview";
 import { useFound } from "./useFound";
+import type { FoundApps } from "./useFoundApps";
 import { useFoundApps } from "./useFoundApps";
 import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
@@ -82,6 +83,12 @@ type Props = {
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
   open: boolean;
+  /**
+   * The applications and bookmarks its empty box offers, found before it was
+   * opened, so they are drawn with the panel rather than landing a moment
+   * after it. See `useOpeningApps`.
+   */
+  opening: FoundApps;
   /** What a path holds, answered by the host, for the preview. */
   preview: Preview;
   /**
@@ -126,6 +133,7 @@ export const Launcher = ({
   onDismiss,
   onLaunch,
   open,
+  opening,
   preview,
   search,
   searchApps,
@@ -168,6 +176,7 @@ export const Launcher = ({
     */}
     <Query
       onLaunch={onLaunch}
+      opening={opening}
       preview={preview}
       search={search}
       searchApps={searchApps}
@@ -177,6 +186,7 @@ export const Launcher = ({
 
 type QueryProps = {
   onLaunch: (launch: Launch) => void;
+  opening: FoundApps;
   preview: Preview;
   search: Search;
   searchApps: SearchApps;
@@ -191,7 +201,13 @@ type QueryProps = {
  * actually is — a person types, watches the list narrow, and presses Enter
  * without having looked at the screen for the last two of those.
  */
-const Query = ({ onLaunch, preview, search, searchApps }: QueryProps) => {
+const Query = ({
+  onLaunch,
+  opening,
+  preview,
+  search,
+  searchApps,
+}: QueryProps) => {
   const listId = useId();
   const [query, setQuery] = useState("");
   // Where the arrow keys or the pointer have taken the highlight, from the
@@ -200,7 +216,7 @@ const Query = ({ onLaunch, preview, search, searchApps }: QueryProps) => {
   const [stepped, setStepped] = useState(0);
 
   const found = useFound(search, query);
-  const offered = useFoundApps(searchApps, query);
+  const offered = useFoundApps(searchApps, query, opening);
   // Every row is a thing Enter can do — the applications, the bookmarks and
   // the files, and a site and a search around them — so the list is the whole
   // answer to what it will do.

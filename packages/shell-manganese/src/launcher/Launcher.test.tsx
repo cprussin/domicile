@@ -146,6 +146,7 @@ const launcher = (
         launched.push(launch);
       }}
       open
+      opening={{ apps, bookmarks }}
       preview={previewing}
       search={searching(files, indexing)}
       searchApps={searchingApps(apps, bookmarks)}
@@ -185,6 +186,7 @@ describe("Launcher", () => {
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
+        opening={{ apps: [], bookmarks: [] }}
         preview={previewing}
         search={searching(FILES, false)}
         searchApps={searchingApps([], [])}
@@ -242,6 +244,27 @@ describe("Launcher", () => {
       "example.com",
       "Search for example.com",
     ]);
+  });
+
+  it("draws the applications it opens onto without waiting on the host", () => {
+    const { unmount } = render(
+      <Launcher
+        here
+        onClosed={() => undefined}
+        onDismiss={() => undefined}
+        onLaunch={() => undefined}
+        open
+        opening={{ apps: [EDITOR], bookmarks: [MAIL] }}
+        preview={previewing}
+        search={() => new Promise(() => undefined)}
+        searchApps={() => new Promise(() => undefined)}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("option").map((row) => row.textContent),
+    ).toStrictEqual(["Text Editor", "Mail"]);
+    unmount();
   });
 
   it("offers the applications above the files, and a search below both", async () => {

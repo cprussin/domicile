@@ -47,23 +47,51 @@ const host = () => {
   };
 };
 
+/** What the desk had found for the empty box before the launcher opened. */
+const OPENING = { apps: [EDITOR], bookmarks: [MAIL] };
+
 describe("useFoundApps", () => {
-  it("asks for what the box says, and has found nothing until it is answered", async () => {
+  it("offers what was found for the empty box without asking again", () => {
     const machine = host();
-    const { result } = renderHook(() => useFoundApps(machine.searchApps, "te"));
+    const { result } = renderHook(() =>
+      useFoundApps(machine.searchApps, "", OPENING),
+    );
+
+    expect(machine.asked()).toStrictEqual([]);
+    expect(result.current).toStrictEqual(OPENING);
+  });
+
+  it("asks for what the box says, and keeps what it had until it is answered", async () => {
+    const machine = host();
+    const { result } = renderHook(() =>
+      useFoundApps(machine.searchApps, "te", OPENING),
+    );
 
     expect(machine.asked()).toStrictEqual(["te"]);
-    expect(result.current).toStrictEqual({ apps: [], bookmarks: [] });
+    expect(result.current).toStrictEqual(OPENING);
 
-    await machine.answers(0, [EDITOR], [MAIL]);
+    await machine.answers(0, [EDITOR]);
 
-    expect(result.current).toStrictEqual({ apps: [EDITOR], bookmarks: [MAIL] });
+    expect(result.current).toStrictEqual({ apps: [EDITOR], bookmarks: [] });
+  });
+
+  it("goes back to what was found for the empty box once it is emptied", async () => {
+    const machine = host();
+    const { rerender, result } = renderHook(
+      ({ query }) => useFoundApps(machine.searchApps, query, OPENING),
+      { initialProps: { query: "x" } },
+    );
+    await machine.answers(0, []);
+
+    rerender({ query: "" });
+
+    expect(result.current).toStrictEqual(OPENING);
   });
 
   it("keeps the answer to the box when a keystroke ago's arrives after it", async () => {
     const machine = host();
     const { rerender, result } = renderHook(
-      ({ query }) => useFoundApps(machine.searchApps, query),
+      ({ query }) => useFoundApps(machine.searchApps, query, OPENING),
       { initialProps: { query: "t" } },
     );
     rerender({ query: "te" });
