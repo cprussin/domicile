@@ -132,12 +132,13 @@ compositor does.
 Phase 1: one page, raster at S. Behind `--domicile-one-page` until phase 2,
 because a lower-density display is downsampled until then.
 
-- [ ] `ShellWindows`: one host, `DeskPresenter`s for the rest
-- [ ] The host's view sized to the desk box and offset; page `ScreenInfos` from the profile
-- [ ] `DeskPresenter` shows the page's surface; host chosen by refresh rate
-- [ ] Pointer and keys to the host at `desk` positions
-- [ ] Compositor: with `--domicile-one-page`, no `set_screen`; the page gets the whole desk
-- [ ] Hardware check on `home-office-right-two`
+- [x] `ShellWindows`: one host, `DeskPresenters` for the rest
+- [x] The host's view sized to the desk box and offset; page `ScreenInfos` from the profile
+- [x] `DeskPresenters` show the page's surface; host chosen by refresh rate
+- [x] Pointer, scroll and keys to the host at `desk` positions (patch 0065)
+- [x] No `set_screen` with `--domicile-one-page`, so the compositor describes the whole desk (no compositor change)
+- [ ] Hardware check on `home-office-right-two`: `DOMICILE_ENGINE_ARGS=--domicile-one-page`
+- [ ] Pointer warp onto another display (clamped to the host's today)
 
 Phase 2: native density.
 

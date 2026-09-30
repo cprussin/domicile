@@ -18,16 +18,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 30,
 # WindowDiff 7, EngineEventQueue 6, ShortcutRegistry 7, ShellURLLoaderFactory
 # 11, ShellDocument 11, ShellSource 3, CursorShape 3, CommandProtocol 8,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
-# ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12.
+# ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 8.
 #
-# 136, and it was 123 — a window a second page mirrors is seven more
+# 144, and it was 136 — the one page a desk is, its box, scale, host and
+# screen, is eight DeskGeometry cases. Before that 136, and it was 123 — a window a second page mirrors is seven more
 # FrameSinkBroker cases, and the tally had that suite at 17 when the file held
 # 23. Before that 123, and it was 121 — the factor tabs.setZoom sets and the zoom settings a
 # desk tab takes are two more DeskTabs cases. Before that 121, and it was 114 — ShellWindowPlaces was never in the filter, so its five
@@ -52,7 +53,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=136
+FLOOR=144
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
