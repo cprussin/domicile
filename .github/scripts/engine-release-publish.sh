@@ -41,9 +41,50 @@ fi
 
 API="https://api.github.com/repos/$GITHUB_REPOSITORY"
 UPLOADS="https://uploads.github.com/repos/$GITHUB_REPOSITORY"
-api() { curl -sS -f -H "Authorization: Bearer $GITHUB_TOKEN" \
-             -H "Accept: application/vnd.github+json" \
-             -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
+
+# THE API IS TRIED AGAIN ON A 5xx OR A RATE LIMIT, and only then. Run #76
+# lost an 87-minute build to one 500 on creating the release. Anything else
+# (404, 422) is an answer, not a bad minute, and fails at once. Five tries,
+# 15s doubling: 3m45s of waiting at most, then a loud failure naming the status.
+API_ATTEMPTS=5
+
+# Like `curl -f`: the body on stdout on a 2xx, exit 22 otherwise.
+api() {
+  local attempt=1 status url="" arg body
+  for arg in "$@"; do
+    case "$arg" in (http*) url="$arg" ;; esac
+  done
+  body="$(mktemp)"
+  while :; do
+    # `-w` prints 000 when curl reached nothing; curl says why on stderr.
+    status="$(curl -sS -o "$body" -w '%{http_code}' \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" "$@")" || true
+    case "$status" in
+      (2??) cat "$body"; rm -f "$body"; return 0 ;;
+    esac
+    if api_retryable "$status" "$body" && [ "$attempt" -lt "$API_ATTEMPTS" ]; then
+      echo "  GitHub answered $status to $url; attempt $((attempt + 1)) in $((15 << (attempt - 1)))s" >&2
+      sleep $((15 << (attempt - 1)))
+      attempt=$((attempt + 1))
+    else
+      echo "GitHub answered $status to $url (attempt $attempt of $API_ATTEMPTS): $(head -c 300 "$body")" >&2
+      rm -f "$body"
+      return 22
+    fi
+  done
+}
+
+# A 5xx, a 429, or a 403 that says it is a (secondary) rate limit: GitHub
+# answers a permission failure 403 too, and that one will not change.
+api_retryable() { # status, body file
+  case "$1" in
+    (5??|429) return 0 ;;
+    (403) grep -qi 'rate limit' "$2" ;;
+    (*) return 1 ;;
+  esac
+}
 
 # WHICH SERIES THIS BUILD IS OF. Stated in every release's body whichever kind
 # it is, because `update-engine-release.sh` reads it back out of there and
@@ -136,11 +177,22 @@ negative control that fails when nothing draws.
 BODY
 )
 
+# A release for this tag, made here or found. A create GitHub answered 500 may
+# still have landed, and its retry is then 422 `already_exists`: the release
+# that exists is this run's, and the uploads below clear any asset on it first.
+create_release() { # tag, prerelease
+  api -X POST "$API/releases" -d "$(
+    jq -n --arg tag "$1" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
+          --argjson pre "$2" \
+      '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body, prerelease: $pre}'
+  )" || {
+    echo "  the create failed; filling $1 if GitHub made it anyway" >&2
+    api "$API/releases/tags/$1"
+  }
+}
+
 echo "creating release $TAG"
-release=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg body "$BODY" \
-                --argjson pre "$PRERELEASE" \
-  '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body, prerelease: $pre}' |
-  api -X POST "$API/releases" -d @-)
+release=$(create_release "$TAG" "$PRERELEASE")
 id=$(echo "$release" | jq -r .id)
 
 # What a release carries: the build, and the digest beside it.
@@ -244,10 +296,7 @@ if [ -n "$PINNABLE" ]; then
     complete_assets "$(echo "$pinned" | jq -r .id)"
   else
     echo "creating release $PINNABLE"
-    pinnable=$(jq -n --arg tag "$PINNABLE" --arg sha "$GITHUB_SHA" \
-                    --arg body "$BODY" \
-      '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body, prerelease: false}' |
-      api -X POST "$API/releases" -d @-)
+    pinnable=$(create_release "$PINNABLE" false)
     upload_assets "$(echo "$pinnable" | jq -r .id)"
     echo "published $(echo "$pinnable" | jq -r .html_url)"
   fi

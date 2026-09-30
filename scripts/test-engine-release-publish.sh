@@ -47,17 +47,24 @@ cat > "$BIN/curl" <<'FAKE'
 #!/usr/bin/env bash
 # GitHub, as far as the publisher can tell. Every call is appended to
 # `$STATE/calls` as `<METHOD> <url>`; a release exists iff `$STATE/rel-<tag>`
-# does, and `-f` is honored by exiting 22 when it does not.
+# does. The status is answered as curl does: `-o <file> -w '%{http_code}'`
+# writes the body there and prints the status, and `-f` exits 22 on >= 400.
 set -u
 state="$FAKE_STATE"
-method=GET; url=""; stdin_body=0; upload=""
+method=GET; url=""; data=""; upload=""; out=""; code_out=0; fail_flag=0
 prev=""
 for arg in "$@"; do
-  [ "$prev" = "-X" ] && method="$arg"
+  case "$prev" in
+    -X) method="$arg" ;;
+    -d) data="$arg" ;;
+    -o) out="$arg" ;;
+    -w) code_out=1 ;;
+  esac
   case "$arg" in
     http*) url="$arg" ;;
-    @-) stdin_body=1 ;;
-    @*) upload="${arg#@}" ;;
+    -f) fail_flag=1 ;;
+    @-) [ "$prev" = "-d" ] && data="$(cat)" ;;
+    @*) [ "$prev" = "--data-binary" ] && upload="${arg#@}" ;;
   esac
   prev="$arg"
 done
@@ -81,55 +88,91 @@ if [ -n "$upload" ]; then
   exit 0
 fi
 
-case "$method" in
-  GET)
-    case "$url" in
-      # The assets already on a release, with an id the DELETE below can take
-      # the release and the name back out of.
-      (*/assets)
-        id="${url#*/releases/}"; id="${id%%/assets}"
-        awk -v id="$id" '$1 == id { print $2, $3 }' "$state/assets" |
-          jq -R -s -c --arg id "$id" \
-            'split("\n") | map(select(length > 0)) | map(split(" ")) |
-             map({id: ($id + "!" + .[0]), name: .[0], state: .[1]})'
-        ;;
-      (*)
-        tag="${url##*/}"
-        [ -f "$state/rel-$tag" ] || exit 22
-        cat "$state/rel-$tag"
-        ;;
-    esac
-    ;;
-  POST)
-    body=""; [ "$stdin_body" = 1 ] && body="$(cat)"
-    tag="$(printf '%s' "$body" | jq -r .tag_name)"
-    printf '%s' "$body" > "$state/created-$tag.json"
-    jq -n --arg tag "$tag" \
-      '{id: ("id-" + $tag), html_url: ("https://example.invalid/" + $tag)}' \
-      > "$state/rel-$tag"
-    cat "$state/rel-$tag"
-    ;;
-  DELETE)
-    case "$url" in
-      (*/releases/assets/*)
-        asset="${url##*/releases/assets/}"
-        echo "${asset#*!}" >> "$state/deleted-assets"
-        awk -v rel="${asset%%!*}" -v name="${asset#*!}" \
-          '!($1 == rel && $2 == name)' "$state/assets" > "$state/left"
-        mv "$state/left" "$state/assets"
-        ;;
-      # By id, which the fake made from the tag, so the tag is recoverable.
-      (*)
-        id="${url##*/}"
-        echo "${id#id-}" >> "$state/deleted"
-        rm -f "$state/rel-${id#id-}"
-        # A deleted release takes its assets with it.
-        awk -v rel="$id" '$1 != rel' "$state/assets" > "$state/left"
-        mv "$state/left" "$state/assets"
-        ;;
-    esac
-    ;;
+status=200
+respond() {
+  case "$method" in
+    GET)
+      case "$url" in
+        # The assets already on a release, with an id the DELETE below can take
+        # the release and the name back out of.
+        (*/assets)
+          id="${url#*/releases/}"; id="${id%%/assets}"
+          awk -v id="$id" '$1 == id { print $2, $3 }' "$state/assets" |
+            jq -R -s -c --arg id "$id" \
+              'split("\n") | map(select(length > 0)) | map(split(" ")) |
+               map({id: ($id + "!" + .[0]), name: .[0], state: .[1]})'
+          ;;
+        (*)
+          tag="${url##*/}"
+          if [ -f "$state/rel-$tag" ]; then
+            cat "$state/rel-$tag"
+          else
+            status=404; echo '{"message":"Not Found"}'
+          fi
+          ;;
+      esac
+      ;;
+    POST)
+      tag="$(printf '%s' "$data" | jq -r .tag_name)"
+      # As GitHub does: a tag that already has a release is 422.
+      if [ -f "$state/rel-$tag" ]; then
+        status=422; echo '{"message":"Validation Failed","errors":[{"code":"already_exists"}]}'
+        return
+      fi
+      printf '%s' "$data" > "$state/created-$tag.json"
+      jq -n --arg tag "$tag" \
+        '{id: ("id-" + $tag), html_url: ("https://example.invalid/" + $tag)}' \
+        > "$state/rel-$tag"
+      cat "$state/rel-$tag"
+      ;;
+    DELETE)
+      case "$url" in
+        (*/releases/assets/*)
+          asset="${url##*/releases/assets/}"
+          echo "${asset#*!}" >> "$state/deleted-assets"
+          awk -v rel="${asset%%!*}" -v name="${asset#*!}" \
+            '!($1 == rel && $2 == name)' "$state/assets" > "$state/left"
+          mv "$state/left" "$state/assets"
+          ;;
+        # By id, which the fake made from the tag, so the tag is recoverable.
+        (*)
+          id="${url##*/}"
+          echo "${id#id-}" >> "$state/deleted"
+          rm -f "$state/rel-${id#id-}"
+          # A deleted release takes its assets with it.
+          awk -v rel="$id" '$1 != rel' "$state/assets" > "$state/left"
+          mv "$state/left" "$state/assets"
+          ;;
+      esac
+      ;;
+  esac
+}
+
+# A GitHub having a bad minute. `$STATE/fail-<METHOD>` holds one answer per
+# line for the next calls of that method: `500`, `403rl` (a secondary rate
+# limit), or `500+` (the call lands and GitHub answers 500 anyway, as run #76's
+# create may have).
+answer=""
+if [ -s "$state/fail-$method" ]; then
+  answer="$(head -1 "$state/fail-$method")"
+  sed -i 1d "$state/fail-$method"
+fi
+case "$answer" in
+  (500) status=500; echo '{"message":"Server Error"}' > "$state/body" ;;
+  (403rl) status=403
+    echo '{"message":"You have exceeded a secondary rate limit."}' > "$state/body" ;;
+  (500+) respond > "$state/body"; status=500 ;;
+  ("") respond > "$state/body" ;;
 esac
+
+if [ -n "$out" ]; then
+  cp "$state/body" "$out"
+  [ "$code_out" = 0 ] || printf '%s' "$status"
+elif [ "$fail_flag" = 1 ] && [ "$status" -ge 400 ]; then
+  exit 22
+else
+  cat "$state/body"
+fi
 FAKE
 chmod +x "$BIN/curl"
 
@@ -318,6 +361,46 @@ done
 # `already_exists`, so a retry that does not clear it retries forever.
 grep -qx "$TARBALL" "$dropped/deleted-assets" ||
   fail "the dropped upload's asset was left on the release"
+
+echo "a 500 or a secondary rate limit on the API is tried again"
+# Run #76 lost an 87-minute build to one 500 on creating the release.
+flaky="$WORK/flaky"
+mkdir -p "$flaky"
+printf '%s\n' 500 403rl > "$flaky/fail-POST"
+publish "$flaky" || { cat "$flaky/out" >&2; fail "publisher exited nonzero"; }
+for release in engine-nightly "$PINNABLE"; do
+  count="$(grep -c "^id-$release .* uploaded$" "$flaky/assets" || true)"
+  [ "$count" = "2" ] ||
+    fail "$release got $count assets after a flaky create, wanted 2"
+done
+
+echo "a release a 500 created anyway is used, not made twice"
+# The POST can land and still answer 500; the retry then gets 422
+# `already_exists`, and the release that exists is the one to fill.
+landed="$WORK/landed"
+mkdir -p "$landed"
+echo 500+ > "$landed/fail-POST"
+publish "$landed" || { cat "$landed/out" >&2; fail "publisher exited nonzero"; }
+for release in engine-nightly "$PINNABLE"; do
+  count="$(grep -c "^id-$release .* uploaded$" "$landed/assets" || true)"
+  [ "$count" = "2" ] ||
+    fail "$release got $count assets after a create that landed behind a 500, wanted 2"
+done
+
+echo "an API that keeps failing fails the run, after a bounded number of tries"
+down="$WORK/down"
+mkdir -p "$down"
+printf '500\n%.0s' $(seq 20) > "$down/fail-POST"
+if publish "$down"; then
+  fail "the publisher exited 0 with GitHub answering 500 to every create"
+fi
+posts="$(grep -c '^POST https://api.github.com/.*/releases$' "$down/calls" || true)"
+[ "$posts" = "5" ] ||
+  fail "the create was tried $posts times, wanted 5"
+grep -q 'uploads.github.com' "$down/calls" &&
+  fail "an asset was uploaded with no release to put it on"
+grep -q '500' "$down/out" ||
+  fail "the failure does not say GitHub answered 500: $(cat "$down/out")"
 
 [ "$FAILED" = "0" ] || exit 1
 echo "engine-release-publish: a published engine stays fetchable"
