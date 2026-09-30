@@ -44,8 +44,12 @@ const covering = (display: Display): Display => ({
 const client = () => {
   const handlers = new Map<string, (message: never) => void>();
   const spawned: (readonly string[])[] = [];
+  const locks: undefined[] = [];
   const domicile = {
     closeApp: () => undefined,
+    lock: () => {
+      locks.push(undefined);
+    },
     on: (type: string, registered: (message: never) => void) => {
       handlers.set(type, registered);
     },
@@ -65,6 +69,7 @@ const client = () => {
       });
     },
     domicile,
+    locks,
     spawned,
   };
 };
@@ -373,6 +378,14 @@ describe("a command on a desk of several pages", () => {
     desk.say(Message.Acted(WindowAction.TerminalLaunched()));
 
     expect(host.spawned).toEqual([["kitty"]]);
+  });
+
+  it("asks the compositor to lock the desk", () => {
+    const { desk, host } = desktop([covering(LEFT), RIGHT]);
+
+    desk.say(Message.Acted(WindowAction.DeskLocked()));
+
+    expect(host.locks).toHaveLength(1);
   });
 
   it("runs the command of an application the launcher chose", () => {

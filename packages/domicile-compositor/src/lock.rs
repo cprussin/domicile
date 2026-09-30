@@ -36,8 +36,7 @@
 //! hears it.
 //!
 //! What locks the desk is the idle edge — see [`crate::idle`], which decides
-//! when nobody is at it. There is no message a page can send to lock one yet;
-//! that is in `ROADMAP.md` too.
+//! when nobody is at it — or the shell asking, with `ChromeMessage::Lock`.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -206,7 +205,7 @@ pub struct Lock {
 
 impl Lock {
     /// A desk this verifier opens, not locked yet: a desktop comes up open, and
-    /// what shuts it is nobody being at it.
+    /// what shuts it is nobody being at it, or the shell asking.
     ///
     /// `answer` is where a verdict goes, from the thread that reached it. In
     /// the compositor that is a channel into its own loop, which hands the
@@ -407,7 +406,8 @@ pub enum Asked<'a> {
 /// while the desk was locked is told it is locked by *answering* that hello, so
 /// a lock that swallowed it would be a locked desk with no lock screen on it.
 /// `Unlock` is the way out and cannot be refused by the thing it is there to
-/// open. A client's copy is a client's, not the shell's, and refusing it would
+/// open. `Lock` shuts what is already shut, which is nothing to refuse.
+/// A client's copy is a client's, not the shell's, and refusing it would
 /// leave the history disagreeing with what a paste produces.
 ///
 /// **A LAUNCHER'S SEARCHES AND PREVIEW ARE REFUSED, WHERE THEY ARE ANSWERED.**
@@ -449,6 +449,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ChromeHello { .. }
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
+            | ClientRequest::Lock
             // The rest of a theme change, which a locked desk takes for the
             // reason it takes `SetTheme`: see below.
             | ClientRequest::TurnTheWindows { .. }
@@ -905,6 +906,10 @@ mod tests {
                 ClientRequest::Unlock {
                     passphrase: Passphrase::from("friend"),
                 },
+            ),
+            (
+                "the shell locking a desk already locked",
+                ClientRequest::Lock,
             ),
         ] {
             assert_eq!(

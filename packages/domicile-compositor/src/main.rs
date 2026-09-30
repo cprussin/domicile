@@ -418,6 +418,9 @@ enum ClientRequest {
     Unlock {
         passphrase: Passphrase,
     },
+    /// The shell asked for the desk to be locked now. See
+    /// [`DomicileCompositor::shut_the_desk`].
+    Lock,
 }
 
 /// Something a chrome asked that the connection it arrived on answers itself,
@@ -1378,6 +1381,12 @@ fn read_chrome_messages(
             // the passphrase in it — see `crate::lock`.
             Ok(ChromeMessage::Unlock { passphrase }) => {
                 hub.send_request(ClientRequest::Unlock { passphrase });
+                Vec::new()
+            }
+            // To the Wayland thread, where the lock is, like an unlock; the
+            // answer is the same `locked` broadcast the idle edge sends.
+            Ok(ChromeMessage::Lock) => {
+                hub.send_request(ClientRequest::Lock);
                 Vec::new()
             }
             // Compositor-level: the chrome's pixel density is the output's
@@ -3924,22 +3933,22 @@ impl DomicileCompositor {
         }
     }
 
-    /// Lock this desk, because nobody is at it.
+    /// Lock this desk: nobody is at it, or the shell asked. `why` is what the
+    /// log says.
     ///
-    /// On the same edge the screens go dark on, and that is the whole of what
-    /// locks a desk today: there is no message a page can send to lock one and
-    /// no separate clock for it. `ROADMAP.md` carries both.
+    /// The idle edge the screens go dark on and `ClientRequest::Lock` are the
+    /// two things that lock a desk; there is no separate clock for it.
     ///
     /// Only on the edge into a locked desk. A desk nobody has opened blanks
     /// again and again — dark, a hand, dark — and a second `locked: true` would
     /// be a shell told to raise a lock screen it already has up, over a
     /// passphrase somebody may be halfway through typing.
-    fn shut_the_desk(&mut self) {
+    fn shut_the_desk(&mut self, why: &str) {
         let Some(lock) = self.lock.as_mut() else {
             return;
         };
         if lock.shut() {
-            debug!("nobody is at this desktop; it locks itself");
+            debug!("{why}");
             // AND THE SEAT LETS GO OF WHAT IT IS HOLDING, which is the one
             // thing the refusal at the injection cannot do for itself. What it
             // drops from here on is an event that never happened as far as a
@@ -4183,7 +4192,7 @@ impl DomicileCompositor {
             // not open the desk — only the passphrase does — so what a person
             // returning sees is a lit lock screen rather than the work they
             // left.
-            self.shut_the_desk();
+            self.shut_the_desk("nobody is at this desktop; it locks itself");
             self.state_the_connectors();
         }
         next
@@ -4947,6 +4956,13 @@ impl DomicileCompositor {
                 ),
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
+            ClientRequest::Lock => {
+                if self.lock.is_some() {
+                    self.shut_the_desk("the shell asked for this desktop to be locked");
+                } else {
+                    warn!("a chrome asked to lock a desktop that has no lock");
+                }
+            }
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // A turnover already under way is replaced rather than
                 // finished: its windows are about to be told a newer theme.

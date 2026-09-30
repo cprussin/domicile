@@ -127,6 +127,9 @@ The evidence for each of those is in the doc that made the claim —
    still readable by anybody who can read the disk and still not compared in
    constant time, for a machine with no service to name.
 
+   **And a shell can lock it on purpose**: `ChromeMessage::Lock`, which shuts
+   the desk the way the idle edge does. manganese binds it to Mod+Shift+Return.
+
    What is left is
 
    - **The PAM service is a line the machine carries.** A home-manager module
@@ -136,11 +139,6 @@ The evidence for each of those is in the doc that made the claim —
      [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#the-screen-going-dark)
      says so, and the compositor says so when it is missing. A NixOS module
      would make that one line rather than two in two places.
-   - **Nothing locks a desk on purpose.** The idle edge is the only thing that
-     locks one, so there is no "lock now" — no chord, no menu item, no
-     `ChromeMessage` for it — and a desk with no `idle.blank_after_seconds` never
-     locks however loudly it states a passphrase. A shell wants to be able to
-     ask, which is one message and a `Lock` on `ClientRequest`.
    - **A wrong passphrase is answered with silence.** No verdict crosses the
      protocol, so a shell cannot say "that was wrong", cannot count tries and
      cannot rate-limit them; the compositor logs the refusal and the desk stays
