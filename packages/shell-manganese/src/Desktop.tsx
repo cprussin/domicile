@@ -9,6 +9,7 @@ import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
+import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
 import { useLocked } from "./lock/useLocked";
 import { Monitor } from "./screens/Monitor";
@@ -82,6 +83,10 @@ export const Desktop = ({ desk, domicile }: Props) => {
     (query: string) => domicile.searchApps(query),
     [domicile],
   );
+  // Asked while the panel is shut rather than as it opens, so its empty box's
+  // rows are drawn with it instead of landing a moment later and pushing the
+  // rest down.
+  const opening = useOpeningApps(searchApps, windows.launcherOpen);
   // And its preview, of the same index, for the same reason.
   const preview = useCallback(
     (path: string) => domicile.previewFile(path),
@@ -204,6 +209,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
           }
         }}
         open={windows.launcherOpen}
+        opening={opening}
         preview={preview}
         search={search}
         searchApps={searchApps}

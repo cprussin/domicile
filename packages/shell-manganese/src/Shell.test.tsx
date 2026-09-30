@@ -2519,7 +2519,20 @@ describe("the launcher", () => {
 
     expect(launcherBox()).toBeVisible();
     expect(domicile.calls).toContainEqual(["searchFiles", ""]);
+  });
+
+  it("asks the host for its empty box's applications before it is opened", () => {
+    // Unlike the files: an answer that landed after the panel did would push
+    // the rows under it down. See `launcher/useOpeningApps.ts`.
+    renderShell();
+
     expect(domicile.calls).toContainEqual(["searchApps", ""]);
+
+    press("space");
+
+    expect(
+      domicile.calls.filter(([call]) => call === "searchApps"),
+    ).toStrictEqual([["searchApps", ""]]);
   });
 
   it("shows the files the host answered with", async () => {
