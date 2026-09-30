@@ -160,11 +160,14 @@ for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 echo "the engine is listening on $BROKER"
 
 # The compositor, as the producer. libdomicile_engine.so is dlopened by name.
+# DOMICILE_SPIKE_CENTER asks it for the `engine drew` lines polled below; they
+# are off by default because each is a readback on the submit path.
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-client-window.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
+DOMICILE_SPIKE_CENTER=1 \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \

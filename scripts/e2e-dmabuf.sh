@@ -34,9 +34,10 @@ COMPLOG="$(mktemp)"
 CLILOG="$(mktemp)"
 MOCK=""; CLI=""
 
-# Frame handling logs at debug: this script's whole job is telling apart
-# "no commit arrived" from "imported but never delivered".
-RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
+# Frame handling logs at debug and buffer releases at trace: this script's
+# whole job is telling apart "no commit arrived" from "imported but never
+# delivered".
+RUST_LOG="${RUST_LOG:-info,domicile_compositor=trace}" \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
 disown "$COMP" 2>/dev/null || true   # so teardown's kill doesn't print "Killed"

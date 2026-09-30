@@ -29,4 +29,6 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetDefaultCursor(
   return BitmapCursorFactory::GetDefaultCursor(type);
 }
 
+void DrmCursorFactory::ObserveThemeChanges() {}
+
 }  // namespace ui
