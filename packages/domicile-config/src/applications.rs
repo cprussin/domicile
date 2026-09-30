@@ -8,6 +8,8 @@
 //! A bookmark is the other thing a launcher offers beside them: a name and a
 //! URL the desk opens itself, rather than a program handing it to a browser.
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 
 use crate::files::Omit;
@@ -38,6 +40,10 @@ pub struct Bookmark {
     pub name: String,
     /// What choosing it opens.
     pub url: String,
+    /// A word, `!mp` say, and the URL choosing it opens instead when a
+    /// launcher's query holds that word.
+    #[serde(default)]
+    pub shortcodes: BTreeMap<String, String>,
 }
 
 impl Default for ApplicationsConfig {

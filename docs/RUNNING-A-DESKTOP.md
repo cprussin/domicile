@@ -130,6 +130,16 @@ name = "Calendar"
 url = "https://calendar.google.com"
 ```
 
+A bookmark's `shortcodes` open another URL when a search holds the word:
+`calendar !work` offers the second URL here, `calendar` the first.
+
+```toml
+[[applications.bookmarks]]
+name = "Calendar"
+url = "https://calendar.google.com"
+shortcodes = { "!work" = "https://calendar.google.com?authuser=me@work.example" }
+```
+
 On NixOS those are `programs.domicile.settings.applications.omit` and
 `.bookmarks`, and a reload takes either up at the next keystroke.
 

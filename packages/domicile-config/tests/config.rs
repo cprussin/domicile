@@ -4,6 +4,7 @@
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -427,7 +428,30 @@ url = "https://calendar.google.com"
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.google.com".into(),
+            shortcodes: BTreeMap::new(),
         }]
+    );
+}
+
+#[test]
+fn a_bookmark_names_the_url_each_of_its_shortcodes_opens() {
+    let bookmarks = Config::parse(
+        r#"
+[[applications.bookmarks]]
+name = "Calendar"
+url = "https://calendar.google.com"
+shortcodes = { "!work" = "https://calendar.google.com?authuser=work" }
+"#,
+    )
+    .unwrap()
+    .applications
+    .bookmarks;
+    assert_eq!(
+        bookmarks[0].shortcodes,
+        BTreeMap::from([(
+            "!work".into(),
+            "https://calendar.google.com?authuser=work".into()
+        )])
     );
 }
 

@@ -168,7 +168,7 @@ use domicile_config::{
 };
 use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
-use domicile_host::bookmarks::find as find_bookmarks;
+use domicile_host::bookmarks::{find as find_bookmarks, Offered as OfferedBookmark};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
@@ -991,17 +991,15 @@ const FOUND: usize = 200;
 
 /// The desk's bookmarks a search matched, as a launcher is told them.
 fn offered_bookmarks(bookmarks: &[domicile_config::Bookmark], query: &str) -> Vec<Bookmark> {
-    let bookmarks: Vec<Bookmark> = bookmarks
+    let bookmarks: Vec<OfferedBookmark> = bookmarks
         .iter()
-        .map(|bookmark| Bookmark {
+        .map(|bookmark| OfferedBookmark {
             name: bookmark.name.clone(),
             url: bookmark.url.clone(),
+            shortcodes: bookmark.shortcodes.clone(),
         })
         .collect();
     find_bookmarks(&bookmarks, query, FOUND_APPS)
-        .into_iter()
-        .cloned()
-        .collect()
 }
 
 /// How many applications a search sends. Fewer than files, because each
