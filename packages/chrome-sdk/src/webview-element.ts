@@ -373,10 +373,12 @@ declare global {
    * The event {@link WEBVIEW_FILE_CHOOSER_EVENT} names: a page waiting for a
    * file to be picked.
    *
-   * PATHS ARE RELATIVE TO THE HOME DIRECTORY, the same vocabulary a
-   * `found_files` answer uses — so a picker built on `searchFiles` hands back
-   * what it was shown. A path that is absolute, empty or climbs out with `..`
-   * is a `TypeError`.
+   * PATHS ARE ABSOLUTE OR RELATIVE TO THE HOME DIRECTORY. Relative is the
+   * vocabulary a `found_files` answer uses — so a picker built on
+   * `searchFiles` hands back what it was shown — and `""` is the home.
+   * Absolute is the rest of the filesystem, walked with
+   * {@link DomicileFileChooserEvent.list}. A path that climbs with `..` is a
+   * `TypeError`.
    */
   interface DomicileFileChooserEvent extends Event {
     /**
@@ -398,6 +400,14 @@ declare global {
      * `TypeError`. A second answer is an `InvalidStateError`.
      */
     choose(paths: readonly string[]): void;
+    /**
+     * The names in the directory at `path`, each a directory's ending in `/`,
+     * in no order — how a picker reaches what the home's index never found.
+     * Rejects with a `NotReadableError` for a path that is not a directory the
+     * browser can read. Only while unanswered: after, an
+     * `InvalidStateError`.
+     */
+    list(path: string): Promise<string[]>;
     /** Answer that nothing was picked. */
     cancel(): void;
   }

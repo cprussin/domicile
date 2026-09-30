@@ -132,6 +132,7 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
       choose: (paths: readonly string[]) => {
         answers.push(`choose ${paths.join(",")}`);
       },
+      list: () => Promise.resolve([]),
       mode: "open",
       suggestedName: "",
     }),

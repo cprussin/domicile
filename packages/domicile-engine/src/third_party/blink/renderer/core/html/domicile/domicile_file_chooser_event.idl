@@ -26,10 +26,19 @@
   // A save's suggested name, and the empty string otherwise.
   readonly attribute DOMString suggestedName;
 
-  // The answer: paths relative to the home directory, as many as `mode` asks
-  // for. A wrong count or a path that is absolute, empty or climbs out with
-  // `..` is a TypeError; a second answer is an InvalidStateError.
+  // The answer: paths, absolute or relative to the home directory, as many as
+  // `mode` asks for. A wrong count or a path that climbs with `..` is a
+  // TypeError; a second answer is an InvalidStateError.
   [RaisesException] undefined choose(sequence<DOMString> paths);
+
+  // The names in the directory at `path` -- absolute or relative to the home,
+  // as `choose` takes -- each a directory's ending in `/`, in no order. How a
+  // picker reaches what the home's index never found. Rejects with a
+  // NotReadableError for a path that is not a directory the browser can read.
+  // A path that climbs with `..` is a TypeError, and a chooser already
+  // answered an InvalidStateError: the listing is for answering it.
+  [CallWith=ScriptState, RaisesException]
+  Promise<sequence<DOMString>> list(DOMString path);
 
   // The other answer: nothing was picked.
   [RaisesException] undefined cancel();

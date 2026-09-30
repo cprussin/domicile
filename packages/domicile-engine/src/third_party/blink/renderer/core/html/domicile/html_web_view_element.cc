@@ -453,4 +453,13 @@ void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {
   waiting_choosers_.erase(&event);
 }
 
+// A CHECK rather than a guard: a chooser is only ever dispatched by the guest,
+// so an element holding one has a guest to ask.
+void HTMLWebViewElement::ListDirectory(
+    const String& path,
+    domicile::mojom::blink::WebViewGuest::ListDirectoryCallback listed) {
+  CHECK(guest_.is_bound());
+  guest_->ListDirectory(path, std::move(listed));
+}
+
 }  // namespace blink
