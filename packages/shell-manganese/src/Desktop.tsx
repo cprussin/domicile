@@ -16,6 +16,7 @@ import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
 import { useTray } from "./tray/useTray";
+import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
@@ -107,6 +108,9 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // And the system tray's icons, pushed and held once for the desk for the
   // same reasons.
   const tray = useTray(domicile);
+  // And the order the user dragged the tray into, once for the desk so a drag
+  // on one monitor's bar is a drag on every one's.
+  const trayOrder = useTrayOrder();
 
   // And whether the desk is locked, which is pushed for a harder reason: it is
   // the compositor's state rather than this page's, because the compositor is
@@ -183,6 +187,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
             key={display.name}
             modifiers={modifiers}
             tray={tray}
+            trayOrder={trayOrder}
             windows={windows}
           />
         ))}

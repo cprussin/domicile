@@ -6,14 +6,12 @@ import { Popover } from "@domicile/component-library/Popover";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { hstack } from "../../styled-system/patterns";
-import { shownInTray } from "./shown";
 
 type Props = {
   /** What every click asks, popup or not. */
   domicile: DomicileClient;
-  /** Every extension with an action, as the engine last described them. */
-  extensions: readonly Extension[];
+  /** The extension whose action this is, as the engine last described it. */
+  extension: Extension;
   /**
    * Asked to open the popup of the extension with this id, or to close the
    * one that is open with `undefined`. The desktop decides: a popup is a panel
@@ -25,7 +23,7 @@ type Props = {
 };
 
 /**
- * The extensions' actions: Chrome's toolbar icons, on the bar.
+ * An extension's action: Chrome's toolbar icon, on the bar's tray.
  *
  * **Every click is `activateExtension`**, which is Chrome's toolbar click: the
  * extension gets `activeTab` on the focused browser window. Then one with a
@@ -38,66 +36,63 @@ type Props = {
  * the popup's own `window.close()`, which the view says as `domicile-close`.
  * Escape is heard only while this page has the keyboard: a key pressed inside
  * the popup's page never reaches it, like every other guest's.
- *
- * A disabled action is not drawn. The state is each action's default rather
- * than the focused page's until actions are per tab — see EXTENSIONS.md.
  */
-export const ExtensionTray = ({
+export const ExtensionAction = ({
   domicile,
-  extensions,
+  extension,
   onOpen,
   opened,
-}: Props) => (
-  <div className={trayStyles}>
-    {shownInTray(extensions).map((extension) => {
-      const { id, popup } = extension;
-      return popup === undefined ? (
-        <Button
-          key={id}
-          label={extension.title}
-          onClick={() => {
-            domicile.activateExtension(id);
-          }}
-          size="sm"
-          variant="ghost"
-        >
+}: Props) => {
+  const { id, popup } = extension;
+  return popup === undefined ? (
+    <Button
+      label={extension.title}
+      onClick={() => {
+        domicile.activateExtension(id);
+      }}
+      size="sm"
+      variant="ghost"
+    >
+      <Icon extension={extension} />
+    </Button>
+  ) : (
+    <Popover
+      align="start"
+      flush
+      onOpenChange={(open) => {
+        if (open) {
+          domicile.activateExtension(id);
+        }
+        onOpen(open ? id : undefined);
+      }}
+      open={opened === id}
+      side="bottom"
+      trigger={
+        <Button label={extension.title} size="sm" variant="ghost">
           <Icon extension={extension} />
         </Button>
-      ) : (
-        <Popover
-          align="start"
-          flush
-          key={id}
-          onOpenChange={(open) => {
-            if (open) {
-              domicile.activateExtension(id);
-            }
-            onOpen(open ? id : undefined);
-          }}
-          open={opened === id}
-          side="bottom"
-          trigger={
-            <Button label={extension.title} size="sm" variant="ghost">
-              <Icon extension={extension} />
-            </Button>
-          }
-        >
-          <PopupView
-            onClose={() => {
-              onOpen(undefined);
-            }}
-            popup={popup}
-          />
-        </Popover>
-      );
-    })}
-  </div>
-);
+      }
+    >
+      <PopupView
+        onClose={() => {
+          onOpen(undefined);
+        }}
+        popup={popup}
+      />
+    </Popover>
+  );
+};
 
 /** An action's icon, with its badge over the corner when it has one. */
 const Icon = ({ extension }: { extension: Extension }) => (
   <span className={iconStyles}>
-    <img alt="" className={imageStyles} src={extension.icon} />
+    <img
+      alt=""
+      className={imageStyles}
+      // Not the engine's to drag: a press and a move reorders the tray.
+      draggable={false}
+      src={extension.icon}
+    />
     {extension.badgeText !== "" && (
       <span
         className={badgeStyles}
@@ -141,8 +136,6 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
 
   return <webview className={viewStyles} ref={setView} src={popup} />;
 };
-
-const trayStyles = hstack({ gap: 0.5 });
 
 // What the badge is placed against.
 const iconStyles = css({ display: "inline-flex", position: "relative" });

@@ -3,7 +3,7 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { TrayAction, TrayItem } from "@domicile/chrome-sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { SystemTray } from "./SystemTray";
+import { TrayIcon } from "./TrayIcon";
 
 /** An application that sent a picture. */
 const network: TrayItem = {
@@ -41,27 +41,22 @@ const NO_DOMICILE = {
   activateTrayItem: () => undefined,
 } as unknown as DomicileClient;
 
-const renderTray = (items: readonly TrayItem[]) => {
-  render(<SystemTray domicile={NO_DOMICILE} items={items} />);
+const renderIcon = (item: TrayItem) => {
+  render(<TrayIcon domicile={NO_DOMICILE} item={item} />);
 };
 
-/** The tray over `items`, resolving with the first click it hands on. */
-const trayOf = (items: readonly TrayItem[]) => {
+/** The icon of `item`, resolving with the first click it hands on. */
+const iconOf = (item: TrayItem) => {
   const { click, domicile } = clicked();
-  render(<SystemTray domicile={domicile} items={items} />);
+  render(<TrayIcon domicile={domicile} item={item} />);
   return click;
 };
 
-describe("SystemTray", () => {
+describe("TrayIcon", () => {
   describe("rendering", () => {
-    it("shows each icon in order, named by its title", () => {
-      renderTray([network, sync]);
+    it("shows the picture, named by its title", () => {
+      renderIcon(network);
 
-      expect(
-        screen
-          .getAllByRole("button")
-          .map((button) => button.getAttribute("aria-label")),
-      ).toStrictEqual(["Wired connection 1", "Syncthing"]);
       expect(
         screen
           .getByRole("button", { name: "Wired connection 1" })
@@ -71,7 +66,7 @@ describe("SystemTray", () => {
     });
 
     it("draws the first letter of the title for an icon with no picture", () => {
-      renderTray([sync]);
+      renderIcon(sync);
 
       const button = screen.getByRole("button", { name: "Syncthing" });
       expect(button.querySelector("img")).toBeNull();
@@ -81,7 +76,7 @@ describe("SystemTray", () => {
 
   describe("clicking", () => {
     it("activates an icon on the primary button", async () => {
-      const click = trayOf([network]);
+      const click = iconOf(network);
 
       fireEvent.click(screen.getByRole("button", { name: network.title }));
 
@@ -89,7 +84,7 @@ describe("SystemTray", () => {
     });
 
     it("asks for the application's menu on the secondary button", async () => {
-      const click = trayOf([network]);
+      const click = iconOf(network);
 
       fireEvent.contextMenu(
         screen.getByRole("button", { name: network.title }),
@@ -99,7 +94,7 @@ describe("SystemTray", () => {
     });
 
     it("keeps the page's own menu away from the secondary button", () => {
-      renderTray([network]);
+      renderIcon(network);
 
       // `false` is a default that was prevented: the engine's context menu
       // would otherwise open over the application's.
@@ -111,7 +106,7 @@ describe("SystemTray", () => {
     });
 
     it("secondary-activates an icon on the middle button", async () => {
-      const click = trayOf([network]);
+      const click = iconOf(network);
 
       fireEvent(
         screen.getByRole("button", { name: network.title }),

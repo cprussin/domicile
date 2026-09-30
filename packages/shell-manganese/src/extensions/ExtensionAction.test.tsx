@@ -5,7 +5,7 @@ import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { ExtensionTray } from "./ExtensionTray";
+import { ExtensionAction } from "./ExtensionAction";
 
 const BLOCKER = "abcdefghijklmnopabcdefghijklmnop";
 const COUNTER = "ponmlkjihgfedcbaponmlkjihgfedcba";
@@ -60,64 +60,42 @@ const popupView = (): Promise<HTMLWebViewElement> =>
   });
 
 /**
- * The tray with `opened` open, resolving with what it next asks `opened` to
+ * The action with `opened` open, resolving with what it next asks `opened` to
  * become.
  */
 const trayAsking = (
-  extensions: readonly Extension[],
+  extension: Extension,
   opened: string | undefined,
 ): Promise<string | undefined> =>
   new Promise((resolve) => {
     render(
-      <ExtensionTray
+      <ExtensionAction
         domicile={NO_DOMICILE}
-        extensions={extensions}
+        extension={extension}
         onOpen={resolve}
         opened={opened}
       />,
     );
   });
 
-describe("ExtensionTray", () => {
+describe("ExtensionAction", () => {
   describe("rendering", () => {
-    it("shows each enabled extension's icon, named by its title", () => {
-      // A disabled action is left out rather than drawn dimmed.
-      const off = {
-        ...counter,
-        enabled: false,
-        id: "x".repeat(32),
-        title: "Off",
-      };
-      render(
-        <ExtensionTray
-          domicile={NO_DOMICILE}
-          extensions={[blocker, counter, off]}
-          onOpen={() => undefined}
-          opened={undefined}
-        />,
-      );
-
-      expect(
-        screen
-          .getAllByRole("button")
-          .map((button) => button.getAttribute("aria-label")),
-      ).toStrictEqual(["Blocker: on for this site", "Counter"]);
-      expect(
-        screen
-          .getByRole("button", { name: "Counter" })
-          .querySelector("img")
-          ?.getAttribute("src"),
-      ).toBe(counter.icon);
-    });
-
     it("draws a badge in its color, and none without text", () => {
       render(
-        <ExtensionTray
-          domicile={NO_DOMICILE}
-          extensions={[blocker, counter]}
-          onOpen={() => undefined}
-          opened={undefined}
-        />,
+        <>
+          <ExtensionAction
+            domicile={NO_DOMICILE}
+            extension={blocker}
+            onOpen={() => undefined}
+            opened={undefined}
+          />
+          <ExtensionAction
+            domicile={NO_DOMICILE}
+            extension={counter}
+            onOpen={() => undefined}
+            opened={undefined}
+          />
+        </>,
       );
 
       expect(screen.getByText("12").style.backgroundColor).toBe("#d93025ff");
@@ -129,9 +107,9 @@ describe("ExtensionTray", () => {
 
     it("holds the popup in a view while it is open, and nothing while not", async () => {
       const { rerender } = render(
-        <ExtensionTray
+        <ExtensionAction
           domicile={NO_DOMICILE}
-          extensions={[blocker]}
+          extension={blocker}
           onOpen={() => undefined}
           opened={undefined}
         />,
@@ -140,9 +118,9 @@ describe("ExtensionTray", () => {
       expect(document.querySelector("webview")).toBeNull();
 
       rerender(
-        <ExtensionTray
+        <ExtensionAction
           domicile={NO_DOMICILE}
-          extensions={[blocker]}
+          extension={blocker}
           onOpen={() => undefined}
           opened={BLOCKER}
         />,
@@ -153,9 +131,9 @@ describe("ExtensionTray", () => {
 
     it("draws the popup's panel flush, with no padding framing the page", async () => {
       render(
-        <ExtensionTray
+        <ExtensionAction
           domicile={NO_DOMICILE}
-          extensions={[blocker]}
+          extension={blocker}
           onOpen={() => undefined}
           opened={BLOCKER}
         />,
@@ -165,36 +143,11 @@ describe("ExtensionTray", () => {
 
       expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
     });
-
-    it("follows the list as it changes", () => {
-      const { rerender } = render(
-        <ExtensionTray
-          domicile={NO_DOMICILE}
-          extensions={[blocker]}
-          onOpen={() => undefined}
-          opened={undefined}
-        />,
-      );
-
-      rerender(
-        <ExtensionTray
-          domicile={NO_DOMICILE}
-          extensions={[{ ...counter, badgeText: "13" }]}
-          onOpen={() => undefined}
-          opened={undefined}
-        />,
-      );
-
-      expect(
-        screen.queryByRole("button", { name: "Blocker: on for this site" }),
-      ).toBeNull();
-      expect(screen.getByText("13")).toBeInTheDocument();
-    });
   });
 
   describe("a click", () => {
     it("opens the popup of an extension that has one", async () => {
-      const asked = trayAsking([blocker], undefined);
+      const asked = trayAsking(blocker, undefined);
 
       await userEvent.click(
         screen.getByRole("button", { name: "Blocker: on for this site" }),
@@ -210,9 +163,9 @@ describe("ExtensionTray", () => {
       // `action.onClicked` for an action with a popup.
       const activated: string[] = [];
       const { rerender } = render(
-        <ExtensionTray
+        <ExtensionAction
           domicile={recordingDomicile(activated)}
-          extensions={[blocker]}
+          extension={blocker}
           onOpen={() => undefined}
           opened={undefined}
         />,
@@ -222,9 +175,9 @@ describe("ExtensionTray", () => {
         screen.getByRole("button", { name: "Blocker: on for this site" }),
       );
       rerender(
-        <ExtensionTray
+        <ExtensionAction
           domicile={recordingDomicile(activated)}
-          extensions={[blocker]}
+          extension={blocker}
           onOpen={() => undefined}
           opened={BLOCKER}
         />,
@@ -239,9 +192,9 @@ describe("ExtensionTray", () => {
       const activated: string[] = [];
       const opened: (string | undefined)[] = [];
       render(
-        <ExtensionTray
+        <ExtensionAction
           domicile={recordingDomicile(activated)}
-          extensions={[counter]}
+          extension={counter}
           onOpen={(id) => {
             opened.push(id);
           }}
@@ -258,7 +211,7 @@ describe("ExtensionTray", () => {
 
   describe("closing the popup", () => {
     it("closes when the popup closes itself", async () => {
-      const asked = trayAsking([blocker], BLOCKER);
+      const asked = trayAsking(blocker, BLOCKER);
 
       fireEvent(
         await popupView(),
@@ -269,7 +222,7 @@ describe("ExtensionTray", () => {
     });
 
     it("closes on Escape", async () => {
-      const asked = trayAsking([blocker], BLOCKER);
+      const asked = trayAsking(blocker, BLOCKER);
 
       await userEvent.keyboard("{Escape}");
 
@@ -277,7 +230,7 @@ describe("ExtensionTray", () => {
     });
 
     it("closes on a press outside it", async () => {
-      const asked = trayAsking([blocker], BLOCKER);
+      const asked = trayAsking(blocker, BLOCKER);
 
       await userEvent.click(document.body);
 

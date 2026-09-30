@@ -23,7 +23,7 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 | The bus: watcher, host name, signals, clicks | `packages/domicile-compositor/src/tray.rs` |
 | `tray` event, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
 | `TrayItem`, `TrayAction`, `activateTrayItem` | `@domicile/chrome-sdk/tray`, `domicile-client` |
-| Manganese's tray, left of the extensions' | `packages/shell-manganese/src/tray/` |
+| Manganese's tray, one row with the extensions' actions, reorderable | `packages/shell-manganese/src/tray/` |
 
 ## Key decisions
 
