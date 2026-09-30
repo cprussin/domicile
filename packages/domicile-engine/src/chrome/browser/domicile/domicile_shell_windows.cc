@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -20,15 +21,18 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/domicile/domicile_desk_presenters.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "components/domicile/browser/desk_geometry.h"
 #include "components/domicile/browser/shell_windows.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/domicile_desk.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/window.h"
@@ -42,6 +46,10 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/window/client_view.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -52,6 +60,10 @@ namespace {
 // string is not worth a dependency on //ui/ozone.
 constexpr char kScanoutPlatform[] = "drm";
 constexpr char kOzonePlatformSwitch[] = "ozone-platform";
+// See docs/architecture/ONE-PAGE-FOR-THE-DESK.md. Off until a page rasters at
+// every display's own scale: until then a lower-density display is shown the
+// page downsampled.
+constexpr char kOnePageSwitch[] = "domicile-one-page";
 
 // Whether this engine is the one that scans out.
 //
@@ -65,6 +77,39 @@ constexpr char kOzonePlatformSwitch[] = "ozone-platform";
 bool ScansOut() {
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
              kOzonePlatformSwitch) == kScanoutPlatform;
+}
+
+// Whether the desk is one page, hosted on one display and presented on the
+// rest, rather than a page per display.
+bool OnePage() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(kOnePageSwitch);
+}
+
+// The one page a desk is, from the layout the compositor last stated and the
+// displays there are now. `std::nullopt` before a layout names any of them.
+struct Desk {
+  DeskGeometry geometry;
+  std::vector<DeskPlace> places;
+};
+
+std::optional<Desk> DeskOf(const std::vector<display::Display>& displays) {
+  std::vector<DeskPlace> places;
+  for (const content::DomicileDeskDisplay& lit : content::GetDomicileDesk()) {
+    const auto found =
+        std::ranges::find(displays, lit.id, &display::Display::id);
+    if (found == displays.end()) {
+      continue;
+    }
+    places.push_back(DeskPlace{.id = lit.id,
+                               .desk = lit.desk,
+                               .scale = lit.scale,
+                               .refresh_hz = found->display_frequency()});
+  }
+  const std::optional<DeskGeometry> geometry = DeskGeometryOf(places);
+  if (!geometry.has_value()) {
+    return std::nullopt;
+  }
+  return Desk{.geometry = *geometry, .places = std::move(places)};
 }
 
 // A window showing a shell, and the display its rectangle currently reads as.
@@ -177,7 +222,11 @@ std::vector<SightedShellWindow> SightingsOf(
 // Keeps one shell window per display, through startup and every hotplug.
 class ShellWindows : public display::DisplayObserver {
  public:
-  ShellWindows() {
+  ShellWindows()
+      : desk_laid_out_(content::AddDomicileDeskObserver(
+            base::BindRepeating(&ShellWindows::ReconcileSoon,
+                                // A NoDestructor, as `ReconcileSoon` says.
+                                base::Unretained(this)))) {
     display::Screen::Get()->AddObserver(this);
     Reconcile();
   }
@@ -244,6 +293,11 @@ class ShellWindows : public display::DisplayObserver {
         FitTo(window, display.bounds());
       }
     }
+    // And the presenter on it, which is only a window the reconciliation
+    // knows about.
+    if (OnePage()) {
+      ReconcileSoon();
+    }
   }
 
  private:
@@ -309,8 +363,20 @@ class ShellWindows : public display::DisplayObserver {
     // COPIED RATHER THAN HELD BY REFERENCE. `GetAllDisplays` hands back the
     // screen's own vector, and what follows opens and closes windows; a list
     // that reallocated underneath this loop would be read after it moved.
-    const std::vector<display::Display> displays =
+    const std::vector<display::Display> all =
         display::Screen::Get()->GetAllDisplays();
+    // ONE PAGE IS ONE WINDOW, on the display that hosts it; the others are
+    // presenters. Before the compositor states a layout there is no desk to
+    // host, and the primary holds the page until there is.
+    const std::optional<Desk> desk = OnePage() ? DeskOf(all) : std::nullopt;
+    std::vector<display::Display> displays = all;
+    if (OnePage() && !all.empty()) {
+      const int64_t host =
+          desk.has_value() ? desk->geometry.host : all.front().id();
+      std::erase_if(displays, [host](const display::Display& display) {
+        return display.id() != host;
+      });
+    }
     const ShellWindowPlan plan = ShellWindowsFor(displays, windowed);
 
     // OPEN BEFORE CLOSING, which `shell_windows.h` states and says why: a desk
@@ -322,6 +388,67 @@ class ShellWindows : public display::DisplayObserver {
     for (int64_t id : plan.close) {
       Close(id, held, placed);
     }
+    if (OnePage()) {
+      Present(desk, all);
+    }
+  }
+
+  // Lays the host's page out over the desk, and shows it on every other
+  // display. Asked on every reconciliation, because each of what it reads --
+  // the layout, the displays, the host's page and its renderer -- changes one
+  // of them.
+  void Present(const std::optional<Desk>& desk,
+               const std::vector<display::Display>& all) {
+    BrowserWindowInterface* host = nullptr;
+    if (desk.has_value()) {
+      for (const ShellWindow& one : ShellWindowsNow()) {
+        if (places_.Of(Identity(one.window)) == desk->geometry.host) {
+          host = one.window;
+          break;
+        }
+      }
+    }
+    if (host == nullptr) {
+      ui::OzonePlatform::GetInstance()->SetDomicileDeskHost(
+          gfx::kNullAcceleratedWidget);
+      presenters_.Present(nullptr, {});
+      return;
+    }
+    const auto on_host =
+        std::ranges::find(desk->places, desk->geometry.host, &DeskPlace::id);
+    gfx::NativeWindow window = host->GetWindow()->GetNativeWindow();
+    // Every pointer and key, on whichever monitor, is the page's.
+    ui::OzonePlatform::GetInstance()->SetDomicileDeskHost(
+        window->GetHost()->GetAcceleratedWidget());
+    const gfx::Rect page = PageBoundsOn(*on_host, desk->geometry.box);
+    if (content::GetDomicileDeskPageBounds(window) != page) {
+      content::SetDomicileDeskPageBounds(window, page);
+      views::Widget::GetWidgetForNativeWindow(window)
+          ->client_view()
+          ->InvalidateLayout();
+    }
+    content::WebContents* contents =
+        host->GetActiveTabInterface()->GetContents();
+    content::SetDomicileDeskScreenInfos(
+        contents,
+        DeskScreenInfos(desk->geometry,
+                        display::Screen::Get()
+                            ->GetScreenInfosNearestDisplay(desk->geometry.host)
+                            .current()));
+
+    std::vector<Presented> presented;
+    for (const DeskPlace& place : desk->places) {
+      if (place.id == desk->geometry.host) {
+        continue;
+      }
+      const auto found =
+          std::ranges::find(all, place.id, &display::Display::id);
+      presented.push_back(
+          Presented{.display = place.id,
+                    .pixels = found->bounds(),
+                    .page = PageBoundsOn(place, desk->geometry.box)});
+    }
+    presenters_.Present(contents, presented);
   }
 
   // A copy of the shell window that already exists, on `id`.
@@ -455,6 +582,9 @@ class ShellWindows : public display::DisplayObserver {
   // `TheShellWindows` below: a page told one monitor and a window opened for
   // another is a monitor showing another monitor's desktop.
   ShellWindowPlaces places_;
+  // With --domicile-one-page, the windows showing the host's page.
+  DeskPresenters presenters_;
+  base::CallbackListSubscription desk_laid_out_;
 };
 
 // The one instance, or null until `StartShellWindows` has made it.
@@ -506,7 +636,9 @@ std::string ScreenOf(content::RenderFrameHost* frame) {
   // the geometry, two pages claimed one monitor and a third monitor had a
   // page that named somebody else's.
   const int64_t on = TheShellWindows()->DisplayOfPageIn(window);
-  if (on == display::kInvalidDisplayId) {
+  // ONE PAGE IS ON NO ONE DISPLAY. Named none, the compositor describes the
+  // whole desk to it, about the desk's own corner -- which is the page's.
+  if (OnePage() || on == display::kInvalidDisplayId) {
     return std::string();
   }
   return base::StrCat({"drm-", base::NumberToString(on)});

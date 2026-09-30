@@ -191,8 +191,9 @@ The evidence for each of those is in the doc that made the claim —
 
 7. **One page for the desk.** On a tty the shell becomes one page over the
    desk's bounding box, shown on every monitor at its own density and refresh
-   rate, instead of a page per monitor. Needs the engine (presenters per CRTC,
-   a cc tiling per display scale) before the shells lose their N-page code.
+   rate, instead of a page per monitor. Phase 1 (one host, presenters per
+   CRTC, raster at the largest scale) is behind `--domicile-one-page`; left:
+   a cc tiling per display scale, then the shells lose their N-page code.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 ## In the engine fork — the agent on `crux`

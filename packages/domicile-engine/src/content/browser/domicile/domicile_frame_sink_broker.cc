@@ -22,6 +22,7 @@
 #include "components/domicile/browser/frame_sink_broker.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "content/browser/compositor/surface_utils.h"
+#include "content/browser/domicile/domicile_desk.h"
 #include "content/browser/domicile/domicile_spike_probe.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "content/public/browser/browser_thread.h"
@@ -203,6 +204,17 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .desk = display->desk});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
+  // And to whoever lays out the one page a desk is. After the modeset is
+  // asked for, so a page moved onto a display finds it lit.
+  std::vector<DomicileDeskDisplay> lit;
+  for (const ui::DomicileDisplayLayout& display : wanted) {
+    if (display.enabled) {
+      lit.push_back({.id = display.id,
+                     .desk = display.desk,
+                     .scale = static_cast<float>(display.scale)});
+    }
+  }
+  DomicileDeskLaidOut(std::move(lit));
 }
 
 // The producer's word about a clipboard, on its way to the one this process
