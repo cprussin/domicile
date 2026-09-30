@@ -28,3 +28,11 @@ action.onClicked.addListener((tab) => {
       console.error(`GUARD refused ${error.message}`);
     });
 });
+
+// And only then says it is listening, on its action: the shell's click waits
+// for this badge. The tray row arrives at install, before this worker has run,
+// and an event dispatched with no listener registered is dropped -- so a click
+// on the row alone could be granted and never reach onClicked.
+action.setBadgeText({ text: "on" }).catch((error) => {
+  console.error(`GUARD refused ${error.message}`);
+});

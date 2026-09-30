@@ -106,6 +106,7 @@ rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
 # 1. The page. Its own server: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -129,6 +130,7 @@ else
   NAMED=(--unpacked "$EXTENSION")
   WITNESSED="$WITNESS"
 fi
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" ${NAMED[@]+"${NAMED[@]}"} >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -141,6 +143,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 # 3. The engine. No `--load-extension` and no `--disable-features`: the only
 #    way the fixture gets in is the list.
 STARTED_AT="$(date +%s)"
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

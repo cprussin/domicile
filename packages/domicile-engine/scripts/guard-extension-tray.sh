@@ -106,6 +106,7 @@ mkdir -p "$PROFILE"
 # 1. What the <webview> opens: the popup the tray names, or -- for the control
 #    -- a served page that never closes itself.
 if [ "$NEGATIVE" = "1" ]; then
+  rm -f "$HTTP_LOG"
   python3 "$SCRIPTS/guard-webview-content-script-server.py" \
     --port 0 --color 25A8F9 >"$HTTP_LOG" 2>&1 &
   STARTED+=($!)
@@ -128,6 +129,7 @@ else
 fi
 
 # 2. The compositor's end, naming the fixture -- or, for the control, nothing.
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" ${NAMED[@]+"${NAMED[@]}"} >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -139,6 +141,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 
 # 3. The engine. No `--load-extension`: the fixture gets in by the list.
 STARTED_AT="$(date +%s)"
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

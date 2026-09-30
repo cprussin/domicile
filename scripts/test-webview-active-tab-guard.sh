@@ -141,6 +141,22 @@ expect "and may, by activeTab and nothing else" "yes" \
 expect "and has no popup, so the click is its onClicked" "yes" \
   "$(grep -qF 'default_popup' "$FIXTURE/manifest.json" && echo no || echo yes)"
 
+# THE CLICK WAITS FOR THE LISTENER. An event with no listener registered yet is
+# dropped, not queued: the tray row arrives at install, before the service
+# worker has run, and a click then is granted and never dispatched -- "painted
+# 1 1 1 1 1" with no refusal, as on cprussin/domicile#738. So the worker badges
+# its action once onClicked is registered, and the shell clicks only a row
+# carrying that badge.
+SHELL_MODULE="$SCRIPTS/guard-webview-active-tab.js"
+LISTENS="$(grep -n 'action.onClicked.addListener' "$FIXTURE/background.js" | cut -d: -f1)"
+BADGES="$(grep -n 'action.setBadgeText({ text: "on" })' "$FIXTURE/background.js" | cut -d: -f1)"
+expect "the fixture badges its action once onClicked is registered" "yes" \
+  "$([ -n "$LISTENS" ] && [ -n "$BADGES" ] && [ "$BADGES" -gt "$LISTENS" ] &&
+    echo yes || echo no)"
+expect "and the shell counts it in the tray only with that badge" "yes" \
+  "$(grep -qF 'extension.badgeText === "on"' "$SHELL_MODULE" &&
+    echo yes || echo no)"
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   echo "the webview-active-tab guard's verdict names the right end in every case"

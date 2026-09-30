@@ -111,6 +111,7 @@ measure() { # $1 which run, $2 the URL to open, $3 the witness, $4 "with" or "wi
 
   # The framing guard's flags, plus the extension. The feature is disabled in
   # every run, so the legs differ in `--load-extension` and nothing else.
+  rm -f "$engine_log"
   "$CHROMIUM/$OUT/chrome" \
     --ozone-platform=headless \
     --disable-gpu \
@@ -154,6 +155,7 @@ measure() { # $1 which run, $2 the URL to open, $3 the witness, $4 "with" or "wi
 }
 
 # 1. The page. Its own server: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
