@@ -109,6 +109,8 @@ export const BINDINGS: readonly Binding[] = [
   // it: sway's own defaults for everything the user did not rebind.
   bound("Return", false, Action.TerminalLaunched()),
   bound("q", true, Action.WindowKilled()),
+  // Not sway's, which has no lock: Shift on the terminal's key.
+  bound("Return", true, Action.DeskLocked()),
   // The launcher's key in both places the config puts one — `mod+space` in
   // the user's own bindings and `mod+d` in sway's defaults. Both are the same
   // panel rather than one of them being a lesser version: a person who learned
