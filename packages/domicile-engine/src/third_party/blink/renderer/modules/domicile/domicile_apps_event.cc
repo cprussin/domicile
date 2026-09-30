@@ -22,17 +22,22 @@ DomicileAppsEvent::DomicileAppsEvent(const AtomicString& type,
       query_(initializer->query()),
       apps_(MakeGarbageCollected<FrozenArray<DomicileDesktopEntry>>(
           initializer->apps())),
+      bookmarks_(MakeGarbageCollected<FrozenArray<DomicileBookmark>>(
+          initializer->bookmarks())),
       arrival_(initializer->arrival()) {}
 
 DomicileAppsEvent::DomicileAppsEvent(
     const AtomicString& type,
     String query,
     HeapVector<Member<DomicileDesktopEntry>> apps,
+    HeapVector<Member<DomicileBookmark>> bookmarks,
     DOMHighResTimeStamp arrival)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
       query_(std::move(query)),
       apps_(MakeGarbageCollected<FrozenArray<DomicileDesktopEntry>>(
           std::move(apps))),
+      bookmarks_(MakeGarbageCollected<FrozenArray<DomicileBookmark>>(
+          std::move(bookmarks))),
       arrival_(arrival) {}
 
 DomicileAppsEvent::~DomicileAppsEvent() = default;
@@ -43,6 +48,7 @@ const AtomicString& DomicileAppsEvent::InterfaceName() const {
 
 void DomicileAppsEvent::Trace(Visitor* visitor) const {
   visitor->Trace(apps_);
+  visitor->Trace(bookmarks_);
   Event::Trace(visitor);
 }
 

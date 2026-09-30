@@ -189,6 +189,13 @@ struct DesktopEntry {
   string icon;
 };
 
+// A URL the desk offers by name, from its config: the page opens `url`
+// itself rather than handing it to a program.
+struct Bookmark {
+  string name;
+  string url;
+};
+
 // Page -> browser -> compositor.
 interface ControlChannel {
   // Hand the browser the page's end of the other direction.
@@ -473,11 +480,12 @@ interface ControlChannelClient {
               string cover,
               mojo_base.mojom.TimeTicks arrival);
 
-  // The applications a SearchApps matched, best first. An answer like Files,
-  // so the query comes back for the page to tell answers apart; an empty
-  // array is a query that matched nothing.
+  // The applications and bookmarks a SearchApps matched, each best first. An
+  // answer like Files, so the query comes back for the page to tell answers
+  // apart; empty arrays are a query that matched nothing.
   Apps(string query,
        array<DesktopEntry> apps,
+       array<Bookmark> bookmarks,
        mojo_base.mojom.TimeTicks arrival);
 
   // The machine's battery: `charge` is a fraction 0.0 through 1.0, `charging`

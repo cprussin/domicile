@@ -121,8 +121,17 @@ wants only its own says so:
 omit = ["*", "!launcher-*"]
 ```
 
-On NixOS that is `programs.domicile.settings.applications.omit`, and a reload
-takes it up at the next keystroke.
+It offers the desk's own bookmarks beside them, each a name and a URL the shell
+opens itself rather than handing it to a browser:
+
+```toml
+[[applications.bookmarks]]
+name = "Calendar"
+url = "https://calendar.google.com"
+```
+
+On NixOS those are `programs.domicile.settings.applications.omit` and
+`.bookmarks`, and a reload takes either up at the next keystroke.
 
 ## The screen going dark
 

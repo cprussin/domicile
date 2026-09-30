@@ -303,17 +303,20 @@ describe("what applications matched", () => {
     name: "Firefox",
   };
 
-  it("arrives as the query it answers and the entries, each with its icon", () => {
+  it("arrives as the query it answers, the entries each with its icon, and the bookmarks", () => {
+    const bookmark = { name: "Fire Drill", url: "https://example.com/drill" };
     expect(
       foundApps(
         Object.assign(new Event("apps"), {
           apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
           arrival: 0,
+          bookmarks: [bookmark],
           query: "fire",
         }) as DomicileAppsEvent,
       ),
     ).toStrictEqual({
       apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
+      bookmarks: [bookmark],
       query: "fire",
     });
   });
@@ -323,6 +326,7 @@ describe("what applications matched", () => {
       Object.assign(new Event("apps"), {
         apps: [{ ...firefox, icon: "" }],
         arrival: 0,
+        bookmarks: [],
         query: "fire",
       }) as DomicileAppsEvent,
     ).apps;

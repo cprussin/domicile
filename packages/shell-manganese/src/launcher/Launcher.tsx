@@ -11,6 +11,7 @@ import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
+import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FileXIcon } from "@phosphor-icons/react/dist/ssr/FileX";
@@ -199,11 +200,16 @@ const Query = ({ onLaunch, preview, search, searchApps }: QueryProps) => {
   const [stepped, setStepped] = useState(0);
 
   const found = useFound(search, query);
-  const apps = useFoundApps(searchApps, query);
-  // Every row is a thing Enter can do — the applications and the files, and a
-  // site and a search around them — so the list is the whole answer to what
-  // it will do.
-  const choices = choicesFor(query, found.files, apps);
+  const offered = useFoundApps(searchApps, query);
+  // Every row is a thing Enter can do — the applications, the bookmarks and
+  // the files, and a site and a search around them — so the list is the whole
+  // answer to what it will do.
+  const choices = choicesFor(
+    query,
+    found.files,
+    offered.apps,
+    offered.bookmarks,
+  );
   const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
   // Keyed rather than the choice itself, because a choice is a new object on
@@ -425,6 +431,16 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
         </>
       );
     }
+    case ChoiceKind.Bookmark: {
+      return (
+        <>
+          <RowTile icon={BookmarkSimpleIcon} />
+          <span className={rowNameStyles}>
+            <Marked marks={marked(choice.name, query)} />
+          </span>
+        </>
+      );
+    }
     case ChoiceKind.File: {
       return <FileChoice query={query} row={choice.row} />;
     }
@@ -564,6 +580,15 @@ const Pending = ({ choice }: { choice: Choice }) => {
     case ChoiceKind.App: {
       return <AppPreview entry={choice.entry} />;
     }
+    case ChoiceKind.Bookmark: {
+      return (
+        <Placeholder
+          icon={BookmarkSimpleIcon}
+          note={choice.url}
+          title={choice.name}
+        />
+      );
+    }
     case ChoiceKind.File: {
       return <NamedFile row={choice.row} />;
     }
@@ -691,6 +716,7 @@ const ChoicePreview = ({
         />
       );
     }
+    case ChoiceKind.Bookmark:
     case ChoiceKind.Site:
     case ChoiceKind.Search:
     case ChoiceKind.TaggedSearch:
@@ -926,6 +952,9 @@ const keyOf = (choice: Choice): string => {
   switch (choice.kind) {
     case ChoiceKind.App: {
       return `app:${choice.entry.id}`;
+    }
+    case ChoiceKind.Bookmark: {
+      return `bookmark:${choice.name}:${choice.url}`;
     }
     case ChoiceKind.File: {
       return `file:${choice.row.path}`;

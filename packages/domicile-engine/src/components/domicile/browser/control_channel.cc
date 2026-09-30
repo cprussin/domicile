@@ -930,8 +930,25 @@ void ControlChannel::DispatchLine(const std::string& line,
           *id, *name, comment ? *comment : std::string(), std::move(command),
           icon ? *icon : std::string()));
     }
+    // A bookmark with no name or URL is one nothing could draw or open, and
+    // is dropped. An answer with no list at all is an answer with none.
+    std::vector<mojom::BookmarkPtr> bookmarks;
+    if (const base::ListValue* marked = message.FindList("bookmarks")) {
+      for (const base::Value& row : *marked) {
+        const base::DictValue* bookmark = row.GetIfDict();
+        if (!bookmark) {
+          continue;
+        }
+        const std::string* name = bookmark->FindString("name");
+        const std::string* url = bookmark->FindString("url");
+        if (!name || !url) {
+          continue;
+        }
+        bookmarks.push_back(mojom::Bookmark::New(*name, *url));
+      }
+    }
     // Sent even when it is empty, for the reason `found_files` is.
-    client_->Apps(*query, std::move(apps), arrival);
+    client_->Apps(*query, std::move(apps), std::move(bookmarks), arrival);
     return;
   }
 

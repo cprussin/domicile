@@ -7,7 +7,7 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo,
+    negotiate, Bookmark, ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo,
     DisplayTransform, FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
@@ -123,6 +123,10 @@ fn a_desktop_entry_carries_the_command_it_runs() {
             command: vec!["firefox".into()],
             icon: Some("data:image/png;base64,cm93".into()),
         }],
+        bookmarks: vec![Bookmark {
+            name: "Firefox Add-ons".into(),
+            url: "https://addons.mozilla.org".into(),
+        }],
     })
     .unwrap();
     assert_eq!(
@@ -136,6 +140,10 @@ fn a_desktop_entry_carries_the_command_it_runs() {
                 "comment": "Browse the web",
                 "command": ["firefox"],
                 "icon": "data:image/png;base64,cm93",
+            }],
+            "bookmarks": [{
+                "name": "Firefox Add-ons",
+                "url": "https://addons.mozilla.org",
             }],
         })
     );
@@ -273,6 +281,10 @@ fn host_messages_round_trip() {
             comment: String::new(),
             command: vec!["firefox".into(), "--new-window".into()],
             icon: None,
+        }],
+        bookmarks: vec![Bookmark {
+            name: "Fire Drill".into(),
+            url: "https://example.com/drill".into(),
         }],
     });
     for preview in [

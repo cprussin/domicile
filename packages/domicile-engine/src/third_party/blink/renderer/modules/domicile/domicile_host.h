@@ -213,6 +213,7 @@ class MODULES_EXPORT DomicileHost final
                    base::TimeTicks arrival) override;
   void Apps(const String& query,
             Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
+            Vector<domicile::mojom::blink::BookmarkPtr> bookmarks,
             base::TimeTicks arrival) override;
   void Battery(double charge,
                bool charging,

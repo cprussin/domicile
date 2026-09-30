@@ -4,5 +4,6 @@
 dictionary DomicileAppsEventInit : EventInit {
   DOMString query = "";
   sequence<DomicileDesktopEntry> apps = [];
+  sequence<DomicileBookmark> bookmarks = [];
   DOMHighResTimeStamp arrival = 0;
 };

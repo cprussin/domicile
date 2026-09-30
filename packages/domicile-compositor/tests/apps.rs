@@ -10,7 +10,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, DesktopEntry, HostMessage};
+use domicile_protocol::{Bookmark, ChromeMessage, DesktopEntry, HostMessage};
 
 use crate::running::Compositor;
 
@@ -434,7 +434,7 @@ fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
     let answer = chrome
         .wait_for(|message| matches!(message, HostMessage::FoundApps { .. }))
         .expect("the compositor answers");
-    let HostMessage::FoundApps { query, apps } = answer else {
+    let HostMessage::FoundApps { query, apps, .. } = answer else {
         panic!("that is not a search's answer: {answer:?}");
     };
     assert_eq!(query, "edit");
@@ -482,5 +482,43 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
     assert_eq!(
         apps.iter().map(|app| app.id.as_str()).collect::<Vec<_>>(),
         ["editor.desktop"]
+    );
+}
+
+/// A search offers the desk's bookmarks beside its applications.
+#[test]
+fn a_search_for_applications_offers_the_bookmarks_it_matches() {
+    let config = format!(
+        "{ONE_DISPLAY}
+[[applications.bookmarks]]
+name = \"Mail\"
+url = \"https://mail.example.com\"
+
+[[applications.bookmarks]]
+name = \"Calendar\"
+url = \"https://calendar.example.com\"
+"
+    );
+
+    let compositor = Compositor::started_with(&config);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SearchApps {
+            query: "cal".into(),
+        })
+        .expect("it asks");
+
+    let answer = chrome
+        .wait_for(|message| matches!(message, HostMessage::FoundApps { .. }))
+        .expect("the compositor answers");
+    let HostMessage::FoundApps { bookmarks, .. } = answer else {
+        panic!("that is not a search's answer: {answer:?}");
+    };
+    assert_eq!(
+        bookmarks,
+        vec![Bookmark {
+            name: "Calendar".into(),
+            url: "https://calendar.example.com".into(),
+        }]
     );
 }

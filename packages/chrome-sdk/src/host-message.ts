@@ -248,13 +248,20 @@ export type FoundFilesMessage = {
 };
 
 /**
- * The applications a search matched, best first: the answer to
- * {@link DomicileClient.searchApps}.
+ * The applications and bookmarks a search matched, each best first: the
+ * answer to {@link DomicileClient.searchApps}.
  */
 export type FoundAppsMessage = {
   /** The query this answers. */
   query: string;
   apps: readonly DesktopEntry[];
+  bookmarks: readonly Bookmark[];
+};
+
+/** A URL the desk offers by name; the shell opens it itself. */
+export type Bookmark = {
+  name: string;
+  url: string;
 };
 
 /** An application a desktop entry offers, as a launcher draws and runs it. */
@@ -547,6 +554,10 @@ export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
     icon: named(entry.icon),
     id: entry.id,
     name: entry.name,
+  })),
+  bookmarks: event.bookmarks.map((bookmark) => ({
+    name: bookmark.name,
+    url: bookmark.url,
   })),
   query: event.query,
 });

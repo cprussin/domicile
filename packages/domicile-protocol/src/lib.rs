@@ -587,14 +587,18 @@ pub enum HostMessage {
         preview: FilePreview,
     },
 
-    /// The applications a [`ChromeMessage::SearchApps`] matched, best first.
+    /// The applications and bookmarks a [`ChromeMessage::SearchApps`]
+    /// matched, each best first.
     ///
     /// `query` is the one this answers, for [`HostMessage::FoundFiles`]'s
     /// reason. Each entry carries the argv it runs, so a shell launches one
-    /// with `spawn` and nothing on the page parses an `Exec` line.
+    /// with `spawn` and nothing on the page parses an `Exec` line. A bookmark
+    /// is the desk's own, from `applications.bookmarks`, and the shell opens
+    /// its URL itself.
     FoundApps {
         query: String,
         apps: Vec<DesktopEntry>,
+        bookmarks: Vec<Bookmark>,
     },
 
     /// The machine's battery: how full, and whether a lead is in.
@@ -794,6 +798,15 @@ pub struct DesktopEntry {
     /// the file, or nothing when the entry names none the compositor found.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+}
+
+/// A URL the desk offers by name, as a launcher is told about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bookmark {
+    /// What a launcher's row says.
+    pub name: String,
+    /// What choosing it opens.
+    pub url: String,
 }
 
 /// One thing that was copied, as the shell is told about it.
