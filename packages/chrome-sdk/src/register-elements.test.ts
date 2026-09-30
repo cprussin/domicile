@@ -413,6 +413,25 @@ describe("registerElements", () => {
       expect(domicile.calls).toEqual([["key", "term", 1, false]]);
     });
 
+    it("releases what it is holding when a browser window takes the focus", () => {
+      // A key released while a `<webview>` guest has the focus comes up on the
+      // site and never in this document. Super held on a terminal through
+      // Super+l onto a browser window stayed down in the seat, and every
+      // window after it took each key as a Super chord.
+      const element = mountApp("term");
+      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, code: "MetaLeft" }),
+      );
+      domicile.calls.length = 0;
+
+      const view = document.createElement("webview");
+      document.body.append(view);
+      view.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+      expect(domicile.calls).toEqual([["key", "term", 125, false]]);
+    });
+
     it("releases what it is holding when the page goes away", () => {
       // A reload never delivers the keyup, and blur is not what fires when the
       // page is navigated away from.
