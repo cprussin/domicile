@@ -456,6 +456,30 @@ fn a_locked_desk_reads_no_preview_and_the_passphrase_lets_the_next_one_read() {
     );
 }
 
+/// A shell that asks for the lock gets it, with nobody having walked away.
+///
+/// No clock on this desk at all, so the only thing that can shut it is the
+/// message; and a key sent after it is refused, so it is the lock that shut
+/// rather than a `locked` said about a desk still listening.
+#[test]
+fn a_shell_can_lock_the_desk_on_purpose() {
+    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let (mut chrome, _client, app_id) = a_client_being_typed_at(&compositor);
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
+        .expect("a desk that can lock tells a page that says hello it is open");
+
+    chrome
+        .say(&ChromeMessage::Lock)
+        .expect("the chrome socket takes a lock");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("the desk locks when the shell asks and every chrome is told");
+
+    press_a(&mut chrome, &app_id);
+    compositor.wait_for_log("this desktop is locked");
+}
+
 /// A chrome on a desk whose home is indexed, and then locked.
 fn an_indexed_desk_locked(compositor: &Compositor) -> domicile_test_chrome::Chrome {
     let mut chrome = compositor.chrome();
