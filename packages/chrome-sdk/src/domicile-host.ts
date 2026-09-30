@@ -742,6 +742,18 @@ export type DomicileLockedEvent = Event & {
 };
 
 /**
+ * An address somebody asked this desktop to open: `domicile open-url`, which is
+ * what `BROWSER` runs for every app the desktop starts.
+ *
+ * Already a valid URL — the engine refuses one that is not. Which window it
+ * goes in, and whether, is yours.
+ */
+export type DomicileOpenUrlEvent = Event & {
+  /** The address. */
+  readonly url: string;
+};
+
+/**
  * One extension with an action, as the tray draws it.
  *
  * An interface on the engine's side rather than a plain object, for
@@ -856,6 +868,8 @@ export type DomicileHostEventMap = {
    * once on connecting.
    */
   tray: DomicileTrayEvent;
+  /** An address to open — see {@link DomicileOpenUrlEvent}. */
+  openurl: DomicileOpenUrlEvent;
   /**
    * The desk's notifications, whole, whenever one arrives, changes or goes,
    * and once on connecting.

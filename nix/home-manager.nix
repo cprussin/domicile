@@ -182,9 +182,10 @@
 
     # A verb is only a verb as the first word, and a line that starts with one
     # has said what it wants whatever follows -- `load-shell` takes a shell of
-    # its own, which is not the configured shell being asked for.
+    # its own and `open-url` an address, neither of which is the configured
+    # shell being asked for.
     case "''${1-}" in
-      which-shell|load-shell) named_one=1 ;;
+      which-shell|load-shell|open-url) named_one=1 ;;
     esac
 
     if [ -n "''${named_one-}" ]; then
@@ -205,6 +206,18 @@ in {
       type = lib.types.package;
       default = domicilePackages.domicile;
       defaultText = lib.literalExpression "domicile.packages.\${system}.domicile";
+    };
+
+    defaultBrowser = lib.mkOption {
+      description = ''
+        Make `domicile-open-url` the default browser: the handler for web
+        links in `mimeapps.list`, which `xdg-open` reads and which programs
+        check before asking to be the default themselves. Inside a desktop a
+        link then opens in a browser window of that desktop; `BROWSER` is set
+        to the same program there whatever this says.
+      '';
+      type = lib.types.bool;
+      default = true;
     };
 
     shell = lib.mkOption {
@@ -590,5 +603,14 @@ in {
     # and why it walks lists as well as attrsets.
     xdg.configFile."domicile/domicile.toml".source =
       toml.generate "domicile.toml" (withoutNulls cfg.settings);
+
+    # The desktop entry is the package's own, installed with it above.
+    xdg.mimeApps = lib.mkIf cfg.defaultBrowser {
+      enable = true;
+      defaultApplications =
+        lib.genAttrs
+        ["text/html" "x-scheme-handler/http" "x-scheme-handler/https"]
+        (_: ["domicile-open-url.desktop"]);
+    };
   };
 }

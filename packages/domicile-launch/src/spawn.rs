@@ -276,6 +276,11 @@ pub fn engine(
 /// started from inside another desktop would still be carrying that desktop's
 /// path.
 ///
+/// `BROWSER` is `domicile-open-url`, for the same reason and to the same
+/// children: a link a program opens is a browser window of this desktop, not a
+/// browser of its own. A program rather than `domicile open-url`, because much
+/// of what reads `BROWSER` runs it as one word.
+///
 /// `LD_LIBRARY_PATH` carries the engine's own directory because that is where
 /// `libdomicile_engine.so` is: the compositor `dlopen`s it rather than linking
 /// it, so that `cargo build` does not need a Chromium checkout. Prepended
@@ -285,6 +290,7 @@ pub fn engine(
 pub fn compositor(
     compositor: &Path,
     engine: &Path,
+    browser: &Path,
     runtime: &Runtime,
     config: Option<&Path>,
     inherited: &dyn Fn(&str) -> Option<String>,
@@ -314,6 +320,7 @@ pub fn compositor(
         args,
         env: vec![
             (VARIABLE.to_string(), runtime.control.clone().into()),
+            ("BROWSER".to_string(), browser.into()),
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),

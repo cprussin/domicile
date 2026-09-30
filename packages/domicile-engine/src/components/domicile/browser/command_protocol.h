@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/function_ref.h"
+#include "url/gurl.h"
 
 namespace domicile {
 
@@ -18,6 +19,10 @@ namespace domicile {
 //
 //   {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 //   -> {"type":"loaded"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"open_url","version":1,"url":"https://example.com/"}
+//   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
 // Newline-delimited JSON because that is already the framing in this system --
@@ -56,9 +61,16 @@ using LoadShell =
     base::FunctionRef<bool(const base::FilePath& root,
                            const std::string& module)>;
 
+// Carrying a believed `open_url` out: hand the shell this address to open.
+// Answers whether there was a shell page to hand it to, for LoadShell's
+// reason. Which window it goes in, and whether, is the shell's.
+using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
+
 // Answer one request line, without its newline. The reply carries its own
 // trailing newline, because what a caller wants is the bytes to write.
-std::string AnswerCommand(std::string_view line, LoadShell load_shell);
+std::string AnswerCommand(std::string_view line,
+                          LoadShell load_shell,
+                          OpenUrl open_url);
 
 // The reply for a request this engine will not carry out, given the reason a
 // person should read.

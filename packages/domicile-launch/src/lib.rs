@@ -16,9 +16,10 @@
 //! what a desktop can be asked and what it answers ([`control`]), and where it
 //! answers ([`control_socket`]).
 //!
-//! `domicile load-shell <path>` is the command a desktop does not answer on
-//! its own account: the page belongs to the engine, so the supervisor routes
-//! it on. What that says is [`command`] — the one contract here with a version
+//! `domicile load-shell <path>` and `domicile open-url <url>` are the commands
+//! a desktop does not answer on its own account: the page belongs to the
+//! engine, so the supervisor routes them on — `open-url`'s address made a URL
+//! first ([`address`]). What that says is [`command`] — the one contract here with a version
 //! in it, because the engine is published separately from this — and where it
 //! says it is [`command_socket`].
 //!
@@ -38,6 +39,7 @@
 //! is a place to keep logic that can be tested with a string and a temp
 //! directory.
 
+pub mod address;
 pub mod arguments;
 pub mod cli;
 pub mod command;
