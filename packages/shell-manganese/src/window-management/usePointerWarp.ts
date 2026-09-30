@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
 import { warpTo } from "./pointer-warp";
+import type { Rect } from "./rect";
 import type { WindowState } from "./window-state";
 
 /**
@@ -233,9 +234,15 @@ export const usePointerWarp = ({
     // And the third: the window the keyboard was in has closed, the tiling
     // has shut over it, and the keyboard has landed somewhere the pointer is
     // not — with whatever filled the gap arriving under the pointer as it
-    // went. Nobody pressed anything for that one either.
+    // went. Nobody pressed anything for that one either — unless what took
+    // the keyboard is the next tab, drawn in the very box the closed one was:
+    // then nothing slid under the pointer, which is likely on the tab bar
+    // having just pressed the close button, and has nothing to take back.
     const was = held.current;
-    const gone = was?.id !== undefined && !windows.includes(was.id);
+    const gone =
+      was?.id !== undefined &&
+      !windows.includes(was.id) &&
+      !sameBox(was.box, focus?.box);
     const keyed = pressed.count !== answered.current;
     answered.current = pressed.count;
     if (keyed && pressed.on !== screen) {
@@ -280,3 +287,11 @@ export const usePointerWarp = ({
 /** Whether two places on the page are the same place. */
 const same = (one: Spot, other: Spot): boolean =>
   one[0] === other[0] && one[1] === other[1];
+
+/** Whether `other` is the box `one` is, or `false` for no box at all. */
+const sameBox = (one: Rect, other: Rect | undefined): boolean =>
+  other !== undefined &&
+  one.x === other.x &&
+  one.y === other.y &&
+  one.width === other.width &&
+  one.height === other.height;

@@ -449,6 +449,20 @@ describe("usePointerWarp", () => {
     expect(warps).toStrictEqual([[600, 350]]);
   });
 
+  it("leaves the pointer alone when a tab closes onto the next one", () => {
+    // The tab after it is drawn in the box the closed one was, so nothing
+    // slid under the pointer — which is on the tab bar, above that box,
+    // having just pressed the close button.
+    const { rerender } = warping(desktopOf(LEFT, [...BOTH, "firefox"]));
+    pointerAt(200, 90);
+
+    rerender(
+      desktopOf({ box: LEFT.box, id: "firefox" }, [RIGHT.id, "firefox"]),
+    );
+
+    expect(warps).toStrictEqual([]);
+  });
+
   it("remembers where it put the pointer", () => {
     // Nothing promises to tell this page where the pointer went: the engine
     // moves the one it draws. A page that went on believing the pointer was
