@@ -115,7 +115,7 @@ on:
 # hands each run a tree nothing else holds, and `engine-compile-slot.sh` keeps
 # the cold builds among them down to one. The queue in front of those is GitHub's runner queue:
 # unbounded, FIFO, and it never throws a run away -- and, for a run that will
-# compile, the build job's own `crux-compile` group, below.
+# compile, the build job's own `crux-compile` or `crux-compile-cold` group, below.
 #
 # A CONCURRENCY GROUP IS NOT THAT QUEUE, WHICH IS WHY THIS IS KEYED BY REF. A
 # group holds exactly ONE pending run and evicts it when a newer run arrives,
@@ -199,7 +199,7 @@ jobs:
   # 6-minute run, 36205015099 187, 36209486241 152.
   #
   # So a run that will compile waits on GitHub instead: the build job's
-  # concurrency group is `crux-compile` unless this said `compile=false`, and
+  # concurrency group is a compile queue unless this said `compile=false`, and
   # a job pending in a group holds no runner. `queue: max` keeps every pending
   # run, up to 100, in order -- the default keeps one and cancels the rest,
   # which is what threw away runs 176 and 177 (see the top-level group).
@@ -215,6 +215,18 @@ jobs:
   # 10.9h for 5.9h of Build, and one cold 80-minute build kept five pull
   # requests needing ~2 minutes of compile each waiting 40-86 minutes. So the
   # checks are a job of their own, outside it; see the engine job.
+  #
+  # AND A COLD COMPILE QUEUES APART, for the other half of that: the 80 minutes
+  # were a build, and a warm one queued behind it. `cold=false` only for a
+  # compile ccache covers -- a built tree at this pin that this series changes
+  # in sources only, 95-100% hits -- and that queues in `crux-compile`.
+  # Anything else, a failed plan included, queues in `crux-compile-cold`. The
+  # two queues are two runs at once on one machine and one compile slot, so
+  # the cold build steps aside for a warm one at the slot rather than a warm
+  # one waiting there; see the Build step. A wrong guess picks a queue and
+  # nothing else: a cold compile guessed warm holds the slot as every compile
+  # did before this, and a warm one guessed cold steps aside for nobody's
+  # benefit. See `engine-tree-pool.sh compiles`.
   plan:
     needs: gate
     if: ${{ !cancelled() && needs.gate.outputs.proved != 'true' }}
@@ -223,6 +235,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       compile: ${{ steps.pool.outputs.compile }}
+      cold: ${{ steps.pool.outputs.cold }}
     steps:
       - uses: actions/checkout@v7
       - name: Would this run compile?
@@ -250,9 +263,10 @@ jobs:
     # The compile queue, unless the plan positively said this run compiles
     # nothing: a plan that failed answers nothing, and queueing is the safe
     # side of that. Otherwise a group of this run's own, which is no queue.
+    # The warm queue only when the plan positively said warm; see the plan.
     # Released when this job ends, which is the point of it being a job.
     concurrency:
-      group: ${{ needs.plan.outputs.compile == 'false' && format('crux-warm-{0}-{1}', github.run_id, github.run_attempt) || 'crux-compile' }}
+      group: ${{ needs.plan.outputs.compile == 'false' && format('crux-warm-{0}-{1}', github.run_id, github.run_attempt) || needs.plan.outputs.cold == 'false' && 'crux-compile' || 'crux-compile-cold' }}
       queue: max
       cancel-in-progress: false
     # `crux` is a label, not the runner's name. Both are set in
@@ -350,6 +364,11 @@ jobs:
       GIT_AUTHOR_EMAIL: ci@domicile.invalid
       GIT_COMMITTER_NAME: domicile CI
       GIT_COMMITTER_EMAIL: ci@domicile.invalid
+
+      # A cold build's rank at the compile slot: it steps aside only for a
+      # compile that never does, and engine-release.yml's rank-0 build steps
+      # aside for it. Unset for a warm one. See engine-compile-slot.sh.
+      DOMICILE_COMPILE_SLOT_RANK: ${{ needs.plan.outputs.cold != 'false' && '1' || '' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -486,11 +505,12 @@ jobs:
         id: warm
         run: .github/scripts/engine-compile-slot.sh warm "$CHROMIUM"
 
-      # THE QUEUE FOR THIS IS THE JOB'S `crux-compile` GROUP NOW, which holds
+      # THE QUEUE FOR THIS IS THE JOB'S COMPILE GROUP NOW, which holds
       # no runner; see the plan job. What waits here is the backstop: a run
       # the plan guessed warm that found its tree cold or owes a release, or
       # a compile from engine-release.yml in the other tree. That wait holds this runner, so
-      # it is the rare case rather than the queue. It waits out a cold repin
+      # it is the rare case rather than the queue -- and a warm run behind a
+      # cold build, which steps aside within a poll (see the Build step). It waits out a cold repin
       # rather than going red behind one, because a refused run had to be
       # noticed and re-run by hand.
       #
@@ -608,8 +628,30 @@ jobs:
       #
       # As noise, because it is: another run's latency guard waits it out
       # rather than timing the machine this compile loads.
+      #
+      # A COLD BUILD STEPS ASIDE, as engine-release.yml's does: whenever a warm
+      # compile waits for the slot, it stops the whole build, hands the slot
+      # over, takes it back and resumes incrementally. One compile at a time
+      # still -- the slot is never held by two, and a stopped build is killed
+      # before the handover. Only while it holds the slot: a run that found
+      # itself warm skipped the slot, and has nothing to hand over. It also
+      # steps aside for another run's latency guard. See
+      # .github/scripts/engine-yielding-build.sh.
+      #
+      # Still one step named `Build`, the name engine-cancel-stale.yml may stop.
       - name: Build
-        run: .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-build-in-shell.sh "$CHROMIUM"
+        env:
+          STEP_ASIDE: ${{ needs.plan.outputs.cold != 'false' && steps.slot.outcome == 'success' }}
+          # Taking it back waits as long as the first take did.
+          DOMICILE_COMPILE_SLOT_WAIT: 36000
+        run: |
+          set -euo pipefail
+          build=(.github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- .github/scripts/engine-build-in-shell.sh "$CHROMIUM")
+          if [ "$STEP_ASIDE" = true ]; then
+            .github/scripts/engine-yielding-build.sh "$LOCK_OWNER" -- "${build[@]}"
+          else
+            "${build[@]}"
+          fi
 
       - name: Write down what out/Release was built from
         run: .github/scripts/engine-compile-slot.sh built "$CHROMIUM"
