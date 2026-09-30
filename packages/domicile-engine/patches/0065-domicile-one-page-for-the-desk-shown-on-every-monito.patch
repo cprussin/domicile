@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 30 Sep 2026 00:00:00 +0000
+Subject: [PATCH] domicile: one page for the desk, shown on every monitor
+
+With --domicile-one-page the shell is one page over the desk's bounding
+box, hosted by one CRTC's window and shown on the rest
+(docs/architecture/ONE-PAGE-FOR-THE-DESK.md, phase 1):
+
+- RenderWidgetHostViewBase: a page tagged with the desk's ScreenInfos is
+  told those, not its window's display (content/public/browser/
+  domicile_desk.h).
+- BrowserViewAppLayoutImpl: a window tagged with the page's desk bounds
+  lays its contents out there, bigger than the window and offset.
+- OzonePlatform::SetDomicileDeskHost: every pointer, scroll and key goes
+  to the host window, at its desk position (PointerInWindow), and the
+  host sets the cursor on every monitor.
+---
+ .../frame/layout/browser_view_app_layout_impl.cc     |  8 ++++++++
+ content/browser/BUILD.gn                             |  2 ++
+ .../renderer_host/render_widget_host_view_base.cc    |  9 +++++++++
+ content/public/browser/BUILD.gn                      |  1 +
+ ui/ozone/platform/drm/host/drm_cursor.cc             | 12 +++++++++++-
+ ui/ozone/platform/drm/host/drm_cursor.h              |  7 +++++++
+ ui/ozone/platform/drm/host/drm_window_host.cc        | 11 ++++++++++-
+ ui/ozone/platform/drm/host/drm_window_host_manager.h |  6 ++++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc          |  9 +++++++++
+ ui/ozone/public/ozone_platform.h                     |  5 +++++
+ 10 files changed, 68 insertions(+), 2 deletions(-)
+
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
+index a6efac4..9eb0014 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
+@@ -18,6 +18,7 @@
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+ #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
++#include "content/public/browser/domicile_desk.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/text_constants.h"
+ #include "ui/views/controls/label.h"
+@@ -192,6 +193,13 @@ BrowserViewAppLayoutImpl::CalculateProposedLayout(
+                                views().browser_view));
+   gfx::Rect contents_bounds = params.visual_client_area;
+   contents_bounds.set_height(std::max(contents_bounds.height(), 1));
++  // DOMICILE: the page a desk is, bigger than this window and offset so the
++  // window shows its own display's part. See content/public/browser/
++  // domicile_desk.h.
++  if (const std::optional<gfx::Rect> desk = content::GetDomicileDeskPageBounds(
++          views().browser_view->GetWidget()->GetNativeWindow())) {
++    contents_bounds = *desk;
++  }
+   layout.AddChild(views().multi_contents_view, contents_bounds);
+ 
+   // If certain views were not laid out, make sure they're hidden to avoid
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 0329c8d..365b3e0 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -937,6 +937,8 @@ source_set("browser") {
+     "dom_storage/dom_storage_context_wrapper.h",
+     "dom_storage/session_storage_namespace_handle_impl.cc",
+     "dom_storage/session_storage_namespace_handle_impl.h",
++    "domicile/domicile_desk.cc",
++    "domicile/domicile_desk.h",
+     "domicile/domicile_frame_sink_broker.cc",
+     "domicile/domicile_frame_sink_broker.h",
+     "domicile/domicile_spike_probe.cc",
+diff --git a/content/browser/renderer_host/render_widget_host_view_base.cc b/content/browser/renderer_host/render_widget_host_view_base.cc
+index 3c8f08f..da1861c 100644
+--- a/content/browser/renderer_host/render_widget_host_view_base.cc
++++ b/content/browser/renderer_host/render_widget_host_view_base.cc
+@@ -24,6 +24,7 @@
+ #include "components/viz/host/host_frame_sink_manager.h"
+ #include "content/browser/compositor/surface_utils.h"
+ #include "content/browser/device_posture/device_posture_provider_impl.h"
++#include "content/browser/domicile/domicile_desk.h"
+ #include "content/browser/gpu/gpu_data_manager_impl.h"
+ #include "content/browser/renderer_host/delegated_frame_host.h"
+ #include "content/browser/renderer_host/frame_tree.h"
+@@ -959,6 +960,14 @@ display::ScreenInfos RenderWidgetHostViewBase::GetNewScreenInfosForUpdate() {
+ 
+   display::ScreenInfos screen_infos;
+ 
++  // DOMICILE: the page a desk is spans every display and is on none of them,
++  // so it is told the desk instead. See content/public/browser/domicile_desk.h.
++  if (std::optional<display::ScreenInfos> desk =
++          DomicileDeskScreenInfosFor(GetNativeView())) {
++    desk->system_cursor_size = system_cursor_size_;
++    return *desk;
++  }
++
+   if (auto* screen = display::Screen::Get()) {
+     gfx::NativeView native_view = GetNativeView();
+     const auto& display = native_view
+diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
+index 790d665..d63c848 100644
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -167,6 +167,7 @@ source_set("browser_sources") {
+     "document_user_data.cc",
+     "document_user_data.h",
+     "dom_storage_context.h",
++    "domicile_desk.h",
+     "download_item_utils.h",
+     "download_manager.cc",
+     "download_manager.h",
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 8a6ea18..8db3f29 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -90,8 +90,12 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
+ 
+   base::AutoLock lock(lock_);
+ 
+-  if (window_ != window || cursor_ == platform_cursor)
++  // DOMICILE: the desk's host sets the cursor on every monitor; the pointer
++  // is over its page wherever it is.
++  if ((window_ != window && window != desk_host_) ||
++      cursor_ == platform_cursor) {
+     return;
++  }
+ 
+   cursor_ = platform_cursor;
+ 
+@@ -188,6 +192,12 @@ gfx::PointF DrmCursor::ToWindow(gfx::AcceleratedWidget window,
+   return PointerInWindow(screens_, layout_, screen_location, window);
+ }
+ 
++void DrmCursor::SetDomicileDeskHost(gfx::AcceleratedWidget host) {
++  DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
++  base::AutoLock lock(lock_);
++  desk_host_ = host;
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index 7678435..b3f0485 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -94,6 +94,11 @@ class DrmCursor : public CursorDelegateEvdev {
+   gfx::PointF ToWindow(gfx::AcceleratedWidget window,
+                        const gfx::PointF& screen_location);
+ 
++  // DOMICILE: the window every pointer event goes to, whose cursor is drawn
++  // on whichever monitor the pointer is on. See
++  // `OzonePlatform::SetDomicileDeskHost`.
++  void SetDomicileDeskHost(gfx::AcceleratedWidget host);
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+@@ -156,6 +161,8 @@ class DrmCursor : public CursorDelegateEvdev {
+   // thread and the window manager is the UI thread's.
+   std::vector<PointerScreen> screens_ GUARDED_BY(lock_);
+   std::vector<DomicileDisplayLayout> layout_ GUARDED_BY(lock_);
++  gfx::AcceleratedWidget desk_host_ GUARDED_BY(lock_) =
++      gfx::kNullAcceleratedWidget;
+ 
+   const raw_ptr<DrmWindowHostManager> window_manager_
+       GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
+diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
+index 1d4135d..3237488 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host.cc
++++ b/ui/ozone/platform/drm/host/drm_window_host.cc
+@@ -377,6 +377,15 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
+   if (grabber != gfx::kNullAcceleratedWidget)
+     return grabber == widget_;
+ 
++  // DOMICILE: one page for the desk hears every pointer and key, on whichever
++  // monitor. The rest are presenters, showing its page and taking nothing.
++  const gfx::AcceleratedWidget desk = window_manager_->desk_host();
++  if (desk != gfx::kNullAcceleratedWidget &&
++      (event->IsMouseEvent() || event->IsScrollEvent() ||
++       event->IsKeyEvent())) {
++    return desk == widget_;
++  }
++
+   // DOMICILE: and a held button keeps the pointer in the window it was
+   // pressed in, the implicit grab X and Wayland give. See
+   // `PointerHolderAfter`.
+@@ -504,7 +513,7 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+     // entirely: the drag went sideways, or nowhere. On the window the pointer
+     // is on it is the upstream arithmetic. See `PointerInWindow`.
+     const gfx::PointF location =
+-        event->IsMouseEvent()
++        event->IsMouseEvent() || event->IsScrollEvent()
+             ? cursor_->ToWindow(widget_, located_event->location_f())
+             : located_event->location_f() -
+                   gfx::Vector2dF(bounds_.OffsetFromOrigin());
+diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+index e4924af..a711127 100644
+--- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
++++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
+@@ -82,6 +82,11 @@ class DrmWindowHostManager {
+     pointer_holder_ = widget;
+   }
+ 
++  // DOMICILE: the window every pointer and key event goes to, or null. See
++  // `OzonePlatform::SetDomicileDeskHost`.
++  gfx::AcceleratedWidget desk_host() const { return desk_host_; }
++  void set_desk_host(gfx::AcceleratedWidget widget) { desk_host_ = widget; }
++
+  private:
+   typedef std::map<gfx::AcceleratedWidget, DrmWindowHost*> WidgetToWindowMap;
+ 
+@@ -91,6 +96,7 @@ class DrmWindowHostManager {
+ 
+   gfx::AcceleratedWidget event_grabber_ = gfx::kNullAcceleratedWidget;
+   gfx::AcceleratedWidget pointer_holder_ = gfx::kNullAcceleratedWidget;
++  gfx::AcceleratedWidget desk_host_ = gfx::kNullAcceleratedWidget;
+ };
+ 
+ }  // namespace ui
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 4af83ef..65bd24f 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -168,6 +168,15 @@ class OzonePlatformDrm : public OzonePlatform {
+     }
+   }
+ 
++  void SetDomicileDeskHost(gfx::AcceleratedWidget host) override {
++    if (window_manager_) {
++      window_manager_->set_desk_host(host);
++    }
++    if (cursor_) {
++      cursor_->SetDomicileDeskHost(host);
++    }
++  }
++
+   // DOMICILE: the desktop's clipboards, which without this the browser does
+   // not have -- `Clipboard::Create` falls back to `ClipboardNonBacked`, an
+   // in-process store nothing outside the browser can reach, so a copy made in
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index a99f31a..ed71b99 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -369,6 +369,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // to lay out. See `DomicileDisplayLayout` above.
+   virtual void SetDomicileDisplayLayout(
+       const std::vector<DomicileDisplayLayout>& layout) {}
++  // DOMICILE: the window every pointer and key event goes to, whichever
++  // monitor it happens on -- the one page a desk is, with --domicile-one-page
++  // (docs/architecture/ONE-PAGE-FOR-THE-DESK.md). `gfx::kNullAcceleratedWidget`
++  // gives each window its own events again. DRM only, like the layout above.
++  virtual void SetDomicileDeskHost(gfx::AcceleratedWidget host) {}
+   // DOMICILE: what the compositor says is on one of the desktop's clipboards.
+   //
+   // THE BROWSER IS TOLD RATHER THAN ASKED. The compositor reads every
+-- 
+2.43.0
+
