@@ -100,6 +100,8 @@ class MODULES_EXPORT DomicileHost final
   // where that is written down as the property it is rather than as a
   // convenience.
   void unlock(ScriptState*, const String& passphrase, ExceptionState&);
+  // Lock the desk now. Answered with a `locked` event to every chrome.
+  void lock(ScriptState*, ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with a `windowstheme` event once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);

@@ -392,6 +392,12 @@ void ControlChannel::Unlock(const std::string& passphrase) {
   SendMessage(std::move(message));
 }
 
+// Relayed, like Unlock: the lock is the compositor's, and what comes back up is
+// `locked` to every chrome.
+void ControlChannel::Lock() {
+  SendMessage(Typed("lock"));
+}
+
 void ControlChannel::ThemeCaptured(mojom::Theme theme) {
   base::DictValue message = Typed("theme_captured");
   message.Set("theme", std::string(ThemeToWire(theme)));

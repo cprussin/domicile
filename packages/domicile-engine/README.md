@@ -149,7 +149,7 @@ a new message.
 **Implemented — every member the fork keeps.** Outbound: `spawn`,
 `search_files`, `preview_file`, `search_apps`, `copy_clipboard_entry`,
 `activate_tray_item`, `focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
-`set_device_pixel_ratio`, `set_theme`, `grab_shortcut`, `warp_pointer`, `key`,
+`set_device_pixel_ratio`, `set_theme`, `unlock`, `lock`, `grab_shortcut`, `warp_pointer`, `key`,
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
 Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `app_min_size`, `app_max_size`,

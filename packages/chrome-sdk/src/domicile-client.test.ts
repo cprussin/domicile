@@ -124,6 +124,9 @@ class FakeHost implements DomicileHost {
   unlock(passphrase: string): void {
     this.calls.push(["unlock", passphrase]);
   }
+  lock(): void {
+    this.calls.push(["lock"]);
+  }
   themeCaptured(theme: Theme): void {
     this.calls.push(["themeCaptured", theme]);
   }
@@ -706,6 +709,10 @@ describe("DomicileClient", () => {
       // what this page hears about it is a `locked` message.
       domicile.unlock("open sesame");
       expect(host.lastCall()).toStrictEqual(["unlock", "open sesame"]);
+
+      // And the other way, which likewise waits for the `locked` message.
+      domicile.lock();
+      expect(host.lastCall()).toStrictEqual(["lock"]);
 
       domicile.themeCaptured("light");
       expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);

@@ -965,6 +965,15 @@ export type DomicileHost = {
   unlock(passphrase: string): void;
 
   /**
+   * Lock this desk now, whoever is at it.
+   *
+   * Answered like {@link unlock}: with a `locked` event to every chrome, and
+   * only when the desk actually shut. A desktop with no lock configured has
+   * nothing to shut, and sends nothing.
+   */
+  lock(): void;
+
+  /**
    * This page's old frame is held for `theme`: turn the desk's windows now.
    *
    * Called from inside a shell's wipe, once the frame it wipes away from is

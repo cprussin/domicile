@@ -314,6 +314,14 @@ pub enum ChromeMessage {
     /// cannot be printed by accident — see that type.
     Unlock { passphrase: Passphrase },
 
+    /// Lock this desk now, whoever is at it.
+    ///
+    /// The shell's half of what the idle edge already does: the desk shuts,
+    /// and every chrome hears [`HostMessage::Locked`]. A desk that states no
+    /// verifier has no lock to shut, so this does nothing there but say so in
+    /// the compositor's log. Answered with nothing else.
+    Lock,
+
     /// A click on one of the system tray's icons: `id` is a
     /// [`TrayItem::id`] from the last [`HostMessage::Tray`], and `action`
     /// which button it was.

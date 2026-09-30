@@ -341,6 +341,13 @@ interface ControlChannel {
   // answered with nothing at all.
   Unlock(string passphrase);
 
+  // Lock the desk now, whoever is at it.
+  //
+  // Answered like Unlock: with ControlChannelClient::Locked to every chrome,
+  // and only when the desk actually shut. A desk with no lock configured has
+  // nothing to shut, and answers nothing.
+  Lock();
+
   // This page's old frame is held for `theme`: the desk's windows may turn.
   //
   // Called from inside the shell's wipe, once the frame it wipes away from is
