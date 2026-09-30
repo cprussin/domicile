@@ -157,7 +157,7 @@ export const useWindows = (
   latest.current = state;
 
   // Everything the state cannot do itself: a terminal is a process the
-  // compositor starts, and a client's window is the client's to close — the
+  // compositor starts, the lock is the compositor's, and a client's window is the client's to close — the
   // compositor sends its toplevel a close and the window goes when the host
   // says it went. Both are still actions, so that the bindings stay one table
   // and the reduction stays pure.
@@ -170,6 +170,9 @@ export const useWindows = (
       }
       if (action.kind === WindowActionKind.TerminalLaunched) {
         domicile.spawn(TERMINAL_COMMAND);
+      }
+      if (action.kind === WindowActionKind.DeskLocked) {
+        domicile.lock();
       }
       // The launcher's other half. `openCommand` is where the argv is built
       // and why it has a shell in it: `$HOME` lives in the process the

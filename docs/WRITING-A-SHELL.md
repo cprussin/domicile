@@ -267,8 +267,8 @@ and your shell hears both — see [When nobody is at the
 desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
 blanks, which is deliberate: nothing warns a moment *before* it, so a desk that
 went dark on a timeout its user never set is one that looks like it died. It is
-also what locks a desk that states what opens it under `[lock]`, which is the
-only thing that locks one — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
+also what locks a desk that states what opens it under `[lock]`, as does your
+shell calling `lock()` — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
 either answer. An app playing a film holds the screens on through the timeout —
 `zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
 — so a desk that has not blanked is not necessarily one whose timeout is wrong,
@@ -772,6 +772,10 @@ domicile.on("locked", ({ locked }) => {
 
 // And the way out, which is an offer rather than a decision:
 domicile.unlock(typed);
+
+// Or lock it now, from a chord or a menu item. The lock screen goes up on the
+// `locked: true` that answers it, like any other:
+domicile.lock();
 ```
 
 **The compositor holds the lock, and your page cannot open it by drawing.** This

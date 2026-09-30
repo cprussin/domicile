@@ -1020,7 +1020,7 @@ it of every request before any of it reaches Smithay, and
 | **Drops, as a hand** (`debug`) | `Key`, `PointerMotion`, `PointerButton`, `PointerAxis`, `PointerLeave` | Each is something done to a client. A leave is here although `crate::idle` does not count it: it tells a window the pointer has gone |
 | **Refuses, as a command** (`warn`) | `CloseApp`, `Spawn`, `CopyClipboardEntry`, `ActivateTrayItem` | The desktop acting for whoever is at it, and a locked desk acts for nobody. A shell that asks has drawn a panel over its own lock screen, so it is a warning |
 | **Refuses, as a command, on the connection** (`warn`) | `SearchFiles`, `PreviewFile` | Reading the home for whoever is at it. Answered with nothing — what a desk with no index says — so a refusal says nothing about the query, the path or the disk |
-| **Answers** | `ChromeHello`, `Unlock` | The lock screen's own two: how a reloaded page learns the desk is locked, and the way out |
+| **Answers** | `ChromeHello`, `Unlock`, `Lock` | The lock screen's own three: how a reloaded page learns the desk is locked, the way out, and a lock asked for again, which shuts nothing new |
 | **Answers** | `SetOutputScale`, `SetOutputSize` | The page describing its window. Nothing replays them, so a monitor changed under a locked desk would stay wrong after the unlock |
 | **Answers** | `ClipboardCopied` | A client's copy, not the shell's ask. Refused, the history would disagree with what a paste produces |
 | **Answers, on the connection** | `SetTheme` | Opens nothing and reads nothing, and the person at the desk is looking at it anyway. Refused, a shell that turns over at sunset would keep its lock screen in the day's colors all night |

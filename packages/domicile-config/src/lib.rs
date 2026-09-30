@@ -487,8 +487,8 @@ impl std::fmt::Display for Axis {
 /// from a crash. A shell that wants the screens off says how long.
 ///
 /// **It is also what locks a desk**, on a desktop that states a
-/// [`LockConfig::passphrase`]: the dark edge is the only thing that locks one, so
-/// a desk with no timeout here never locks whatever else it says.
+/// [`LockConfig::passphrase`]: the dark edge is the only thing that locks one
+/// by itself, so a desk with no timeout here locks only when its shell asks.
 ///
 /// Seconds, spelled in the name, because this file is generated: a unit that
 /// has to be read out of a doc comment is one a generator gets wrong, and the
