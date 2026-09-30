@@ -177,6 +177,23 @@ describe("TitleBar", () => {
     expect(square.borderTopWidth).not.toBe("1px");
   });
 
+  it("says when it is middle-clicked", async () => {
+    await new Promise<void>((resolve) => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          onMiddleClick={() => {
+            resolve();
+          }}
+        />,
+      );
+      fireEvent(
+        bar(container),
+        new MouseEvent("auxclick", { bubbles: true, button: 1 }),
+      );
+    });
+  });
+
   describe("the button that fills the screen", () => {
     it("asks for the window it names to fill the screen", async () => {
       await new Promise<void>((resolve) => {

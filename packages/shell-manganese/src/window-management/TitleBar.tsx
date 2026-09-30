@@ -23,6 +23,9 @@ import {
   shuffledBy,
 } from "./window-styles";
 
+/** The middle button, as `MouseEvent.button` numbers it. */
+const MIDDLE_BUTTON = 1;
+
 type Props = {
   /** How it stacks: the depth of the window it names. */
   depth: number;
@@ -70,6 +73,11 @@ type Props = {
   /** Called when it has played that motion all the way out. */
   onMotionEnded: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
+  /**
+   * A middle click on the bar, which closes a tab the way a browser's does —
+   * or `undefined` for a bar it does nothing to.
+   */
+  onMiddleClick?: (() => void) | undefined;
   /**
    * A press on the bar: how a drag of it starts, for a window that can be
    * dragged by it, and the user reaching for the window a tab names.
@@ -120,6 +128,7 @@ export const TitleBar = ({
   onClose,
   onContextMenu,
   onFullscreen,
+  onMiddleClick,
   onMotionEnded,
   onPointerDown,
   rect,
@@ -159,6 +168,11 @@ export const TitleBar = ({
     onAnimationEnd={(event) => {
       if (event.target === event.currentTarget) {
         onMotionEnded();
+      }
+    }}
+    onAuxClick={(event) => {
+      if (event.button === MIDDLE_BUTTON) {
+        onMiddleClick?.();
       }
     }}
     onContextMenu={onContextMenu}
