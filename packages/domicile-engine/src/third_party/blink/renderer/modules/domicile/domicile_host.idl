@@ -153,6 +153,10 @@
   // are three pages and the desk they draw has one lock.
   [CallWith=ScriptState, RaisesException] undefined unlock(DOMString passphrase);
 
+  // Lock the desk now, whoever is at it. Answered like unlock(): with a
+  // `locked` event to every chrome, and only when the desk actually shut.
+  [CallWith=ScriptState, RaisesException] undefined lock();
+
   // This page's old frame is held for `theme`: turn the desk's windows now.
   //
   // Called from inside a shell's wipe, once the frame it wipes away from is

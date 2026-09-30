@@ -487,6 +487,15 @@ export class DomicileClient {
   }
 
   /**
+   * Lock this desk now. Nothing is applied here either: draw the lock screen
+   * when the `locked` message says the desk shut. See
+   * {@link DomicileHost.lock}.
+   */
+  lock(): void {
+    this.#host.lock();
+  }
+
+  /**
    * This page's old frame is held for `theme`: turn the desk's windows now.
    * Answered with a `windows_theme` message once they have. See
    * {@link DomicileHost.themeCaptured}.

@@ -353,8 +353,9 @@ in {
                 desk that says nothing keeps its screens on.
 
                 It is also what locks a desk that states a verifier under `lock`,
-                because the dark edge is the only thing that locks one. A desk
-                with no timeout here never locks, whatever else it says.
+                because the dark edge is the only thing that locks one by
+                itself. A desk with no timeout here locks only when its shell
+                asks.
 
                 Followed on a reload, from either direction: a rebuild can
                 give a running desk a timeout it never had, or take one away.
@@ -399,7 +400,7 @@ in {
                 neither does an engine that died and came back.
 
                 A desk locks when `idle.blank_after_seconds` says nobody is at
-                it, which is the only thing that locks one today. Read on
+                it, or when its shell asks. Read on
                 startup and not on a reload: whether this desk is locked is not
                 something this file says, and rebuilding the verifier under a
                 locked desk would be either an unlock by file edit or a lock

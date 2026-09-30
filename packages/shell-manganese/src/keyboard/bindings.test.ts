@@ -95,6 +95,10 @@ describe("the default bindings", () => {
     expect(pressing("v", true)).toEqual(WindowAction.ClipboardToggled());
   });
 
+  it("locks the desk with Shift on the terminal's key", () => {
+    expect(pressing("Return", true)).toEqual(WindowAction.DeskLocked());
+  });
+
   it("has a key for every workspace the desktop has", () => {
     // The two lists are written out separately — one is the keyboard's order
     // and the other the numbers' — so this is what says they still agree.

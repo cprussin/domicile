@@ -192,6 +192,14 @@ void DomicileHost::unlock(ScriptState*,
   }
 }
 
+// The other way, and just as much a request: what this page hears is the
+// `locked` event every chrome on the desk hears.
+void DomicileHost::lock(ScriptState*, ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->Lock();
+  }
+}
+
 // The whole of what a page may do to the seat's clipboard, and it names a row
 // rather than carrying text: a call that took bytes would let this document
 // write the desktop's clipboard, where this one only chooses among what has

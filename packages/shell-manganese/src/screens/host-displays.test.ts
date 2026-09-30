@@ -52,6 +52,7 @@ class Host implements DomicileHost {
   readonly focusChrome = ignored;
   readonly grabShortcut = ignored;
   readonly key = ignored;
+  readonly lock = ignored;
   readonly pointerAxis = ignored;
   readonly pointerButton = ignored;
   readonly pointerLeave = ignored;
