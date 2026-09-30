@@ -2970,14 +2970,13 @@ impl DomicileCompositor {
             "latency: {} round(s) whose commit came too late to be the key's answer",
             report.answered_too_late
         );
-        // The near end of that same wait, and its own line rather than more of
-        // the one above. A commit 0.82 ms after the key is not a slow answer;
-        // it is a frame the client already had in flight, and folding the two
-        // counts together would send whoever read it looking for a slow
-        // client. Said always, for the reason the one above is.
+        // The near end of that same wait, and not a round given up: a commit
+        // 0.82 ms after the key is a frame the client already had in flight,
+        // and the round waits on past it for the key's answer. So it is
+        // counted in commits. Said always, for the reason the one above is.
         tracing::info!(
             target: "domicile::engine::spike",
-            "latency: {} round(s) whose commit came too soon to be the key's answer",
+            "latency: {} commit(s) passed over for coming too soon to be the key's answer",
             report.answered_too_soon
         );
         // What the client did with the key, as opposed to whether it answered
