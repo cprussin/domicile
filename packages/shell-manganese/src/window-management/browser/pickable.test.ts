@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { fileRow } from "../../launcher/file-row";
 import { ChooserMode } from "./file-request";
-import { HOME, pickable } from "./pickable";
+import { HOME, pickable, pickableIn } from "./pickable";
 
 /** What the host found, in its own vocabulary: a directory ends in `/`. */
 const FOUND = [
@@ -90,5 +90,73 @@ describe("pickable", () => {
   it("names home as the empty path", () => {
     expect(HOME.path).toBe("");
     expect(HOME.isDirectory).toBe(true);
+  });
+});
+
+/** A directory the engine listed, in its own vocabulary: a directory ends in `/`. */
+const LISTED = ["photo.PNG", "zines/", "Albums/", "notes.txt", ".cache/"];
+
+describe("pickableIn", () => {
+  const listed = (
+    mode: ChooserMode,
+    {
+      accept = [],
+      directory = "/mnt/usb",
+      filter = "",
+    }: { accept?: string[]; directory?: string; filter?: string } = {},
+  ) =>
+    pickableIn({
+      accept,
+      browsed: { directory, filter, typed: `${directory}/` },
+      entries: LISTED,
+      mode,
+    });
+
+  // A directory is where a file might be, so opening one walks into it.
+  it("offers directories first and then the files the page will take", () => {
+    expect(paths(listed(ChooserMode.Open, { accept: ["png"] }))).toStrictEqual([
+      "/mnt/usb/Albums",
+      "/mnt/usb/zines",
+      "/mnt/usb/photo.PNG",
+    ]);
+  });
+
+  it("names each row alone, the directory being the one typed", () => {
+    expect(listed(ChooserMode.Open)[0]).toStrictEqual({
+      directory: undefined,
+      isDirectory: true,
+      name: "Albums",
+      path: "/mnt/usb/Albums",
+    });
+  });
+
+  it("narrows to the names holding what is typed after the last slash", () => {
+    expect(paths(listed(ChooserMode.Open, { filter: "OT" }))).toStrictEqual([
+      "/mnt/usb/notes.txt",
+      "/mnt/usb/photo.PNG",
+    ]);
+  });
+
+  // A shell's convention: a dot is typed to see what starts with one.
+  it("hides what starts with a dot until a dot is typed", () => {
+    expect(
+      paths(listed(ChooserMode.OpenFolder, { filter: "." })),
+    ).toStrictEqual(["/mnt/usb/.cache"]);
+  });
+
+  // The directory being listed is an answer too, and the first one while
+  // nothing narrows the listing.
+  it("offers the directory itself first to choose or save in", () => {
+    for (const mode of [ChooserMode.OpenFolder, ChooserMode.Save]) {
+      expect(paths(listed(mode))).toStrictEqual([
+        "/mnt/usb",
+        "/mnt/usb/Albums",
+        "/mnt/usb/zines",
+      ]);
+      expect(paths(listed(mode, { filter: "z" }))).toStrictEqual([
+        "/mnt/usb/zines",
+      ]);
+    }
+    expect(listed(ChooserMode.Save, { directory: "" })[0]).toBe(HOME);
   });
 });
