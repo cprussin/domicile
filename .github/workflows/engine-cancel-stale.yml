@@ -13,9 +13,11 @@ name: Cancel a pull request's stale queued engine runs
 # run queued for a commit they had already pushed past, ahead of the run for
 # the commit that mattered. So on `synchronize` this cancels the branch's
 # waiting runs for every commit but the new head, including a started run
-# with no job running -- its engine job queued in engine.yml's `crux-compile`
-# group. A stale run that already has the machine is engine.yml's to end when
-# it comes to take the compile slot: see its "Take the compile slot" step.
+# with no job running -- its build job queued in engine.yml's `crux-compile`
+# group, or between its build and its checks, where engine.yml's drop-tree
+# job gives back the tree it holds. A stale run that already has the machine
+# is engine.yml's to end when it comes to take the compile slot: see its "Take
+# the compile slot" step.
 #
 # AND ITS STARTED ONES, ONCE THEY ARE BUILDING OR CHECKING. Holding the slot, a
 # run never looks back, so a 24h sample found about 5h/day of builds for
@@ -26,8 +28,9 @@ name: Cancel a pull request's stale queued engine runs
 # or "The engine's checks". Safe for the tree: lld and clang write through a
 # temp file and rename, so a killed build leaves nothing half-written, the next
 # run resumes incrementally from the series stamp and out/Release, and the
-# `if: always()` drops still give back the tree and the compile slot. Never
-# later: the write-back of engine-release.nix is itself a push to the branch.
+# `if: always()` drops and drop-tree job still give back the tree and the
+# compile slot. Never later: the write-back of engine-release.nix is itself a
+# push to the branch.
 # The decisions live in .github/scripts/crux-stale-runs.sh and
 # .github/scripts/crux-cancelable-step.sh, where scripts/test-crux-stale-runs.sh
 # feeds them the cases. Close still takes only runs that never started.

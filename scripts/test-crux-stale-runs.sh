@@ -159,19 +159,40 @@ expect "a started run from a fork is left alone" "" \
 # `synchronize` itself, and would otherwise cancel the run that made it before
 # it recorded its proof.
 STEP="$ROOT/.github/scripts/crux-cancelable-step.sh"
-jobs_json() { # the step in progress in the engine job
-  printf '{"jobs":[{"name":"gate","status":"completed","steps":[{"name":"Prove","status":"completed"}]},{"name":"engine","status":"in_progress","steps":[{"name":"Take a tree","status":"completed"},{"name":"%s","status":"in_progress"}]}]}' "$1"
+jobs_json() { # the step in progress, the job it is in
+  printf '{"jobs":[{"name":"gate","status":"completed","steps":[{"name":"Prove","status":"completed"}]},{"name":"%s","status":"in_progress","steps":[{"name":"Set up job","status":"completed"},{"name":"%s","status":"in_progress"}]}]}' "$2" "$1"
 }
-step() { printf '%s' "$(jobs_json "$1")" | "$STEP" >/dev/null 2>&1; echo $?; }
-for name in "Build" "The engine's checks"; do
-  grep -q "^      - name: $name\$" "$ROOT/$CRUX_WORKFLOW" ||
-    { echo "fixture is stale: $CRUX_WORKFLOW has no step '$name'" >&2; exit 1; }
-  expect "a run in '$name' may be stopped" 0 "$(step "$name")"
+step() { printf '%s' "$(jobs_json "$1" "$2")" | "$STEP" >/dev/null 2>&1; echo $?; }
+# Each in the job engine.yml runs it in: the build in `build`, the checks in
+# `engine`.
+in_job() { # step, job
+  awk -v j="  $2:" -v s="      - name: $1" '
+    /^jobs:/ { in_jobs = 1; next }
+    in_jobs && /^  [a-z][a-z-]*:[[:space:]]*$/ { inside = ($0 == j) }
+    inside && $0 == s { found = 1 }
+    END { exit !found }' "$ROOT/$CRUX_WORKFLOW"
+}
+for pair in "Build:build" "The engine's checks:engine"; do
+  name="${pair%:*}" job="${pair##*:}"
+  in_job "$name" "$job" ||
+    { echo "fixture is stale: $CRUX_WORKFLOW's $job job has no step '$name'" >&2; exit 1; }
+  expect "a run in '$name' may be stopped" 0 "$(step "$name" "$job")"
 done
-for name in "Take a tree" "Publish the release" "Write engine-release.nix back onto this branch" "Record the proof"; do
-  expect "a run in '$name' is left alone" 1 "$(step "$name")"
+for pair in "Take a tree:build" "Publish the release:engine" \
+            "Write engine-release.nix back onto this branch:engine" "Record the proof:engine" \
+            "Drop the tree:drop-tree"; do
+  expect "a run in '${pair%:*}' is left alone" 1 "$(step "${pair%:*}" "${pair##*:}")"
 done
-# A run with no job started -- its engine job queued on GitHub for the compile
+# BETWEEN ITS BUILD AND ITS CHECKS a run holds its tree with no job running.
+# Stopping it there is still free: nothing it cannot repeat has happened, and
+# engine.yml's drop-tree job gives the tree back on a canceled run.
+expect "a run between its build and its checks may be stopped" 0 \
+  "$(printf '{"jobs":[{"name":"build","status":"completed","steps":[{"name":"Build","status":"completed"}]},{"name":"engine","status":"queued","steps":[]}]}' |
+       "$STEP" >/dev/null 2>&1; echo $?)"
+contains "and it says the tree is given back" "drop-tree" \
+  "$(printf '{"jobs":[{"name":"build","status":"completed","steps":[{"name":"Build","status":"completed"}]},{"name":"engine","status":"queued","steps":[]}]}' |
+       "$STEP" 2>&1)"
+# A run with no job started -- its build job queued on GitHub for the compile
 # slot, or for a runner -- holds nothing on crux, so stopping it is free.
 expect "a run whose jobs are all waiting or done may be stopped" 0 \
   "$(printf '{"jobs":[{"name":"plan","status":"completed","steps":[{"name":"Would this run compile?","status":"completed"}]},{"name":"engine","status":"waiting","steps":[]}]}' |
