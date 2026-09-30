@@ -258,6 +258,33 @@ in {
             example = ["*" "!launcher-*"];
           };
 
+          applications.bookmarks = lib.mkOption {
+            description = ''
+              URLs the launcher offers by name, beside the applications. The
+              shell opens one itself rather than handing it to a browser.
+              Followed on a reload.
+            '';
+            type = lib.types.listOf (lib.types.submodule {
+              options = {
+                name = lib.mkOption {
+                  description = "What the launcher's row says, and what a search matches.";
+                  type = lib.types.str;
+                };
+                url = lib.mkOption {
+                  description = "What choosing it opens.";
+                  type = lib.types.str;
+                };
+              };
+            });
+            default = [];
+            example = [
+              {
+                name = "Calendar";
+                url = "https://calendar.google.com";
+              }
+            ];
+          };
+
           extensions = {
             web_store = lib.mkOption {
               description = ''

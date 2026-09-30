@@ -7,7 +7,8 @@
 //   GUARD listening        navigator.domicile exists and a listener is
 //                          registered -- the harness working
 //   GUARD tray id=…        the fixture's row arrived: it is installed
-//   GUARD focused          the window showed its page and this focused it
+//   GUARD focused          the window finished loading its page and this
+//                          focused it
 //   GUARD activated id=…   this clicked the fixture's action, `?activate=1`
 //
 // THE CLAIM IS NOT HERE. It is a color in the window, read by the guard's
@@ -73,14 +74,22 @@ const clickOnceReady = () => {
   }
 };
 
-view.addEventListener("domicile-page-change", () => {
-  if (!focused) {
+const src = required(parameters, "src");
+
+// FOCUSED ONCE THE PAGE HAS ARRIVED, not on the first page change: that can
+// be the guest's address moving before the page commits, and activeTab grants
+// the page the tab is showing when the click lands. A grant on the page before
+// this one is revoked when this one commits, and the fixture is then refused.
+const focusOnceArrived = () => {
+  if (!focused && view.url === src && !view.loading) {
     focused = true;
     view.focus();
     say("focused");
     clickOnceReady();
   }
-});
+};
+view.addEventListener("domicile-page-change", focusOnceArrived);
+view.addEventListener("domicile-loading-change", focusOnceArrived);
 
 host.addEventListener("extensions", (event) => {
   if (
@@ -96,4 +105,4 @@ say("listening");
 
 // `src` last: it is what asks for a guest, and the element needs a frame first.
 document.body.append(view);
-view.setAttribute("src", required(parameters, "src"));
+view.setAttribute("src", src);

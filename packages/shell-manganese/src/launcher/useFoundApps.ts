@@ -1,11 +1,15 @@
-import type {
-  DesktopEntry,
-  FoundAppsMessage,
-} from "@domicile/chrome-sdk/host-message";
+import type { FoundAppsMessage } from "@domicile/chrome-sdk/host-message";
 import { useEffect, useState } from "react";
 
+/** What a search for applications offers: the applications and bookmarks. */
+export type FoundApps = Pick<FoundAppsMessage, "apps" | "bookmarks">;
+
+/** What is offered before the host has answered. */
+const NOTHING: FoundApps = { apps: [], bookmarks: [] };
+
 /**
- * The applications the host found for `query`, asked for whenever it changes.
+ * The applications and bookmarks the host found for `query`, asked for
+ * whenever it changes.
  *
  * `useFound`'s shape without its asking again: the host reads the desktop
  * entries afresh for every question, so there is no half-built answer to
@@ -15,15 +19,15 @@ import { useEffect, useState } from "react";
 export const useFoundApps = (
   searchApps: (query: string) => Promise<FoundAppsMessage>,
   query: string,
-): readonly DesktopEntry[] => {
-  const [apps, setApps] = useState<readonly DesktopEntry[]>([]);
+): FoundApps => {
+  const [found, setFound] = useState<FoundApps>(NOTHING);
 
   useEffect(() => {
     let current = true;
     searchApps(query)
-      .then((found) => {
+      .then(({ apps, bookmarks }) => {
         if (current) {
-          setApps(found.apps);
+          setFound({ apps, bookmarks });
         }
       })
       .catch((error: unknown) => {
@@ -35,5 +39,5 @@ export const useFoundApps = (
     };
   }, [searchApps, query]);
 
-  return apps;
+  return found;
 };

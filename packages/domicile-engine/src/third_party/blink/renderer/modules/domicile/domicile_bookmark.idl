@@ -1,0 +1,18 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A URL the desk offers by name, from its config.
+//
+// An interface rather than a dictionary for DomicileDesktopEntry's reason:
+// these are read off a DomicileAppsEvent's array attribute.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileBookmark {
+  // What a launcher's row says.
+  readonly attribute DOMString name;
+
+  // What choosing it opens. The shell opens it itself.
+  readonly attribute DOMString url;
+};

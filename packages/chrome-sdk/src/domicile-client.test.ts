@@ -842,7 +842,12 @@ describe("DomicileClient", () => {
     const answer = (query: string, apps: readonly (typeof editor)[]) => {
       host.dispatch(
         "apps",
-        Object.assign(new Event("apps"), { apps, arrival: 0, query }),
+        Object.assign(new Event("apps"), {
+          apps,
+          arrival: 0,
+          bookmarks: [],
+          query,
+        }),
       );
     };
 
@@ -856,6 +861,7 @@ describe("DomicileClient", () => {
 
       expect(await longer).toStrictEqual({
         apps: [{ ...editor, icon: undefined }],
+        bookmarks: [],
         query: "ed",
       });
       expect((await shorter).apps).toStrictEqual([]);

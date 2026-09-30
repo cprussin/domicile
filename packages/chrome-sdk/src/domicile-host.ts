@@ -401,14 +401,26 @@ export type DomicileDesktopEntry = {
   readonly icon: string;
 };
 
+/** A URL the desk offers by name, from its config. */
+export type DomicileBookmark = {
+  /** What a launcher's row says. */
+  readonly name: string;
+
+  /** What choosing it opens; the shell opens it itself. */
+  readonly url: string;
+};
+
 /**
- * The applications a {@link DomicileHost.searchApps} matched, best first.
+ * The applications and bookmarks a {@link DomicileHost.searchApps} matched,
+ * each best first.
  */
 export type DomicileAppsEvent = Event & {
   /** The query this answers. */
   readonly query: string;
 
   readonly apps: readonly DomicileDesktopEntry[];
+
+  readonly bookmarks: readonly DomicileBookmark[];
 
   /**
    * When the browser process had this message, in `performance.now()`'s

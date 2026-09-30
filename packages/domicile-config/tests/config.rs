@@ -7,7 +7,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use domicile_config::{Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode};
+use domicile_config::{
+    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode,
+};
 
 // ---- parsing & defaults ---------------------------------------------------
 
@@ -397,6 +399,44 @@ fn an_application_pattern_that_is_not_a_glob_is_refused() {
         r#"
 [applications]
 omit = ["[unclosed"]
+"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
+#[test]
+fn a_desk_that_says_nothing_has_no_bookmarks() {
+    assert!(Config::parse("").unwrap().applications.bookmarks.is_empty());
+}
+
+#[test]
+fn a_bookmark_is_a_name_and_the_url_it_opens() {
+    let bookmarks = Config::parse(
+        r#"
+[[applications.bookmarks]]
+name = "Calendar"
+url = "https://calendar.google.com"
+"#,
+    )
+    .unwrap()
+    .applications
+    .bookmarks;
+    assert_eq!(
+        bookmarks,
+        vec![Bookmark {
+            name: "Calendar".into(),
+            url: "https://calendar.google.com".into(),
+        }]
+    );
+}
+
+#[test]
+fn a_bookmark_missing_its_url_is_refused() {
+    let err = Config::parse(
+        r#"
+[[applications.bookmarks]]
+name = "Calendar"
 "#,
     )
     .unwrap_err();

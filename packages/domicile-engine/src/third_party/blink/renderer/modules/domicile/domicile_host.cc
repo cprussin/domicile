@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_apps_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_bookmark.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_desktop_entry.h"
@@ -559,6 +560,7 @@ void DomicileHost::FilePreview(const String& path,
 // `domicile_desktop_entry.h`.
 void DomicileHost::Apps(const String& query,
                         Vector<domicile::mojom::blink::DesktopEntryPtr> apps,
+                        Vector<domicile::mojom::blink::BookmarkPtr> bookmarks,
                         base::TimeTicks arrival) {
   HeapVector<Member<DomicileDesktopEntry>> entries;
   entries.reserve(apps.size());
@@ -567,9 +569,15 @@ void DomicileHost::Apps(const String& query,
         app->id, app->name, app->comment, std::move(app->command),
         app->icon));
   }
+  HeapVector<Member<DomicileBookmark>> marked;
+  marked.reserve(bookmarks.size());
+  for (auto& bookmark : bookmarks) {
+    marked.push_back(
+        MakeGarbageCollected<DomicileBookmark>(bookmark->name, bookmark->url));
+  }
   DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
       domicile_event_names::Apps(), query, std::move(entries),
-      Arrival(arrival)));
+      std::move(marked), Arrival(arrival)));
 }
 
 // Pushed, so there is no ask for this to be the answer to. The compositor
