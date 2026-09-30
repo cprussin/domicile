@@ -14,8 +14,10 @@
 // drawing anything, because what is measured is the answer's trip and not a
 // picker.
 //
-//   ?answer=choose&pick=<path>   take it and choose <path>, relative to the
-//                                home -- THE CLAIM's run
+//   ?answer=choose&pick=<path>   take it and choose <path>, absolute or
+//                                relative to the home -- THE CLAIM's run
+//     &list=<directory>          and list <directory> first, as a picker
+//                                walking the filesystem does
 //   ?answer=cancel               take it and cancel -- the control
 //
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
@@ -26,6 +28,7 @@
 //                                the harness working rather than a finding
 //   GUARD file-chooser mode=…    THE QUESTION: the element asked, and for what
 //     suggested=…
+//   GUARD listed <names>         what `list` answered, sorted
 //   GUARD answered               the answer was given without a throw
 //
 // The page in the window says what it got for itself; see
@@ -72,6 +75,24 @@ document.addEventListener("domicile-file-chooser", (event) => {
     `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")}`,
   );
   event.preventDefault();
+  const listing = parameters.get("list");
+  if (listing === null) {
+    answerIt(event);
+  } else {
+    event.list(listing).then(
+      (entries) => {
+        say(`listed ${entries.toSorted().join(",")}`);
+        answerIt(event);
+      },
+      (error) => {
+        say(`list-refused ${error.name}`);
+      },
+    );
+  }
+});
+
+/** Answer `event` as `?answer=` says, and say so. */
+const answerIt = (event) => {
   switch (answer) {
     case "choose": {
       event.choose([required(parameters, "pick")]);
@@ -88,7 +109,7 @@ document.addEventListener("domicile-file-chooser", (event) => {
     }
   }
   say("answered");
-});
+};
 
 // The harness's own reading: a press that landed in this document, which is
 // what makes every absence below a measurement.

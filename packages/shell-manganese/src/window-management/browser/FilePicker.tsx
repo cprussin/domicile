@@ -20,13 +20,20 @@ import {
   stepOf,
   steppedTo,
 } from "../../launcher/walk";
+import type { Browsing } from "./browsing";
+import { browsing, parentOf, typedOf } from "./browsing";
 import type { FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
-import { HOME, pickable } from "./pickable";
-import { savedPath } from "./saved-path";
+import { pathIn } from "./path-in";
+import { HOME, pickable, pickableIn } from "./pickable";
+import type { Listing } from "./useListing";
+import { ListingState, useListing } from "./useListing";
 
-/** What the box asks for, as its placeholder and as its accessible name. */
+/** What the box asks for, as its accessible name. */
 const PROMPT = "Search your files";
+
+/** What the box says while it is empty: the search, and the other way in. */
+const PLACEHOLDER = "Search your files, or type / or ~/ to browse";
 
 /** How big the glyph beside a row, and in the box, is drawn. */
 const ICON_SIZE = 16;
@@ -49,11 +56,13 @@ type Props = {
 /**
  * A file picker for the page in a browser window, drawn over that page.
  *
- * **THE LAUNCHER'S SEARCH, NOT A FILE MANAGER.** The host indexes the home and
- * answers a query with the paths that match, and those are already the
- * vocabulary the engine takes an answer in — so a picker is a box, the rows
- * the host found, and the narrowing to what the page asked for. There is no
- * tree to walk: a home is found by typing, the way the launcher opens a file.
+ * **THE LAUNCHER'S SEARCH, AND A PATH FOR THE REST.** The host indexes the
+ * home and answers a query with the paths that match, and those are already
+ * the vocabulary the engine takes an answer in — so a picker is a box, the
+ * rows the host found, and the narrowing to what the page asked for. What the
+ * index does not hold — anywhere outside the home — is reached by typing where
+ * it is: a box that starts with `/` or `~/` lists that directory instead, the
+ * way a shell's prompt completes a path. See `browsing`.
  *
  * **OVER THE PAGE, NOT THE DESKTOP.** The question is the page's, and a page
  * waiting on a picker is a window that cannot go on until it is answered —
@@ -63,7 +72,8 @@ type Props = {
  * The keys are the launcher's, and fzf's before it: the arrows walk the rows,
  * Enter takes the one highlighted, and — where several files are asked for —
  * Tab marks a row and moves on, and Enter takes everything marked. Escape
- * cancels.
+ * cancels. The right arrow walks into the directory highlighted, as Enter does
+ * where a directory is not an answer, and Backspace at a `/` walks back out.
  */
 export const FilePicker = ({ ref, request, search }: Props) => {
   const titleId = useId();
@@ -78,16 +88,35 @@ export const FilePicker = ({ ref, request, search }: Props) => {
   const [name, setName] = useState(request.suggestedName);
 
   const found = useFound(search, query);
-  const rows = pickable({
-    accept: request.accept,
+  const browsed = browsing(query);
+  const listing = useListing(request.list, browsed?.directory);
+  const rows = offered({
+    browsed,
     found: found.files,
-    mode: request.mode,
+    listing,
     query,
+    request,
   });
   const highlighted = highlightIn(rows.length, stepped);
   const current = highlighted === undefined ? undefined : rows[highlighted];
   const multiple = request.mode === ChooserMode.OpenMultiple;
   const answer = answerOf(request.mode, current, marks, name);
+  // Where a directory is not an answer, choosing one is walking into it.
+  const opening =
+    request.mode === ChooserMode.Open ||
+    request.mode === ChooserMode.OpenMultiple;
+
+  // The box, and the walk along the rows that belonged to the last one.
+  const retype = (typed: string) => {
+    setQuery(typed);
+    // The walk belongs to the list that was on screen when it happened —
+    // see the launcher's box.
+    setStepped(0);
+  };
+
+  const walkInto = (row: FileRow) => {
+    retype(typedOf(row.path));
+  };
 
   const confirm = () => {
     if (answer !== undefined) {
@@ -100,13 +129,24 @@ export const FilePicker = ({ ref, request, search }: Props) => {
   // the directory to save in, which is half of a save and not all of it.
   const pick = (row: FileRow, at: number) => {
     switch (request.mode) {
-      case ChooserMode.Open:
+      case ChooserMode.Open: {
+        if (row.isDirectory) {
+          walkInto(row);
+        } else {
+          request.choose([row.path]);
+        }
+        break;
+      }
       case ChooserMode.OpenFolder: {
         request.choose([row.path]);
         break;
       }
       case ChooserMode.OpenMultiple: {
-        setMarks(toggled(marks, row.path));
+        if (row.isDirectory) {
+          walkInto(row);
+        } else {
+          setMarks(toggled(marks, row.path));
+        }
         break;
       }
       case ChooserMode.Save: {
@@ -120,7 +160,11 @@ export const FilePicker = ({ ref, request, search }: Props) => {
   const confirmOnEnter = (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      confirm();
+      if (opening && marks.length === 0 && current?.isDirectory === true) {
+        walkInto(current);
+      } else {
+        confirm();
+      }
     }
   };
 
@@ -149,28 +193,48 @@ export const FilePicker = ({ ref, request, search }: Props) => {
           aria-expanded
           aria-label={PROMPT}
           onChange={(event) => {
-            setQuery(event.target.value);
-            // The walk belongs to the list that was on screen when it
-            // happened — see the launcher's box.
-            setStepped(0);
+            retype(event.target.value);
           }}
           onKeyDown={(event) => {
             const step = stepOf(event);
+            // Only with the caret at the end, where these keys have nothing
+            // of their own to do: in the middle, they edit the box.
+            const atEnd =
+              event.currentTarget.selectionStart === query.length &&
+              event.currentTarget.selectionEnd === query.length;
+            const up =
+              browsed === undefined || browsed.filter !== ""
+                ? undefined
+                : parentOf(browsed.typed);
             if (step !== undefined) {
               event.preventDefault();
               setStepped(steppedTo(highlighted ?? 0, step, rows.length));
             } else if (event.key === "Tab" && multiple) {
-              // fzf's mark: this row, and on to the next.
+              // fzf's mark: this row, and on to the next. A directory is
+              // somewhere to walk, not a file to mark.
               event.preventDefault();
               if (current !== undefined && highlighted !== undefined) {
-                setMarks(toggled(marks, current.path));
+                if (!current.isDirectory) {
+                  setMarks(toggled(marks, current.path));
+                }
                 setStepped(steppedTo(highlighted, 1, rows.length));
               }
+            } else if (
+              event.key === "ArrowRight" &&
+              atEnd &&
+              current?.isDirectory === true
+            ) {
+              event.preventDefault();
+              walkInto(current);
+            } else if (event.key === "Backspace" && atEnd && up !== undefined) {
+              // The whole of the last directory, rather than its `/`.
+              event.preventDefault();
+              retype(up);
             } else {
               confirmOnEnter(event);
             }
           }}
-          placeholder={PROMPT}
+          placeholder={PLACEHOLDER}
           prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
           ref={ref}
           role="combobox"
@@ -179,6 +243,12 @@ export const FilePicker = ({ ref, request, search }: Props) => {
           value={query}
         />
         <div className={resultsStyles}>
+          {listing.state === ListingState.Unreadable &&
+            browsed !== undefined && (
+              <p className={statusStyles} role="status">
+                Can't read {browsed.typed}
+              </p>
+            )}
           <div
             aria-multiselectable={multiple}
             className={listStyles}
@@ -269,6 +339,41 @@ const RowGlyph = ({ marked, row }: { marked: boolean; row: FileRow }) => {
 };
 
 /**
+ * The rows on offer: what the host's search found, or — while the box is a
+ * path — what the engine listed in it. A listing still on its way, or refused,
+ * offers nothing.
+ */
+const offered = ({
+  browsed,
+  found,
+  listing,
+  query,
+  request,
+}: {
+  browsed: Browsing | undefined;
+  found: readonly string[];
+  listing: Listing;
+  query: string;
+  request: FileRequest;
+}): readonly FileRow[] => {
+  if (browsed === undefined) {
+    return pickable({
+      accept: request.accept,
+      found,
+      mode: request.mode,
+      query,
+    });
+  } else {
+    return pickableIn({
+      accept: request.accept,
+      browsed,
+      entries: listing.state === ListingState.Listed ? listing.entries : [],
+      mode: request.mode,
+    });
+  }
+};
+
+/**
  * What the picker would answer now, or `undefined` while it has nothing to
  * answer with — no row, or a save with no name.
  *
@@ -282,24 +387,26 @@ const answerOf = (
   name: string,
 ): readonly string[] | undefined => {
   switch (mode) {
-    case ChooserMode.Open:
+    case ChooserMode.Open: {
+      return fileOf(current);
+    }
     case ChooserMode.OpenFolder: {
       return current === undefined ? undefined : [current.path];
     }
     case ChooserMode.OpenMultiple: {
-      if (marks.length > 0) {
-        return marks;
-      } else {
-        return current === undefined ? undefined : [current.path];
-      }
+      return marks.length > 0 ? marks : fileOf(current);
     }
     case ChooserMode.Save: {
       return current === undefined || name === ""
         ? undefined
-        : [savedPath(current.path, name)];
+        : [pathIn(current.path, name)];
     }
   }
 };
+
+/** The highlighted row as an answer to open, which a directory is not. */
+const fileOf = (current: FileRow | undefined): readonly string[] | undefined =>
+  current === undefined || current.isDirectory ? undefined : [current.path];
 
 /** `marks` with `path` marked if it was not, and unmarked if it was. */
 const toggled = (marks: readonly string[], path: string): readonly string[] =>
@@ -395,6 +502,14 @@ const resultsStyles = css({
   scrollbarColor: "{colors.border} transparent",
   scrollbarWidth: "thin",
   scrollPaddingBlock: 1,
+});
+
+const statusStyles = css({
+  color: "muted",
+  fontSize: "sm",
+  margin: 0,
+  paddingBlock: 1.5,
+  paddingInline: 2,
 });
 
 const listStyles = flex({
