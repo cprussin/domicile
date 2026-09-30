@@ -151,6 +151,21 @@ describe("ExtensionTray", () => {
       expect((await popupView()).getAttribute("src")).toBe(POPUP);
     });
 
+    it("draws the popup's panel flush, with no padding framing the page", async () => {
+      render(
+        <ExtensionTray
+          domicile={NO_DOMICILE}
+          extensions={[blocker]}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+
+      await popupView();
+
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
+    });
+
     it("follows the list as it changes", () => {
       const { rerender } = render(
         <ExtensionTray

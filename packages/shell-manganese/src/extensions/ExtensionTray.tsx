@@ -66,6 +66,7 @@ export const ExtensionTray = ({
       ) : (
         <Popover
           align="start"
+          flush
           key={id}
           onOpenChange={(open) => {
             if (open) {
@@ -168,10 +169,13 @@ const badgeStyles = css({
 
 // A `<webview>` is a replaced element that is 300x150 left to itself, and an
 // extension's popup has no size to give this page — Chrome sizes its bubble to
-// the popup's document, which a guest does not report. So a fixed box, inside
-// the popover's own width.
+// the popup's document, which a guest does not report. So a fixed box, at the
+// size popups are laid out for — Bitwarden's is 380px wide — and short of
+// Chrome's 600px cap on a screen too short for it. Block, so no line box
+// leaves a gap under it in the flush panel.
 const viewStyles = css({
-  blockSize: 100,
+  blockSize: "min({spacing.150}, 80vh)",
   borderStyle: "none",
-  inlineSize: 80,
+  display: "block",
+  inlineSize: 100,
 });
