@@ -156,6 +156,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # 1. The pages: one server, two paths. Its own fixture rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-routed-link-server.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -179,6 +180,7 @@ echo "serving a page with one link at $SITE/page"
 #    one origin, and what decides it is the BUTTON rather than which process the
 #    press came from. The version of this guard that needed both is in the
 #    header, with the run that retired it.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

@@ -202,6 +202,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 
 # 1. The three pages. Their own server rather than real sites, for the reason
 #    the framing guard has one: `crux` reaches no arbitrary host.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-history-server.py" \
   --port 0 --slow-seconds "$SLOW_SECONDS" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -223,6 +224,7 @@ echo "serving a browser window's pages under $SUBJECT"
 #    cannot ask for a guest at all. `--app` for the reason `domicile` uses it
 #    and every guard here repeats: the guard runs the configuration the product
 #    runs, or it is guarding something else.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

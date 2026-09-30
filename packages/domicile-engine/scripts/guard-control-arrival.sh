@@ -96,6 +96,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The compositor's end. It accepts, answers `hello` with a `welcome`, and
 #    then writes the three lines this guard is about — which is the half
 #    guard-webview-keyboard-socket.py deliberately does not do.
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-control-arrival-compositor.py" --socket "$CONTROL" \
   >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -110,6 +111,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 #    guard here repeats: the guard runs the configuration the product runs, or
 #    it is guarding something else. Headless and without the GPU because nothing
 #    here is measured in pixels.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

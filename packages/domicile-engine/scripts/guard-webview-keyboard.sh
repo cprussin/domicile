@@ -180,6 +180,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The page a browser window shows. Its own server rather than a real site,
 #    for the reason the framing guard has one: `crux` reaches no arbitrary host.
 #    Shared with guard-webview-click.sh, which needs the same thing of it.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -201,6 +202,7 @@ echo "serving a browser window's page at $SUBJECT"
 #    and closes the page's end — and the claim, the press and the modifiers all
 #    travel on it. It is also where "the claim is no longer relayed" is
 #    measured: `grab_shortcut` must never appear in its log.
+rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-webview-keyboard-socket.py" --socket "$CONTROL" \
   >"$SOCKET_LOG" 2>&1 &
 STARTED+=($!)
@@ -218,6 +220,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
 #    `--remote-debugging-port` is how the keystroke gets in. There is no
 #    keyboard on this machine; see guard-webview-keyboard-key.py for why the
 #    path it takes is the same one a real key would.
+rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \

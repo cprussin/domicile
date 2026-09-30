@@ -115,6 +115,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 }
 
 # 1. The page in the window.
+rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-file-chooser-server.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
@@ -129,6 +130,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SITE="http://127.0.0.1:$PORT"
 
 # 2. The engine, on a domicile:// document, with this guard's home.
+rm -f "$ENGINE_LOG"
 HOME="$HOME_DIR" "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
