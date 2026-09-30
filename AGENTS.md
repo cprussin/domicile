@@ -136,6 +136,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/EXTENSIONS.md](/docs/architecture/EXTENSIONS.md) | Chrome extensions on a desk: installed from the config, their actions in the shell's tray, and every `<webview>` a tab to `chrome.tabs`. Two slices, both done; one follow-up left: tabs' zoom. |
 | [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | Applications' tray icons: the compositor is the StatusNotifierItem host on the session bus, and manganese draws the icons in one reorderable row with the extensions'. Menus (dbusmenu) are left. |
 | [/docs/architecture/WINDOWS-ACROSS-SCREENS.md](/docs/architecture/WINDOWS-ACROSS-SCREENS.md) | Dragging a floating window from one monitor to another in `shell-manganese`: ownership follows the center, and an `<app>` embedded by every page it overlaps. Floats cross and span screens; global fullscreen and browser windows are left. |
+| [/docs/architecture/ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md) | One shell page over the whole desk on a tty, shown on every monitor at its own density and refresh rate: presenters per CRTC, and a cc tiling per display scale. Supersedes the N-page model; nothing built yet. |
 
 [`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
 item pointing at the doc above that carries its detail. Read it before starting
