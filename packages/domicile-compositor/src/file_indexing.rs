@@ -32,8 +32,8 @@ use domicile_config::Omit;
 use domicile_host::file_changes::{changes, Change};
 use domicile_host::file_index::FileIndex;
 use domicile_host::file_search::FileSearch;
-use domicile_host::home_walk::{walk, walk_within, RealDirectory};
-use domicile_host::home_watch::{watch_home, HomeWatcher};
+use domicile_host::home_walk::{walk, walk_within, Directory, RealDirectory};
+use domicile_host::home_watch::HomeWatcher;
 use domicile_host::index_file::{read, write, IndexFileError};
 use domicile_host::index_location::index_file;
 use tracing::{debug, error, info, warn};
@@ -130,13 +130,11 @@ pub fn keep_the_index(
     let mut index = FileIndex::building(remembered(kept_at.as_deref()));
 
     loop {
-        // BEFORE THE WATCH, BECAUSE WATCHING A HOME IS WALKING IT. A recursive
-        // watch is one inotify watch per directory, set up by visiting every
-        // one, so on a real home it takes as long as the walk below — and a
-        // launcher opened in that time, with nothing yet announced, was
-        // answered nothing: no rows, and no line saying the index was still
-        // being built. Said here, it has last session's list and the fact
-        // that it is being checked, from the moment the home is known to open.
+        // BEFORE THE WALK, WHICH IS WHAT A LAUNCHER WAITS ON. A launcher
+        // opened before anything is announced is answered nothing: no rows,
+        // and no line saying the index is still being built. Said here, it has
+        // last session's list and the fact that it is being checked, from the
+        // moment the home is known to open.
         //
         // Not on a home that will not open: that would be a launcher holding
         // last session's list of a home it cannot see, under a notice saying
@@ -151,29 +149,32 @@ pub fn keep_the_index(
         }
         announce(&mut index, &tell);
 
-        // BEFORE THE WALK, AND THAT IS THE ONLY ORDER THAT LOSES NOTHING. The
-        // kernel reports what moves under a watch it already has, so a walk
-        // with no watch behind it goes stale as it runs: a file written into a
-        // directory the walk had already read was in neither the walk nor any
-        // event, and nothing revisits a home until the next boot — so the
-        // launcher went the whole session without it. A directory that arrived
-        // in that window cost more than itself: a directory is a row of its own
-        // that nothing synthesizes from the names under it, so a file written
-        // into it once the watch was up was offered with no directory to sit
-        // in.
+        // THE WALK WATCHES WHAT IT READS, AND THAT IS THE ONLY ORDER THAT LOSES
+        // NOTHING. The kernel reports what moves under a watch it already has,
+        // so a directory read with no watch behind it goes stale as the walk
+        // runs: a file written into it afterwards was in neither the walk nor
+        // any event, and nothing revisits a home until the next boot — so the
+        // launcher went the whole session without it. So each directory is
+        // watched before it is read, and what the walk omits is never watched
+        // at all. See `domicile_host::home_watch`.
         //
-        // Watching first costs nothing, because the walk and the watch agree
-        // about what they find. Events that arrive while the walk runs wait on
-        // `heard`, which is unbounded and so never turns a send away, and
-        // `FileIndex::found` and `FileIndex::appeared` are both inserts into a
-        // set — so a path the walk and an event both report lands once. Nothing
-        // in the walk reads the watch.
+        // Events that arrive while the walk runs wait on `heard`, which is
+        // unbounded and so never turns a send away, and `FileIndex::found` and
+        // `FileIndex::appeared` are both inserts into a set — so a path the
+        // walk and an event both report lands once.
         //
         // Held to the end of this turn of the loop and no further: a walk again
-        // is a watch again, and the next turn's watch is up before its walk for
-        // the same reason this one is.
+        // is a watcher again, so nothing the new rule omits stays watched.
         let watched = watch_the_home(&home, told.clone());
-        if !walk_the_home(&home, &omit, &mut index, &tell) {
+        let walked = match &watched {
+            Some(watcher) => {
+                let walked = walk_the_home(&home, &omit, watcher, &mut index, &tell);
+                report_unwatched(watcher);
+                walked
+            }
+            None => walk_the_home(&home, &omit, &RealDirectory, &mut index, &tell),
+        };
+        if !walked {
             return;
         }
         // Where it always was, because the file is a copy of the whole list: it
@@ -181,11 +182,19 @@ pub fn keep_the_index(
         write_it_down(kept_at.as_deref(), &index);
         // And with no watch there is nothing further to hear — the walk above
         // is this session's last word on the home. See `watch_the_home`.
-        let Some(_watcher) = watched else {
+        let Some(watcher) = watched else {
             return;
         };
 
-        match hold_it_current(&heard, &home, &omit, kept_at.as_deref(), &mut index, &tell) {
+        match hold_it_current(
+            &heard,
+            &home,
+            &omit,
+            &watcher,
+            kept_at.as_deref(),
+            &mut index,
+            &tell,
+        ) {
             Held::Lost => {
                 debug!("the kernel dropped filesystem events, so the home is being walked again");
             }
@@ -199,16 +208,15 @@ pub fn keep_the_index(
     }
 }
 
-/// A watch over the home for as long as it is held, and nothing when one
+/// A watcher for the walk to read the home through, and nothing when one
 /// cannot be established.
 ///
 /// **Nothing is the launcher this desktop had before any of this existed**: the
 /// caller still walks the home and still publishes what it found, and what is
 /// lost is the index staying true as the home moves. Loud rather than retried,
-/// because the usual cause is `fs.inotify.max_user_watches` — which the line
-/// names — and a thread spinning will not move it.
+/// because a thread spinning will not move whatever refused it.
 fn watch_the_home(home: &Path, told: Sender<Heard>) -> Option<HomeWatcher> {
-    match watch_home(home, move |event| {
+    match HomeWatcher::new(move |event| {
         // Only refused when the index thread has gone, which is the desktop
         // going away — nothing to report from a watcher's thread.
         let _ = told.send(Heard::Filesystem(event));
@@ -217,12 +225,27 @@ fn watch_the_home(home: &Path, told: Sender<Heard>) -> Option<HomeWatcher> {
         Err(err) => {
             error!(
                 %err, home = %home.display(),
-                "the home directory cannot be watched -- check \
-                 fs.inotify.max_user_watches -- so what a launcher is offered \
-                 is what was there at startup"
+                "the home directory cannot be watched, so what a launcher is \
+                 offered is what was there at startup"
             );
             None
         }
+    }
+}
+
+/// Say which directories were read but not watched, if any were.
+///
+/// What is under them is offered as the walk found it and stays that way until
+/// the next walk, which is a launcher that is a little less good rather than a
+/// broken one — so one line for all of them, naming the usual cause.
+fn report_unwatched(watcher: &HomeWatcher) {
+    if let Some(unwatched) = watcher.unwatched() {
+        error!(
+            err = %unwatched.first, directories = unwatched.count,
+            "directories in the home could not be watched -- check \
+             fs.inotify.max_user_watches -- so what a launcher is offered \
+             from them is what was there when they were read"
+        );
     }
 }
 
@@ -232,9 +255,15 @@ fn watch_the_home(home: &Path, told: Sender<Heard>) -> Option<HomeWatcher> {
 /// the indexing. Everything the walk meets *below* the home — a directory it
 /// may not read, a name that is not text — is the walk's own business and is
 /// not reported here; see [`domicile_host::home_walk`].
-fn walk_the_home(home: &Path, omit: &Omit, index: &mut FileIndex, tell: &impl Fn(Offered)) -> bool {
+fn walk_the_home(
+    home: &Path,
+    omit: &Omit,
+    directory: &impl Directory,
+    index: &mut FileIndex,
+    tell: &impl Fn(Offered),
+) -> bool {
     let omitted = |path: &str| omit.omits(path);
-    let mut walking = match walk(home, &RealDirectory, &omitted) {
+    let mut walking = match walk(home, directory, &omitted) {
         Ok(walking) => walking,
         Err(err) => {
             error!(
@@ -340,6 +369,7 @@ fn hold_it_current(
     heard: &Receiver<Heard>,
     home: &Path,
     omit: &Omit,
+    watcher: &HomeWatcher,
     kept_at: Option<&Path>,
     index: &mut FileIndex,
     tell: &impl Fn(Offered),
@@ -365,7 +395,9 @@ fn hold_it_current(
                     rescan |= event.need_rescan();
                     for change in changes(&event, home, &omitted) {
                         match change {
-                            Change::Appeared(path) => appeared(index, home, &omitted, path),
+                            Change::Appeared(path) => {
+                                appeared(index, home, watcher, &omitted, path)
+                            }
                             Change::Vanished(path) => index.vanished(&path),
                         }
                     }
@@ -379,6 +411,7 @@ fn hold_it_current(
             }
         }
 
+        report_unwatched(watcher);
         announce(index, tell);
         // And the copy the next session starts from, which would otherwise be
         // whatever the home held at this session's startup — a day or a week
@@ -408,13 +441,22 @@ fn hold_it_current(
 /// inside are never sent to anybody. Left alone, the index would hold the
 /// directory and none of its contents until the next boot.
 ///
-/// So anything that appears is walked, under the same rule as the boot walk.
-/// A plain file is a `read_dir` that fails, which is the walk's own answer for
-/// a leaf — see [`domicile_host::home_walk`] — so the ordinary case costs one
-/// failed system call and says nothing.
-fn appeared(index: &mut FileIndex, home: &Path, omitted: &impl Fn(&str) -> bool, path: String) {
-    if let Ok(inside) = walk_within(home, &path, &RealDirectory, omitted) {
-        index.found(inside);
+/// So a directory that appears is walked through the watcher, under the same
+/// rule as the boot walk — which is also what watches it and everything in it.
+/// Not a link to one, which the boot walk would not have followed either, and
+/// not a plain file: one `lstat` answers both, and says nothing.
+fn appeared(
+    index: &mut FileIndex,
+    home: &Path,
+    watcher: &HomeWatcher,
+    omitted: &impl Fn(&str) -> bool,
+    path: String,
+) {
+    let directory = fs::symlink_metadata(home.join(&path)).is_ok_and(|found| found.is_dir());
+    if directory {
+        if let Ok(inside) = walk_within(home, &path, watcher, omitted) {
+            index.found(inside);
+        }
     }
     index.appeared(path);
 }
@@ -441,6 +483,7 @@ pub fn kept_at() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::os::unix::fs::symlink;
     use std::path::Path;
     use std::sync::mpsc::{channel, Receiver, Sender};
     use std::thread;
@@ -467,15 +510,13 @@ mod tests {
     const EVERY_ROW: usize = 100;
 
     #[test]
-    fn the_index_says_it_is_building_before_it_watches_the_home() {
-        // WATCHING A HOME IS WALKING IT. A recursive watch is one inotify watch
-        // per directory, set up by visiting every one, so on a real home it
-        // takes as long as the walk does — and nothing was announced until it
-        // was up. A launcher opened in that time was answered nothing at all:
-        // no rows, and no line saying the index was still being built.
+    fn the_index_says_it_is_building_before_it_walks_the_home() {
+        // A walk of a real home takes seconds, and a launcher opened before
+        // anything was announced was answered nothing at all: no rows, and no
+        // line saying the index was still being built.
         //
-        // So the first announcement goes out before the watch, and so before
-        // the walk has read anything. A path created while it is in hand is one
+        // So the first announcement goes out before the walk has read
+        // anything. A path created while it is in hand is one
         // the walk still reaches, which the walk's own last announcement shows.
         let home = tempfile::tempdir().expect("a home to lay out");
         fs::create_dir(home.path().join("Notes")).expect("the directory");
@@ -562,6 +603,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_directory_that_appears_after_the_walk_is_watched_too() {
+        // NOTHING WATCHES A DIRECTORY BUT A WALK OF IT. One made once the boot
+        // walk has ended is walked when it is heard, and that walk is what
+        // watches it — so a file written into it later is heard as well.
+        let home = tempfile::tempdir().expect("a home to lay out");
+        let (announcements, go_on) = keeping(home.path());
+
+        walked(&announcements, &go_on);
+        fs::create_dir(home.path().join("Late")).expect("the directory");
+        go_on.send(()).expect("the index goes on");
+        until(&announcements, &go_on, "Late");
+        fs::write(home.path().join("Late/plan.org"), "").expect("the file");
+        go_on.send(()).expect("the index goes on");
+
+        until(&announcements, &go_on, "Late/plan.org");
+    }
+
+    #[test]
+    fn a_link_that_appears_after_the_walk_is_offered_but_not_followed() {
+        // As the boot walk offers one: by name, and no further. See
+        // `domicile_host::home_walk`.
+        let home = tempfile::tempdir().expect("a home to lay out");
+        let elsewhere = tempfile::tempdir().expect("a directory outside the home");
+        fs::write(elsewhere.path().join("inside.txt"), "").expect("the file");
+        let (announcements, go_on) = keeping(home.path());
+
+        walked(&announcements, &go_on);
+        symlink(elsewhere.path(), home.path().join("result")).expect("the link");
+        // Heard after the link, so by the time it is offered the link has been
+        // taken in too.
+        fs::write(home.path().join("after.txt"), "").expect("the file");
+        go_on.send(()).expect("the index goes on");
+
+        assert_eq!(
+            until(&announcements, &go_on, "after.txt"),
+            ["after.txt", "result"]
+        );
+    }
+
     /// What each announcement offers and whether it is still indexing, and
     /// what lets the index go on past each one.
     type Keeping = (Receiver<(Vec<String>, bool)>, Sender<()>);
@@ -591,6 +672,21 @@ mod tests {
         announcements
             .recv_timeout(ANNOUNCED_WITHIN)
             .unwrap_or_else(|_| panic!("the index announced nothing within {ANNOUNCED_WITHIN:?}"))
+    }
+
+    /// The first announcement to offer `path`, with the index held there.
+    fn until(
+        announcements: &Receiver<(Vec<String>, bool)>,
+        go_on: &Sender<()>,
+        path: &str,
+    ) -> Vec<String> {
+        loop {
+            let (files, _) = next(announcements);
+            if files.iter().any(|file| file == path) {
+                return files;
+            }
+            let _ = go_on.send(());
+        }
     }
 
     /// What the walk's last announcement offers, with the index held there.

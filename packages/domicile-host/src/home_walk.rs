@@ -35,8 +35,17 @@
 //! thing anybody opens by name — but a desk that wants its dotfiles offered
 //! can say so, and one with a `~/Library` too big to be worth reading can say
 //! that.
+//!
+//! # A link is a name, not a place the walk goes
+//!
+//! Only what a listing says is a directory is walked into, and a listing says
+//! a link is a link. A `result` left by `nix build` points into the store, and
+//! a checkout's `node_modules` can be a farm of links into its own store:
+//! followed, each is a walk of somebody else's tree, or of one that leads back
+//! into itself. The link is still offered, by its name.
 
 use std::collections::VecDeque;
+use std::fs::ReadDir;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -44,21 +53,48 @@ use std::path::{Path, PathBuf};
 pub trait Directory {
     /// What is in `path`.
     ///
-    /// An `Err` is "this is not a directory I can read", which is the ordinary
-    /// answer for a plain file and the one thing the walk treats as a leaf.
-    /// Only the home directory's own failure is reported — see [`walk`].
-    fn read(&self, path: &Path) -> io::Result<Vec<PathBuf>>;
+    /// An `Err` is "this is not a directory I can read", which the walk treats
+    /// as a leaf. Only the home directory's own failure is reported — see
+    /// [`walk`].
+    fn read(&self, path: &Path) -> io::Result<Vec<Entry>>;
+}
+
+/// One entry of a directory, and whether the walk goes into it.
+#[derive(Debug, Clone)]
+pub struct Entry {
+    pub path: PathBuf,
+    /// Whether the listing says this is a directory — not a link to one.
+    ///
+    /// From the listing rather than asked of the path, because asking is a
+    /// system call per file, and a home is mostly files.
+    pub directory: bool,
 }
 
 /// The filesystem this process is running on.
 pub struct RealDirectory;
 
 impl Directory for RealDirectory {
-    fn read(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
-        std::fs::read_dir(path)?
-            .map(|entry| entry.map(|entry| entry.path()))
-            .collect()
+    fn read(&self, path: &Path) -> io::Result<Vec<Entry>> {
+        listed(std::fs::read_dir(path)?)
     }
+}
+
+/// What an opened directory holds.
+///
+/// Apart from the opening so that [`crate::home_watch`] can watch a directory
+/// between the two: once it is open, so a plain file is never watched, and
+/// before it is read, so nothing written into it in between is lost.
+pub(crate) fn listed(listing: ReadDir) -> io::Result<Vec<Entry>> {
+    listing
+        .map(|entry| {
+            let entry = entry?;
+            Ok(Entry {
+                // The listing's own type, which does not follow a link.
+                directory: entry.file_type()?.is_dir(),
+                path: entry.path(),
+            })
+        })
+        .collect()
 }
 
 /// Everything under `home`, named relative to it, shallowest first.
@@ -88,8 +124,8 @@ pub fn walk<'a, D: Directory, O: Fn(&str) -> bool>(
 /// For a directory that turns up after the walk: its contents are rows the
 /// boot walk would have found, so they are named from the home and left out by
 /// the same rule rather than by one relative to where they arrived. `Err` is
-/// `path` not being a directory that reads, which for a plain file is the
-/// ordinary answer.
+/// `path` not being a directory that reads. `path` is read whatever it is, so
+/// whether it is a directory rather than a link to one is the caller's to know.
 pub fn walk_within<'a, D: Directory, O: Fn(&str) -> bool>(
     home: &Path,
     path: &str,
@@ -128,7 +164,7 @@ fn started_at<'a, D: Directory, O: Fn(&str) -> bool>(
 /// has no way to be stopped in the middle of.
 pub struct Walk<'a, D: Directory, O: Fn(&str) -> bool> {
     home: PathBuf,
-    pending: VecDeque<PathBuf>,
+    pending: VecDeque<Entry>,
     directory: &'a D,
     omitted: &'a O,
 }
@@ -138,21 +174,21 @@ impl<D: Directory, O: Fn(&str) -> bool> Iterator for Walk<'_, D, O> {
 
     fn next(&mut self) -> Option<String> {
         loop {
-            let path = self.pending.pop_front()?;
-            // Asked of everything, because a directory listing does not say
-            // which of its entries is itself a directory. A plain file and a
-            // directory that will not open answer the same way and are both
-            // leaves: the path is still offered, and the walk carries on with
-            // the rest of the home rather than stopping on it.
-            if let Ok(children) = self.directory.read(&path) {
-                self.pending
-                    .extend(offerable(children, &self.home, self.omitted));
+            let entry = self.pending.pop_front()?;
+            // A directory that will not open is a leaf: the path is still
+            // offered, and the walk carries on with the rest of the home
+            // rather than stopping on it.
+            if entry.directory {
+                if let Ok(children) = self.directory.read(&entry.path) {
+                    self.pending
+                        .extend(offerable(children, &self.home, self.omitted));
+                }
             }
             // A name the kernel stored as bytes no `str` can hold is a path a
             // launcher cannot print, so it cannot be offered — but everything
             // *under* it still can be, which is why the descent above happens
             // first and the loop takes the next path rather than ending here.
-            if let Some(name) = named_from(&path, &self.home) {
+            if let Some(name) = named_from(&entry.path, &self.home) {
                 return Some(name);
             }
         }
@@ -169,16 +205,12 @@ impl<D: Directory, O: Fn(&str) -> bool> Iterator for Walk<'_, D, O> {
 ///
 /// A name that is not text cannot be asked about, and is kept: it is not
 /// offered either — see [`named_from`] — but what is under it still can be.
-fn offerable(
-    entries: Vec<PathBuf>,
-    home: &Path,
-    omitted: &impl Fn(&str) -> bool,
-) -> VecDeque<PathBuf> {
-    let mut offerable: Vec<PathBuf> = entries
+fn offerable(entries: Vec<Entry>, home: &Path, omitted: &impl Fn(&str) -> bool) -> VecDeque<Entry> {
+    let mut offerable: Vec<Entry> = entries
         .into_iter()
-        .filter(|entry| !named_from(entry, home).is_some_and(|name| omitted(&name)))
+        .filter(|entry| !named_from(&entry.path, home).is_some_and(|name| omitted(&name)))
         .collect();
-    offerable.sort();
+    offerable.sort_by(|one, other| one.path.cmp(&other.path));
     offerable.into()
 }
 
