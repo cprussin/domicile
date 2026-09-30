@@ -18,11 +18,11 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
-use crate::command::{load_shell_line, reply, Reply};
+use crate::command::{load_shell_line, open_url_line, reply, Reply};
 
-/// A shell the engine is not serving, and why it is not.
+/// A command the engine did not carry out, and why it did not.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum LoadError {
+pub enum CommandError {
     #[error(
         "the engine of this desktop is not answering at {path}. That is a \
          desktop whose engine has died — the supervisor is about to replace \
@@ -33,8 +33,8 @@ pub enum LoadError {
 
     #[error(
         "the engine took the command and did not answer. It is running and it \
-         is not serving its command socket at {path}, so which shell it is on \
-         now is not something this can say."
+         is not serving its command socket at {path}, so whether it carried \
+         the command out is not something this can say."
     )]
     NoAnswer { path: String },
 
@@ -46,7 +46,7 @@ pub enum LoadError {
     )]
     Unreadable { path: String, said: String },
 
-    #[error("the engine would not load that shell: {why}")]
+    #[error("the engine refused: {why}")]
     Refused { why: String },
 
     #[error("could not reach the engine at {path}: {kind:?}")]
@@ -65,12 +65,36 @@ pub fn load_shell(
     root: &Path,
     module: &Path,
     patience: Duration,
-) -> Result<(), LoadError> {
-    let said = exchange(socket, &load_shell_line(root, module), patience)?;
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &load_shell_line(root, module),
+        Reply::Loaded,
+        patience,
+    )
+}
+
+/// Tell the engine answering at `socket` to hand `url` to the shell to open.
+pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
+    carry_out(socket, &open_url_line(url), Reply::Opened, patience)
+}
+
+/// Put one command to the engine, and read `done` as its having carried it
+/// out.
+///
+/// A reply to some other command is unreadable here rather than a success:
+/// `loaded` in answer to `open_url` is an engine that heard something else.
+fn carry_out(
+    socket: &Path,
+    line: &str,
+    done: Reply,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    let said = exchange(socket, line, patience)?;
     match reply(said.trim()) {
-        Ok(Reply::Loaded) => Ok(()),
-        Ok(Reply::Refused { why }) => Err(LoadError::Refused { why }),
-        Err(_) => Err(LoadError::Unreadable {
+        Ok(Reply::Refused { why }) => Err(CommandError::Refused { why }),
+        Ok(answered) if answered == done => Ok(()),
+        _ => Err(CommandError::Unreadable {
             path: socket.display().to_string(),
             said: said.trim().to_string(),
         }),
@@ -78,16 +102,16 @@ pub fn load_shell(
 }
 
 /// Write one line to the engine and read the one it writes back.
-fn exchange(socket: &Path, line: &str, patience: Duration) -> Result<String, LoadError> {
+fn exchange(socket: &Path, line: &str, patience: Duration) -> Result<String, CommandError> {
     let mut stream = UnixStream::connect(socket).map_err(|why| match why.kind() {
         // The socket file is absent, or it is one an engine that died left
         // behind: either way there is no engine here.
         std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused => {
-            LoadError::NoEngine {
+            CommandError::NoEngine {
                 path: socket.display().to_string(),
             }
         }
-        kind => LoadError::Failed {
+        kind => CommandError::Failed {
             kind,
             path: socket.display().to_string(),
         },
@@ -110,7 +134,7 @@ fn exchange(socket: &Path, line: &str, patience: Duration) -> Result<String, Loa
         // which `CommandSocket::Close` also does for a peer it gave up on.
         // Read as an unreadable reply it would be a sentence with nothing
         // after the colon.
-        true => Err(LoadError::NoAnswer {
+        true => Err(CommandError::NoAnswer {
             path: socket.display().to_string(),
         }),
         false => Ok(said),
@@ -125,15 +149,15 @@ fn exchange(socket: &Path, line: &str, patience: Duration) -> Result<String, Loa
 /// `ConnectionReset` or `BrokenPipe` depending on whether its close had been
 /// noticed yet. The fifth face is an empty read, and it is in [`exchange`]
 /// because it is not an error at all.
-fn unreachable_engine(socket: &Path, why: &std::io::Error) -> LoadError {
+fn unreachable_engine(socket: &Path, why: &std::io::Error) -> CommandError {
     match why.kind() {
         std::io::ErrorKind::WouldBlock
         | std::io::ErrorKind::TimedOut
         | std::io::ErrorKind::BrokenPipe
-        | std::io::ErrorKind::ConnectionReset => LoadError::NoAnswer {
+        | std::io::ErrorKind::ConnectionReset => CommandError::NoAnswer {
             path: socket.display().to_string(),
         },
-        kind => LoadError::Failed {
+        kind => CommandError::Failed {
             kind,
             path: socket.display().to_string(),
         },

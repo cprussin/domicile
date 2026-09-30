@@ -107,6 +107,7 @@ compare DomicileAppsEvent domicile_apps_event.idl
 compare DomicileIdleEvent domicile_idle_event.idl
 compare DomicileLockedEvent domicile_locked_event.idl
 compare DomicileTrayEvent domicile_tray_event.idl
+compare DomicileOpenUrlEvent domicile_open_url_event.idl
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"

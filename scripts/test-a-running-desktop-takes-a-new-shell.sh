@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# A desktop that is up is told to serve another shell, and does.
+# A desktop that is up is told to serve another shell, and does — and to open
+# an address, which it hands the engine the same way.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -29,7 +30,7 @@ command -v python3 >/dev/null 2>&1 || {
 }
 
 echo "== building domicile =="
-( cd "$ROOT" && cargo build -q -p domicile-launch --bin domicile ) || {
+( cd "$ROOT" && cargo build -q -p domicile-launch --bins ) || {
   echo "FAIL: domicile would not build"; exit 1; }
 DOMICILE="$TARGET/debug/domicile"
 [ -x "$DOMICILE" ] || { echo "FAIL: no binary at $DOMICILE"; exit 1; }
@@ -98,7 +99,9 @@ while True:
     with open("$WORK/engine-heard", "a") as heard:
         heard.write(line.decode())
     answer = open("$WORK/answer").read().strip()
-    reply = ({"type": "loaded"} if answer == "loaded"
+    done = ({"type": "opened"} if b'"type":"open_url"' in line
+            else {"type": "loaded"})
+    reply = (done if answer == "loaded"
              else {"type": "refused", "why": answer})
     connection.sendall((json.dumps(reply) + "\n").encode())
     connection.close()
@@ -111,6 +114,8 @@ while [ $# -gt 0 ]; do
   case "$1" in --session) session="$2"; shift ;; esac
   shift
 done
+# What every app this desktop starts would inherit, for the test to read back.
+printf '%s' "$BROWSER" >"$(dirname "$session")/browser"
 : >"$session"
 exec sleep 60
 COMPOSITOR
@@ -219,6 +224,36 @@ elif grep -q "no shell at" "$MISSING" &&
 else
   echo "FAIL: it failed for some other reason, or it reached the engine:"
   sed 's/^/    /' "$MISSING"
+  FAILED=1
+fi
+
+echo "== the apps a desktop starts are handed domicile-open-url as BROWSER =="
+BROWSER_WAS="$(cat "$(dirname "$GIVEN")/browser" 2>/dev/null)"
+if [ "$BROWSER_WAS" = "$TARGET/debug/domicile-open-url" ]; then
+  echo "PASS: $BROWSER_WAS"
+else
+  echo "FAIL: the compositor was given BROWSER='$BROWSER_WAS', and the program"
+  echo "      beside domicile is $TARGET/debug/domicile-open-url"
+  FAILED=1
+fi
+
+echo "== BROWSER reaches the engine as the line the protocol says it is =="
+# The program BROWSER names, run the way an app runs it: with one word, and a
+# path made a URL against the directory it was run in.
+echo loaded >"$WORK/answer"
+if ! ( cd "$WORK" && env DOMICILE_SOCK="$SOCK" "$TARGET/debug/domicile-open-url" \
+         "first/a page.html" ) >"$WORK/opened.log" 2>&1; then
+  echo "FAIL: domicile-open-url failed:"
+  sed 's/^/    /' "$WORK/opened.log"
+  FAILED=1
+fi
+HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
+WANT="{\"type\":\"open_url\",\"version\":1,\"url\":\"file://$WORK/first/a%20page.html\"}"
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the engine heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
   FAILED=1
 fi
 

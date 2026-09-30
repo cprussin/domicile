@@ -50,6 +50,10 @@ commands = [["emacsclient", "-e", "t"], ["sh", "-c", "mako >/dev/null"]]
 
 On NixOS that is `programs.domicile.settings.startup.commands`.
 
+A link an app opens opens in the desk: every app it starts has `BROWSER` set
+to `domicile-open-url`, which hands the address to the shell as a browser
+window. `domicile open-url <url>` does the same from a terminal inside it.
+
 ## Your session's keys, in a window
 
 A desktop in a window needs the Meta key, and in your session that key is
@@ -233,6 +237,11 @@ baked into `domicile` so it is not typed twice:
   };
 }
 ```
+
+It also makes `domicile-open-url` the default browser — the handler for web
+links in `mimeapps.list` — so `xdg-open` opens links in the desk and programs
+stop asking to be the default. `programs.domicile.defaultBrowser = false`
+leaves `mimeapps.list` alone.
 
 It writes the config and installs no session — booting into a desk is a
 machine's decision, not a home directory's. For the same reason it declares no

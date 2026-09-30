@@ -35,6 +35,7 @@ domicile <shell>                  # the built JavaScript module the shell is
 domicile --config <path> <shell>  # ...with the compositor's own file
 domicile <command>                # ...or a command for the desktop already running
 domicile load-shell <shell>       # ...one of which takes a shell of its own
+domicile open-url <url>           # ...and one an address, which is what BROWSER runs
 ```
 
 `--config` may come on either side of the shell, and leaving it off is an
@@ -70,6 +71,7 @@ The modules, and the split is by what each needs to be tested:
 | `command` | yes | what the engine can be told about the shell it serves: the line, its version, and the reply |
 | `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
 | `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
+| `address` | yes | what `open-url` hands the engine: a URL as given, a path as a `file://` URL against where it was typed |
 
 **`nix/home-manager.nix` is that file's other end**, and the only part of this
 system that writes one rather than reading it: an option per field of the
@@ -242,7 +244,15 @@ answer the first command is a socket that moves when the second one lands.
 ```
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ the supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engine ─▶ the page
+domicile open-url    ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engine ─▶ one page
 ```
+
+**`BROWSER` is `domicile-open-url`**, set on the compositor beside
+`DOMICILE_SOCK` so every app inherits it: a link an app opens is a browser
+window of this desktop. A second `[[bin]]` that execs `domicile open-url`,
+because most of what reads `BROWSER` runs it as one word. The engine hands the
+address to one page (`UrlRegistry`) — every page is the same shell, so telling
+each would open a window per monitor — and the shell opens it.
 
 **A session holds as many desktops as it likes.** Each answers its own socket
 and each tells its own apps where that is, so a command reaches the desktop it

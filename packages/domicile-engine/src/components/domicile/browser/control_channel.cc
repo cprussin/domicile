@@ -71,6 +71,7 @@ ControlChannel::ControlChannel(
 
 ControlChannel::~ControlChannel() {
   ShortcutRegistry::Get().RemoveChannel(channel_);
+  UrlRegistry::Get().RemovePage(url_page_);
 }
 
 void ControlChannel::Connect() {
@@ -156,6 +157,11 @@ void ControlChannel::OnConnectFailed() {
 void ControlChannel::SetClient(
     mojo::PendingRemote<mojom::ControlChannelClient> client) {
   client_.Bind(std::move(client));
+  // Here rather than in the constructor: a page is one an address can be
+  // handed to once there is somebody on its end to tell.
+  url_page_ = UrlRegistry::Get().AddPage(base::BindPostTaskToCurrentDefault(
+      base::BindRepeating(&ControlChannel::DeliverOpenUrl,
+                          weak_factory_.GetWeakPtr())));
 }
 
 void ControlChannel::Spawn(const std::vector<std::string>& command) {
@@ -529,6 +535,10 @@ void ControlChannel::DeliverModifiers(Modifiers modifiers,
 // of that post is when this channel had it, which is the quantity the page
 // subtracts. Taking it at the match instead would price the post into the hop
 // and report a stage that is not the one being measured.
+void ControlChannel::DeliverOpenUrl(const std::string& url) {
+  client_->OpenUrl(url);
+}
+
 void ControlChannel::DeliverShortcutNow(Chord chord) {
   DeliverShortcut(chord, base::TimeTicks::Now());
 }

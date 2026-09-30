@@ -98,6 +98,7 @@ import {
   idle,
   locked,
   modifiers,
+  openUrl,
   popupPlaced,
   shortcut,
   theme,
@@ -317,6 +318,9 @@ export class DomicileClient {
     });
     host.addEventListener("tray", (event) => {
       this.#deliver("tray", tray(event));
+    });
+    host.addEventListener("openurl", (event) => {
+      this.#deliver("open_url", openUrl(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));

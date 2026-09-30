@@ -65,6 +65,12 @@ const client = () => {
       });
     },
     domicile,
+    /** `domicile open-url`, told to this page and no other. */
+    opens: (url: string) => {
+      act(() => {
+        handlers.get("open_url")?.({ url } as never);
+      });
+    },
     spawned,
   };
 };
@@ -300,6 +306,20 @@ describe("the desktop the pages of a desk share", () => {
     desk.say(Message.Desk(NO_WINDOWS));
 
     expect(result.current.windows).toHaveLength(1);
+  });
+});
+
+describe("an address somebody asked the desk to open", () => {
+  it("is a browser window, opened by the page that leads", () => {
+    // TOLD TO ONE PAGE, unlike the compositor's events, and not necessarily
+    // the one that leads: so it is a command, handed over like any other.
+    const { desk, host } = desktop([LEFT, covering(RIGHT)]);
+
+    host.opens("https://example.com/");
+
+    expect(desk.said).toContainEqual(
+      Message.Acted(WindowAction.BrowserOpened("https://example.com/")),
+    );
   });
 });
 

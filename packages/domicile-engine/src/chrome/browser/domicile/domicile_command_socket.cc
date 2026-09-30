@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
+#include "components/domicile/browser/url_registry.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -34,6 +35,7 @@
 #include "net/socket/stream_socket.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "url/gurl.h"
 
 namespace domicile {
 namespace {
@@ -116,9 +118,15 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
 // thread's too. So whatever carries a command in is what posts -- and this
 // posts the line rather than the parse, which costs a JSON read of one short
 // line on the UI thread and buys one function that is the whole protocol.
+// Hand an address to the shell, which opens it -- or does not; that is the
+// shell's. One page of the desk is told: see UrlRegistry.
+bool OpenUrlInTheShell(const GURL& url) {
+  return UrlRegistry::Get().Open(url.spec());
+}
+
 std::string AnswerOnUIThread(const std::string& line) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return AnswerCommand(line, &LoadShellIntoTheShellWindow);
+  return AnswerCommand(line, &LoadShellIntoTheShellWindow, &OpenUrlInTheShell);
 }
 
 // The socket the supervisor dials, on the browser's IO thread.

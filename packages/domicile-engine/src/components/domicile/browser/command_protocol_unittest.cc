@@ -12,6 +12,7 @@
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace domicile {
 namespace {
@@ -27,11 +28,14 @@ struct Told {
   bool asked = false;
   base::FilePath root;
   std::string module;
+  // What an `open_url` handed on, and whether one did.
+  bool opened = false;
+  std::string url;
 };
 
 // Answer one line against a recording engine. `has_window` false is an engine
-// with no shell window to load a shell into, which is the one way applying a
-// well-formed command can still fail.
+// with no shell window to load a shell into, and no shell page to open an
+// address in -- the one way applying a well-formed command can still fail.
 std::string Answer(std::string_view line,
                    Told* told,
                    bool has_window = true) {
@@ -42,7 +46,12 @@ std::string Answer(std::string_view line,
     told->module = module;
     return has_window;
   };
-  return AnswerCommand(line, load_shell);
+  auto open_url = [told, has_window](const GURL& url) {
+    told->opened = true;
+    told->url = url.spec();
+    return has_window;
+  };
+  return AnswerCommand(line, load_shell, open_url);
 }
 
 // The reply's `type`, so a test asserts on the answer rather than on its
@@ -192,6 +201,40 @@ TEST(CommandProtocolTest, IgnoresFieldsItDoesNotKnow) {
       &told);
   EXPECT_EQ(TypeOf(reply), "loaded");
   EXPECT_EQ(told.module, "shell.js");
+}
+
+TEST(CommandProtocolTest, HandsTheShellTheAddressARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/a?b=c"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_TRUE(told.opened);
+  EXPECT_EQ(told.url, "https://example.com/a?b=c");
+  EXPECT_FALSE(told.asked);
+}
+
+TEST(CommandProtocolTest, RefusesAnAddressThatIsNotAUrl) {
+  // Refused here rather than handed on, because a shell handed one opens a
+  // window with nothing in it, and the person who ran the command is told it
+  // worked.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"not a url"})", &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("not a url"));
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"open_url","version":1})", &told)),
+            "refused");
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, RefusesWhenThereIsNoShellPageToOpenIn) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"open_url","version":1,"url":"https://example.com/"})",
+             &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("shell page"));
 }
 
 }  // namespace

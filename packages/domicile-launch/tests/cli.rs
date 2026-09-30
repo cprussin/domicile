@@ -120,6 +120,36 @@ fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
 }
 
 #[test]
+fn open_url_is_the_verb_that_takes_an_address() {
+    // What `BROWSER` runs, with the one word it is handed. Carried as typed,
+    // like `load-shell`'s: a relative path is a question about the directory
+    // it was typed in, and this module has none.
+    assert_eq!(
+        run(&["open-url", "https://example.com/a?b=c"]).unwrap(),
+        Invocation::Open {
+            target: "https://example.com/a?b=c".to_string()
+        }
+    );
+}
+
+#[test]
+fn open_url_with_nothing_to_open_is_refused() {
+    assert_eq!(run(&["open-url"]), Err(CliError::NothingToOpen));
+}
+
+#[test]
+fn open_url_takes_one_address_and_the_extra_word_is_named() {
+    // One address, one window. A program that hands `BROWSER` two is one
+    // that expects two windows, and opening the first quietly is not that.
+    assert_eq!(
+        run(&["open-url", "https://a.example", "https://b.example"]),
+        Err(CliError::ExtraToOpen {
+            extra: "https://b.example".to_string()
+        })
+    );
+}
+
+#[test]
 fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
     // THE VERBS WIN, and they are a closed set for exactly this reason: which
     // reading a bare word gets cannot depend on what happens to be on disk
