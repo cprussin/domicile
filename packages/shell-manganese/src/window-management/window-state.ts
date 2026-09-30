@@ -49,6 +49,7 @@ import {
   modeToggled,
   opened,
   parentFocused,
+  pointedOn,
   reached,
   shown,
   splitFlipped,
@@ -689,7 +690,8 @@ export const WindowAction = {
 
   /**
    * The pointer moved into a window, which is what makes it the window the
-   * user is working in: focus follows the cursor here.
+   * user is working in: focus follows the cursor here. A hidden tab is its
+   * container's open tab — see `pointedOn`.
    *
    * Not the same as reaching for one, which is what a click is — see
    * {@link WindowAction.WindowSelected}.
@@ -1234,17 +1236,26 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
     workspace === undefined ? undefined : screenShowing(state, workspace.name);
   if (workspace === undefined || screen === undefined) {
     return state;
-  } else if (focusedOn(workspace) === id && state.focused === screen) {
-    // The same object for a pointer that never left: a window says this again
-    // for every part of it that is an element of its own — a browser window's
-    // address bar, its page — and none of those is the user reaching anywhere.
-    return state;
   } else {
-    return onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
-      reached(found, id),
-    );
+    return pointAtShown(state, workspace, screen, pointedOn(workspace, id));
   }
 };
+
+// The pointer arriving in `id`, which is showing on `screen`.
+const pointAtShown = (
+  state: WindowState,
+  workspace: Workspace,
+  screen: string,
+  id: string,
+): WindowState =>
+  // The same object for a pointer that never left: a window says this again
+  // for every part of it that is an element of its own — a browser window's
+  // address bar, its page — and none of those is the user reaching anywhere.
+  focusedOn(workspace) === id && state.focused === screen
+    ? state
+    : onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
+        reached(found, id),
+      );
 
 // The screen under the pointer is the screen the keyboard is on. The same
 // object for a screen that already has it, because this is said on every move

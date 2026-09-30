@@ -693,6 +693,7 @@ describe("the pointer", () => {
   it("makes the window under it the one being worked in", () => {
     const state = reduce(
       desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
       WindowAction.WindowHovered(APP("kitty")),
     );
 
@@ -714,6 +715,51 @@ describe("the pointer", () => {
     expect(
       workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
     ).toEqual([APP("kitty"), APP("editor")]);
+  });
+
+  // A HIDDEN TAB IS NOT A WINDOW THE POINTER CAN BE IN. Crossing a tab row on
+  // the way into a container is arriving at the container, so the keyboard
+  // goes to the tab it shows; changing which one it shows is a click's job.
+  it("goes to the open tab of a container whose hidden tab it crosses", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.FocusStepped(Direction.Left),
+      WindowAction.FocusStepped(Direction.Left),
+      WindowAction.WindowHovered(APP("mail")),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
+  it("goes to the open tab of a floating group whose hidden tab it crosses", () => {
+    const state = reduce(
+      desktop("mail", "kitty"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.ParentFocused(),
+      WindowAction.FloatToggled(),
+      WindowAction.ModeSwapped(),
+      WindowAction.WindowHovered(APP("kitty")),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
+  it("goes to a fullscreen window a tab opened since would hide", () => {
+    // A window filling the screen is on screen whatever the tree says.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.FullscreenToggled(false),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.WindowHovered(APP("kitty")),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("kitty"));
   });
 
   it("reports a window on another workspace as nothing at all", () => {

@@ -9,9 +9,9 @@
 // two places would have to be kept in step; this way there is one.
 
 import type { Container, LayoutNode } from "./node";
-import { NodeKind, windowsIn } from "./node";
+import { NodeKind, showsOneChild, windowsIn } from "./node";
 import type { Path } from "./path";
-import { nodeAt, pathTo } from "./path";
+import { ancestorsOf, nodeAt, pathTo } from "./path";
 
 export type Tiling = {
   /** How many children of the chain below the commands are pointed at. */
@@ -40,6 +40,26 @@ export const focusedWindowIn = (node: LayoutNode): string => {
     case NodeKind.Window: {
       return node.id;
     }
+  }
+};
+
+/**
+ * The window showing where `id` is drawn: `id` itself, or the open tab of the
+ * outermost tabbed or stacking container hiding it — a hidden window has only
+ * its tab on screen, which is the container's rather than its own.
+ *
+ * Throws for a window not in `root`: the caller found it there.
+ */
+export const shownOver = (root: LayoutNode, id: string): string => {
+  const path = pathTo(root, id);
+  if (path === undefined) {
+    throw new Error(`layout tree: no window ${id} to show`);
+  } else {
+    const hiding = ancestorsOf(root, path).findLast(
+      ({ container, index }) =>
+        showsOneChild(container.layout) && index !== container.focused,
+    );
+    return hiding === undefined ? id : focusedWindowIn(hiding.container);
   }
 };
 

@@ -7,6 +7,7 @@ import {
   focusedNodeOf,
   focusedParent,
   NOTHING_TILED,
+  shownOver,
   windowsOf,
   withFocusOn,
 } from "./tiling";
@@ -49,6 +50,25 @@ describe("focusedIdOf", () => {
 
   it("has nothing to answer with on an empty workspace", () => {
     expect(focusedIdOf(NOTHING_TILED)).toBeUndefined();
+  });
+});
+
+describe("shownOver", () => {
+  it("answers with the tab the outermost container hiding the window shows", () => {
+    // `c` is behind `b`, and both are behind `a`: only `a` is on screen.
+    const root = LayoutNode.Container(
+      Layout.Tabbed,
+      [
+        LayoutNode.Window("a"),
+        LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Window("b"),
+          LayoutNode.Window("c"),
+        ]),
+      ],
+      0,
+    );
+
+    expect(shownOver(root, "c")).toBe("a");
   });
 });
 

@@ -1346,6 +1346,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       pointerAt(1440, 800);
 
       crossInto(barFor(container, "app:one"), 300, TOP_BAR + 10);
@@ -1362,6 +1363,7 @@ describe("Shell", () => {
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
       clientAppears("one");
+      press("e");
       pointerAt(1440, 800);
       const view = container.querySelector<HTMLElement>("webview");
       if (view === null) {
@@ -1658,6 +1660,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       press("v");
       clientAppears("three");
       pointerAt(1440, 800);
@@ -2334,6 +2337,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       domicile.calls.length = 0;
 
       act(() => {
