@@ -308,10 +308,14 @@ export const Stage = ({
                 frame={placement.frame}
                 fullscreen={window.id === fullscreenId}
                 motion={barMotion(motion)}
+                onAim={setAim}
                 onClose={() => {
                   onClose(window.id);
                 }}
                 onDrop={onDrop}
+                onDropOn={(target, edge) => {
+                  onDropOn(window.id, target, edge);
+                }}
                 onFullscreen={() => {
                   onFullscreen(window.id);
                 }}
@@ -325,6 +329,7 @@ export const Stage = ({
                 rect={placement.bar}
                 restack={restack}
                 tabbed={placement.tabbed}
+                targets={targets}
                 title={window.title}
                 window={window.id}
               />
@@ -492,6 +497,9 @@ export const Stage = ({
           }}
           onFullscreen={() => {
             onFullscreen(tab.id);
+          }}
+          onMiddleClick={() => {
+            onClose(tab.id);
           }}
           onMotionEnded={() => {
             motions.onPlayedOut(tab.id, motion);
