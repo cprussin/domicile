@@ -317,6 +317,7 @@ export enum WindowActionKind {
   ClipboardToggled,
   ContainerSplit,
   DeskAdopted,
+  DeskLocked,
   FileOpened,
   FloatToggled,
   FocusChanged,
@@ -470,6 +471,14 @@ export const WindowAction = {
     desk,
     kind: WindowActionKind.DeskAdopted as const,
   }),
+
+  /**
+   * The user asked for the desk to be locked, which the compositor does.
+   *
+   * Nothing in the state moves: the lock screen goes up when the host says the
+   * desk is locked, like any other `locked` message.
+   */
+  DeskLocked: () => ({ kind: WindowActionKind.DeskLocked as const }),
 
   /**
    * The user picked a file in the launcher, which the compositor opens with
@@ -931,6 +940,10 @@ const reduceAction = (
     }
     case WindowActionKind.SplitToggled: {
       return onCurrent(state, splitFlipped);
+    }
+    case WindowActionKind.DeskLocked: {
+      // The compositor locks it and the host says so.
+      return state;
     }
     case WindowActionKind.TerminalLaunched: {
       // The compositor spawns it and the host announces the window it opens.

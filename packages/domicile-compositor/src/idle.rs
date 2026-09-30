@@ -322,7 +322,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::ClipboardCopied { .. }
         | ClientRequest::CopyClipboardEntry { .. }
         // And a tray click is `CloseApp`'s case exactly.
-        | ClientRequest::ActivateTrayItem { .. } => false,
+        | ClientRequest::ActivateTrayItem { .. }
+        // And so is a lock asked for: the chord that asked landed on the
+        // shell, and a lock that lit the screens is still a lock.
+        | ClientRequest::Lock => false,
         // A HAND, AND THE ONE ARM HERE THAT IS NOT A KEY OR A POINTER. Somebody
         // is typing at the lock screen, which is a person at this desk by
         // definition — and the keystrokes that typed it did *not* arrive as
@@ -961,6 +964,7 @@ mod tests {
                     action: TrayAction::Primary,
                 },
             ),
+            ("the shell locking the desk", ClientRequest::Lock),
         ] {
             assert!(
                 !somebody_is_here(&request),
