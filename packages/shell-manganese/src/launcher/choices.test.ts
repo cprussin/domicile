@@ -12,10 +12,15 @@ const EDITOR = {
   icon: undefined,
   id: "org.gnome.gedit.desktop",
   name: "Text Editor",
+  preview: undefined,
 };
 
 /** A bookmark the desk offers, as the host would have answered. */
-const MAIL = { name: "Mail", url: "https://mail.example.com" };
+const MAIL = {
+  label: undefined,
+  name: "Mail",
+  url: "https://mail.example.com",
+};
 
 /** What a home might have in it, as the host would have answered. */
 const FOUND = ["Notes/", "Notes/today.org", "notes.org"];

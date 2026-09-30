@@ -228,10 +228,15 @@ const Query = ({
   );
   const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
-  // Keyed rather than the choice itself, because a choice is a new object on
-  // every render and would never be seen to settle.
-  const chosenKey = chosen === undefined ? undefined : keyOf(chosen);
-  const settledKey = useSettled(chosenKey, PREVIEW_SETTLE_MS);
+  // What the pane shows: the highlighted row once the highlight has stood on
+  // it, and until then the one it showed before — a preview, then the next,
+  // with nothing in between. Keyed, because a choice is a new object on every
+  // render and would never be seen to settle.
+  const shown = useSettled(
+    chosen,
+    chosen === undefined ? undefined : keyOf(chosen),
+    PREVIEW_SETTLE_MS,
+  );
   const box = useRef<HTMLInputElement>(null);
   const pane = useRef<HTMLElement>(null);
 
@@ -363,11 +368,7 @@ const Query = ({
           {found.indexing && <StillIndexing />}
         </div>
         <section aria-label="Preview" className={previewStyles} ref={pane}>
-          <PreviewOf
-            choice={chosen}
-            preview={preview}
-            settled={chosenKey === settledKey}
-          />
+          <PreviewOf choice={shown} preview={preview} />
         </section>
       </div>
     </div>
@@ -450,9 +451,17 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
     case ChoiceKind.Bookmark: {
       return (
         <>
-          <RowTile icon={BookmarkSimpleIcon} />
+          {/* Keyed on the URL, so a site that had no icon does not leave the
+              next one drawn as a glyph. */}
+          <SiteTile key={choice.url} url={choice.url} />
           <span className={rowNameStyles}>
             <Marked marks={marked(choice.name, query)} />
+            {choice.label !== undefined && (
+              <>
+                {" "}
+                <span className={rowVerbStyles}>for</span> {choice.label}
+              </>
+            )}
           </span>
         </>
       );
@@ -560,93 +569,65 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
   );
 
 /**
+ * A site's tile: the icon it serves at `/favicon.ico`, where every browser has
+ * looked for one since there were any, or a bookmark's glyph for a site that
+ * has none there — or that the engine could not reach.
+ */
+const SiteTile = ({ url }: { url: string }) => {
+  const [failed, setFailed] = useState(false);
+  return failed ? (
+    <RowTile icon={BookmarkSimpleIcon} />
+  ) : (
+    <span className={rowTileStyles} data-row-tile="">
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the icon failing to load, not something a person does to it */}
+      <img
+        alt=""
+        className={rowPictureStyles}
+        onError={() => {
+          setFailed(true);
+        }}
+        src={new URL("/favicon.ico", url).href}
+      />
+    </span>
+  );
+};
+
+/**
  * What the pane shows, which is never nothing: a blank pane reads as a broken
- * one. With no row highlighted it says how to choose one, and while the typing
- * has not settled it names the row it is about to preview.
+ * one. With no row highlighted it says how to choose one.
  */
 const PreviewOf = ({
   choice,
   preview,
-  settled,
 }: {
   choice: Choice | undefined;
   preview: Preview;
-  settled: boolean;
-}) => {
-  if (choice === undefined) {
-    return (
-      <Placeholder
-        icon={MagnifyingGlassIcon}
-        note="Type to find an app, a file, a site or a search"
-        title="Nothing selected"
-      />
-    );
-  } else {
-    return settled ? (
-      <ChoicePreview choice={choice} preview={preview} />
-    ) : (
-      <Pending choice={choice} />
-    );
-  }
-};
-
-/** The row a preview is on its way for, named and drawn as its kind. */
-const Pending = ({ choice }: { choice: Choice }) => {
-  switch (choice.kind) {
-    case ChoiceKind.App: {
-      return <AppPreview entry={choice.entry} />;
-    }
-    case ChoiceKind.Bookmark: {
-      return (
-        <Placeholder
-          icon={BookmarkSimpleIcon}
-          note={choice.url}
-          title={choice.name}
-        />
-      );
-    }
-    case ChoiceKind.File: {
-      return <NamedFile row={choice.row} />;
-    }
-    case ChoiceKind.Site: {
-      return <Placeholder icon={GlobeSimpleIcon} title={choice.url} />;
-    }
-    case ChoiceKind.Search: {
-      return (
-        <Placeholder
-          icon={MagnifyingGlassIcon}
-          note="Search"
-          title={choice.query}
-        />
-      );
-    }
-    case ChoiceKind.TaggedSearch: {
-      return (
-        <Placeholder
-          icon={logoOf(choice.engine)}
-          note={`Search ${nameOf(choice.engine)}`}
-          title={choice.query}
-        />
-      );
-    }
-    case ChoiceKind.TaggedSite: {
-      return (
-        <Placeholder
-          icon={logoOf(choice.engine)}
-          note={nameOf(choice.engine)}
-          title={choice.path}
-        />
-      );
-    }
-  }
-};
+}) =>
+  choice === undefined ? (
+    <Placeholder
+      icon={MagnifyingGlassIcon}
+      note="Type to find an app, a file, a site or a search"
+      title="Nothing selected"
+    />
+  ) : (
+    <ChoicePreview choice={choice} preview={preview} />
+  );
 
 /**
- * An application: its name, what its entry says it is for, and the command
- * Enter runs — which is the one thing a launcher's row cannot show and the
- * thing that tells two entries of the same name apart.
+ * An application: the picture of itself its entry names, or else its name,
+ * what its entry says it is for, and the command Enter runs — which is the one
+ * thing a launcher's row cannot show and the thing that tells two entries of
+ * the same name apart.
  */
-const AppPreview = ({ entry }: { entry: DesktopEntry }) => (
+const AppPreview = ({ entry }: { entry: DesktopEntry }) =>
+  entry.preview === undefined ? (
+    <AppCard entry={entry} />
+  ) : (
+    <img alt={entry.name} className={mediaStyles} src={entry.preview} />
+  );
+
+/** An application with no picture of itself, described. */
+const AppCard = ({ entry }: { entry: DesktopEntry }) => (
   <Placeholder
     icon={AppWindowIcon}
     note={
@@ -1061,7 +1042,11 @@ const resultsStyles = css({
   // A ground a shade off the panel's, so the room the fixed height keeps
   // reads as a box waiting to be filled rather than as panel nobody used.
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  blockSize: 120,
+  // A fraction of the screen rather than a spacing token, because what it is
+  // measured against is the screen: most of it, less the room the box, the
+  // footer and the offset from the top take, so the panel stops short of the
+  // bottom edge on any monitor.
+  blockSize: "60vh",
   borderRadius: "md",
   overflowY: "auto",
   padding: 1,
@@ -1086,7 +1071,7 @@ const resultsStyles = css({
 // hairline bar as the rows.
 const previewStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  blockSize: 120,
+  blockSize: "60vh",
   borderRadius: "md",
   color: "foreground",
   overflowY: "auto",

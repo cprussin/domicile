@@ -305,35 +305,48 @@ describe("what applications matched", () => {
     name: "Firefox",
   };
 
-  it("arrives as the query it answers, the entries each with its icon, and the bookmarks", () => {
-    const bookmark = { name: "Fire Drill", url: "https://example.com/drill" };
+  it("arrives as the query it answers, the entries each with its pictures, and the bookmarks", () => {
+    const pictured = {
+      ...firefox,
+      icon: "data:image/png;base64,cm93",
+      preview: "data:image/svg+xml;base64,PHN2Zz4=",
+    };
+    const bookmark = {
+      label: "Work",
+      name: "Fire Drill",
+      url: "https://example.com/drill",
+    };
     expect(
       foundApps(
         Object.assign(new Event("apps"), {
-          apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
+          apps: [pictured],
           arrival: 0,
           bookmarks: [bookmark],
           query: "fire",
         }) as DomicileAppsEvent,
       ),
     ).toStrictEqual({
-      apps: [{ ...firefox, icon: "data:image/png;base64,cm93" }],
+      apps: [pictured],
       bookmarks: [bookmark],
       query: "fire",
     });
   });
 
-  it("has no icon for an entry the engine carries an empty one for", () => {
-    const [found] = foundApps(
+  it("has no icon, preview or label for one the engine carries an empty one for", () => {
+    const found = foundApps(
       Object.assign(new Event("apps"), {
-        apps: [{ ...firefox, icon: "" }],
+        apps: [{ ...firefox, icon: "", preview: "" }],
         arrival: 0,
-        bookmarks: [],
+        bookmarks: [
+          { label: "", name: "Fire Drill", url: "https://example.com/drill" },
+        ],
         query: "fire",
       }) as DomicileAppsEvent,
-    ).apps;
+    );
 
-    expect(found?.icon).toBeUndefined();
+    expect(found.apps[0]?.icon).toBeUndefined();
+    expect(found.apps[0]?.preview).toBeUndefined();
+    expect(found.bookmarks[0]?.label).toBeUndefined();
   });
 });
 

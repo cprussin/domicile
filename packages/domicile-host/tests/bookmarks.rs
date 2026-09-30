@@ -2,13 +2,14 @@
 
 use std::collections::BTreeMap;
 
-use domicile_host::bookmarks::{find, Offered};
+use domicile_host::bookmarks::{find, Offered, Shortcode};
 use domicile_protocol::Bookmark;
 
 fn bookmark(name: &str, url: &str) -> Offered {
     Offered {
         name: name.into(),
         url: url.into(),
+        label: None,
         shortcodes: BTreeMap::new(),
     }
 }
@@ -17,9 +18,13 @@ fn offered() -> Vec<Offered> {
     vec![
         bookmark("Mail", "https://mail.google.com"),
         Offered {
+            label: Some("Home".into()),
             shortcodes: BTreeMap::from([(
                 "!work".into(),
-                "https://calendar.google.com?authuser=work".into(),
+                Shortcode {
+                    url: "https://calendar.google.com?authuser=work".into(),
+                    label: Some("Work".into()),
+                },
             )]),
             ..bookmark("Calendar", "https://calendar.google.com")
         },
@@ -58,23 +63,25 @@ fn no_more_than_the_limit_is_offered() {
 }
 
 #[test]
-fn a_bookmark_without_a_shortcode_offers_its_url() {
+fn a_bookmark_without_a_shortcode_offers_its_url_and_label() {
     assert_eq!(
         find(&offered(), "cal", 10),
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.google.com".into(),
+            label: Some("Home".into()),
         }]
     );
 }
 
 #[test]
-fn a_shortcode_in_the_query_offers_its_url_and_is_not_matched_as_a_word() {
+fn a_shortcode_in_the_query_offers_its_url_and_label_and_is_not_matched_as_a_word() {
     assert_eq!(
         find(&offered(), "cal !WORK", 10),
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.google.com?authuser=work".into(),
+            label: Some("Work".into()),
         }]
     );
 }

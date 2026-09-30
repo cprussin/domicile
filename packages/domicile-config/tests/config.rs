@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode,
+    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, Shortcode, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -428,19 +428,37 @@ url = "https://calendar.google.com"
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.google.com".into(),
+            label: None,
             shortcodes: BTreeMap::new(),
         }]
     );
 }
 
 #[test]
-fn a_bookmark_names_the_url_each_of_its_shortcodes_opens() {
+fn a_bookmark_can_say_what_its_url_is_for() {
     let bookmarks = Config::parse(
         r#"
 [[applications.bookmarks]]
 name = "Calendar"
 url = "https://calendar.google.com"
-shortcodes = { "!work" = "https://calendar.google.com?authuser=work" }
+label = "Home"
+"#,
+    )
+    .unwrap()
+    .applications
+    .bookmarks;
+    assert_eq!(bookmarks[0].label.as_deref(), Some("Home"));
+}
+
+#[test]
+fn a_bookmark_names_the_url_each_of_its_shortcodes_opens_and_what_it_is_for() {
+    let bookmarks = Config::parse(
+        r#"
+[[applications.bookmarks]]
+name = "Calendar"
+url = "https://calendar.google.com"
+shortcodes."!work" = { url = "https://calendar.google.com?authuser=work", label = "Work" }
+shortcodes."!old" = { url = "https://calendar.google.com?authuser=old" }
 "#,
     )
     .unwrap()
@@ -448,11 +466,39 @@ shortcodes = { "!work" = "https://calendar.google.com?authuser=work" }
     .bookmarks;
     assert_eq!(
         bookmarks[0].shortcodes,
-        BTreeMap::from([(
-            "!work".into(),
-            "https://calendar.google.com?authuser=work".into()
-        )])
+        BTreeMap::from([
+            (
+                "!old".into(),
+                Shortcode {
+                    url: "https://calendar.google.com?authuser=old".into(),
+                    label: None,
+                }
+            ),
+            (
+                "!work".into(),
+                Shortcode {
+                    url: "https://calendar.google.com?authuser=work".into(),
+                    label: Some("Work".into()),
+                }
+            ),
+        ])
     );
+}
+
+#[test]
+fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
+    // A launcher draws the site's icon from the URL, and opens it as a page:
+    // `calendar.google.com` with no scheme is neither.
+    for url in [
+        "url = \"calendar.google.com\"",
+        "url = \"https://a.example\"\nshortcodes.\"!w\" = { url = \"b.example\" }",
+    ] {
+        let err = Config::parse(&format!(
+            "[[applications.bookmarks]]\nname = \"Calendar\"\n{url}\n"
+        ))
+        .unwrap_err();
+        assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+    }
 }
 
 #[test]

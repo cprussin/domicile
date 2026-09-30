@@ -27,4 +27,8 @@
   // compositor did not find. A URL rather than a path: the page may draw what
   // the compositor read and has no way to read it for itself.
   readonly attribute DOMString icon;
+
+  // The picture the entry names for a launcher's preview, `X-Domicile-Preview`,
+  // as `icon` is: a `data:` URL, or empty.
+  readonly attribute DOMString preview;
 };

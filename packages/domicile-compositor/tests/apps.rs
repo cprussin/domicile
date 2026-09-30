@@ -408,7 +408,7 @@ fn a_client_that_limits_its_size_has_the_chrome_told() {
 
 /// A launcher's search for applications reads the desktop entries under the
 /// home's data directory, and answers with the command each one runs and the
-/// icon it names.
+/// icon and preview it names.
 #[test]
 fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
     let home = tempfile::tempdir().expect("a home to lay out");
@@ -416,12 +416,16 @@ fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
     std::fs::create_dir_all(&applications).expect("the directory");
     std::fs::write(
         applications.join("editor.desktop"),
-        "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\nIcon=editor\n",
+        format!(
+            "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\nIcon=editor\nX-Domicile-Preview={}\n",
+            home.path().join("editor-preview.svg").display()
+        ),
     )
     .expect("the entry");
     let icons = home.path().join(".local/share/icons/hicolor/48x48/apps");
     std::fs::create_dir_all(&icons).expect("the icon directory");
     std::fs::write(icons.join("editor.png"), b"png").expect("the icon");
+    std::fs::write(home.path().join("editor-preview.svg"), b"svg").expect("the preview");
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
     let mut chrome = compositor.chrome();
@@ -446,6 +450,7 @@ fn a_search_for_applications_finds_a_desktop_entry_in_the_home() {
             comment: String::new(),
             command: vec!["editor".into()],
             icon: Some("data:image/png;base64,cG5n".into()),
+            preview: Some("data:image/svg+xml;base64,c3Zn".into()),
         }]
     );
 }
@@ -486,7 +491,7 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
 }
 
 /// A search offers the desk's bookmarks beside its applications, a shortcode
-/// in it picking the URL its bookmark names.
+/// in it picking the URL and label its bookmark names.
 #[test]
 fn a_search_for_applications_offers_the_bookmarks_it_matches() {
     let config = format!(
@@ -498,7 +503,8 @@ url = \"https://mail.example.com\"
 [[applications.bookmarks]]
 name = \"Calendar\"
 url = \"https://calendar.example.com\"
-shortcodes = {{ \"!work\" = \"https://calendar.example.com?user=work\" }}
+label = \"Home\"
+shortcodes = {{ \"!work\" = {{ url = \"https://calendar.example.com?user=work\", label = \"Work\" }} }}
 "
     );
 
@@ -521,6 +527,7 @@ shortcodes = {{ \"!work\" = \"https://calendar.example.com?user=work\" }}
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.example.com?user=work".into(),
+            label: Some("Work".into()),
         }]
     );
 }

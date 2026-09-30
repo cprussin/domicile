@@ -830,6 +830,10 @@ pub struct DesktopEntry {
     /// the file, or nothing when the entry names none the compositor found.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// `X-Domicile-Preview`, a picture of the application for a launcher's
+    /// preview, found and sent as `icon` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
 }
 
 /// A URL the desk offers by name, as a launcher is told about it.
@@ -839,6 +843,10 @@ pub struct Bookmark {
     pub name: String,
     /// What choosing it opens.
     pub url: String,
+    /// Which of the bookmark's URLs `url` is, when the desk said, for a
+    /// launcher's row to say beside the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// One thing that was copied, as the shell is told about it.
