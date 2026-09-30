@@ -290,7 +290,7 @@ case "$action" in
 
   compiles)
     # WHETHER THE TREE `pick` WOULD TAKE NOW NEEDS A COMPILE, asked before the
-    # engine job takes a runner: engine.yml queues a run that compiles on
+    # build job takes a runner: engine.yml queues a run that compiles on
     # GitHub for the compile slot, where waiting holds no runner. Writes
     # `compile=false` only for a free tree whose stamp names this series and
     # whose out/Release was built from it -- the two answers the job's own

@@ -4,9 +4,11 @@
 #   curl ... /actions/runs/<id>/jobs | .github/scripts/crux-cancelable-step.sh
 #                                       0 yes, 1 no, else could not read it
 #
-# A run with no job started -- queued on GitHub for the compile slot or for a
-# runner -- holds nothing, so it may be stopped. Otherwise only engine.yml's
-# long, repeatable steps. A canceled build resumes
+# A run with no job running may be stopped: queued on GitHub for the compile
+# slot or for a runner, or between engine.yml's build and its checks. That last
+# one holds its tree, and engine.yml's drop-tree job gives it back on a
+# canceled run; nothing it cannot repeat has happened yet. Otherwise only
+# engine.yml's long, repeatable steps. A canceled build resumes
 # incrementally: lld and clang write through a temp file and rename, so nothing
 # is left half-written, and the series stamp and out/Release stay. What comes
 # after them -- publishing a release, writing engine-release.nix back onto the
@@ -18,7 +20,7 @@ set -euo pipefail
 
 jobs="$(cat)"
 if [ "$(printf '%s' "$jobs" | jq '[.jobs[] | select(.status == "in_progress")] | length')" = 0 ]; then
-  echo "in no job, so it holds nothing and may be stopped"
+  echo "in no job, so it may be stopped: a tree it holds between jobs goes back in drop-tree"
   exit 0
 fi
 step="$(printf '%s' "$jobs" | jq -r '[.jobs[] | select(.status == "in_progress") | .steps[]

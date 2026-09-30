@@ -8,7 +8,7 @@
 # (36194734502: 200 minutes queued for a 6-minute run).
 #
 # So a `plan` job asks the pool whether the tree this run would get is already
-# built from its series, and the engine job's concurrency group is the compile
+# built from its series, and the build job's concurrency group is the compile
 # queue only when it is not. A pending job holds no runner, and `queue: max`
 # keeps every pending run rather than evicting all but one.
 set -u
@@ -62,10 +62,10 @@ has "that asks the pool whether this run compiles" 'engine-tree-pool\.sh compile
 has "and hands the answer on" 'compile: \$\{\{ steps\.[a-z]+\.outputs\.compile \}\}' "$plan"
 lacks "without taking a tree" 'engine-tree-pool\.sh pick|engine-tree-lock\.sh take' "$plan"
 
-echo "the engine job"
-engine="$(job engine)"
-has "needs the plan" 'needs: \[gate, plan\]' "$engine"
-queue="$(concurrency_of "$engine")"
+echo "the build job"
+build="$(job build)"
+has "needs the plan" 'needs: \[gate, plan\]' "$build"
+queue="$(concurrency_of "$build")"
 # The compile queue unless the plan positively said no compile: a plan that
 # failed or was skipped answers nothing, and queueing is the safe side.
 has "queues on the compile queue unless the plan said it compiles nothing" \
@@ -78,7 +78,7 @@ lacks "and never canceling a run in progress" 'cancel-in-progress: true' "$queue
 # The slot stays, as the backstop for a guess that went stale and for
 # engine-release.yml, which compiles in the same trees.
 has "and still takes the compile slot before compiling" \
-  'engine-compile-slot\.sh take "\$LOCK_OWNER"' "$engine"
+  'engine-compile-slot\.sh take "\$LOCK_OWNER"' "$build"
 
 # THE CRUX WORKFLOWS' OWN GROUPS STAY PER REF (test-engine-concurrency.sh), so
 # no other workflow may queue on this one's name by accident.
