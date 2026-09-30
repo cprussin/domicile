@@ -1074,9 +1074,13 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 
 - **`preventDefault()` takes it.** One nobody takes is canceled when the
   dispatch returns, so an upload is refused rather than left waiting.
-- **Paths are relative to the home**, as `searchFiles` names them, so a picker
-  built on it hands back what it showed. Absolute, empty or `..` is a
-  `TypeError`.
+- **Paths are absolute or relative to the home.** Relative is how
+  `searchFiles` names them, so a picker built on it hands back what it showed;
+  `""` is the home. `..` is a `TypeError`.
+- **`event.list(path)` walks the filesystem** while the chooser is unanswered:
+  the names in a directory, a directory's ending in `/`, so a picker reaches
+  what the index never found. It rejects for a path that is not a readable
+  directory.
 - **`mode`** is `open`, `open-multiple`, `open-folder` or `save`; `accept` is
   extensions without the dot (empty is anything); `suggestedName` is a save's.
 - **Every download asks**, in `save` mode. Cancel it and nothing is saved.

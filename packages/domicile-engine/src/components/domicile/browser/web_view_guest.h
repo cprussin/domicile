@@ -191,6 +191,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   void Stop() override;
   void Reload() override;
   void SetZoom(double factor) override;
+  void ListDirectory(const std::string& path,
+                     ListDirectoryCallback callback) override;
 
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
@@ -443,6 +445,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   // message per real change.
   void ReportZoom();
 
+  // `answer`, held open: counted in `open_choosers_` until it runs. Static
+  // over a weak pointer, because the answer must run whether or not the guest
+  // is still here -- see FilesChosen.
+  mojom::WebViewGuestClient::FileChooserRequestedCallback HeldOpen(
+      mojom::WebViewGuestClient::FileChooserRequestedCallback answer);
+  static void ChooserAnswered(
+      base::WeakPtr<WebViewGuest> guest,
+      mojom::WebViewGuestClient::FileChooserRequestedCallback answer,
+      const std::optional<std::vector<std::string>>& paths);
+
   // The second half of CreateAndAttach, once content has produced a frame that
   // is safe to swap. `outer_contents_frame` is null when the frame went away
   // or a beforeunload handler under it said no, and dropping `guest` is then
@@ -464,6 +476,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool self_owned_ = false;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
+  // How many of this guest's file choosers the shell has yet to answer, which
+  // is when ListDirectory answers at all.
+  size_t open_choosers_ = 0;
 
   // The element, for as long as it lives. Bound from the CreateGuest that made
   // this guest, so there is no moment at which the guest has a history and
