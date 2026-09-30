@@ -18,8 +18,11 @@ name: Engine release
 # loses only the steps that were running.
 #
 # It publishes as `engine-official-`, beside what engine.yml publishes rather
-# than over it, and nothing pins it yet: this is how long it takes, measured,
-# before anything depends on it.
+# than over it, and then lands `engine-official.nix` on main through a pull
+# request of its own (engine-official-repin.sh). The flake runs that engine
+# while it is of the series the checked pin names; see engine-pin.nix. That
+# file is excluded from the filter below, or landing it would start the next
+# release of the same series.
 #
 # The engine workflow proves a change; this publishes the result of it. They
 # are separate because they want different builds: that one is a component
@@ -47,6 +50,7 @@ on:
       - packages/domicile-engine/**
       - "!packages/domicile-engine/**/*.md"
       - "!packages/domicile-engine/engine-release.nix"
+      - "!packages/domicile-engine/engine-official.nix"
       - .github/workflows/engine-release.yml
       - .github/scripts/engine-*.sh
   workflow_dispatch:
@@ -55,9 +59,11 @@ concurrency:
   group: engine-release-${{ github.ref }}
   cancel-in-progress: false
 
-# To create the release and upload to it.
+# To create the release and upload to it, and to open and merge the pull
+# request that pins it.
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -279,6 +285,19 @@ jobs:
         run: |
           set -euo pipefail
           .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
+
+      # Only from main: a tag's release is pinned by hand, and a dispatch on a
+      # branch is not what main runs.
+      - name: Point main's flake at this engine
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
+        run: |
+          set -euo pipefail
+          identity="$(.github/scripts/engine-series-stamp.sh identity)"
+          DOMICILE_ENGINE_TAG="engine-official-s${identity:0:12}" \
+            .github/scripts/engine-official-repin.sh
 
       - name: What the guard wrote down
         if: ${{ failure() }}

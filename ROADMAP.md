@@ -526,16 +526,21 @@ costs nothing.
   leaks and never reclaims its own build (#612): 82G had leaked, which is the
   room earlier runs found by deleting builds and the compiler cache.
 
-  **The shipped engine is not optimized, and making it so is next.** It is a
-  non-official build with DCHECKs on, EXPENSIVE_DCHECKs included, because it is
-  the same `out/Release` every pull request's checks run against. The plan is
-  two builds: pull requests keep that one, and an official build (PGO, ThinLTO,
-  no DCHECKs) runs after merge, always of the newest `main`, and publishes what
+  **The shipped engine is optimized.** It was a non-official build with
+  DCHECKs on, EXPENSIVE_DCHECKs included, because it was the same
+  `out/Release` every pull request's checks run against. Now there are two
+  builds: pull requests keep that one, and an official build (PGO, ThinLTO,
+  no DCHECKs) runs after merge, always of the newest `main`, and is what
   users get. It is hours long, so it must never hold the slot against a pull
   request: a waiter now leaves a note beside the slot, and a holder can ask
   whether anybody is `wanted` and `yield` to them, resuming its build after.
-  `engine-release.yml` is that build now, publishing as `engine-official-`;
-  what is left is its measured cost and then pinning users to it.
+  `engine-release.yml` is that build, publishing as `engine-official-` and
+  landing `engine-official.nix` on main after each one; the flake runs it
+  whenever it is of main's series (`engine-pin.nix`). Measured: cold 8h15m,
+  warm ~20m. The landing pull request is opened with the workflow's own token,
+  so no other workflow runs on it; the url and hash are right by construction
+  (`nix store prefetch-file`), and `nix-build.yml` resolves them on the next
+  push to main.
 - **Hot-swapping the chrome page is a page reload**, survivable only because
   `announce_open_apps` re-states the desktop to a page that has just loaded.
   `domicile load-shell` is what asks for one, so a shell that keeps state in

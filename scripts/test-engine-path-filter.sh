@@ -219,6 +219,12 @@ EOF
 does_not_trigger "a repin does not build the engine" \
   packages/domicile-engine/engine-release.nix "${patterns[@]}"
 
+# The production engine's pin, which the release workflow commits to main
+# after every official build. It names a tarball exactly as the checked pin
+# does, and nothing here can read it either.
+does_not_trigger "the official engine's repin does not build the engine" \
+  packages/domicile-engine/engine-official.nix "${patterns[@]}"
+
 real packages/domicile-engine/upstream/setoverridechildpaintflags.md &&
   does_not_trigger "prose under the package does not build the engine" \
     packages/domicile-engine/upstream/setoverridechildpaintflags.md "${patterns[@]}"
@@ -308,6 +314,30 @@ triggers "the exclusion is one generated file and not every .nix" \
 # still pass every exclusion assertion above.
 triggers "the exclusions did not swallow the package" \
   packages/domicile-engine/scripts/build.sh "${patterns[@]}"
+
+# --- the production build does not start itself ---------------------------
+
+echo "engine-release.yml"
+
+# THE RELEASE WORKFLOW WRITES A FILE TO MAIN, and a push to main that matches
+# its own filter is another release. So the file it writes is excluded, or
+# every official build lands a pin that starts the next official build of the
+# same series: hours of `crux` on a loop, forever.
+RELEASE_FLOW="$WORKFLOWS/engine-release.yml"
+release_patterns=()
+while IFS= read -r pattern; do
+  [ -n "$pattern" ] && release_patterns+=("$pattern")
+done <<EOF
+$(paths_for "$RELEASE_FLOW" push)
+EOF
+if [ "${#release_patterns[@]}" -gt 0 ]; then
+  does_not_trigger "landing the official pin does not start another release" \
+    packages/domicile-engine/engine-official.nix "${release_patterns[@]}"
+  triggers "and a patch still does" "$patch" "${release_patterns[@]}"
+else
+  fail "the release workflow's push filter was read at all" \
+    "on.push.paths in engine-release.yml is empty or unparsed"
+fi
 
 # --- what makes excluding the pin safe --------------------------------------
 

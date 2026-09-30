@@ -84,6 +84,15 @@ work on NixOS, where a generic-linux Chromium cannot start at all.
 `/scripts/update-engine-release.sh` moves that file to the newest release, so
 **which engine a given revision runs is a commit you can read.**
 
+**Two engines are pinned, and the fast one wins when it can.**
+`engine-release.nix` is the checked build a pull request proves (DCHECKs on,
+no PGO). `engine-official.nix` is the production build `engine-release.yml`
+makes after the merge (PGO, ThinLTO, no DCHECKs) and lands on main through a
+pull request of its own (`.github/scripts/engine-official-repin.sh`).
+`engine-pin.nix` takes the official one only when it is of the checked one's
+series; for the hours between a fork-moving merge and its official build, main
+runs the checked engine rather than one missing the new patches.
+
 `DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
 `out/Domicile`, say. It names the directory holding `chrome`.
 
@@ -345,7 +354,7 @@ are, and both of these have already happened rather than been imagined:
 - **CI resets that tree.** `engine.yml` and `engine-release.yml` reset
   `/build/chromium/src` to the pin and lay the series over it. `engine.yml`
   fires on any push or pull request touching `packages/domicile-engine/**`
-  *except* Markdown under it and `engine-release.nix` — prose cannot change
+  *except* Markdown under it and the two pins — prose cannot change
   what the build produces and the job never reads the repin, and the exclusions
   are asserted by `/scripts/test-engine-path-filter.sh`. `engine-release.yml`
   fires on an `engine-v*` tag or a dispatch. So most pushes to the fork take
