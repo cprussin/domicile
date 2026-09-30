@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_locked_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_open_url_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_event.h"
@@ -705,6 +706,11 @@ void DomicileHost::FocusRequested(const String& app_id,
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Focusrequested(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
+}
+
+void DomicileHost::OpenUrl(const String& url) {
+  DispatchEvent(*MakeGarbageCollected<DomicileOpenUrlEvent>(
+      domicile_event_names::Openurl(), url));
 }
 
 void DomicileHost::AppTitled(const String& app_id, const String& title,

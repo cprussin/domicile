@@ -36,6 +36,11 @@ pub enum Request {
     /// person typed a path in a terminal of their own, and neither this
     /// desktop nor the engine it talks to shares that working directory.
     LoadShell { root: PathBuf, module: PathBuf },
+    /// Open this address in a browser window of this desktop.
+    ///
+    /// A URL already: a path was made one in front of whoever typed it — see
+    /// [`crate::address`].
+    OpenUrl { url: String },
 }
 
 /// What it answered.
@@ -51,6 +56,12 @@ pub enum Response {
     /// answer rather than a `Loaded` of its own, because a second variant
     /// saying the same thing is a second thing for a client to get right.
     Shell { module: PathBuf },
+
+    /// The engine handed the address to the shell.
+    ///
+    /// Handed, not opened: which window it goes in, and whether, is the
+    /// shell's to decide, and nothing comes back to say what it decided.
+    Opened,
 
     /// The request was not one this desktop knows, or was one it could not
     /// carry out.
@@ -89,6 +100,13 @@ pub fn parse_response(line: &str) -> Result<Response, serde_json::Error> {
 /// that does not.
 pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 
+/// Handing an address to the shell to open, or saying why it was not.
+///
+/// [`crate::command_socket::open_url`] in a desktop and a closure in a test,
+/// for [`LoadShell`]'s reason: the windows are the page's, and the page is the
+/// engine's.
+pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
 /// Answer one line from the socket, given the shell this desktop is running
 /// and what it takes to make it serve another.
 ///
@@ -100,7 +118,7 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 /// line of this function is still a string in and a string out. Getting bytes
 /// onto the engine's socket is [`crate::command_socket`]'s, the way getting
 /// them off this one is [`crate::control_socket`]'s.
-pub fn answer(line: &str, module: &Path, load: LoadShell) -> String {
+pub fn answer(line: &str, module: &Path, load: LoadShell, open: OpenUrl) -> String {
     match parse_request(line.trim()) {
         Ok(Request::WhichShell) => to_line(&Response::Shell {
             module: module.to_path_buf(),
@@ -113,6 +131,10 @@ pub fn answer(line: &str, module: &Path, load: LoadShell) -> String {
             Ok(()) => Response::Shell {
                 module: root.join(module),
             },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::OpenUrl { url }) => to_line(&match open(&url) {
+            Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),
         Err(why) => to_line(&Response::Refused {

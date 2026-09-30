@@ -125,6 +125,7 @@ const EVENT_NAMES = [
   "locked",
   "extensions",
   "tray",
+  "openurl",
 ];
 const missing = EVENT_NAMES.flatMap((name) => {
   const heard = { handler: false, listener: false };

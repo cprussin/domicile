@@ -352,4 +352,9 @@
   // The system tray, as a DomicileTrayEvent: every application showing an
   // icon, whenever any of it changes and once more when this page connects.
   attribute EventHandler ontray;
+
+  // An address to open, as a DomicileOpenUrlEvent: `domicile open-url`, which
+  // is what `BROWSER` runs for every app this desktop starts. Told to one page
+  // of the desk, not every one.
+  attribute EventHandler onopenurl;
 };

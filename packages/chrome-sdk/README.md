@@ -22,7 +22,9 @@ It provides these:
   a DOM event dispatched with no listener is gone, and a React shell registers
   tens of milliseconds after the compositor has announced every window already
   running. For the same reason a page must never call `addEventListener` on
-  `window.domicile` itself.
+  `window.domicile` itself. One message is not the compositor's: `open_url` is
+  an address `domicile open-url` asked the desktop to open — what `BROWSER`
+  runs inside it — told to one page of the desk. Opening it is the shell's.
 - **`registerElements`** (`./register-elements`) — the input routing behind the
   engine's `<app>` tag. It forwards the pointer over a window to the client
   underneath in that client's own surface coordinates, and routes the page's

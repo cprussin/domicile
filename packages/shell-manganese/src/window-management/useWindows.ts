@@ -328,6 +328,16 @@ export const useWindows = (
     [desk],
   );
 
+  // An address `domicile open-url` asked the desk to open. The engine tells
+  // one page rather than every one, and not necessarily the page that leads,
+  // so it is a command handed over like a press rather than an event reduced
+  // where it lands.
+  useEffect(() => {
+    domicile.on("open_url", ({ url }) => {
+      act(Action.BrowserOpened(url));
+    });
+  }, [act, domicile]);
+
   return useMemo(
     () => ({
       ...state,

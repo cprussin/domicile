@@ -171,13 +171,15 @@ source_set("shell_source") {
   ]
 }
 
-# What a running engine can be told about the shell it serves.
+# What a running engine can be told about the shell it serves, and the
+# addresses it is asked to hand that shell.
 #
 # Its own target beside :shell_source rather than part of it, because a line of
 # JSON and the state it names are two different things -- and because this is
 # the half of the command socket that can be tested with a string. What cannot
 # is in //chrome/browser/domicile, which is where the socket and the shell's
-# window are. //base and the switch names; no //content and no socket.
+# window are. //base, the switch names and //url to parse an address; no
+# //content and no socket.
 source_set("command_protocol") {
   sources = [
     "browser/command_protocol.cc",
@@ -187,7 +189,22 @@ source_set("command_protocol") {
   public_deps = [
     ":common",
     "//base",
+    "//url",
   ]
+}
+
+# The shell pages an address can be handed to, and which one gets it.
+#
+# Its own target for :shortcut_registry's reasons: :control_channel registers
+# into it and //chrome/browser/domicile's command socket asks it, and it is the
+# part of opening an address that can be tested without a browser.
+source_set("url_registry") {
+  sources = [
+    "browser/url_registry.cc",
+    "browser/url_registry.h",
+  ]
+
+  public_deps = [ "//base" ]
 }
 
 # The chords the shell claimed for the desktop, and who to tell when one fires.
@@ -409,6 +426,7 @@ source_set("control_channel") {
     ":line_framer",
     ":shortcut_registry",
     ":theme",
+    ":url_registry",
     "//base",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
@@ -435,6 +453,7 @@ source_set("unit_tests") {
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
+    "browser/url_registry_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
     "common/theme_unittest.cc",
@@ -472,6 +491,7 @@ source_set("unit_tests") {
     ":shell_windows",
     ":shortcut_registry",
     ":theme",
+    ":url_registry",
     "//components/domicile/mojom",
     "//components/domicile/engine:event_queue_unit_tests",
     "//components/domicile/engine:surface_alpha_unit_tests",

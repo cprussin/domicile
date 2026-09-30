@@ -235,6 +235,9 @@ class MODULES_EXPORT DomicileHost final
                            base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
+  // The one without an `arrival`: it comes from the engine's command socket,
+  // not off the compositor's.
+  void OpenUrl(const String& url) override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 

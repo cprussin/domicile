@@ -340,6 +340,7 @@
       #
       #   bin/domicile
       #   bin/domicile-compositor
+      #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #
       # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
@@ -364,6 +365,23 @@
         mkdir -p "$out/bin" "$out/libexec/domicile"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
+        # What `BROWSER` names inside a desktop, found beside `domicile` for the
+        # reason the compositor is; copied for the same reason too.
+        cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
+        # The same program as the handler for web links, so `xdg-open` and
+        # anything asking which browser is the default open a browser window of
+        # the desktop it was run in. Hidden: it is not something to launch.
+        # `programs.domicile.defaultBrowser` is what makes it the default.
+        mkdir -p "$out/share/applications"
+        cat >"$out/share/applications/domicile-open-url.desktop" <<DESKTOP
+        [Desktop Entry]
+        Type=Application
+        Name=Domicile
+        Comment=Open a link in a browser window of this desktop
+        Exec=$out/bin/domicile-open-url %u
+        MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+        NoDisplay=true
+        DESKTOP
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         # How `xdg-desktop-portal` learns that this desktop answers `Settings`
         # itself, which is how a theme reaches the desk's GTK, Qt and Electron
@@ -499,7 +517,7 @@
         # keeps it out of what this package installs.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
-          "-p" "domicile-launch" "--bin" "domicile"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url"
         ];
 
         # Not because they would fail — none needs a GPU, and CI runs them on
@@ -739,9 +757,9 @@
       # is -- and it needs an evaluator.
       #
       # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
-      # module sets exactly two things outside its own namespace, `home.packages`
-      # and `xdg.configFile`, so declaring those two is the whole of what it
-      # takes to evaluate it. Taking home-manager as a flake input to check one
+      # module sets only a few things outside its own namespace --
+      # `home.packages`, `xdg.configFile` and `xdg.mimeApps` -- so declaring
+      # those is the whole of what it takes to evaluate it. Taking home-manager as a flake input to check one
       # module would put its whole closure behind every `nix flake check`, and
       # a stub that has drifted fails loudly here rather than silently passing.
       checks.${system}.home-manager-module =
@@ -756,6 +774,14 @@
                 type = lib.types.attrsOf (lib.types.submodule {
                   options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
                 });
+                default = { };
+              };
+              xdg.mimeApps.enable = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+              };
+              xdg.mimeApps.defaultApplications = lib.mkOption {
+                type = lib.types.attrsOf (lib.types.listOf lib.types.str);
                 default = { };
               };
             };
@@ -903,6 +929,23 @@
           # And a config flag is not a shell -- the path after it is skipped,
           # so the configured shell still goes on the end.
           saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
+
+          # And the verb that takes an address, for the same reason.
+          saw "open-url https://example.com" open-url https://example.com
+
+          # THE DEFAULT BROWSER, which is what keeps other programs from asking
+          # to be it: every web link is `domicile-open-url`'s.
+          [ '${builtins.toJSON evaluated.config.xdg.mimeApps}' = \
+            '${builtins.toJSON {
+              enable = true;
+              defaultApplications = pkgs.lib.genAttrs
+                [ "text/html" "x-scheme-handler/http" "x-scheme-handler/https" ]
+                (_: [ "domicile-open-url.desktop" ]);
+            }}' ] || {
+            echo "the module did not make domicile-open-url the default browser:" >&2
+            echo '${builtins.toJSON evaluated.config.xdg.mimeApps}' >&2
+            exit 1
+          }
 
           touch "$out"
         '';
