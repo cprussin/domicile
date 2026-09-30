@@ -927,11 +927,12 @@ void ControlChannel::DispatchLine(const std::string& line,
       }
       // An entry with no id or name is one nothing could draw, and one with
       // no command is one nothing could run: dropped, like a clipboard row
-      // with no preview. A missing comment or icon is an empty one.
+      // with no preview. A missing comment, icon or preview is an empty one.
       const std::string* id = entry->FindString("id");
       const std::string* name = entry->FindString("name");
       const std::string* comment = entry->FindString("comment");
       const std::string* icon = entry->FindString("icon");
+      const std::string* preview = entry->FindString("preview");
       const base::ListValue* listed = entry->FindList("command");
       if (!id || !name || !listed) {
         continue;
@@ -948,10 +949,11 @@ void ControlChannel::DispatchLine(const std::string& line,
       }
       apps.push_back(mojom::DesktopEntry::New(
           *id, *name, comment ? *comment : std::string(), std::move(command),
-          icon ? *icon : std::string()));
+          icon ? *icon : std::string(), preview ? *preview : std::string()));
     }
     // A bookmark with no name or URL is one nothing could draw or open, and
-    // is dropped. An answer with no list at all is an answer with none.
+    // is dropped; a missing label is an empty one. An answer with no list at
+    // all is an answer with none.
     std::vector<mojom::BookmarkPtr> bookmarks;
     if (const base::ListValue* marked = message.FindList("bookmarks")) {
       for (const base::Value& row : *marked) {
@@ -961,10 +963,12 @@ void ControlChannel::DispatchLine(const std::string& line,
         }
         const std::string* name = bookmark->FindString("name");
         const std::string* url = bookmark->FindString("url");
+        const std::string* label = bookmark->FindString("label");
         if (!name || !url) {
           continue;
         }
-        bookmarks.push_back(mojom::Bookmark::New(*name, *url));
+        bookmarks.push_back(mojom::Bookmark::New(
+            *name, *url, label ? *label : std::string()));
       }
     }
     // Sent even when it is empty, for the reason `found_files` is.

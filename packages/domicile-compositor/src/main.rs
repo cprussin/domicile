@@ -169,7 +169,9 @@ use domicile_config::{
 };
 use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
-use domicile_host::bookmarks::{find as find_bookmarks, Offered as OfferedBookmark};
+use domicile_host::bookmarks::{
+    find as find_bookmarks, Offered as OfferedBookmark, Shortcode as OfferedShortcode,
+};
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
@@ -1011,7 +1013,20 @@ fn offered_bookmarks(bookmarks: &[domicile_config::Bookmark], query: &str) -> Ve
         .map(|bookmark| OfferedBookmark {
             name: bookmark.name.clone(),
             url: bookmark.url.clone(),
-            shortcodes: bookmark.shortcodes.clone(),
+            label: bookmark.label.clone(),
+            shortcodes: bookmark
+                .shortcodes
+                .iter()
+                .map(|(code, picked)| {
+                    (
+                        code.clone(),
+                        OfferedShortcode {
+                            url: picked.url.clone(),
+                            label: picked.label.clone(),
+                        },
+                    )
+                })
+                .collect(),
         })
         .collect();
     find_bookmarks(&bookmarks, query, FOUND_APPS)
@@ -1663,6 +1678,7 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                 .into_iter()
                 .map(|found| DesktopEntry {
                     icon: found.icon_name().and_then(|name| icons.icon(name)),
+                    preview: found.preview_name().and_then(|name| icons.icon(name)),
                     ..found.entry.clone()
                 })
                 .collect();

@@ -1,4 +1,5 @@
-//! The picture a launcher draws beside an application, as a `data:` URL.
+//! The picture a launcher draws beside an application, as a `data:` URL — and
+//! the one its `X-Domicile-Preview` names for the preview, found the same way.
 //!
 //! A desktop entry names its icon, and the icon theme spec says where a name
 //! is: `icons/<theme>/<size>/apps/<name>.<ext>` under each data directory, then

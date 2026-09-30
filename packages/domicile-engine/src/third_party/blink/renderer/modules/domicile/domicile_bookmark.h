@@ -18,15 +18,18 @@ class MODULES_EXPORT DomicileBookmark final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DomicileBookmark(const String& name, const String& url);
+  DomicileBookmark(const String& name, const String& url, const String& label);
   ~DomicileBookmark() override;
 
   const String& name() const { return name_; }
   const String& url() const { return url_; }
+  const String& label() const { return label_; }
 
  private:
   String name_;
   String url_;
+  // Empty when the desk did not say which of the bookmark's URLs this is.
+  String label_;
 };
 
 }  // namespace blink

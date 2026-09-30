@@ -264,6 +264,11 @@ export type FoundAppsMessage = {
 export type Bookmark = {
   name: string;
   url: string;
+  /**
+   * Which of the bookmark's URLs `url` is, or `undefined` when the desk did
+   * not say.
+   */
+  label: string | undefined;
 };
 
 /** An application a desktop entry offers, as a launcher draws and runs it. */
@@ -276,6 +281,8 @@ export type DesktopEntry = {
   command: readonly string[];
   /** A `data:` URL to draw, or `undefined` for an icon that was not found. */
   icon: string | undefined;
+  /** A picture of the application for a preview, the same way as `icon`. */
+  preview: string | undefined;
 };
 
 /**
@@ -558,7 +565,8 @@ export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
 });
 
 /**
- * What applications matched, with the engine's empty icon read as none.
+ * What applications matched, with the engine's empty icon, preview and label
+ * read as none.
  */
 export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
   apps: event.apps.map((entry) => ({
@@ -567,8 +575,10 @@ export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
     icon: named(entry.icon),
     id: entry.id,
     name: entry.name,
+    preview: named(entry.preview),
   })),
   bookmarks: event.bookmarks.map((bookmark) => ({
+    label: named(bookmark.label),
     name: bookmark.name,
     url: bookmark.url,
   })),

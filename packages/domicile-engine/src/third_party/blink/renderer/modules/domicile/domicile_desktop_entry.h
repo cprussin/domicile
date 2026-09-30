@@ -24,7 +24,8 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
                        const String& name,
                        const String& comment,
                        Vector<String> command,
-                       const String& icon);
+                       const String& icon,
+                       const String& preview);
   ~DomicileDesktopEntry() override;
 
   const String& id() const { return id_; }
@@ -32,6 +33,7 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   const String& comment() const { return comment_; }
   const FrozenArray<IDLString>& command() const { return *command_; }
   const String& icon() const { return icon_; }
+  const String& preview() const { return preview_; }
 
   void Trace(Visitor*) const override;
 
@@ -45,6 +47,8 @@ class MODULES_EXPORT DomicileDesktopEntry final : public ScriptWrappable {
   Member<FrozenArray<IDLString>> command_;
   // A `data:` URL, or empty for an entry whose icon was not found.
   String icon_;
+  // The same, for the picture the entry names for a launcher's preview.
+  String preview_;
 };
 
 }  // namespace blink

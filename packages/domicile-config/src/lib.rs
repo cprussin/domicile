@@ -22,7 +22,7 @@ mod files;
 mod profile;
 mod startup;
 
-pub use applications::{ApplicationsConfig, Bookmark};
+pub use applications::{ApplicationsConfig, Bookmark, Shortcode};
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
