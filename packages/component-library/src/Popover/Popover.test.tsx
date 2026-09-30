@@ -36,6 +36,20 @@ describe(Popover, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    it("says when it is drawn flush, so the stylesheet can drop its padding", () => {
+      render(
+        <Popover flush open>
+          Body
+        </Popover>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
+    });
+
+    it("is padded unless it is drawn flush", () => {
+      render(<Popover open>Body</Popover>);
+      expect(screen.getByRole("dialog")).not.toHaveAttribute("data-flush");
+    });
+
     it("renders the trigger and stays closed until it is pressed", () => {
       render(
         <Popover title="Connection" trigger={<Button>Details</Button>}>

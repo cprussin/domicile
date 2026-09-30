@@ -19,6 +19,11 @@ type Props = ExtendProps<
   {
     align?: Alignment | undefined;
     children: ReactNode;
+    /**
+     * Drop the panel's padding and width cap, for a body that is a surface of
+     * its own — a view of another page — which the padding would only frame.
+     */
+    flush?: boolean | undefined;
     side?: Side | undefined;
     title?: ReactNode | undefined;
     trigger?: ReactElement | undefined;
@@ -42,6 +47,7 @@ type Props = ExtendProps<
 const PopoverComponent = ({
   align = "center",
   children,
+  flush = false,
   side = "bottom",
   title,
   trigger,
@@ -56,7 +62,10 @@ const PopoverComponent = ({
         side={side}
         sideOffset={8}
       >
-        <BasePopover.Popup className={popupStyles}>
+        <BasePopover.Popup
+          className={popupStyles}
+          data-flush={flush ? "" : undefined}
+        >
           {title !== undefined && (
             <BasePopover.Title className={titleStyles}>
               {title}
@@ -90,6 +99,13 @@ const popupStyles = flex({
     transform: "scale(0.96)",
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
+  },
+  // Clipped, so the body's own corners follow the panel's.
+  "&[data-flush]": {
+    maxInlineSize: "90vw",
+    overflow: "hidden",
+    paddingBlock: 0,
+    paddingInline: 0,
   },
   // `&[data-starting-style]` rather than Panda's `_starting`: base-ui sets and
   // clears the attribute itself, and the browser's `@starting-style` does not
