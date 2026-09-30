@@ -77,6 +77,7 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Unlock {
         passphrase: Passphrase::from("open sesame"),
     });
+    chrome_round_trip(&ChromeMessage::Lock);
 }
 
 /// The launcher's ask carries a query and no path, and that is the security
@@ -512,6 +513,14 @@ fn an_unlock_carries_the_passphrase_and_nothing_else() {
         v,
         serde_json::json!({"type": "unlock", "passphrase": "open sesame"})
     );
+}
+
+/// A lock is the tag and nothing else: there is only one desk to lock, and
+/// nothing a page says can choose how.
+#[test]
+fn a_lock_is_the_tag_and_nothing_else() {
+    let v = serde_json::to_value(ChromeMessage::Lock).unwrap();
+    assert_eq!(v, serde_json::json!({"type": "lock"}));
 }
 
 /// A passphrase is not in what a log line would print.
