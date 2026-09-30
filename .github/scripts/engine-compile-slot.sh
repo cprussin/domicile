@@ -46,6 +46,13 @@
 # in the last DOMICILE_COMPILE_SLOT_FRESH seconds counts: a waiter that was
 # killed cannot write that it stopped waiting, and a holder that yields to it
 # would yield for ever.
+#
+# BY RANK, SO TWO HOLDERS THAT STEP ASIDE CANNOT HAND IT BACK AND FORTH.
+# DOMICILE_COMPILE_SLOT_RANK, a number, goes on a waiter's note, and `wanted`
+# and `yield` count only notes that outrank it. Unset is the highest: a compile
+# that never steps aside. engine-release.yml builds at 0 and engine.yml's cold
+# builds at 1, so the production build steps aside for both and a cold pull
+# request only for a warm one.
 set -u
 
 usage() {
@@ -98,12 +105,18 @@ holder() {
 # The note a waiter leaves, named by a hash because an owner is a sentence.
 note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
 
-# Every fresh note that is not <owner>'s, one owner per line.
+# Every fresh note that is not <owner>'s and outranks this holder, one owner
+# per line. A note's second line is its waiter's rank; no rank outranks every
+# rank, and a holder with none counts every note.
 waiters() {
   [ -d "$WAITING" ] || return 0
   find "$WAITING" -type f -newermt "-${DOMICILE_COMPILE_SLOT_FRESH:-60} seconds" |
     while IFS= read -r waiter; do
-      [ "$waiter" = "$(note "$1")" ] || cat "$waiter"
+      [ "$waiter" != "$(note "$1")" ] || continue
+      rank="$(sed -n 2p "$waiter")"
+      [ -z "${DOMICILE_COMPILE_SLOT_RANK:-}" ] || [ -z "$rank" ] ||
+        [ "$rank" -gt "$DOMICILE_COMPILE_SLOT_RANK" ] || continue
+      sed -n 1p "$waiter"
     done
 }
 
@@ -147,7 +160,7 @@ case "$action" in
         continue
       fi
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
-      echo "$owner" >"$waiting"
+      printf '%s\n' "$owner" ${DOMICILE_COMPILE_SLOT_RANK:+"$DOMICILE_COMPILE_SLOT_RANK"} >"$waiting"
       # Once per holder, not once: a wait can outlast a cold repin, and hours
       # of one line cannot say whether the slot has changed hands since.
       now_held="$(holder)"

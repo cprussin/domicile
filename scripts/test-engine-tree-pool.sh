@@ -391,6 +391,58 @@ built "$root" 0
 expect "a warm tree carrying another series compiles" \
   true "$(compiles "$root" aaaaaaa)"
 
+echo
+echo "== whether that compile is cold =="
+
+# A cold compile holds the slot for an hour and more, a warm one a minute or
+# two. engine.yml queues them apart so the warm ones stop waiting behind the
+# cold, and asks this which is which. What a series changes in the tree comes
+# from engine-series-diff.sh, stubbed here: its own test covers it.
+cat >"$WORK/series-diff" <<'EOF'
+#!/usr/bin/env bash
+printf '%s' "$STUB_CHANGED"
+exit "${STUB_STATUS:-0}"
+EOF
+chmod +x "$WORK/series-diff"
+cold() { # root pin changed [status]
+  : >"$WORK/output"
+  DOMICILE_BUILD_ROOT="$1" GITHUB_OUTPUT="$WORK/output" \
+    DOMICILE_SERIES_DIFF="$WORK/series-diff" STUB_CHANGED="$3" STUB_STATUS="${4:-0}" \
+    "$POOL_SH" compiles "$2" >/dev/null 2>&1
+  sed -n 's/^cold=//p' "$WORK/output"
+}
+
+root="$(build_root 1)"
+carrying "$root" 0 aaaaaaa
+stamped "$root" 0 some-other-series
+built "$root" 0
+expect "a built tree at the pin whose series changes only sources is warm" \
+  false "$(cold "$root" aaaaaaa 'content/a.cc
+content/b.cc
+')"
+expect "one that changes a header is cold" \
+  true "$(cold "$root" aaaaaaa 'content/a.cc
+content/public/a.h
+')"
+expect "and so is one that changes a mojom, which generates headers" \
+  true "$(cold "$root" aaaaaaa 'content/a.mojom
+')"
+expect "a tree whose changes cannot be read is cold" \
+  true "$(cold "$root" aaaaaaa 'content/a.cc' 1)"
+
+rm -f "$root/trees/tree-0/.domicile-built"
+expect "a tree at the pin whose out/Release is not built from what it carries is cold" \
+  true "$(cold "$root" aaaaaaa 'content/a.cc')"
+
+built "$root" 0
+carrying "$root" 0 bbbbbbb
+expect "a tree at another pin is cold" true "$(cold "$root" aaaaaaa 'content/a.cc')"
+
+carrying "$root" 0 aaaaaaa
+stamped "$root" 0 "$SERIES_ID"
+built "$root" 0
+expect "a run that compiles nothing is not cold" false "$(cold "$root" aaaaaaa '')"
+
 # A run from a workflow older than per-tree locks holds the single lock and
 # repoints /build/chromium into whichever tree it likes, so nothing is free.
 root="$(build_root 2)"

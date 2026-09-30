@@ -71,6 +71,12 @@ jobs:
       # can act on. See engine.yml.
       LOCK_OWNER: engine-release.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
 
+      # The lowest rank at the compile slot, so this build steps aside for
+      # every compile, engine.yml's cold one (rank 1) included, and none of
+      # them hands the slot back to it while they want it. See
+      # engine-compile-slot.sh.
+      DOMICILE_COMPILE_SLOT_RANK: 0
+
       # `git am` refuses to write a commit without an identity, and this unit
       # has no ~/.gitconfig: its HOME is the work directory, which is deleted
       # on every start. See engine.yml, where this failed the apply step in
