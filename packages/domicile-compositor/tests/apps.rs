@@ -241,6 +241,28 @@ fn a_spawned_program_is_pointed_at_this_compositor() {
     );
 }
 
+/// A desk's startup commands run once it is up, on its display.
+///
+/// The display for the reason above; and without a chrome, because what a
+/// desk starts with is the desk's to say, not a page's.
+#[test]
+fn a_startup_command_runs_on_this_compositor() {
+    let directory = tempfile::tempdir().expect("a directory to report into");
+    let reported = directory.path().join("started-display");
+    let compositor = Compositor::started_with(&format!(
+        r#"{ONE_DISPLAY}
+[startup]
+commands = [["sh", "-c", "printf '%s' \"$WAYLAND_DISPLAY\" > {0}.new && mv {0}.new {0}"]]
+"#,
+        reported.display()
+    ));
+
+    assert_eq!(
+        compositor.await_file(&reported),
+        compositor.wayland_display()
+    );
+}
+
 /// A spawn with nothing to run does not stop the compositor listening to the
 /// chrome that sent it.
 ///

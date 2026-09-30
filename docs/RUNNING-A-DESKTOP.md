@@ -39,6 +39,17 @@ client. Each desktop also launches a terminal on a key of its own, and
 everything started from that terminal lands here too:
 [the long answer](/packages/shell-simple/README.md#launch-an-app-into-it).
 
+Programs a desk should come up with — a notification daemon, an editor's
+server — go in `[startup] commands`, each an argv. They run once, when the
+desk starts, on its display; a reload does not run them again.
+
+```toml
+[startup]
+commands = [["emacsclient", "-e", "t"], ["sh", "-c", "mako >/dev/null"]]
+```
+
+On NixOS that is `programs.domicile.settings.startup.commands`.
+
 ## Your session's keys, in a window
 
 A desktop in a window needs the Meta key, and in your session that key is
