@@ -111,7 +111,7 @@ PauseAnswer DrmTakenDevices::Pause(DeviceNumber number,
       if (echo->second == 0) {
         released_.erase(echo);
       }
-      VLOG(1) << "domicile: input device " << number.major << ":"
+      VLOG(2) << "domicile: input device " << number.major << ":"
               << number.minor
               << " reports gone, which is logind answering the release this "
                  "session asked for; still holding " << devices_.size();
@@ -194,6 +194,21 @@ bool DrmTakenDevices::Resume(DeviceNumber number, base::ScopedFD descriptor) {
   const int id = named->second.id;
   const base::FilePath path = named->second.path;
 
+  // A RESUME logind SENT BEFORE A RELEASE THIS SESSION HAS SINCE MADE, and so
+  // a descriptor that is already dead. logind signals in order, so a release
+  // whose "gone" has not arrived yet was made after this resume was sent --
+  // and the release freed the `SessionDevice` this descriptor belonged to,
+  // revoking it. It happens on every activation: `Reclaim` gives each revoked
+  // device back and takes it again, live, before the activation's own resumes
+  // are read. Reopening on one of those closes the live converter `Reclaim`
+  // just built and fails on `ENODEV`.
+  if (released_.contains(number)) {
+    VLOG(1) << "domicile: dropping logind's resume of input device "
+            << number.major << ":" << number.minor
+            << ", sent before this session gave it back and took it again";
+    return false;
+  }
+
   const bool forgotten = devices_.find(number) == devices_.end();
   if (forgotten) {
     LOG(ERROR) << "logind resumed input device " << number.major << ":"
@@ -266,7 +281,7 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
   // alone: the node has not gone anywhere, and a `ResumeDevice` that lands
   // between this and the `TakeDevice` that follows is answered from it.
   devices_.erase(taken);
-  VLOG(1) << "domicile: gave back input device " << number.major << ":"
+  VLOG(2) << "domicile: gave back input device " << number.major << ":"
           << number.minor << "; holding " << devices_.size();
   return true;
 }

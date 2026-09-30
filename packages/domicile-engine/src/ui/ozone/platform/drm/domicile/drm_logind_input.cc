@@ -222,7 +222,7 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
     return resumed;
   }
 
-  VLOG(1) << "domicile: asking logind for " << params.path.value();
+  VLOG(2) << "domicile: asking logind for " << params.path.value();
 
   const std::optional<DeviceNumber> number = NumberOfDevice(params.path);
   if (!number.has_value()) {
@@ -318,13 +318,12 @@ base::ScopedFD DrmLogindInput::OpenDeviceFd(
       continue;
     }
 
-    LOG(ERROR) << "logind handed over " << params.path.value() << " ("
-               << number->major << ":" << number->minor
-               << ") already revoked, because this session is not the one "
-                  "in front of the user. Nothing from this device reaches "
-                  "the desktop until the session goes Active, which is "
-                  "answered by taking it again -- switch back to this "
-                  "console (Ctrl+Alt+F<n>) if it does not.";
+    // VERBOSE, NOT AN ERROR: every console switch away lands here once per
+    // device, and the activation that follows takes each one back.
+    VLOG(1) << "domicile: logind handed over " << params.path.value() << " ("
+            << number->major << ":" << number->minor
+            << ") revoked, because this session is not the one in front of "
+               "the user; taking it again when the session goes Active";
     return base::ScopedFD();
   }
 
@@ -418,16 +417,11 @@ void DrmLogindInput::OnPauseDevice(dbus::Signal* signal) {
     case PauseAnswer::kDeviceIsRevoked:
       // THE LINE THAT WAS MISSING, AND THE REASON THIS COST A REBOOT. A
       // desktop whose every keyboard and every trackpad stopped in the same
-      // instant said nothing at all in its own log. It says this instead,
-      // once per device, naming the way out.
-      LOG(ERROR) << "logind force-paused input device " << number.major << ":"
-                 << number.minor
-                 << ": it has ALREADY revoked that descriptor, and a force "
-                    "pause comes for every input device this session holds "
-                    "at once -- so the desktop is deaf from here. Taking "
-                    "them back when the session goes Active; if input does "
-                    "not return, switch to this console with "
-                    "Ctrl+Alt+F<n>.";
+      // instant said nothing at all in its own log. Verbose rather than an
+      // error, because every console switch away is one of these per device.
+      VLOG(1) << "domicile: logind force-paused input device " << number.major
+              << ":" << number.minor
+              << "; taking it back when the session goes Active";
       return;
 
     case PauseAnswer::kCompleteIt:
@@ -482,14 +476,9 @@ void DrmLogindInput::OnPropertiesChanged(dbus::Signal*) {
     return;
   }
 
-  const size_t reclaimed = devices_.Reclaim();
-  if (reclaimed > 0) {
-    LOG(ERROR) << "this console is in front of the user again; giving "
-               << reclaimed
-               << " revoked input device(s) back to logind and taking them "
-                  "again, because a revoked descriptor cannot be repaired "
-                  "in place";
-  }
+  // `Reclaim` says how many it took back, and a console switch back is
+  // routine, so there is nothing to add here.
+  devices_.Reclaim();
 }
 
 bool DrmLogindInput::SessionIsActive() {
