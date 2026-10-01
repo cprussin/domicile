@@ -94,6 +94,20 @@ pull request of its own (`.github/scripts/engine-official-repin.sh`).
 series; for the hours between a fork-moving merge and its official build, main
 runs the checked engine rather than one missing the new patches.
 
+**That pull request needs `DOMICILE_WRITEBACK_TOKEN`.** `GITHUB_TOKEN` may not
+open one here, and one it opened would start no checks, so it could never
+merge. The secret is a fine-grained personal access token:
+
+- Repository access: `cprussin/domicile` only.
+- Permissions: Contents, Pull requests and Workflows, read and write.
+- Stored as the repository secret `DOMICILE_WRITEBACK_TOKEN`.
+- The repository allows auto-merge (Settings → General → Pull Requests): the
+  pull request is opened with its auto-merge on, and merges when its checks
+  pass.
+
+`engine.yml`'s write-back uses the same token when it is there, so its push
+starts CI without waiting for an approval.
+
 `DOMICILE_ENGINE` points `domicile` at a different one — a checkout's
 `out/Domicile`, say. It names the directory holding `chrome`.
 
