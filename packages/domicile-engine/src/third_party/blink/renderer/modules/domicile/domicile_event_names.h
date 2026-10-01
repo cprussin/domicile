@@ -45,7 +45,8 @@
   X(displayschanged, Displayschanged)    \
   X(locked, Locked)                      \
   X(extensions, Extensions)              \
-  X(tray, Tray)
+  X(tray, Tray)                          \
+  X(notifications, Notifications)
 
 namespace blink::domicile_event_names {
 

@@ -42,6 +42,7 @@ same reason.
 | `scripts/guard-shell-shortcuts.sh`, `guard-shell-shortcuts.js`, `guard-shell-shortcuts-reload.py` | Chrome's reload, back, fullscreen, zoom, close and quit chords pressed at a shell that handles none of them, and the shell neither reloaded, navigated, resized nor closed — patch 0047. Headless. Its control reloads the shell over the debugging port instead, because the claim is an absence |
 | `scripts/guard-webview-framing.sh`, `guard-webview-framing.js`, `guard-webview-framing-server.py` | a site that refuses framing, shown in a `<webview>`. The one guard here that runs headless and needs no compositor: what it measures is a page against itself, so there is no client and nothing to import |
 | `scripts/guard-shell-local-network.sh`, `guard-shell-local-network.js`, `guard-shell-local-network-server.py` | the shell showing a picture from a server on this machine — a launcher's favicon for a bookmark on localhost — with no Local Network Access prompt (patch 0066, which classes `domicile://` loopback). Headless. Its control is an ordinary page the engine is told is public (`--ip-address-space-overrides`): a picture from its own server must show, and one from loopback must not |
+| `scripts/guard-webview-notifications.sh`, `guard-webview-notifications.js`, `guard-webview-notifications-server.py` | a page in a browser window reading notifications as granted, with no prompt (patch 0068, which sets the profile's default to allow) — so a site's Web Notification reaches `org.freedesktop.Notifications`, which the compositor serves. Headless. Its control is two runs of the same shell: a guest that paints unasked, which must show, then one asking about geolocation, which nothing granted and must not |
 | `scripts/guard-webview-content-script.sh`, `guard-webview-content-script.js`, `guard-webview-content-script-server.py`, `guard-webview-content-script-extension/` | an unpacked extension's content script marking a page in a `<webview>`, loaded by `--load-extension` with `DisableLoadExtensionCommandLineSwitch` disabled — the assumption `EXTENSIONS.md` rests on. Headless. Its control marks the page top-level first, then shows the `<webview>` without the extension, which must stay unmarked |
 | `scripts/guard-extension-installer.sh`, `guard-extension-installer.js`, `guard-extension-installer-compositor.py` | the content-script fixture above named only by an `extensions` message from a stand-in for the compositor, with no `--load-extension`: the installer (patch 0055) loads it and its mark shows in a `<webview>`. Headless. Its control sends the list empty, and the page must stay unmarked |
 | `scripts/guard-extension-tray.sh`, `guard-extension-tray.js`, `guard-extension-tray-extension/` | the tray (patch 0056): a fixture named by the same stand-in, whose action has a title, a badge its service worker sets and a popup, reaches the shell as an `extensions` event carrying all of it; the popup opens in a `<webview>`, lists itself to `runtime.getContexts` as a `TAB`, and its `window.close()` arrives as `domicile-close`. Headless. Its control sends the list empty and opens a page that never closes: the tray must still arrive without the fixture, and the page must neither answer nor close |
@@ -173,7 +174,7 @@ a new message.
 
 **Implemented — every member the fork keeps.** Outbound: `spawn`,
 `search_files`, `preview_file`, `search_apps`, `copy_clipboard_entry`,
-`activate_tray_item`, `focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
+`activate_tray_item`, `dismiss_notifications`, `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
 `set_device_pixel_ratio`, `set_theme`, `unlock`, `lock`, `grab_shortcut`, `warp_pointer`, `key`,
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
 Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
@@ -181,7 +182,7 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `found_apps`, `battery`, `clipboard`, `theme`,
-`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`.
+`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`, `notifications`.
 
 `preview_file` is the one outbound member that names a path, which
 `search_files` exists not to. The path is relative to the home, as a

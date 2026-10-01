@@ -230,6 +230,12 @@ class FakeDomicile {
   activateTrayItem(id: string, action: string): void {
     this.calls.push(["activateTrayItem", id, action]);
   }
+  dismissNotifications(ids: readonly number[]): void {
+    this.calls.push(["dismissNotifications", ids]);
+  }
+  invokeNotificationAction(id: number, action: string): void {
+    this.calls.push(["invokeNotificationAction", id, action]);
+  }
 }
 
 let domicile: FakeDomicile;
@@ -970,6 +976,63 @@ describe("Shell", () => {
       ).toBeTruthy();
       expect(
         extension.compareDocumentPosition(workspace) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+  });
+
+  describe("the notifications", () => {
+    /** A notification as the client hands one on. */
+    const arrived = (id: number, summary: string) => ({
+      actions: [],
+      appName: "chat.example.com",
+      body: "",
+      clickable: true,
+      icon: undefined,
+      id,
+      summary,
+      time: id,
+      timeoutMs: undefined,
+      urgency: "normal",
+    });
+
+    it("toasts what arrives, and the bell counts it", async () => {
+      renderShell();
+      domicile.emit("notifications", { items: [] });
+
+      domicile.emit("notifications", { items: [arrived(7, "New message")] });
+
+      expect(
+        await screen.findByRole("button", { name: "New message" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Notifications, 1 unread" }),
+      ).toBeVisible();
+    });
+
+    it("lists them in the drawer the bell opens, and clears them all", async () => {
+      renderShell();
+      domicile.emit("notifications", {
+        items: [arrived(1, "Older"), arrived(2, "Newer")],
+      });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Notifications" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Clear all" }),
+      );
+
+      expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
+    });
+
+    it("is the far end of the bar", () => {
+      renderShell();
+
+      const battery = screen.getByRole("button", { name: /theme/ });
+      const bell = screen.getByRole("button", { name: "Notifications" });
+      expect(
+        battery.compareDocumentPosition(bell) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });

@@ -129,6 +129,9 @@ pub fn apply_chrome_message(
                 // changed is never sent again, so a page that reloaded would
                 // otherwise draw an empty tray until one did.
                 .chain(host.describe_tray())
+                // And the notifications, for the tray's reason: the history
+                // is the desk's, and a page that reloaded has missed it.
+                .chain(host.describe_notifications())
                 .collect()
             }
             // Answered, and with *this* build's version rather than nothing.

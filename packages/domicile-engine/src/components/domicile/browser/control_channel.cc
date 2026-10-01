@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/control_channel.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -321,6 +322,27 @@ void ControlChannel::ActivateTrayItem(const std::string& id,
       message.Set("action", "context");
       break;
   }
+  SendMessage(std::move(message));
+}
+
+// Ids and nothing else, as CopyClipboardEntry's entry is. Written as ints for
+// the reason Notification.id is 32 bits: the compositor's ids never come near
+// two billion.
+void ControlChannel::DismissNotifications(const std::vector<uint32_t>& ids) {
+  base::ListValue listed;
+  for (uint32_t id : ids) {
+    listed.Append(static_cast<int>(id));
+  }
+  base::DictValue message = Typed("dismiss_notifications");
+  message.Set("ids", std::move(listed));
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::InvokeNotificationAction(uint32_t id,
+                                              const std::string& action) {
+  base::DictValue message = Typed("invoke_notification_action");
+  message.Set("id", static_cast<int>(id));
+  message.Set("action", action);
   SendMessage(std::move(message));
 }
 
@@ -1098,6 +1120,61 @@ void ControlChannel::DispatchLine(const std::string& line,
     // Sent even when it is empty, for `clipboard`'s reason: a tray with
     // nothing in it is an answer.
     client_->Tray(std::move(items), arrival);
+    return;
+  }
+
+  if (*type == "notifications") {
+    const base::ListValue* listed = message.FindList("items");
+    if (!listed) {
+      return;
+    }
+    std::vector<mojom::NotificationPtr> items;
+    items.reserve(listed->size());
+    for (const base::Value& row : *listed) {
+      const base::DictValue* item = row.GetIfDict();
+      if (!item) {
+        continue;
+      }
+      // A notification with no id is one nothing could clear, and one missing
+      // what it says or when is one nothing could draw: dropped, as a tray
+      // icon missing its id or title is. The picture and the timeout are
+      // optional -- the compositor leaves out a picture it could not draw, and
+      // a timeout left to the shell -- and are carried as empty and -1.
+      std::optional<int> id = item->FindInt("id");
+      const std::string* app_name = item->FindString("app_name");
+      const std::string* summary = item->FindString("summary");
+      const std::string* body = item->FindString("body");
+      const std::string* urgency = item->FindString("urgency");
+      const base::ListValue* offered = item->FindList("actions");
+      std::optional<bool> clickable = item->FindBool("clickable");
+      std::optional<double> time = item->FindDouble("time");
+      if (!id || !app_name || !summary || !body || !urgency || !offered ||
+          !clickable || !time) {
+        continue;
+      }
+      std::vector<mojom::NotificationActionPtr> actions;
+      for (const base::Value& button : *offered) {
+        const base::DictValue* action = button.GetIfDict();
+        const std::string* key = action ? action->FindString("key") : nullptr;
+        const std::string* label =
+            action ? action->FindString("label") : nullptr;
+        if (key && label) {
+          actions.push_back(mojom::NotificationAction::New(*key, *label));
+        }
+      }
+      const std::string* icon = item->FindString("icon");
+      // Read as a double: the timeout is a u32 on the wire, and one past two
+      // billion milliseconds is a month, which is as good as never.
+      std::optional<double> timeout_ms = item->FindDouble("timeout_ms");
+      items.push_back(mojom::Notification::New(
+          static_cast<uint32_t>(*id), *app_name, *summary, *body,
+          icon ? *icon : std::string(), *urgency, std::move(actions),
+          *clickable,
+          timeout_ms ? static_cast<int32_t>(std::min(*timeout_ms, 2.0e9)) : -1,
+          *time));
+    }
+    // Sent even when it is empty, for `clipboard`'s reason.
+    client_->Notifications(std::move(items), arrival);
     return;
   }
 

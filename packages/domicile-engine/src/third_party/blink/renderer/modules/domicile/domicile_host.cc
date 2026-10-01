@@ -37,6 +37,9 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_locked_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_notification.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_notification_action.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_notifications_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_event.h"
@@ -333,6 +336,36 @@ void DomicileHost::activateTrayItem(ScriptState*,
   }
   if (Ready(exception_state)) {
     channel_->ActivateTrayItem(id, MojoTrayAction(action));
+  }
+}
+
+// Ids and nothing else. An empty list is a shell that cleared nothing, which is
+// not an error and asks nothing of the compositor.
+void DomicileHost::dismissNotifications(ScriptState*,
+                                        const Vector<uint32_t>& ids,
+                                        ExceptionState& exception_state) {
+  if (ids.empty()) {
+    return;
+  }
+  if (Ready(exception_state)) {
+    channel_->DismissNotifications(ids);
+  }
+}
+
+// A notification and a key, and nothing about what the press does. An empty
+// key throws, as activateTrayItem's empty id does: it is a shell that forgot to
+// say which button, rather than one that raced the notification going away.
+void DomicileHost::invokeNotificationAction(ScriptState*,
+                                            uint32_t id,
+                                            const String& action,
+                                            ExceptionState& exception_state) {
+  if (action.empty()) {
+    exception_state.ThrowTypeError(
+        "action must be a non-empty notification action key");
+    return;
+  }
+  if (Ready(exception_state)) {
+    channel_->InvokeNotificationAction(id, action);
   }
 }
 
@@ -658,6 +691,30 @@ void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
   }
   DispatchEvent(*MakeGarbageCollected<DomicileTrayEvent>(
       domicile_event_names::Tray(), std::move(tray), Arrival(arrival)));
+}
+
+// Pushed, like Tray: a notification is a call on the session bus, which the
+// compositor hears without anybody asking.
+void DomicileHost::Notifications(
+    Vector<domicile::mojom::blink::NotificationPtr> items,
+    base::TimeTicks arrival) {
+  HeapVector<Member<DomicileNotification>> notifications;
+  notifications.reserve(items.size());
+  for (const auto& item : items) {
+    HeapVector<Member<DomicileNotificationAction>> actions;
+    actions.reserve(item->actions.size());
+    for (const auto& action : item->actions) {
+      actions.push_back(MakeGarbageCollected<DomicileNotificationAction>(
+          action->key, action->label));
+    }
+    notifications.push_back(MakeGarbageCollected<DomicileNotification>(
+        item->id, item->app_name, item->summary, item->body, item->icon,
+        item->urgency, std::move(actions), item->clickable, item->timeout_ms,
+        item->time));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileNotificationsEvent>(
+      domicile_event_names::Notifications(), std::move(notifications),
+      Arrival(arrival)));
 }
 
 // Pushed, like Battery, and the one pushed message this page can cause:
