@@ -223,6 +223,15 @@ export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
 export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
 
 /**
+ * Fired when the icon the page names for itself changes, which is readable on
+ * the element as {@link HTMLWebViewElement.favicon}. Carries nothing, like the
+ * other state events.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
+
+/**
  * Fired when the user asks the page to zoom in or out — Ctrl and the wheel,
  * over a page that did not take the wheel for itself.
  *
@@ -340,6 +349,13 @@ declare global {
      * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
      */
     setZoom(factor: number): void;
+    /**
+     * The icon the page names for itself — the best of the icons it links,
+     * an SVG before the biggest — as an absolute URL, or `""` for a page that
+     * names none or has not said yet. The page's own word, signed in as the
+     * user is. Changes are announced in {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
+     */
+    readonly favicon: string;
     goBack(): void;
     goForward(): void;
     stop(): void;

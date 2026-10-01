@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
@@ -30,6 +31,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
+#include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -387,6 +389,20 @@ class WebViewGuest : public mojom::WebViewGuest,
   // per real change.
   void DidChangeVisibleSecurityState() override;
 
+  // The icons the page links, which the renderer reports once its head is
+  // parsed and again whenever a script changes them. Reduced to the one a
+  // launcher draws best and reported to the element -- see FaviconChanged in
+  // the mojom.
+  void DidUpdateFaviconURL(
+      content::RenderFrameHost* render_frame_host,
+      const std::vector<blink::mojom::FaviconURLPtr>& candidates,
+      blink::mojom::FaviconUpdateReason reason) override;
+
+  // A new page, which has named no icon yet: the last page's is withdrawn, so
+  // it is not taken for this one's -- and a page that never names one (the
+  // renderer reports nothing then) is not left wearing it.
+  void PrimaryPageChanged(content::Page& page) override;
+
  private:
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
@@ -509,6 +525,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // And the last zoom sent, as a factor. 100%, because that is where a fresh
   // guest is and what the element starts out holding.
   double reported_zoom_ = 1.0;
+
+  // And the last icon sent. Empty, which is a page that has named none yet.
+  GURL reported_favicon_;
 
   // HostZoomMap's word that a site's zoom changed, which is how a second
   // window on the same site moves this one. Dropped with the guest's

@@ -95,6 +95,8 @@ baseline() { # $1 NEGATIVE
   # anything — the guest is on its second page in both.
   TWO_PATH="/two"
   TWO_SECURITY="neutral"
+  # And the icon the page it is on links, by path. Shared for the same reason.
+  TWO_FAVICON="/two.png"
   # Shared too, and for the same reason: the guest is on a page that has
   # finished arriving, and then on a navigation the fixture is still holding
   # open.
@@ -258,6 +260,17 @@ expect "an element that reported no page at all is a failure" "fail" \
   "$(verdict 0 TWO_PATH='""')"
 
 echo
+echo "and the icon the page names, which is what a launcher learns a site by"
+# THE FAVICON REPORT. The page links /two.png; an element that names nothing, or
+# the last page's icon, is a chrome that draws a site with somebody else's.
+expect "an element that named no icon is a failure in both runs" "fail" \
+  "$(verdict 1 TWO_FAVICON='""')"
+expect "an element naming the last page's icon is a failure" "fail" \
+  "$(verdict 0 TWO_FAVICON=/one.png)"
+expect "no icon blames the favicon report" "yes" \
+  "$(blames "icon the page links" 0 TWO_FAVICON='""')"
+
+echo
 echo "and what the browser said about the connection, which it must not invent"
 # A PADLOCK IS DRAWN FROM THIS. An engine that reports nothing leaves a chrome
 # with nothing to draw — which is the honest outcome — but it is still a broken
@@ -418,6 +431,27 @@ expect "a slow page the browser hung up on can no longer come" "yes" \
   "$(settled "$(printf 'asked /slow\nabandoned /slow')" "GUARD done")"
 expect "a slow page that arrived has come" "yes" \
   "$(settled "asked /slow" "GUARD guest-shown path=/slow serial=4")"
+
+echo
+echo "when the guard reads the icon the element named"
+FAVICON_AT="$(awk '/^favicon_at\(\) \{/,/^}$/' "$GUARD")"
+[ -n "$FAVICON_AT" ] || {
+  echo "no favicon_at in $GUARD — its markers moved. Fix this test with it." >&2
+  exit 1
+}
+favicon_read() { # $1 engine log
+  (
+    ENGINE_LOG="$LOGS/engine"
+    printf '%s\n' "$1" >"$ENGINE_LOG"
+    eval "$FAVICON_AT"
+    favicon_at two-pages
+  )
+}
+# As the engine logs it: the console line quoted, its source after it.
+expect "the path is read up to the console line's closing quote" "/two.png" \
+  "$(favicon_read '[1:1:0/0:INFO:CONSOLE:118] "GUARD favicon-state at=two-pages path=/two.png", source: domicile://shell/guard-webview-history.js (118)')"
+expect "an icon the element never named is read as empty" "" \
+  "$(favicon_read '[1:1:0/0:INFO:CONSOLE:118] "GUARD favicon-state at=two-pages path=", source: x (1)')"
 
 echo
 if [ "$FAILED" -eq 0 ]; then
