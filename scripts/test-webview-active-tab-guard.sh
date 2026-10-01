@@ -157,6 +157,36 @@ expect "and the shell counts it in the tray only with that badge" "yes" \
   "$(grep -qF 'extension.badgeText === "on"' "$SHELL_MODULE" &&
     echo yes || echo no)"
 
+# THE CLICK WAITS FOR THE PAGE. `url` is the guest's visible entry, which can
+# be a pending one, and `loading` falls for a load that stopped short of a
+# commit: "painted 1 1 1 1 1" refused for the host, as on
+# cprussin/domicile#797. So the still page says it is up once it has loaded,
+# by a same-document commit to `#ready`, and the shell clicks only once its
+# <webview> is showing that.
+SERVER="$SCRIPTS/guard-webview-content-script-server.py"
+SERVER_LOG="$(mktemp)"
+python3 "$SERVER" --port 0 --color 123456 --still >"$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 40); do
+  grep -qF "serving" "$SERVER_LOG" && break
+  sleep 0.25
+done
+PORT="$(sed -n 's/^serving .* on 127\.0\.0\.1:\([0-9][0-9]*\)$/\1/p' "$SERVER_LOG")"
+STILL="$(curl -sf "http://127.0.0.1:$PORT/page")"
+kill "$SERVER_PID"
+wait "$SERVER_PID" 2>/dev/null
+rm -f "$SERVER_LOG"
+expect "the still page says it is up once it has loaded" "yes" \
+  "$(case "$STILL" in
+    *'addEventListener("load", () => {'*'history.replaceState(null, "", "#ready");'*)
+      echo yes
+      ;;
+    *) echo no ;;
+    esac)"
+expect "and the shell focuses, so clicks, only a page that said so" "yes" \
+  "$(grep -qF 'view.url === `${src}#ready`' "$SHELL_MODULE" &&
+    echo yes || echo no)"
+
 echo
 if [ "$FAILED" -eq 0 ]; then
   echo "the webview-active-tab guard's verdict names the right end in every case"
