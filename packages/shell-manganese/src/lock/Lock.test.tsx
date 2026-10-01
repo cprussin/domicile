@@ -7,31 +7,64 @@ import { Lock } from "./Lock";
 /** The lock over a desk, recording every passphrase it was asked to offer. */
 const lock = (locked = true) => {
   const offered: string[] = [];
-  render(
+  const drawn = (shut: boolean) => (
     <Lock
-      locked={locked}
+      locked={shut}
       onUnlock={(passphrase) => {
         offered.push(passphrase);
       }}
-    />,
+    />
   );
-  return { offered, user: userEvent.setup() };
+  const { rerender } = render(drawn(locked));
+  return {
+    offered,
+    says: (shut: boolean) => {
+      rerender(drawn(shut));
+    },
+    user: userEvent.setup(),
+  };
 };
 
 describe("Lock", () => {
-  it("is not on the page at all while the desk is open", () => {
-    // Absent rather than hidden. A sheet over the whole desktop that was merely
-    // transparent would take every click on the desk with it, and the desk this
-    // shell is drawing is the one somebody is working at.
+  it("is out of reach while the desk is open", () => {
+    // Inert rather than unmounted, because it has to fade out after the desk
+    // opens — and a sheet over the whole desktop that was merely transparent
+    // would take every click on the desk with it, and every Tab too.
     lock(false);
 
-    expect(screen.queryByLabelText("Passphrase")).toBeNull();
+    expect(
+      screen.getByLabelText("Passphrase").closest("[inert]"),
+    ).not.toBeNull();
   });
 
   it("covers the desktop and asks for the passphrase", () => {
     lock();
 
-    expect(screen.getByLabelText("Passphrase")).toBeTruthy();
+    expect(screen.getByLabelText("Passphrase").closest("[inert]")).toBeNull();
+  });
+
+  describe("the keyboard", () => {
+    it("is put in the field as the desk shuts", () => {
+      // On the edge rather than on mount: the sheet is on the page the whole
+      // time, so the moment it is shown is the moment the compositor says so.
+      const { says } = lock(false);
+
+      says(true);
+
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("cannot be taken out of the field while the desk is shut", async () => {
+      // Nothing else on a locked desk is anything to type into, so a key that
+      // went anywhere but the field is a key of the passphrase thrown away.
+      const { user } = lock();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+
+      await user.click(screen.getByRole("button", { name: "Unlock" }));
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
   });
 
   it("offers what was typed and never decides anything itself", async () => {
