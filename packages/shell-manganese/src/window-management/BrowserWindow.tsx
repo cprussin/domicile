@@ -16,10 +16,12 @@ import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FilePicker } from "./browser/FilePicker";
+import { FindBar } from "./browser/FindBar";
 import { useFileRequest } from "./browser/useFileRequest";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
@@ -243,6 +245,12 @@ export const BrowserWindow = ({
   // goes instead of the page, which is waiting on it. `null` for the ref API's
   // reason, as the view's is.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
+  // WHETHER THE FIND BAR IS UP, and its box while it is: where the keyboard
+  // goes when the user asks to find, and back to the page when they are done.
+  // `null` for the ref API's reason, as the picker's is.
+  const [finding, setFinding] = useState(false);
+  const [findBox, setFindBox] = useState<HTMLInputElement | null>(null);
+  const found = useFindResult(view);
 
   // Every focus this window puts in its own page — or in the picker over it —
   // goes through here, because each of them comes back as the announcement a
@@ -343,6 +351,17 @@ export const BrowserWindow = ({
             view.goBack();
             break;
           }
+          // A bar already up takes the keyboard again, with what it holds
+          // selected so the next thing typed replaces it — Chrome's Ctrl+F.
+          // One coming up takes it as it mounts; see the effect below.
+          case BrowserCommand.Find: {
+            setFinding(true);
+            if (findBox !== null) {
+              focusOwn(findBox);
+              findBox.select();
+            }
+            break;
+          }
           case BrowserCommand.Forward: {
             view.goForward();
             break;
@@ -369,8 +388,16 @@ export const BrowserWindow = ({
         }
       }
     },
-    [view],
+    [findBox, focusOwn, view],
   );
+
+  // The find bar takes the keyboard as it comes up: the user asked to find,
+  // and what they type next is what to find.
+  useEffect(() => {
+    if (findBox !== null) {
+      focusOwn(findBox);
+    }
+  }, [findBox, focusOwn]);
 
   // THE PAGE'S HALF OF THE KEYBOARD, which sends nothing out on its own: a key
   // pressed in a guest never reaches this document. The engine hands back the
@@ -493,6 +520,16 @@ export const BrowserWindow = ({
     if (!focusing.current) {
       onReach();
     }
+  };
+
+  // Put the find bar away and the keyboard back in the page it was finding in,
+  // with the match it was on still selected — Escape in Chrome's.
+  const stopFinding = () => {
+    withView((loaded) => {
+      loaded.stopFinding();
+      focusOwn(loaded);
+    });
+    setFinding(false);
   };
 
   const navigate = (url: string) => {
@@ -628,11 +665,24 @@ export const BrowserWindow = ({
         zoomsAnnounced={zoomsAnnounced}
       />
       {/*
-        The page, and the picker it is waiting on over it: a box of their own
-        so the picker covers the page and leaves the bar above it alone.
+        The page, and the find bar and the picker it is waiting on over it: a
+        box of their own so either covers the page and leaves the bar above it
+        alone.
       */}
       <div className={pageStyles}>
         <webview className={viewStyles} ref={setView} src={src} />
+        {finding && (
+          <FindBar
+            found={found}
+            onClose={stopFinding}
+            onFind={(text, backward) => {
+              withView((loaded) => {
+                loaded.find(text, backward);
+              });
+            }}
+            ref={setFindBox}
+          />
+        )}
         {asking !== undefined && (
           <FilePicker
             // A picker per question, so a second one starts on an empty box.

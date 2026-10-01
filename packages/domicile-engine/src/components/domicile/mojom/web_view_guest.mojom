@@ -308,6 +308,21 @@ interface WebViewGuestClient {
   // compared against what was last sent.
   CloseRequested();
 
+  // What a find in the page has found: how many matches, and which of them is
+  // the one selected, counted from 1. Zero and zero is no find at all -- none
+  // asked for, one stopped, or one ended by the page it searched going away.
+  //
+  // THE BROWSER'S COUNT, from FindRequestManager, which searches every frame
+  // in the guest -- a cross-site one in another process included -- and adds
+  // them up. The renderer the element lives in can see none of those frames,
+  // so this is the only way it learns the answer.
+  //
+  // SENT ONLY WHEN IT CHANGES, like the reports above. A find answers in
+  // several replies as the count is scoped frame by frame, and each that
+  // moves the pair is one message; a fresh guest sends nothing, because it
+  // has found nothing and neither has the element.
+  FindChanged(int32 matches, int32 active_match);
+
   // An extension asked for this browser window to be the one in front:
   // `chrome.tabs.update(id, {active: true})` or `chrome.windows.update(id,
   // {focused: true})`. Which window is in front is the shell's, so the browser
@@ -374,6 +389,26 @@ interface WebViewGuest {
   // that arrives here anyway did not come from the element, and is a bad
   // message.
   SetZoom(double factor);
+
+  // Find `text` in the page and select a match: the next one after the
+  // selection, or the one before it when `forward` is false. The answer comes
+  // back as WebViewGuestClient.FindChanged.
+  //
+  // THE SAME TEXT AGAIN IS "FIND NEXT", and different text is a new search --
+  // Chrome's find bar's rule, kept here in the browser rather than in the
+  // element, because it is the browser that knows whether a session is still
+  // open: the page navigating ends one.
+  //
+  // NEVER EMPTY. Content refuses to search for nothing, and the element sends
+  // StopFinding for an empty string instead -- so one that arrives here did
+  // not come from the element, and is a bad message.
+  Find(string text, bool forward);
+
+  // End the find: the highlights go, and the page is left with the match that
+  // was selected still selected when `keep_selection` is true -- Escape in a
+  // find bar -- or with nothing selected when it is false -- the text in it
+  // cleared. Reported as FindChanged(0, 0).
+  StopFinding(bool keep_selection);
 
   // The names in the directory at `path`, each a directory's ending in `/`,
   // for the shell's picker to walk -- so a file the index never found is one
