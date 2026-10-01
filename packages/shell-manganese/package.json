@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "@domicile/chrome-sdk": "workspace:*",
     "@domicile/component-library": "workspace:*",
     "@phosphor-icons/react": "catalog:",

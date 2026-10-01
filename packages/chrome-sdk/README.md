@@ -74,6 +74,19 @@ It provides these:
 - **`TrayItem`, `TrayAction`** (`./tray`) — one icon of the system tray, as
   `DomicileClient.on("tray", …)` delivers it, and the button a click was. A
   click is `DomicileClient.activateTrayItem(id, action)`.
+- **`bindKeys`** (`./bind-keys`) — the keys the compositor's config binds,
+  claimed and answered: `bindKeys(domicile, "myshell", { onCommand,
+  onModeChanged, onOptions })`. The config's `[keybindings]` and `[modes.*]`
+  are every shell's, and `[shells.myshell.*]` adds to them, winning a chord both
+  bind. A `send-shell <words>` binding calls `onCommand(words)`, whose meaning
+  is the shell's; `mode <name>` is answered here, and `onModeChanged` says the
+  mode moved. It returns `{ unbind, setMode }`: `setMode` is how a desktop of
+  several pages keeps one mode across them (one the config lacks goes back to
+  `default`). `onOptions` is `[shells.myshell.options]`, as unparsed JSON. It
+  owns the `shell_config` and `shortcut` slots of `DomicileClient.on`, and the
+  chords it claims are never given back — the channel cannot release one.
+  `./keybindings` is its pure half (whose binding wins, and what a press does
+  in a mode) and `./key-action` the action a binding carries.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.
@@ -102,7 +115,10 @@ It provides these:
 - **The compositor's own JSON wire**, which **a page no longer speaks** —
   `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
   there for `@domicile/e2e-harness`, a headless stand-in for a chrome that
-  talks to the compositor's socket directly.
+  talks to the compositor's socket directly. The one exception is
+  `shell_config`, which the engine forwards as the compositor's line because a
+  shell's `options` have no type it could declare: `./host-message` parses it
+  with `./protocol`'s schema.
 
 ## Usage
 

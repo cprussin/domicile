@@ -374,4 +374,75 @@ describe("parseHostMessage", () => {
       type: "shortcut",
     });
   });
+
+  it("decodes the keys the config binds, the desk's and each shell's", () => {
+    const shortcut = {
+      alt: false,
+      ctrl: false,
+      key: 38,
+      logo: true,
+      shift: false,
+    };
+    const message = parseHostMessage(
+      JSON.stringify({
+        keybindings: {
+          default: [
+            {
+              action: { args: ["focus", "right"], type: "send_shell" },
+              shortcut,
+            },
+          ],
+          resize: [{ action: { name: "default", type: "mode" }, shortcut }],
+        },
+        shells: {
+          manganese: {
+            keybindings: { default: [] },
+            options: { gaps: 8 },
+          },
+        },
+        type: "shell_config",
+      }),
+    );
+
+    expect(message).toStrictEqual({
+      keybindings: {
+        default: [
+          {
+            action: { args: ["focus", "right"], type: "send_shell" },
+            shortcut,
+          },
+        ],
+        resize: [{ action: { name: "default", type: "mode" }, shortcut }],
+      },
+      shells: {
+        manganese: { keybindings: { default: [] }, options: { gaps: 8 } },
+      },
+      type: "shell_config",
+    });
+  });
+
+  it("throws on a binding whose action it cannot name", () => {
+    expect(() =>
+      parseHostMessage(
+        JSON.stringify({
+          keybindings: {
+            default: [
+              {
+                action: { type: "exec" },
+                shortcut: {
+                  alt: false,
+                  ctrl: false,
+                  key: 38,
+                  logo: true,
+                  shift: false,
+                },
+              },
+            ],
+          },
+          shells: {},
+          type: "shell_config",
+        }),
+      ),
+    ).toThrow();
+  });
 });

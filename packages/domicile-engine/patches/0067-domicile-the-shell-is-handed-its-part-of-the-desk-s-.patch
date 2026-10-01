@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 1 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell is handed its part of the desk's config
+
+Registers one member of the control protocol: a `shellconfig` event, a
+DomicileShellConfigEvent whose `config` is the compositor's
+`shell_config` line as it arrived -- the shell's keybindings, each
+mode's, and the options the config keeps for a shell by name.
+
+A string and not attributes, because a shell's options are whatever its
+config says, and WebIDL cannot type a value nobody has declared. The page
+parses it; the SDK is where its shape is read.
+
+The event, its init dictionary and the mojom member are new files under
+src/; what cannot be a new file is a name in a generated-bindings list.
+Its context is the domicile block as 0063 leaves it, for the reason 0045
+gives.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 4 ++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 2 ++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index aed9de80ae..11ddcd3336 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -333,6 +333,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
+@@ -2432,6 +2434,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index e2f4b53c6e..e9c7624f1d 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -307,6 +307,8 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event_init.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",

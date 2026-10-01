@@ -356,4 +356,10 @@
   // The system tray, as a DomicileTrayEvent: every application showing an
   // icon, whenever any of it changes and once more when this page connects.
   attribute EventHandler ontray;
+
+  // The shell's part of the desk's config, as a DomicileShellConfigEvent: its
+  // keybindings and its options, as the JSON line the compositor sent. Pushed
+  // like ontheme -- once more to a page that has only just connected, and again
+  // whenever a reload of the compositor's config moved what it carries.
+  attribute EventHandler onshellconfig;
 };

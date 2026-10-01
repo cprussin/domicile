@@ -9,7 +9,6 @@ import { Battery } from "../battery/Battery";
 import { Clock } from "../clock/Clock";
 import { Tray } from "../tray/Tray";
 import type { TrayOrder } from "../tray/useTrayOrder";
-import { BindingMode } from "../window-management/window-state";
 import { Workspaces } from "./Workspaces";
 
 /**
@@ -34,8 +33,11 @@ type Props = {
   extensions: readonly Extension[];
   /** Whether the keyboard is on this screen. */
   focused: boolean;
-  /** Which bindings are live, which the bar says when it is not the usual set. */
-  mode: BindingMode;
+  /**
+   * The binding mode the keys are read in, which the bar names when it is not
+   * the usual `default`.
+   */
+  mode: string;
   /** Open an extension's popup, or close the open one with `undefined`. */
   onOpenExtension: (id: string | undefined) => void;
   onSelectWorkspace: (name: string) => void;
@@ -129,9 +131,7 @@ export const TopBar = ({
       <Clock />
     </div>
     <div className={endStyles}>
-      {mode === BindingMode.Resize && (
-        <span className={modeStyles}>resize</span>
-      )}
+      {mode !== "default" && <span className={modeStyles}>{mode}</span>}
       <ThemeSwitch />
       <Battery domicile={domicile} />
     </div>

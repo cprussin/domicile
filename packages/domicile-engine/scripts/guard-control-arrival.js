@@ -125,6 +125,7 @@ const EVENT_NAMES = [
   "locked",
   "extensions",
   "tray",
+  "shellconfig",
 ];
 const missing = EVENT_NAMES.flatMap((name) => {
   const heard = { handler: false, listener: false };
