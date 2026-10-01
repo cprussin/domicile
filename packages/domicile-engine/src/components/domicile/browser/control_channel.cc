@@ -958,7 +958,7 @@ void ControlChannel::DispatchLine(const std::string& line,
           icon ? *icon : std::string(), preview ? *preview : std::string()));
     }
     // A bookmark with no name or URL is one nothing could draw or open, and
-    // is dropped; a missing label is an empty one. An answer with no list at
+    // is dropped; a missing icon is an empty one. An answer with no list at
     // all is an answer with none.
     std::vector<mojom::BookmarkPtr> bookmarks;
     if (const base::ListValue* marked = message.FindList("bookmarks")) {
@@ -969,12 +969,12 @@ void ControlChannel::DispatchLine(const std::string& line,
         }
         const std::string* name = bookmark->FindString("name");
         const std::string* url = bookmark->FindString("url");
-        const std::string* label = bookmark->FindString("label");
+        const std::string* icon = bookmark->FindString("icon");
         if (!name || !url) {
           continue;
         }
         bookmarks.push_back(mojom::Bookmark::New(
-            *name, *url, label ? *label : std::string()));
+            *name, *url, icon ? *icon : std::string()));
       }
     }
     // Sent even when it is empty, for the reason `found_files` is.

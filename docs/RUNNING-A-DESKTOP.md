@@ -136,28 +136,28 @@ X-Domicile-Preview=/path/to/agenda-preview.svg
 ```
 
 It offers the desk's own bookmarks beside them, each a name and a URL the shell
-opens itself rather than handing it to a browser, drawn with the icon the site
-serves at `/favicon.ico` — which the launcher fetches from it. A URL is `http`
-or `https`, and anything else is refused:
+opens itself rather than handing it to a browser. A URL is `http` or `https`,
+and anything else is refused. One URL per bookmark: two accounts of one site
+are two bookmarks.
 
 ```toml
 [[applications.bookmarks]]
-name = "Calendar"
-url = "https://calendar.google.com"
-```
+name = "Calendar - Home"
+url = "https://calendar.google.com?authuser=me@home.example"
 
-A bookmark's `shortcodes` open another URL when a search holds the word:
-`calendar !work` offers the second URL here, `calendar` the first. Each
-`label` is optional, and is what the row says after the name — `Calendar for
-Work` and `Calendar for Home` — so which URL Enter opens is on screen.
-
-```toml
 [[applications.bookmarks]]
-name = "Calendar"
-url = "https://calendar.google.com"
-label = "Home"
-shortcodes."!work" = { url = "https://calendar.google.com?authuser=me@work.example", label = "Work" }
+name = "Calendar - Work"
+url = "https://calendar.google.com?authuser=me@work.example"
 ```
+
+Each is drawn with the icon its site names for itself, which the compositor
+fetches in the background when the config is read: the `<link rel="icon">` its
+page links, else its `/favicon.ico`. A site that had none, or did not answer,
+is asked again a minute later, so a desk that came up before its network did
+has its icons once it is up. It fetches without the desk's cookies, so
+a site behind a sign-in is asked for its own `/favicon.ico` rather than the
+sign-in page's, and one that answers nothing to a stranger is drawn with a
+glyph.
 
 On NixOS those are `programs.domicile.settings.applications.omit` and
 `.bookmarks`, and a reload takes either up at the next keystroke.

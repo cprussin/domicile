@@ -312,7 +312,7 @@ describe("what applications matched", () => {
       preview: "data:image/svg+xml;base64,PHN2Zz4=",
     };
     const bookmark = {
-      label: "Work",
+      icon: "data:image/png;base64,aWNv",
       name: "Fire Drill",
       url: "https://example.com/drill",
     };
@@ -332,13 +332,13 @@ describe("what applications matched", () => {
     });
   });
 
-  it("has no icon, preview or label for one the engine carries an empty one for", () => {
+  it("has no icon or preview for one the engine carries an empty one for", () => {
     const found = foundApps(
       Object.assign(new Event("apps"), {
         apps: [{ ...firefox, icon: "", preview: "" }],
         arrival: 0,
         bookmarks: [
-          { label: "", name: "Fire Drill", url: "https://example.com/drill" },
+          { icon: "", name: "Fire Drill", url: "https://example.com/drill" },
         ],
         query: "fire",
       }) as DomicileAppsEvent,
@@ -346,7 +346,7 @@ describe("what applications matched", () => {
 
     expect(found.apps[0]?.icon).toBeUndefined();
     expect(found.apps[0]?.preview).toBeUndefined();
-    expect(found.bookmarks[0]?.label).toBeUndefined();
+    expect(found.bookmarks[0]?.icon).toBeUndefined();
   });
 });
 

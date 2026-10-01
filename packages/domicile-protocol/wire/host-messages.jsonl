@@ -25,7 +25,7 @@
 {"type":"file_preview","path":"Music/song.flac","kind":"audio","title":"Song","artist":"Band","duration":61.5,"cover":"data:image/png;base64,AQID"}
 {"type":"file_preview","path":"photo.jpg","kind":"binary"}
 {"type":"file_preview","path":"gone.txt","kind":"unreadable"}
-{"type":"found_apps","query":"fire","apps":[{"id":"firefox.desktop","name":"Firefox","comment":"Browse the web","command":["firefox","--new-window"],"icon":"data:image/png;base64,cm93","preview":"data:image/svg+xml;base64,PHN2Zz4="},{"id":"xterm.desktop","name":"XTerm","comment":"","command":["xterm"]}],"bookmarks":[{"name":"Fire Drill","url":"https://example.com/drill","label":"Work"},{"name":"Fire Map","url":"https://example.com/map"}]}
+{"type":"found_apps","query":"fire","apps":[{"id":"firefox.desktop","name":"Firefox","comment":"Browse the web","command":["firefox","--new-window"],"icon":"data:image/png;base64,cm93","preview":"data:image/svg+xml;base64,PHN2Zz4="},{"id":"xterm.desktop","name":"XTerm","comment":"","command":["xterm"]}],"bookmarks":[{"name":"Fire Drill","url":"https://example.com/drill","icon":"data:image/png;base64,aWNv"},{"name":"Fire Map","url":"https://example.com/map"}]}
 {"type":"found_apps","query":"zzz","apps":[],"bookmarks":[]}
 {"type":"battery","charge":0.42,"charging":true}
 {"type":"theme","theme":"light"}

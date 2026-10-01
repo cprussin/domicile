@@ -851,10 +851,10 @@ pub struct Bookmark {
     pub name: String,
     /// What choosing it opens.
     pub url: String,
-    /// Which of the bookmark's URLs `url` is, when the desk said, for a
-    /// launcher's row to say beside the name.
+    /// The icon the site names for itself, as a `data:` URL, or nothing when
+    /// the compositor has not found one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub icon: Option<String>,
 }
 
 /// One thing that was copied, as the shell is told about it.

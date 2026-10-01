@@ -7,8 +7,8 @@ namespace blink {
 
 DomicileBookmark::DomicileBookmark(const String& name,
                                    const String& url,
-                                   const String& label)
-    : name_(name), url_(url), label_(label) {}
+                                   const String& icon)
+    : name_(name), url_(url), icon_(icon) {}
 
 DomicileBookmark::~DomicileBookmark() = default;
 

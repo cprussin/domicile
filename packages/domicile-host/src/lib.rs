@@ -20,6 +20,7 @@ pub mod bookmarks;
 pub mod clipboard;
 mod data_url;
 pub mod desktop_entries;
+pub mod favicons;
 pub mod file_changes;
 pub mod file_index;
 pub mod file_preview;

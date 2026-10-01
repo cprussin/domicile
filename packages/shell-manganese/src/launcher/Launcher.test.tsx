@@ -40,7 +40,7 @@ const PAINT: DesktopEntry = {
 
 /** A bookmark the desk offers. */
 const MAIL: Bookmark = {
-  label: undefined,
+  icon: undefined,
   name: "Mail",
   url: "https://mail.example.com",
 };
@@ -331,46 +331,42 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("says which of its URLs a bookmark opens, when the desk said", async () => {
-    // One bookmark, several accounts: a shortcode in the query picks another
-    // URL, and the row is where that is seen to have happened.
-    using panel = launcher([], false, [], [{ ...MAIL, label: "Work" }]);
-
-    await panel.user.type(panel.box(), "mail");
-
-    expect(await panel.rows()).toStrictEqual([
-      "Mail for Work",
-      "Search for mail",
-    ]);
-  });
-
-  it("draws a bookmark with its site's icon", async () => {
-    using panel = launcher([], false, [], [MAIL]);
+  it("draws a bookmark with the icon the host found for its site", async () => {
+    const icon = "data:image/png;base64,aWNv";
+    using panel = launcher([], false, [], [{ ...MAIL, icon }]);
 
     await panel.user.type(panel.box(), "mail");
     const [row] = await screen.findAllByRole("option");
 
-    expect(row?.querySelector("img")?.getAttribute("src")).toBe(
-      "https://mail.example.com/favicon.ico",
-    );
+    expect(row?.querySelector("img")?.getAttribute("src")).toBe(icon);
   });
 
-  it("draws a bookmark whose site has no icon with a glyph", async () => {
+  it("draws a bookmark whose site's icon was not found with a glyph", async () => {
     using panel = launcher([], false, [], [MAIL]);
 
     await panel.user.type(panel.box(), "mail");
     const [row] = await screen.findAllByRole("option");
-    const icon = row?.querySelector("img");
-    if (icon === null || icon === undefined) {
-      throw new Error("the row drew no icon to fail");
-    } else {
-      fireEvent.error(icon);
-    }
 
     expect(row?.querySelector("img")).toBeNull();
     expect(row?.querySelector("svg")?.innerHTML).toBe(
       glyphOf(<BookmarkSimpleIcon size={16} />),
     );
+  });
+
+  it("draws a picture as itself, without the frame a glyph's tile has", async () => {
+    // A site's or an application's icon is its own shape; a frame round it is
+    // a box drawn round somebody else's logo.
+    using panel = launcher([], false, [PAINT]);
+
+    await panel.user.type(panel.box(), "paint");
+    const [row] = await screen.findAllByRole("option");
+    const picture = row?.querySelector("img")?.parentElement;
+    if (picture === null || picture === undefined) {
+      throw new Error("the row drew no picture");
+    } else {
+      // `data-row-tile` is the framed tile, which a reached row recolors.
+      expect(picture.hasAttribute("data-row-tile")).toBe(false);
+    }
   });
 
   it("browses to the bookmark chosen", async () => {

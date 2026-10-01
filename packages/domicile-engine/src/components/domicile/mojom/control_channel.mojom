@@ -215,12 +215,13 @@ struct DesktopEntry {
 };
 
 // A URL the desk offers by name, from its config: the page opens `url`
-// itself rather than handing it to a program. `label` says which of the
-// bookmark's URLs `url` is, and is empty when the desk did not say.
+// itself rather than handing it to a program. `icon` is the one its site
+// names for itself, a `data:` URL as DesktopEntry's is, and empty when the
+// compositor has not found it.
 struct Bookmark {
   string name;
   string url;
-  string label;
+  string icon;
 };
 
 // Page -> browser -> compositor.

@@ -114,6 +114,7 @@ mod engine_buffers;
 mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
+mod favicons;
 mod file_indexing;
 mod gbm;
 mod idle;
@@ -169,9 +170,7 @@ use domicile_config::{
 };
 use domicile_host::app_icons::AppIcons;
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
-use domicile_host::bookmarks::{
-    find as find_bookmarks, Offered as OfferedBookmark, Shortcode as OfferedShortcode,
-};
+use domicile_host::bookmarks::find as find_bookmarks;
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::desktop_entries::{application_dirs, data_dirs, find, installed};
 use domicile_host::file_preview::preview;
@@ -507,6 +506,8 @@ struct ChromeHub {
     /// The icons a launcher's applications are drawn with, found once each.
     /// Behind a lock of its own because every connection answers searches.
     app_icons: Mutex<AppIcons>,
+    /// The icons the bookmarks' sites name, found in the background.
+    favicons: favicons::Favicons,
     /// How the desk's *clients* are told the theme, which is the other half of
     /// broadcasting one.
     ///
@@ -527,8 +528,17 @@ impl ChromeHub {
     /// Take up `applications`: which desktop entries and bookmarks the next
     /// search offers. Nothing is told — a launcher asks on every keystroke, so
     /// the next one is answered under it.
+    ///
+    /// The icons of bookmarks it has not seen are looked for now, in the
+    /// background, so a search a moment later has them.
     fn offer_the_applications(&self, applications: &ApplicationsConfig) {
         *self.applications.lock().unwrap() = applications.clone();
+        self.favicons.look_for(
+            applications
+                .bookmarks
+                .iter()
+                .map(|bookmark| bookmark.url.clone()),
+        );
     }
 
     fn new(
@@ -555,6 +565,7 @@ impl ChromeHub {
                 std::env::var_os("XDG_DATA_DIRS"),
                 home_directory().as_deref(),
             ))),
+            favicons: favicons::Favicons::default(),
             appearance,
             tray: OnceLock::new(),
         });
@@ -1010,29 +1021,32 @@ const BATTERY_BACKSTOP: Duration = Duration::from_secs(120);
 const FOUND: usize = 200;
 
 /// The desk's bookmarks a search matched, as a launcher is told them.
-fn offered_bookmarks(bookmarks: &[domicile_config::Bookmark], query: &str) -> Vec<Bookmark> {
-    let bookmarks: Vec<OfferedBookmark> = bookmarks
+///
+/// Each with the icon its site was found to name, if it has been. One whose
+/// site had none, or did not answer, is asked again now if it is due — see
+/// [`favicons::Favicons::look_for`] — and has it on a later search.
+fn offered_bookmarks(
+    bookmarks: &[domicile_config::Bookmark],
+    favicons: &favicons::Favicons,
+    query: &str,
+) -> Vec<Bookmark> {
+    let bookmarks: Vec<Bookmark> = bookmarks
         .iter()
-        .map(|bookmark| OfferedBookmark {
+        .map(|bookmark| Bookmark {
             name: bookmark.name.clone(),
             url: bookmark.url.clone(),
-            label: bookmark.label.clone(),
-            shortcodes: bookmark
-                .shortcodes
-                .iter()
-                .map(|(code, picked)| {
-                    (
-                        code.clone(),
-                        OfferedShortcode {
-                            url: picked.url.clone(),
-                            label: picked.label.clone(),
-                        },
-                    )
-                })
-                .collect(),
+            icon: None,
         })
         .collect();
+    favicons.look_for(bookmarks.iter().map(|bookmark| bookmark.url.clone()));
+    // Matched first, so only what is sent is given its icon.
     find_bookmarks(&bookmarks, query, FOUND_APPS)
+        .into_iter()
+        .map(|bookmark| Bookmark {
+            icon: favicons.icon(&bookmark.url),
+            ..bookmark
+        })
+        .collect()
 }
 
 /// How many applications a search sends. Fewer than files, because each
@@ -1691,7 +1705,7 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
                     ..found.entry.clone()
                 })
                 .collect();
-            let bookmarks = offered_bookmarks(&offered.bookmarks, &query);
+            let bookmarks = offered_bookmarks(&offered.bookmarks, &hub.favicons, &query);
             vec![HostMessage::FoundApps {
                 apps,
                 bookmarks,

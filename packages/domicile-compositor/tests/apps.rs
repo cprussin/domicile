@@ -490,21 +490,18 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
     );
 }
 
-/// A search offers the desk's bookmarks beside its applications, a shortcode
-/// in it picking the URL and label its bookmark names.
+/// A search offers the desk's bookmarks beside its applications.
 #[test]
 fn a_search_for_applications_offers_the_bookmarks_it_matches() {
     let config = format!(
         "{ONE_DISPLAY}
 [[applications.bookmarks]]
 name = \"Mail\"
-url = \"https://mail.example.com\"
+url = \"https://mail.invalid\"
 
 [[applications.bookmarks]]
 name = \"Calendar\"
-url = \"https://calendar.example.com\"
-label = \"Home\"
-shortcodes = {{ \"!work\" = {{ url = \"https://calendar.example.com?user=work\", label = \"Work\" }} }}
+url = \"https://calendar.invalid\"
 "
     );
 
@@ -512,7 +509,7 @@ shortcodes = {{ \"!work\" = {{ url = \"https://calendar.example.com?user=work\",
     let mut chrome = compositor.chrome();
     chrome
         .say(&ChromeMessage::SearchApps {
-            query: "cal !work".into(),
+            query: "cal".into(),
         })
         .expect("it asks");
 
@@ -526,8 +523,69 @@ shortcodes = {{ \"!work\" = {{ url = \"https://calendar.example.com?user=work\",
         bookmarks,
         vec![Bookmark {
             name: "Calendar".into(),
-            url: "https://calendar.example.com?user=work".into(),
-            label: Some("Work".into()),
+            url: "https://calendar.invalid".into(),
+            icon: None,
         }]
     );
+}
+
+/// A bookmark is offered with the icon its site's page links, which the
+/// compositor fetches itself rather than leaving a page to guess at.
+#[test]
+fn a_search_offers_a_bookmark_with_the_icon_its_page_links() {
+    let site = std::net::TcpListener::bind("127.0.0.1:0").expect("a port for the site");
+    let address = site.local_addr().expect("its address");
+    std::thread::spawn(move || {
+        for stream in site.incoming() {
+            let mut stream = stream.expect("a connection");
+            let mut request = [0u8; 2048];
+            let read = std::io::Read::read(&mut stream, &mut request).expect("a request");
+            let request = String::from_utf8_lossy(&request[..read]);
+            let (kind, body): (&str, &[u8]) = if request.starts_with("GET /icon.png ") {
+                ("image/png", b"png")
+            } else {
+                ("text/html", b"<link rel=\"icon\" href=\"/icon.png\">")
+            };
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            std::io::Write::write_all(&mut stream, head.as_bytes()).expect("the head");
+            std::io::Write::write_all(&mut stream, body).expect("the body");
+        }
+    });
+    let config = format!(
+        "{ONE_DISPLAY}
+[[applications.bookmarks]]
+name = \"Site\"
+url = \"http://{address}/\"
+"
+    );
+
+    let compositor = Compositor::started_with(&config);
+    let mut chrome = compositor.chrome();
+    // Found in the background, so a search before it is done has none: asked
+    // until one has it.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let icon = loop {
+        chrome
+            .say(&ChromeMessage::SearchApps {
+                query: "site".into(),
+            })
+            .expect("it asks");
+        let answer = chrome
+            .wait_for(|message| matches!(message, HostMessage::FoundApps { .. }))
+            .expect("the compositor answers");
+        let HostMessage::FoundApps { bookmarks, .. } = answer else {
+            panic!("that is not a search's answer: {answer:?}");
+        };
+        match bookmarks[0].icon.clone() {
+            Some(icon) => break icon,
+            None if std::time::Instant::now() < until => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            None => panic!("the bookmark never had its icon"),
+        }
+    };
+    assert_eq!(icon, "data:image/png;base64,cG5n");
 }

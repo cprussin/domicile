@@ -1,31 +1,21 @@
 //! What a launcher is offered of the desk's bookmarks.
 
-use std::collections::BTreeMap;
-
-use domicile_host::bookmarks::{find, Offered, Shortcode};
+use domicile_host::bookmarks::find;
 use domicile_protocol::Bookmark;
 
-fn bookmark(name: &str, url: &str) -> Offered {
-    Offered {
+fn bookmark(name: &str, url: &str) -> Bookmark {
+    Bookmark {
         name: name.into(),
         url: url.into(),
-        label: None,
-        shortcodes: BTreeMap::new(),
+        icon: None,
     }
 }
 
-fn offered() -> Vec<Offered> {
+fn offered() -> Vec<Bookmark> {
     vec![
         bookmark("Mail", "https://mail.google.com"),
-        Offered {
-            label: Some("Home".into()),
-            shortcodes: BTreeMap::from([(
-                "!work".into(),
-                Shortcode {
-                    url: "https://calendar.google.com?authuser=work".into(),
-                    label: Some("Work".into()),
-                },
-            )]),
+        Bookmark {
+            icon: Some("data:image/png;base64,Y2Fs".into()),
             ..bookmark("Calendar", "https://calendar.google.com")
         },
         bookmark("Code Review", "https://github.com/pulls"),
@@ -63,25 +53,6 @@ fn no_more_than_the_limit_is_offered() {
 }
 
 #[test]
-fn a_bookmark_without_a_shortcode_offers_its_url_and_label() {
-    assert_eq!(
-        find(&offered(), "cal", 10),
-        vec![Bookmark {
-            name: "Calendar".into(),
-            url: "https://calendar.google.com".into(),
-            label: Some("Home".into()),
-        }]
-    );
-}
-
-#[test]
-fn a_shortcode_in_the_query_offers_its_url_and_label_and_is_not_matched_as_a_word() {
-    assert_eq!(
-        find(&offered(), "cal !WORK", 10),
-        vec![Bookmark {
-            name: "Calendar".into(),
-            url: "https://calendar.google.com?authuser=work".into(),
-            label: Some("Work".into()),
-        }]
-    );
+fn a_bookmark_is_offered_with_its_icon() {
+    assert_eq!(find(&offered(), "cal", 10), vec![offered()[1].clone()]);
 }

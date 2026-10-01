@@ -317,9 +317,9 @@ const desktopEntrySchema = z.looseObject({
 });
 
 // A URL the desk offers by name, from `applications.bookmarks`, with the
-// `label` the desk gave the URL it opens, if it gave one.
+// `icon` its site names as a `data:` URL once the compositor has found it.
 const bookmarkSchema = z.looseObject({
-  label: z.string().optional(),
+  icon: z.string().optional(),
   name: z.string(),
   url: z.string(),
 });

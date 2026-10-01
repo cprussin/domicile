@@ -612,7 +612,7 @@ void DomicileHost::Apps(const String& query,
   marked.reserve(bookmarks.size());
   for (auto& bookmark : bookmarks) {
     marked.push_back(MakeGarbageCollected<DomicileBookmark>(
-        bookmark->name, bookmark->url, bookmark->label));
+        bookmark->name, bookmark->url, bookmark->icon));
   }
   DispatchEvent(*MakeGarbageCollected<DomicileAppsEvent>(
       domicile_event_names::Apps(), query, std::move(entries),
