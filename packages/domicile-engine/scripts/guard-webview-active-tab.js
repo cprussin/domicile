@@ -77,12 +77,15 @@ const clickOnceReady = () => {
 
 const src = required(parameters, "src");
 
-// FOCUSED ONCE THE PAGE HAS ARRIVED, not on the first page change: that can
-// be the guest's address moving before the page commits, and activeTab grants
-// the page the tab is showing when the click lands. A grant on the page before
-// this one is revoked when this one commits, and the fixture is then refused.
+// FOCUSED ONCE THE PAGE HAS ARRIVED, not on the first page change: activeTab
+// grants the page the tab is showing when the click lands, and one that has
+// not committed is not that page. `view.url === src` is not arrival -- `url` is
+// the guest's visible entry, which can be a pending one, and `loading` also
+// falls for a load that stopped short of a commit. So the page says it arrived:
+// the server's still page moves itself to `#ready` once it has loaded, a
+// same-document commit no uncommitted page can make.
 const focusOnceArrived = () => {
-  if (!focused && view.url === src && !view.loading) {
+  if (!focused && view.url === `${src}#ready` && !view.loading) {
     focused = true;
     view.focus();
     say("focused");
