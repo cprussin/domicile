@@ -45,6 +45,7 @@ import type {
   DomicileIdleEvent,
   DomicileLockedEvent,
   DomicileModifiersEvent,
+  DomicileNotificationsEvent,
   DomicileShellConfigEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
@@ -58,6 +59,8 @@ import {
   filePreviewKindSchema,
 } from "./file-preview";
 import { KeyAction } from "./key-action";
+import type { Notification } from "./notification";
+import { notificationUrgencySchema } from "./notification";
 import { shellConfigSchema } from "./protocol";
 import type { Theme } from "./theme";
 import type { TrayItem } from "./tray";
@@ -471,6 +474,17 @@ export type ShellConfigMessage = {
   shells: ReadonlyMap<string, ShellSection>;
 };
 
+/**
+ * The desk's notifications, as a shell draws them.
+ *
+ * The whole list every time, oldest first, like the tray, and once more when
+ * the page connects. Clearing is `dismissNotifications(ids)`; a press is
+ * `invokeNotificationAction(id, action)`.
+ */
+export type NotificationsMessage = {
+  items: readonly Notification[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -493,6 +507,7 @@ export type HostMessageMap = {
   locked: LockedMessage;
   extensions: ExtensionsMessage;
   tray: TrayMessage;
+  notifications: NotificationsMessage;
   /**
    * Which way round the desk's windows are drawn: `theme`'s other half,
    * arriving once they have turned. See {@link DomicileHost.themeCaptured}.
@@ -804,6 +819,29 @@ const byMode = (table: WireKeybindings): KeybindingsByMode =>
       })),
     ]),
   );
+
+/**
+ * The notifications, with the SDK's own `arrival` left behind, an empty
+ * picture read as none and `-1` as a timeout left to the shell. The urgency is
+ * parsed, because the engine carries it as a word: one it has no name for is
+ * a compositor this SDK does not match, and throws.
+ */
+export const notifications = (
+  event: DomicileNotificationsEvent,
+): NotificationsMessage => ({
+  items: event.items.map((item) => ({
+    actions: item.actions.map(({ key, label }) => ({ key, label })),
+    appName: item.appName,
+    body: item.body,
+    clickable: item.clickable,
+    icon: named(item.icon),
+    id: item.id,
+    summary: item.summary,
+    time: item.time,
+    timeoutMs: item.timeoutMs < 0 ? undefined : item.timeoutMs,
+    urgency: notificationUrgencySchema.parse(item.urgency),
+  })),
+});
 
 export const modifiers = (event: DomicileModifiersEvent): ModifiersMessage => ({
   altKey: event.altKey,

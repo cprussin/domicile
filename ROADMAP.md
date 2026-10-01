@@ -139,14 +139,12 @@ The evidence for each of those is in the doc that made the claim —
      [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#the-screen-going-dark)
      says so, and the compositor says so when it is missing. A NixOS module
      would make that one line rather than two in two places.
-   - **A wrong passphrase is answered with silence.** No verdict crosses the
-     protocol, so a shell cannot say "that was wrong", cannot count tries and
-     cannot rate-limit them; the compositor logs the refusal and the desk stays
-     shut. The field clearing is the only feedback there is, and with PAM behind
-     the seam the refusal also takes as long as PAM's delay on a failure, which
-     the shell cannot see either. What this wants is a message carrying the
-     verdict — and a "checking" state, since keys sent while one is being
-     checked reach nothing.
+   - **A wrong passphrase is only `locked: true` again.** That is enough to say
+     "that was wrong" — every verdict is broadcast, and a shell waiting on a
+     check reads the state said again as the refusal — but it cannot tell a
+     wrong passphrase from a verifier that could not check, count tries or
+     rate-limit them. A verdict of its own would need an event of its own in
+     the engine.
    - **A reload does not move the lock.** `[lock]` is read at startup and
      nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left
@@ -179,7 +177,7 @@ The evidence for each of those is in the doc that made the claim —
    `fullscreen global` through the same mirrors, and browser windows, which
    stay on their screen because a `<webview>` on another page reloads.
    [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
-   What is left comes free with item 7.
+   What is left comes free with item 8.
 
 6. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
@@ -187,7 +185,14 @@ The evidence for each of those is in the doc that made the claim —
    libappindicator items do nothing on a secondary click.
    [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
-7. **One page for the desk.** On a tty the shell becomes one page over the
+7. **Which monitor toasts a notification.** The compositor serves
+   `org.freedesktop.Notifications` — a site's Web Notification included — and
+   manganese toasts them and keeps a drawer. Left: on one page over the desk,
+   the toasts go to the top-right of the whole desk rather than the focused
+   screen; and inline reply.
+   [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
+
+8. **One page for the desk.** On a tty the shell becomes one page over the
    desk's bounding box, shown on every monitor at its own density and refresh
    rate, instead of a page per monitor. Phase 1 (one host, presenters per
    CRTC, raster at the largest scale) is behind `--domicile-one-page`; left:

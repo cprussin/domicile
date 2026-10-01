@@ -9,11 +9,13 @@
 
 import { common, createLowlight } from "lowlight";
 
+import { org } from "./org";
+
 /** A piece of a line, and what a grammar says it is, if it says anything. */
 export type Run = { scope: string | undefined; text: string };
 
-/** The grammars a preview knows: `highlight.js`'s common set. */
-const lowlight = createLowlight(common);
+/** The grammars a preview knows: `highlight.js`'s common set, and Org. */
+const lowlight = createLowlight({ ...common, org });
 
 /**
  * The names `highlight.js`'s plain-text grammar goes by. Plain text is not a

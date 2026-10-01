@@ -6,10 +6,10 @@ describe("languageOf", () => {
   it("reads a language from an extension, or from a name with none", () => {
     expect(languageOf("src/main.TS")).toBe("ts");
     expect(languageOf("Makefile")).toBe("makefile");
+    expect(languageOf("Notes/today.org")).toBe("org");
   });
 
   it("is nothing for a file no grammar is for, or for plain text", () => {
-    expect(languageOf("Notes/today.org")).toBeUndefined();
     expect(languageOf("todo.txt")).toBeUndefined();
     expect(languageOf(".bashrc")).toBeUndefined();
   });

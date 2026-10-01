@@ -44,6 +44,12 @@ import {
 
 type Props = {
   /**
+   * Whether it is all the screen shows, alone or as a tab group — see
+   * `showsOneThing` — which leaves its frame the resting color even while it
+   * is focused: there is nothing else for it to be picked out from.
+   */
+  alone?: boolean;
+  /**
    * How the window says a client no longer holds the keyboard.
    *
    * A browser window's keyboard is its page's, and its page is part of this
@@ -173,6 +179,7 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
+  alone = false,
   clickThrough,
   covered,
   depth,
@@ -231,14 +238,8 @@ export const BrowserWindow = ({
   const focusing = useRef(false);
   // THE FILE THE PAGE IS WAITING ON, which is this window's to pick: the
   // engine draws no dialog of its own and refuses a question nobody takes —
-  // see `useFileRequest`. Picked from the launcher's search, one function for
-  // the life of the client for the launcher's reason: a new one is a new
-  // search.
+  // see `useFileRequest`.
   const asking = useFileRequest(view);
-  const search = useCallback(
-    (query: string) => domicile.searchFiles(query),
-    [domicile],
-  );
   // The picker's box, while there is a picker: where this window's keyboard
   // goes instead of the page, which is waiting on it. `null` for the ref API's
   // reason, as the view's is.
@@ -543,7 +544,7 @@ export const BrowserWindow = ({
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
-        focused ? focusedEdgeStyles : restingEdgeStyles,
+        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
@@ -639,7 +640,6 @@ export const BrowserWindow = ({
             key={asking.serial}
             ref={setPickerBox}
             request={asking}
-            search={search}
           />
         )}
       </div>

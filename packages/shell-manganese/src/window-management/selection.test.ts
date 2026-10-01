@@ -27,11 +27,13 @@ const reduce = (
   ...actions: readonly WindowAction[]
 ): WindowState => actions.reduce(reduceWindows, state);
 
+// Two windows side by side: a workspace opens its windows as tabs.
 const desktop = (...actions: readonly WindowAction[]): WindowState =>
   reduce(
     NO_WINDOWS,
     WindowAction.AppAppeared("one", "one"),
     WindowAction.AppAppeared("two", "two"),
+    WindowAction.LayoutSet(Layout.SplitH),
     ...actions,
   );
 
@@ -61,12 +63,16 @@ describe("selectionOf", () => {
   });
 
   it("rises around the open tab alone, rather than the tabs beside it", () => {
-    const state = desktop(WindowAction.LayoutSet(Layout.Tabbed));
+    const state = desktop(
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("three", "three"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
 
     expect(selected(state)?.bar).toEqual({
       height: TITLE_BAR,
-      width: 958,
-      x: 962,
+      width: 473,
+      x: 1447,
       y: GEOMETRY.workspace.y,
     });
   });
@@ -125,6 +131,20 @@ describe("selectionOf", () => {
     // nothing and costs the window the pixels along all four sides.
     expect(
       selected(reduce(NO_WINDOWS, WindowAction.AppAppeared("one", "one"))),
+    ).toBeUndefined();
+  });
+
+  it("rings nothing around the workspace's only tab group", () => {
+    // Its open tab already says which window is open, and there is nothing
+    // else on the workspace the commands could be pointed at.
+    expect(
+      selected(
+        reduce(
+          NO_WINDOWS,
+          WindowAction.AppAppeared("one", "one"),
+          WindowAction.AppAppeared("two", "two"),
+        ),
+      ),
     ).toBeUndefined();
   });
 

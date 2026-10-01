@@ -235,6 +235,12 @@ class FakeDomicile {
   activateTrayItem(id: string, action: string): void {
     this.calls.push(["activateTrayItem", id, action]);
   }
+  dismissNotifications(ids: readonly number[]): void {
+    this.calls.push(["dismissNotifications", ids]);
+  }
+  invokeNotificationAction(id: number, action: string): void {
+    this.calls.push(["invokeNotificationAction", id, action]);
+  }
 }
 
 let domicile: FakeDomicile;
@@ -1134,6 +1140,63 @@ describe("Shell", () => {
     });
   });
 
+  describe("the notifications", () => {
+    /** A notification as the client hands one on. */
+    const arrived = (id: number, summary: string) => ({
+      actions: [],
+      appName: "chat.example.com",
+      body: "",
+      clickable: true,
+      icon: undefined,
+      id,
+      summary,
+      time: id,
+      timeoutMs: undefined,
+      urgency: "normal",
+    });
+
+    it("toasts what arrives, and the bell counts it", async () => {
+      renderShell();
+      domicile.emit("notifications", { items: [] });
+
+      domicile.emit("notifications", { items: [arrived(7, "New message")] });
+
+      expect(
+        await screen.findByRole("button", { name: "New message" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Notifications, 1 unread" }),
+      ).toBeVisible();
+    });
+
+    it("lists them in the drawer the bell opens, and clears them all", async () => {
+      renderShell();
+      domicile.emit("notifications", {
+        items: [arrived(1, "Older"), arrived(2, "Newer")],
+      });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Notifications" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Clear all" }),
+      );
+
+      expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
+    });
+
+    it("is the far end of the bar", () => {
+      renderShell();
+
+      const battery = screen.getByRole("button", { name: /theme/ });
+      const bell = screen.getByRole("button", { name: "Notifications" });
+      expect(
+        battery.compareDocumentPosition(bell) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+  });
+
   describe("the extension tray", () => {
     it("is on the bar, and a click on one with no popup activates it", async () => {
       renderShell();
@@ -1440,6 +1503,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term");
       clientAppears("shell");
+      press("e");
       press("braceright");
       clientAppears("editor");
 
@@ -1591,11 +1655,23 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       expect(appElement(container, "two").className).toContain(
         css({ borderColor: "accent" }),
       );
       expect(appElement(container, "one").className).toContain(
+        css({ borderColor: "borderStrong" }),
+      );
+    });
+
+    it("draws no frame in the accent around a screen's only tab group", () => {
+      // Nothing else on the screen for it to be picked out from.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(appElement(container, "two").className).toContain(
         css({ borderColor: "borderStrong" }),
       );
     });
@@ -1734,6 +1810,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       const ring = selectionRing(container);
       const around = boxOf(ring);
 
@@ -1761,6 +1838,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       for (const corner of [
         css({ borderStartStartRadius: "lg" }),
@@ -1779,19 +1857,23 @@ describe("Shell", () => {
     it("rises around the open tab alone, and runs under the ones beside it", () => {
       // A ring around the whole of a tabbed container is drawn across every
       // tab, and says nothing about which of them is open.
+      // Beside a window of its own, or the tabs would be all the screen shows.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
+      press("v");
+      clientAppears("three");
 
       press("w");
 
       // The second of two tabs, in the ring's own coordinates.
       expect(boxOf(ringPart(container, "tab"))).toMatchObject({
-        width: "958px",
-        x: "962px",
+        width: "473px",
+        x: "477px",
       });
       expect(boxOf(ringPart(container, "before"))).toMatchObject({
-        width: "962px",
+        width: "477px",
       });
       expect(boxOf(ringPart(container, "after"))).toMatchObject({
         width: "0px",
@@ -1804,6 +1886,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       motionsPlayOut(container);
       clientAppears("three");
       const ring = selectionRing(container);
@@ -1812,12 +1895,13 @@ describe("Shell", () => {
       expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 
-    it("grows the ring in with the second window of a workspace", () => {
-      // The only window on a workspace has no ring, so there is no last one to
+    it("grows the ring in with the window that brings it on", () => {
+      // A window alone on the screen has no ring, so there is no last one to
       // slide across from, and a ring drawn at full size around a window still
       // growing in is a line ahead of it.
       const { container } = renderShell();
       clientAppears("one");
+      press("e");
       clientAppears("two");
 
       expect(selectionRing(container).className).toContain(

@@ -102,6 +102,10 @@
       "types": "./dist/newline-frames.d.ts",
       "default": "./dist/newline-frames.js"
     },
+    "./notification": {
+      "types": "./dist/notification.d.ts",
+      "default": "./dist/notification.js"
+    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"

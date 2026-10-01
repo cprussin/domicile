@@ -1,5 +1,6 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
+import { createToastManager } from "@domicile/component-library/Toaster";
 import { useCallback, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
@@ -12,6 +13,10 @@ import { LaunchKind } from "./launcher/launch";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
 import { useLocked } from "./lock/useLocked";
+import { NotificationDrawer } from "./notifications/NotificationDrawer";
+import { NotificationToasts } from "./notifications/NotificationToasts";
+import { useNotifications } from "./notifications/useNotifications";
+import { useNow } from "./notifications/useNow";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
@@ -112,12 +117,29 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // on one monitor's bar is a drag on every one's.
   const trayOrder = useTrayOrder();
 
+  // And the desk's notifications, pushed and held once for the desk for the
+  // tray's reasons. The toasts are this page's: one manager for the life of
+  // the page, because the toaster subscribes to it once.
+  const [toasts] = useState(createToastManager);
+  const notifications = useNotifications(domicile, toasts);
+  const { read } = notifications;
+  const now = useNow();
+  // Whether the drawer is out. Opening it is reading everything in it, and
+  // takes every toast down: each one is in the drawer, and a deck over the
+  // drawer would be the same notifications twice.
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const openNotifications = useCallback(() => {
+    setNotificationsOpen(true);
+    read();
+    toasts.close();
+  }, [read, toasts]);
+
   // And whether the desk is locked, which is pushed for a harder reason: it is
   // the compositor's state rather than this page's, because the compositor is
   // what refuses to put a forwarded keystroke into the seat. So there is nothing
   // here to set — a reload of this page does not open the desk, and this hook is
   // told where it stands as the page connects.
-  const locked = useLocked(domicile);
+  const lock = useLocked(domicile);
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
@@ -191,6 +213,11 @@ export const Desktop = ({ desk, domicile }: Props) => {
             extensions={extensions}
             key={display.name}
             modifiers={modifiers}
+            notifications={{
+              onOpen: openNotifications,
+              open: notificationsOpen,
+              unread: notifications.unread,
+            }}
             tray={tray}
             trayOrder={trayOrder}
             windows={windows}
@@ -242,6 +269,32 @@ export const Desktop = ({ desk, domicile }: Props) => {
         open={windows.clipboardOpen}
       />
       {/*
+        Over the windows and under every panel: a toast over the launcher
+        would cover what is being typed. Not drawn at all over a locked desk,
+        whose lock screen they would read out to whoever is in front of it.
+      */}
+      <NotificationToasts
+        manager={toasts}
+        now={now}
+        onAction={notifications.invoke}
+        shown={!lock.locked}
+      />
+      {/* From the bar's far edge, over the whole desktop, like the clipboard. */}
+      <NotificationDrawer
+        items={notifications.items}
+        now={now}
+        onAction={notifications.invoke}
+        onDismiss={notifications.dismiss}
+        onOpenChange={(open) => {
+          if (open) {
+            openNotifications();
+          } else {
+            setNotificationsOpen(false);
+          }
+        }}
+        open={notificationsOpen && !lock.locked}
+      />
+      {/*
         Last, and over every panel above it: the launcher and the clipboard are
         `modal`, and a lock screen underneath an open launcher would be a locked
         desk somebody could still type a path into.
@@ -251,10 +304,10 @@ export const Desktop = ({ desk, domicile }: Props) => {
         the desk opened — never this page's own click. See `lock/Lock.tsx`.
       */}
       <Lock
-        locked={locked}
-        onUnlock={(passphrase) => {
-          domicile.unlock(passphrase);
-        }}
+        checking={lock.checking}
+        locked={lock.locked}
+        onUnlock={lock.unlock}
+        refusals={lock.refusals}
       />
       <NoScreens />
     </>

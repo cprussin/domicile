@@ -74,6 +74,13 @@ class MODULES_EXPORT DomicileHost final
                         const String& id,
                         V8DomicileTrayAction action,
                         ExceptionState&);
+  void dismissNotifications(ScriptState*,
+                            const Vector<uint32_t>& ids,
+                            ExceptionState&);
+  void invokeNotificationAction(ScriptState*,
+                                uint32_t id,
+                                const String& action,
+                                ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);
@@ -229,6 +236,8 @@ class MODULES_EXPORT DomicileHost final
                  base::TimeTicks arrival) override;
   void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
             base::TimeTicks arrival) override;
+  void Notifications(Vector<domicile::mojom::blink::NotificationPtr> items,
+                     base::TimeTicks arrival) override;
   void ThemeChanged(domicile::mojom::blink::Theme theme,
                     base::TimeTicks arrival) override;
   void Idle(bool idle, base::TimeTicks arrival) override;

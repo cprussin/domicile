@@ -17,6 +17,7 @@ const asking = (mode: string, answers: string[] = []) =>
     choose: (paths: readonly string[]) => {
       answers.push(`choose ${paths.join(",")}`);
     },
+    home: "/home/someone",
     list: (path: string) => Promise.resolve([`${path}/a`, `${path}/b/`]),
     mode,
     suggestedName: "photo.png",
@@ -42,11 +43,12 @@ describe("fileRequestOf", () => {
     expect(() => fileRequestOf(asking("open-everything"))).toThrow();
   });
 
-  it("keeps what the page will take and the name it suggests", () => {
+  it("keeps what the page will take, the name it suggests and the home", () => {
     const request = fileRequestOf(asking("save"));
 
     expect(request.accept).toStrictEqual(["png", "jpg"]);
     expect(request.suggestedName).toBe("photo.png");
+    expect(request.home).toBe("/home/someone");
   });
 
   it("answers the engine through the event", () => {

@@ -179,6 +179,12 @@ export const domicilePreset = definePreset({
           "0%": { clipPath: "inset(0 0 100% 0)" },
           "100%": { clipPath: "inset(0 0 0 0)" },
         },
+        // A toast's countdown: the hairline along its foot running out, as
+        // long as the toast stays up — see `Toaster`.
+        toastCountdown: {
+          "0%": { transform: "scaleX(1)" },
+          "100%": { transform: "scaleX(0)" },
+        },
       },
       recipes: {
         control: defineRecipe({
@@ -380,6 +386,14 @@ export const domicilePreset = definePreset({
         },
       },
       tokens: {
+        borderWidths: {
+          // A stroke around each letter in its own color, painted under it
+          // (`paintOrder: "stroke"`) so only its outer half shows: that reads
+          // as semibold without a heavier weight's wider letters, for emphasis
+          // that must not move the text around it. In `em` so it thickens
+          // with the type.
+          fauxBold: { value: "0.05em" },
+        },
         durations: {
           // A dissolve between two pictures — far longer than any of the
           // default durations, which measure how long a control takes to
@@ -455,6 +469,12 @@ export const domicilePreset = definePreset({
           lock: { value: "202" },
           modal: { value: "201" },
           modalBackdrop: { value: "200" },
+          // Under a modal and its backdrop, and over everything a page lays
+          // out: a toast is news about the page, and drawn over a dialog it
+          // would cover the thing being answered. Panda's own is 1700, over
+          // the lock screen, which would put a notification on a locked
+          // desk; this preset's scale is the one above.
+          toast: { value: "199" },
         },
       },
     },

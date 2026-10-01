@@ -139,6 +139,12 @@ class FakeHost implements DomicileHost {
   activateTrayItem(id: string, action: TrayAction): void {
     this.calls.push(["activateTrayItem", id, action]);
   }
+  dismissNotifications(ids: readonly number[]): void {
+    this.calls.push(["dismissNotifications", ids]);
+  }
+  invokeNotificationAction(id: number, action: string): void {
+    this.calls.push(["invokeNotificationAction", id, action]);
+  }
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
   }
@@ -349,6 +355,53 @@ describe("DomicileClient", () => {
         {
           items: [
             { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
+          ],
+        },
+      ]);
+    });
+
+    it("delivers the notifications nobody asked for", () => {
+      const seen: unknown[] = [];
+      domicile.on("notifications", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "notifications",
+        Object.assign(new Event("notifications"), {
+          arrival: 0,
+          items: [
+            {
+              actions: [],
+              appName: "",
+              body: "",
+              clickable: false,
+              icon: "",
+              id: 8,
+              summary: "Battery low",
+              time: 1,
+              timeoutMs: 0,
+              urgency: "critical",
+            },
+          ],
+        }),
+      );
+
+      expect(seen).toStrictEqual([
+        {
+          items: [
+            {
+              actions: [],
+              appName: "",
+              body: "",
+              clickable: false,
+              icon: undefined,
+              id: 8,
+              summary: "Battery low",
+              time: 1,
+              timeoutMs: 0,
+              urgency: "critical",
+            },
           ],
         },
       ]);
@@ -715,6 +768,16 @@ describe("DomicileClient", () => {
         "activateTrayItem",
         ":1.9/StatusNotifierItem",
         "context",
+      ]);
+
+      domicile.dismissNotifications([7, 8]);
+      expect(host.lastCall()).toStrictEqual(["dismissNotifications", [7, 8]]);
+
+      domicile.invokeNotificationAction(7, "reply");
+      expect(host.lastCall()).toStrictEqual([
+        "invokeNotificationAction",
+        7,
+        "reply",
       ]);
 
       domicile.setDevicePixelRatio(2);

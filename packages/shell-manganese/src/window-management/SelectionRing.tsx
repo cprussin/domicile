@@ -48,9 +48,9 @@ type Props = {
  * keyboard is, so it slides across from the last window to the new one rather
  * than reappearing there — the eye follows it instead of hunting for it.
  *
- * **Unless there was no last ring.** The only window on a workspace has none
- * — see `selectionOf` — so the ring around the second has nothing to slide
- * across from and grows in with it: a ring drawn at full size around a window
+ * **Unless there was no last ring.** A window or tab group alone on the
+ * screen has none — see `showsOneThing` — so the ring around the window that
+ * joins it has nothing to slide across from and grows in with it: a ring drawn at full size around a window
  * still growing in is a line out ahead of it.
  *
  * At the depth of what it rings and after every window in the document, which

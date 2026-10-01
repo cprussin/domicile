@@ -867,11 +867,13 @@ page that believed its own keystrokes would be a lock anybody could open by
 editing the page. A desk of three monitors is three of your pages and one lock,
 which is the same reason `setTheme` comes back as a `theme` event.
 
-**A wrong passphrase is answered with nothing at all.** No verdict and no
-count: the desk stays shut and the compositor says so in its own log, without
-the passphrase in it. So your field is the only thing that can say the try
-happened — clear it on every submit rather than waiting for an answer that is
-not coming. There is no "that was wrong" on this protocol yet;
+**A wrong passphrase is answered with `locked: true` again.** Every check is
+answered to every chrome once it is over, and nothing else sends `locked: true`
+to a desk being checked — that desk is already shut — so a `true` while your
+page has a passphrase out is the refusal. Hold your field until then, and clear
+it on the refusal or the `false`. A verifier that could not check is answered
+the same way; the compositor tells the two apart only in its own log, without
+the passphrase in it. There is no count on this protocol yet;
 [ROADMAP.md](/ROADMAP.md) carries it.
 
 **A right one takes as long as PAM takes, and the desk stays shut until then.**
@@ -1131,13 +1133,13 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 
 - **`preventDefault()` takes it.** One nobody takes is canceled when the
   dispatch returns, so an upload is refused rather than left waiting.
-- **Paths are absolute or relative to the home.** Relative is how
-  `searchFiles` names them, so a picker built on it hands back what it showed;
-  `""` is the home. `..` is a `TypeError`.
+- **`event.home` is where to start**: the absolute home directory, which the
+  page has no other way to learn.
 - **`event.list(path)` walks the filesystem** while the chooser is unanswered:
-  the names in a directory, a directory's ending in `/`, so a picker reaches
-  what the index never found. It rejects for a path that is not a readable
-  directory.
+  the names in a directory, a directory's ending in `/`. It rejects for a path
+  that is not a readable directory.
+- **Paths are absolute**, or relative to the home (`""` is the home). `..` is
+  a `TypeError`.
 - **`mode`** is `open`, `open-multiple`, `open-folder` or `save`; `accept` is
   extensions without the dot (empty is anything); `suggestedName` is a save's.
 - **Every download asks**, in `save` mode. Cancel it and nothing is saved.
@@ -1254,6 +1256,26 @@ What a click does is the application's. There are no menus yet — see
 [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
 [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx) is
 manganese's, drawing both kinds in one row the user can reorder.
+
+## Notifications
+
+Every application's notification — and every site's, because the browser hands
+a Web Notification to the same server — arrives as `notifications`: every one
+nobody has cleared, oldest first, on every change and once on connecting. Which
+are new is yours to tell; the first list is history.
+
+```ts
+domicile.on("notifications", ({ items }) => {
+  draw(items); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+});
+domicile.invokeNotificationAction(id, "default"); // a press on it, if clickable; or an action's key
+domicile.dismissNotifications([id]); // cleared: its application is told
+```
+
+How long one stays up on screen is yours; it stays in the list until cleared.
+See [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
+[`notifications/`](/packages/shell-manganese/src/notifications/) is manganese's:
+toasts, a bell and a drawer.
 
 ## Bundling
 

@@ -14,6 +14,7 @@ import type {
   DomicileIdleEvent,
   DomicileLockedEvent,
   DomicileModifiersEvent,
+  DomicileNotificationsEvent,
   DomicileShellConfigEvent,
   DomicileShortcutEvent,
   DomicileTrayEvent,
@@ -35,6 +36,7 @@ import {
   idle,
   locked,
   modifiers,
+  notifications,
   popupPlaced,
   shellConfig,
   shortcut,
@@ -534,6 +536,71 @@ describe("the system tray", () => {
         { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
       ],
     });
+  });
+});
+
+describe("the notifications", () => {
+  /** One notification, as the engine carries it. */
+  const carried = (
+    fields: Partial<DomicileNotificationsEvent["items"][number]>,
+  ) => ({
+    actions: [],
+    appName: "Firefox",
+    body: "Ada: lunch?",
+    clickable: true,
+    icon: "data:image/png;base64,iVBORw0KGgo=",
+    id: 7,
+    summary: "New message",
+    time: 1_790_000_000_000,
+    timeoutMs: -1,
+    urgency: "normal",
+    ...fields,
+  });
+
+  const arrived = (items: DomicileNotificationsEvent["items"]) =>
+    notifications(
+      Object.assign(new Event("notifications"), {
+        arrival: 0,
+        items,
+      }) as DomicileNotificationsEvent,
+    );
+
+  it("arrives as the notifications a shell draws, without the hop", () => {
+    expect(
+      arrived([carried({ actions: [{ key: "reply", label: "Reply" }] })]),
+    ).toStrictEqual({
+      items: [
+        {
+          actions: [{ key: "reply", label: "Reply" }],
+          appName: "Firefox",
+          body: "Ada: lunch?",
+          clickable: true,
+          icon: "data:image/png;base64,iVBORw0KGgo=",
+          id: 7,
+          summary: "New message",
+          time: 1_790_000_000_000,
+          timeoutMs: undefined,
+          urgency: "normal",
+        },
+      ],
+    });
+  });
+
+  it("reads the engine's empty and negative stand-ins as nothing said", () => {
+    // An empty picture is one the compositor could not draw, and `-1` is a
+    // notification that left how long it stays up to the shell; `0` is one
+    // that asked to stay until it is dismissed, which is something said.
+    const [lasting, critical] = arrived([
+      carried({ icon: "", timeoutMs: 0 }),
+      carried({ id: 8, urgency: "critical" }),
+    ]).items;
+
+    expect([lasting?.icon, lasting?.timeoutMs]).toStrictEqual([undefined, 0]);
+    expect(critical?.urgency).toBe("critical");
+  });
+
+  it("refuses an urgency the compositor has no word for", () => {
+    expect(() => arrived([carried({ urgency: "panic" })])).toThrow();
   });
 });
 

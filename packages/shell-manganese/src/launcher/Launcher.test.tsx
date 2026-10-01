@@ -239,6 +239,30 @@ describe("Launcher", () => {
     ]);
   });
 
+  it("emboldens the letters typed without widening them", async () => {
+    // A heavier weight is a wider letter, so a bold match would push the rest
+    // of its row along with every key pressed. A stroke around each letter
+    // thickens it and leaves its width alone.
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "notes");
+    await panel.rows();
+    const lit = screen
+      .getAllByText("Notes", { selector: "mark" })
+      .map((element) => globalThis.getComputedStyle(element))
+      .map((style) => ({
+        // The stroke itself is not something happy-dom computes; the order
+        // it is painted in, under each letter, is.
+        paintOrder: style.getPropertyValue("paint-order"),
+        weight: style.fontWeight,
+      }));
+
+    expect(lit).toStrictEqual([
+      { paintOrder: "stroke", weight: "normal" },
+      { paintOrder: "stroke", weight: "normal" },
+    ]);
+  });
+
   it("offers a URL above the file it names, and a search below both", async () => {
     // A URL typed whole is a URL meant, so it is on top — but the file of the
     // same name and a search for the words are both still one arrow away.
@@ -270,7 +294,7 @@ describe("Launcher", () => {
 
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["Text Editor", "Mail"]);
+    ).toStrictEqual(["Mail", "Text Editor"]);
     unmount();
   });
 
@@ -319,7 +343,7 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("offers a bookmark below the applications and above the files", async () => {
+  it("offers a bookmark above the files", async () => {
     using panel = launcher(["mail.txt"], false, [], [MAIL]);
 
     await panel.user.type(panel.box(), "mail");

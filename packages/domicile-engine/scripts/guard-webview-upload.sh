@@ -76,9 +76,10 @@ WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
 # What the shell picks -- absolute, under this guard's home -- the directory it
-# lists first, and what is in the file.
-PICK="$HOME_DIR/picked/guard-upload.txt"
-LISTED="$(dirname "$PICK")"
+# lists first, relative to the `home` the event reports, and what is in the
+# file.
+LISTED="picked"
+PICK="$HOME_DIR/$LISTED/guard-upload.txt"
 TEXT="a file the shell picked"
 
 WHICH=""
@@ -109,7 +110,7 @@ command -v python3 >/dev/null || {
 }
 
 rm -f "$BROKER"; rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
-mkdir -p "$LISTED"
+mkdir -p "$HOME_DIR/$LISTED"
 printf '%s' "$TEXT" >"$PICK"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file
@@ -240,7 +241,9 @@ HTMLWebViewElement, or the event's name, of which WEBVIEW_FILE_CHOOSER_EVENT \
 in the SDK is the third copy"
 elif [ "$SAW_LISTED" != "1" ]; then
   FAILURE="THE SHELL COULD NOT LIST THE DIRECTORY IT PICKS FROM: its list() \
-never answered with the file this guard wrote. That is the event's list(), \
+never answered with the file this guard wrote. That is the event's home attribute -- \
+which the shell lists under, so a wrong one lists the wrong directory -- its \
+list(), \
 WebViewGuest::ListDirectory -- which answers only while a chooser is open -- \
 or DirectoryEntries in file_choice.h. The engine log has GUARD list-refused \
 if it was refused"

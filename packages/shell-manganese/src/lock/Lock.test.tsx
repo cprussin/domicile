@@ -4,34 +4,73 @@ import userEvent from "@testing-library/user-event";
 
 import { Lock } from "./Lock";
 
+/** Where the lock stands, as `useLocked` would hand it over. */
+type Standing = { checking: boolean; locked: boolean; refusals: number };
+
 /** The lock over a desk, recording every passphrase it was asked to offer. */
 const lock = (locked = true) => {
   const offered: string[] = [];
-  render(
+  const drawn = (standing: Standing) => (
     <Lock
-      locked={locked}
+      {...standing}
       onUnlock={(passphrase) => {
         offered.push(passphrase);
       }}
-    />,
+    />
   );
-  return { offered, user: userEvent.setup() };
+  const { rerender } = render(drawn({ checking: false, locked, refusals: 0 }));
+  return {
+    field: () => screen.getByLabelText("Passphrase") as HTMLInputElement,
+    offered,
+    says: (standing: Partial<Standing>) => {
+      rerender(
+        drawn({ checking: false, locked: true, refusals: 0, ...standing }),
+      );
+    },
+    user: userEvent.setup(),
+  };
 };
 
 describe("Lock", () => {
-  it("is not on the page at all while the desk is open", () => {
-    // Absent rather than hidden. A sheet over the whole desktop that was merely
-    // transparent would take every click on the desk with it, and the desk this
-    // shell is drawing is the one somebody is working at.
+  it("is out of reach while the desk is open", () => {
+    // Inert rather than unmounted, because it has to fade out after the desk
+    // opens — and a sheet over the whole desktop that was merely transparent
+    // would take every click on the desk with it, and every Tab too.
     lock(false);
 
-    expect(screen.queryByLabelText("Passphrase")).toBeNull();
+    expect(
+      screen.getByLabelText("Passphrase").closest("[inert]"),
+    ).not.toBeNull();
   });
 
   it("covers the desktop and asks for the passphrase", () => {
     lock();
 
-    expect(screen.getByLabelText("Passphrase")).toBeTruthy();
+    expect(screen.getByLabelText("Passphrase").closest("[inert]")).toBeNull();
+  });
+
+  describe("the keyboard", () => {
+    it("is put in the field as the desk shuts", () => {
+      // On the edge rather than on mount: the sheet is on the page the whole
+      // time, so the moment it is shown is the moment the compositor says so.
+      const { says } = lock(false);
+
+      says({ locked: true });
+
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("cannot be taken out of the field while the desk is shut", async () => {
+      // Nothing else on a locked desk is anything to type into, so a key that
+      // went anywhere but the field is a key of the passphrase thrown away.
+      const { user } = lock();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+
+      await user.click(screen.getByRole("button", { name: "Unlock" }));
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
   });
 
   it("offers what was typed and never decides anything itself", async () => {
@@ -59,16 +98,53 @@ describe("Lock", () => {
     );
   });
 
-  it("clears what was typed after each try", async () => {
-    // A refused passphrase is answered with nothing at all, so the field is
-    // what says the try happened: one left full is a person retyping over their
-    // own first guess, and one somebody walked away from is a guess left on the
-    // screen of a locked desk.
-    const { user } = lock();
-    const field = screen.getByLabelText("Passphrase");
+  describe("a passphrase being checked", () => {
+    it("stays in the field, and is not offered twice", async () => {
+      // Held rather than cleared, because nothing has said it was wrong yet —
+      // a field that emptied on Enter is a person who cannot see what they
+      // just sent.
+      const { field, offered, says, user } = lock();
+      await user.type(field(), "open sesame{Enter}");
 
-    await user.type(field, "wrong{Enter}");
+      says({ checking: true });
+      await user.type(field(), "{Enter}");
 
-    expect((field as HTMLInputElement).value).toBe("");
+      expect(field().value).toBe("open sesame");
+      expect(offered).toStrictEqual(["open sesame"]);
+    });
+
+    it("is cleared once it is refused, and the refusal said", async () => {
+      // A refusal is the only thing that says the try was wrong, so it is the
+      // only thing that empties the field — and one somebody walked away from
+      // would be a guess left on the screen of a locked desk.
+      const { field, says, user } = lock();
+      await user.type(field(), "wrong{Enter}");
+      says({ checking: true });
+
+      says({ refusals: 1 });
+
+      expect(field().value).toBe("");
+      expect(screen.getByRole("alert").textContent).toBe("Wrong passphrase");
+    });
+
+    it("stops saying it was wrong once somebody types again", async () => {
+      const { field, says, user } = lock();
+      says({ refusals: 1 });
+
+      await user.type(field(), "x");
+
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("is cleared once the desk opens", async () => {
+      // The sheet outlives the lock to fade out, and a passphrase left in it
+      // would be one sitting in the page of an open desk.
+      const { field, says, user } = lock();
+      await user.type(field(), "open sesame{Enter}");
+
+      says({ locked: false });
+
+      expect(field().value).toBe("");
+    });
   });
 });

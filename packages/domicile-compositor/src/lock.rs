@@ -160,12 +160,13 @@ pub enum Offer {
 pub enum Unlocking {
     /// It was the passphrase. The desk is open now, and every chrome is told.
     Opened,
-    /// It was not. The desk stays shut, and nothing is broadcast — a page told
-    /// `locked: true` again would learn nothing, and a page told anything else
-    /// would be wrong.
+    /// It was not. The desk stays shut, and every chrome is told so —
+    /// `locked: true` again, which a page waiting on its check reads as the
+    /// answer to it.
     Refused,
-    /// The verifier could not say. The desk stays shut, and this is an error
-    /// rather than a refusal — see [`CouldNotCheck`].
+    /// The verifier could not say. The desk stays shut, every chrome is told so
+    /// as for a refusal, and this is an error rather than a refusal — see
+    /// [`CouldNotCheck`].
     Unverifiable(CouldNotCheck),
 }
 
@@ -262,8 +263,8 @@ impl Lock {
     /// **ONE AT A TIME, AND THE SECOND IS DROPPED.** Two out at once would be
     /// two verdicts racing to decide one desk, and a page that sent a hundred
     /// would be a hundred threads each paying PAM's delay. Not queued either:
-    /// the shell clears its field on every submit, so what was typed while the
-    /// desk was busy is already gone from the screen.
+    /// a shell holds its field as it was sent until the verdict, so there is
+    /// nothing typed meanwhile for a queue to keep.
     pub fn offered(&mut self, passphrase: &Passphrase) -> Offer {
         let mut state = self.state.lock().unwrap();
         match *state {
@@ -435,7 +436,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
             | ClientRequest::CopyClipboardEntry { .. }
-            | ClientRequest::ActivateTrayItem { .. },
+            | ClientRequest::ActivateTrayItem { .. }
+            | ClientRequest::DismissNotifications { .. }
+            | ClientRequest::InvokeNotificationAction { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -621,9 +624,8 @@ mod tests {
         // ONE CHECK AT A TIME. A second passphrase while the first is out would
         // be two verdicts racing to decide one desk, and a page that sent a
         // hundred would be a hundred threads each costing PAM's delay. It is
-        // not queued either: the shell clears its field on every submit, so
-        // what was typed while the desk was busy is gone from the screen and
-        // should be gone from here.
+        // not queued either: a shell holds its field as it was sent until the
+        // verdict, so nothing typed while the desk was busy is waiting on it.
         let (mut lock, heard) = desk();
         lock.shut();
 
@@ -811,6 +813,17 @@ mod tests {
                 ClientRequest::ActivateTrayItem {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
+                },
+            ),
+            (
+                "notifications cleared",
+                ClientRequest::DismissNotifications { ids: vec![7] },
+            ),
+            (
+                "a notification's action taken",
+                ClientRequest::InvokeNotificationAction {
+                    id: 7,
+                    action: "default".into(),
                 },
             ),
         ] {

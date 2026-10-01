@@ -18,22 +18,13 @@ import {
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../../styled-system/css";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
-
-/** A home with one file in it, which is all a picker here is asked about. */
-const HOME_FILES = ["notes.txt"];
 
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-  searchFiles: (query: string) =>
-    Promise.resolve({
-      files: HOME_FILES,
-      indexing: false,
-      matched: HOME_FILES.length,
-      query,
-    }),
 } as unknown as DomicileClient;
 
 /** A domicile client that keeps what the window told the host, in order. */
@@ -132,16 +123,18 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
       choose: (paths: readonly string[]) => {
         answers.push(`choose ${paths.join(",")}`);
       },
-      list: () => Promise.resolve([]),
+      home: "/home/someone",
+      // A home with one file in it, which is all a picker here is asked about.
+      list: () => Promise.resolve(["notes.txt"]),
       mode: "open",
       suggestedName: "",
     }),
   );
 };
 
-/** The picker's search box, which is where its keyboard is. */
+/** The picker's box, which is where its keyboard is. */
 const pickerBox = (): HTMLElement =>
-  screen.getByRole("combobox", { name: "Search your files" });
+  screen.getByRole("combobox", { name: "Filter or go to a path" });
 
 /**
  * The engine reporting where the guest now is and what it says about the
@@ -270,6 +263,33 @@ describe("BrowserWindow", () => {
     expect(style.borderEndEndRadius).toBe("");
     // A line around the edge of the screen says nothing the window does not.
     expect(style.borderTopWidth).not.toBe("1px");
+  });
+
+  it("leaves its frame the resting color while it is all the screen shows", () => {
+    // Focused, but with nothing else on the screen to be picked out from.
+    render(
+      <BrowserWindow
+        alone
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={silentDomicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen={false}
+        motion="resting"
+        onClose={nothingClosed}
+        onMotionEnded={nothingEnded}
+        onNavigate={() => undefined}
+        onOpenWindow={noWindows}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        src="https://example.com"
+      />,
+    );
+
+    expect(browser().className).toContain(css({ borderColor: "borderStrong" }));
   });
 
   it("points its view at the address it opened with", () => {
@@ -556,11 +576,11 @@ describe("BrowserWindow", () => {
       const { container } = render(<BrowserWindow {...windowProps} focused />);
       asksForAFile(view(container), answers);
 
-      await userEvent.click(
+      await userEvent.dblClick(
         await screen.findByRole("option", { name: "notes.txt" }),
       );
 
-      expect(answers).toStrictEqual(["choose notes.txt"]);
+      expect(answers).toStrictEqual(["choose /home/someone/notes.txt"]);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 

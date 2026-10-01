@@ -87,6 +87,10 @@ It provides these:
   chords it claims are never given back — the channel cannot release one.
   `./keybindings` is its pure half (whose binding wins, and what a press does
   in a mode) and `./key-action` the action a binding carries.
+- **`Notification`** (`./notification`) — one notification, as
+  `DomicileClient.on("notifications", …)` delivers it: an application's or a
+  site's. A press is `invokeNotificationAction(id, key)`, a clear
+  `dismissNotifications(ids)`.
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.

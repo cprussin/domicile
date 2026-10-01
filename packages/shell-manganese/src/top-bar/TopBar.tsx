@@ -7,6 +7,7 @@ import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
 import { Clock } from "../clock/Clock";
+import { NotificationBell } from "../notifications/NotificationBell";
 import { Tray } from "../tray/Tray";
 import type { TrayOrder } from "../tray/useTrayOrder";
 import { Workspaces } from "./Workspaces";
@@ -40,6 +41,8 @@ type Props = {
   mode: string;
   /** Open an extension's popup, or close the open one with `undefined`. */
   onOpenExtension: (id: string | undefined) => void;
+  /** Open the drawer of notifications. */
+  onOpenNotifications: () => void;
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
@@ -47,6 +50,8 @@ type Props = {
   tray: readonly TrayItem[];
   /** The order the tray is in, and how a drag changes it. */
   trayOrder: TrayOrder;
+  /** How many notifications arrived since the drawer was last opened. */
+  unread: number;
   /** The workspaces this screen has, which are the ones shown. */
   workspaces: readonly string[];
 };
@@ -91,6 +96,11 @@ type Props = {
  * thin end of it. It takes no pointer, so the stage under the overhang is
  * still the stage.
  *
+ * **The bell is last, at the far end**, because the drawer it opens slides
+ * out from that edge: the control and what it opens are on the same side of
+ * the screen. It is the other control here that is not a launcher — it opens
+ * what the desk has already been told, rather than starting anything.
+ *
  * The clock is in the middle of the *bar* rather than in the middle of what
  * the workspaces and the charge leave, which is what the three columns are
  * for: the one in the middle is centered in the screen whatever is in the
@@ -103,10 +113,12 @@ export const TopBar = ({
   focused,
   mode,
   onOpenExtension,
+  onOpenNotifications,
   onSelectWorkspace,
   openedExtension,
   tray,
   trayOrder,
+  unread,
   workspaces,
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
@@ -134,6 +146,7 @@ export const TopBar = ({
       {mode !== "default" && <span className={modeStyles}>{mode}</span>}
       <ThemeSwitch />
       <Battery domicile={domicile} />
+      <NotificationBell onOpen={onOpenNotifications} unread={unread} />
     </div>
   </header>
 );
