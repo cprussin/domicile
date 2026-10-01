@@ -59,6 +59,12 @@ type Props = {
    * before it can be told where the window is being dragged to.
    */
   clickThrough: boolean;
+  /**
+   * Whether a tab its container is showing is drawn over it. Nothing can be
+   * clicked in a page under another, so its guest taking focus is never the
+   * user reaching for it — see `onReach`.
+   */
+  covered: boolean;
   /** How it stacks: the window's own `z-index`, which the SDK reports. */
   depth: number;
   /** Whether the user has hold of this window, which makes it see-through. */
@@ -168,6 +174,7 @@ type Props = {
  */
 export const BrowserWindow = ({
   clickThrough,
+  covered,
   depth,
   domicile,
   dragging,
@@ -251,12 +258,17 @@ export const BrowserWindow = ({
   // The click in the page, which is the half of this window the shell cannot
   // see: the element dispatches this when its guest takes focus, because
   // nothing else about that click leaves the guest — see `onReach`.
+  //
+  // NOT FOR A PAGE UNDER ANOTHER TAB. The engine hands the focus back to the
+  // guest that last had it when the page gets the keyboard back from a client
+  // — which the launcher opening over one does — and announces that exactly
+  // as it does a click. Answered, it raised the tab behind.
   useEffect(() => {
     if (view === null) {
       return undefined;
     } else {
       const reached = () => {
-        if (!focusing.current) {
+        if (!(focusing.current || covered)) {
           onReach();
         }
       };
@@ -265,7 +277,7 @@ export const BrowserWindow = ({
         view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reached);
       };
     }
-  }, [onReach, view]);
+  }, [covered, onReach, view]);
 
   // An extension asking for this window in front — `chrome.tabs.update` with
   // `active`, or `chrome.windows.update` with `focused` — which is a reach the

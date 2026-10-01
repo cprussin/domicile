@@ -5,6 +5,7 @@ import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
+  WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
@@ -2777,5 +2778,32 @@ describe("the launcher", () => {
     hostPress("space");
 
     expect(launcherBox()).toBeVisible();
+  });
+
+  it("leaves the tab that was open selected once it is dismissed", async () => {
+    // The page takes the keyboard back from the client while the panel is up,
+    // and the engine hands it to the guest that last had it: the browser in
+    // the tab behind, which nobody can click.
+    const { container } = renderShell();
+    press("space");
+    await typeIntoLauncher("example.com{Enter}");
+    clientAppears("two");
+    press("space");
+    const behind = container.querySelector<HTMLElement>("webview");
+    if (behind === null) {
+      throw new Error("test: no browser window");
+    }
+    act(() => {
+      behind.dispatchEvent(
+        new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }),
+      );
+    });
+
+    await userEvent.setup().keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(barFor(container, "app:two").dataset.focus).toBe("focused");
   });
 });

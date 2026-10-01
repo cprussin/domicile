@@ -218,6 +218,7 @@ describe("BrowserWindow", () => {
     render(
       <BrowserWindow
         clickThrough={false}
+        covered={false}
         depth={0}
         domicile={silentDomicile}
         dragging={false}
@@ -246,6 +247,7 @@ describe("BrowserWindow", () => {
     render(
       <BrowserWindow
         clickThrough={false}
+        covered={false}
         depth={0}
         domicile={silentDomicile}
         dragging={false}
@@ -274,6 +276,7 @@ describe("BrowserWindow", () => {
     const { container } = render(
       <BrowserWindow
         clickThrough={false}
+        covered={false}
         depth={0}
         domicile={silentDomicile}
         dragging={false}
@@ -299,6 +302,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -331,6 +335,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -364,6 +369,7 @@ describe("BrowserWindow", () => {
       const seen: string[] = [];
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -400,6 +406,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -430,6 +437,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -466,6 +474,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -497,6 +506,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -525,6 +535,7 @@ describe("BrowserWindow", () => {
   describe("a file its page asks for", () => {
     const windowProps = {
       clickThrough: false,
+      covered: false,
       depth: 0,
       domicile: silentDomicile,
       dragging: false,
@@ -632,6 +643,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -671,6 +683,7 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={recordingDomicile(calls)}
           dragging={false}
@@ -695,6 +708,7 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={recordingDomicile(calls)}
           dragging={false}
@@ -735,6 +749,7 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={domicile}
           dragging={false}
@@ -762,6 +777,7 @@ describe("BrowserWindow", () => {
     it("puts the keyboard in its page when it becomes the window being worked in", () => {
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -795,6 +811,7 @@ describe("BrowserWindow", () => {
     it("leaves the focus in its address bar when the press that reached it landed there", async () => {
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -832,6 +849,7 @@ describe("BrowserWindow", () => {
     it("gives the keyboard back when the user moves to another window", () => {
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -864,6 +882,7 @@ describe("BrowserWindow", () => {
     it("gives it back from its address bar too", async () => {
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -904,6 +923,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -931,6 +951,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -963,6 +984,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -993,6 +1015,7 @@ describe("BrowserWindow", () => {
         const { container } = render(
           <BrowserWindow
             clickThrough={false}
+            covered={false}
             depth={0}
             domicile={silentDomicile}
             dragging={false}
@@ -1024,6 +1047,7 @@ describe("BrowserWindow", () => {
       const reaches: string[] = [];
       const windowProps = {
         clickThrough: false,
+        covered: false,
         depth: 0,
         domicile: silentDomicile,
         dragging: false,
@@ -1066,6 +1090,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1113,6 +1138,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1141,6 +1167,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1172,6 +1199,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1202,6 +1230,7 @@ describe("BrowserWindow", () => {
       const { container } = render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1239,6 +1268,7 @@ describe("BrowserWindow", () => {
       render(
         <BrowserWindow
           clickThrough={false}
+          covered={false}
           depth={0}
           domicile={silentDomicile}
           dragging={false}
@@ -1350,6 +1380,7 @@ describe("BrowserWindow", () => {
     render(
       <BrowserWindow
         clickThrough={false}
+        covered={false}
         depth={0}
         domicile={silentDomicile}
         dragging={false}
@@ -1375,6 +1406,7 @@ describe("BrowserWindow", () => {
     /** The props every case here shares; each overrides the one it is about. */
     const windowProps = {
       clickThrough: false,
+      covered: false,
       depth: 0,
       domicile: silentDomicile,
       dragging: false,
