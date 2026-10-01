@@ -375,6 +375,7 @@
   // like ontheme -- once more to a page that has only just connected, and again
   // whenever a reload of the compositor's config moved what it carries.
   attribute EventHandler onshellconfig;
+
   // The desk's notifications, as a DomicileNotificationsEvent: every one not
   // yet cleared, whenever any of them changes and once more when this page
   // connects.

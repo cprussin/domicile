@@ -46,7 +46,7 @@
   X(locked, Locked)                      \
   X(extensions, Extensions)              \
   X(tray, Tray)                          \
-  X(shellconfig, Shellconfig)
+  X(shellconfig, Shellconfig)            \
   X(notifications, Notifications)
 
 namespace blink::domicile_event_names {
