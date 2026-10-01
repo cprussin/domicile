@@ -50,6 +50,17 @@ slot() { # subcommand, owner
   fi
 }
 status() { printf '%s\n' "$1" | head -1; }
+# A waiter runs in the background, and a busy runner can take longer than any
+# fixed sleep to start it. So ask until it says it is waiting, for no longer
+# than the waiter itself waits.
+until_wanted() { # holder; says what the last `wanted` said
+  local out tries=0
+  until out="$(slot wanted "$1")"; [ "$(status "$out")" = ok ] || [ "$tries" -ge 20 ]; do
+    sleep 0.1
+    tries=$((tries + 1))
+  done
+  printf '%s\n' "$out"
+}
 
 expect "a free slot is taken" ok "$(status "$(slot take alice)")"
 expect "a second taker is refused" refused "$(status "$(slot take bob)")"
@@ -123,7 +134,10 @@ slot drop heidi >/dev/null
 # there first reads differently from one holder that never moves.
 rm -rf "$WORK/slot"
 slot take judy >/dev/null
-( sleep 0.5; slot drop judy >/dev/null; slot take mallory >/dev/null
+# Handed straight to mallory rather than dropped and retaken: between a drop and
+# a take the slot is free, and a busy runner gives niaj's poll time to take it.
+( sleep 0.5; echo mallory >"$WORK/slot/owner.new"
+  mv "$WORK/slot/owner.new" "$WORK/slot/owner"
   sleep 0.5; slot drop mallory >/dev/null ) &
 waited="$(DOMICILE_COMPILE_SLOT_WAIT=5 slot take niaj)"
 wait
@@ -184,8 +198,7 @@ rm -rf "$WORK/slot" "$WORK/slot.waiting"
 slot take victor >/dev/null
 expect "nobody waiting is not wanted" refused "$(status "$(slot wanted victor)")"
 ( DOMICILE_COMPILE_SLOT_WAIT=2 slot take walter >/dev/null ) &
-sleep 0.5
-wanted="$(slot wanted victor)"
+wanted="$(until_wanted victor)"
 expect "a waiter makes the slot wanted" ok "$(status "$wanted")"
 contains "and is named" "'walter'" "$wanted"
 wait
@@ -202,7 +215,7 @@ expect "a waiter that stopped refreshing is not wanted" refused \
 
 # Yielding hands the slot to the waiter rather than racing it for the slot.
 ( DOMICILE_COMPILE_SLOT_WAIT=5 slot take wendy >/dev/null; sleep 1 ) &
-sleep 0.5
+until_wanted victor >/dev/null
 expect "the holder yields" ok "$(status "$(slot yield victor)")"
 contains "and the waiter has it when the yield returns" "'wendy'" "$(slot who)"
 wait
@@ -220,8 +233,9 @@ expect "only the holder can yield" refused "$(status "$(slot yield xavier)")"
 # that says nothing is a compile that never steps aside.
 rm -rf "$WORK/slot" "$WORK/slot.waiting"
 slot take victor >/dev/null
-( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=2 slot take walter >/dev/null ) &
-sleep 0.5
+# Waiting long enough for all three questions below on a busy runner.
+( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=5 slot take walter >/dev/null ) &
+until_wanted victor >/dev/null
 expect "a rank-1 holder does not yield to a rank-1 waiter" refused \
   "$(status "$(DOMICILE_COMPILE_SLOT_RANK=1 slot wanted victor)")"
 expect "a rank-0 holder yields to it" ok \
@@ -230,7 +244,7 @@ expect "and an unranked holder yields to everybody" ok \
   "$(status "$(slot wanted victor)")"
 wait
 ( DOMICILE_COMPILE_SLOT_WAIT=2 slot take wendy >/dev/null ) &
-sleep 0.5
+until_wanted victor >/dev/null
 expect "a rank-1 holder yields to an unranked waiter" ok \
   "$(status "$(DOMICILE_COMPILE_SLOT_RANK=1 slot wanted victor)")"
 wait
