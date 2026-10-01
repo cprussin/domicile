@@ -78,6 +78,7 @@ fn chrome_messages_round_trip() {
         passphrase: Passphrase::from("open sesame"),
     });
     chrome_round_trip(&ChromeMessage::Lock);
+    chrome_round_trip(&ChromeMessage::SetBrightness { level: 0.25 });
 }
 
 /// The launcher's ask carries a query and no path, and that is the security
@@ -265,6 +266,7 @@ fn host_messages_round_trip() {
         charge: 0.42,
         charging: true,
     });
+    host_round_trip(&HostMessage::Brightness { level: 0.8 });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
     });
@@ -451,6 +453,26 @@ fn an_empty_battery_is_a_reading_rather_than_a_silence() {
     .unwrap();
     assert_eq!(v["charge"], 0.0);
     assert_eq!(v["charging"], false);
+}
+
+/// The screen's brightness, as a fraction like the charge: the slider is drawn
+/// off it and the figures rounded where they are shown.
+#[test]
+fn the_brightness_is_a_fraction() {
+    let v = serde_json::to_value(HostMessage::Brightness { level: 0.42 }).unwrap();
+    assert_eq!(v["type"], "brightness");
+    assert_eq!(v["level"], 0.42);
+}
+
+/// A shell asks for a level and is answered with [`HostMessage::Brightness`],
+/// to every chrome, once the backlight has moved.
+#[test]
+fn setting_the_brightness_carries_the_level_and_nothing_else() {
+    let sent = r#"{"type":"set_brightness","level":0.5}"#;
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(sent).unwrap(),
+        ChromeMessage::SetBrightness { level: 0.5 }
+    );
 }
 
 /// Whether anybody is at the desk, in the one field that says it.

@@ -1,0 +1,108 @@
+import { describe, expect, it } from "bun:test";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { Brightness } from "./Brightness";
+
+/**
+ * A backlight the test holds the wire to: `watch` stands in for the host's,
+ * `report` is the compositor saying a level, and `asked` is every level the
+ * shell asked the desk for.
+ */
+const heldBacklight = () => {
+  const listeners: ((level: number) => void)[] = [];
+  const asked: number[] = [];
+  return {
+    asked,
+    domicile: {
+      setBrightness: (level: number) => {
+        asked.push(level);
+      },
+    } as unknown as DomicileClient,
+    report: (level: number) => {
+      act(() => {
+        for (const onLevel of listeners) {
+          onLevel(level);
+        }
+      });
+    },
+    watch: (_domicile: DomicileClient, onLevel: (level: number) => void) => {
+      listeners.push(onLevel);
+      return () => undefined;
+    },
+  };
+};
+
+const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
+  render(<Brightness domicile={backlight.domicile} watch={backlight.watch} />);
+  backlight.report(0.42);
+  await userEvent.click(screen.getByRole("button", { name: "Brightness 42%" }));
+  return screen.getByRole("slider", { name: "Brightness" });
+};
+
+describe("Brightness", () => {
+  it("shows nothing on a machine that has said no brightness", () => {
+    const backlight = heldBacklight();
+
+    render(
+      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+    );
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("opens a slider at the level the desk is at", async () => {
+    const backlight = heldBacklight();
+
+    const slider = await opened(backlight);
+
+    expect(slider).toHaveAttribute("aria-valuenow", "42");
+    expect(screen.getByText("42%")).toBeVisible();
+  });
+
+  it("asks the desk for the level the slider is moved to", async () => {
+    const backlight = heldBacklight();
+    const slider = await opened(backlight);
+
+    slider.focus();
+    await userEvent.keyboard("{ArrowRight}");
+
+    expect(backlight.asked).toEqual([0.43]);
+  });
+
+  it("follows the desk when the brightness moves elsewhere", async () => {
+    const backlight = heldBacklight();
+    const slider = await opened(backlight);
+
+    backlight.report(0.7);
+
+    expect(slider).toHaveAttribute("aria-valuenow", "70");
+  });
+
+  it("steps by a twentieth from wherever the wheel left it", () => {
+    const backlight = heldBacklight();
+    render(
+      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+    );
+    backlight.report(0.42);
+    const icon = screen.getByRole("button", { name: "Brightness 42%" });
+
+    fireEvent.wheel(icon, { deltaY: -100 });
+    fireEvent.wheel(icon, { deltaY: 100 });
+
+    expect(backlight.asked).toEqual([0.47, 0.42]);
+  });
+
+  it("never asks past either end", () => {
+    const backlight = heldBacklight();
+    render(
+      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+    );
+    backlight.report(0.98);
+
+    fireEvent.wheel(screen.getByRole("button"), { deltaY: -100 });
+
+    expect(backlight.asked).toEqual([1]);
+  });
+});

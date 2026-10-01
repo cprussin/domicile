@@ -23,6 +23,7 @@ const ignored = (): undefined => undefined;
  */
 class Host implements DomicileHost {
   displays: readonly DomicileDisplay[] | null = null;
+  brightness: number | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -62,6 +63,7 @@ class Host implements DomicileHost {
   readonly previewFile = ignored;
   readonly searchFiles = ignored;
   readonly searchApps = ignored;
+  readonly setBrightness = ignored;
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly setTheme = ignored;

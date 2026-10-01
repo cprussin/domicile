@@ -453,6 +453,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
             | ClientRequest::Lock
+            // Says nothing about the desk and opens nothing on it, and a lock
+            // screen is still read by the light it gives.
+            | ClientRequest::SetBrightness { .. }
             // The rest of a theme change, which a locked desk takes for the
             // reason it takes `SetTheme`: see below.
             | ClientRequest::TurnTheWindows { .. }

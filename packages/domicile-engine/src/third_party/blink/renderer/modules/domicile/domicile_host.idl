@@ -170,6 +170,15 @@
   // `locked` event to every chrome, and only when the desk actually shut.
   [CallWith=ScriptState, RaisesException] undefined lock();
 
+  // Set the screen's backlight to `level`, 0.0 through 1.0.
+  //
+  // A request, like setTheme(): answered with `brightnesschanged` to every
+  // chrome once the backlight has moved, so a slider follows the desk rather
+  // than its own drag. `double` rather than `unrestricted double`, so a level
+  // that is not a number throws here instead of reaching the compositor.
+  [CallWith=ScriptState, RaisesException] undefined setBrightness(
+      double level);
+
   // This page's old frame is held for `theme`: turn the desk's windows now.
   //
   // Called from inside a shell's wipe, once the frame it wipes away from is
@@ -262,6 +271,16 @@
   // arrives when the reading moves far enough to draw, and once more to a page
   // that has only just connected.
   attribute EventHandler onbattery;
+
+  // How bright the screen is, 0.0 through 1.0.
+  //
+  // An attribute rather than an event payload, like `displays`: a slider that
+  // mounts long after the reading arrived reads it here. NULL on a machine
+  // with no backlight, which never sends one, and until the first reading.
+  readonly attribute double? brightness;
+
+  // The brightness moved. Read `brightness` for where it is now.
+  attribute EventHandler onbrightnesschanged;
 
   // Which way round the desktop is drawn, as a DomicileThemeEvent.
   //

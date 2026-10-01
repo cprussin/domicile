@@ -301,6 +301,14 @@ export class DomicileClient {
     host.addEventListener("battery", (event) => {
       this.#deliver("battery", battery(event));
     });
+    // Bare, like `displayschanged`: the engine writes the attribute first,
+    // so reading it here reads this reading.
+    host.addEventListener("brightnesschanged", () => {
+      const level = this.#host.brightness;
+      if (level !== null) {
+        this.#deliver("brightness", { level });
+      }
+    });
     host.addEventListener("clipboard", (event) => {
       this.#deliver("clipboard", clipboard(event));
     });
@@ -499,6 +507,15 @@ export class DomicileClient {
    */
   lock(): void {
     this.#host.lock();
+  }
+
+  /**
+   * Set the screen's backlight to `level`, 0 through 1. Nothing is applied
+   * here: the slider follows the `brightness` message that comes back. See
+   * {@link DomicileHost.setBrightness}.
+   */
+  setBrightness(level: number): void {
+    this.#host.setBrightness(level);
   }
 
   /**
