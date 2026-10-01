@@ -44,8 +44,7 @@
   // `scale` is the integer wl_output one, so 1800 times 2 is not 2160.
   //
   // Zero where the compositor said nothing, which is a desktop that has no
-  // notion of modes rather than a panel with no pixels. Nothing divides by it
-  // unless `fillsTheWindow` says to.
+  // notion of modes rather than a panel with no pixels.
   readonly attribute unsigned long modeWidth;
   readonly attribute unsigned long modeHeight;
 
@@ -65,15 +64,4 @@
   // is closed all the same and a name outside it never reaches here: the
   // browser parses it into four cases and anything else is `normal`.
   readonly attribute DOMString transform;
-
-  // This screen is the whole page. The browser turns and scales its window,
-  // so the page is the logical box above, upright, and `modeWidth`,
-  // `modeHeight` and `transform` only say how it was drawn.
-  //
-  // True where the engine scans out, which is where it opens one window per
-  // CRTC and each one is told the single display it covers. False for every
-  // desktop the page's window is the whole of -- a nested run, a developer
-  // window -- where the page's CSS pixels already are the desktop's logical
-  // ones and there is nothing to map.
-  readonly attribute boolean fillsTheWindow;
 };

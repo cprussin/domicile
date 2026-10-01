@@ -36,8 +36,7 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
                   uint32_t scale,
                   uint32_t mode_width,
                   uint32_t mode_height,
-                  const String& transform,
-                  bool fills_the_window);
+                  const String& transform);
   ~DomicileDisplay() override;
 
   const String& name() const { return name_; }
@@ -49,7 +48,6 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t modeWidth() const { return mode_width_; }
   uint32_t modeHeight() const { return mode_height_; }
   const String& transform() const { return transform_; }
-  bool fillsTheWindow() const { return fills_the_window_; }
 
   void Trace(Visitor*) const override;
 
@@ -61,12 +59,10 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t height_ = 0;
   uint32_t scale_ = 1;
   // Zero, and deliberately not the logical size: a mode nobody stated is not
-  // a mode, and `fills_the_window_` is what decides whether anybody divides
-  // by it.
+  // a mode.
   uint32_t mode_width_ = 0;
   uint32_t mode_height_ = 0;
   String transform_;
-  bool fills_the_window_ = false;
 };
 
 }  // namespace blink

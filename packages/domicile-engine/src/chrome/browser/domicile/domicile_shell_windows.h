@@ -4,21 +4,16 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_SHELL_WINDOWS_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_SHELL_WINDOWS_H_
 
-#include <string>
-
-namespace content {
-class RenderFrameHost;
-}  // namespace content
-
 namespace domicile {
 
-// Keep one shell window on every display, now and on every hotplug.
+// Keep the shell's one page on the desk, now and on every hotplug: hosted by
+// a window on the fastest display, laid out over the desk's bounding box, and
+// shown on every other display by a presenter window. See
+// docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 //
-// A DESK OF THREE MONITORS SHOWED THE CHROME ON ONE. `--app=` opens a single
-// window, `ScreenManager::FindWindowAt` binds a window to a display controller
-// only on an exact rectangle match, and one window cannot be two rectangles --
-// so the other two CRTCs had no window, and a modeset that lit them put
-// nothing on them.
+// A WINDOW PER CRTC, because `ScreenManager::FindWindowAt` binds a window to
+// a display controller only on an exact rectangle match, and one window cannot
+// be two rectangles.
 //
 // WHY THIS LIVES IN //chrome. Making a window is `CreateBrowserWindow` in
 // //chrome/browser/ui/browser_window, the way carrying a `load_shell` out is
@@ -29,38 +24,9 @@ namespace domicile {
 //
 // Must be called on the UI thread, and after the shell's own window exists:
 // ChromeBrowserMainParts::PostBrowserStart, beside StartCommandSocket(). The
-// windows this opens are copies of that one -- its profile, its URL -- so
-// there is nothing to copy before it is there.
+// host this opens, when the fastest display is another, is a copy of that one
+// -- its profile, its URL -- so there is nothing to copy before it is there.
 void StartShellWindows();
-
-// Which display the page in `frame` is on, by the name the compositor
-// describes it under: `drm-<id>` for the engine's own displays.
-//
-// THE BROWSER KNOWS THIS AND THE PAGE DOES NOT, which is the whole reason it
-// is answered here. It put that window on that display; a page asked to work
-// it out would be guessing from its own geometry, and a guess is how this area
-// produces a monitor showing another monitor's desktop.
-//
-// THE DISPLAY THE WINDOW WAS OPENED FOR, not the one its rectangle reads as
-// now, and the difference is the whole of a bug this used to have. A monitor
-// plugged in is a window made and a page loading in it, which is exactly when
-// the desk's origins have moved and the windows on them have not followed --
-// so a window read off its geometry named the monitor that had just taken its
-// corner of the desk. Two pages claimed one monitor, and a third monitor's
-// page named somebody else's. `ShellWindowPlaces` in //components/domicile is
-// what remembers it instead.
-//
-// Empty where there is no screen to name -- no `display::Screen` and no shell
-// windows, which is a unit test and a nested run, and a frame in no window of
-// this browser's, which is one that never made it to a window. The control
-// channel sends nothing in that case and the compositor goes on describing the
-// whole desktop, which is what a nested run wants.
-//
-// `drm-<id>` IS AN AGREEMENT WITH THE COMPOSITOR, not a private spelling:
-// `screens.rs` builds a `wl_output` name from the id this engine sent it, and
-// this is the same string arriving from the other side. The two are checked
-// against each other in that file's own tests.
-std::string ScreenOf(content::RenderFrameHost* frame);
 
 }  // namespace domicile
 

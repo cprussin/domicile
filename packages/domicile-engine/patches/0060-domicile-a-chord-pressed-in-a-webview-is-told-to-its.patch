@@ -16,19 +16,17 @@ frame it is embedded in; the registry tells only that page.
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 3dd96f2e3f..8207c4b856 100644
+index 81758bb1f6..c869fbb43c 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -550,7 +550,13 @@ void PopulateChromeFrameBinders(
-                 // screen both are -- and read from the browser rather than
-                 // asked of the page, which does not know which monitor it was
-                 // put on and could only guess from its own geometry.
--                domicile::ScreenOf(frame)));
-+                domicile::ScreenOf(frame),
+@@ -541,7 +541,11 @@ void PopulateChromeFrameBinders(
+                     base::BindRepeating(
+                         &domicile::InstallExtensionsInto,
+                         Profile::FromBrowserContext(frame->GetBrowserContext())
+-                            ->GetWeakPtr()))));
++                            ->GetWeakPtr())),
 +                // AND WHICH PAGE THIS IS, which is what a chord pressed in one
-+                // of its <webview>s is told to: every monitor's page claims
-+                // the same chords, and a press told to all of them is run
-+                // once per monitor.
++                // of its <webview>s is told to, and no other page.
 +                domicile::Page{frame->GetGlobalId().child_id.value(),
 +                               frame->GetGlobalId().frame_routing_id}));
        }));

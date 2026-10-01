@@ -510,13 +510,12 @@ describe("registerElements", () => {
       );
     });
 
-    it("releases a key another page of the desk pressed", () => {
-      // A desk of several monitors is several pages, and the engine hands the
-      // keys to the one the pointer is on: Super held while a window is sent
-      // to the next monitor comes up on a page that never saw it go down. Kept
-      // back, it stays down in the compositor's seat, and every key after it
-      // reaches the client as Super+key. So every release is sent, and the
-      // seat — which knows what it holds — drops one it never saw pressed.
+    it("releases a key this page never saw pressed", () => {
+      // Super held while the page reloads comes up on a page that never saw
+      // it go down. Kept back, it stays down in the compositor's seat, and
+      // every key after it reaches the client as Super+key. So every release
+      // is sent, and the seat — which knows what it holds — drops one it never
+      // saw pressed.
       mountApp("term").dispatchEvent(pointer("pointerdown", { button: 0 }));
       domicile.calls.length = 0;
 

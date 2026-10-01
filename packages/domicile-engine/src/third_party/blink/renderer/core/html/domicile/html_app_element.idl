@@ -18,9 +18,4 @@
   // Which window. Reflected, so the attribute and the property are one value,
   // the way <img src> is.
   [CEReactions, Reflect=app_id] attribute DOMString appId;
-
-  // Show the window without configuring it: another page -- another monitor's
-  // -- is the one the window is on, and this shows the part of it over here.
-  // See docs/architecture/WINDOWS-ACROSS-SCREENS.md.
-  [CEReactions, Reflect] attribute boolean mirror;
 };

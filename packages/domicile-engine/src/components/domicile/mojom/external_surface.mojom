@@ -7,17 +7,6 @@ import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
-// Browser to renderer: which surface a mirroring <app> shows now.
-//
-// A mirror is an <app> on another page than the one configuring the window --
-// a window dragged across two monitors, each a page of its own. It shows the
-// surface the owning page embedded, so it is told each time that page embeds
-// a new one, and never the other way round.
-interface ExternalSurfaceClient {
-  OnSurfaceChanged(viz.mojom.FrameSinkId frame_sink_id,
-                   viz.mojom.LocalSurfaceId local_surface_id);
-};
-
 // Renderer to browser: how a page learns which surface to embed.
 //
 // The id cannot come from the renderer's own allocation path. A brokered
@@ -60,20 +49,4 @@ interface ExternalSurfaceProvider {
         gfx.mojom.Size size,
         double scale)
       => (viz.mojom.FrameSinkId? frame_sink_id);
-
-  // Show `app_id`'s window here as well, as it is wherever it is embedded:
-  // under `parent_frame_sink_id`, so BeginFrames reach the producer from this
-  // page too, and at whatever surface the page that embedded it last chose.
-  // `client` is told that surface now if there is one and again each time it
-  // changes -- and the producer is told nothing, because a mirror does not
-  // configure the client: two pages configuring one window would each resize
-  // it to their own box in turn.
-  //
-  // For as long as `client` is connected. Dropping it is how a page stops
-  // mirroring, and it takes this page's parent with it.
-  //
-  // Held until a producer has been brokered a sink for that app, like Embed.
-  Mirror(string app_id,
-         viz.mojom.FrameSinkId parent_frame_sink_id,
-         pending_remote<ExternalSurfaceClient> client);
 };

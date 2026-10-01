@@ -33,21 +33,20 @@ and both blobs are that file's.
  3 files changed, 37 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 59ff02e6c5..3dd96f2e3f 100644
+index b465203b7e..81758bb1f6 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -6,8 +6,10 @@
+@@ -6,7 +6,9 @@
  
  #include "base/task/bind_post_task.h"
  #include "chrome/browser/domicile/domicile_extension_installer.h"
 +#include "chrome/browser/domicile/domicile_extension_tray.h"
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
- #include "chrome/browser/domicile/domicile_shell_windows.h"
 +#include "chrome/browser/domicile/domicile_tab_helpers.h"
  #include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -572,7 +574,32 @@
+@@ -563,7 +565,32 @@ void PopulateChromeFrameBinders(
                "domicile: only a domicile:// document may ask for a guest.");
            return;
          }

@@ -197,12 +197,8 @@ class FakeHost implements DomicileHost {
   }
 }
 
-// A monitor of a desktop the page's window is the whole of, which is what
-// every test in this file is about. `domicile-host.ts` documents what the
-// other three mean; a screen that IS its window is
-// `shell-manganese/src/screens/host-displays.test.ts`.
+// A monitor of the desk. `domicile-host.ts` documents what each field means.
 const LEFT: DomicileDisplay = {
-  fillsTheWindow: false,
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
@@ -1087,7 +1083,6 @@ describe("DomicileClient", () => {
       // displays configured the desktop is Domicile's own window, so every
       // resize and every density change re-describes it.
       const RIGHT: DomicileDisplay = {
-        fillsTheWindow: false,
         height: 1440,
         modeHeight: 2880,
         modeWidth: 5120,
