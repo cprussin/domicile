@@ -42,8 +42,9 @@ fi
 API="https://api.github.com/repos/$GITHUB_REPOSITORY"
 UPLOADS="https://uploads.github.com/repos/$GITHUB_REPOSITORY"
 
-# THE API IS TRIED AGAIN ON A 5xx OR A RATE LIMIT, and only then. Run #76
-# lost an 87-minute build to one 500 on creating the release. Anything else
+# THE API IS TRIED AGAIN ON A 5xx, A RATE LIMIT OR NO ANSWER AT ALL, and only
+# then. Run #76 lost an 87-minute build to one 500 on creating the release, and
+# engine job 110246634707 lost one to a connection timeout. Anything else
 # (404, 422) is an answer, not a bad minute, and fails at once. Five tries,
 # 15s doubling: 3m45s of waiting at most, then a loud failure naming the status.
 API_ATTEMPTS=5
@@ -76,11 +77,12 @@ api() {
   done
 }
 
-# A 5xx, a 429, or a 403 that says it is a (secondary) rate limit: GitHub
-# answers a permission failure 403 too, and that one will not change.
+# A 5xx, a 429, a 000 (curl reached nothing), or a 403 that says it is a
+# (secondary) rate limit: GitHub answers a permission failure 403 too, and that
+# one will not change.
 api_retryable() { # status, body file
   case "$1" in
-    (5??|429) return 0 ;;
+    (5??|429|000) return 0 ;;
     (403) grep -qi 'rate limit' "$2" ;;
     (*) return 1 ;;
   esac
