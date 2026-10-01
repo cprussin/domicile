@@ -13,8 +13,7 @@ DomicileDisplay::DomicileDisplay(const String& name,
                                  uint32_t scale,
                                  uint32_t mode_width,
                                  uint32_t mode_height,
-                                 const String& transform,
-                                 bool fills_the_window)
+                                 const String& transform)
     : name_(name),
       x_(x),
       y_(y),
@@ -23,8 +22,7 @@ DomicileDisplay::DomicileDisplay(const String& name,
       scale_(scale),
       mode_width_(mode_width),
       mode_height_(mode_height),
-      transform_(transform),
-      fills_the_window_(fills_the_window) {}
+      transform_(transform) {}
 
 DomicileDisplay::~DomicileDisplay() = default;
 

@@ -76,9 +76,6 @@ class ControlChannel : public mojom::ControlChannel {
   // way a shell can tell: resetting just the client remote silences the inbound
   // direction and leaves the page holding a channel that looks alive and
   // swallows everything written to it.
-  // `screen` is the display this page's window covers, by the name the
-  // compositor describes it under -- `drm-<id>` for the engine's own displays.
-  // Empty where the window is the whole desktop, which is a nested run.
   // `page` is the frame the channel was bound for, which is what a chord
   // pressed in one of its `<webview>`s is delivered by -- see ShortcutRegistry.
   ControlChannel(const std::string& socket_path,
@@ -87,7 +84,6 @@ class ControlChannel : public mojom::ControlChannel {
                  PointerWarpSink warp_sink,
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
-                 const std::string& screen,
                  const Page& page);
 
   ControlChannel(const ControlChannel&) = delete;
@@ -198,11 +194,6 @@ class ControlChannel : public mojom::ControlChannel {
   const PointerWarpSink warp_sink_;
   const ThemeSink theme_sink_;
   const ExtensionsSink extensions_sink_;
-  // The display this page's window covers, or empty for a window that is the
-  // whole desktop. Stated to the compositor on connecting and never again: a
-  // window does not move between monitors here, because it is created at one
-  // display's bounds and closed when that display goes.
-  const std::string screen_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -244,7 +235,6 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
-                        const std::string& screen,
                         const Page& page);
 
 }  // namespace domicile

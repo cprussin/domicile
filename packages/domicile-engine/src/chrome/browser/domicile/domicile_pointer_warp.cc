@@ -31,8 +31,8 @@ void WarpPointerIn(content::GlobalRenderFrameHostId frame_id,
   gfx::NativeView view = frame->GetNativeView();
   aura::Window* root = view == gfx::NativeView() ? nullptr : view->GetRootWindow();
   if (root == nullptr) {
-    // A frame that never made it to a window, which is `ScreenOf`'s same case
-    // next door: a unit test, or a view detached on its way out.
+    // A frame that never made it to a window: a unit test, or a view
+    // detached on its way out.
     return;
   }
 

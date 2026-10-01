@@ -12,7 +12,9 @@ read "unmarked" forever. Reloading turns that race into a delay.
 
 `--still` serves it without the reload, for a guard whose mark is painted once
 into the page that is up -- guard-webview-active-tab.sh's -- and which a reload
-would wipe.
+would wipe. That page says it is up, once it has loaded, by moving itself to
+`#ready` with a same-document commit: the shell's <webview> shows that address
+only for a page that committed, where its `url` alone can be a pending one.
 """
 
 import argparse
@@ -25,11 +27,18 @@ PAGE_PATH = "/page"
 REFRESH = """    <meta http-equiv="refresh" content="1" />
 """
 
+READY = """    <script>
+      addEventListener("load", () => {
+        history.replaceState(null, "", "#ready");
+      });
+    </script>
+"""
+
 PAGE = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-{refresh}    <title>a page for a content script</title>
+{refresh}{ready}    <title>a page for a content script</title>
     <style>
       html,
       body {{
@@ -52,12 +61,13 @@ class OnePage(BaseHTTPRequestHandler):
     # Set by main(): BaseHTTPRequestHandler is instantiated per request.
     color = "000000"
     refresh = REFRESH
+    ready = ""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
         if urlsplit(self.path).path == PAGE_PATH:
-            body = PAGE.format(color=self.color, refresh=self.refresh).encode(
-                "utf-8"
-            )
+            body = PAGE.format(
+                color=self.color, refresh=self.refresh, ready=self.ready
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -90,12 +100,14 @@ def main():
     parser.add_argument(
         "--still",
         action="store_true",
-        help="serve the page without reloading itself every second",
+        help="serve the page without reloading itself every second, and"
+        " saying it is up by moving to #ready once it has loaded",
     )
     arguments = parser.parse_args()
 
     OnePage.color = arguments.color
     OnePage.refresh = "" if arguments.still else REFRESH
+    OnePage.ready = READY if arguments.still else ""
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), OnePage)
     # Before serve_forever, so a guard waiting on this line is not waiting on a
     # buffer. lib-ports.sh's served_port reads the port off it.

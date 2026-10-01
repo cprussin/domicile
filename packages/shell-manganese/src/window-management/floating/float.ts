@@ -175,11 +175,8 @@ export const movedTo = (float: Float, x: number, y: number): Float => ({
 });
 
 /**
- * The same box in the pixels of the page drawing the screen at `screen`,
- * rather than that screen's own.
- *
- * The same on a page that is one monitor, whose screen is its whole viewport;
- * a page that is the whole desk has the screen somewhere else on it.
+ * The same box in the page's pixels rather than those of the screen at
+ * `screen`: the page spans the desk, and has the screen somewhere on it.
  */
 export const onScreen = (float: Float, screen: Rect): Float =>
   movedTo(float, float.x + screen.x, float.y + screen.y);

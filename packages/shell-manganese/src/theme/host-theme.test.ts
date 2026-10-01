@@ -107,7 +107,7 @@ describe("the theme a shell paints in", () => {
     // THE LOAD-BEARING ONE. A click is a request: the compositor answers to
     // every chrome on the desk, and hands the same value to the settings
     // portal its GTK and Qt clients read. A source that applied it here would
-    // be the one monitor that had changed.
+    // be the shell changing while every window stayed as it was.
     const [client, host] = connected();
 
     hostTheme(client).setTheme("light");

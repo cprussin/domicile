@@ -172,12 +172,12 @@ The evidence for each of those is in the doc that made the claim —
    tray click grants `activeTab`.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
-5. **A floating window across monitors.** A float goes to the screen its
-   middle is dragged onto, and is drawn on both while it crosses. Left:
-   `fullscreen global` through the same mirrors, and browser windows, which
-   stay on their screen because a `<webview>` on another page reloads.
-   [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
-   What is left comes free with item 8.
+5. **A floating browser window across monitors.** A float goes to the screen
+   its middle is dragged onto and is drawn over both while it crosses, but a
+   browser window stays on its screen: each monitor's `Stage` in manganese
+   draws its own `<webview>`, so another screen's is a reload. Left: one
+   element per window for the desk.
+   [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 6. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
@@ -192,11 +192,10 @@ The evidence for each of those is in the doc that made the claim —
    screen; and inline reply.
    [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
 
-8. **One page for the desk.** On a tty the shell becomes one page over the
-   desk's bounding box, shown on every monitor at its own density and refresh
-   rate, instead of a page per monitor. Phase 1 (one host, presenters per
-   CRTC, raster at the largest scale) is behind `--domicile-one-page`; left:
-   a cc tiling per display scale, then the shells lose their N-page code.
+8. **Native density on every monitor.** On a tty the shell is one page over
+   the desk's bounding box, hosted on the fastest monitor and presented on the
+   rest, rastered at the largest scale: a lower-density monitor is shown it
+   downsampled. Left: a cc tiling per display scale.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 ## In the engine fork — the agent on `crux`
@@ -305,10 +304,11 @@ these is one run, and each has a line to look for.
   the compositor's half is proved only by unit tests over the decisions.
 - **A float dragged to the next monitor.** Two monitors, a floating terminal
   on the left, Meta+drag it right until its middle is past the edge. Expect it
-  to appear on the right monitor and keep following the hand until release. A
-  window that stops at the edge means the pressed page lost the pointer when it
-  crossed CRTCs — the open question in
-  [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
+  to be drawn over both while it crosses, land on the right monitor, and keep
+  following the hand until release. A window that stops at the edge means the
+  page stopped getting moves when the pointer crossed CRTCs — see
+  [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md),
+  *Input*.
 - **A desk left alone.** Run with `idle.blank_after_seconds = 60`, walk away for
   a minute, then touch the trackpad. Expect `nobody is at this desktop; its
   screens go dark connectors=N`, the panels off, and
@@ -350,16 +350,13 @@ these is one run, and each has a line to look for.
   on a laptop with a panel.
 - **A desk of several monitors.** Plug one in and then a second, with
   `--vmodule=drm*=1`. Expect `configuring N display(s)` for each, a bar and a
-  wallpaper on every panel, and `told the chrome about N display(s), from the
-  window it named` once per monitor with N distinct names. Then: `mod+2` puts
-  the keyboard on the monitor showing workspace 2 and leaves that workspace
-  where it is; `mod+Return` opens the terminal on the monitor the keyboard is
-  on; moving the pointer to another monitor moves the keys with it; and a
-  window keeps drawing while every one of those happens. Nothing here can see
-  any of it — no runner has a `/dev/dri`, and the shell half is arithmetic over
-  an injected desk. The failure this replaces was three monitors with two pages
-  on one of them, a third with none, and a terminal that answered the keyboard
-  and drew nothing.
+  wallpaper on every panel, and `told the chrome about N display(s)`. Then:
+  `mod+2` puts the keyboard on the monitor showing workspace 2 and leaves that
+  workspace where it is; `mod+Return` opens the terminal on the monitor the
+  keyboard is on; moving the pointer to another monitor moves the keys with
+  it; and a window keeps drawing while every one of those happens. Nothing
+  here can see any of it — no runner has a `/dev/dri`, and the shell half is
+  arithmetic over an injected desk.
   Also: three identical monitors on one MST hub, plugged in together and one at
   a time, each lit with one window and no crash — the engine now places a
   connector no layout names past everything placed rather than at `(0, 0)`,

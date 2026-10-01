@@ -88,11 +88,6 @@ type Props = {
    */
   hasKeyboard: boolean;
   /**
-   * Whether another page is the one that configures this window, and this
-   * only shows the part of it over this monitor's edge — see `withOverhangs`.
-   */
-  mirror: boolean;
-  /**
    * What this window is doing that the page has to draw over time: arriving,
    * leaving, or nothing at all.
    *
@@ -155,7 +150,6 @@ export const AppWindow = ({
   frame,
   fullscreen,
   hasKeyboard,
-  mirror,
   motion,
   onMotionEnded,
   rect,
@@ -290,9 +284,6 @@ export const AppWindow = ({
       hidden={rect === undefined}
       // Nothing a keyboard can reach, for as long as it is only being drawn.
       inert={leaving}
-      // A boolean attribute, so present or absent rather than `true`: React
-      // writes a value it does not know the type of as a string.
-      mirror={mirror ? "" : undefined}
       // Its own rather than one of the chrome's on its way up the document:
       // a window is told it has finished when *it* has.
       onAnimationEnd={(event) => {
