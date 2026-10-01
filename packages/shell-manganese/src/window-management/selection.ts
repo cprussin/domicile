@@ -1,3 +1,4 @@
+import { showsOneThing } from "./alone";
 import type { Screenful } from "./placement";
 import type { Rect } from "./rect";
 import { barOf } from "./rect";
@@ -33,17 +34,19 @@ export type Selection = {
  * says nothing the fullscreen window does not already, and a group's is drawn
  * over a window that covers it.
  *
- * Nor around the only window on the workspace: there is nothing else the
- * commands could be pointed at, so it would be a line that says nothing.
+ * Nor while the screen shows one thing alone — see {@link showsOneThing}:
+ * there is nothing else the commands could be pointed at, so it would be a
+ * line that says nothing.
  */
 export const selectionOf = (
-  { placements, selection }: Screenful,
+  screenful: Screenful,
   activeId: string | undefined,
   fullscreenId: string | undefined,
   draggingId: string | undefined,
 ): Selection | undefined => {
+  const { placements, selection } = screenful;
   const active = placements.find(({ id }) => id === activeId);
-  if (fullscreenId !== undefined) {
+  if (fullscreenId !== undefined || showsOneThing(screenful)) {
     return undefined;
   } else if (selection !== undefined) {
     return {
@@ -53,7 +56,7 @@ export const selectionOf = (
       group: true,
       rect: selection.rect,
     };
-  } else if (active === undefined || placements.length === 1) {
+  } else if (active === undefined) {
     return undefined;
   } else {
     return {

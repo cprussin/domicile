@@ -18,6 +18,7 @@ import {
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../../styled-system/css";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
 
@@ -262,6 +263,33 @@ describe("BrowserWindow", () => {
     expect(style.borderEndEndRadius).toBe("");
     // A line around the edge of the screen says nothing the window does not.
     expect(style.borderTopWidth).not.toBe("1px");
+  });
+
+  it("leaves its frame the resting color while it is all the screen shows", () => {
+    // Focused, but with nothing else on the screen to be picked out from.
+    render(
+      <BrowserWindow
+        alone
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={silentDomicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen={false}
+        motion="resting"
+        onClose={nothingClosed}
+        onMotionEnded={nothingEnded}
+        onNavigate={() => undefined}
+        onOpenWindow={noWindows}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        src="https://example.com"
+      />,
+    );
+
+    expect(browser().className).toContain(css({ borderColor: "borderStrong" }));
   });
 
   it("points its view at the address it opened with", () => {
