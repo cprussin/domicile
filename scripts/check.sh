@@ -314,12 +314,25 @@ if wanted engine; then
   # the job names itself -- `engine.yml` sets `CARD_OWNER` -- because the
   # registry is on `crux`'s /build, which a person's machine has no reason to
   # have. Latency itself is not noise, or it would wait out its own run.
+  #
+  # AND TIMED. A check that never returns held engine run 36820989982 for seven
+  # hours as noise, and run 36820571967's latency guard waited on it from the
+  # other runner, so both of `crux`'s slots sat idle until they were canceled.
+  # The longest check is a minute; the budget is a cold cargo build's. Inside
+  # `noisy`, so a wait for the card is not spent from it, and `timeout` kills
+  # the check's whole process group, so nothing it started outlives it.
+  ENGINE_CHECK_TIMEOUT="${DOMICILE_ENGINE_CHECK_TIMEOUT:-1800}"
   engine_noisy() {
+    local status
     if [ -n "${CARD_OWNER:-}" ]; then
-      "$ROOT/.github/scripts/engine-render-node-lock.sh" noisy "$CARD_OWNER" -- "$@"
+      "$ROOT/.github/scripts/engine-render-node-lock.sh" noisy "$CARD_OWNER" -- \
+        timeout -k 30 "$ENGINE_CHECK_TIMEOUT" "$@"
     else
-      "$@"
+      timeout -k 30 "$ENGINE_CHECK_TIMEOUT" "$@"
     fi
+    status=$?
+    [ "$status" -ne 124 ] || echo "$(basename "$1") ran past ${ENGINE_CHECK_TIMEOUT}s and was killed"
+    return "$status"
   }
   engine_serial() {
     local script
