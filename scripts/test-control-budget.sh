@@ -243,6 +243,7 @@ says "and one with a note says what it read" '3s'
 # gets the full budget forever and looks exactly like this working.
 GUARDS="$ROOT/packages/domicile-engine/scripts"
 for guard in guard-client-window guard-shell guard-webview-framing \
+  guard-shell-local-network \
   guard-webview-content-script guard-extension-installer \
   guard-extension-tray guard-webview-tabs guard-webview-active-tab \
   guard-webview-passkey-extension; do
