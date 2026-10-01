@@ -11,7 +11,6 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/common/surfaces/surface_id.h"
-#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -36,15 +35,11 @@ namespace blink {
 // This does not embed anything itself. It hands back a SurfaceId, and what a
 // caller does with it — cc::SurfaceLayer::SetSurfaceId, by way of
 // SurfaceLayerBridge — is the caller's business.
-class PLATFORM_EXPORT ExternalSurfaceEmbedder
-    : public domicile::mojom::blink::ExternalSurfaceClient {
+class PLATFORM_EXPORT ExternalSurfaceEmbedder {
  public:
   // Null if the connection to the browser dropped before a producer turned up.
   using EmbeddedCallback =
       base::OnceCallback<void(const std::optional<viz::SurfaceId>&)>;
-  // Every surface a mirror is to show, as the page configuring the window
-  // chooses them.
-  using MirroredCallback = base::RepeatingCallback<void(const viz::SurfaceId&)>;
 
   // Which LocalSurfaceId to embed at.
   enum class Allocation {
@@ -71,7 +66,7 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder
   ExternalSurfaceEmbedder(const ExternalSurfaceEmbedder&) = delete;
   ExternalSurfaceEmbedder& operator=(const ExternalSurfaceEmbedder&) = delete;
 
-  ~ExternalSurfaceEmbedder() override;
+  ~ExternalSurfaceEmbedder();
 
   // Resolves a LocalSurfaceId per `allocation` and asks the browser which
   // FrameSinkId to pair it with. `parent_frame_sink_id` is this page's own, so
@@ -97,33 +92,13 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder
              Allocation allocation,
              EmbeddedCallback callback);
 
-  // Shows `app_id`'s window without configuring it: `callback` runs with the
-  // surface the page that does configure it embedded, and again each time
-  // that page embeds another, for as long as this lives. Allocates nothing --
-  // the surface is the other page's -- and is under `parent_frame_sink_id` so
-  // BeginFrames reach the producer from here too.
-  //
-  // Once per embedder. The browser answers this for as long as the pipe is
-  // open, so a page that stops mirroring drops the embedder.
-  void Mirror(const String& app_id,
-              const viz::FrameSinkId& parent_frame_sink_id,
-              MirroredCallback callback);
-
-  // domicile::mojom::blink::ExternalSurfaceClient:
-  void OnSurfaceChanged(const viz::FrameSinkId& frame_sink_id,
-                        const viz::LocalSurfaceId& local_surface_id) override;
-
  private:
   void OnEmbedded(EmbeddedCallback callback,
                   const String& app_id,
                   const viz::LocalSurfaceId& local_surface_id,
                   const std::optional<viz::FrameSinkId>& frame_sink_id);
 
-  void BindProvider();
-
   mojo::Remote<domicile::mojom::blink::ExternalSurfaceProvider> provider_;
-  mojo::Receiver<domicile::mojom::blink::ExternalSurfaceClient> client_{this};
-  MirroredCallback mirrored_;
 };
 
 }  // namespace blink

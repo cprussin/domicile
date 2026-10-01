@@ -903,7 +903,7 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 | **The mode, not the logical size** | This is the engine's desktop: a connector occupies what it scans out there, whatever the scale divides it into on ours |
 | **All on one row** | Nothing is ever drawn across two connectors, and the pointer crosses by where the profile placed the displays (below), not by this row. So the row decides nothing a person can see |
 
-### The pointer crosses the profile's desktop, and the keys go with it
+### The pointer crosses the profile's desktop
 
 Upstream `DrmCursor` clamps the pointer into the window it is on; ash moves it
 to the next display (`ExtendedMouseWarpController`), and a views browser has no
@@ -916,12 +916,10 @@ page, so no shell knows there is more than one monitor under it.
 | **A dark connector is never entered** | It has no place on the desktop. With no layout at all (the hardware decides) the engine's own desktop is the desk |
 | **Within a logical pixel counts** | A profile's positions are rounded outward, so screens meant to touch can be a pixel apart, and a slow hand would never get across |
 | **By the upright edge** | A monitor on its side is a landscape CRTC, and a hand moving right on it moves along the panel's y. The edge and the height are read turned, with the rotation `CursorController` already has |
-| **The keys are on the monitor the pointer is on** | Every `DrmWindowHost` accepted every key, so the first window took them all and a launcher on another monitor could never be typed into. The pointer is the one thing the engine and a page agree on without a shell saying so |
+| **Every pointer event and key goes to the desk's host** | The one page is in the host's window; the others only present it (`OzonePlatform::SetDomicileDeskHost`). It hears the pointer where the desk has it, whichever monitor it is on (`PointerInWindow`), and a warp to anywhere on the desk lands on the monitor holding it |
 
 `ui/ozone/platform/drm/domicile/drm_pointer_crossing.h` is the arithmetic, with
-its tests. What a shell draws a panel by is therefore the page that heard the
-press, not which monitor its own focus is on: `shell-manganese`'s launcher
-does exactly that.
+its tests.
 
 ### Blanking is that same layout with the light taken out of it
 
@@ -1123,8 +1121,8 @@ down.
 **ChromeOS turns a screen in the render tree**, not at the modeset —
 `ash::RootWindowTransformer` and a display transform hint on the compositor —
 and so does this, with the same parts. A root transform belongs to a window,
-which is why it waited for *one browser window per CRTC*: each monitor's
-window is turned and scaled on its own.
+which is why each monitor has a window of its own: each is turned and scaled
+on its own.
 
 | Piece | What it does |
 |---|---|
@@ -1134,19 +1132,15 @@ window is turned and scaled on its own.
 | `CursorController` | Compiled off ChromeOS, so `DrmCursor::MoveCursor` turns a hand's travel with the monitor. `DrmWindowHost` tells it the turn when a window moves or a display turns under it |
 | `wm::CursorLoader` | Turns and scales the arrow off the display it is told about, which it now has |
 
-**So a page is the monitor's logical box, upright, at its density.** A 4K
-panel on its side at 1.2 is a page 1800×3200 CSS pixels big with a
-`devicePixelRatio` of 1.2; `<Screen>` places a region at the origin with no
-transform, events arrive in those pixels, and anything a shell draws outside a
-region — a portal, a dialog — is the right way up too. The shell writes none
-of it. It used to: `<Screen>` drew the turn as a CSS transform, a shell had to
-map every pointer position and warp through it, and whatever was portalled out
-of a region came out sideways, as did the arrow.
+**So a window is the monitor's logical box, upright, at its density.** A 4K
+panel on its side at 1.2 is a window 1800×3200 DIPs big. The shell's one page
+is laid out over the desk in those logical pixels, and each monitor's window
+turns and scales its part of it ([ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md)).
+The shell writes none of it.
 
 **Each `<app>` says the scale its box is in** (patch `0044` and the
 `configure_at` callback), because the box is in the page's device pixels and a
-configure is in logical ones, and a desk of several monitors is several pages
-at several scales.
+configure is in logical ones.
 
 **The two quarter turns count counterclockwise, as `wl_output` and kanshi do.**
 `rotate-270` turns the content a quarter *clockwise*, for a panel on its left
@@ -1160,76 +1154,25 @@ draw pre-turned and save a pass, and the compositor does not read
 turned twice. Nothing in the desk does today, and the fix is in the dmabuf
 submit path rather than here.
 
-**A desk of three monitors had the chrome on one of them**, because `--app=`
-opens one window and `FindWindowAt` binds a window to a controller only on an
-exact rectangle match — one window cannot be two rectangles. So the engine
-opens one per display now, **on the platform that scans out and nowhere
-else**, and keeps doing it: `ShellWindowsFor` answers what
-has no window and what has no display, and a `display::DisplayObserver` asks
-it again on every add and removal — on the next task, once the whole reading
-is in the list — and moves a window on every bounds change. Two rules in it are the
-difference between a desktop and a dead session — the last window is never
-closed, because closing it is the browser exiting, and windows open before
-they close, because a dock swapped at once would otherwise pass through zero.
-Two more keep an arriving monitor from getting two windows or none: a window
-is its display's from being asked for, through its page loading, onward
-(`ShellWindowPlaces`), and it is moved to where its display is when it
-arrives, not where it was when asked for.
+**A window per CRTC, one page for the desk.** `--app=` opens one window and
+`FindWindowAt` binds a window to a controller only on an exact rectangle match
+— one window cannot be two rectangles. So `ShellWindows` keeps a window on
+every display, **on the platform that scans out and nowhere else** (a nested
+run's screen is the host's monitors): the fastest display's is a browser window
+hosting the shell's page, laid out over the desk's bounding box, and every
+other display's is a presenter showing that page's surface. A
+`display::DisplayObserver` reconciles on every add and removal — on the next
+task, once the whole reading is in the list — and moves a window on every
+bounds change. Two rules in it are the difference between a desktop and a dead
+session: the last window is never closed, because closing it is the browser
+exiting, and windows open before they close, because a dock swapped at once
+would otherwise pass through zero. A window is its display's from being asked
+for, through its page loading, onward (`ShellWindowPlaces`), and it is moved to
+where its display is when it arrives, not where it was when asked for.
 
-Every one of those windows would otherwise draw the *same* thing — they all
-load the same shell, and a shell lays its `<Screen>` regions out in the
-desktop's own coordinates. So each window says which display it is, and the
-compositor answers that connection alone with the desk read from there: the
-whole of it, moved so that window's own display is at the origin, and that
-display alone marked `fills_the_window`.
-
-**The whole desk and not just that display**, which cost a release to learn.
-Narrowed to one screen, every page read itself as the first screen of a desk of
-one — so every monitor drew the whole chrome, and every page embedded every
-window. A client's frame sink takes one parent, so the last page to embed took
-the window off all the others, and a terminal that answered the keyboard drew
-nothing. What a shell decides about the desk (which screen the chrome is on,
-where a box across every screen is) it cannot decide from one monitor; what it
-may DRAW on is still one monitor, and `fills_the_window` is what says which.
-`<Screen>` is where that is enforced, once, for every shell.
-
-That gate is the same one `DomicileDisplayWatcher` is behind and is there for
-the same reason: **a nested run's screen is the host's monitors.** Windowing
-those would open a browser window per monitor of the desk a developer run is
-sitting on, and naming one would tell the compositor its desktop is a display
-it has never heard of — which it answers by narrowing to nothing, so the shell
-is told no screens at all and draws nothing. That is not a hypothetical: it is
-what `guard-shell.sh` and the client-window guards reported the first time this
-was written without the gate.
-
-**The browser says it, not the page.** It placed that window on that display;
-a page asked to work out which monitor it is could only guess from its own
-geometry, and a guess here is a monitor showing another monitor's desktop with
-nothing to say so. `ScreenOf` reads it off the frame's view on the UI thread
-and `ControlChannel` states it on the socket right after the handshake —
-second, because the compositor puts a connection on its list when it agrees
-the protocol and a `set_screen` before that names a window it has no record
-of.
-
-**`set_screen` is the one message whose answer differs per connection**, and
-the one the compositor cannot broadcast. The desk has one brain and a window
-each, so the display a window covers is held beside that socket's writer
-rather than on the `Host` they all drive, and the desktop is re-encoded per
-chrome on the way out. Everything else is encoded once for everybody, which is
-why the narrowing is a `Some`/`None` rather than a branch every message pays
-for.
-
-A shell does almost nothing about any of this. `<Screen name="left">` renders
-in the window on the left monitor and nowhere else, which is what it always
-meant, and `position` is still where the region goes on the page — it is just
-that the page is one screen now.
-
-What is left to a shell is the one thing N pages really cost: they are N copies
-of its state. A desktop whose workspaces span the desk has to be one desktop,
-so `shell-manganese` reduces it on the page covering the first screen and the
-others ask that page and show what it says — `window-management/desk-channel.ts`
-there. A shell that wants nothing of the kind writes nothing: a page draws its
-own screen and is told the desk, and those two facts are the whole contract.
+The compositor describes the whole desk to the page, about the desk's own
+corner, and the page lays out in it like any other: a shell never learns how
+many windows there are. See [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md).
 
 **A profile names a monitor the way it is labeled.** The `wl_output` is still
 `drm-<id>` — short, always there, and what clients are already on — but every
