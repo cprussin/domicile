@@ -4,9 +4,9 @@
 // will this do" — there is no second line under it saying so. In order: the
 // page a `!` tag's site has for the words, if it has one; the search the tag
 // names, if the box carries one; a site, if the box holds one; the
-// applications the host found, then the desk's bookmarks it matched; a path,
-// if it is spelled like one; the files
-// the host found; and a search on Google for the line as typed, always. A URL
+// applications and the desk's bookmarks the host matched, as one list by
+// name; a path, if it is spelled like one; the files the host found; and a
+// search on Google for the line as typed, always. A URL
 // typed whole is a URL meant, so it goes on top; an application is above a
 // file, because a launcher is asked for one far more often; the search goes
 // last, because it is what is left when nothing above it was.
@@ -127,10 +127,10 @@ const plainChoicesFor = (
 ): Choice[] => {
   const typed = query.trim();
   const address = typedAddress(typed);
-  const applications = [
+  const applications = byName(typed, [
     ...apps.map((entry) => Choice.App(entry)),
     ...bookmarks.map((bookmark) => Choice.Bookmark(bookmark)),
-  ];
+  ]);
   const files = found.map((path) => Choice.File(path));
   return address === undefined
     ? [...applications, ...files]
@@ -143,6 +143,51 @@ const plainChoicesFor = (
         ...files,
         Choice.Search(typed, googleUrl(typed)),
       ];
+};
+
+/**
+ * The applications and bookmarks as one list, in the order the host ranks
+ * each of them: a name that starts with the query first, then by name. Sorted
+ * stably, so two of one name keep the host's order.
+ */
+const byName = (
+  typed: string,
+  choices: readonly (
+    | ReturnType<typeof Choice.App>
+    | ReturnType<typeof Choice.Bookmark>
+  )[],
+): Choice[] => {
+  const prefix = typed.toLowerCase();
+  return choices
+    .map((choice) => ({ choice, name: nameOf(choice).toLowerCase() }))
+    .toSorted(
+      (a, b) =>
+        Number(!a.name.startsWith(prefix)) -
+          Number(!b.name.startsWith(prefix)) || compared(a.name, b.name),
+    )
+    .map(({ choice }) => choice);
+};
+
+/** `a` against `b` code unit by code unit, as the host compares names. */
+const compared = (a: string, b: string): number => {
+  if (a < b) {
+    return -1;
+  } else {
+    return a > b ? 1 : 0;
+  }
+};
+
+const nameOf = (
+  choice: ReturnType<typeof Choice.App> | ReturnType<typeof Choice.Bookmark>,
+): string => {
+  switch (choice.kind) {
+    case ChoiceKind.App: {
+      return choice.entry.name;
+    }
+    case ChoiceKind.Bookmark: {
+      return choice.name;
+    }
+  }
 };
 
 /**
