@@ -13,6 +13,10 @@
 # succeeds on the second try is green with the first one visible. Only the third
 # failure is this script's own.
 #
+# `--no-install-recommends`, because what a job needs it names, and weston's
+# recommends alone pull ffmpeg's tree -- a 27 MB speech model among it -- which
+# is the download a slow mirror timed out on, three attempts running.
+#
 # `declare -f` to carry the function into the `timeout` subshell: `timeout` takes
 # a command and not a shell function, and `bash -c` gets a fresh shell that has
 # never seen it.
@@ -24,7 +28,7 @@ set -euo pipefail
 }
 
 install() {
-  sudo apt-get update && sudo apt-get install -y "$@"
+  sudo apt-get update && sudo apt-get install -y --no-install-recommends "$@"
 }
 
 for attempt in 1 2 3; do

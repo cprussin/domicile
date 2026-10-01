@@ -85,7 +85,7 @@ jobs:
           .github/scripts/apt-install.sh \
             libxkbcommon-dev libwayland-dev \
             libegl1-mesa-dev libgles2-mesa-dev libgbm-dev mesa-utils \
-            libgl1-mesa-dri \
+            libgl1-mesa-dri libegl-mesa0 \
             weston wayland-utils \
             libdrm2 libxkbcommon0
 
