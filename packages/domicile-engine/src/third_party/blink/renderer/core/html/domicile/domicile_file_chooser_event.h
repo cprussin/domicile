@@ -49,6 +49,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
                            domicile::mojom::blink::WebViewFileChooserMode mode,
                            const Vector<String>& accept,
                            const String& suggested_name,
+                           const String& home,
                            Answer answer,
                            HTMLWebViewElement& owner);
   ~DomicileFileChooserEvent() override;
@@ -56,6 +57,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   String mode() const;
   const Vector<String>& accept() const { return accept_; }
   const String& suggestedName() const { return suggested_name_; }
+  const String& home() const { return home_; }
 
   void choose(const Vector<String>& paths, ExceptionState&);
   ScriptPromise<IDLSequence<IDLString>> list(ScriptState*,
@@ -77,6 +79,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   domicile::mojom::blink::WebViewFileChooserMode mode_;
   Vector<String> accept_;
   String suggested_name_;
+  String home_;
   // Null once run: the answer has been given.
   Answer answer_;
   // Told when the answer is given, so it stops holding this.

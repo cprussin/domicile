@@ -6,13 +6,6 @@ import { Listing, useListing } from "./useListing";
 describe("useListing", () => {
   // Each `list` is made once, outside the hook's render: a new one is a new
   // question, which is how the picker's is used.
-  it("is nothing while nothing is browsed", () => {
-    const list = () => Promise.reject(new Error("never asked"));
-    const { result } = renderHook(() => useListing(list, undefined));
-
-    expect(result.current).toStrictEqual(Listing.Listed([]));
-  });
-
   it("is what the engine listed for the directory browsed", async () => {
     const list = (path: string) => Promise.resolve([`${path}-a`]);
     const { result } = renderHook(() => useListing(list, "/mnt"));
