@@ -816,11 +816,13 @@ page that believed its own keystrokes would be a lock anybody could open by
 editing the page. A desk of three monitors is three of your pages and one lock,
 which is the same reason `setTheme` comes back as a `theme` event.
 
-**A wrong passphrase is answered with nothing at all.** No verdict and no
-count: the desk stays shut and the compositor says so in its own log, without
-the passphrase in it. So your field is the only thing that can say the try
-happened — clear it on every submit rather than waiting for an answer that is
-not coming. There is no "that was wrong" on this protocol yet;
+**A wrong passphrase is answered with `locked: true` again.** Every check is
+answered to every chrome once it is over, and nothing else sends `locked: true`
+to a desk being checked — that desk is already shut — so a `true` while your
+page has a passphrase out is the refusal. Hold your field until then, and clear
+it on the refusal or the `false`. A verifier that could not check is answered
+the same way; the compositor tells the two apart only in its own log, without
+the passphrase in it. There is no count on this protocol yet;
 [ROADMAP.md](/ROADMAP.md) carries it.
 
 **A right one takes as long as PAM takes, and the desk stays shut until then.**

@@ -139,14 +139,12 @@ The evidence for each of those is in the doc that made the claim —
      [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#the-screen-going-dark)
      says so, and the compositor says so when it is missing. A NixOS module
      would make that one line rather than two in two places.
-   - **A wrong passphrase is answered with silence.** No verdict crosses the
-     protocol, so a shell cannot say "that was wrong", cannot count tries and
-     cannot rate-limit them; the compositor logs the refusal and the desk stays
-     shut. The field clearing is the only feedback there is, and with PAM behind
-     the seam the refusal also takes as long as PAM's delay on a failure, which
-     the shell cannot see either. What this wants is a message carrying the
-     verdict — and a "checking" state, since keys sent while one is being
-     checked reach nothing.
+   - **A wrong passphrase is only `locked: true` again.** That is enough to say
+     "that was wrong" — every verdict is broadcast, and a shell waiting on a
+     check reads the state said again as the refusal — but it cannot tell a
+     wrong passphrase from a verifier that could not check, count tries or
+     rate-limit them. A verdict of its own would need an event of its own in
+     the engine.
    - **A reload does not move the lock.** `[lock]` is read at startup and
      nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left

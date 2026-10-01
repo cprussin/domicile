@@ -970,9 +970,11 @@ export type DomicileHost = {
    * says the desk opened, never because you believed your own keystrokes: a page
    * that did the latter would be a lock anybody with the devtools could open.
    *
-   * A wrong passphrase produces nothing at all. There is no verdict, no count
-   * and no delay on this protocol yet; the desk stays shut and the compositor
-   * says so in its own log, without the passphrase in it.
+   * A wrong passphrase produces a `locked` event saying the desk is still
+   * locked: nothing else sends one to a desk being checked, so a page waiting on
+   * its check reads it as the refusal. There is no count and no delay on this
+   * protocol yet; the compositor says why in its own log, without the
+   * passphrase in it.
    */
   unlock(passphrase: string): void;
 

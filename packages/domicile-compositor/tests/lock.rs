@@ -223,17 +223,23 @@ fn a_page_that_connects_over_a_locked_desk_is_told_so() {
         .expect("a page that has only just connected is told where the desk stands");
 }
 
-/// A passphrase the desk refuses leaves it shut, and does not turn up in the
-/// log.
+/// A passphrase the desk refuses leaves it shut, the page is told so, and it
+/// does not turn up in the log.
 ///
-/// The second half is not decoration. The compositor says out loud that it
+/// **THE PAGE IS TOLD BY BEING TOLD THE DESK IS LOCKED, AGAIN.** `locked: true`
+/// to the chrome that already knows it is the answer to the check it is
+/// waiting on: nothing else sends one to a desk being checked, because a desk
+/// being checked is already shut. Without it a shell has nothing to clear its
+/// field on and nothing to say "wrong" on.
+///
+/// The last half is not decoration. The compositor says out loud that it
 /// refused something — a lock that said nothing would be a desk somebody is
 /// guessing at with no trace of it anywhere — and the obvious way to write that
 /// line is with the thing it refused in it, which would put the guess, and
 /// sooner or later the real passphrase, in the journal. Both spellings are
 /// checked: the one that was typed, and the one that would have worked.
 #[test]
-fn a_passphrase_the_desk_refuses_leaves_it_shut_and_stays_out_of_the_log() {
+fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log() {
     let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
     let mut chrome = compositor.chrome();
     lock_the_desk(&compositor, &mut chrome);
@@ -244,6 +250,9 @@ fn a_passphrase_the_desk_refuses_leaves_it_shut_and_stays_out_of_the_log() {
             passphrase: Passphrase::from(wrong),
         })
         .expect("the chrome socket takes an unlock");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("the page that offered the passphrase is told the desk stayed locked");
     compositor.wait_for_log("a passphrase this desktop did not take");
 
     let said = compositor.complaint();
@@ -255,13 +264,6 @@ fn a_passphrase_the_desk_refuses_leaves_it_shut_and_stays_out_of_the_log() {
         !said.contains(THE_PASSPHRASE),
         "the desk's own passphrase is in the log:\n{said}"
     );
-
-    // And the desk is still shut, asked the one way a test can ask without
-    // waiting for an absence: a page connecting is told where the desk stands.
-    compositor
-        .chrome()
-        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
-        .expect("a desk that refused a passphrase is still locked");
 }
 
 /// A key held down when the desk locks is let go of for the client.

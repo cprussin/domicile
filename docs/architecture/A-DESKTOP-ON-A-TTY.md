@@ -1095,7 +1095,8 @@ and the directory PAM reads are the same one. A passphrase with a NUL in it is
 refused before PAM sees it: C would read only the part before the NUL, which is
 a second passphrase that opens the desk.
 
-A refused passphrase is a line in the log and no message at all. The line does
+A refused passphrase is a line in the log and `locked: true` to every chrome
+again, which a shell waiting on its check reads as the refusal. The line does
 not contain what was typed, and neither does the frame log a few lines above it:
 `domicile_protocol::Passphrase` refuses to print itself, which is what makes that
 structural rather than a rule for the next person adding a `debug!`. PAM's copy

@@ -479,8 +479,10 @@ export class DomicileClient {
    * the desk opened, never because it believed its own keystrokes. A page that
    * did the latter would be a lock anybody with the devtools could open.
    *
-   * A wrong passphrase is answered with nothing at all: the desk stays shut, and
-   * the compositor says so in its own log without the passphrase in it.
+   * A wrong passphrase is answered with `locked: true` again, which a page
+   * waiting on its check reads as the answer: nothing else sends one to a desk
+   * being checked. The compositor says why in its own log, without the
+   * passphrase in it.
    */
   unlock(passphrase: string): void {
     this.#host.unlock(passphrase);
