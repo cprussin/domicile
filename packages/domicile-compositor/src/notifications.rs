@@ -40,8 +40,8 @@ use domicile_protocol::Notification;
 use tracing::{debug, warn};
 use zbus::blocking::object_server::InterfaceRef;
 use zbus::blocking::Connection;
+use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
-use zbus::SignalContext;
 
 /// The name a notification server answers on.
 const SERVER_NAME: &str = "org.freedesktop.Notifications";
@@ -199,7 +199,7 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
 /// `crate::tray::listed`'s reason.
 fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
     let said = zbus::block_on(Server::notification_closed(
-        server.signal_context(),
+        server.signal_emitter(),
         id,
         reason as u32,
     ));
@@ -210,7 +210,7 @@ fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
 
 /// Say `ActionInvoked`.
 fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
-    let said = zbus::block_on(Server::action_invoked(server.signal_context(), id, action));
+    let said = zbus::block_on(Server::action_invoked(server.signal_emitter(), id, action));
     if let Err(why) = said {
         warn!(%why, %id, "a notification's action could not be said");
     }
@@ -279,7 +279,7 @@ impl Server {
     #[allow(clippy::too_many_arguments)] // The spec's own signature.
     async fn notify(
         &self,
-        #[zbus(signal_context)] context: SignalContext<'_>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
         app_name: String,
         replaces_id: u32,
         app_icon: String,
@@ -302,7 +302,7 @@ impl Server {
         let notified = self.store.change(|held| held.notify(sent, now()));
         if let Some(evicted) = notified.evicted {
             if let Err(why) =
-                Self::notification_closed(&context, evicted, Reason::Expired as u32).await
+                Self::notification_closed(&emitter, evicted, Reason::Expired as u32).await
             {
                 warn!(%why, "a notification's closing could not be said");
             }
@@ -314,11 +314,11 @@ impl Server {
     /// nothing to say.
     async fn close_notification(
         &self,
-        #[zbus(signal_context)] context: SignalContext<'_>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
         id: u32,
     ) {
         if self.store.change(|held| held.close(id)) {
-            if let Err(why) = Self::notification_closed(&context, id, Reason::Closed as u32).await {
+            if let Err(why) = Self::notification_closed(&emitter, id, Reason::Closed as u32).await {
                 warn!(%why, "a notification's closing could not be said");
             }
         }
@@ -336,14 +336,14 @@ impl Server {
 
     #[zbus(signal)]
     async fn notification_closed(
-        context: &SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         id: u32,
         reason: u32,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn action_invoked(
-        context: &SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         id: u32,
         action_key: &str,
     ) -> zbus::Result<()>;
