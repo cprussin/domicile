@@ -135,7 +135,8 @@ export type Pointer = {
  * happened. A window OPENING is not told: a client finishing its startup and a
  * link opening a browser window both take the keyboard with no press behind
  * them, and what says so is the window being one that was not there last
- * render. A window CLOSING is the same again read backwards — the window the
+ * render — unless it opened as a tab of the stack the keyboard was in, which
+ * slides nothing under the pointer. A window CLOSING is the same again read backwards — the window the
  * keyboard was in is not in this render's list, the tiling has shut over the
  * gap, and the keyboard is somewhere the pointer is not. All three are a focus
  * nothing else asked for, so all three are a focus the pointer would otherwise
@@ -228,9 +229,16 @@ export const usePointerWarp = ({
   // where it is this one — so the render is the whole signal, and a press
   // whose render changed nothing else has to be spent all the same.
   useEffect(() => {
+    const was = held.current;
     // A window nobody has seen before, holding the keyboard: the one focus
-    // change that announces itself in the render rather than in a press.
-    const opened = focus?.id !== undefined && !open.current.includes(focus.id);
+    // change that announces itself in the render rather than in a press —
+    // unless it opened as a tab of the stack the keyboard was already in,
+    // drawn in the very box it held: then nothing slid under the pointer,
+    // wherever it is, and there is nothing to take back.
+    const opened =
+      focus?.id !== undefined &&
+      !open.current.includes(focus.id) &&
+      !(was !== undefined && sameBox(was.box, focus.box));
     // And the third: the window the keyboard was in has closed, the tiling
     // has shut over it, and the keyboard has landed somewhere the pointer is
     // not — with whatever filled the gap arriving under the pointer as it
@@ -238,7 +246,6 @@ export const usePointerWarp = ({
     // the keyboard is the next tab, drawn in the very box the closed one was:
     // then nothing slid under the pointer, which is likely on the tab bar
     // having just pressed the close button, and has nothing to take back.
-    const was = held.current;
     const gone =
       was?.id !== undefined &&
       !windows.includes(was.id) &&
@@ -254,7 +261,7 @@ export const usePointerWarp = ({
     const to =
       keyed || opened || gone
         ? warpTo({
-            from: held.current,
+            from: was,
             // Where the cursor is as far as this page can tell, which is
             // where it was asked to go while that is still in the air: a
             // second press before the first warp has landed must not send it

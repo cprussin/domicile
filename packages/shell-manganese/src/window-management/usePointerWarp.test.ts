@@ -216,6 +216,28 @@ describe("usePointerWarp", () => {
     expect(warps).toStrictEqual([]);
   });
 
+  it("leaves the pointer alone for a window that opens as a tab of the focused stack", () => {
+    // Drawn in the box the keyboard was already in, so nothing slid under the
+    // pointer — which may be anywhere, the top bar included.
+    const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
+    pointerAt(900, 10);
+
+    rerender(desktopOf({ box: LEFT.box, id: "firefox" }, [LEFT.id, "firefox"]));
+
+    expect(warps).toStrictEqual([]);
+  });
+
+  it("takes the pointer to a window that opens as a tab of a stack it was not in", () => {
+    const { rerender } = warping(desktopOf(LEFT, BOTH));
+    pointerAt(200, 300);
+
+    rerender(
+      desktopOf({ box: RIGHT.box, id: "firefox" }, [...BOTH, "firefox"]),
+    );
+
+    expect(warps).toStrictEqual([[600, 350]]);
+  });
+
   it("reads a window arriving where the pointer already is as no pointing", () => {
     // The layout moving under a stationary hand fires `pointerover` the same
     // way the pointer crossing a window does, and the desktop has to tell
