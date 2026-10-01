@@ -50,6 +50,64 @@ pub struct UnknownLayout {
 /// The config's keymap, in the `XKB_KEYMAP_FORMAT_TEXT_V1` text a
 /// `wl_keyboard.keymap` fd carries.
 pub fn compiled_keymap(config: &KeyboardConfig) -> Result<String, UnknownLayout> {
+    compiled(config).map(|keymap| keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1))
+}
+
+/// The config's keymap, compiled, for asking which key a keysym is on.
+///
+/// A keysym is what a binding names and a key is what a press arrives as, so
+/// this is the one place a binding meets the keyboard.
+pub struct Keyboard {
+    keymap: xkb::Keymap,
+}
+
+impl Keyboard {
+    pub fn compiled(config: &KeyboardConfig) -> Result<Keyboard, UnknownLayout> {
+        compiled(config).map(|keymap| Keyboard { keymap })
+    }
+
+    /// The evdev key `keysym` is on.
+    ///
+    /// The lowest key that has it on any level of the first layout, the one a
+    /// desk types in until something switches it. Lowest key rather than
+    /// lowest level because xkb numbers the main block first, and a keysym
+    /// is often also unshifted on a key a board may not have — `us` puts
+    /// `parenleft` on the keypad's own parenthesis key, and `less` beside a
+    /// left Shift that a US board lacks. Which modifiers are held is the
+    /// binding's to say and not this: `Meta+Shift+parenleft` is the key
+    /// `parenleft` is on, with Shift, whatever level that is.
+    pub fn key_for(&self, keysym: &str) -> Result<u32, UnknownKeysym> {
+        let wanted = xkb::keysym_from_name(keysym, xkb::KEYSYM_NO_FLAGS);
+        if wanted == xkb::Keysym::NoSymbol {
+            return Err(UnknownKeysym::NoSuchName(keysym.to_string()));
+        }
+        let keys = self.keymap.min_keycode().raw()..=self.keymap.max_keycode().raw();
+        keys.map(xkb::Keycode::new)
+            .find(|&key| {
+                (0..self.keymap.num_levels_for_key(key, 0)).any(|level| {
+                    self.keymap
+                        .key_get_syms_by_level(key, 0, level)
+                        .contains(&wanted)
+                })
+            })
+            // An xkb keycode is the evdev one plus 8, and evdev is what the
+            // chrome speaks — see `Shortcut::key`.
+            .map(|key| key.raw() - 8)
+            .ok_or_else(|| UnknownKeysym::OnNoKey(keysym.to_string()))
+    }
+}
+
+/// A binding names a keysym this keyboard cannot type.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum UnknownKeysym {
+    #[error("{0:?} is not the name of an xkb keysym")]
+    NoSuchName(String),
+    #[error("{0:?} is on no key of the keyboard input.keyboard names")]
+    OnNoKey(String),
+}
+
+/// `config`, compiled by xkb, or the names it would not compile.
+fn compiled(config: &KeyboardConfig) -> Result<xkb::Keymap, UnknownLayout> {
     let options = config.xkb_options_string();
     let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
     xkb::Keymap::new_from_names(
@@ -61,7 +119,6 @@ pub fn compiled_keymap(config: &KeyboardConfig) -> Result<String, UnknownLayout>
         Some(options.clone()),
         xkb::KEYMAP_COMPILE_NO_FLAGS,
     )
-    .map(|keymap| keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1))
     .ok_or_else(|| UnknownLayout {
         rules: config.xkb_rules.clone(),
         model: config.xkb_model.clone(),
@@ -151,6 +208,62 @@ mod tests {
         };
 
         assert!(compiled_keymap(&nonsense).is_err());
+    }
+
+    /// The evdev codes, as `linux/input-event-codes.h` numbers them.
+    const KEY_5: u32 = 6;
+    const KEY_9: u32 = 10;
+    const KEY_P: u32 = 25;
+    const KEY_ENTER: u32 = 28;
+    const KEY_L: u32 = 38;
+    const KEY_COMMA: u32 = 51;
+
+    fn key_for(config: &KeyboardConfig, keysym: &str) -> Result<u32, UnknownKeysym> {
+        Keyboard::compiled(config)
+            .expect("the layout exists")
+            .key_for(keysym)
+    }
+
+    #[test]
+    fn a_keysym_is_the_key_it_is_on_in_the_layout_the_config_names() {
+        // What a hand-kept table of Programmer's Dvorak got right on exactly
+        // one keyboard: `l` is a different key on each of these.
+        assert_eq!(key_for(&KeyboardConfig::default(), "l"), Ok(KEY_L));
+        assert_eq!(key_for(&dvorak(), "l"), Ok(KEY_P));
+        assert_eq!(key_for(&dvorak(), "Return"), Ok(KEY_ENTER));
+    }
+
+    #[test]
+    fn a_keysym_is_its_key_whichever_level_it_is_on() {
+        // `parenleft` is shifted on `us` and unshifted on the key `us` prints
+        // a 5 on in `dvp`. The key either way, and the modifiers stay the
+        // chord's: `Meta+Shift+parenleft` on dvp is that key with Shift held,
+        // which is what the shell asked for.
+        assert_eq!(key_for(&dvorak(), "parenleft"), Ok(KEY_5));
+    }
+
+    #[test]
+    fn the_lowest_key_wins_whatever_level_it_is_on() {
+        // `us` has `parenleft` twice: Shift+9, and unshifted on the keypad's
+        // own parenthesis key, which hardly a keyboard has. And `less` twice:
+        // Shift+comma, and unshifted on the extra key beside the left Shift,
+        // which a US board does not have. Preferring the unshifted level would
+        // bind both to a key nobody can press; xkb numbers the main block
+        // first, so the lowest key is the one a person types the keysym on.
+        assert_eq!(key_for(&KeyboardConfig::default(), "parenleft"), Ok(KEY_9));
+        assert_eq!(key_for(&KeyboardConfig::default(), "less"), Ok(KEY_COMMA));
+    }
+
+    #[test]
+    fn a_keysym_the_keyboard_cannot_type_is_refused_and_named() {
+        assert_eq!(
+            key_for(&KeyboardConfig::default(), "Retrun"),
+            Err(UnknownKeysym::NoSuchName("Retrun".into()))
+        );
+        assert_eq!(
+            key_for(&KeyboardConfig::default(), "Greek_alpha"),
+            Err(UnknownKeysym::OnNoKey("Greek_alpha".into()))
+        );
     }
 
     /// The `key <NAME> { ... };` block of a compiled keymap.
