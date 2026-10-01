@@ -256,6 +256,18 @@ interface WebViewGuestClient {
   // heard nothing.
   ZoomChanged(double factor);
 
+  // The icon the guest's page names for itself: of the `<link rel="icon">`s
+  // and touch icons it links -- or the `/favicon.ico` the renderer assumes for
+  // one that links none -- the one a launcher would draw best, an SVG before
+  // the biggest. An empty URL is a page that names none it can, and is sent
+  // as each new page commits, before its head has named any.
+  //
+  // WHAT A SIGNED-IN PAGE SAYS, which is the reason this exists: a site that
+  // shows its icon only to somebody signed in shows it here, where the guest
+  // is the user's own browser, and nowhere a compositor's anonymous fetch
+  // reaches. SENT ONLY WHEN IT CHANGES, like the reports above.
+  FaviconChanged(url.mojom.Url icon);
+
   // The user asked the page to zoom -- Ctrl and the wheel, over the page --
   // and the page did not take the wheel for itself.
   //

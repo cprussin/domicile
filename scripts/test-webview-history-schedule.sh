@@ -51,6 +51,7 @@ const view = {
   },
   canGoBack: false,
   canGoForward: false,
+  favicon: "",
   goBack: () => go(entries[index - 1], () => { index -= 1; }),
   goForward: () => go(entries[index + 1], () => { index += 1; }),
   loading: false,
@@ -109,6 +110,9 @@ const go = (path, commit) => {
           setTimeout(() => {
             log(`GUARD guest-shown path=${path}`);
             setLoading(false);
+            // The page's head is parsed by now, and it links `<path>.png`.
+            view.favicon = `http://fixture${path}.png`;
+            announce("domicile-favicon-change");
           }, LATENCY);
         },
         path === "/slow" ? Number(slowMs) : LATENCY,

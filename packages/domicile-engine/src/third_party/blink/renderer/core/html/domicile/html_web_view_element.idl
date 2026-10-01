@@ -99,4 +99,11 @@
   // range -- 0.25 to 5 -- is a RangeError rather than a zoom clamped into it,
   // because a shell that computed one has a bug worth hearing about.
   [RaisesException] undefined setZoom(double factor);
+
+  // The icon the page names for itself -- the best of the icons it links, an
+  // SVG before the biggest -- announced in `domicile-favicon-change`. The
+  // empty string for a page that names none, or has not said yet. It is the
+  // page's own word, signed in as the user is, which is what makes it the one
+  // a launcher learns a site's icon from.
+  readonly attribute USVString favicon;
 };

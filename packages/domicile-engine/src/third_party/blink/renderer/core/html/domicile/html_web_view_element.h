@@ -155,6 +155,10 @@ class CORE_EXPORT HTMLWebViewElement final
   const String& security() const { return security_; }
 
   double zoom() const { return zoom_; }
+
+  // The icon the page names for itself, or empty for one that names none --
+  // see FaviconChanged in components/domicile/mojom/web_view_guest.mojom.
+  const String& favicon() const { return favicon_; }
   void setZoom(double factor, ExceptionState&);
 
   // A file chooser this element dispatched has been answered, so it stops
@@ -297,6 +301,8 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void ZoomRequested(bool zoom_in) override;
 
+  void FaviconChanged(const KURL& icon) override;
+
   // The page needs a file picked, and the shell is asked in a
   // `domicile-file-chooser` event it answers. One no listener takes with
   // `preventDefault()` is canceled here as soon as the dispatch returns. See
@@ -360,6 +366,10 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // 100% until the browser says otherwise, which is what a fresh guest is.
   double zoom_ = 1.0;
+
+  // Empty until the browser names an icon, which a page that has not parsed
+  // its head yet has not.
+  String favicon_;
 
   // Every file chooser a shell took and has not answered yet.
   //
