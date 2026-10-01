@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 1 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell is asked for no local network permission
+
+Every time the launcher opened, the desk asked to "access other devices
+on your network" and "apps and services on this device". The launcher
+draws a bookmark's tile from its site's /favicon.ico, and a bookmark on
+the LAN or on localhost is a Local Network Access request from the
+shell's document.
+
+domicile:// has no IP address, so ChromeContentBrowserClient left it
+kUnknown, which LNA reads as public: every fetch it made into the
+network or the machine was a request for LOCAL_NETWORK or
+LOOPBACK_NETWORK, prompted for, and never remembered for an origin that
+is not http(s).
+
+The shell is the desktop, not a site, so it is classed loopback, as
+chrome-search:// and chrome-extension:// already are. Its fetches are
+then never more private than itself, and nothing is asked. Pages in a
+<webview> are their own documents and keep LNA as they were.
+---
+ chrome/browser/chrome_content_browser_client.cc | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -2275,6 +2275,13 @@ ChromeContentBrowserClient::DetermineAddressSpaceFromURL(const GURL& url) {
+     return network::mojom::IPAddressSpace::kLoopback;
+   }
+ #endif
++  // Domicile's engine fork. The shell is the desktop, not a site: left
++  // kUnknown it reads as public, and every bookmark's favicon on the LAN or
++  // on localhost asks for local network access. Its guests are their own
++  // documents and are not affected.
++  if (url.SchemeIs(domicile::kDomicileScheme)) {
++    return network::mojom::IPAddressSpace::kLoopback;
++  }
+ 
+   return network::mojom::IPAddressSpace::kUnknown;
+ }
+-- 
+2.43.0
+
