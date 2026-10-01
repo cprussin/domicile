@@ -157,6 +157,13 @@ class CORE_EXPORT HTMLWebViewElement final
   double zoom() const { return zoom_; }
   void setZoom(double factor, ExceptionState&);
 
+  // Find in the page, which is the guest's: the browser searches it and
+  // FindChanged below is the answer.
+  void find(const String& text, bool backward);
+  void stopFinding();
+  int32_t findMatches() const { return find_matches_; }
+  int32_t findActiveMatch() const { return find_active_match_; }
+
   // A file chooser this element dispatched has been answered, so it stops
   // holding the event. See `waiting_choosers_`.
   void FileChooserAnswered(DomicileFileChooserEvent&);
@@ -297,6 +304,10 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void ZoomRequested(bool zoom_in) override;
 
+  // The browser saying what a find has found. It arrives when it CHANGES, so
+  // the event below is never dispatched for a change that is not one.
+  void FindChanged(int32_t matches, int32_t active_match) override;
+
   // The page needs a file picked, and the shell is asked in a
   // `domicile-file-chooser` event it answers. One no listener takes with
   // `preventDefault()` is canceled here as soon as the dispatch returns. See
@@ -359,6 +370,10 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // 100% until the browser says otherwise, which is what a fresh guest is.
   double zoom_ = 1.0;
+
+  // No find, until the browser says one found something.
+  int32_t find_matches_ = 0;
+  int32_t find_active_match_ = 0;
 
   // Every file chooser a shell took and has not answered yet.
   //

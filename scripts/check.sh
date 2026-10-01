@@ -352,6 +352,7 @@ if wanted engine; then
       scripts/engine-guard-webview-keyboard.sh \
       scripts/engine-guard-webview-escape.sh \
       scripts/engine-guard-webview-history.sh \
+      scripts/engine-guard-webview-find.sh \
       scripts/engine-guard-webview-click.sh \
       scripts/engine-guard-webview-new-window.sh \
       scripts/engine-guard-webview-routed-link.sh \

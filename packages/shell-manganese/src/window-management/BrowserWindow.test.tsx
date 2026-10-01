@@ -5,6 +5,7 @@ import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
+  WEBVIEW_FIND_CHANGE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
@@ -196,6 +197,43 @@ const guestPresses = (
     new KeyboardEvent(WEBVIEW_GUEST_KEYDOWN_EVENT, { bubbles: true, ...init }),
   );
 };
+
+/**
+ * A view whose find says what it was asked to do, in order, the way the
+ * engine's `find` and `stopFinding` would be called — and that has found
+ * nothing yet, which is where the engine's element starts.
+ */
+const findable = (element: HTMLWebViewElement): string[] => {
+  const calls: string[] = [];
+  finds(element, 0, 0);
+  element.find = (text: string, backward = false) => {
+    calls.push(backward ? `find ${text} backward` : `find ${text}`);
+  };
+  element.stopFinding = () => {
+    calls.push("stop");
+  };
+  return calls;
+};
+
+/**
+ * The engine reporting what a find has found. `defineProperties` because both
+ * are readonly on the real element: the count is the browser's.
+ */
+const finds = (
+  element: HTMLWebViewElement,
+  matches: number,
+  activeMatch: number,
+): void => {
+  Object.defineProperties(element, {
+    findActiveMatch: { configurable: true, value: activeMatch },
+    findMatches: { configurable: true, value: matches },
+  });
+  fireEvent(element, new Event(WEBVIEW_FIND_CHANGE_EVENT));
+};
+
+/** The find bar's box, which is where its keyboard is. */
+const findBox = (): HTMLElement =>
+  screen.getByRole("searchbox", { name: "Find in page" });
 
 loadEmittedStylesheet(document);
 
@@ -1373,6 +1411,127 @@ describe("BrowserWindow", () => {
       guestPresses(view(container), { ctrlKey: true, key: "+" });
 
       expect(screen.getByRole("status")).toHaveTextContent("110%");
+    });
+  });
+
+  describe("finding in the page", () => {
+    const renderWindow = () =>
+      render(
+        <BrowserWindow
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onClose={nothingClosed}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+
+    // Ctrl+F pressed in the page, which the page left alone and the engine
+    // handed back — the way a find bar is almost always opened.
+    it("opens a find bar on Ctrl+F, with the keyboard in it", () => {
+      const { container } = renderWindow();
+
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+
+      expect(findBox()).toHaveFocus();
+    });
+
+    // Chrome's Ctrl+F with the bar already up: back into the box, with what
+    // it holds selected so the next thing typed replaces it.
+    it("takes the keyboard back on Ctrl+F with the bar already up", async () => {
+      const { container } = renderWindow();
+      findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+      await userEvent.type(findBox(), "ab");
+      act(() => {
+        view(container).focus();
+      });
+
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+
+      expect(findBox()).toHaveFocus();
+      expect(findBox()).toHaveProperty("selectionStart", 0);
+      expect(findBox()).toHaveProperty("selectionEnd", 2);
+    });
+
+    it("finds as the user types, and steps with Enter and Shift+Enter", async () => {
+      const { container } = renderWindow();
+      const calls = findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+
+      await userEvent.type(findBox(), "ab");
+      await userEvent.keyboard("{Enter}{Shift>}{Enter}{/Shift}");
+
+      expect(calls).toStrictEqual([
+        "find a",
+        "find ab",
+        "find ab",
+        "find ab backward",
+      ]);
+    });
+
+    it("steps from its buttons", async () => {
+      const { container } = renderWindow();
+      const calls = findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+      await userEvent.type(findBox(), "a");
+      finds(view(container), 2, 1);
+
+      await userEvent.click(control("Next match"));
+      await userEvent.click(control("Previous match"));
+
+      expect(calls).toStrictEqual(["find a", "find a", "find a backward"]);
+    });
+
+    it("says which match it is on, out of how many", async () => {
+      const { container } = renderWindow();
+      findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+      await userEvent.type(findBox(), "a");
+
+      finds(view(container), 3, 2);
+
+      expect(screen.getByText("2/3")).toBeInTheDocument();
+    });
+
+    // Escape in a find bar, as in Chrome: the match it was on stays selected,
+    // and the keyboard goes back to the page it was finding in.
+    it("stops and hands the page back the keyboard on Escape", async () => {
+      const { container } = renderWindow();
+      const calls = findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(calls).toStrictEqual(["stop"]);
+      expect(
+        screen.queryByRole("searchbox", { name: "Find in page" }),
+      ).toBeNull();
+      expect(view(container)).toHaveFocus();
+    });
+
+    it("stops from its close button", async () => {
+      const { container } = renderWindow();
+      const calls = findable(view(container));
+      guestPresses(view(container), { ctrlKey: true, key: "f" });
+
+      await userEvent.click(control("Close find bar"));
+
+      expect(calls).toStrictEqual(["stop"]);
+      expect(
+        screen.queryByRole("searchbox", { name: "Find in page" }),
+      ).toBeNull();
     });
   });
 
