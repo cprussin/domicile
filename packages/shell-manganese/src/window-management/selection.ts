@@ -32,6 +32,9 @@ export type Selection = {
  * Nothing while a window fills the screen: a line around the screen's edge
  * says nothing the fullscreen window does not already, and a group's is drawn
  * over a window that covers it.
+ *
+ * Nor around the only window on the workspace: there is nothing else the
+ * commands could be pointed at, so it would be a line that says nothing.
  */
 export const selectionOf = (
   { placements, selection }: Screenful,
@@ -50,7 +53,7 @@ export const selectionOf = (
       group: true,
       rect: selection.rect,
     };
-  } else if (active === undefined) {
+  } else if (active === undefined || placements.length === 1) {
     return undefined;
   } else {
     return {

@@ -1280,6 +1280,7 @@ describe("Shell", () => {
     it("brings the ring on with the workspace rather than easing it across", () => {
       const { container } = renderShell();
       clientAppears("term");
+      clientAppears("shell");
       press("braceright");
       clientAppears("editor");
 
@@ -1583,6 +1584,7 @@ describe("Shell", () => {
     it("rounds the ring at all four corners, as a window's frame is", () => {
       const { container } = renderShell();
       clientAppears("one");
+      clientAppears("two");
 
       for (const corner of [
         css({ borderStartStartRadius: "lg" }),
@@ -1625,19 +1627,22 @@ describe("Shell", () => {
       // the last window rather than hunting for where it reappeared.
       const { container } = renderShell();
       clientAppears("one");
-      motionsPlayOut(container);
       clientAppears("two");
+      motionsPlayOut(container);
+      clientAppears("three");
       const ring = selectionRing(container);
 
       expect(ring.className).toContain(settlingStyles({ dragging: false }));
       expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 
-    it("grows the ring in with the first window of a workspace", () => {
-      // There is no last window to slide across from, and a ring drawn at
-      // full size around a window still growing in is a line ahead of it.
+    it("grows the ring in with the second window of a workspace", () => {
+      // The only window on a workspace has no ring, so there is no last one to
+      // slide across from, and a ring drawn at full size around a window still
+      // growing in is a line ahead of it.
       const { container } = renderShell();
       clientAppears("one");
+      clientAppears("two");
 
       expect(selectionRing(container).className).toContain(
         movingStyles({ motion: "opening" }),
@@ -1946,6 +1951,7 @@ describe("Shell", () => {
       // The ring eases between boxes, which is right for `focus parent` and a
       // retile — and a ring trailing every step of a drag behind the window.
       const { container } = renderShell();
+      clientAppears("shell");
       clientAppears("term");
       press("Tab", true);
       const bar = barFor(container, "app:term");

@@ -120,6 +120,14 @@ describe("selectionOf", () => {
     ).toBeUndefined();
   });
 
+  it("rings nothing around the only window on the workspace", () => {
+    // There is nothing else the commands could be pointed at, so the ring says
+    // nothing and costs the window the pixels along all four sides.
+    expect(
+      selected(reduce(NO_WINDOWS, WindowAction.AppAppeared("one", "one"))),
+    ).toBeUndefined();
+  });
+
   it("rings nothing while no window is being worked in", () => {
     expect(selected(NO_WINDOWS)).toBeUndefined();
   });
