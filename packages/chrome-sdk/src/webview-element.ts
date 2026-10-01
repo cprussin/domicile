@@ -237,6 +237,20 @@ export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
 export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
 
 /**
+ * Fired when a find in the page has found something new, which is readable on
+ * the element as {@link HTMLWebViewElement.findMatches} and
+ * {@link HTMLWebViewElement.findActiveMatch}. Carries nothing, like the other
+ * state events.
+ *
+ * The count settles over several of these as the browser searches the page
+ * frame by frame, and goes back to nothing when the find is stopped or the page
+ * navigates away — a new page ends a find, as it does in Chrome.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_FIND_CHANGE_EVENT = "domicile-find-change";
+
+/**
  * Fired when the page inside the view needs a file picked: an
  * `<input type="file">` clicked, or a download that needs somewhere to go.
  *
@@ -340,6 +354,23 @@ declare global {
      * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
      */
     setZoom(factor: number): void;
+    /**
+     * Find `text` in the page and select a match: the next one, or the one
+     * before when `backward` is true. The same text again steps through the
+     * matches and different text is a new search. `""` ends the find with
+     * nothing selected. The answer arrives as
+     * {@link WEBVIEW_FIND_CHANGE_EVENT}.
+     */
+    find(text: string, backward?: boolean): void;
+    /** End the find, leaving the match it was on selected. */
+    stopFinding(): void;
+    /**
+     * How many matches the find has found, across every frame in the page. 0
+     * while there is no find.
+     */
+    readonly findMatches: number;
+    /** Which of them is selected, counted from 1. 0 while there is none. */
+    readonly findActiveMatch: number;
     goBack(): void;
     goForward(): void;
     stop(): void;
