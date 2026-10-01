@@ -69,6 +69,7 @@ zbus = { version = "4.4", default-features = false, features = [
     "async-io",
     "blocking",
 ] }
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "gzip"] }
 
 # In Domicile the web engine is the renderer, so we deliberately do NOT pull
 # Smithay's winit, DRM or udev backends. Smithay's job here is accepting clients

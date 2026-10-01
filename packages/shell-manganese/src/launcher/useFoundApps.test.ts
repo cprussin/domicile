@@ -18,7 +18,7 @@ const EDITOR: DesktopEntry = {
 };
 
 const MAIL: Bookmark = {
-  label: undefined,
+  icon: undefined,
   name: "Mail",
   url: "https://mail.example.com",
 };

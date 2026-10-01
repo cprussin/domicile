@@ -16,7 +16,7 @@
   // What choosing it opens. The shell opens it itself.
   readonly attribute DOMString url;
 
-  // Which of the bookmark's URLs `url` is -- the one a shortcode in the query
-  // picked, say -- or empty when the desk did not say.
-  readonly attribute DOMString label;
+  // The icon the site names for itself, as a `data:` URL the compositor
+  // fetched, or empty for one it has not found.
+  readonly attribute DOMString icon;
 };

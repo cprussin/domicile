@@ -51,5 +51,7 @@ globset = { version = "0.4", default-features = false }
 # itself, which a page cannot read — the shell is served on another origin than
 # the home it would be reading.
 lofty = "0.25"
+# A bookmark's icon: the links its page names, read against the page's URL.
+url = "2"
 tempfile = "3"
 libc = "0.2"

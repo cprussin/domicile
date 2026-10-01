@@ -14,6 +14,7 @@ serde.workspace = true
 serde_json = "1"
 notify.workspace = true
 lofty.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

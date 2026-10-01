@@ -417,10 +417,10 @@ export type DomicileBookmark = {
   readonly url: string;
 
   /**
-   * Which of the bookmark's URLs `url` is, or empty when the desk did not
-   * say.
+   * The icon the site names for itself, as a `data:` URL the compositor
+   * fetched, or empty for one it has not found.
    */
-  readonly label: string;
+  readonly icon: string;
 };
 
 /**
