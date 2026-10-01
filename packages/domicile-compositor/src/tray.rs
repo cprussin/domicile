@@ -49,8 +49,9 @@ use tracing::{debug, warn};
 use zbus::blocking::object_server::InterfaceRef;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::message::{Header, Type};
+use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
-use zbus::{MatchRule, SignalContext};
+use zbus::MatchRule;
 
 /// The name a watcher answers on. KDE's, because it is the one every item
 /// looks for: the freedesktop spelling was proposed and never taken up.
@@ -242,17 +243,17 @@ fn listed(
     left: Option<&str>,
 ) {
     watcher.get_mut().items = registry.ids();
-    let context = watcher.signal_context();
+    let emitter = watcher.signal_emitter();
     let said = zbus::block_on(async {
         watcher
             .get()
-            .registered_status_notifier_items_changed(context)
+            .registered_status_notifier_items_changed(emitter)
             .await?;
         if let Some(id) = arrived {
-            Watcher::status_notifier_item_registered(context, id).await?;
+            Watcher::status_notifier_item_registered(emitter, id).await?;
         }
         if let Some(id) = left {
-            Watcher::status_notifier_item_unregistered(context, id).await?;
+            Watcher::status_notifier_item_unregistered(emitter, id).await?;
         }
         zbus::Result::Ok(())
     });
@@ -462,18 +463,18 @@ impl Watcher {
 
     #[zbus(signal)]
     async fn status_notifier_item_registered(
-        context: &SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         service: &str,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn status_notifier_item_unregistered(
-        context: &SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         service: &str,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
-    async fn status_notifier_host_registered(context: &SignalContext<'_>) -> zbus::Result<()>;
+    async fn status_notifier_host_registered(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
 #[cfg(test)]
