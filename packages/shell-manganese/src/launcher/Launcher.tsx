@@ -1202,11 +1202,12 @@ const rowGlyphStyles = css({
 
 // The letters the query is responsible for. `mark`'s own yellow is a
 // highlighter pen on a page; what this is marking is why a row is on screen,
-// so it is said in the color the desktop says "this one" in.
+// so it is said in the color the desktop says "this one" in. Color alone, not
+// weight: a heavier letter is a wider one, and the row would shift with every
+// key pressed.
 const markStyles = css({
   backgroundColor: "transparent",
   color: "accent",
-  fontWeight: "semibold",
 });
 
 // The directory over the name, each a line of its own that gives way at its

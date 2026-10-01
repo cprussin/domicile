@@ -239,6 +239,21 @@ describe("Launcher", () => {
     ]);
   });
 
+  it("lights the letters typed without widening them", async () => {
+    // A heavier weight is a wider letter, so a bold match would push the rest
+    // of its row along with every key pressed.
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "notes");
+    await panel.rows();
+    const weightOf = (element: Element) =>
+      globalThis.getComputedStyle(element).fontWeight;
+
+    expect(
+      screen.getAllByText("Notes", { selector: "mark" }).map(weightOf),
+    ).toStrictEqual(["normal", "normal"]);
+  });
+
   it("offers a URL above the file it names, and a search below both", async () => {
     // A URL typed whole is a URL meant, so it is on top — but the file of the
     // same name and a search for the words are both still one arrow away.
