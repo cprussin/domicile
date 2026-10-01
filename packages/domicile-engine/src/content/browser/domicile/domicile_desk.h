@@ -18,7 +18,8 @@ namespace content {
 void DomicileDeskLaidOut(std::vector<DomicileDeskDisplay> lit);
 
 // What `SetDomicileDeskScreenInfos` told the contents `view` is in, if
-// anything. Read by `RenderWidgetHostViewBase::GetNewScreenInfosForUpdate`.
+// anything, moved to where the contents' window is on the engine's screen.
+// Read by `RenderWidgetHostViewBase::GetNewScreenInfosForUpdate`.
 std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
     gfx::NativeView view);
 
