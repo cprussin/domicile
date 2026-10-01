@@ -200,6 +200,31 @@ touch -d '10 minutes ago' "$WORK/slot.waiting/ghost"
 expect "a waiter that stopped refreshing is not wanted" refused \
   "$(status "$(slot wanted victor)")"
 
+# A NOTE IS NEVER READ HALF-WRITTEN. A waiter rewrites it every poll, and a
+# holder that read a name with no rank under it would yield to a waiter it
+# outranks; one that read nothing would miss it. So read it while it is
+# rewritten as fast as it can be, then free the slot to end the wait.
+( DOMICILE_COMPILE_SLOT_RANK=1 DOMICILE_COMPILE_SLOT_WAIT=5 DOMICILE_COMPILE_SLOT_POLL=0 \
+    slot take tom >/dev/null ) &
+tom="$WORK/slot.waiting/$(printf tom | sha256sum | cut -d' ' -f1)"
+tries=0
+until [ -s "$tom" ] || [ "$tries" -ge 50 ]; do sleep 0.1; tries=$((tries + 1)); done
+torn=0
+for _ in $(seq 20000); do
+  { IFS= read -r name; IFS= read -r rank; } <"$tom" 2>/dev/null
+  [ "${name:-}:${rank:-}" = "tom:1" ] || torn=$((torn + 1))
+done
+expect "a waiter's note is never read half-written" 0 "$torn"
+slot drop victor >/dev/null
+wait
+slot drop tom >/dev/null
+slot take victor >/dev/null
+# Nor is the one being written beside it until it is renamed over it.
+printf 'tom\n' >"$tom.tmp"
+expect "a note still being written is not a waiter" refused \
+  "$(status "$(slot wanted victor)")"
+rm -f "$tom.tmp"
+
 # Yielding hands the slot to the waiter rather than racing it for the slot.
 ( DOMICILE_COMPILE_SLOT_WAIT=5 slot take wendy >/dev/null; sleep 1 ) &
 sleep 0.5
