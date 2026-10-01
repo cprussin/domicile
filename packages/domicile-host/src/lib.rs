@@ -12,7 +12,11 @@
 
 use std::collections::HashMap;
 
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme, TrayItem};
+use std::collections::BTreeMap;
+
+use domicile_protocol::{
+    ChromeMessage, DisplayInfo, HostMessage, ModeBindings, ShellBindings, Theme, TrayItem,
+};
 
 pub mod app_icons;
 pub mod battery;
@@ -121,6 +125,12 @@ pub struct Host {
     /// host with no config behind it saying "none" would empty a profile it
     /// was never asked about.
     extensions: Option<(Vec<String>, Vec<String>)>,
+    /// The keys the config binds, resolved against the keymap above, and what
+    /// each shell is told besides — [`HostMessage::ShellConfig`]'s fields.
+    ///
+    /// `None` until something sets them, for the keymap's reason: a host with
+    /// no keyboard behind it has no key a keysym could resolve to.
+    shell_config: Option<(ModeBindings, BTreeMap<String, ShellBindings>)>,
     /// Which way round the desktop is drawn, as every chrome is told — on
     /// connecting, and again whenever it changes under them.
     ///
@@ -215,6 +225,32 @@ impl Host {
             .map(|(web_store, unpacked)| HostMessage::Extensions {
                 web_store,
                 unpacked,
+            })
+    }
+
+    /// Hand over the keys the config binds and what each shell is told, for
+    /// every chrome that connects after.
+    ///
+    /// [`Host::set_keymap`]'s shape: set at startup and again whenever a
+    /// reload moves the bindings or the keyboard they were resolved on,
+    /// replacing rather than accumulating, and broadcast by the compositor to
+    /// the chromes already connected.
+    pub fn set_shell_config(
+        &mut self,
+        keybindings: ModeBindings,
+        shells: BTreeMap<String, ShellBindings>,
+    ) {
+        self.shell_config = Some((keybindings, shells));
+    }
+
+    /// The keys and the shells' settings, in the message a chrome is told
+    /// them as, or `None` from a host that has never been given any.
+    pub fn describe_shell_config(&self) -> Option<HostMessage> {
+        self.shell_config
+            .clone()
+            .map(|(keybindings, shells)| HostMessage::ShellConfig {
+                keybindings,
+                shells,
             })
     }
 

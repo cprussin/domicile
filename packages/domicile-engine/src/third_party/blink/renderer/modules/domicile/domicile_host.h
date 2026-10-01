@@ -235,6 +235,7 @@ class MODULES_EXPORT DomicileHost final
   void Locked(bool locked, base::TimeTicks arrival) override;
   void WindowsThemeChanged(domicile::mojom::blink::Theme theme,
                            base::TimeTicks arrival) override;
+  void ShellConfig(const String& config, base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   void Displays(

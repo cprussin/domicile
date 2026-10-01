@@ -239,6 +239,8 @@ follows the portal, a new `files.omit` walks the home again for the launcher's
 index, a new `[applications]` changes which applications and bookmarks the next
 search offers, a new `[extensions]` list installs and uninstalls what it names (see
 [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
+new `[keybindings]`, `[modes]` or `[shells]` rebind the keys (see
+[Keybindings](#keybindings)),
 and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
 edit replaced. Two sections are read at startup and not on a reload:
@@ -706,6 +708,55 @@ covering the monitor the focus landed on is the one that asks, whichever page
 heard the key — which makes the press part of the desk every page is shown
 rather than a fact about the page it happened on.
 
+## Keybindings
+
+**A shell's keys are the config's, not the shell's.** Sway-style: a chord maps
+to an action, and `send-shell` hands the rest of the line to your shell.
+
+```toml
+[keybindings]                        # every shell
+"Meta+Return" = "send-shell terminal"
+
+[shells.my-shell.keybindings]        # only the shell that binds as "my-shell"
+"Meta+l" = "send-shell focus right"
+"Meta+r" = "mode resize"
+
+[shells.my-shell.modes.resize]
+"Meta+l" = "send-shell grow right"
+"Meta+Escape" = "mode default"
+
+[shells.my-shell.options]            # anything; handed to your shell as JSON
+```
+
+A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) and an xkb keysym name,
+joined by `+`; the compositor finds the key that keysym is on in the configured
+layout, so `Meta+parenleft` is right on Programmer's Dvorak and on QWERTY
+alike. An action is `send-shell <word>…` or `mode <name>`. A config that names
+a keysym on no key is refused like one xkb cannot compile.
+
+**Bind once, by name:**
+
+```ts
+import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
+
+bindKeys(domicile, "my-shell", {
+  onCommand: (args) => run(args),        // ["focus", "right"]
+  onModeChanged: (mode) => show(mode),   // "resize", "default"
+  onOptions: (options) => apply(options),
+});
+```
+
+It claims every chord the config names, matches a press whether it landed on
+the page or in a `<webview>`, runs `mode` itself, and hands you every
+`send-shell`. What a command *means* is yours: parse it, and report one you do
+not know rather than throwing — it came from a file somebody typed. Your
+README is where your vocabulary lives; manganese's is
+[here](/packages/shell-manganese/README.md).
+
+**A claim is never given back**, so a chord a reload removes stays the desk's
+until restart. Why it is built this way:
+[KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
+
 ## When nobody is at the desk
 
 A desk that has gone untouched for `idle.blank_after_seconds` turns its screens
@@ -990,11 +1041,12 @@ client — its page is inside your own. Three things follow, none optional:
   zooms, and `view.zoom` with `domicile-zoom-change` says where it landed — the
   site's zoom, keyed by host the way Chrome keys it. Manganese's
   `BrowserWindow.tsx` binds Chrome's defaults.
-- **Claim your desktop chords** with `domicile.grabShortcut`. The browser
-  process is the only layer above a focused guest: a key pressed on a site
-  reaches neither this page nor the compositor. A claimed chord comes back as a
-  `shortcut` message rather than as a DOM event, carrying the fields it was
-  claimed with, because the page is not what received it.
+- **Your desktop chords still reach you**, because `bindKeys` claims them —
+  see [Keybindings](#keybindings). The browser process is the only layer above
+  a focused guest: a key pressed on a site reaches neither this page nor the
+  compositor, so a claimed chord comes back as a `shortcut` message rather than
+  a DOM event. `domicile.grabShortcut` is the claim underneath, for a chord the
+  config does not name.
 
 Whether the window holds the keyboard at all is one question over both halves,
 and the fork makes it one test: a `<webview>` whose guest has the focus is your

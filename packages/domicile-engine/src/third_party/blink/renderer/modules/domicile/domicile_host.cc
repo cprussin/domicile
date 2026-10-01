@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_files_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_idle_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_locked_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_shell_config_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_shortcut_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_event.h"
@@ -696,6 +697,14 @@ void DomicileHost::Idle(bool idle, base::TimeTicks arrival) {
 void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileLockedEvent>(
       domicile_event_names::Locked(), locked, Arrival(arrival)));
+}
+
+// Pushed like ThemeChanged, and handed on as the line it arrived as: a shell's
+// options are freeform, so the page parses `config` for itself. See
+// ControlChannelClient::ShellConfig.
+void DomicileHost::ShellConfig(const String& config, base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileShellConfigEvent>(
+      domicile_event_names::Shellconfig(), config, Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

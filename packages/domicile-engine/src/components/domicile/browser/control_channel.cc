@@ -1133,6 +1133,16 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "shell_config") {
+    // RELAYED AS THE LINE IT ARRIVED AS, and read no further than `type`. A
+    // shell's `options` are freeform, so the page parses this itself -- see
+    // ControlChannelClient::ShellConfig -- and a field picked out here would be
+    // a second reader of a shape the page already owns. The parse above has
+    // already refused a line that is not a JSON object.
+    client_->ShellConfig(line, arrival);
+    return;
+  }
+
   if (*type == "focus_changed") {
     // Empty app_id means the chrome itself has focus, which is a state rather
     // than a missing field.

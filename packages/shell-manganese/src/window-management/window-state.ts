@@ -1,16 +1,17 @@
 // Every change the desktop can undergo, as one pure reduction.
 //
 // The shell owns three things: which windows exist, which workspace each of
-// them is on, and which key bindings are live. They move together — a window
+// them is on, and which binding mode the keys are read in. They move together — a window
 // that opens lands on the workspace being looked at, a window sent to the
 // scratchpad leaves every workspace — so they are one state, reduced in one
 // place, with no DOM or domicile client in sight. `useWindows` is what feeds
 // host events and keystrokes into it.
 //
-// **The actions are sway's commands.** `keyboard/bindings.ts` is a table from
-// a key to one of the constructors below, so the desktop's vocabulary is the
-// one the user's config is written in: `focus left`, `move container to
-// workspace 2`, `layout tabbed`. What a command *means* is the workspace's or
+// **The actions are sway's commands.** `keyboard/command.ts` reads the words a
+// key the config binds sends — `send-shell focus left` — into one of the
+// constructors below, so the desktop's vocabulary is the one the user's config
+// is written in: `focus left`, `move container to workspace 2`, `layout
+// tabbed`. What a command *means* is the workspace's or
 // the tree's to say, and almost every arm of the reduction is one call into
 // `workspace.ts`.
 
@@ -60,17 +61,6 @@ import {
   windowMoved,
   windowsOn,
 } from "./workspace";
-
-/**
- * Which set of bindings the keys are read in.
- *
- * sway's binding modes, of which this desktop has the two its config names:
- * the default one, and the resize mode `mod+r` enters.
- */
-export enum BindingMode {
-  Default,
-  Resize,
-}
 
 /**
  * The workspaces, by the names the config's keys name them with.
@@ -169,23 +159,29 @@ export type WindowState = {
    * Whether the launcher's panel is up.
    *
    * Here rather than in the component that draws it because it is a desktop
-   * state and not a widget's: the key that opens it is a line in the same
-   * bindings table as every other key, and what closes it is usually
-   * something else being launched. A panel that owned its own `useState`
-   * would need the bindings to reach into it and every launch to remember to
-   * close it.
+   * state and not a widget's: the key that opens it is a command like every
+   * other key's, and what closes it is usually something else being
+   * launched. A panel that owned its own `useState` would need the keys to
+   * reach into it and every launch to remember to close it.
    */
   launcherOpen: boolean;
   /**
    * Whether the clipboard's history is up.
    *
    * Desktop state for {@link WindowState.launcherOpen}'s reason: the key that
-   * opens it is a line in the same bindings table as every other key, and a
-   * panel that owned its own `useState` would need the bindings to reach into
-   * it.
+   * opens it is a command like every other key's, and a panel that owned its
+   * own `useState` would need the keys to reach into it.
    */
   clipboardOpen: boolean;
-  mode: BindingMode;
+  /**
+   * The binding mode the keys are read in: `default`, or one the config
+   * declares — `resize` in the sample.
+   *
+   * Desk state rather than a page's, because a key that enters a mode can
+   * land on one monitor's page and the next key on another's. The SDK keeps
+   * the mode the keys are read in; this is what every page tells it.
+   */
+  mode: string;
   /**
    * The workspace the current one was reached from, which the same key goes
    * back to (`workspaceAutoBackAndForth`).
@@ -225,7 +221,7 @@ export const NO_WINDOWS: WindowState = {
   focusedId: undefined,
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
-  mode: BindingMode.Default,
+  mode: "default",
   popups: [],
   pressed: { count: 0, on: undefined },
   previous: undefined,
@@ -572,8 +568,11 @@ export const WindowAction = {
     layout,
   }),
 
-  /** `mode resize` and the `mode default` that leaves it. */
-  ModeSet: (mode: BindingMode) => ({
+  /**
+   * A key entered a binding mode — `mode resize`, and the `mode default` that
+   * leaves it — on whichever page heard it.
+   */
+  ModeSet: (mode: string) => ({
     kind: WindowActionKind.ModeSet as const,
     mode,
   }),
@@ -625,8 +624,8 @@ export const WindowAction = {
    * The user asked for a terminal, which the compositor spawns.
    *
    * Nothing in the state moves: the window arrives as an announcement from
-   * the host like any other client's. It is an action so that the bindings
-   * table can be one table of them.
+   * the host like any other client's. It is an action so that every command
+   * a key can send is one of them.
    */
   TerminalLaunched: () => ({
     kind: WindowActionKind.TerminalLaunched as const,

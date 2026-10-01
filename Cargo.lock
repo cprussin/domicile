@@ -414,6 +414,7 @@ dependencies = [
  "smithay",
  "tempfile",
  "thiserror",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "ureq",

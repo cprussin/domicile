@@ -120,6 +120,10 @@ pub fn apply_chrome_message(
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())
+                // And the keys the config binds, which were resolved against
+                // that keymap, for its reason: a page that reloads has no
+                // bindings until it is told them again.
+                .chain(host.describe_shell_config())
                 // And the extensions the config names, which the browser
                 // process also reads rather than the page, and which a page
                 // that reloads has to be told again for the keymap's reason.
