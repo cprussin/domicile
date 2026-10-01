@@ -305,6 +305,7 @@ class CORE_EXPORT HTMLWebViewElement final
       domicile::mojom::blink::WebViewFileChooserMode mode,
       const Vector<String>& accept,
       const String& suggested_name,
+      const String& home,
       FileChooserRequestedCallback callback) override;
 
   // And the browser saying the page inside called window.close(), which its

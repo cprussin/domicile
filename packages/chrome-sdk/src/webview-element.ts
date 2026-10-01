@@ -373,12 +373,10 @@ declare global {
    * The event {@link WEBVIEW_FILE_CHOOSER_EVENT} names: a page waiting for a
    * file to be picked.
    *
-   * PATHS ARE ABSOLUTE OR RELATIVE TO THE HOME DIRECTORY. Relative is the
-   * vocabulary a `found_files` answer uses — so a picker built on
-   * `searchFiles` hands back what it was shown — and `""` is the home.
-   * Absolute is the rest of the filesystem, walked with
-   * {@link DomicileFileChooserEvent.list}. A path that climbs with `..` is a
-   * `TypeError`.
+   * PATHS ARE ABSOLUTE OR RELATIVE TO THE HOME DIRECTORY, where `""` is the
+   * home. A picker starts at {@link DomicileFileChooserEvent.home} and walks
+   * the filesystem with {@link DomicileFileChooserEvent.list}. A path that
+   * climbs with `..` is a `TypeError`.
    */
   interface DomicileFileChooserEvent extends Event {
     /**
@@ -394,6 +392,11 @@ declare global {
     readonly accept: readonly string[];
     /** The name the page suggests for a `save`; `""` otherwise. */
     readonly suggestedName: string;
+    /**
+     * The absolute home directory, which the page has no other way to learn:
+     * where a picker starts, and what its `~` means.
+     */
+    readonly home: string;
     /**
      * Answer with the paths picked. `open`, `open-folder` and `save` take
      * exactly one, `open-multiple` at least one; anything else is a

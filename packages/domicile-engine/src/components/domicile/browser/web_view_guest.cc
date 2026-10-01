@@ -497,6 +497,7 @@ void WebViewGuest::ChooseDownloadPath(
   client_->FileChooserRequested(
       mojom::WebViewFileChooserMode::kSave, {},
       suggested_path.BaseName().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           HeldOpen(base::BindOnce(&DownloadPathChosen, std::move(chosen))),
           std::nullopt));
@@ -752,6 +753,7 @@ void WebViewGuest::RunFileChooser(
       AsWebViewFileChooserMode(params.mode),
       AcceptedExtensions(params.accept_types),
       params.default_file_name.BaseName().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           HeldOpen(
               base::BindOnce(&FilesChosen, std::move(listener), params.mode)),

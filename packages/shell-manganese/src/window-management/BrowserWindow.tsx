@@ -224,14 +224,8 @@ export const BrowserWindow = ({
   const focusing = useRef(false);
   // THE FILE THE PAGE IS WAITING ON, which is this window's to pick: the
   // engine draws no dialog of its own and refuses a question nobody takes —
-  // see `useFileRequest`. Picked from the launcher's search, one function for
-  // the life of the client for the launcher's reason: a new one is a new
-  // search.
+  // see `useFileRequest`.
   const asking = useFileRequest(view);
-  const search = useCallback(
-    (query: string) => domicile.searchFiles(query),
-    [domicile],
-  );
   // The picker's box, while there is a picker: where this window's keyboard
   // goes instead of the page, which is waiting on it. `null` for the ref API's
   // reason, as the view's is.
@@ -627,7 +621,6 @@ export const BrowserWindow = ({
             key={asking.serial}
             ref={setPickerBox}
             request={asking}
-            search={search}
           />
         )}
       </div>
