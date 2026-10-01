@@ -110,7 +110,7 @@ note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
 # rank, and a holder with none counts every note.
 waiters() {
   [ -d "$WAITING" ] || return 0
-  find "$WAITING" -type f -newermt "-${DOMICILE_COMPILE_SLOT_FRESH:-60} seconds" |
+  find "$WAITING" -type f ! -name '*.tmp' -newermt "-${DOMICILE_COMPILE_SLOT_FRESH:-60} seconds" |
     while IFS= read -r waiter; do
       [ "$waiter" != "$(note "$1")" ] || continue
       rank="$(sed -n 2p "$waiter")"
@@ -129,7 +129,7 @@ case "$action" in
     asked=0
     mkdir -p "$WAITING"
     waiting="$(note "$owner")"
-    trap 'rm -f "$waiting"' EXIT
+    trap 'rm -f "$waiting" "$waiting.tmp"' EXIT
     while :; do
       # Whether this run is still worth waiting for, when the workflow says
       # how to tell: exit 0 yes, 1 no, anything else could not ask. A wait
@@ -160,7 +160,11 @@ case "$action" in
         continue
       fi
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
-      printf '%s\n' "$owner" ${DOMICILE_COMPILE_SLOT_RANK:+"$DOMICILE_COMPILE_SLOT_RANK"} >"$waiting"
+      # Renamed over the last one rather than rewritten in place: a holder
+      # reading it between the truncate and the writes would see no waiter,
+      # or one with no rank, which outranks everybody.
+      printf '%s\n' "$owner" ${DOMICILE_COMPILE_SLOT_RANK:+"$DOMICILE_COMPILE_SLOT_RANK"} >"$waiting.tmp"
+      mv "$waiting.tmp" "$waiting"
       # Once per holder, not once: a wait can outlast a cold repin, and hours
       # of one line cannot say whether the slot has changed hands since.
       now_held="$(holder)"
