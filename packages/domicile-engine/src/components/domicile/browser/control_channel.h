@@ -105,6 +105,9 @@ class ControlChannel : public mojom::ControlChannel {
   void CopyClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
                         mojom::TrayAction action) override;
+  void DismissNotifications(const std::vector<uint32_t>& ids) override;
+  void InvokeNotificationAction(uint32_t id,
+                                const std::string& action) override;
   void FocusApp(const std::string& app_id) override;
   void FocusChrome() override;
   void WarpPointer(double x, double y) override;

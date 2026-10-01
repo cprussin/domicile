@@ -26,6 +26,7 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 | `@domicile/component-library/Card` | Elevated surface with optional title / footer. |
 | `@domicile/component-library/ModalDialog` | Modal dialog with flattened `title` / `footer` / `trigger` API. |
 | `@domicile/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
+| `@domicile/component-library/Toaster` | Toasts as a deck in a box's top trailing corner — fans out on hover, swipes away, a countdown along each (base-ui Toast). The caller draws each card. |
 | `@domicile/component-library/Popover` | Non-modal panel anchored to the control that opened it (base-ui Popover), for detail a control has no room for. |
 | `@domicile/component-library/Avatar` | Avatar with initials / gradient fallback. |
 | `@domicile/component-library/Kbd` | Keyboard-shortcut key cap. |

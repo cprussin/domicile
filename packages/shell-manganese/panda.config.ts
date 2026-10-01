@@ -92,6 +92,19 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
+        // The bar's bell when something arrives: a swing either way that
+        // dies down, hung from the top the way a bell is. Once per arrival,
+        // not on a loop — a bell that went on ringing would be the bar
+        // shouting about something already on the screen as a toast.
+        bellRing: {
+          "0%": { transform: "rotate(0)" },
+          "15%": { transform: "rotate(14deg)" },
+          "30%": { transform: "rotate(-12deg)" },
+          "45%": { transform: "rotate(8deg)" },
+          "60%": { transform: "rotate(-5deg)" },
+          "75%": { transform: "rotate(2deg)" },
+          "100%": { transform: "rotate(0)" },
+        },
         // The charge, once there is almost none: the readout is drawn at full
         // strength twice a turn rather than dimmed throughout, which is the
         // difference between this and the preset's `pulse`. `pulse` sits

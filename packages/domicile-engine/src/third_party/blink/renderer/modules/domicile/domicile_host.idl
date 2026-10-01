@@ -81,6 +81,19 @@
   [CallWith=ScriptState, RaisesException] undefined activateTrayItem(
       DOMString id, DomicileTrayAction action);
 
+  // Clear notifications: ids a `notifications` event carried. Each
+  // application hears its notification was dismissed, and the next
+  // `notifications` event is without them. An id already gone is passed over.
+  [CallWith=ScriptState, RaisesException] undefined dismissNotifications(
+      sequence<unsigned long> ids);
+
+  // Press one of a notification's actions -- "default" for the notification
+  // itself. It names a notification and a key it offered, and nothing about
+  // what the press does, for copyClipboardEntry's reason: that is the
+  // application's. An empty action throws.
+  [CallWith=ScriptState, RaisesException] undefined invokeNotificationAction(
+      unsigned long id, DOMString action);
+
   // Which window has the keyboard. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);
   [CallWith=ScriptState, RaisesException] undefined focusChrome();
@@ -356,4 +369,9 @@
   // The system tray, as a DomicileTrayEvent: every application showing an
   // icon, whenever any of it changes and once more when this page connects.
   attribute EventHandler ontray;
+
+  // The desk's notifications, as a DomicileNotificationsEvent: every one not
+  // yet cleared, whenever any of them changes and once more when this page
+  // connects.
+  attribute EventHandler onnotifications;
 };

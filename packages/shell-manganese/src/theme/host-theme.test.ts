@@ -57,6 +57,8 @@ class Host implements DomicileHost {
 
   readonly activateExtension = ignored;
   readonly activateTrayItem = ignored;
+  readonly dismissNotifications = ignored;
+  readonly invokeNotificationAction = ignored;
   readonly closeApp = ignored;
   readonly copyClipboardEntry = ignored;
   readonly focusApp = ignored;

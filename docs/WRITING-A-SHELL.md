@@ -1205,6 +1205,26 @@ What a click does is the application's. There are no menus yet — see
 [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx) is
 manganese's, drawing both kinds in one row the user can reorder.
 
+## Notifications
+
+Every application's notification — and every site's, because the browser hands
+a Web Notification to the same server — arrives as `notifications`: every one
+nobody has cleared, oldest first, on every change and once on connecting. Which
+are new is yours to tell; the first list is history.
+
+```ts
+domicile.on("notifications", ({ items }) => {
+  draw(items); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+});
+domicile.invokeNotificationAction(id, "default"); // a press on it, if clickable; or an action's key
+domicile.dismissNotifications([id]); // cleared: its application is told
+```
+
+How long one stays up on screen is yours; it stays in the list until cleared.
+See [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
+[`notifications/`](/packages/shell-manganese/src/notifications/) is manganese's:
+toasts, a bell and a drawer.
+
 ## Bundling
 
 One build, from your module rather than from a document, emitting one file

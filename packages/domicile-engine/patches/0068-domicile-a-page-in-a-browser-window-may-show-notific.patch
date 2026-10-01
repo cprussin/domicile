@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 1 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a page in a browser window may show
+ notifications
+
+Chrome asks before a site may notify, and the asking is a permission
+bubble drawn over the page -- on a desktop, over the shell, where there
+is no browser window for it to belong to. Left at "ask", every
+Notification.requestPermission() went unanswered and every site's
+notifications were lost.
+
+PostProfileInit sets the profile's default for notifications to allow,
+every start. What a notification then becomes is the desktop's: Chrome on
+Linux hands it to org.freedesktop.Notifications, which the compositor
+serves and the shell draws.
+---
+ chrome/browser/chrome_browser_main.cc | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index a462b48..85cc7ef 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -8,6 +8,10 @@
+ #include "chrome/browser/domicile/domicile_desk.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
+ 
+ #include <memory>
+ #include <string>
+@@ -1623,6 +1627,14 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+   // And every <webview> a tab of one window, to chrome.tabs, before an
+   // extension's first call can ask.
+   domicile::StartDesk(profile);
++  // And a page in a browser window may show notifications without asking:
++  // the browser's permission prompt is a bubble drawn over the desktop, which
++  // has nowhere to put one, so left at "ask" every request would go
++  // unanswered. What a notification is shown as is the desktop's -- Chrome
++  // hands it to org.freedesktop.Notifications, which the compositor serves.
++  HostContentSettingsMapFactory::GetForProfile(profile)
++      ->SetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS,
++                                 CONTENT_SETTING_ALLOW);
+ 
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostProfileInit(profile, is_initial_profile);
+-- 
+2.43.0
+
