@@ -57,11 +57,10 @@ concurrency:
   group: engine-release-${{ github.ref }}
   cancel-in-progress: false
 
-# To create the release and upload to it, and to open and merge the pull
-# request that pins it.
+# To create the release and upload to it. The pull request that pins it is
+# DOMICILE_WRITEBACK_TOKEN's, not this token's.
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
@@ -295,7 +294,8 @@ jobs:
       - name: Point main's flake at this engine
         if: ${{ github.ref == 'refs/heads/main' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required: GITHUB_TOKEN may not open the pull request, and one it
+          # opened would run no checks. packages/domicile-engine/README.md.
           DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
         run: |
           set -euo pipefail

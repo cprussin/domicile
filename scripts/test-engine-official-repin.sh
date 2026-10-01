@@ -8,9 +8,11 @@
 # hash is the tarball's. So the release job writes it and lands it on main.
 #
 # MAIN TAKES CHANGES ONLY THROUGH A PULL REQUEST, so the job pushes a branch of
-# its own, opens one and merges it. What is asserted here is what that push is
-# built on, when there is nothing to land, and that the pull request is opened
-# and merged -- once, even when a previous run left one open.
+# its own, opens one and turns on its auto-merge. What is asserted here is what
+# that push is built on, when there is nothing to land, and that the pull
+# request is opened with the repository's own token and set to merge -- once,
+# even when a previous run left one open -- and that GitHub's refusal is
+# printed rather than swallowed.
 #
 # NOT WHEN MAIN HAS MOVED ON. A merge that moved the fork again while this
 # built makes this engine the wrong series for main; the flake would ignore it
@@ -84,31 +86,45 @@ GEN
   git -C "$WORK/repo" checkout -q --detach
   MAIN_TIP="$(git -C "$WORK/repo" rev-parse HEAD)"
 
-  # GitHub, faked: every call is written down, and a pull request that
-  # already exists is refused as the API refuses it (422, which `curl -f`
-  # turns into a failure) until it is looked up by its head.
+  # GitHub, faked: every call and the token it carried are written down, and
+  # each answer is the status and body the API gives. A pull request that
+  # already exists is refused with a 422 until it is looked up by its head.
   mkdir -p "$WORK/bin"
   : >"$WORK/calls"
+  : >"$WORK/auth"
   cat >"$WORK/bin/curl" <<'CURL'
 #!/usr/bin/env bash
-method=GET url="" data=""
+method=GET url="" data="" out=/dev/stdout
 while [ $# -gt 0 ]; do
   case "$1" in
     (-X) method="$2"; shift ;;
     (-d|--data) data="$2"; shift ;;
-    (-H|-o|-w) shift ;;
+    (-o) out="$2"; shift ;;
+    (-H) case "$2" in (Authorization:*) echo "$2" >>"$FAKE_AUTH" ;; esac; shift ;;
+    (-w) shift ;;
     (http*) url="$1" ;;
   esac
   shift
 done
 printf '%s %s %s\n' "$method" "$url" "$data" >>"$FAKE_CALLS"
+answer() { printf '%s' "$2" >"$out"; printf '%s' "$1"; }
 case "$method $url" in
   ("POST "*/pulls)
-    [ -z "${FAKE_PR_EXISTS:-}" ] || exit 22
-    echo '{"number": 7}' ;;
-  ("GET "*/pulls\?*) echo '[{"number": 9}]' ;;
-  ("PUT "*/merge) echo '{"merged": true}' ;;
-  (*) exit 22 ;;
+    if [ -n "${FAKE_FORBIDDEN:-}" ]; then
+      answer 403 '{"message": "Resource not accessible by integration"}'
+    elif [ -n "${FAKE_PR_EXISTS:-}" ]; then
+      answer 422 '{"message": "A pull request already exists"}'
+    else
+      answer 201 '{"number": 7, "node_id": "PR_7"}'
+    fi ;;
+  ("GET "*/pulls\?*) answer 200 '[{"number": 9, "node_id": "PR_9"}]' ;;
+  ("POST "*/graphql)
+    if [ -n "${FAKE_AUTOMERGE_REFUSED:-}" ]; then
+      answer 200 '{"errors": [{"message": "Auto merge is not allowed for this repository"}]}'
+    else
+      answer 200 '{"data": {"enablePullRequestAutoMerge": {"clientMutationId": null}}}'
+    fi ;;
+  (*) answer 404 '{"message": "Not Found"}' ;;
 esac
 CURL
   chmod +x "$WORK/bin/curl"
@@ -117,8 +133,9 @@ CURL
 repin() { # extra env assignments
   local out
   if out="$(cd "$WORK/repo" && env PATH="$WORK/bin:$PATH" FAKE_CALLS="$WORK/calls" \
+              FAKE_AUTH="$WORK/auth" \
               DOMICILE_ENGINE_TAG=engine-official-sabc123456789 \
-              GH_TOKEN=token GITHUB_REPOSITORY=owner/repo \
+              DOMICILE_WRITEBACK_TOKEN=token GITHUB_REPOSITORY=owner/repo \
               "$@" bash .github/scripts/engine-official-repin.sh 2>&1)"; then
     printf 'ok\n%s\n' "$out"
   else
@@ -144,17 +161,44 @@ calls="$(cat "$WORK/calls")"
 contains "a pull request is opened from that branch" \
   "POST https://api.github.com/repos/owner/repo/pulls" "$calls"
 contains "into main" '"base":"main"' "$calls"
-contains "and merged" "PUT https://api.github.com/repos/owner/repo/pulls/7/merge" "$calls"
+# GITHUB_TOKEN may not open pull requests here, and one it opens runs no checks.
+expect "with the repository's own token, on every call" "Authorization: Bearer token" \
+  "$(sort -u "$WORK/auth")"
+contains "and set to merge once its checks pass" \
+  'POST https://api.github.com/graphql {"query":"mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) { clientMutationId } }","variables":{"id":"PR_7"}}' \
+  "$calls"
+# Merged at once it would be refused: its required checks have not run yet.
+expect "not merged before them" "" "$(grep '/merge' "$WORK/calls")"
 
-echo "== a pull request a previous run left open is the one merged =="
+echo "== a pull request a previous run left open is the one set to merge =="
 
 setup aaaa
 out="$(repin FAKE_IDENTITY=aaaa FAKE_PR_EXISTS=1)"
 expect "the repin succeeds" ok "$(status "$out")"
 contains "the open one is found by its head" "pulls?head=owner:engine-official-pin" \
   "$(cat "$WORK/calls")"
-contains "and merged" "PUT https://api.github.com/repos/owner/repo/pulls/9/merge" \
-  "$(cat "$WORK/calls")"
+contains "and set to merge" '"variables":{"id":"PR_9"}' "$(cat "$WORK/calls")"
+
+echo "== GitHub's refusal is printed, not swallowed =="
+
+setup aaaa
+out="$(repin FAKE_IDENTITY=aaaa FAKE_FORBIDDEN=1)"
+expect "a pull request GitHub will not open is refused" refused "$(status "$out")"
+contains "with its status" 403 "$out"
+contains "and its reason" "Resource not accessible by integration" "$out"
+
+setup aaaa
+out="$(repin FAKE_IDENTITY=aaaa FAKE_AUTOMERGE_REFUSED=1)"
+expect "an auto-merge GitHub will not turn on is refused" refused "$(status "$out")"
+contains "with its reason" "Auto merge is not allowed for this repository" "$out"
+
+echo "== no token of the repository's own is refused before anything is pushed =="
+
+setup aaaa
+out="$(repin FAKE_IDENTITY=aaaa DOMICILE_WRITEBACK_TOKEN=)"
+expect "the repin is refused" refused "$(status "$out")"
+contains "naming the secret" DOMICILE_WRITEBACK_TOKEN "$out"
+expect "and pushes nothing" missing "$(pushed engine-official-pin)"
 
 echo "== nothing to land is not a pull request =="
 
