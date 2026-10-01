@@ -370,6 +370,13 @@ const batterySchema = z.looseObject({
   type: z.literal("battery"),
 });
 
+// How bright the screen is, as a fraction. Pushed like the battery, and not
+// clamped for the battery's reason. A machine with no backlight sends none.
+const brightnessSchema = z.looseObject({
+  level: z.number(),
+  type: z.literal("brightness"),
+});
+
 // What has been copied on this desktop, newest first.
 //
 // Pushed, like the battery: a copy is an event the compositor already hears,
@@ -551,6 +558,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   foundAppsSchema,
   filePreviewSchema,
   batterySchema,
+  brightnessSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,

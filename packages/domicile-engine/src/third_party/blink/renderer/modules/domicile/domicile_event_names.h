@@ -21,31 +21,32 @@
 // scripts/test-engine-event-names.sh keeps this list, the IDL's on<name>
 // handlers and the list guard-control-arrival fires in a real engine the
 // same set.
-#define DOMICILE_EVENT_NAMES(X)          \
-  X(apptitled, Apptitled)                \
-  X(appappeared, Appappeared)            \
-  X(appresized, Appresized)              \
-  X(appminsize, Appminsize)              \
-  X(appmaxsize, Appmaxsize)              \
-  X(popupplaced, Popupplaced)            \
-  X(appclosed, Appclosed)                \
-  X(appcursor, Appcursor)                \
-  X(shortcut, Shortcut)                  \
-  X(modifiers, Modifiers)                \
-  X(files, Files)                        \
-  X(filepreview, Filepreview)            \
-  X(apps, Apps)                          \
-  X(battery, Battery)                    \
-  X(clipboard, Clipboard)                \
-  X(theme, Theme)                        \
-  X(windowstheme, Windowstheme)          \
-  X(idle, Idle)                          \
-  X(focuschanged, Focuschanged)          \
-  X(focusrequested, Focusrequested)      \
-  X(displayschanged, Displayschanged)    \
-  X(locked, Locked)                      \
-  X(extensions, Extensions)              \
-  X(tray, Tray)                          \
+#define DOMICILE_EVENT_NAMES(X)           \
+  X(apptitled, Apptitled)                 \
+  X(appappeared, Appappeared)             \
+  X(appresized, Appresized)               \
+  X(appminsize, Appminsize)               \
+  X(appmaxsize, Appmaxsize)               \
+  X(popupplaced, Popupplaced)             \
+  X(appclosed, Appclosed)                 \
+  X(appcursor, Appcursor)                 \
+  X(shortcut, Shortcut)                   \
+  X(modifiers, Modifiers)                 \
+  X(files, Files)                         \
+  X(filepreview, Filepreview)             \
+  X(apps, Apps)                           \
+  X(battery, Battery)                     \
+  X(brightnesschanged, Brightnesschanged) \
+  X(clipboard, Clipboard)                 \
+  X(theme, Theme)                         \
+  X(windowstheme, Windowstheme)           \
+  X(idle, Idle)                           \
+  X(focuschanged, Focuschanged)           \
+  X(focusrequested, Focusrequested)       \
+  X(displayschanged, Displayschanged)     \
+  X(locked, Locked)                       \
+  X(extensions, Extensions)               \
+  X(tray, Tray)                           \
   X(notifications, Notifications)
 
 namespace blink::domicile_event_names {

@@ -71,6 +71,9 @@ class FakeHost implements DomicileHost {
   /** Empty until the compositor has described the desktop, as the fork's is. */
   displays: readonly DomicileDisplay[] | null = null;
 
+  /** Null until the compositor has said a brightness, as the fork's is. */
+  brightness: number | null = null;
+
   readonly #listeners = new Map<string, (event: never) => void>();
 
   addEventListener<T extends keyof DomicileHostEventMap>(
@@ -127,6 +130,9 @@ class FakeHost implements DomicileHost {
   lock(): void {
     this.calls.push(["lock"]);
   }
+  setBrightness(level: number): void {
+    this.calls.push(["setBrightness", level]);
+  }
   themeCaptured(theme: Theme): void {
     this.calls.push(["themeCaptured", theme]);
   }
@@ -178,6 +184,12 @@ class FakeHost implements DomicileHost {
   describes(displays: readonly DomicileDisplay[]): void {
     this.displays = displays;
     this.dispatch("displayschanged", new Event("displayschanged"));
+  }
+
+  /** The backlight moving: the attribute, then the bare event. */
+  brightens(level: number): void {
+    this.brightness = level;
+    this.dispatch("brightnesschanged", new Event("brightnesschanged"));
   }
 
   lastCall(): Call | undefined {
@@ -313,6 +325,17 @@ describe("DomicileClient", () => {
       );
 
       expect(seen).toStrictEqual([{ charge: 0.42, charging: true }]);
+    });
+
+    it("delivers the brightness off the attribute the bare event names", () => {
+      const seen: unknown[] = [];
+      domicile.on("brightness", (message) => {
+        seen.push(message);
+      });
+
+      host.brightens(0.42);
+
+      expect(seen).toStrictEqual([{ level: 0.42 }]);
     });
 
     it("delivers the clipboard's history nobody asked for", () => {
@@ -776,6 +799,10 @@ describe("DomicileClient", () => {
       // And the other way, which likewise waits for the `locked` message.
       domicile.lock();
       expect(host.lastCall()).toStrictEqual(["lock"]);
+
+      // And the brightness, which comes back as a `brightness` message.
+      domicile.setBrightness(0.3);
+      expect(host.lastCall()).toStrictEqual(["setBrightness", 0.3]);
 
       domicile.themeCaptured("light");
       expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);
