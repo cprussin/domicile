@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """The page guard-webview-passkey-extension.sh asks for a passkey from.
 
-One path, `/page`: a document that calls navigator.credentials.create() and
+One path, `/page`: a document that first has a sandboxed frame -- an opaque
+origin -- ask isUserVerifyingPlatformAuthenticatorAvailable(), which took the
+browser down until patch 0069; then calls navigator.credentials.create() and
 paints what came back, each in one flat color the guard reads:
 
   --answered   the fixture extension's answer, by its message
@@ -81,8 +83,28 @@ PAGE = """<!doctype html>
           );
       }};
 
+      // A fraud-detection script asks from a sandboxed frame, so its origin is
+      // opaque. The browser has to answer it before the page asks anything.
+      const askFromAnOpaqueOrigin = () => {{
+        window.addEventListener(
+          "message",
+          (event) => {{
+            console.log(`GUARD opaque frame told ${{event.data}}`);
+            ask();
+          }},
+          {{ once: true }},
+        );
+        const frame = document.createElement("iframe");
+        frame.hidden = true;
+        frame.sandbox = "allow-scripts";
+        frame.srcdoc =
+          "<script>PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()" +
+          '.then((available) => parent.postMessage(available, "*"));<\\/script>';
+        document.body.append(frame);
+      }};
+
       if (typeof PublicKeyCredential === "function") {{
-        ask();
+        askFromAnOpaqueOrigin();
       }} else {{
         console.log("GUARD no PublicKeyCredential");
         paint("{no_api}");
