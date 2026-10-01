@@ -130,6 +130,7 @@ Mutations go where the thing they change lives:
 - **The default profile, not a partition of its own.** It is the partition browser windows use (see `web_view_guest.h`, *NO GUEST SiteInstance*), so content scripts and network rules see the pages the user actually browses.
 - **One window, not one per `<webview>`.** A shell's browser windows are what Chrome calls tabs, and extensions assume many tabs and one active tab per window.
 - **Refuse what has no desktop meaning; never fake it.** A `tabs.move` that answers success and does nothing is a bug the extension cannot see.
+- **Passkeys come from an extension.** The browser draws no WebAuthn UI (patch `0048`), so a password manager's extension is where passkeys live: by a content script wrapping `navigator.credentials`, or by `chrome.webAuthenticationProxy`. `guard-webview-passkey-extension.sh` reads the second answering a page in a `<webview>`; its control, the same page refused with `PublicKeyCredential` present, is what the first needs.
 - **Manifest V3 only.** Chromium at the pin no longer loads MV2, so uBlock Origin will not run and uBlock Origin Lite will. That is upstream's decision, not the desk's.
 
 ## Not in scope
