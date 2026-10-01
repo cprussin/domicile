@@ -270,7 +270,7 @@ describe("Launcher", () => {
 
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
-    ).toStrictEqual(["Text Editor", "Mail"]);
+    ).toStrictEqual(["Mail", "Text Editor"]);
     unmount();
   });
 
@@ -319,7 +319,7 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("offers a bookmark below the applications and above the files", async () => {
+  it("offers a bookmark above the files", async () => {
     using panel = launcher(["mail.txt"], false, [], [MAIL]);
 
     await panel.user.type(panel.box(), "mail");

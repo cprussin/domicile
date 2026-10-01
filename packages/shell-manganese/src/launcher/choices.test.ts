@@ -114,11 +114,30 @@ describe("choicesFor", () => {
     ]);
   });
 
-  it("offers the bookmarks below the applications and above the files", () => {
-    expect(choicesFor("", ["notes.org"], [EDITOR], [MAIL])).toStrictEqual([
-      Choice.App(EDITOR),
+  it("offers the bookmarks among the applications, by name, above the files", () => {
+    // One list, not two: a bookmark is an application that happens to be a
+    // page, and which of the two a name is is not what anybody types.
+    const paint = { ...EDITOR, id: "paint.desktop", name: "Paint" };
+    expect(
+      choicesFor("", ["notes.org"], [paint, EDITOR], [MAIL]),
+    ).toStrictEqual([
       Choice.Bookmark(MAIL),
+      Choice.App(paint),
+      Choice.App(EDITOR),
       Choice.File("notes.org"),
+    ]);
+  });
+
+  it("puts a name that starts with the query first, application or bookmark", () => {
+    const tea = { ...MAIL, name: "Tea Timer", url: "https://tea.example.com" };
+    expect(choicesFor("te", [], [EDITOR], [tea]).slice(0, 2)).toStrictEqual([
+      Choice.Bookmark(tea),
+      Choice.App(EDITOR),
+    ]);
+    const meter = { ...MAIL, name: "Meter", url: "https://meter.example.com" };
+    expect(choicesFor("te", [], [EDITOR], [meter]).slice(0, 2)).toStrictEqual([
+      Choice.App(EDITOR),
+      Choice.Bookmark(meter),
     ]);
   });
 
