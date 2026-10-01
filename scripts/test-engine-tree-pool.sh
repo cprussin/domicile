@@ -283,10 +283,53 @@ expect "a second run gets a different tree" ok \
 
 # And when every tree is held, saying so is the only safe answer: building in
 # a locked tree is the reset-inside-someone-else's-build this all exists for.
-out="$(pick "$root" aaaaaaa 'run three')"
+out="$(DOMICILE_TREE_WAIT=0 pick "$root" aaaaaaa 'run three')"
 expect "a third run is refused rather than given a held tree" refused \
   "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
 contains "and the refusal says who holds them" "run one" "$out"
+
+echo
+echo "== a run that finds every tree held waits for one, and only one run waits =="
+
+# Refusing was a red check per run that lost the race: PR #794's build failed
+# three times in an afternoon on trees that freed minutes later. But a waiting
+# build holds one of crux's two runners, and a tree is only dropped by its
+# run's engine job, which needs a runner. Two waiters would hold both and wait
+# forever, so a second waiter is refused, which always leaves a runner free.
+LOCK_SH="$ROOT/.github/scripts/engine-tree-lock.sh"
+waiting_pick() { # root pin owner -- in the background, into $WORK/<owner>
+  DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 \
+    pick "$1" "$2" "$3" >"$WORK/$3" &
+}
+root="$(build_root 2)"
+pick "$root" aaaaaaa 'holder one' >/dev/null
+pick "$root" aaaaaaa 'holder two' >/dev/null
+waiting_pick "$root" aaaaaaa waiter
+waiter=$!
+sleep 2
+out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 pick "$root" aaaaaaa 'second waiter')"
+expect "a second run is refused while one waits" refused \
+  "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
+contains "and the refusal names the run waiting" "waiter" "$out"
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" drop "$root/trees/tree-1/src" 'holder two' >/dev/null
+wait "$waiter"
+expect "the waiter gets the tree that was dropped" "$root/trees/tree-1/src" \
+  "$(grep "^/" "$WORK/waiter" | tail -1)"
+expect "and holds its lock" waiter "$(cat "$(lock_of "$root" tree-1)/owner")"
+expect "and is no longer waiting" absent \
+  "$([ -e "$root/.domicile-tree-waiter" ] && echo present || echo absent)"
+
+# A waiter that was canceled cannot say it stopped. It says it is alive every
+# poll, and one that has not for longer than that is not waiting.
+root="$(build_root 1)"
+pick "$root" aaaaaaa 'holder' >/dev/null
+mkdir "$root/.domicile-tree-waiter"
+echo 'canceled run' >"$root/.domicile-tree-waiter/owner"
+touch -d '-1 hour' "$root/.domicile-tree-waiter"/* "$root/.domicile-tree-waiter"
+out="$(DOMICILE_TREE_WAIT=1 DOMICILE_TREE_POLL=1 pick "$root" aaaaaaa 'next run')"
+contains "a waiter that stopped saying it is alive is replaced" \
+  "held after waiting 1s" "$out"
+contains "and the wait is bounded, naming who held the trees" "holder" "$out"
 
 # A tree carrying the pin is still preferred -- the lock decides between
 # candidates, it does not replace the ordering that makes a warm tree worth
