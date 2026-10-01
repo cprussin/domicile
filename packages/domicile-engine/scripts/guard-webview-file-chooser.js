@@ -16,8 +16,9 @@
 //
 //   ?answer=choose&pick=<path>   take it and choose <path>, absolute or
 //                                relative to the home -- THE CLAIM's run
-//     &list=<directory>          and list <directory> first, as a picker
-//                                walking the filesystem does
+//     &list=<directory>          and list <directory> under the event's
+//                                `home` first, as a picker walking the
+//                                filesystem from `~` does
 //   ?answer=cancel               take it and cancel -- the control
 //
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
@@ -79,7 +80,7 @@ document.addEventListener("domicile-file-chooser", (event) => {
   if (listing === null) {
     answerIt(event);
   } else {
-    event.list(listing).then(
+    event.list(`${event.home}/${listing}`).then(
       (entries) => {
         say(`listed ${entries.toSorted().join(",")}`);
         answerIt(event);

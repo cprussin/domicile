@@ -26,6 +26,10 @@
   // A save's suggested name, and the empty string otherwise.
   readonly attribute DOMString suggestedName;
 
+  // The absolute home directory: where a picker starts, and what its `~`
+  // means. The page has no other way to learn it.
+  readonly attribute DOMString home;
+
   // The answer: paths, absolute or relative to the home directory, as many as
   // `mode` asks for. A wrong count or a path that climbs with `..` is a
   // TypeError; a second answer is an InvalidStateError.
