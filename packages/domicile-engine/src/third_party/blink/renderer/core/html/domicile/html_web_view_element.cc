@@ -71,6 +71,10 @@ constexpr char kZoomChangeEvent[] = "domicile-zoom-change";
 constexpr char kZoomInRequestEvent[] = "domicile-zoom-in-request";
 constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
+// And the icon the page names, which carries nothing either: `favicon` is
+// readable on the element.
+constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
+
 // And what it asks when the page needs a file picked -- the one event here
 // that is a question, answered on the event itself. See
 // domicile_file_chooser_event.h.
@@ -412,6 +416,13 @@ void HTMLWebViewElement::ZoomChanged(double factor) {
   zoom_ = factor;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kZoomChangeEvent)));
+}
+
+// Stored before it is announced, for the reason every state here is.
+void HTMLWebViewElement::FaviconChanged(const KURL& icon) {
+  favicon_ = icon.IsValid() ? icon.GetString() : String("");
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kFaviconChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

@@ -1,7 +1,10 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { FilePreview } from "@domicile/chrome-sdk/file-preview";
 import type { Bookmark, DesktopEntry } from "@domicile/chrome-sdk/host-message";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_FAVICON_CHANGE_EVENT,
+  WEBVIEW_GUEST_FOCUS_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
@@ -14,6 +17,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
+import { learnedIcons, learnIcon } from "./learned-icons";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
@@ -181,6 +185,12 @@ const glyphOf = (icon: ReactElement): string =>
 loadEmittedStylesheet(document);
 
 const previewPane = () => screen.getByRole("region", { name: "Preview" });
+
+// Icons learned from bookmarks' pages are written down for the next panel; each
+// test starts on a machine that has learned none.
+beforeEach(() => {
+  globalThis.localStorage.clear();
+});
 
 describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
@@ -369,6 +379,86 @@ describe("Launcher", () => {
     expect(row?.querySelector("svg")?.innerHTML).toBe(
       glyphOf(<BookmarkSimpleIcon size={16} />),
     );
+  });
+
+  describe("a bookmark's icon learned from its own page", () => {
+    // Signed in, a site names the icon it keeps for people signed in, which no
+    // anonymous lookup sees: the preview is the user's browser, so it is what
+    // a bookmark's icon is learned from.
+    const LEARNED = "https://cdn.example.com/mail-31.ico";
+
+    it("is learned from the page the preview shows", async () => {
+      using panel = launcher([], false, [], [MAIL]);
+
+      await panel.user.type(panel.box(), "mail");
+      const view = await within(previewPane()).findByTitle(
+        "https://mail.example.com",
+      );
+      Object.defineProperty(view, "url", { value: `${MAIL.url}/inbox` });
+      Object.defineProperty(view, "favicon", { value: LEARNED });
+      fireEvent(
+        view,
+        new Event(WEBVIEW_FAVICON_CHANGE_EVENT, { bubbles: true }),
+      );
+
+      const [row] = await screen.findAllByRole("option");
+      expect(row?.querySelector("img")?.getAttribute("src")).toBe(LEARNED);
+    });
+
+    it("is not learned from a page of another site", async () => {
+      // Signed out, the page is the sign-in page, whose icon is not the app's;
+      // a link followed in the preview is not the bookmark's site either.
+      using panel = launcher([], false, [], [MAIL]);
+
+      await panel.user.type(panel.box(), "mail");
+      const view = await within(previewPane()).findByTitle(
+        "https://mail.example.com",
+      );
+      Object.defineProperty(view, "url", {
+        value: "https://accounts.example.com/signin",
+      });
+      Object.defineProperty(view, "favicon", { value: LEARNED });
+      fireEvent(
+        view,
+        new Event(WEBVIEW_FAVICON_CHANGE_EVENT, { bubbles: true }),
+      );
+
+      const [row] = await screen.findAllByRole("option");
+      expect(row?.querySelector("img")).toBeNull();
+      expect(learnedIcons()).toStrictEqual({});
+    });
+
+    it("is drawn before the host's, from the moment the panel opens", async () => {
+      learnIcon(MAIL.url, LEARNED);
+      using panel = launcher(
+        [],
+        false,
+        [],
+        [{ ...MAIL, icon: "data:image/png;base64,aG9zdA==" }],
+      );
+
+      await panel.user.type(panel.box(), "mail");
+      const [row] = await screen.findAllByRole("option");
+
+      expect(row?.querySelector("img")?.getAttribute("src")).toBe(LEARNED);
+    });
+
+    it("gives way to the host's when it will not load", async () => {
+      const host = "data:image/png;base64,aG9zdA==";
+      learnIcon(MAIL.url, LEARNED);
+      using panel = launcher([], false, [], [{ ...MAIL, icon: host }]);
+
+      await panel.user.type(panel.box(), "mail");
+      const [row] = await screen.findAllByRole("option");
+      const icon = row?.querySelector("img");
+      if (icon === null || icon === undefined) {
+        throw new Error("the row drew no icon to fail");
+      } else {
+        fireEvent.error(icon);
+      }
+
+      expect(row?.querySelector("img")?.getAttribute("src")).toBe(host);
+    });
   });
 
   it("draws a picture as itself, without the frame a glyph's tile has", async () => {

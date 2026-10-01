@@ -52,6 +52,9 @@ PAGE = """<!doctype html>
   <head>
     <meta charset="utf-8" />
     <title>{path}</title>
+    <!-- What the element's `favicon` must name: never fetched, because the
+         browser reports the icon a page links rather than one it loaded. -->
+    <link rel="icon" href="{path}.png" />
   </head>
   <body>
     <script>
