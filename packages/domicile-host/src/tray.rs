@@ -286,7 +286,7 @@ impl TrayIcons {
 
     /// The icon `name` is, looked for in `theme_path` before anywhere else, as
     /// a `data:` URL — or nothing a page could draw. An empty name is none.
-    fn icon(&mut self, name: &str, theme_path: &str) -> Option<String> {
+    pub fn icon(&mut self, name: &str, theme_path: &str) -> Option<String> {
         if name.is_empty() {
             return None;
         }

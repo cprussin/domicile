@@ -551,7 +551,7 @@ rather than showing an empty box.
 
 Across the top of every screen: the tray and the
 workspaces, in that order, at one end, the clock in the middle, and at the other end the charge, behind the name
-of the binding mode whenever it is not the usual one. Each screen's bar marks the workspace that
+of the binding mode whenever it is not the usual one, and last the bell. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
 that is a fact about the desk.
 
@@ -695,6 +695,19 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
+### Notifications
+
+Every application's and site's notification is a toast in the top-right
+corner, under the bar: a deck, the newest in front, that fans out when the
+pointer is over it. A press on one takes its action; the cross or a swipe to
+the right only puts the toast away. A critical one stays up and is ringed in
+red. None are shown over a locked desk.
+
+The bell at the far end of the bar counts what arrived since it was last
+opened, and opens a drawer of every notification nobody has cleared, from the
+same edge: press one, clear one, or clear them all. The history is the
+compositor's, so a reload keeps it.
+
 ### The tray
 
 Beside the workspaces, one row: each application's StatusNotifierItem, and each
@@ -776,9 +789,10 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the tray, the workspaces, the clock and the charge. |
+| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the charge and the bell. |
 | `src/tray/` | The tray: applications' and extensions' icons in one row, and the order the user dragged them into. |
 | `src/extensions/` | An extension's action on the tray, the popup panel under its icon, and the engine's list it draws. |
+| `src/notifications/` | The toasts, the bell and the drawer, and the desk's notifications they are drawn from. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications, then the desk's bookmarks (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the icon the compositor found its site naming), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme, drawn without the frame a glyph's tile has; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |

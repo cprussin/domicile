@@ -25,6 +25,13 @@ import {
   workspacesOn,
 } from "../window-management/window-state";
 
+/** What a monitor's bar knows of the desk's notifications. */
+export type MonitorNotifications = {
+  unread: number;
+  open: boolean;
+  onOpen: () => void;
+};
+
 type Props = {
   /** Run a command: a press on this monitor's chrome. */
   act: (action: WindowAction) => void;
@@ -37,6 +44,11 @@ type Props = {
   extensions: readonly Extension[];
   /** What the user is holding down, which decides who gets the pointer. */
   modifiers: Modifiers;
+  /**
+   * The desk's notifications, as this monitor's bar has them: how many
+   * arrived unseen, whether the drawer is open, and how to open it.
+   */
+  notifications: MonitorNotifications;
   /** The system tray's icons, for this monitor's bar. */
   tray: readonly TrayItem[];
   /** The order of this monitor's tray, which is every monitor's. */
@@ -66,6 +78,7 @@ export const Monitor = ({
   domicile,
   extensions,
   modifiers,
+  notifications,
   tray,
   trayOrder,
   windows,
@@ -140,12 +153,14 @@ export const Monitor = ({
         focused={windows.focused === display.name}
         mode={windows.mode}
         onOpenExtension={setOpened}
+        onOpenNotifications={notifications.onOpen}
         onSelectWorkspace={(name) => {
           act(WindowAction.WorkspaceSelected(name));
         }}
         openedExtension={opened}
         tray={tray}
         trayOrder={trayOrder}
+        unread={notifications.unread}
         workspaces={workspacesOn(windows, display.name)}
       />
       <Stage
@@ -153,7 +168,12 @@ export const Monitor = ({
         // A panel of the desktop's own is a thing to type into that no
         // window knows about, so for as long as one is up the keyboard
         // is the page's — see `AppWindow`. An extension's popup is one.
-        behindPanel={windows.launcherOpen || windows.clipboardOpen || popupOpen}
+        behindPanel={
+          windows.launcherOpen ||
+          windows.clipboardOpen ||
+          popupOpen ||
+          notifications.open
+        }
         current={current}
         domicile={domicile}
         draggingId={windows.draggingId}

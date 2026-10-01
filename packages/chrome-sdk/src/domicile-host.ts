@@ -602,6 +602,63 @@ export type DomicileTrayEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/** One button of a notification. */
+export type DomicileNotificationAction = {
+  /** What {@link DomicileHost.invokeNotificationAction} names it by. */
+  readonly key: string;
+  /** What the button says. */
+  readonly label: string;
+};
+
+/** One notification, as the compositor took it up. */
+export type DomicileNotification = {
+  /** What the host's dismiss and invoke calls name it by. */
+  readonly id: number;
+  /** Who sent it, as it named itself; may be empty. */
+  readonly appName: string;
+  readonly summary: string;
+  /** Plain text, never markup; may be empty. */
+  readonly body: string;
+  /** A `data:` URL, or empty for nothing to draw. */
+  readonly icon: string;
+  /** `"low"`, `"normal"` or `"critical"`. */
+  readonly urgency: string;
+  readonly actions: readonly DomicileNotificationAction[];
+  /** Whether it offers the `"default"` action: a press on it. */
+  readonly clickable: boolean;
+  /**
+   * Milliseconds it asked to stay up: `0` for until dismissed, `-1` for the
+   * shell's choice.
+   */
+  readonly timeoutMs: number;
+  /** Milliseconds since the epoch, on the compositor's clock. */
+  readonly time: number;
+};
+
+/**
+ * The desk's notifications: every one not yet cleared, oldest first.
+ *
+ * **A page cannot read these for itself.** A notification is a call to
+ * `org.freedesktop.Notifications` on the session bus, which the compositor
+ * serves — a page's own Web Notification included, because the browser shows
+ * one by calling that server.
+ *
+ * Pushed, like the tray, and the whole list every time: sent whenever one
+ * arrives, is replaced or is let go of, and again to a page that has just
+ * connected. Which are new is the shell's to tell.
+ */
+export type DomicileNotificationsEvent = Event & {
+  /** The notifications, oldest first. */
+  readonly items: readonly DomicileNotification[];
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /**
  * Which way round the desktop is drawn now.
  *
@@ -809,6 +866,11 @@ export type DomicileHostEventMap = {
    * once on connecting.
    */
   tray: DomicileTrayEvent;
+  /**
+   * The desk's notifications, whole, whenever one arrives, changes or goes,
+   * and once on connecting.
+   */
+  notifications: DomicileNotificationsEvent;
   /**
    * The desktop changed: a screen arrived or left, a display was resized, or
    * its density moved. Bare — read {@link DomicileHost.displays} for what it
@@ -1019,6 +1081,20 @@ export type DomicileHost = {
    * nothing, and an empty id throws.
    */
   activateTrayItem(id: string, action: TrayAction): void;
+
+  /**
+   * Clear notifications: ids a `notifications` event carried. Each
+   * application hears its notification was dismissed; an id already gone is
+   * passed over.
+   */
+  dismissNotifications(ids: readonly number[]): void;
+
+  /**
+   * Press one of a notification's actions — `"default"` for the notification
+   * itself. Its application hears the key, and the notification is let go of.
+   * An action it never offered does nothing.
+   */
+  invokeNotificationAction(id: number, action: string): void;
 
   key(appId: string, keycode: number, pressed: boolean): void;
   pointerMotion(appId: string, x: number, y: number): void;

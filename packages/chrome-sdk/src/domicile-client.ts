@@ -98,6 +98,7 @@ import {
   idle,
   locked,
   modifiers,
+  notifications,
   popupPlaced,
   shortcut,
   theme,
@@ -317,6 +318,9 @@ export class DomicileClient {
     });
     host.addEventListener("tray", (event) => {
       this.#deliver("tray", tray(event));
+    });
+    host.addEventListener("notifications", (event) => {
+      this.#deliver("notifications", notifications(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
@@ -656,6 +660,24 @@ export class DomicileClient {
    */
   activateTrayItem(id: string, action: TrayAction): void {
     this.#host.activateTrayItem(id, action);
+  }
+
+  /**
+   * Clear notifications: ids from the last `notifications` message. There is
+   * no answer but the next `notifications` message, without them.
+   */
+  dismissNotifications(ids: readonly number[]): void {
+    this.#host.dismissNotifications(ids);
+  }
+
+  /**
+   * Press one of a notification's actions, or `"default"` for the
+   * notification itself where it is `clickable`. What the press does is the
+   * application's; the notification is let go of, and the next
+   * `notifications` message is without it.
+   */
+  invokeNotificationAction(id: number, action: string): void {
+    this.#host.invokeNotificationAction(id, action);
   }
 
   /**

@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { cursorShapeSchema } from "./cursor-shape";
 import { displayTransformSchema } from "./display-transform";
+import { notificationUrgencySchema } from "./notification";
 import { themeSchema } from "./theme";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
@@ -410,6 +411,31 @@ const traySchema = z.looseObject({
   type: z.literal("tray"),
 });
 
+// The desk's notifications: every one not yet cleared, oldest first.
+//
+// Pushed like the tray, and the whole list every time: the compositor serves
+// `org.freedesktop.Notifications` and sends this whenever one arrives, is
+// replaced or goes, and again to a chrome that has just connected. A clear goes
+// back as `dismiss_notifications`, a press as `invoke_notification_action`.
+// `icon` is a `data:` URL, and `timeout_ms` absent is the shell's choice.
+const notificationSchema = z.looseObject({
+  actions: z.array(z.looseObject({ key: z.string(), label: z.string() })),
+  app_name: z.string(),
+  body: z.string(),
+  clickable: z.boolean(),
+  icon: z.string().optional(),
+  id: z.number(),
+  summary: z.string(),
+  time: z.number(),
+  timeout_ms: z.number().optional(),
+  urgency: notificationUrgencySchema,
+});
+
+const notificationsSchema = z.looseObject({
+  items: z.array(notificationSchema),
+  type: z.literal("notifications"),
+});
+
 // Which way round the desktop is drawn now.
 //
 // Pushed like the battery, and the one pushed message a page can cause: a
@@ -527,6 +553,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   batterySchema,
   clipboardSchema,
   traySchema,
+  notificationsSchema,
   themeMessageSchema,
   idleSchema,
   lockedSchema,
@@ -565,6 +592,7 @@ export type FoundAppsMessage = z.infer<typeof foundAppsSchema>;
 export type BatteryMessage = z.infer<typeof batterySchema>;
 export type ClipboardMessage = z.infer<typeof clipboardSchema>;
 export type TrayMessage = z.infer<typeof traySchema>;
+export type NotificationsMessage = z.infer<typeof notificationsSchema>;
 export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
 export type LockedMessage = z.infer<typeof lockedSchema>;

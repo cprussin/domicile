@@ -333,6 +333,27 @@ pub enum ChromeMessage {
     /// click was in flight, which is the one way to reach it and says nothing
     /// worth answering.
     ActivateTrayItem { id: String, action: TrayAction },
+
+    /// The user cleared these notifications: each [`Notification::id`] from
+    /// the last [`HostMessage::Notifications`]. One message for one or for
+    /// every one of them, so clearing the lot is one broadcast rather than
+    /// one per row.
+    ///
+    /// Answered with the next [`HostMessage::Notifications`], without them,
+    /// and each application hears `NotificationClosed` with the reason
+    /// "dismissed by the user". An id that names nothing is one its
+    /// application closed while the click was in flight, and is passed over.
+    DismissNotifications { ids: Vec<u32> },
+
+    /// The user pressed one of a notification's buttons, or the notification
+    /// itself: `action` is a [`NotificationAction::key`], or `"default"` for
+    /// a press on a [`Notification::clickable`] one.
+    ///
+    /// The application hears `ActionInvoked`, which is all the spec lets a
+    /// server say — what the press does is the application's. The
+    /// notification is then closed, as a dismissal is, because that is what
+    /// every server does with one whose action has been taken.
+    InvokeNotificationAction { id: u32, action: String },
 }
 
 /// Messages sent from the host to the chrome (in-page client).
@@ -821,6 +842,22 @@ pub enum HostMessage {
     /// An item that says it is `Passive` is not in the list: the spec's word
     /// for an icon that has nothing to say right now, which every tray hides.
     Tray { items: Vec<TrayItem> },
+
+    /// The desk's notifications: every one an application sent that nobody
+    /// has cleared yet, oldest first.
+    ///
+    /// **`org.freedesktop.Notifications`, over the session bus.** That is
+    /// what `notify-send`, every toolkit and the browser itself send to —
+    /// a page's Web Notification included, because Chrome on Linux shows
+    /// one by calling the same server — and the compositor is the server.
+    /// See `crate::notifications` in `domicile-compositor`.
+    ///
+    /// **Pushed, and the whole list every time**, for
+    /// [`HostMessage::Tray`]'s reasons: on every change and to a chrome that
+    /// has just connected, so a page that reloads still has the history, and
+    /// every monitor's page has the same one. Which of them are *new* is
+    /// the shell's to tell, by the ones it had not been told before.
+    Notifications { items: Vec<Notification> },
 }
 
 /// An application a desktop entry offers, as a launcher is told about it.
@@ -1111,6 +1148,64 @@ pub enum TrayAction {
     Context,
 }
 
+/// One notification, as a shell is told about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Notification {
+    /// The id `Notify` answered the application with, which is what
+    /// [`ChromeMessage::DismissNotifications`] and
+    /// [`ChromeMessage::InvokeNotificationAction`] name it by. A notification
+    /// the application replaced keeps its id and arrives with new contents.
+    pub id: u32,
+    /// Who sent it, as it named itself. May be empty.
+    pub app_name: String,
+    /// The one line that says what happened. May be empty, though a sender
+    /// that leaves it so has said very little.
+    pub summary: String,
+    /// More, as plain text: the spec's markup is taken out by the compositor,
+    /// so a shell can draw this as text and not as HTML.
+    pub body: String,
+    /// The picture, as a `data:` URL: the notification's own image where it
+    /// sent one, and its application's icon otherwise. Absent when there was
+    /// neither, or nothing the compositor could draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    pub urgency: Urgency,
+    /// Its buttons, in the order the application listed them. The `default`
+    /// action is not one of them: it is [`Notification::clickable`].
+    pub actions: Vec<NotificationAction>,
+    /// Whether pressing the notification itself does something — the
+    /// application offered a `default` action.
+    pub clickable: bool,
+    /// How long it asked to stay up, in milliseconds: `0` for until it is
+    /// dismissed. Absent where it left that to the server, which is the
+    /// shell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u32>,
+    /// When it arrived, or was last replaced: milliseconds since the Unix
+    /// epoch, on the compositor's clock.
+    pub time: u64,
+}
+
+/// One button of a [`Notification`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationAction {
+    /// What [`ChromeMessage::InvokeNotificationAction`] names it by.
+    pub key: String,
+    /// What the button says.
+    pub label: String,
+}
+
+/// How much a notification asks to be noticed: the spec's `urgency` hint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Urgency {
+    Low,
+    #[default]
+    Normal,
+    /// Something the user should not miss — a battery about to run out.
+    Critical,
+}
+
 /// Version negotiation failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("incompatible protocol version: host speaks {host}, chrome speaks {chrome}")]
@@ -1181,6 +1276,30 @@ mod wire_names {
             ChromeMessage::ActivateTrayItem {
                 id: ":1.42/StatusNotifierItem".to_string(),
                 action: TrayAction::Context,
+            }
+        );
+    }
+
+    /// The exact JSON the SDK sends when notifications are cleared, for
+    /// [`the_theme_the_sdk_sends_parses`]'s reason.
+    #[test]
+    fn the_dismissal_the_sdk_sends_parses() {
+        let sent = r#"{"type":"dismiss_notifications","ids":[7,8]}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::DismissNotifications { ids: vec![7, 8] }
+        );
+    }
+
+    /// And the one it sends when a notification's button is pressed.
+    #[test]
+    fn the_notification_action_the_sdk_sends_parses() {
+        let sent = r#"{"type":"invoke_notification_action","id":7,"action":"reply"}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::InvokeNotificationAction {
+                id: 7,
+                action: "reply".to_string(),
             }
         );
     }

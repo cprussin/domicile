@@ -194,6 +194,42 @@ enum TrayAction {
   kContext,
 };
 
+// One button of a Notification.
+//
+// `key` is what InvokeNotificationAction names it by; `label` is what the
+// button says.
+struct NotificationAction {
+  string key;
+  string label;
+};
+
+// One notification: an application's call to org.freedesktop.Notifications,
+// which the compositor serves on the session bus. A page's own Web
+// Notification arrives as one too -- the browser shows it by calling that
+// server.
+//
+// `id` is 32 bits for ClipboardEntry's reason. `body` is plain text: the
+// compositor tells senders it takes no markup. `icon` is a `data:` URL, for
+// DesktopEntry's reason below, and empty for nothing to draw. `urgency` is
+// "low", "normal" or "critical", carried as the compositor's word because a
+// page reads it as a word. `actions` leaves out the press on the notification
+// itself, which is `clickable`. `timeout_ms` is -1 where the sender left how
+// long it stays up to the shell, and 0 for until it is dismissed. `time` is
+// milliseconds since the epoch, on the compositor's clock -- a double because
+// a base::Value's whole numbers stop at two billion.
+struct Notification {
+  uint32 id;
+  string app_name;
+  string summary;
+  string body;
+  string icon;
+  string urgency;
+  array<NotificationAction> actions;
+  bool clickable;
+  int32 timeout_ms;
+  double time;
+};
+
 // An application a desktop entry offers, as a launcher draws and runs it.
 //
 // `command` is the argv, already unquoted and with its field codes dropped by
@@ -291,6 +327,19 @@ interface ControlChannel {
   // what the click does is the application's, and all a page may do is say
   // which of the icons already in the tray was clicked, and with which button.
   ActivateTrayItem(string id, TrayAction action);
+
+  // Clear notifications: ids a Notifications message carried. Each
+  // application hears its notification was dismissed.
+  //
+  // NAMES NOTIFICATIONS AND CARRIES NOTHING ELSE, for CopyClipboardEntry's
+  // reason. An id that names none now is one its application closed while the
+  // click was in flight, and is passed over.
+  DismissNotifications(array<uint32> ids);
+
+  // Press one of a notification's actions -- "default" for the notification
+  // itself. The application hears `action`, if it offered it; what the press
+  // does is the application's.
+  InvokeNotificationAction(uint32 id, string action);
 
   // Which window has the keyboard. FocusChrome takes it back to the page.
   FocusApp(string app_id);
@@ -569,6 +618,16 @@ interface ControlChannelClient {
   // the session bus is its, and a page has none. An empty array is a desk no
   // application has put an icon on, and every desk with no session bus.
   Tray(array<TrayItem> items, mojo_base.mojom.TimeTicks arrival);
+
+  // The desk's notifications: every one not yet cleared, oldest first.
+  //
+  // Pushed like Tray, and the whole list every time: sent whenever one
+  // arrives, is replaced or goes, and once more to a chrome that has just
+  // connected -- the history is the compositor's, so a page that reloads
+  // keeps it. Which are new is the page's to tell. An empty array is a desk
+  // with nothing to say, and every desk with no session bus.
+  Notifications(array<Notification> items,
+                mojo_base.mojom.TimeTicks arrival);
 
   // Which way round the desktop is drawn now.
   //
