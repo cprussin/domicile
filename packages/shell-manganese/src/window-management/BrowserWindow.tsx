@@ -44,6 +44,12 @@ import {
 
 type Props = {
   /**
+   * Whether it is all the screen shows, alone or as a tab group — see
+   * `showsOneThing` — which leaves its frame the resting color even while it
+   * is focused: there is nothing else for it to be picked out from.
+   */
+  alone?: boolean;
+  /**
    * How the window says a client no longer holds the keyboard.
    *
    * A browser window's keyboard is its page's, and its page is part of this
@@ -173,6 +179,7 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
+  alone = false,
   clickThrough,
   covered,
   depth,
@@ -543,7 +550,7 @@ export const BrowserWindow = ({
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
-        focused ? focusedEdgeStyles : restingEdgeStyles,
+        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,

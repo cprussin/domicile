@@ -6,6 +6,7 @@ import { css } from "../../styled-system/css";
 import type { Modifiers } from "../keyboard/useModifiers";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
+import { showsOneThing } from "./alone";
 import { BrowserWindow } from "./BrowserWindow";
 import type { Direction } from "./direction";
 import { FloatBorder } from "./floating/FloatBorder";
@@ -178,6 +179,7 @@ export const Stage = ({
   // `stageStyles` for the rest of what this changes.
   const [stretching, setStretching] = useState(false);
   const targets = tiledTargets(placements);
+  const alone = showsOneThing(screenful);
   return (
     <main
       className={stageStyles}
@@ -249,6 +251,7 @@ export const Stage = ({
           >
             {window.kind === WindowKind.App ? (
               <AppWindow
+                alone={alone}
                 appId={window.appId}
                 behindPanel={behindPanel}
                 clickThrough={clickThrough}
@@ -268,6 +271,7 @@ export const Stage = ({
               />
             ) : (
               <BrowserWindow
+                alone={alone}
                 clickThrough={clickThrough}
                 covered={placement?.behind !== undefined}
                 depth={depth}

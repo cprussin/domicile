@@ -1281,6 +1281,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term");
       clientAppears("shell");
+      press("e");
       press("braceright");
       clientAppears("editor");
 
@@ -1432,11 +1433,23 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       expect(appElement(container, "two").className).toContain(
         css({ borderColor: "accent" }),
       );
       expect(appElement(container, "one").className).toContain(
+        css({ borderColor: "borderStrong" }),
+      );
+    });
+
+    it("draws no frame in the accent around a screen's only tab group", () => {
+      // Nothing else on the screen for it to be picked out from.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      expect(appElement(container, "two").className).toContain(
         css({ borderColor: "borderStrong" }),
       );
     });
@@ -1558,6 +1571,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       const ring = selectionRing(container);
       const around = boxOf(ring);
 
@@ -1585,6 +1599,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
 
       for (const corner of [
         css({ borderStartStartRadius: "lg" }),
@@ -1603,19 +1618,23 @@ describe("Shell", () => {
     it("rises around the open tab alone, and runs under the ones beside it", () => {
       // A ring around the whole of a tabbed container is drawn across every
       // tab, and says nothing about which of them is open.
+      // Beside a window of its own, or the tabs would be all the screen shows.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
+      press("v");
+      clientAppears("three");
 
       press("w");
 
       // The second of two tabs, in the ring's own coordinates.
       expect(boxOf(ringPart(container, "tab"))).toMatchObject({
-        width: "958px",
-        x: "962px",
+        width: "473px",
+        x: "477px",
       });
       expect(boxOf(ringPart(container, "before"))).toMatchObject({
-        width: "962px",
+        width: "477px",
       });
       expect(boxOf(ringPart(container, "after"))).toMatchObject({
         width: "0px",
@@ -1628,6 +1647,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
+      press("e");
       motionsPlayOut(container);
       clientAppears("three");
       const ring = selectionRing(container);
@@ -1636,12 +1656,13 @@ describe("Shell", () => {
       expect(ring.className).not.toContain(movingStyles({ motion: "opening" }));
     });
 
-    it("grows the ring in with the second window of a workspace", () => {
-      // The only window on a workspace has no ring, so there is no last one to
+    it("grows the ring in with the window that brings it on", () => {
+      // A window alone on the screen has no ring, so there is no last one to
       // slide across from, and a ring drawn at full size around a window still
       // growing in is a line ahead of it.
       const { container } = renderShell();
       clientAppears("one");
+      press("e");
       clientAppears("two");
 
       expect(selectionRing(container).className).toContain(
