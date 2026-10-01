@@ -73,12 +73,19 @@ expect "unanswered is a failure" "fail" "$(verdict "answered 1")"
 expect "and names the delegate the proxy needs" "yes" \
   "$(says "answered 1" "GetWebAuthenticationRequestDelegate")"
 expect "and Blink's WebAuth" "yes" "$(says "answered 1" "WebAuth is off")"
+expect "and the opaque frame's question the browser died on" "yes" \
+  "$(says "answered 1" "opaque")"
 expect "nothing measured is a failure" "fail" "$(verdict "answered 2")"
 expect "nothing measured blames the harness" "yes" \
   "$(says "answered 2" "harness")"
 expect "an unusable probe fails" "fail" "$(verdict "answered 3")"
 expect "and a killed one does not pass either" "fail" \
   "$(verdict "answered 137")"
+
+expect "a probe stuck on a dead browser fails" "fail" \
+  "$(verdict "answered 124")"
+expect "and says the browser stopped answering" "yes" \
+  "$(says "answered 124" "stopped answering")"
 
 echo
 echo "the control — no extension, which must be refused"
@@ -97,7 +104,13 @@ expect "and names the missing API" "yes" \
   "$(says "refused 2" "PublicKeyCredential")"
 expect "and a request the browser holds" "yes" \
   "$(says "refused 2" "dialog")"
+expect "and the opaque frame's question the browser died on" "yes" \
+  "$(says "refused 2" "opaque")"
 expect "an unusable probe fails" "fail" "$(verdict "refused 3")"
+expect "a probe stuck on a dead browser fails" "fail" \
+  "$(verdict "refused 124")"
+expect "and says the browser stopped answering" "yes" \
+  "$(says "refused 124" "stopped answering")"
 
 echo
 echo "a run that measured nothing at all"
