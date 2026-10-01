@@ -68,26 +68,37 @@ enters one (the crossing already follows `desk`).
 
 ### Raster: one tiling per display scale
 
-cc keeps one HIGH_RES tiling per layer. This makes it one per distinct display
-scale, each prioritized over only its own display's rect:
+cc keeps one HIGH_RES tiling per layer, at S. A layer a less dense monitor
+shows also keeps a tiling at that monitor's scale (patch 0069,
+`cc/domicile/display_regions.h`):
 
-- `LayerTreeImpl` gets the display rects and scales
-  (`SetDisplayRects(std::vector<DisplayRect>)`), next to
-  `ViewportRectForTilePriority`.
-- `PictureLayerImpl::RecalculateRasterScales` gives each scale present its
-  ideal: `s_i/S` times today's ideal.
-- `PictureLayerTiling::ComputeTilePriorityRects` takes the tiling's display
-  rect, so a gap or another monitor's region is never rastered at that scale.
-- `TilingSetRasterQueueAll`, eviction and `CleanUpTilingsOnActiveLayer` treat
-  every display-scale tiling as HIGH_RES.
-- `TileBasedLayerImpl::AppendQuads` runs the coverage iterator once per display
-  rect, with that display's scale as the ideal key.
+- The browser lists every lit monitor among the page's screens
+  (`DeskScreenInfos`), labeled `cc::kDomicileDisplayLabel`, placed where the
+  page is on the engine's screen (`DomicileDeskScreenInfosFor`).
+- `WidgetBase` turns those into regions of its own viewport, in device pixels,
+  each with the ratio `s_i/S` (`DomicileDisplayRegionsOf`), and hands them to
+  `LayerTreeHost::SetDomicileDisplayRegions`. A `<webview>` finds its regions
+  by its own screen rect, so it is native too.
+- On the active tree, `PictureLayerImpl::UpdateDomicileDisplayTilings` keeps a
+  tiling at the high-res scale times each ratio the layer meets. Its priority
+  rects are clipped to that monitor's region, so a gap or another monitor is
+  never rastered at that scale. It is NON_IDEAL but still makes tiles, and
+  `CleanUpTilingsOnActiveLayer` skips it while the monitor shows the layer.
+- `TilingSetRasterQueueAll` rasters up to three such tilings, each after the
+  high-res tiling in every bin.
+- `TileBasedLayerImpl::AppendQuads` covers each region from that tiling
+  (`DomicileCoverage`), falling back to high res where a tile is not ready.
 
-A tile rastered at `s_i` lands 1:1 on display `i`'s pixels after the
-aggregator's `s_i/S`.
+A tile rastered at `s_i` lands 1:1 on display `i`'s pixels after viz's
+`s_i/S`.
+
+The high-res tiling still covers the whole layer: the pending tree has only it,
+and it is what activation waits on and what a region falls back to. So a
+lower-density monitor costs extra raster, not less.
 
 **Falls back to S:** layers under a non-root render surface (filters, blur,
-masks, opacity groups). viz renders those passes at the frame's scale, so they
+masks, opacity groups), layers turned or with an animating transform, and
+directly composited images. viz renders those at the frame's scale, so they
 are resampled on a lower-density display.
 
 ### Frames
@@ -140,8 +151,7 @@ compositor does.
 
 ## Plan
 
-Phase 1: one page, raster at S. Done, and the only model: a lower-density
-display is shown the page downsampled until phase 2.
+Phase 1: one page, raster at S. Done, and the only model.
 
 - [x] `ShellWindows`: one host, `DeskPresenters` for the rest
 - [x] The host's view sized to the desk box and offset; page `ScreenInfos` from the profile
@@ -151,11 +161,13 @@ display is shown the page downsampled until phase 2.
 
 Phase 2: native density.
 
-- [ ] `LayerTreeImpl::SetDisplayRects`, from the host's `ScreenInfos`
-- [ ] A HIGH_RES tiling per display scale, prioritized over its display's rect
-- [ ] Raster queue, eviction and cleanup keep every display scale
-- [ ] `AppendQuads` per display rect
-- [ ] Fall back to S under non-root render surfaces
+- [x] Every lit monitor in the page's `ScreenInfos`; `WidgetBase` makes regions
+- [x] `LayerTreeHost`/`LayerTreeImpl::SetDomicileDisplayRegions`
+- [x] A tiling per lower display scale, prioritized over its region
+- [x] Raster queue and cleanup keep it
+- [x] `AppendQuads` per region
+- [x] Fall back to S under non-root render surfaces
+- [ ] Hardware check: text on the lower-density monitor is crisp
 - [ ] `<app>` scale from the display under its center
 
 Phase 3: floats drawn once at desk level, so a browser window can cross
