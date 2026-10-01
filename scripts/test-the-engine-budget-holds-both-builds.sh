@@ -187,11 +187,22 @@ slot_wait() { # workflow
       "$ROOT/.github/scripts/engine-compile-slot.sh" | head -1
 }
 
+# And the wait for a tree before it, which `engine-tree-pool.sh pick` spends
+# when every tree is held: the same budget, so the same sum.
+tree_wait() { # workflow
+  commands "$1" |
+    sed -n 's/^[[:space:]]*DOMICILE_TREE_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
+    head -1 | grep . ||
+    sed -n 's/.*DOMICILE_TREE_WAIT:-\([0-9][0-9]*\).*/\1/p' \
+      "$ROOT/.github/scripts/engine-tree-pool.sh" | head -1
+}
+
 TOKEN_LIFETIME=1440
 
 for name in $both; do
   mine="$(budget "$WORKFLOWS/$name")"
   waits=$(($(slot_wait "$WORKFLOWS/$name") / 60))
+  trees=$(($(tree_wait "$WORKFLOWS/$name") / 60))
 
   if [ "$waits" -ge "$FLOOR" ]; then
     ok "$name waits out a holder's cold repin (${waits}m against ${FLOOR}m)"
@@ -200,10 +211,10 @@ for name in $both; do
       "a run behind a repin gives up before the repin can finish, and goes red for nothing but the overlap"
   fi
 
-  if [ $((waits + FLOOR)) -le "$mine" ]; then
-    ok "$name still holds a cold repin after the longest wait (${waits}m + ${FLOOR}m within ${mine}m)"
+  if [ $((trees + waits + FLOOR)) -le "$mine" ]; then
+    ok "$name still holds a cold repin after the longest waits (${trees}m + ${waits}m + ${FLOOR}m within ${mine}m)"
   else
-    fail "$name still holds a cold repin after the longest wait (${waits}m + ${FLOOR}m within ${mine}m)" \
+    fail "$name still holds a cold repin after the longest waits (${trees}m + ${waits}m + ${FLOOR}m within ${mine}m)" \
       "a run that waits that long is killed partway through its own compile"
   fi
 
