@@ -427,9 +427,10 @@ void HTMLWebViewElement::FileChooserRequested(
     domicile::mojom::blink::WebViewFileChooserMode mode,
     const Vector<String>& accept,
     const String& suggested_name,
+    const String& home,
     FileChooserRequestedCallback callback) {
   auto* event = MakeGarbageCollected<DomicileFileChooserEvent>(
-      AtomicString(kFileChooserEvent), mode, accept, suggested_name,
+      AtomicString(kFileChooserEvent), mode, accept, suggested_name, home,
       std::move(callback), *this);
   waiting_choosers_.insert(event);
   DispatchEvent(*event);

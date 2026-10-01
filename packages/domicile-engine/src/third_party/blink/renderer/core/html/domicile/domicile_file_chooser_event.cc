@@ -56,12 +56,14 @@ DomicileFileChooserEvent::DomicileFileChooserEvent(
     domicile::mojom::blink::WebViewFileChooserMode mode,
     const Vector<String>& accept,
     const String& suggested_name,
+    const String& home,
     Answer answer,
     HTMLWebViewElement& owner)
     : Event(type, Bubbles::kYes, Cancelable::kYes),
       mode_(mode),
       accept_(accept),
       suggested_name_(suggested_name),
+      home_(home),
       answer_(std::move(answer)),
       owner_(&owner) {}
 

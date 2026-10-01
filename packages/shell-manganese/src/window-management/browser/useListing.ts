@@ -21,44 +21,39 @@ export const Listing = {
 export type Listing = ReturnType<(typeof Listing)[keyof typeof Listing]>;
 
 /**
- * What is in `directory`, asked for whenever it changes — or nothing while
- * the box is a search rather than a path, and `directory` is `undefined`.
+ * What is in `directory`, asked for whenever it changes.
  *
- * An answer for a directory the box has left is dropped: typing moves faster
- * than the engine lists, and the engine owes the answers no order.
+ * An answer for a directory the picker has left is dropped: walking moves
+ * faster than the engine lists, and the engine owes the answers no order.
  */
 export const useListing = (
   list: (path: string) => Promise<readonly string[]>,
-  directory: string | undefined,
+  directory: string,
 ): Listing => {
-  const [listing, setListing] = useState<Listing>(Listing.Listed([]));
+  const [listing, setListing] = useState<Listing>(Listing.Loading());
 
   useEffect(() => {
     let current = true;
-    if (directory === undefined) {
-      setListing(Listing.Listed([]));
-    } else {
-      setListing(Listing.Loading());
-      list(directory)
-        .then((entries) => {
+    setListing(Listing.Loading());
+    list(directory)
+      .then((entries) => {
+        if (current) {
+          setListing(Listing.Listed(entries));
+        }
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof DOMException &&
+          error.name === "NotReadableError"
+        ) {
           if (current) {
-            setListing(Listing.Listed(entries));
+            setListing(Listing.Unreadable());
           }
-        })
-        .catch((error: unknown) => {
-          if (
-            error instanceof DOMException &&
-            error.name === "NotReadableError"
-          ) {
-            if (current) {
-              setListing(Listing.Unreadable());
-            }
-          } else {
-            // biome-ignore lint/suspicious/noConsole: surfacing a listing the engine failed for a reason other than the directory
-            console.error("The browser could not list a directory", error);
-          }
-        });
-    }
+        } else {
+          // biome-ignore lint/suspicious/noConsole: surfacing a listing the engine failed for a reason other than the directory
+          console.error("The browser could not list a directory", error);
+        }
+      });
     return () => {
       current = false;
     };
