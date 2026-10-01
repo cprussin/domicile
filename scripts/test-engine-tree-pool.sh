@@ -340,6 +340,22 @@ out="$(pick "$root" bbbbbbb 'warm run')"
 expect "the tree carrying the pin wins even though it is not first" ok \
   "$([ "$out" = "$root/trees/tree-1/src" ] && echo ok || echo "said $out")"
 
+# A waiter whose commit its branch has moved past is waiting for nothing, and
+# holds the one waiting place while it does. It asks, as the compile slot's
+# waiters do, and stops; a check that cannot answer is not a no.
+root="$(build_root 1)"
+pick "$root" aaaaaaa 'holder' >/dev/null
+out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
+  DOMICILE_TREE_STILL_WANTED='echo "replaced by abc"; exit 1' \
+  GITHUB_OUTPUT="$WORK/replaced.out" pick "$root" aaaaaaa 'replaced run')"
+contains "a waiter whose commit was replaced stops waiting" "replaced by abc" "$out"
+expect "and tells the workflow so" superseded=true "$(cat "$WORK/replaced.out" 2>/dev/null)"
+expect "and gives up the waiting place" absent \
+  "$([ -e "$root/.domicile-tree-waiter" ] && echo present || echo absent)"
+out="$(DOMICILE_TREE_WAIT=2 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
+  DOMICILE_TREE_STILL_WANTED='echo "no route"; exit 3' pick "$root" aaaaaaa 'unsure run')"
+contains "a check that cannot answer leaves the wait alone" "held after waiting 2s" "$out"
+
 echo
 echo "== a tree already carrying this run's series is the one to take =="
 

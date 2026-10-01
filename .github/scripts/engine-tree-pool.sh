@@ -366,10 +366,29 @@ case "$action" in
     touch "$WAITER/alive"
     echo "every Chromium tree under $TREES is held; waiting up to ${WAIT}s for one" >&2
     waited=0
+    asked=0
     while [ "$waited" -lt "$WAIT" ]; do
       sleep "$POLL"
       waited=$((waited + POLL))
       touch "$WAITER/alive"
+      # Whether this run is still worth a tree, asked the way the compile
+      # slot's waiters ask (engine-compile-slot.sh): exit 0 yes, 1 no, anything
+      # else could not ask. A run whose commit was replaced holds the one
+      # waiting place for nothing; a check that cannot answer is not a no.
+      if [ -n "${DOMICILE_TREE_STILL_WANTED:-}" ] &&
+         [ $((waited - asked)) -ge "${DOMICILE_TREE_RECHECK:-60}" ]; then
+        asked="$waited"
+        why="$(sh -c "$DOMICILE_TREE_STILL_WANTED" 2>&1)"
+        case $? in
+          0) ;;
+          1)
+            echo "::error::no longer waiting for a tree: $why" >&2
+            [ -z "${GITHUB_OUTPUT:-}" ] || echo "superseded=true" >>"$GITHUB_OUTPUT"
+            exit 1
+            ;;
+          *) echo "could not ask whether this run is still wanted, so it carries on: $why" >&2 ;;
+        esac
+      fi
       if take_best; then
         echo "took a tree after ${waited}s" >&2
         exit 0
