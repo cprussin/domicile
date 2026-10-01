@@ -41,14 +41,12 @@ ControlChannel::ControlChannel(
     PointerWarpSink warp_sink,
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
-    const std::string& screen,
     const Page& page)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
       theme_sink_(std::move(theme_sink)),
       extensions_sink_(std::move(extensions_sink)),
-      screen_(screen),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
@@ -101,31 +99,6 @@ void ControlChannel::OnConnect(int result) {
   std::string line;
   if (base::JSONWriter::Write(hello, &line)) {
     pending_.insert(pending_.begin(), line);
-  }
-
-  // WHICH WINDOW THIS IS, and the browser owns it for the same reason it owns
-  // the handshake: the page does not know which monitor it was put on, and
-  // asking it to find out would be asking it to guess. A desk of several
-  // monitors is several windows -- one cannot span two CRTCs -- each loading
-  // the same shell, and this is the only thing that differs between them.
-  //
-  // AFTER THE HANDSHAKE AND NOT BEFORE. The compositor puts a connection on
-  // its list when it agrees the protocol, and a `set_screen` arriving before
-  // that names a window it has no record of. One socket is read in order, so
-  // inserting it second is enough to be sure.
-  //
-  // Empty for a nested run, where the window is the whole desktop and there is
-  // no display to name.
-  if (!screen_.empty()) {
-    // Built here rather than through `Typed`, which is declared further down
-    // this file than the handshake that needs it.
-    base::DictValue screen;
-    screen.Set("type", "set_screen");
-    screen.Set("name", screen_);
-    std::string named;
-    if (base::JSONWriter::Write(screen, &named)) {
-      pending_.insert(pending_.begin() + 1, named);
-    }
   }
 
   ReadLoop();
@@ -858,9 +831,7 @@ void ControlChannel::DispatchLine(const std::string& line,
       // required for different reasons. A display with no name or no
       // rectangle is not a display and is dropped; a display with no mode is
       // one from a host that predates the field, and 0x0 is what it gets --
-      // harmless, because `fills_the_window` is what decides whether anybody
-      // divides by it and that too defaults to the answer for a desktop that
-      // had no notion of any of this.
+      // harmless, because nothing divides by it.
       const base::ListValue* mode = display->FindList("mode");
       const bool moded = mode && mode->size() == 2u;
       const std::string* transform = display->FindString("transform");
@@ -872,8 +843,7 @@ void ControlChannel::DispatchLine(const std::string& line,
           static_cast<uint32_t>(display->FindInt("scale").value_or(1)),
           moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
           moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
-          TransformNamed(transform),
-          display->FindBool("fills_the_window").value_or(false)));
+          TransformNamed(transform)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an
     // answer: a page told nothing and a page told there are no screens are
@@ -1261,7 +1231,6 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
-                        const std::string& screen,
                         const Page& page) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -1279,7 +1248,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
                      std::move(warp_sink), std::move(theme_sink),
-                     std::move(extensions_sink), screen, page);
+                     std::move(extensions_sink), page);
 }
 
 }  // namespace domicile

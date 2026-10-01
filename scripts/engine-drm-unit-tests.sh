@@ -53,7 +53,7 @@ SUITES=(
   DrmInputControllerTest:1
   DrmCursorFactoryTest:4
   DrmEdidSerialTest:18
-  DrmPointerCrossingTest:18
+  DrmPointerCrossingTest:17
   ScrollAcceleratorTest:7
   WheelTicksTest:3
 )

@@ -44,13 +44,13 @@ New files are untracked and live in the series' src/.
  .../blink/renderer/bindings/idl_in_core.gni   |  2 ++
  .../core/css/resolver/style_adjuster.cc       |  9 +++++++++
  .../blink/renderer/core/html/build.gni        |  6 ++++++
- .../core/html/html_attribute_names.json5      |  2 ++
+ .../core/html/html_attribute_names.json5      |  1 +
  .../core/html/html_frame_element_base.h       |  4 +++-
  .../renderer/core/html/html_tag_names.json5   | 20 +++++++++++++++++++
  .../renderer/core/html/resources/html.css     | 13 +++++++++++-
  .../platform/graphics/paint/display_item.cc   |  1 +
  .../platform/graphics/paint/display_item.h    |  4 +++-
- 11 files changed, 72 insertions(+), 4 deletions(-)
+ 11 files changed, 71 insertions(+), 4 deletions(-)
 
 diff --git a/extensions/renderer/dispatcher.cc b/extensions/renderer/dispatcher.cc
 index b4fd769cc2..af2e4ee07a 100644
@@ -145,15 +145,14 @@ index 1d7cd61e59..df8fce03ec 100644
    "fenced_frame/fence.h",
    "fenced_frame/fenced_frame_config.cc",
 diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5 b/third_party/blink/renderer/core/html/html_attribute_names.json5
-index f686f3b474..0ca59df1ef 100644
+index f686f3b474..a98fc053c9 100644
 --- a/third_party/blink/renderer/core/html/html_attribute_names.json5
 +++ b/third_party/blink/renderer/core/html/html_attribute_names.json5
-@@ -22,6 +22,8 @@
+@@ -22,6 +22,7 @@
      "allowpaymentrequest",
      "alpha",
      "alt",
 +    "app-id",
-+    "mirror",
      "archive",
      "as",
      "async",

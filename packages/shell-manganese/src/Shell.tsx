@@ -5,17 +5,8 @@ import { Provider } from "@domicile/component-library/Provider";
 import type { ThemeSource } from "@domicile/component-library/theme-source";
 
 import { Desktop } from "./Desktop";
-import type { DeskChannel } from "./window-management/desk-channel";
 
 type Props = {
-  /**
-   * The other pages of this desk.
-   *
-   * Passed in for `displays`'s reason: it is a connection, and a desk of
-   * several monitors is several pages of this shell with one desktop between
-   * them — `window-management/desk-channel.ts` says how.
-   */
-  desk: DeskChannel;
   /**
    * Where the desktop comes from — the host over the control channel, or the
    * window itself where there is no host. Passed in rather than built here
@@ -30,7 +21,7 @@ type Props = {
    * Where the theme comes from, and what the bar's toggle asks. The host over
    * the control channel, or the page itself where there is no host — passed in
    * for {@link displays}'s reason, and for one more: the theme is the
-   * desktop's, so a shell that built its own would be the one monitor that
+   * desktop's, so a shell that built its own would be the one place that
    * changed.
    */
   theme: ThemeSource;
@@ -44,10 +35,10 @@ type Props = {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ desk, displays, domicile, theme }: Props) => (
+export const Shell = ({ displays, domicile, theme }: Props) => (
   <Provider theme={theme}>
     <DisplayProvider source={displays}>
-      <Desktop desk={desk} domicile={domicile} />
+      <Desktop domicile={domicile} />
     </DisplayProvider>
   </Provider>
 );

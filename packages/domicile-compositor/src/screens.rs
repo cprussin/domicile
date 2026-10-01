@@ -191,12 +191,6 @@ impl Advertised {
     /// its magnitude: no output has one, `as_coordinate` is what refuses to
     /// build one, and turning a negative into a plausible positive here is the
     /// silent wrong answer that check exists to prevent.
-    ///
-    /// `fills_the_window` is FALSE HERE AND SET NOWHERE ELSE BUT
-    /// [`as_seen_from`](domicile_host::as_seen_from). This is the desktop as
-    /// a whole, told to whoever asked about the desktop as a whole; a window
-    /// is one monitor of it, and the read from that window is the only thing
-    /// that knows which.
     pub fn described(&self) -> DisplayInfo {
         DisplayInfo {
             name: self.name.clone(),
@@ -205,7 +199,6 @@ impl Advertised {
             size: [as_measure(self.logical.0), as_measure(self.logical.1)],
             mode: [as_measure(self.mode.0), as_measure(self.mode.1)],
             transform: as_wire_transform(self.transform),
-            fills_the_window: false,
         }
     }
 }
@@ -911,13 +904,9 @@ scale = 2
                 // desktop is the arithmetic rather than a panel: the config
                 // asked for 2560x1440 at density 2, so the `wl_output` mode is
                 // 5120x2880 and nothing is scanning it out. It is a fact about
-                // the output either way, and it is only a viewport where
-                // `fills_the_window` says so.
+                // the output either way.
                 mode: [5120, 2880],
                 transform: DisplayTransform::Normal,
-                // Not this function's to set. A desktop is not anybody's
-                // viewport -- `as_seen_from` is what reads one from a window.
-                fills_the_window: false,
             }
         );
     }

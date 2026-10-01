@@ -263,7 +263,6 @@ export const Stage = ({
                 frame={placement?.frame}
                 fullscreen={window.id === fullscreenId}
                 hasKeyboard={window.id === focusedId}
-                mirror={screenful.mirrored.includes(window.id)}
                 motion={motion}
                 onMotionEnded={onMotionEnded}
                 rect={contents?.rect}

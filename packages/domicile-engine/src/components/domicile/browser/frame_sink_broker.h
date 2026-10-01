@@ -13,7 +13,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
-#include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -116,13 +115,6 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
              double scale,
              EmbedCallback callback);
 
-  // Another page shows `app_id`'s window as well, without configuring it --
-  // see BrokeredFrameSink::Mirror. Held, like Embed, until that app has a
-  // producer.
-  void Mirror(const std::string& app_id,
-              const viz::FrameSinkId& parent_frame_sink_id,
-              mojo::PendingRemote<mojom::ExternalSurfaceClient> client);
-
   // The browser's displays, as the embedder has just read them. Forwarded to
   // every producer watching, and remembered so that one connecting afterwards
   // is told without waiting for the next change.
@@ -188,20 +180,6 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     EmbedCallback callback;
   };
 
-  // A page that asked to mirror before that app's producer had connected.
-  struct PendingMirror {
-    PendingMirror(const std::string& app_id,
-                  const viz::FrameSinkId& parent_frame_sink_id,
-                  mojo::PendingRemote<mojom::ExternalSurfaceClient> client);
-    PendingMirror(PendingMirror&&);
-    PendingMirror& operator=(PendingMirror&&);
-    ~PendingMirror();
-
-    std::string app_id;
-    viz::FrameSinkId parent_frame_sink_id;
-    mojo::PendingRemote<mojom::ExternalSurfaceClient> client;
-  };
-
   // The sink brokered for `app_id`, or null if that app has no producer yet.
   //
   // A linear scan: one desktop holds a handful of windows, and a second map
@@ -231,8 +209,6 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       frame_sink_map_;
 
   std::vector<PendingEmbed> pending_embeds_;
-
-  std::vector<PendingMirror> pending_mirrors_;
 
   mojo::RemoteSet<mojom::DisplayListObserver> display_observers_;
 

@@ -560,15 +560,6 @@ impl Host {
             ChromeMessage::Hello { .. } => {
                 // The handshake is handled by the connection layer; nothing to do here.
             }
-            ChromeMessage::SetScreen { .. } => {
-                // PER CONNECTION, AND THE BRAIN IS SHARED. Which display a
-                // window covers is a fact about that one socket -- the desk
-                // has one brain and a window each -- so recording it here
-                // would be the last chrome to connect overwriting what every
-                // other one is. The compositor holds it beside the writer it
-                // belongs to and reads that connection's desktop from it with
-                // `as_seen_from` on the way out.
-            }
             ChromeMessage::SetDevicePixelRatio { .. } => {
                 // The scene is described in logical units, which do not change
                 // when the display's pixel density does. This is the
@@ -695,60 +686,4 @@ fn announced(app: &App) -> Vec<HostMessage> {
 
 fn wire_size((width, height): (f64, f64)) -> [f64; 2] {
     [width, height]
-}
-
-/// The desk as the window on `name` sees it: every display, with that one at
-/// the origin and the whole of it.
-///
-/// **A DESK OF SEVERAL MONITORS IS SEVERAL WINDOWS.** One browser window
-/// cannot span two CRTCs — `ScreenManager::FindWindowAt` binds a window to a
-/// controller only on an exact rectangle match — so the engine opens one per
-/// display, each loading the same shell. This is the one thing that differs
-/// between what those windows are told.
-///
-/// **MOVED TO THE ORIGIN, WHICH IS HALF THE POINT.** A window is its display,
-/// so within it that display starts at zero. A page goes on placing a region
-/// at `position` against the initial containing block exactly as it always
-/// has, and a shell needs to know nothing about any of this.
-///
-/// **AND THE REST OF THE DESK COMES WITH IT, WHICH IS THE OTHER HALF.** A
-/// shell decides things about the desk that it cannot decide about one
-/// monitor: which screen the chrome goes on, what a box across every screen
-/// is, which monitor is left of which. Handed its own display alone, every
-/// page decides all of them about itself — every monitor draws the whole
-/// chrome, and every page embeds every window. A client's frame sink takes
-/// one parent, so the last page to embed takes the window off all the others,
-/// and a terminal that still answers the keyboard stops drawing. Which
-/// display this page may draw on is `fills_the_window`, and it is exactly
-/// one of them.
-///
-/// The others come relative to it because the desk is one space and moving
-/// its origin moves all of it: a list whose own screen had been moved and
-/// whose others had not is a desk that overlaps itself.
-///
-/// **A NAME THAT MATCHES NOTHING IS AN EMPTY DESKTOP**, not the whole one.
-/// That is a window whose display went away between the engine naming it and
-/// the desktop being described, and the two readings are a blank screen and a
-/// page laying out in a desktop it has no corner of. A blank one is honest and
-/// lasts until the reconciliation closes the window.
-///
-/// **AND ITS OWN DISPLAY IS THE WHOLE WINDOW**, which `fills_the_window`
-/// says. The engine turns and scales that window itself, so the page is the
-/// display's logical box the right way up and has nothing to map; the flag is
-/// how a page knows which display is its own. Set only here, because this is the only place that knows a window is a monitor —
-/// `Advertised::described` describes a desktop, and a desktop is not anybody's
-/// viewport.
-pub fn as_seen_from(displays: &[DisplayInfo], name: &str) -> Vec<DisplayInfo> {
-    let Some(window) = displays.iter().find(|display| display.name == name) else {
-        return Vec::new();
-    };
-    let [left, top] = window.position;
-    displays
-        .iter()
-        .map(|display| DisplayInfo {
-            position: [display.position[0] - left, display.position[1] - top],
-            fills_the_window: display.name == name,
-            ..display.clone()
-        })
-        .collect()
 }

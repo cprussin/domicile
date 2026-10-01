@@ -144,8 +144,6 @@ const launcher = (
   const dismissed: true[] = [];
   const { unmount } = render(
     <Launcher
-      here
-      onClosed={() => undefined}
       onDismiss={() => {
         dismissed.push(true);
       }}
@@ -188,8 +186,6 @@ describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
       <Launcher
-        here
-        onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open={false}
@@ -280,8 +276,6 @@ describe("Launcher", () => {
   it("draws the applications it opens onto without waiting on the host", () => {
     const { unmount } = render(
       <Launcher
-        here
-        onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
         open
