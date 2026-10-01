@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
 pub mod app_icons;
+pub mod backlight;
 pub mod battery;
 pub mod bookmarks;
 pub mod clipboard;
@@ -606,6 +607,7 @@ impl Host {
             | ChromeMessage::DismissNotifications { .. }
             | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::SetTheme { .. }
+            | ChromeMessage::SetBrightness { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

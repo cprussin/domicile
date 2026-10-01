@@ -877,6 +877,11 @@ export type DomicileHostEventMap = {
    * is now.
    */
   displayschanged: Event;
+  /**
+   * The brightness moved. Bare — read {@link DomicileHost.brightness} for
+   * where it is now.
+   */
+  brightnesschanged: Event;
 };
 
 /**
@@ -1050,6 +1055,15 @@ export type DomicileHost = {
   lock(): void;
 
   /**
+   * Set the screen's backlight to `level`, 0 through 1.
+   *
+   * A request, like {@link setTheme}: answered with `brightnesschanged` to
+   * every chrome once the backlight has moved. The compositor never turns the
+   * screen all the way off, and a level that is not a number throws.
+   */
+  setBrightness(level: number): void;
+
+  /**
    * This page's old frame is held for `theme`: turn the desk's windows now.
    *
    * Called from inside a shell's wipe, once the frame it wipes away from is
@@ -1127,6 +1141,13 @@ export type DomicileHost = {
    * sends the whole desktop each time it changes.
    */
   readonly displays: readonly DomicileDisplay[] | null;
+
+  /**
+   * How bright the screen is, 0 through 1 — an attribute for the reason
+   * {@link displays} is one. `null` until the compositor has said, and for
+   * ever on a machine with no backlight.
+   */
+  readonly brightness: number | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,

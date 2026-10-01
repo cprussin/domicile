@@ -874,6 +874,16 @@ describe("Shell", () => {
       expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
     });
 
+    it("shows the brightness the host says", () => {
+      renderShell();
+
+      domicile.emit("brightness", { level: 0.6 });
+
+      expect(
+        screen.getByRole("button", { name: "Brightness 60%" }),
+      ).toBeVisible();
+    });
+
     it("draws no meter for a machine the host says nothing about", () => {
       // A desktop PC, which the compositor sends no reading for at all. The
       // bar showing `100%` on one would be the bug this readout was rebuilt

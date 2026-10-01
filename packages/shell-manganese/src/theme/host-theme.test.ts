@@ -23,6 +23,7 @@ class Host implements DomicileHost {
   readonly asked: Theme[] = [];
   readonly captured: Theme[] = [];
   displays: readonly DomicileDisplay[] | null = null;
+  brightness: number | null = null;
 
   readonly #listeners = new Map<string, (event: never) => void>();
 
@@ -73,6 +74,7 @@ class Host implements DomicileHost {
   readonly previewFile = ignored;
   readonly searchFiles = ignored;
   readonly searchApps = ignored;
+  readonly setBrightness = ignored;
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly spawn = ignored;
