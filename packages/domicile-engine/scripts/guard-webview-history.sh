@@ -343,6 +343,15 @@ security_at() { # $1 point
 }
 TWO_PATH="$(path_at two-pages)"
 TWO_SECURITY="$(security_at two-pages)"
+# AND THE ICON THE PAGE LINKS, by path, which is what a launcher learns a
+# bookmark's icon from. Read where both runs are on /two, which links /two.png.
+# The engine logs a console line as `"GUARD ...", source: ...`, so the path
+# ends at the quote as well as at a space.
+favicon_at() { # $1 point
+  grep -o "GUARD favicon-state at=$1 path=[^ \"]*" "$ENGINE_LOG" |
+    sed -n 's/^.* path=//p' | head -1
+}
+TWO_FAVICON="$(favicon_at two-pages)"
 BACK_PATH="$(path_at after-back)"
 FORWARD_PATH="$(path_at after-forward)"
 
@@ -397,6 +406,12 @@ elif [ "$TWO_PATH" != "/two" ]; then
 visible entry, pushed from the browser, and a chrome that cannot read it shows \
 the user the page they left. An empty reading is the browser never having sent \
 PageChanged; a stale one is it having sent the wrong entry"
+elif [ "$TWO_FAVICON" != "/two.png" ]; then
+  FAILURE="the guest was showing /two, whose page links /two.png, and the \
+element named \"$TWO_FAVICON\" as the icon the page links. An empty reading \
+is the browser never having sent FaviconChanged; /one.png is it having sent \
+the last page's. Either way a chrome learning a site's icon from its own \
+signed-in page would draw it with the wrong one, or none"
 elif [ "$TWO_SECURITY" = "" ] || [ "$TWO_SECURITY" = "undefined" ]; then
   FAILURE="the element reported no security for a page that had committed, \
 which is what an engine with no verdict to give looks like from a chrome: \

@@ -207,6 +207,15 @@ const readPage = (at) => {
   );
 };
 
+// And the icon the page links, by path, for the reason the address is read by
+// path. Read at `two-pages` only: the guest is on /two in both runs there.
+const readFavicon = (at) => {
+  const icon = view.favicon ?? "";
+  say(
+    `favicon-state at=${at} path=${icon === "" ? "" : new URL(icon).pathname}`,
+  );
+};
+
 // An element that has reported nothing has no address to take a path out of,
 // and `new URL("")` throws — which would end the run on a TypeError and turn
 // "the element said nothing" into "the harness broke".
@@ -293,6 +302,10 @@ const run = async () => {
   // element reports having never had a listener on it.
   readState("two-pages");
   readPage("two-pages");
+  // The icon is reported once the page's head is parsed, which can be a moment
+  // after the page shows: waited for, up to a step, rather than raced.
+  await until(() => (view.favicon ?? "").endsWith("/two.png"), step);
+  readFavicon("two-pages");
   listen();
   const back = arrived("/one");
   call("goBack", (v) => v.goBack());
