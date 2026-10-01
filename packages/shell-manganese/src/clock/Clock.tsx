@@ -1,30 +1,15 @@
-import { useEffect, useState } from "react";
-
 import { css } from "../../styled-system/css";
 import { reading } from "./reading";
-
-/** The wall clock the display reads; injected so tests can hold it still. */
-const wallClock = (): Date => new Date();
-
-/** A reading is good for a second, so the clock is read every second. */
-const TICK_INTERVAL_MS = 1000;
+import type { wallClock } from "./useNow";
+import { useNow } from "./useNow";
 
 type Props = {
   now?: typeof wallClock | undefined;
 };
 
 /** The live clock: in the middle of the top bar, and alone on every other screen. */
-export const Clock = ({ now = wallClock }: Props) => {
-  const [time, setTime] = useState(() => now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(now());
-    }, TICK_INTERVAL_MS);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [now]);
+export const Clock = ({ now }: Props) => {
+  const time = useNow(now);
 
   return (
     <time className={clockStyles} dateTime={time.toISOString()}>
