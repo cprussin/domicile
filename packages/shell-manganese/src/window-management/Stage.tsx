@@ -269,6 +269,7 @@ export const Stage = ({
             ) : (
               <BrowserWindow
                 clickThrough={clickThrough}
+                covered={placement?.behind !== undefined}
                 depth={depth}
                 domicile={domicile}
                 dragging={window.id === draggingId}
