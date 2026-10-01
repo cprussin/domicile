@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/web_view_guest.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +17,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -36,8 +38,10 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -880,6 +884,69 @@ void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
   if (loading != reported_loading_) {
     reported_loading_ = loading;
     client_->LoadingChanged(loading);
+  }
+}
+
+namespace {
+
+// The size an icon is when its link does not say: a touch icon is Apple's 180
+// pixels, and anything else a tab's 16.
+int AssumedSize(const blink::mojom::FaviconURL& icon) {
+  return icon.icon_type == blink::mojom::FaviconIconType::kFavicon ? 16 : 180;
+}
+
+// The icon of `candidates` a launcher draws best: a drawing first, because it
+// is every size at once, then the biggest. The page's first of two alike.
+// The same rule the compositor's own lookup ranks a page's links by -- see
+// `domicile_host::favicons`.
+GURL BestFavicon(const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
+  const blink::mojom::FaviconURL* best = nullptr;
+  bool best_drawn = false;
+  int best_size = 0;
+  for (const blink::mojom::FaviconURLPtr& icon : candidates) {
+    if (icon->icon_type == blink::mojom::FaviconIconType::kInvalid ||
+        !icon->icon_url.is_valid()) {
+      continue;
+    }
+    const bool drawn =
+        base::EndsWith(icon->icon_url.path(), ".svg",
+                       base::CompareCase::INSENSITIVE_ASCII);
+    int size = 0;
+    for (const gfx::Size& stated : icon->icon_sizes) {
+      size = std::max(size, std::max(stated.width(), stated.height()));
+    }
+    if (size == 0) {
+      size = AssumedSize(*icon);
+    }
+    if (!best || drawn > best_drawn ||
+        (drawn == best_drawn && size > best_size)) {
+      best = icon.get();
+      best_drawn = drawn;
+      best_size = size;
+    }
+  }
+  return best ? best->icon_url : GURL();
+}
+
+}  // namespace
+
+void WebViewGuest::DidUpdateFaviconURL(
+    content::RenderFrameHost* render_frame_host,
+    const std::vector<blink::mojom::FaviconURLPtr>& candidates,
+    blink::mojom::FaviconUpdateReason reason) {
+  // A CHANGE, not a notification, as every report here is: the renderer
+  // reports the list again when a script touches any link in the head.
+  const GURL icon = BestFavicon(candidates);
+  if (icon != reported_favicon_) {
+    reported_favicon_ = icon;
+    client_->FaviconChanged(icon);
+  }
+}
+
+void WebViewGuest::PrimaryPageChanged(content::Page& page) {
+  if (!reported_favicon_.is_empty()) {
+    reported_favicon_ = GURL();
+    client_->FaviconChanged(reported_favicon_);
   }
 }
 
