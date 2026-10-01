@@ -150,8 +150,8 @@ respond() {
 
 # A GitHub having a bad minute. `$STATE/fail-<METHOD>` holds one answer per
 # line for the next calls of that method: `500`, `403rl` (a secondary rate
-# limit), or `500+` (the call lands and GitHub answers 500 anyway, as run #76's
-# create may have).
+# limit), `500+` (the call lands and GitHub answers 500 anyway, as run #76's
+# create may have), or `000` (curl reached nothing: it prints 000 and exits 28).
 answer=""
 if [ -s "$state/fail-$method" ]; then
   answer="$(head -1 "$state/fail-$method")"
@@ -162,12 +162,17 @@ case "$answer" in
   (403rl) status=403
     echo '{"message":"You have exceeded a secondary rate limit."}' > "$state/body" ;;
   (500+) respond > "$state/body"; status=500 ;;
+  (000) status=000; : > "$state/body" ;;
   ("") respond > "$state/body" ;;
 esac
 
 if [ -n "$out" ]; then
   cp "$state/body" "$out"
   [ "$code_out" = 0 ] || printf '%s' "$status"
+  if [ "$status" = 000 ]; then
+    echo "curl: (28) Connection timed out after 300002 milliseconds" >&2
+    exit 28
+  fi
 elif [ "$fail_flag" = 1 ] && [ "$status" -ge 400 ]; then
   exit 22
 else
@@ -362,11 +367,12 @@ done
 grep -qx "$TARBALL" "$dropped/deleted-assets" ||
   fail "the dropped upload's asset was left on the release"
 
-echo "a 500 or a secondary rate limit on the API is tried again"
-# Run #76 lost an 87-minute build to one 500 on creating the release.
+echo "a 500, a secondary rate limit or no answer at all from the API is tried again"
+# Run #76 lost an 87-minute build to one 500 on creating the release, and
+# engine job 110246634707 lost one to a connection timeout.
 flaky="$WORK/flaky"
 mkdir -p "$flaky"
-printf '%s\n' 500 403rl > "$flaky/fail-POST"
+printf '%s\n' 500 403rl 000 > "$flaky/fail-POST"
 publish "$flaky" || { cat "$flaky/out" >&2; fail "publisher exited nonzero"; }
 for release in engine-nightly "$PINNABLE"; do
   count="$(grep -c "^id-$release .* uploaded$" "$flaky/assets" || true)"
