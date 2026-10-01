@@ -12,6 +12,11 @@
 # the request to before any dialog and only once the browser gave it a
 # delegate. This is both, read in the window a site actually runs in.
 #
+# Before either, a sandboxed frame on the page asks
+# isUserVerifyingPlatformAuthenticatorAvailable() from an opaque origin, which
+# a DCHECK in content answered by aborting the browser (patch 0067). Both legs
+# ask it, and a browser that died paints neither answer.
+#
 # Headless and software-composited, as `guard-webview-content-script.sh`, whose
 # shell module this reuses: one <webview> on the witness.
 #
@@ -165,8 +170,12 @@ done
 }
 echo "the engine is listening on $BROKER, showing $PAGE in a <webview>"
 
-# 3. The reading: the probe watches until it sees `COLOR`, or gives up.
+# 3. The reading: the probe watches until it sees `COLOR`, or gives up. Under
+#    `timeout`: a probe whose browser died waits on its reply forever, and a
+#    browser this page aborted held a CI run for seven hours. 124 is the
+#    verdict's.
 LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  timeout "$((FOR_SECONDS + 30))" \
   "$CHROMIUM/$OUT/domicile_color_probe" \
     --domicile-broker-socket="$BROKER" \
     --color="FF$COLOR" \
@@ -188,7 +197,7 @@ grep -F '"GUARD ' "$ENGINE_LOG" | tail -5 || true
 
 # WHICH END TO BLAME. `scripts/test-webview-passkey-extension-guard.sh` runs
 # this block directly. The probe's status is 0 for the color seen, 1 for the
-# witness alone, 2 for neither.
+# witness alone, 2 for neither; 124 is `timeout`'s.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
@@ -200,12 +209,19 @@ the browser handed the request on rather than refusing it"
   FAILURE="the page drew and no extension answered it: it found no \
 PublicKeyCredential (Blink's WebAuth is off), or the browser refused the \
 request with the fixture attached (GetWebAuthenticationRequestDelegate \
-answered null), or the fixture never attached -- the GUARD lines above say \
-which"
+answered null), or the fixture never attached, or the browser died on the \
+opaque frame's isUserVerifyingPlatformAuthenticatorAvailable() (patch 0067) \
+-- the GUARD lines above say which"
   ;;
 "answered 2")
   FAILURE="nothing was measured: the shell's own background never appeared, \
 so the browser drew no page at all. This is the harness, not the extension"
+  ;;
+"answered 124" | "refused 124")
+  FAILURE="the browser stopped answering the probe, so it died mid-run: \
+the opaque frame's isUserVerifyingPlatformAuthenticatorAvailable() aborting \
+it (patch 0067) is the one this page knows -- the engine's last words below \
+say which"
   ;;
 "answered "*)
   FAILURE="the probe did not run for the claim ($MEASURED), so there is no \
@@ -224,7 +240,9 @@ not the fixture's and the claim proves nothing"
   FAILURE="the page never painted a refusal: it found no PublicKeyCredential \
 (Blink's WebAuth is off, and a content-script passkey extension has nothing to \
 wrap), or its request never came back (the browser is holding it, on a dialog \
-nobody can see), or the guest never drew -- the GUARD lines above say which"
+nobody can see), or the browser died on the opaque frame's \
+isUserVerifyingPlatformAuthenticatorAvailable() (patch 0067), or the guest \
+never drew -- the GUARD lines above say which"
   ;;
 "refused "*)
   FAILURE="the probe did not run for the control ($MEASURED), so it measured \
