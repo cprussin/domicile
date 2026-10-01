@@ -93,11 +93,9 @@ const forwardPress =
   };
 
 // Every release this page hears, not only the ones for a press it forwarded.
-// A desk of several monitors is several pages and the engine hands the keys to
-// the one the pointer is on, so a key held while the pointer crosses — Super,
-// while a window is sent to the next monitor — comes up on a page that never
-// saw it go down. Kept back, it stays down in the seat and every key after it
-// reaches the client with Super held. The compositor drops a release for a key
+// A key held while the page reloads comes up on a page that never saw it go
+// down. Kept back, it stays down in the seat and every key after it reaches
+// the client with it held. The compositor drops a release for a key
 // its seat does not hold, which is what makes sending them all safe: a key
 // typed into the page's own launcher comes up as a release nobody pressed.
 //

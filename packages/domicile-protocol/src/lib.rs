@@ -109,24 +109,6 @@ pub enum ChromeMessage {
     /// displays, or a browser zoom).
     SetDevicePixelRatio { ratio: f64 },
 
-    /// Which display this chrome's window covers, by the name the desktop
-    /// describes it under.
-    ///
-    /// **A DESK OF SEVERAL MONITORS IS SEVERAL WINDOWS, AND EACH ONE IS ONE
-    /// SCREEN.** One window cannot span two CRTCs, so the engine opens one per
-    /// display; without this every one of them would be told the whole desktop
-    /// and would lay its `<Screen>` regions out in the desktop's coordinates,
-    /// putting the desktop's top-left corner on every monitor.
-    ///
-    /// Sent once, on connecting, by a chrome that knows which display it is.
-    /// The answer is the desktop narrowed to that one display and moved to the
-    /// origin, so a page goes on laying out in the coordinates it always did
-    /// and a shell needs to know nothing about any of this.
-    ///
-    /// A chrome that never sends one is told the whole desktop, which is what
-    /// a nested run is and what every chrome was before this existed.
-    SetScreen { name: String },
-
     /// The chrome's own viewport, in CSS pixels: how big the desktop is.
     ///
     /// **The desktop is the chrome's window, and this is the only way the
@@ -231,11 +213,10 @@ pub enum ChromeMessage {
     /// [`domicile_config::ThemeConfig`] in the first place.
     ///
     /// Answered with [`HostMessage::Theme`] to *every* chrome rather than to
-    /// this one: a desk of three monitors is three pages, and a toggle clicked
-    /// on one of them is the whole desktop changing. The sender is told again
-    /// as part of that, which is the same catch-up
-    /// [`HostMessage::FocusChanged`] does and for the same reason — one path
-    /// that sets the theme, rather than a page that believes its own click.
+    /// this one. The sender is told again as part of that, which is the same
+    /// catch-up [`HostMessage::FocusChanged`] does and for the same reason —
+    /// one path that sets the theme, rather than a page that believes its own
+    /// click.
     ///
     /// **Not written back to the config file.** The file is generated — a
     /// shell owns it, and on NixOS home-manager owns the shell — so a desktop
@@ -723,9 +704,7 @@ pub enum HostMessage {
     /// Sent to a chrome that has just connected, so a page's first paint is
     /// the theme the desk is actually on; on every reload of a config whose
     /// `[theme]` moved; and to every chrome when one of them sends
-    /// [`ChromeMessage::SetTheme`]. That last one is why this is a broadcast
-    /// rather than an answer: a desk of three monitors is three pages, and a
-    /// theme half of them are on is not a theme.
+    /// [`ChromeMessage::SetTheme`].
     ///
     /// A fact rather than a preference. `[theme] mode` is where a desk states
     /// the one it comes up on, and there is no `system` for it to be resolved
@@ -954,25 +933,13 @@ pub struct DisplayInfo {
     ///
     /// Sent about every display, because it is a fact about the panel that a
     /// shell may want to show. Description only: the engine turns and scales
-    /// each monitor's window itself, so no page lays out in these pixels.
+    /// each monitor's slice of the page itself, so no page lays out in these
+    /// pixels.
     #[serde(default)]
     pub mode: [u32; 2],
     /// Which way up the monitor is bolted to the desk.
     #[serde(default)]
     pub transform: DisplayTransform,
-    /// This display is the whole page.
-    ///
-    /// **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES.** Where the engine scans
-    /// out it opens one browser window per CRTC, each loading the same shell,
-    /// and turns and scales each window the way its monitor is — so the page
-    /// is this display's logical `size`, upright, at the origin. Nothing for a
-    /// shell to map: this says which display the page is, and `mode` and
-    /// `transform` say how the engine drew it.
-    ///
-    /// False for every desktop the page's window is the whole of — a nested
-    /// run, a developer window.
-    #[serde(default)]
-    pub fills_the_window: bool,
 }
 
 /// Which way up a monitor is bolted to the desk.

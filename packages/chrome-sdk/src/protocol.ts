@@ -182,16 +182,6 @@ const focusRequestedSchema = z.looseObject({
 // the top-left of the displays' bounding box, so `position` is directly where
 // a `<Screen>` goes on the page.
 const displayInfoSchema = z.looseObject({
-  // This display is the whole page. The engine turns and scales the window,
-  // so the page is this display's logical box, upright, with nothing to map.
-  //
-  // False for every desktop the page's window is the whole of — a nested run,
-  // a developer window. False is therefore also the right answer for a host
-  // that does not send the field at all.
-  fills_the_window: z
-    .boolean()
-    .nullish()
-    .transform((fills) => fills ?? false),
   // The pixels the monitor scans out, un-turned — the one field here that is
   // not logical. NOT a second spelling of `size`: a monitor on its side scans
   // out exactly as it did lying down, and `size` is that mode turned and
@@ -475,10 +465,10 @@ const themeMessageSchema = z.looseObject({
 // timeout is no clock, and silence is what a desk with no opinion about who is
 // at it has to say.
 const idleSchema = z.looseObject({
-  // Required, and not defaulted the way `fills_the_window` is: there is no
-  // reading of an absent field here that is not a guess about which way the
-  // desk went, and a guess that came out `false` would clear a shell's lock
-  // screen on a host too old to have sent one.
+  // Required, and not defaulted the way `mode` is: there is no reading of an
+  // absent field here that is not a guess about which way the desk went, and
+  // a guess that came out `false` would clear a shell's lock screen on a host
+  // too old to have sent one.
   idle: z.boolean(),
   type: z.literal("idle"),
 });

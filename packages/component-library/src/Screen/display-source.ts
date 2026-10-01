@@ -4,9 +4,8 @@
  *
  * A regrouping of what the host protocol's `DisplayInfo` carries rather than a
  * copy of it. Declared here rather than imported so this package stays
- * framework- and protocol-free: what `<Screen>` needs is a rectangle, a name,
- * and — where the page's window is one monitor — what covering that window
- * takes.
+ * framework- and protocol-free: what `<Screen>` needs is a rectangle and a
+ * name.
  */
 export type Display = {
   /** What a `<Screen name>` matches. Unique across the desktop. */
@@ -17,51 +16,7 @@ export type Display = {
   scale: number;
   /** Logical width and height. */
   size: readonly [number, number];
-  /**
-   * The monitor this page's window is, and how it is bolted to the desk.
-   * `undefined` everywhere else, which is every display but the page's own and
-   * every desktop the page's window is the whole of.
-   *
-   * **Its presence is the claim**: this display is the page. Nothing here is
-   * for a shell to apply — the engine turns and scales the window itself, so
-   * the page is already `size` CSS pixels, the right way up. The mode and the
-   * turn are description, for a shell that wants to say what a monitor is.
-   *
-   * Not a second spelling of `size`: a monitor on its side scans out exactly
-   * as it did lying down, so a portrait 4K panel is a 3840×2160 mode and an
-   * 1800×3200 box.
-   */
-  scanout?: Scanout | undefined;
 };
-
-/**
- * The monitor a page's window is.
- *
- * @see Display.scanout
- */
-export type Scanout = {
-  /** The monitor's mode, in its own pixels, un-turned. */
-  size: readonly [number, number];
-  /**
-   * Which way up the monitor is, as the turn the content takes to come out
-   * upright — the `wl_output` convention. Already applied by the engine.
-   */
-  transform: Transform;
-};
-
-/**
- * The four rotations a monitor can be bolted to a desk at, spelled the way the
- * host and the config file spell them.
- *
- * Its own list rather than `@domicile/chrome-sdk`'s, because this package has
- * no protocol dependency — the same reason {@link Display} is declared here
- * rather than imported. It is not a fifth list to keep honest by hand:
- * `scripts/test-display-transforms-agree.sh` compares the ones that cross
- * process boundaries, and the adapter that fills a {@link Scanout} assigns the
- * SDK's type to this one, so a disagreement between the two is a type error at
- * that seam rather than a monitor drawn the wrong way.
- */
-export type Transform = "normal" | "rotate-90" | "rotate-180" | "rotate-270";
 
 /**
  * Where a `DisplayProvider` gets the desktop from.

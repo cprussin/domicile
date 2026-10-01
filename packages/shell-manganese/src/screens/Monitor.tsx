@@ -11,7 +11,7 @@ import { TOP_BAR, TopBar } from "../top-bar/TopBar";
 import type { TrayOrder } from "../tray/useTrayOrder";
 import { onScreen } from "../window-management/floating/float";
 import type { Geometry, Screenful } from "../window-management/placement";
-import { placementsOf, withOverhangs } from "../window-management/placement";
+import { placementsOf } from "../window-management/placement";
 import type { Focus } from "../window-management/pointer-warp";
 import type { Rect } from "../window-management/rect";
 import { Stage } from "../window-management/Stage";
@@ -60,16 +60,9 @@ type Props = {
  * One monitor of the desk: the bar across the top of it, and the windows of
  * the workspace it is showing.
  *
- * **THIS IS WHERE A DESK OF SEVERAL MONITORS IS SEVERAL PAGES.** The engine
- * opens a browser window per CRTC and each one loads this same shell, so every
- * page renders one of these per screen and `<Screen>` draws the one whose
- * display its window covers. The others are the same element in the page
- * next door: the desktop is one state, drawn a monitor at a time.
- *
- * So the windows of a workspace are drawn by exactly one page, which is not a
- * nicety. A client's window is a frame sink and a frame sink has one parent:
- * two pages embedding one window is the second taking the first's pixels
- * away, leaving a terminal that answers the keyboard and draws nothing.
+ * The page spans the desk and every monitor is a region of it, so a window is
+ * drawn at its place on the page: a float dragged over the edge between two
+ * monitors is one element, over both.
  */
 export const Monitor = ({
   act,
@@ -84,13 +77,10 @@ export const Monitor = ({
   windows,
 }: Props) => {
   const geometry = useMemo(() => geometryOf(display, desk), [desk, display]);
-  // And what hangs over from the screens either side, on a page that is this
-  // monitor alone: a window dragged across the edge is drawn by both pages.
-  const alone = desk.some(({ scanout }) => scanout !== undefined);
-  const screenful = useMemo(() => {
-    const own = placementsOf(windows, geometry);
-    return alone ? withOverhangs(own, windows, geometry) : own;
-  }, [alone, geometry, windows]);
+  const screenful = useMemo(
+    () => placementsOf(windows, geometry),
+    [geometry, windows],
+  );
   const current = currentOn(windows, display.name);
   const workspace = workspaceOn(windows, display.name);
 
@@ -99,19 +89,13 @@ export const Monitor = ({
   // pointer did not make — a key, or a window opening — would be undone by the
   // next pointer event. `pointer-warp.ts` has the whole of it.
   //
-  // Per monitor, and only by the page that covers it, for the one the
-  // keyboard is on. Every page lays every monitor out, and the engine keeps a
-  // warp inside the page that asked for it: one asked for by the page next
-  // door lands on that page's own edge, where the next pointer event hands
-  // the keyboard straight back.
-  const covered = coveredHere(display, desk);
+  // Per monitor, for the one the keyboard is on.
   const focus = useMemo(
     () =>
-      covered && windows.focused === display.name
+      windows.focused === display.name
         ? focusOn(screenful, windows.activeId, geometry.screen)
         : undefined,
     [
-      covered,
       display.name,
       geometry.screen,
       screenful,
@@ -127,7 +111,6 @@ export const Monitor = ({
     domicile,
     focus,
     pressed: windows.pressed,
-    screen: desk.find(({ scanout }) => scanout !== undefined)?.name,
     windows: open,
   });
 
@@ -210,17 +193,11 @@ export const Monitor = ({
             act(WindowAction.WindowHovered(id));
           }
         }}
-        // Naming this screen, because the page pressed keeps the drag once
-        // the window has gone to another — see `floatDragged`.
+        // In the page's pixels, which are the desk's: the drag outlives this
+        // monitor's element once the window has gone to another — see
+        // `floatDragged`.
         onMove={(id, x, y) => {
-          act(
-            WindowAction.WindowMoved(
-              id,
-              x - geometry.screen.x,
-              y - geometry.screen.y,
-              display.name,
-            ),
-          );
+          act(WindowAction.WindowMoved(id, x, y));
         }}
         onOpenWindow={(url) => {
           act(WindowAction.BrowserOpened(url));
@@ -288,8 +265,7 @@ const focusOn = (
  *
  * Three of them, because a window can be asked to fill any of the three: the
  * workspace is this screen with the bar taken off the top, `fullscreen` is the
- * whole of it, and `fullscreen global` is every screen there is — as far as
- * one monitor can show it, which is all a page that is one monitor can do.
+ * whole of it, and `fullscreen global` is every screen there is.
  */
 const geometryOf = (display: Display, desk: readonly Display[]): Geometry => {
   const screen = rectOf(display);
@@ -312,14 +288,7 @@ const rectOf = (display: Display): Rect => ({
   y: display.position[1],
 });
 
-/**
- * Every screen at once, which is what `fullscreen global` fills.
- *
- * In this page's own coordinates, which is what the host describes: the
- * display this window covers is at the origin and the rest of the desk is
- * placed around it, so a box over the whole desk has a corner this page can
- * draw from and edges it cannot reach.
- */
+/** Every screen at once, which is what `fullscreen global` fills. */
 const boundingBox = (desk: readonly Display[]): Rect => {
   const rects = desk.map((display) => rectOf(display));
   const x = Math.min(...rects.map((rect) => rect.x));
@@ -331,12 +300,3 @@ const boundingBox = (desk: readonly Display[]): Rect => {
     y,
   };
 };
-
-/**
- * Whether this page is the one drawing `display`: the one its window covers,
- * or any display at all on a page that covers none, which is the whole
- * desktop in one window.
- */
-const coveredHere = (display: Display, desk: readonly Display[]): boolean =>
-  display.scanout !== undefined ||
-  desk.every(({ scanout }) => scanout === undefined);

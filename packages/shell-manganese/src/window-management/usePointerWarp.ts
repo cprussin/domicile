@@ -40,19 +40,11 @@ type Options = {
    * a focus the pointer itself moved is one the warp must leave alone, or the
    * desktop chases its own cursor.
    *
-   * The desk's rather than the page's because the desk is one keyboard and
-   * several monitors: the page that heard the key need not be the page
-   * covering the screen the focus landed on, and that page is the one that
-   * can put the pointer there.
+   * The desk's rather than this monitor's because the desk is one keyboard
+   * and several monitors: what answers a press is the monitor the focus
+   * landed on.
    */
   pressed: WindowState["pressed"];
-  /**
-   * The screen this page covers, which is what `pressed` is read against:
-   * the keys go to the monitor the pointer is on, so a press heard on another
-   * screen says the pointer is there. `undefined` on a page that is the whole
-   * desktop, which is where every press is heard.
-   */
-  screen: string | undefined;
   /**
    * Every window the desktop has, by id.
    *
@@ -161,7 +153,6 @@ export const usePointerWarp = ({
   domicile,
   focus,
   pressed,
-  screen,
   windows,
 }: Options): Pointer => {
   // Refs rather than state, every one of them: none is drawn, and a pointer
@@ -176,9 +167,9 @@ export const usePointerWarp = ({
   const sent = useRef<readonly Spot[]>([]);
   const held = useRef<Focus | undefined>(undefined);
   const open = useRef<readonly string[]>([]);
-  // The presses this page has answered, from the count it came up to: a desk
-  // adopted mid-session is not a press.
-  const answered = useRef(pressed.count);
+  // The presses this monitor has answered, from the count it came up to: a
+  // monitor plugged in mid-session has no press to answer.
+  const answered = useRef(pressed);
 
   // Something turned up at `to`: the cursor, or a window at the cursor. Which
   // of the two it was, is {@link Pointer.pointing}'s question, and answering
@@ -250,14 +241,8 @@ export const usePointerWarp = ({
       was?.id !== undefined &&
       !windows.includes(was.id) &&
       !sameBox(was.box, focus?.box);
-    const keyed = pressed.count !== answered.current;
-    answered.current = pressed.count;
-    if (keyed && pressed.on !== screen) {
-      // Heard on another monitor, which is where the pointer is: wherever this
-      // page last saw it, and wherever it last sent it, it has left since.
-      pointer.current = undefined;
-      sent.current = [];
-    }
+    const keyed = pressed !== answered.current;
+    answered.current = pressed;
     const to =
       keyed || opened || gone
         ? warpTo({

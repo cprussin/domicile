@@ -4,12 +4,6 @@ import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import type { Focus, Spot } from "./pointer-warp";
 import { usePointerWarp } from "./usePointerWarp";
-import type { WindowState } from "./window-state";
-
-type Pressed = WindowState["pressed"];
-
-/** The screen this page covers. */
-const HERE = "left";
 
 const LEFT = {
   box: { height: 500, width: 400, x: 0, y: 100 },
@@ -54,17 +48,16 @@ const NOTHING: Desktop = { focus: undefined, windows: [] };
  * openings moved is cleared before the case begins.
  */
 const warping = (desktop: Desktop) => {
-  // The desk's count of keyed presses, which every page reads off the desktop
-  // it is shown: one keyboard serves several screens, and the page that
-  // answers a press is the one covering the screen the focus landed on.
-  let pressed: Pressed = { count: 0, on: HERE };
+  // The desk's count of keyed presses, which every monitor reads off the
+  // desktop: one keyboard serves several screens, and the monitor that
+  // answers a press is the one the focus landed on.
+  let pressed = 0;
   const view = renderHook(
     (current: Desktop) =>
       usePointerWarp({
         domicile: recordingDomicile,
         focus: current.focus,
         pressed,
-        screen: HERE,
         windows: current.windows,
       }),
     { initialProps: NOTHING },
@@ -73,9 +66,9 @@ const warping = (desktop: Desktop) => {
   warps = [];
   return {
     ...view,
-    /** A key ran a command, heard on `on`: this screen unless said. */
-    press: (on: string = HERE) => {
-      pressed = { count: pressed.count + 1, on };
+    /** A key ran a command. */
+    press: () => {
+      pressed += 1;
     },
   };
 };
@@ -148,21 +141,6 @@ describe("usePointerWarp", () => {
     rerender(desktopOf(RIGHT, BOTH));
 
     expect(warps).toStrictEqual([]);
-  });
-
-  it("takes it from another monitor, wherever this page last saw it", () => {
-    // The keys go to the monitor the pointer is on, so a press heard on
-    // another screen says the pointer is there — and not over the window this
-    // page last saw it over, which is where it was before it left.
-    const { rerender, press } = warping(desktopOf(LEFT, BOTH));
-    pointerAt(600, 350);
-
-    act(() => {
-      press("right");
-    });
-    rerender(desktopOf(RIGHT, BOTH));
-
-    expect(warps).toStrictEqual([[600, 350]]);
   });
 
   it("does not warp twice for one press", () => {
@@ -517,7 +495,7 @@ describe("usePointerWarp", () => {
       const { press, rerender } = warping({ focus: undefined, windows: BOTH });
 
       act(() => {
-        press("right");
+        press();
       });
       rerender({ focus: EMPTY, windows: BOTH });
 

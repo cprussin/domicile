@@ -54,33 +54,15 @@ supplies the protocol machinery; the interesting half — scene, input routing,
 portal geometry, config — is pure logic that unit-tests without a GPU, an engine
 or a display, which is what makes test-first work here.
 
-### A page per display where the engine scans out, one page everywhere else
+### One page for the desk
 
 The desktop is a list of displays — the config's, or the monitors DRM
-reports — one `wl_output` each. A display is a *region* of a page, which a
-shell addresses with `<Screen name="left">`, and how many pages there are is
-the platform's answer rather than the shell's.
-
-**Nested, one page spans every display.** A region is a part of it, and a shell
-lays out the whole desk in one window.
-
-**On a tty, a page IS one display**, because `ScreenManager::FindWindowAt`
-binds a window to a display controller only on an exact rectangle match and one
-window cannot be two rectangles. The engine opens a browser window per CRTC and
-each loads the same shell; each is told the whole desk with its own display
-marked — `as_seen_from` in `domicile-host` — so a `<Screen>` renders in the
-window on the monitor it names and nowhere else. `<Screen>` is the seam either
-way: a shell written against it compiles unchanged, which is what made this
-reversal cost no shell code.
-
-What one page across a desk costs is mixed density: it rasterizes at a single
-`devicePixelRatio`, so on a desktop of unequal scales one screen is drawn for
-the other's. A page per display does not have that problem and has another: N
-pages are N copies of a shell's state, and keeping them one desktop is the
-shell's to arrange — `shell-manganese` reduces on the page covering the first
-screen and the others ask it to. The compositor is unaffected either way; the
-`Host` is one brain with a window each, and `set_screen` is the only message
-whose answer differs per connection.
+reports — one `wl_output` each. A shell is one page over the desk's bounding
+box, and a display is a *region* of it, which a shell addresses with
+`<Screen name="left">`. Nested, that page is a window; on a tty the engine shows
+it on every monitor at the monitor's own density and refresh rate —
+[ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md). The compositor's `Host`
+is one brain, and every chrome is told the same desk.
 
 ### Dev environment: Nix flake
 

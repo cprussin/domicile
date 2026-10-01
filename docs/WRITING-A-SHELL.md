@@ -309,9 +309,8 @@ One that never calls it gets its windows turned anyway, a second late.
 using it hands `turnWindows` on its `ThemeSource` to `themeCaptured`.
 
 **And it goes the other way.** `domicile.setTheme("light")` from a shell asks
-the compositor, which answers every chrome on the desk — a desk of three
-monitors is three pages, and the toggle is on one of them. Nothing is written
-back to this file: it is generated, a desktop that edited a build product would
+the compositor, which answers every chrome. Nothing is written back to this
+file: it is generated, a desktop that edited a build product would
 be a desk fighting its own configuration, and a toggle lasts as long as the
 desktop does. An edit to `[theme]` therefore overrules whatever the toggle last
 did, which is the honest reading of somebody restating what this desk is.
@@ -380,18 +379,17 @@ every profile did before the field existed. A size and not a rate: the hertz
 changes no arithmetic here, and a monitor that reports none is ordinary.
 
 **A monitor a profile turns or scales is drawn that way by the engine, and a
-shell does nothing about it.** On a tty the engine opens one browser window per
-CRTC and turns and scales each the way its monitor is, so the page is that
-monitor's logical box, upright, at its density: `100vw` is the logical width,
-a pointer event is in logical pixels, and a portal, a dialog or anything else
-outside a `<Screen>` comes out the right way up. The pointer's arrow and its
-travel turn with the monitor too.
+shell does nothing about it.** Your shell is one page over the desk's bounding
+box, in logical pixels, and each display is a rectangle in it. On a tty the
+engine shows that page on every monitor, turned and scaled the way the monitor
+is: a pointer event is in the page's logical pixels wherever it lands, and a
+portal, a dialog or anything else outside a `<Screen>` comes out the right way
+up. The pointer's arrow and its travel turn with the monitor too.
 
 A display still says how it was drawn, for a shell that wants to show it:
 `mode` is the pixels the panel scans out (un-turned — a 4K panel on its side
-is a 3840×2160 mode and an 1800×3200 box), `transform` which way up it is, and
-`fills_the_window` whether this page is that monitor — false for every desktop
-your window is the whole of. None of them is an instruction.
+is a 3840×2160 mode and an 1800×3200 box) and `transform` which way up it is.
+Neither is an instruction.
 
 **`transform` is the `wl_output` value, which counts counterclockwise**, as the
 config file, kanshi and sway do: `rotate-90` turns the content a quarter
@@ -461,8 +459,7 @@ tooltip — arrives as `popup_placed`: its own `app_id`, the `parent` it is over
 pixels from the top-left of that parent's box. Mount an `<app>` for it there,
 above its window, and take it down on `app_closed` like any other. It is not a
 window: give it no frame, do not tile it, and draw it only where its window is
-drawn — see *A window on two monitors* below. The
-SDK already routes a click on one to its window's keyboard
+drawn. The SDK already routes a click on one to its window's keyboard
 (`DomicileClient.windowOf`), and the compositor dismisses a menu when the
 keyboard leaves its window. The example does it in a dozen lines; a popup the
 compositor placed near a screen edge is not moved back onto the screen.
@@ -548,25 +545,8 @@ them; a tiling layout that cannot is left with the cut-off edge.
 
 ### A window on two monitors
 
-On a tty each monitor is a page of its own, and an `<app>` embedding a window
-configures it: its box is the size the client draws at. Two pages each doing
-that would resize the client to one box and then the other. So a window you
-draw across two monitors is an `<app>` on each page, and **every one but the
-page the window is on sets `mirror`**:
-
-```html
-<app app-id="app-3"></app>          <!-- the page the window is on -->
-<app app-id="app-3" mirror></app>   <!-- the page next door -->
-```
-
-A mirror shows the surface the other page configured, stretched to its own
-box, and hears the pointer like any `<app>`. Moving `mirror` from one page's
-element to the other's hands the window over. A page with no `mirror` on it
-where another already embeds the window takes the window off that page.
-A menu goes where its window is, as a mirror too where the window is one. A
-`<webview>` cannot be mirrored: another page's is another page load.
-`shell-manganese` mirrors a floating window across the edge it is dragged over
-— [WINDOWS-ACROSS-SCREENS.md](architecture/WINDOWS-ACROSS-SCREENS.md).
+One page spans the desk, so a window over the edge between two monitors is
+one `<app>` placed across both, and a drag across that edge is one drag.
 
 ## Who gets the keyboard
 
@@ -693,18 +673,12 @@ this with `mouse_warping` and so does every other compositor, from the outside;
 here the shell is a page, and a page can read where the pointer is and cannot
 put it anywhere. So ask: `domicile.warpPointer([x, y])`, in your own page
 coordinates — the ones a `PointerEvent` reports as `clientX`/`clientY`, which
-are the ones you laid the window out in. A point outside your page is clamped
-into it, and where something else owns the pointer — a nested run inside
-another compositor — nothing moves. `shell-manganese` does this on every focus
-change of its own — a keyed one, and a window opening with the keyboard, which
-is the same problem with nobody pressing anything — and only when the pointer
-is not over the window already.
-
-On a desk of several monitors each page is one of them, and the clamp is to
-that page: a page cannot put the pointer on the monitor next door. So the page
-covering the monitor the focus landed on is the one that asks, whichever page
-heard the key — which makes the press part of the desk every page is shown
-rather than a fact about the page it happened on.
+are the ones you laid the window out in, on whichever monitor that is. A point
+outside your page is clamped into it, and where something else owns the
+pointer — a nested run inside another compositor — nothing moves.
+`shell-manganese` does this on every focus change of its own — a keyed one,
+and a window opening with the keyboard, which is the same problem with nobody
+pressing anything — and only when the pointer is not over the window already.
 
 ## When nobody is at the desk
 
@@ -813,8 +787,8 @@ of it arrives anywhere. `unlock` hands what was typed to the compositor, which
 checks it and, if it was right, sends `locked: false` to **every** chrome on
 the desk. Clear your lock screen on that message and never on your own submit: a
 page that believed its own keystrokes would be a lock anybody could open by
-editing the page. A desk of three monitors is three of your pages and one lock,
-which is the same reason `setTheme` comes back as a `theme` event.
+editing the page, which is the same reason `setTheme` comes back as a `theme`
+event.
 
 **A wrong passphrase is answered with `locked: true` again.** Every check is
 answered to every chrome once it is over, and nothing else sends `locked: true`

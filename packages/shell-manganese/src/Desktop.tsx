@@ -23,16 +23,10 @@ import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
-import type { DeskChannel } from "./window-management/desk-channel";
 import { useWindows } from "./window-management/useWindows";
-import {
-  WindowAction,
-  WindowActionKind,
-} from "./window-management/window-state";
+import { WindowAction } from "./window-management/window-state";
 
 type Props = {
-  /** The other pages of this desk — see `desk-channel.ts`. */
-  desk: DeskChannel;
   domicile: DomicileClient;
 };
 
@@ -40,22 +34,17 @@ type Props = {
  * The desktop: a bar across the top of every monitor, the windows of the
  * workspace each one is showing under it, and the panels over all of it.
  *
- * **ONE DESKTOP, DRAWN A MONITOR AT A TIME.** A desk of several monitors is
- * several browser windows — one cannot span two CRTCs — each loading this same
- * shell, so this component runs once per screen and renders a {@link Monitor}
- * for every screen of the desk. `<Screen>` draws the one whose display this
- * page's window covers and leaves the others to the pages that cover them.
+ * **ONE PAGE FOR THE DESK.** The page spans every monitor, and renders a
+ * {@link Monitor} for each, each in its own region of the page.
  *
  * So the state above the monitors is the desk's and not a screen's: the
  * workspaces span every monitor the way sway's do, a workspace is shown on one
  * screen at a time, and asking for one that is already in view moves the
- * keyboard to the screen showing it rather than taking the work off it. That
- * state has to be the same state on every page, which is `useWindows`'s other
- * half.
+ * keyboard to the screen showing it rather than taking the work off it.
  */
-export const Desktop = ({ desk, domicile }: Props) => {
+export const Desktop = ({ domicile }: Props) => {
   const displays = useDisplays();
-  const windows = useWindows(domicile, displays, desk);
+  const windows = useWindows(domicile, displays);
   const { act } = windows;
 
   // Super is what hands the pointer back to the page, and Shift is what makes
@@ -64,17 +53,6 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // keystrokes handed back short — and off the engine's word for a browser
   // window's page, whose keys this page never hears.
   const { modifiers, spendShift } = useModifiers(domicile);
-
-  // Whether the press that put the launcher up was heard on this page, which
-  // is the page its box can be typed into. The engine hands the keys to the
-  // monitor the pointer is on, and that need not be the monitor the
-  // desktop's focus is on: a key can move the focus to another screen before
-  // the pointer — and so the keyboard — follows it there.
-  //
-  // Forgotten once the panel has finished closing rather than as it starts
-  // to: the panel is only drawn while this holds, and one taken away with the
-  // press that closed it would never get to transition out.
-  const [launchedHere, setLaunchedHere] = useState(false);
 
   // The launcher's rows are the host's answer to what is in its box: the
   // compositor keeps an index of the home and searches it, and all that
@@ -106,8 +84,8 @@ export const Desktop = ({ desk, domicile }: Props) => {
   const clipboard = useClipboard(domicile);
 
   // And the extensions' actions, pushed for the same reason. Once for the desk
-  // rather than once per bar: `on` is a single slot, and a page that is the
-  // whole desktop draws a bar per monitor.
+  // rather than once per bar: `on` is a single slot, and the page draws a bar
+  // per monitor.
   const extensions = useExtensions(domicile);
 
   // And the system tray's icons, pushed and held once for the desk for the
@@ -150,20 +128,14 @@ export const Desktop = ({ desk, domicile }: Props) => {
   const onAction = useCallback(
     (action: WindowAction) => {
       spendShift();
-      if (action.kind === WindowActionKind.LauncherToggled) {
-        setLaunchedHere(true);
-      }
-      // With the key that ran it, which is what takes the pointer with the
-      // keyboard — see `usePointerWarp`. Counted in the desktop rather than
-      // on this page, because the page that answers it is the one covering
-      // the screen the focus lands on, and that need not be this one; and
-      // with this page's screen, because the keys are heard where the
-      // pointer is.
-      act(action, {
-        on: displays?.find(({ scanout }) => scanout !== undefined)?.name,
-      });
+      act(action);
+      // Counted, which is what takes the pointer with the keyboard — see
+      // `usePointerWarp`. In the desktop rather than here, because what
+      // answers it is the monitor the focus lands on. In the same turn, so
+      // the two are one render.
+      act(WindowAction.KeyPressed());
     },
-    [act, displays, spendShift],
+    [act, spendShift],
   );
 
   useShortcuts({
@@ -174,18 +146,16 @@ export const Desktop = ({ desk, domicile }: Props) => {
   });
 
   // The pointer carries the keyboard from one monitor to the next, windows or
-  // none: the engine hands the keys to the monitor the pointer is on, and the
-  // desktop's focus goes with them.
+  // none.
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
 
   return (
     <>
       {/*
-        First, and outside every screen: the viewport is this monitor, so one
-        fixed sheet is its wallpaper, and a positioned sibling that comes first
-        in the document is painted under all of it. It waits for no desktop
-        either — there is no region for it to be moved into — so the handshake
-        happens over a photograph.
+        First, and outside every screen: one fixed sheet is the wallpaper, and
+        a positioned sibling that comes first in the document is painted under
+        all of it. It waits for no desktop either — there is no region for it
+        to be moved into — so the handshake happens over a photograph.
       */}
       <Wallpaper />
       {/*
@@ -219,14 +189,9 @@ export const Desktop = ({ desk, domicile }: Props) => {
           />
         ))}
       {/*
-        Outside every screen, like the wallpaper and for the same reason: the
-        viewport is this monitor, and the panel is over the whole of it.
+        Outside every screen, like the wallpaper.
       */}
       <Launcher
-        here={launchedHere}
-        onClosed={() => {
-          setLaunchedHere(false);
-        }}
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
         }}

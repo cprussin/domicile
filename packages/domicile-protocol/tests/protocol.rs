@@ -579,7 +579,6 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 1,
                 mode: [1920, 1080],
                 transform: DisplayTransform::Normal,
-                fills_the_window: false,
             },
             DisplayInfo {
                 name: "right".into(),
@@ -588,7 +587,6 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 2,
                 mode: [5120, 2880],
                 transform: DisplayTransform::Normal,
-                fills_the_window: false,
             },
         ],
     };
@@ -604,7 +602,6 @@ fn the_desktop_is_described_to_the_chrome() {
     assert_eq!(v["displays"][1]["scale"], 2);
     assert_eq!(v["displays"][1]["mode"], serde_json::json!([5120, 2880]));
     assert_eq!(v["displays"][1]["transform"], "normal");
-    assert_eq!(v["displays"][1]["fills_the_window"], false);
 }
 
 #[test]
@@ -625,13 +622,11 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
         scale: 2,
         mode: [3840, 2160],
         transform: DisplayTransform::Rotate270,
-        fills_the_window: true,
     })
     .unwrap();
     assert_eq!(v["size"], serde_json::json!([1800, 3200]));
     assert_eq!(v["mode"], serde_json::json!([3840, 2160]));
     assert_eq!(v["transform"], "rotate-270");
-    assert_eq!(v["fills_the_window"], true);
 }
 
 #[test]
@@ -640,16 +635,12 @@ fn a_display_that_predates_these_fields_still_reads() {
     // send a `displays` without them. It is that a captured session, a
     // hand-written line, or a fixture from before the fork scanned anything
     // out is still a thing this crate reads, and the answer it gives for the
-    // three is the desktop that had no notion of them: lying down, and not
-    // anybody's viewport.
+    // two is the desktop that had no notion of them: lying down.
     let old: DisplayInfo =
         serde_json::from_str(r#"{"name":"left","position":[0,0],"size":[1920,1080],"scale":1}"#)
             .expect("it reads");
     assert_eq!(old.transform, DisplayTransform::Normal);
-    assert!(!old.fills_the_window);
-    // `[0, 0]` and not the size: a mode nobody stated is not a mode, and
-    // `fills_the_window` is false, which is the field that decides whether
-    // anybody divides by it.
+    // `[0, 0]` and not the size: a mode nobody stated is not a mode.
     assert_eq!(old.mode, [0, 0]);
 }
 

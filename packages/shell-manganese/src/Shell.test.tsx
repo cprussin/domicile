@@ -22,14 +22,7 @@ import { css } from "../styled-system/css";
 import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
-import type { DeskChannel } from "./window-management/desk-channel";
-import { DeskMessage } from "./window-management/desk-channel";
 import { TITLE_BAR } from "./window-management/rect";
-import {
-  NO_WINDOWS,
-  reduceWindows,
-  WindowAction,
-} from "./window-management/window-state";
 import {
   movingStyles,
   settlingStyles,
@@ -40,11 +33,8 @@ import {
 // the component library lays out against. The double below holds this shape
 // rather than that one, so the mapping is exercised by every render here.
 //
-// Both lie down and neither is a window of its own, which is the desktop this
-// file is about: two monitors of one page. A screen that IS its window is
-// `host-displays.test.ts`.
+// Both lie down: two monitors of one page.
 const LEFT: DomicileDisplay = {
-  fillsTheWindow: false,
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
@@ -56,29 +46,7 @@ const LEFT: DomicileDisplay = {
   y: 0,
 };
 
-/**
- * The panel a desktop on a tty draws on: one monitor, one browser window, and
- * a page laid out in half the pixels the monitor scans out.
- *
- * `fillsTheWindow` is what makes `<Screen>` cover its window with a transform,
- * so everything the chrome lays out at 960 across is drawn at 1920 — which is
- * the difference the pointer has to be spoken about in.
- */
-const SCANOUT: DomicileDisplay = {
-  fillsTheWindow: true,
-  height: 540,
-  modeHeight: 1080,
-  modeWidth: 1920,
-  name: "panel",
-  scale: 2,
-  transform: "normal",
-  width: 960,
-  x: 0,
-  y: 0,
-};
-
 const RIGHT: DomicileDisplay = {
-  fillsTheWindow: false,
   height: 1024,
   modeHeight: 1024,
   modeWidth: 1280,
@@ -241,44 +209,6 @@ class FakeDomicile {
 let domicile: FakeDomicile;
 
 /**
- * The other pages of the desk, of which there are none here.
- *
- * A page alone is the whole desk — one monitor, or a shell open in a plain
- * browser — so nothing it says goes anywhere and nothing comes back. What the
- * pages of a desk of several agree on is `desk-channel.ts`'s own test; this
- * file is about what one page draws.
- */
-const alone = (): DeskChannel => ({
-  listen: () => () => undefined,
-  post: () => undefined,
-});
-
-/**
- * What the other pages of the desk say to this one, for the cases about a
- * page that is not the one the desk is reduced on.
- */
-let heard: (message: DeskMessage) => void = () => undefined;
-
-/** What this page has said to the other pages, in order. */
-let said: DeskMessage[] = [];
-
-/** The other pages of a desk, which speak and write down what they hear. */
-const overheard = (): DeskChannel => {
-  said = [];
-  return {
-    listen: (listener) => {
-      heard = listener;
-      return () => {
-        heard = () => undefined;
-      };
-    },
-    post: (message) => {
-      said.push(message);
-    },
-  };
-};
-
-/**
  * Renders the chrome on a desktop of `desktop`.
  *
  * Described *before* the first render by default, the way a shell that has
@@ -286,10 +216,7 @@ const overheard = (): DeskChannel => {
  * desktop to put it on. The tests that care about the gap pass `undefined` and
  * describe one themselves.
  */
-const renderingShell = (
-  desktop: readonly DomicileDisplay[] | undefined,
-  desk: DeskChannel = alone(),
-) => {
+const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
@@ -299,7 +226,6 @@ const renderingShell = (
   // to answer `theme` as well would make every test here depend on it.
   return render(
     <Shell
-      desk={desk}
       displays={hostDisplays(client)}
       domicile={client}
       theme={standaloneThemeSource()}
@@ -2048,26 +1974,6 @@ describe("Shell", () => {
       );
     });
 
-    it("moves it by what the hand crossed, on a page that is one monitor too", () => {
-      // The engine turns and scales a monitor's window, so the page on it is
-      // laid out in the desktop's own pixels and a pointer is reported in
-      // them: a hand that crossed 80 crossed 80 of what the window is placed
-      // in, whatever the monitor's density or turn.
-      const { container } = renderShell([SCANOUT]);
-      clientAppears("term");
-      press("Tab", true);
-      const bar = barFor(container, "app:term");
-      const was = Number.parseFloat(bar.style.insetInlineStart);
-
-      fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
-      fireEvent.pointerMove(window, { clientX: 180, clientY: 100 });
-      fireEvent.pointerUp(window, { clientX: 180, clientY: 100 });
-
-      expect(
-        Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
-      ).toBe(was + 80);
-    });
-
     it("drags a floating window onto the next screen and keeps hold of it", () => {
       // The screen its middle is over takes it, and the drag goes on after its
       // bar has gone from the screen that was pressed.
@@ -2102,70 +2008,29 @@ describe("Shell", () => {
       }
     });
 
-    describe("hanging over the edge onto the next monitor", () => {
-      /**
-       * Kitty floating on the left screen, 220 of it over the right one's
-       * edge — the desk the page that reduces it would say it is.
-       */
-      const overhanging = () =>
-        reduceWindows(
-          reduceWindows(
-            reduceWindows(
-              reduceWindows(
-                NO_WINDOWS,
-                WindowAction.ScreensDescribed([
-                  {
-                    box: { height: 1080, width: 1920, x: -1920, y: 0 },
-                    name: "left",
-                  },
-                  {
-                    box: { height: 1080, width: 1920, x: 0, y: 0 },
-                    name: "right",
-                  },
-                ]),
-              ),
-              WindowAction.AppAppeared("kitty", "kitty"),
-            ),
-            WindowAction.FloatToggled(),
-          ),
-          WindowAction.WindowMoved("app:kitty", 1500, 100, "left"),
-        );
-      const shownApp = (container: HTMLElement) =>
-        container.querySelector(`${APP_TAG_NAME}:not([hidden])`);
+    it("draws a float over the edge between two screens once, whole", () => {
+      // One page spans the desk, so a float hanging over onto the next screen
+      // is one element at its place on the page, over both.
+      const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("term");
+      press("Tab", true);
+      const was = Number.parseFloat(
+        barFor(container, "app:term").style.insetInlineStart,
+      );
 
-      it("draws the part over this monitor, mirrored, on a page that is one", () => {
-        // The page the window is on configures it; this one shows its edge.
-        const { container } = renderingShell(
-          [
-            { ...LEFT, x: -1920 },
-            { ...RIGHT, fillsTheWindow: true, height: 1080, width: 1920, x: 0 },
-          ],
-          overheard(),
-        );
-        act(() => {
-          heard(DeskMessage.Desk(overhanging()));
-        });
-
-        expect(shownApp(container)?.hasAttribute("mirror")).toBe(true);
+      fireEvent.pointerDown(barFor(container, "app:term"), {
+        clientX: 100,
+        clientY: 100,
       });
+      fireEvent.pointerMove(window, { clientX: 1500, clientY: 100 });
+      fireEvent.pointerUp(window, { clientX: 1500, clientY: 100 });
 
-      it("mirrors nothing on a page that is the whole desk", () => {
-        // It draws the window whole where it is, over both screens.
-        const { container } = renderingShell(
-          [
-            { ...LEFT, x: 0 },
-            { ...RIGHT, height: 1080, width: 1920, x: 1920 },
-          ],
-          overheard(),
-        );
-        act(() => {
-          heard(DeskMessage.Desk(overhanging()));
-        });
-
-        expect(
-          container.querySelectorAll(`${APP_TAG_NAME}[mirror]`),
-        ).toHaveLength(0);
-      });
+      expect(
+        container.querySelectorAll(`${APP_TAG_NAME}:not([hidden])`),
+      ).toHaveLength(1);
+      expect(
+        Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
+      ).toBe(was + 1400);
     });
 
     it("draws a fullscreen float's bar at the top of the screen", async () => {
@@ -2365,38 +2230,6 @@ describe("Shell", () => {
   });
 
   describe("focus follows the cursor", () => {
-    it("speaks in the layout's pixels on a page that is one monitor too", () => {
-      // The engine turns and scales a monitor's window, so the page on it is
-      // the display's logical box and the pointer is put where the layout
-      // says: the window's own middle, whatever the monitor's density or turn.
-      const { container } = renderShell([SCANOUT]);
-      clientAppears("one");
-
-      // Its logical box is the screen less the bar, so its middle is 480
-      // across and 301 down.
-      expect(boxOf(appElement(container, "one"))).toMatchObject({
-        height: "478px",
-        width: "960px",
-        x: "0px",
-        y: "62px",
-      });
-      expect(domicile.calls).toContainEqual(["warpPointer", [480, 301]]);
-    });
-
-    it("leaves a window on another monitor to the page that covers it", () => {
-      // A page is one monitor, and the engine keeps a warp inside the page
-      // that asked for it: one asked for a window on the next monitor would
-      // pin the pointer to this monitor's edge, where the next pointer event
-      // hands the keyboard straight back to this screen.
-      renderShell([SCANOUT, { ...RIGHT, x: 960 }]);
-      press("parenright");
-      domicile.calls.length = 0;
-
-      clientAppears("one");
-
-      expect(domicile.calls.map(([kind]) => kind)).not.toContain("warpPointer");
-    });
-
     it("takes the pointer to a window that has just opened", () => {
       // Nobody pressed a key for this one: the client finished starting and
       // its window took the keyboard. The pointer is wherever it was — over
@@ -2453,20 +2286,6 @@ describe("Shell", () => {
       press("l");
 
       expect(domicile.calls).toContainEqual(["warpPointer", [2560, 512]]);
-    });
-
-    it("leaves the warp to another monitor to the page that is that monitor", () => {
-      // A page can only move the pointer over its own window: the engine
-      // clamps anything else to that window's edge, where the next pointer
-      // event would take the keyboard straight back.
-      renderingShell([{ ...LEFT, fillsTheWindow: true }, RIGHT]);
-      domicile.calls.length = 0;
-
-      press("l");
-
-      expect(domicile.calls.filter(([kind]) => kind === "warpPointer")).toEqual(
-        [],
-      );
     });
 
     it("gives the keyboard to the window the pointer moves into", () => {
@@ -2536,62 +2355,6 @@ describe("Shell", () => {
           `${APP_TAG_NAME}:not([hidden])`,
         ),
       ).toBeInTheDocument();
-    });
-
-    it("asks the page that reduces the desk to move the keyboard here", () => {
-      // A desk of several monitors is a page each, and a page that is one
-      // monitor hears the pointer only while it is on that monitor.
-      renderingShell(
-        [
-          { ...LEFT, x: -1920 },
-          { ...RIGHT, fillsTheWindow: true, x: 0 },
-        ],
-        overheard(),
-      );
-
-      pointerAt(10, 10);
-
-      expect(said).toContainEqual(
-        DeskMessage.Acted(WindowAction.ScreenHovered("right")),
-      );
-    });
-
-    it("asks nothing while the keyboard is already on this page's screen", () => {
-      // Said on every move of the hand otherwise, which is a message across
-      // the desk sixty times a second for nothing.
-      renderingShell(
-        [
-          { ...LEFT, x: -1920 },
-          { ...RIGHT, fillsTheWindow: true, x: 0 },
-        ],
-        overheard(),
-      );
-      act(() => {
-        heard(
-          DeskMessage.Desk(
-            reduceWindows(
-              reduceWindows(
-                NO_WINDOWS,
-                WindowAction.ScreensDescribed([
-                  {
-                    box: { height: 1080, width: 1920, x: -1920, y: 0 },
-                    name: "left",
-                  },
-                  {
-                    box: { height: 1080, width: 1920, x: 0, y: 0 },
-                    name: "right",
-                  },
-                ]),
-              ),
-              WindowAction.ScreenHovered("right"),
-            ),
-          ),
-        );
-      });
-
-      pointerAt(10, 10);
-
-      expect(said.filter(({ type }) => type === "acted")).toEqual([]);
     });
 
     it("follows the seat when the compositor moves the keyboard itself", () => {
@@ -2784,60 +2547,10 @@ describe("the launcher", () => {
     expect(launcherBox()).toHaveFocus();
   });
 
-  it("puts the panel on the page that heard the press", () => {
-    // A desk of several monitors is several pages, and the engine hands the
-    // keys to the one the pointer is on. That is the page a box can be typed
-    // into, wherever the desktop's own focus has gone -- here to the right
-    // monitor, which is a page that will hear none of what is typed.
-    renderShell([{ ...LEFT, fillsTheWindow: true }, RIGHT]);
-    press("parenright");
-
-    press("space");
-
-    expect(launcherBox()).toBeVisible();
-  });
-
-  it("dims a monitor whose page did not hear the press", () => {
-    // All the pages are told the launcher is up. The ones the press was not
-    // heard on draw only the backdrop it is up over.
-    const { baseElement } = renderingShell(
-      [{ ...LEFT, fillsTheWindow: true }, RIGHT],
-      overheard(),
-    );
-
-    act(() => {
-      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
-    });
-
-    expect(launcherBox()).toBeNull();
-    expect(baseElement.querySelector("[data-backdrop]")).toBeInTheDocument();
-  });
-
-  it("takes the backdrop away on a page that did not hear the press", async () => {
-    // Drawn without its panel, the dialog still has to finish closing. Before
-    // the pointer could leave its first monitor nobody could click on these
-    // pages, so a backdrop left behind on them went unnoticed.
-    const { baseElement } = renderingShell(
-      [{ ...LEFT, fillsTheWindow: true }, RIGHT],
-      overheard(),
-    );
-    act(() => {
-      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
-    });
-
-    act(() => {
-      heard(DeskMessage.Acted(WindowAction.LauncherToggled()));
-    });
-
-    await waitFor(() => {
-      expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
-    });
-  });
-
   it("leaves nothing over the desktop once a launch puts it away", async () => {
     // The panel closes as the window it opened arrives, and its backdrop has
     // to go with it: one left behind takes every click on the page.
-    const { baseElement } = renderShell([{ ...LEFT, fillsTheWindow: true }]);
+    const { baseElement } = renderShell([LEFT]);
     press("space");
 
     await typeIntoLauncher("example.com{Enter}");
@@ -2848,9 +2561,9 @@ describe("the launcher", () => {
   });
 
   it("keeps the panel up while it closes", () => {
-    // The panel is only drawn on the page that heard the press, and it has to
-    // stay drawn until the dialog has finished closing: a panel taken away
-    // with the press that closed it is one that never gets to leave.
+    // The panel has to stay drawn until the dialog has finished closing: a
+    // panel taken away with the press that closed it is one that never gets
+    // to leave.
     renderShell();
     press("space");
 

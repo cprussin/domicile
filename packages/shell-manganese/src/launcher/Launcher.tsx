@@ -67,18 +67,6 @@ const EMPTY_ICON_SIZE = 64;
 const ICON_SIZE = 16;
 
 type Props = {
-  /**
-   * Whether the press that put it up was heard on this page. A desk of several
-   * monitors is several pages, all told the launcher is up: the panel goes on
-   * the one the keys are arriving at, and the rest draw only the backdrop it
-   * is up over.
-   */
-  here: boolean;
-  /**
-   * The panel has finished leaving, which is later than `open` going false:
-   * it transitions out, and `here` has to hold until it has.
-   */
-  onClosed: () => void;
   /** Escape, or a click on the backdrop. The desktop decides what that means. */
   onDismiss: () => void;
   onLaunch: (launch: Launch) => void;
@@ -128,8 +116,6 @@ type Preview = (path: string) => Promise<FilePreviewMessage>;
  * shut.
  */
 export const Launcher = ({
-  here,
-  onClosed,
   onDismiss,
   onLaunch,
   open,
@@ -149,16 +135,10 @@ export const Launcher = ({
         onDismiss();
       }
     }}
-    onOpenChangeComplete={(next) => {
-      if (!next) {
-        onClosed();
-      }
-    }}
     open={open}
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
-    popup={here}
     // Wide, because a row is a name and the directory it is in, and beside
     // the rows is a preview of the one the highlight is on.
     size="xl"
