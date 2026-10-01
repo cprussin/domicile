@@ -345,6 +345,7 @@ if wanted engine; then
     scripts/engine-guard-shell-shortcuts.sh &&
   { run_together \
       scripts/engine-guard-webview-framing.sh \
+      scripts/engine-guard-shell-local-network.sh \
       scripts/engine-guard-webview-content-script.sh \
       scripts/engine-guard-extension-installer.sh \
       scripts/engine-guard-extension-tray.sh \
