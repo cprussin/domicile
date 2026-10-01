@@ -36,10 +36,12 @@ export const TextPreview = ({ path, text }: { path: string; text: string }) => {
 // Six hues is what the desktop has — its accent, its three statuses, its
 // foreground and a quieter one — so a grammar's dozens of words come down to
 // what a reader tells apart at a glance: what the language says, what the
-// program says, what it computes with, and what nobody runs.
+// program says, what it computes with, and what nobody runs. Org's own words
+// follow Emacs's faces: a headline's level in a hue of its own, what is to do
+// in red and what is done in green, and a done headline quieted.
 const codeStyles = css({
   "& [data-scope=addition]": { color: "success" },
-  "& [data-scope=attr], & [data-scope=attribute], & [data-scope=property], & [data-scope=variable], & [data-scope=template-variable], & [data-scope=params]":
+  "& [data-scope=attr], & [data-scope=attribute], & [data-scope=property], & [data-scope=variable], & [data-scope=template-variable], & [data-scope=params], & [data-scope=table]":
     {
       color: "color-mix(in oklab, {colors.accent} 55%, {colors.foreground})",
     },
@@ -51,11 +53,25 @@ const codeStyles = css({
     fontStyle: "italic",
   },
   "& [data-scope=deletion], & [data-scope=meta]": { color: "danger" },
+  "& [data-scope=done]": { color: "success", fontWeight: "bold" },
   "& [data-scope=emphasis]": { fontStyle: "italic" },
+  "& [data-scope=heading-1]": { color: "accent", fontWeight: "semibold" },
+  "& [data-scope=heading-2]": {
+    color: "color-mix(in oklab, {colors.warning} 60%, {colors.danger})",
+    fontWeight: "semibold",
+  },
+  "& [data-scope=heading-3]": { color: "success", fontWeight: "semibold" },
+  "& [data-scope=heading-4]": {
+    color: "color-mix(in oklab, {colors.accent} 55%, {colors.foreground})",
+    fontWeight: "semibold",
+  },
+  "& [data-scope=heading-done], & [data-scope=punctuation], & [data-scope=tag]":
+    { color: "muted" },
   "& [data-scope=keyword], & [data-scope=selector-tag], & [data-scope=doctag], & [data-scope=name]":
     { color: "accent" },
   "& [data-scope=number], & [data-scope=literal], & [data-scope=symbol], & [data-scope=bullet], & [data-scope=link]":
     { color: "warning" },
+  "& [data-scope=priority]": { color: "warning", fontWeight: "bold" },
   "& [data-scope=regexp], & [data-scope=string], & [data-scope=char]": {
     color: "success",
   },
@@ -64,6 +80,7 @@ const codeStyles = css({
     fontWeight: "semibold",
   },
   "& [data-scope=strong]": { fontWeight: "bold" },
+  "& [data-scope=todo]": { color: "danger", fontWeight: "bold" },
   counterReset: "line",
   fontFamily: "mono",
   fontSize: "sm",

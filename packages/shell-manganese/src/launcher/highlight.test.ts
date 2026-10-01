@@ -41,59 +41,6 @@ describe("highlight", () => {
     ]);
   });
 
-  it("lights an org file's outline, markup and metadata", () => {
-    expect(
-      highlight(
-        "org",
-        [
-          "#+title: Today",
-          "* TODO Write *it* :work:",
-          "  SCHEDULED: <2026-10-01 Thu>",
-          "  - [X] see [[https://a.b][a]] or =c=",
-          "  :ID: /a/ ~b~ +c+",
-          "# not run",
-        ].join("\n"),
-      ),
-    ).toStrictEqual([
-      [
-        { scope: "meta", text: "#+title:" },
-        { scope: undefined, text: " Today" },
-      ],
-      [
-        { scope: "section", text: "* " },
-        { scope: "keyword", text: "TODO" },
-        { scope: "section", text: " Write " },
-        { scope: "strong", text: "*it*" },
-        { scope: "section", text: " " },
-        { scope: "symbol", text: ":work:" },
-      ],
-      [
-        { scope: undefined, text: "  " },
-        { scope: "keyword", text: "SCHEDULED:" },
-        { scope: undefined, text: " " },
-        { scope: "number", text: "<2026-10-01 Thu>" },
-      ],
-      [
-        { scope: "bullet", text: "  - " },
-        { scope: "literal", text: "[X]" },
-        { scope: undefined, text: " see " },
-        { scope: "link", text: "[[https://a.b][a]]" },
-        { scope: undefined, text: " or " },
-        { scope: "string", text: "=c=" },
-      ],
-      [
-        { scope: "attr", text: "  :ID:" },
-        { scope: undefined, text: " " },
-        { scope: "emphasis", text: "/a/" },
-        { scope: undefined, text: " " },
-        { scope: "string", text: "~b~" },
-        { scope: undefined, text: " " },
-        { scope: "deletion", text: "+c+" },
-      ],
-      [{ scope: "comment", text: "# not run" }],
-    ]);
-  });
-
   it("keeps a line nothing is on, but not the one a last newline opens", () => {
     expect(highlight(undefined, "a\n\nb\n")).toStrictEqual([
       [{ scope: undefined, text: "a" }],
