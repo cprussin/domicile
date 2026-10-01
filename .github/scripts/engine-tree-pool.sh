@@ -295,19 +295,43 @@ case "$action" in
     fi
 
     series="$("$STAMP_SH" identity)" || exit 1
-    for slot in $(candidates "$pin" "$series"); do
-      if take_slot "$slot" "$owner"; then
-        touch "$(used_file "$slot")"
-        printf '%s\n' "$slot/src"
-        exit 0
-      fi
-    done
+    take_best() {
+      local slot
+      for slot in $(candidates "$pin" "$series"); do
+        if take_slot "$slot" "$owner"; then
+          touch "$(used_file "$slot")"
+          printf '%s\n' "$slot/src"
+          return 0
+        fi
+      done
+      return 1
+    }
+    take_best && exit 0
 
     # EVERY TREE IS HELD, which is a queue rather than a fault: the machine has
     # as many trees as it has, and a run that cannot have one waits for the
-    # next. Naming the holders is what turns "try again" into a decision.
-    {
-      echo "::error::every Chromium tree under $TREES is held, so this run has nowhere to build"
+    # next. Refusing instead was a red check per run that lost the race --
+    # PR #794's build failed three times in an afternoon on trees that freed
+    # minutes later.
+    #
+    # BUT ONLY ONE RUN WAITS. A waiting build holds one of crux's two runners,
+    # and a tree is dropped only by its run's engine job, which needs a runner
+    # too. Two waiters hold both and nothing can ever drop a tree. One waiter
+    # leaves a runner for the holders' engine jobs to take in turn, so this
+    # always ends. The waiter says it is alive every poll, so one that was
+    # canceled stops counting within WAITER_STALE.
+    #
+    # FORTY-FIVE MINUTES, because it is spent from the build job's budget
+    # before the compile slot's wait and a cold repin, and those two leave 51
+    # (scripts/test-the-engine-budget-holds-both-builds.sh). A warm holder
+    # drops its tree well inside that; one doing a cold repin will not, and
+    # this run is red behind it as it always was.
+    WAIT="${DOMICILE_TREE_WAIT:-2700}"
+    POLL="${DOMICILE_TREE_POLL:-15}"
+    WAITER_STALE="${DOMICILE_TREE_WAITER_STALE:-120}"
+    WAITER="$ROOT/.domicile-tree-waiter"
+    holders() {
+      local slot
       for slot in $(usable); do
         echo "  $(basename "$slot"): $(holder_of "$slot")"
       done
@@ -316,6 +340,44 @@ case "$action" in
       echo "holder is a run that died, its lock is stale and this clears it:"
       echo
       echo "  rm -rf $("$LOCK_SH" path "$(usable | head -1)/src")"
+    }
+    if [ "$WAIT" -le 0 ]; then
+      {
+        echo "::error::every Chromium tree under $TREES is held, so this run has nowhere to build"
+        holders
+      } >&2
+      exit 1
+    fi
+    if ! mkdir "$WAITER" 2>/dev/null; then
+      if [ -n "$(find "$WAITER" -newermt "-$WAITER_STALE seconds" 2>/dev/null)" ]; then
+        {
+          echo "::error::every Chromium tree under $TREES is held, and '$(cat "$WAITER/owner" 2>/dev/null)' is already waiting for one"
+          echo "A second waiter would hold the runner a holder needs to drop its tree."
+          holders
+        } >&2
+        exit 1
+      fi
+      echo "::warning::'$(cat "$WAITER/owner" 2>/dev/null)' stopped saying it was waiting for a tree; waiting in its place" >&2
+      rm -rf "$WAITER"
+      mkdir "$WAITER" || exit 1
+    fi
+    trap 'rm -rf "$WAITER"' EXIT
+    printf '%s\n' "$owner" >"$WAITER/owner"
+    touch "$WAITER/alive"
+    echo "every Chromium tree under $TREES is held; waiting up to ${WAIT}s for one" >&2
+    waited=0
+    while [ "$waited" -lt "$WAIT" ]; do
+      sleep "$POLL"
+      waited=$((waited + POLL))
+      touch "$WAITER/alive"
+      if take_best; then
+        echo "took a tree after ${waited}s" >&2
+        exit 0
+      fi
+    done
+    {
+      echo "::error::every Chromium tree under $TREES was still held after waiting ${waited}s, so this run has nowhere to build"
+      holders
     } >&2
     exit 1
     ;;
