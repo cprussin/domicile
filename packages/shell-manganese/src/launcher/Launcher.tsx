@@ -1202,12 +1202,15 @@ const rowGlyphStyles = css({
 
 // The letters the query is responsible for. `mark`'s own yellow is a
 // highlighter pen on a page; what this is marking is why a row is on screen,
-// so it is said in the color the desktop says "this one" in. Color alone, not
-// weight: a heavier letter is a wider one, and the row would shift with every
-// key pressed.
+// so it is said in the color the desktop says "this one" in. Bold by stroke
+// rather than weight: a heavier letter is a wider one, and the row would shift
+// with every key pressed. The stroke is painted under each letter so only its
+// outer half shows, which thickens the letter without filling in its holes.
 const markStyles = css({
   backgroundColor: "transparent",
   color: "accent",
+  paintOrder: "stroke",
+  WebkitTextStroke: "{borderWidths.fauxBold} currentColor",
 });
 
 // The directory over the name, each a line of its own that gives way at its

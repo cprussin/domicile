@@ -239,19 +239,28 @@ describe("Launcher", () => {
     ]);
   });
 
-  it("lights the letters typed without widening them", async () => {
+  it("emboldens the letters typed without widening them", async () => {
     // A heavier weight is a wider letter, so a bold match would push the rest
-    // of its row along with every key pressed.
+    // of its row along with every key pressed. A stroke around each letter
+    // thickens it and leaves its width alone.
     using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
     await panel.rows();
-    const weightOf = (element: Element) =>
-      globalThis.getComputedStyle(element).fontWeight;
+    const lit = screen
+      .getAllByText("Notes", { selector: "mark" })
+      .map((element) => globalThis.getComputedStyle(element))
+      .map((style) => ({
+        // The stroke itself is not something happy-dom computes; the order
+        // it is painted in, under each letter, is.
+        paintOrder: style.getPropertyValue("paint-order"),
+        weight: style.fontWeight,
+      }));
 
-    expect(
-      screen.getAllByText("Notes", { selector: "mark" }).map(weightOf),
-    ).toStrictEqual(["normal", "normal"]);
+    expect(lit).toStrictEqual([
+      { paintOrder: "stroke", weight: "normal" },
+      { paintOrder: "stroke", weight: "normal" },
+    ]);
   });
 
   it("offers a URL above the file it names, and a search below both", async () => {
