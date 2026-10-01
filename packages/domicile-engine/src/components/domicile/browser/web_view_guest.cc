@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -31,11 +32,13 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/stop_find_action.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -577,6 +580,44 @@ void WebViewGuest::SetZoom(double factor) {
   ZoomTo(factor);
 }
 
+void WebViewGuest::Find(const std::string& text, bool forward) {
+  CHECK(guest_contents_);
+
+  const std::u16string search = base::UTF8ToUTF16(text);
+  // The element sends StopFinding for an empty string, as it throws for a
+  // SetZoom out of range, and content NOTREACHEDs on one.
+  if (search.empty()) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> asked to find nothing in its page.");
+    return;
+  }
+
+  // Chrome's find bar's rule: the text it is already searching for is a step
+  // to the next match, and anything else starts over.
+  const bool new_session = search != find_text_;
+  ++find_request_id_;
+  if (new_session) {
+    find_session_id_ = find_request_id_;
+    find_text_ = search;
+  }
+
+  auto options = blink::mojom::FindOptions::New();
+  options->forward = forward;
+  options->new_session = new_session;
+  // Not skipped: the delay is content's own mitigation for a search typed a
+  // letter at a time, which is exactly how a find bar sends one.
+  guest_contents_->Find(find_request_id_, find_text_, std::move(options),
+                        /*skip_delay=*/false);
+}
+
+void WebViewGuest::StopFinding(bool keep_selection) {
+  CHECK(guest_contents_);
+  guest_contents_->StopFinding(keep_selection
+                                   ? content::STOP_FIND_ACTION_KEEP_SELECTION
+                                   : content::STOP_FIND_ACTION_CLEAR_SELECTION);
+  EndFind();
+}
+
 void WebViewGuest::ListDirectory(const std::string& path,
                                  ListDirectoryCallback callback) {
   const std::optional<base::FilePath> directory =
@@ -900,6 +941,38 @@ void WebViewGuest::ReportZoom() {
   }
 }
 
+void WebViewGuest::FindReply(content::WebContents* web_contents,
+                             int request_id,
+                             int number_of_matches,
+                             const gfx::Rect& selection_rect,
+                             int active_match_ordinal,
+                             bool final_update) {
+  // A find stopped, or one replaced by a search for other text: what this
+  // counts is not what the element is showing.
+  if (find_text_.empty() || request_id < find_session_id_) {
+    return;
+  }
+  // -1 is content's "no change" in either field, so the last answer stands.
+  ReportFind(
+      number_of_matches == -1 ? reported_find_matches_ : number_of_matches,
+      active_match_ordinal == -1 ? reported_find_active_match_
+                                 : active_match_ordinal);
+}
+
+void WebViewGuest::ReportFind(int matches, int active_match) {
+  if (matches != reported_find_matches_ ||
+      active_match != reported_find_active_match_) {
+    reported_find_matches_ = matches;
+    reported_find_active_match_ = active_match;
+    client_->FindChanged(matches, active_match);
+  }
+}
+
+void WebViewGuest::EndFind() {
+  find_text_.clear();
+  ReportFind(0, 0);
+}
+
 bool WebViewGuest::IsWebContentsCreationOverridden(
     content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
@@ -1091,6 +1164,10 @@ void WebViewGuest::WebContentsDestroyed() {
   if (self_owned_) {
     delete this;
   }
+}
+
+void WebViewGuest::PrimaryPageChanged(content::Page& page) {
+  EndFind();
 }
 
 void BindWebViewGuestHost(

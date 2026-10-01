@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
@@ -30,6 +31,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
+#include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -191,6 +193,13 @@ class WebViewGuest : public mojom::WebViewGuest,
   void Stop() override;
   void Reload() override;
   void SetZoom(double factor) override;
+
+  // FIND IN PAGE, on the guest's own WebContents -- so it is the guest's
+  // FindRequestManager that runs it, every frame in the guest is searched, and
+  // the replies come back to this delegate's FindReply below rather than to
+  // the shell's.
+  void Find(const std::string& text, bool forward) override;
+  void StopFinding(bool keep_selection) override;
   void ListDirectory(const std::string& path,
                      ListDirectoryCallback callback) override;
 
@@ -371,8 +380,24 @@ class WebViewGuest : public mojom::WebViewGuest,
   // shell's document. See CloseRequested in the mojom.
   void CloseContents(content::WebContents* source) override;
 
+  // What a Find above found, in as many replies as the count takes to settle.
+  // A reply to a find that has since been stopped, or replaced by a search for
+  // other text, is dropped: it describes a search the element is no longer
+  // showing. Chrome's FindTabHelper drops the same ones.
+  void FindReply(content::WebContents* web_contents,
+                 int request_id,
+                 int number_of_matches,
+                 const gfx::Rect& selection_rect,
+                 int active_match_ordinal,
+                 bool final_update) override;
+
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
+
+  // A NEW PAGE ENDS A FIND, which is Chrome's rule: the matches counted were
+  // the old page's, and the same text typed again on the new one is a new
+  // search rather than a "find next" through matches that are not there.
+  void PrimaryPageChanged(content::Page& page) override;
 
   // WHERE A LOCK STOPS BEING A GUESS. This is the call Chrome's own
   // SecurityStateTabHelper is driven by: content fires it when the certificate,
@@ -445,6 +470,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // message per real change.
   void ReportZoom();
 
+  // Tell the element what the find has found, if that has changed. `0, 0` is
+  // no find at all, which is where a fresh guest starts.
+  void ReportFind(int matches, int active_match);
+
+  // Forget the find in progress, so that replies still on their way to it are
+  // dropped and the next Find is a new search, and tell the element.
+  void EndFind();
+
   // `answer`, held open: counted in `open_choosers_` until it runs. Static
   // over a weak pointer, because the answer must run whether or not the guest
   // is still here -- see FilesChosen.
@@ -509,6 +542,22 @@ class WebViewGuest : public mojom::WebViewGuest,
   // And the last zoom sent, as a factor. 100%, because that is where a fresh
   // guest is and what the element starts out holding.
   double reported_zoom_ = 1.0;
+
+  // The text the find in progress is searching for, empty while there is
+  // none. What decides whether a Find is the next match or a new search.
+  std::u16string find_text_;
+
+  // The id of the last find request sent, and of the one that began the
+  // search in progress: a reply older than that is about a search the element
+  // has moved on from. Ids count up from 1 for the guest's life, because
+  // content refuses a reply with an id lower than one it already reported.
+  int find_request_id_ = 0;
+  int find_session_id_ = 0;
+
+  // And the last count sent. Zero and zero, which is no find, for the reason
+  // the pair above starts false.
+  int reported_find_matches_ = 0;
+  int reported_find_active_match_ = 0;
 
   // HostZoomMap's word that a site's zoom changed, which is how a second
   // window on the same site moves this one. Dropped with the guest's
