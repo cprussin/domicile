@@ -13,8 +13,15 @@
 #
 # MAIN TAKES CHANGES ONLY THROUGH A PULL REQUEST, so this pushes a branch of
 # its own, off main's tip, with the one generated file on it, opens a pull
-# request and merges it. The branch is this job's alone: it is force-pushed,
-# and a pull request a previous run left open is the one merged.
+# request and turns on its auto-merge: merged at once it would be refused,
+# because its required checks have not run. The branch is this job's alone: it
+# is force-pushed, and a pull request a previous run left open is the one set
+# to merge.
+#
+# WITH THE REPOSITORY'S OWN TOKEN, NOT GITHUB_TOKEN. GITHUB_TOKEN may not open
+# a pull request here (a 403, run 36785579403), and one it did open would start
+# no checks, so it could never merge. DOMICILE_WRITEBACK_TOKEN pushes, opens and
+# sets it to merge; packages/domicile-engine/README.md says how it is made.
 #
 # NOT WHEN MAIN HAS MOVED ON. If another merge moved the fork while this built,
 # this engine is of a series main no longer is, and engine-pin.nix would pass
@@ -29,8 +36,9 @@ FILE=packages/domicile-engine/engine-official.nix
 CHECKED=packages/domicile-engine/engine-release.nix
 BRANCH="${DOMICILE_OFFICIAL_PIN_BRANCH:-engine-official-pin}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY names the repository to open the pull request in}"
-API="${DOMICILE_GITHUB_API:-https://api.github.com}/repos/$REPO"
-: "${GH_TOKEN:?GH_TOKEN is what opens and merges the pull request}"
+GITHUB_API="${DOMICILE_GITHUB_API:-https://api.github.com}"
+API="$GITHUB_API/repos/$REPO"
+: "${DOMICILE_WRITEBACK_TOKEN:?DOMICILE_WRITEBACK_TOKEN is what pushes, opens and merges the pull request}"
 
 identity_of() { sed -n 's/^ *identity = "\([0-9a-f]*\)";.*/\1/p' "$1" | head -1; }
 
@@ -73,19 +81,29 @@ it is of the series the checked pin names.
 EOF
 )"
 
-# The writeback token when there is one, as engine-release-repin.sh does.
-if [ -n "${DOMICILE_WRITEBACK_TOKEN:-}" ]; then
-  auth="$(printf 'x-access-token:%s' "$DOMICILE_WRITEBACK_TOKEN" | base64 | tr -d '\n')"
-  git -c http.https://github.com/.extraheader= \
-    -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-    push -q -f origin "$BRANCH"
-else
-  git push -q -f origin "$BRANCH"
-fi
+# The empty value clears the checkout's header before this one is added.
+auth="$(printf 'x-access-token:%s' "$DOMICILE_WRITEBACK_TOKEN" | base64 | tr -d '\n')"
+git -c http.https://github.com/.extraheader= \
+  -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+  push -q -f origin "$BRANCH"
 
+# The body on stdout; anything but a 2xx fails, saying what GitHub answered,
+# with 3 for a 422 (what opening a pull request already open answers) and 1
+# for the rest.
 api() {
-  curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
-    -H "Accept: application/vnd.github+json" "$@"
+  local reply code
+  reply="$(mktemp)"
+  code="$(curl -sS -o "$reply" -w '%{http_code}' \
+    -H "Authorization: Bearer $DOMICILE_WRITEBACK_TOKEN" \
+    -H "Accept: application/vnd.github+json" "$@")"
+  if [ "${code:0:1}" != 2 ]; then
+    echo "GitHub answered $code to $*: $(cat "$reply")" >&2
+    rm -f "$reply"
+    [ "$code" = 422 ] && return 3
+    return 1
+  fi
+  cat "$reply"
+  rm -f "$reply"
 }
 
 title="Point the flake at ${DOMICILE_ENGINE_TAG:-the official engine}"
@@ -94,13 +112,24 @@ request="$(jq -cn --arg title "$title" --arg head "$BRANCH" --arg body "$body" \
   '{title: $title, head: $head, base: "main", body: $body}')"
 
 # A pull request from this branch that a previous run left open is refused
-# with a 422; it is then the one to merge, found by its head.
-if created="$(api -X POST -d "$request" "$API/pulls")"; then
-  number="$(printf '%s' "$created" | jq -r '.number')"
+# with a 422; it is then the one to merge, found by its head. Any other refusal
+# is the job's failure.
+if pr="$(api -X POST -d "$request" "$API/pulls")"; then
+  :
 else
-  number="$(api "$API/pulls?head=${REPO%%/*}:$BRANCH&state=open" | jq -r '.[0].number // empty')"
-  [ -n "$number" ] || { echo "could not open a pull request from $BRANCH" >&2; exit 1; }
+  status=$?
+  [ "$status" = 3 ] || exit "$status"
+  pr="$(api "$API/pulls?head=${REPO%%/*}:$BRANCH&state=open" | jq -c '.[0] // empty')"
+  [ -n "$pr" ] || { echo "could not open a pull request from $BRANCH" >&2; exit 1; }
 fi
+number="$(printf '%s' "$pr" | jq -r '.number')"
 
-api -X PUT -d '{"merge_method": "squash"}' "$API/pulls/$number/merge" >/dev/null
-echo "merged #$number: $FILE now names ${DOMICILE_ENGINE_TAG:-the official engine}"
+# GraphQL answers 200 with its errors in the body.
+mutation='mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) { clientMutationId } }'
+merge="$(printf '%s' "$pr" | jq -c --arg query "$mutation" '{query: $query, variables: {id: .node_id}}')"
+answer="$(api -X POST -d "$merge" "$GITHUB_API/graphql")"
+if [ "$(printf '%s' "$answer" | jq '.errors // [] | length')" != 0 ]; then
+  echo "could not set #$number to merge: $answer" >&2
+  exit 1
+fi
+echo "#$number merges once its checks pass: $FILE will name ${DOMICILE_ENGINE_TAG:-the official engine}"
