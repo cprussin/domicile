@@ -1,0 +1,29 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# Where a page shown on several monitors is drawn at each one's own density.
+# Linked into //cc by patch 0069, which is also what makes GN load this file;
+# tested from //components/domicile:unit_tests.
+source_set("display_regions") {
+  sources = [
+    "display_regions.cc",
+    "display_regions.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "display_regions_unittest.cc" ]
+
+  deps = [
+    ":display_regions",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+  ]
+}
