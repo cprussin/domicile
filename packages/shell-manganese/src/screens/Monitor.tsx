@@ -1,54 +1,40 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Extension } from "@domicile/chrome-sdk/extension";
 import type { TrayItem } from "@domicile/chrome-sdk/tray";
-import type { Display } from "@domicile/component-library/display-source";
 import { Screen } from "@domicile/component-library/Screen";
-import { useMemo, useState } from "react";
 
-import { popupShown } from "../extensions/shown";
-import type { Modifiers } from "../keyboard/useModifiers";
-import { TOP_BAR, TopBar } from "../top-bar/TopBar";
+import { TopBar } from "../top-bar/TopBar";
 import type { TrayOrder } from "../tray/useTrayOrder";
-import { onScreen } from "../window-management/floating/float";
-import type { Geometry, Screenful } from "../window-management/placement";
-import { placementsOf } from "../window-management/placement";
-import type { Focus } from "../window-management/pointer-warp";
-import type { Rect } from "../window-management/rect";
-import { Stage } from "../window-management/Stage";
-import { usePointerWarp } from "../window-management/usePointerWarp";
 import type { Windows } from "../window-management/useWindows";
-import { siteOf } from "../window-management/window";
 import {
   currentOn,
   WindowAction,
-  workspaceOn,
   workspacesOn,
 } from "../window-management/window-state";
 
 /** What a monitor's bar knows of the desk's notifications. */
 export type MonitorNotifications = {
   unread: number;
-  open: boolean;
   onOpen: () => void;
 };
 
 type Props = {
   /** Run a command: a press on this monitor's chrome. */
   act: (action: WindowAction) => void;
-  /** Which monitor this is, and where it is on the desk. */
-  display: Display;
-  /** The desk it is one of — what a window filling every screen fills. */
-  desk: readonly Display[];
   domicile: DomicileClient;
   /** The extensions with an action, for the tray on this monitor's bar. */
   extensions: readonly Extension[];
-  /** What the user is holding down, which decides who gets the pointer. */
-  modifiers: Modifiers;
+  /** Which monitor this is. */
+  name: string;
   /**
    * The desk's notifications, as this monitor's bar has them: how many
    * arrived unseen, whether the drawer is open, and how to open it.
    */
   notifications: MonitorNotifications;
+  /** The extension whose popup is open under this bar's tray, if any. */
+  opened: string | undefined;
+  /** An extension's popup opened under this bar's tray, or closed. */
+  onOpenExtension: (id: string | undefined) => void;
   /** The system tray's icons, for this monitor's bar. */
   tray: readonly TrayItem[];
   /** The order of this monitor's tray, which is every monitor's. */
@@ -57,246 +43,40 @@ type Props = {
 };
 
 /**
- * One monitor of the desk: the bar across the top of it, and the windows of
- * the workspace it is showing.
+ * One monitor of the desk: the bar across the top of it.
  *
- * The page spans the desk and every monitor is a region of it, so a window is
- * drawn at its place on the page: a float dragged over the edge between two
- * monitors is one element, over both.
+ * The windows are not here. The page spans the desk, so the `Stage` draws
+ * every window once, at its place on the page, whichever monitor it is on.
  */
 export const Monitor = ({
   act,
-  desk,
-  display,
   domicile,
   extensions,
-  modifiers,
+  name,
   notifications,
+  onOpenExtension,
+  opened,
   tray,
   trayOrder,
   windows,
-}: Props) => {
-  const geometry = useMemo(() => geometryOf(display, desk), [desk, display]);
-  const screenful = useMemo(
-    () => placementsOf(windows, geometry),
-    [geometry, windows],
-  );
-  const current = currentOn(windows, display.name);
-  const workspace = workspaceOn(windows, display.name);
-
-  // And the pointer goes where the keyboard goes, because the pointer is what
-  // moves the keyboard here: focus follows the cursor, so a focus change the
-  // pointer did not make — a key, or a window opening — would be undone by the
-  // next pointer event. `pointer-warp.ts` has the whole of it.
-  //
-  // Per monitor, for the one the keyboard is on.
-  const focus = useMemo(
-    () =>
-      windows.focused === display.name
-        ? focusOn(screenful, windows.activeId, geometry.screen)
-        : undefined,
-    [
-      display.name,
-      geometry.screen,
-      screenful,
-      windows.activeId,
-      windows.focused,
-    ],
-  );
-  const open = useMemo(
-    () => windows.windows.map(({ id }) => id),
-    [windows.windows],
-  );
-  const { pointing } = usePointerWarp({
-    domicile,
-    focus,
-    pressed: windows.pressed,
-    windows: open,
-  });
-
-  // The extension whose popup is open under this bar's tray. This monitor's
-  // rather than the desk's: the panel hangs off one bar, and the windows it
-  // takes the keyboard from are the ones this monitor draws.
-  const [opened, setOpened] = useState<string | undefined>(undefined);
-  // And forgotten once the tray stops drawing it — its action disabled or its
-  // extension dropped — so an `action.enable()` later does not reopen a panel
-  // nobody clicked. Set during render, React's pattern for state that follows
-  // a prop, so no frame draws the stale answer.
-  const popupOpen = popupShown(extensions, opened);
-  if (opened !== undefined && !popupOpen) {
-    setOpened(undefined);
-  }
-
-  return (
-    <Screen name={display.name}>
-      <TopBar
-        current={current}
-        domicile={domicile}
-        extensions={extensions}
-        focused={windows.focused === display.name}
-        mode={windows.mode}
-        onOpenExtension={setOpened}
-        onOpenNotifications={notifications.onOpen}
-        onSelectWorkspace={(name) => {
-          act(WindowAction.WorkspaceSelected(name));
-        }}
-        openedExtension={opened}
-        tray={tray}
-        trayOrder={trayOrder}
-        unread={notifications.unread}
-        workspaces={workspacesOn(windows, display.name)}
-      />
-      <Stage
-        activeId={windows.activeId}
-        // A panel of the desktop's own is a thing to type into that no
-        // window knows about, so for as long as one is up the keyboard
-        // is the page's — see `AppWindow`. An extension's popup is one.
-        behindPanel={
-          windows.launcherOpen ||
-          windows.clipboardOpen ||
-          popupOpen ||
-          notifications.open
-        }
-        current={current}
-        domicile={domicile}
-        draggingId={windows.draggingId}
-        // In this page's pixels, which is where the screen is on it: a float
-        // is in its own screen's, and moves and resizes go back into them.
-        floats={workspace.floats.map((float) =>
-          onScreen(float, geometry.screen),
-        )}
-        focusedId={windows.focusedId}
-        fullscreenId={workspace.fullscreen?.id}
-        modifiers={modifiers}
-        onClose={(id) => {
-          act(WindowAction.WindowClosed(id));
-        }}
-        onDrop={() => {
-          act(WindowAction.WindowDropped());
-        }}
-        onDropOn={(id, target, edge) => {
-          act(WindowAction.WindowDroppedOn(id, target, edge));
-        }}
-        onFullscreen={(id) => {
-          act(WindowAction.WindowFullscreened(id));
-        }}
-        onGrab={(id) => {
-          act(WindowAction.WindowGrabbed(id));
-        }}
-        // Only where the pointer is what did the crossing. A window that
-        // arrives under a hand nobody moved says `pointerover` just as
-        // loudly, and answering that one hands the keyboard — and whatever
-        // `focus parent` had selected — to whichever window the layout
-        // happened to slide past. See `usePointerWarp`.
-        onHover={(id, at) => {
-          if (pointing(at)) {
-            act(WindowAction.WindowHovered(id));
-          }
-        }}
-        // In the page's pixels, which are the desk's: the drag outlives this
-        // monitor's element once the window has gone to another — see
-        // `floatDragged`.
-        onMove={(id, x, y) => {
-          act(WindowAction.WindowMoved(id, x, y));
-        }}
-        onOpenWindow={(url) => {
-          act(WindowAction.BrowserOpened(url));
-        }}
-        onRename={(id, url) => {
-          act(WindowAction.WindowRenamed(id, siteOf(url)));
-        }}
-        onResize={(id, box) => {
-          act(
-            WindowAction.WindowResized(id, {
-              ...box,
-              x: box.x - geometry.screen.x,
-              y: box.y - geometry.screen.y,
-            }),
-          );
-        }}
-        onSelect={(id) => {
-          act(WindowAction.WindowSelected(id));
-        }}
-        // With this monitor's own workspace box, which is what the tiling on
-        // it is laid out in and so what a dragged pixel is a share of.
-        onStretch={(id, edge, by) => {
-          act(WindowAction.WindowStretched(id, edge, by, geometry.workspace));
-        }}
-        popups={windows.popups}
-        screenful={screenful}
-        width={geometry.screen.width}
-        windows={windows.windows}
-      />
-    </Screen>
-  );
-};
-
-/**
- * The window the keyboard is in on this monitor and the box a pointer over it
- * would be in — or the whole screen, when there is no window to be in.
- *
- * The screen's middle is where sway puts the pointer on an output with nothing
- * on it, and a pointer left on the screen the keyboard came from would take it
- * straight back.
- *
- * Its contents rather than its whole frame, and that is the box the question
- * is about: what a `pointerover` moves the focus to is the `<app>` element —
- * see `Stage` — so the region the pointer has to be in to hold the focus is
- * the one the window draws in, not the bar above it. A window a tab is hiding
- * has only that bar, which is where the window is.
- */
-const focusOn = (
-  screenful: Screenful,
-  activeId: string | undefined,
-  screen: Rect,
-): Focus => {
-  const placement = screenful.placements.find(({ id }) => id === activeId);
-  if (activeId === undefined) {
-    return { box: screen, id: undefined };
-  } else if (placement === undefined) {
-    throw new Error(`shell: window ${activeId} is not laid out on its screen`);
-  } else {
-    return { box: placement.surface ?? placement.bar, id: placement.id };
-  }
-};
-
-/**
- * The rectangles this monitor has to offer.
- *
- * Three of them, because a window can be asked to fill any of the three: the
- * workspace is this screen with the bar taken off the top, `fullscreen` is the
- * whole of it, and `fullscreen global` is every screen there is.
- */
-const geometryOf = (display: Display, desk: readonly Display[]): Geometry => {
-  const screen = rectOf(display);
-  return {
-    desktop: boundingBox(desk),
-    name: display.name,
-    screen,
-    workspace: {
-      ...screen,
-      height: screen.height - TOP_BAR,
-      y: screen.y + TOP_BAR,
-    },
-  };
-};
-
-const rectOf = (display: Display): Rect => ({
-  height: display.size[1],
-  width: display.size[0],
-  x: display.position[0],
-  y: display.position[1],
-});
-
-/** Every screen at once, which is what `fullscreen global` fills. */
-const boundingBox = (desk: readonly Display[]): Rect => {
-  const rects = desk.map((display) => rectOf(display));
-  const x = Math.min(...rects.map((rect) => rect.x));
-  const y = Math.min(...rects.map((rect) => rect.y));
-  return {
-    height: Math.max(...rects.map((rect) => rect.y + rect.height)) - y,
-    width: Math.max(...rects.map((rect) => rect.x + rect.width)) - x,
-    x,
-    y,
-  };
-};
+}: Props) => (
+  <Screen name={name}>
+    <TopBar
+      current={currentOn(windows, name)}
+      domicile={domicile}
+      extensions={extensions}
+      focused={windows.focused === name}
+      mode={windows.mode}
+      onOpenExtension={onOpenExtension}
+      onOpenNotifications={notifications.onOpen}
+      onSelectWorkspace={(workspace) => {
+        act(WindowAction.WorkspaceSelected(workspace));
+      }}
+      openedExtension={opened}
+      tray={tray}
+      trayOrder={trayOrder}
+      unread={notifications.unread}
+      workspaces={workspacesOn(windows, name)}
+    />
+  </Screen>
+);

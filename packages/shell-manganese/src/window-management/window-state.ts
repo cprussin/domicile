@@ -1381,10 +1381,7 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
  * showing its workspace, and that screen's box is what converts.
  *
  * A middle over no screen at all — the gap an L of monitors leaves — keeps
- * the screen it has. A browser window never leaves its own: each screen draws
- * its own `<webview>`, and another screen's is a new guest — a site loaded
- * again from scratch is not a window moving. So its middle is kept on its
- * screen instead.
+ * the screen it has.
  *
  * A window on a workspace no screen is showing is not one a pointer can have
  * hold of, so a move that names one — a drag the keyboard switched the
@@ -1404,13 +1401,10 @@ const floatDragged = (
   } else {
     const here = boxOf(state, home);
     const moved = movedTo(floatHeld(workspace, id), x - here.x, y - here.y);
-    const onto = holdsBrowser(state, moved)
-      ? home
-      : (screenAt(state, middleOf(moved, here)) ?? home);
+    const onto = screenAt(state, middleOf(moved, here)) ?? home;
     if (onto === home) {
-      const kept = holdsBrowser(state, moved) ? keptOn(moved, here) : moved;
       return onWorkspace(state, workspace.name, (found) =>
-        floatMoved(found, id, kept.x, kept.y),
+        floatMoved(found, id, moved.x, moved.y),
       );
     } else {
       const there = boxOf(state, onto);
@@ -1448,13 +1442,6 @@ const floatHeld = (workspace: Workspace, id: string): Float => {
   }
 };
 
-/** Whether any window in the box is a browser window. */
-const holdsBrowser = (state: WindowState, float: Float): boolean =>
-  state.windows.some(
-    (window) =>
-      window.kind === WindowKind.Browser && floatHolds(float, window.id),
-  );
-
 /** The middle of a float on the screen at `box`, in the desk's pixels. */
 const middleOf = (float: Float, box: Rect): readonly [number, number] => [
   box.x + float.x + float.width / 2,
@@ -1477,17 +1464,6 @@ const screenAt = (
       y >= box.y &&
       y < box.y + box.height,
   )?.name;
-
-/** The float moved as little as it takes to keep its middle on `box`. */
-const keptOn = (float: Float, box: Rect): Float =>
-  movedTo(
-    float,
-    Math.min(Math.max(float.x, -float.width / 2), box.width - float.width / 2),
-    Math.min(
-      Math.max(float.y, -float.height / 2),
-      box.height - float.height / 2,
-    ),
-  );
 
 // `move container to workspace <name>`: the window goes and the user stays,
 // which is sway's default. It lands tiled there however it was laid out here.

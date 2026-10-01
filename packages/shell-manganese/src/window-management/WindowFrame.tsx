@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import type { Spot } from "./pointer-warp";
+import { slidAcross } from "./window-styles";
 
 type Props = {
   /** The window's parts: its contents and, while it is on screen, its bar. */
@@ -23,6 +24,11 @@ type Props = {
    * window, and a press is still what raises it.
    */
   onReach: () => void;
+  /**
+   * How wide the screen it is on is, which is how far a workspace switch
+   * slides it — or `undefined` while it is on none.
+   */
+  width: number | undefined;
 };
 
 /**
@@ -38,9 +44,10 @@ type Props = {
  *
  * **It draws nothing.** `display: contents` gives it no box, so each part is
  * placed, stacked and hit-tested exactly as it would be without it — this is
- * a node in the document for events to pass through, not a layer.
+ * a node in the document for events to pass through, not a layer. Its parts
+ * still inherit from it, which is how they know how far to slide.
  */
-export const WindowFrame = ({ children, onHover, onReach }: Props) => (
+export const WindowFrame = ({ children, onHover, onReach, width }: Props) => (
   <div
     className={frameStyles}
     onPointerDown={onReach}
@@ -49,6 +56,7 @@ export const WindowFrame = ({ children, onHover, onReach }: Props) => (
     onPointerOver={(event) => {
       onHover([event.clientX, event.clientY]);
     }}
+    style={width === undefined ? undefined : slidAcross(width)}
   >
     {children}
   </div>

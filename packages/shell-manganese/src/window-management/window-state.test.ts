@@ -983,9 +983,9 @@ describe("a floating window dragged across screens", () => {
     expect(state.focused).toBe("left");
   });
 
-  it("keeps a browser window's middle on its own screen", () => {
-    // Each screen draws its own `<webview>`, so another screen's is a new
-    // guest: the site loaded again from scratch. See
+  it("takes a browser window across like any other", () => {
+    // The desk draws each window once, so the `<webview>` that crosses is the
+    // one that was there: the page in it does not load again. See
     // docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
     const state = reduce(
       desktop(),
@@ -995,8 +995,12 @@ describe("a floating window dragged across screens", () => {
       WindowAction.WindowMoved("browser:1", 1700, 100),
     );
 
-    expect(workspaceOn(state, "left").floats[0]).toMatchObject({ x: 1600 });
-    expect(state.focused).toBe("left");
+    expect(windowsOn(workspaceOn(state, "left"))).toEqual([]);
+    expect(workspaceOn(state, "right").floats[0]).toMatchObject({
+      x: -220,
+      y: 100,
+    });
+    expect(state.focused).toBe("right");
   });
 });
 

@@ -1,10 +1,11 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
 import { createToastManager } from "@domicile/component-library/Toaster";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
+import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
 import { useModifiers } from "./keyboard/useModifiers";
 import { useShortcuts } from "./keyboard/useShortcuts";
@@ -19,11 +20,17 @@ import { useNotifications } from "./notifications/useNotifications";
 import { useNow } from "./notifications/useNow";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
+import type { StageScreen } from "./screens/stage-screens";
+import { stageScreensOf } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
+import type { Focus } from "./window-management/pointer-warp";
+import { Stage } from "./window-management/Stage";
+import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
+import { siteOf } from "./window-management/window";
 import { WindowAction } from "./window-management/window-state";
 
 type Props = {
@@ -35,7 +42,9 @@ type Props = {
  * workspace each one is showing under it, and the panels over all of it.
  *
  * **ONE PAGE FOR THE DESK.** The page spans every monitor, and renders a
- * {@link Monitor} for each, each in its own region of the page.
+ * {@link Monitor} for each, each in its own region of the page — and one
+ * {@link Stage} over all of them, which draws every window once at its place
+ * on the page.
  *
  * So the state above the monitors is the desk's and not a screen's: the
  * workspaces span every monitor the way sway's do, a workspace is shown on one
@@ -119,6 +128,44 @@ export const Desktop = ({ domicile }: Props) => {
   // told where it stands as the page connects.
   const lock = useLocked(domicile);
 
+  // The screens the desktop has taken up, and what each one shows.
+  const screens = useMemo(
+    () => stageScreensOf(windows, displays ?? []),
+    [displays, windows],
+  );
+
+  // And the pointer goes where the keyboard goes, because the pointer is what
+  // moves the keyboard here: focus follows the cursor, so a focus change the
+  // pointer did not make — a key, or a window opening — would be undone by the
+  // next pointer event. `pointer-warp.ts` has the whole of it.
+  const focus = useMemo(
+    () => focusOf(screens, windows.focused, windows.activeId),
+    [screens, windows.activeId, windows.focused],
+  );
+  const open = useMemo(
+    () => windows.windows.map(({ id }) => id),
+    [windows.windows],
+  );
+  const { pointing } = usePointerWarp({
+    domicile,
+    focus,
+    pressed: windows.pressed,
+    windows: open,
+  });
+
+  // The extension whose popup is open, and the bar whose tray it hangs off.
+  const [opened, setOpened] = useState<
+    { extension: string; screen: string } | undefined
+  >(undefined);
+  // And forgotten once the tray stops drawing it — its action disabled or its
+  // extension dropped — so an `action.enable()` later does not reopen a panel
+  // nobody clicked. Set during render, React's pattern for state that follows
+  // a prop, so no frame draws the stale answer.
+  const popupOpen = popupShown(extensions, opened?.extension);
+  if (opened !== undefined && !popupOpen) {
+    setOpened(undefined);
+  }
+
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
   // the outcome: the user pressed it to reach the chord, and a Shift the
@@ -165,29 +212,110 @@ export const Desktop = ({ domicile }: Props) => {
         screen with no workspace on it. One frame of a monitor that has just
         been plugged in, which is a monitor that was dark a moment ago anyway.
       */}
-      {(displays ?? [])
-        .filter(({ name }) =>
-          windows.screens.some((screen) => screen.name === name),
-        )
-        .map((display) => (
-          <Monitor
-            act={act}
-            desk={displays ?? []}
-            display={display}
-            domicile={domicile}
-            extensions={extensions}
-            key={display.name}
-            modifiers={modifiers}
-            notifications={{
-              onOpen: openNotifications,
-              open: notificationsOpen,
-              unread: notifications.unread,
-            }}
-            tray={tray}
-            trayOrder={trayOrder}
-            windows={windows}
-          />
-        ))}
+      {screens.map(({ geometry: { name } }) => (
+        <Monitor
+          act={act}
+          domicile={domicile}
+          extensions={extensions}
+          key={name}
+          name={name}
+          notifications={{
+            onOpen: openNotifications,
+            unread: notifications.unread,
+          }}
+          onOpenExtension={(extension) => {
+            setOpened((now) =>
+              extension === undefined
+                ? closedOn(now, name)
+                : { extension, screen: name },
+            );
+          }}
+          opened={opened?.screen === name ? opened.extension : undefined}
+          tray={tray}
+          trayOrder={trayOrder}
+          windows={windows}
+        />
+      ))}
+      {/*
+        Every window, once for the desk and after every monitor's bar, so a
+        window wins a tie with any bar it is drawn over — see `Stage`. Not on
+        a desk with no screen to draw one on.
+      */}
+      {screens.length > 0 && (
+        <Stage
+          activeId={windows.activeId}
+          // A panel of the desktop's own is a thing to type into that no
+          // window knows about, so for as long as one is up the keyboard
+          // is the page's — see `AppWindow`. An extension's popup is one.
+          behindPanel={
+            windows.launcherOpen ||
+            windows.clipboardOpen ||
+            popupOpen ||
+            notificationsOpen
+          }
+          domicile={domicile}
+          draggingId={windows.draggingId}
+          focusedId={windows.focusedId}
+          modifiers={modifiers}
+          onClose={(id) => {
+            act(WindowAction.WindowClosed(id));
+          }}
+          onDrop={() => {
+            act(WindowAction.WindowDropped());
+          }}
+          onDropOn={(id, target, edge) => {
+            act(WindowAction.WindowDroppedOn(id, target, edge));
+          }}
+          onFullscreen={(id) => {
+            act(WindowAction.WindowFullscreened(id));
+          }}
+          onGrab={(id) => {
+            act(WindowAction.WindowGrabbed(id));
+          }}
+          // Only where the pointer is what did the crossing. A window that
+          // arrives under a hand nobody moved says `pointerover` just as
+          // loudly, and answering that one hands the keyboard — and whatever
+          // `focus parent` had selected — to whichever window the layout
+          // happened to slide past. See `usePointerWarp`.
+          onHover={(id, at) => {
+            if (pointing(at)) {
+              act(WindowAction.WindowHovered(id));
+            }
+          }}
+          // In the page's pixels, which are the desk's: a drag can carry a
+          // float onto another screen — see `floatDragged`.
+          onMove={(id, x, y) => {
+            act(WindowAction.WindowMoved(id, x, y));
+          }}
+          onOpenWindow={(url) => {
+            act(WindowAction.BrowserOpened(url));
+          }}
+          onRename={(id, url) => {
+            act(WindowAction.WindowRenamed(id, siteOf(url)));
+          }}
+          // Back into the pixels of the screen the float is on.
+          onResize={(id, box, on) => {
+            act(
+              WindowAction.WindowResized(id, {
+                ...box,
+                x: box.x - on.screen.x,
+                y: box.y - on.screen.y,
+              }),
+            );
+          }}
+          onSelect={(id) => {
+            act(WindowAction.WindowSelected(id));
+          }}
+          // With the screen's own workspace box, which is what the tiling on
+          // it is laid out in and so what a dragged pixel is a share of.
+          onStretch={(id, edge, by, on) => {
+            act(WindowAction.WindowStretched(id, edge, by, on.workspace));
+          }}
+          popups={windows.popups}
+          screens={screens}
+          windows={windows.windows}
+        />
+      )}
       {/*
         Outside every screen, like the wallpaper.
       */}
@@ -273,3 +401,46 @@ export const Desktop = ({ domicile }: Props) => {
     </>
   );
 };
+
+/**
+ * The window the keyboard is in and the box a pointer over it would be in —
+ * or the whole of the screen it is on, when there is no window to be in.
+ *
+ * The screen's middle is where sway puts the pointer on an output with nothing
+ * on it, and a pointer left on the screen the keyboard came from would take it
+ * straight back.
+ *
+ * Its contents rather than its whole frame, and that is the box the question
+ * is about: what a `pointerover` moves the focus to is the `<app>` element —
+ * see `Stage` — so the region the pointer has to be in to hold the focus is
+ * the one the window draws in, not the bar above it. A window a tab is hiding
+ * has only that bar, which is where the window is.
+ *
+ * `undefined` while the keyboard is on no screen the desktop has taken up.
+ */
+const focusOf = (
+  screens: readonly StageScreen[],
+  focused: string,
+  activeId: string | undefined,
+): Focus | undefined => {
+  const screen = screens.find(({ geometry }) => geometry.name === focused);
+  const placement = screen?.screenful.placements.find(
+    ({ id }) => id === activeId,
+  );
+  if (screen === undefined) {
+    return undefined;
+  } else if (activeId === undefined) {
+    return { box: screen.geometry.screen, id: undefined };
+  } else if (placement === undefined) {
+    throw new Error(`shell: window ${activeId} is not laid out on its screen`);
+  } else {
+    return { box: placement.surface ?? placement.bar, id: placement.id };
+  }
+};
+
+/** The popup open, once the bar `screen` has closed its own. */
+const closedOn = (
+  opened: { extension: string; screen: string } | undefined,
+  screen: string,
+): { extension: string; screen: string } | undefined =>
+  opened?.screen === screen ? undefined : opened;

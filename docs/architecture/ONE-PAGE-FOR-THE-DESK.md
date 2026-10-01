@@ -114,10 +114,10 @@ compositor does.
   `floating_fix_coordinates`). A center in a gap stays put.
 - Until then it is drawn once, at its page position, over both screens: windows
   are `position: fixed` in page pixels, and nothing clips a `<Screen>`.
-- The drag's listeners are on `window`, so it survives its element moving to
-  the other monitor's `Stage`.
-- A browser window's center is kept on its screen: each `Stage` draws its own
-  `<webview>`, and another screen's is a new guest, so a reload.
+- Every window is drawn once for the desk: one `Stage` after every monitor's
+  bar, keyed by window id, so a float that changes screens keeps its element
+  and a browser window's `<webview>` does not reload. A workspace switch still
+  slides only its own screen, by that screen's width.
 
 ## Key decisions
 
@@ -158,8 +158,10 @@ Phase 2: native density.
 - [ ] Fall back to S under non-root render surfaces
 - [ ] `<app>` scale from the display under its center
 
-Phase 3: floats drawn once at desk level, so a browser window can cross
-screens without its `<webview>` reloading.
+Phase 3: floats drawn once at desk level.
+
+- [x] Floats drawn once at desk level
+- [x] Browser windows cross screens without reloading
 
 ## Open questions
 

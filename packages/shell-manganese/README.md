@@ -37,8 +37,10 @@ you get there — and so does `focus <direction>`: off the edge of a workspace,
 or out of a fullscreen window, it goes on to the screen that way, empty or not,
 before it wraps round.
 
-**One page spans the desk**, and `src/screens/Monitor.tsx` is rendered once
-per screen, each in its own `<Screen>` region. Two screens never show one
+**One page spans the desk**, and `src/screens/Monitor.tsx` — the bar — is
+rendered once per screen, each in its own `<Screen>` region. The windows are
+drawn once for the desk, by one `Stage` over every screen, so a window that
+changes screens is the element it was. Two screens never show one
 workspace, and that is load-bearing rather than tidy — a client's window is a
 frame sink and a frame sink has one parent, so a window laid out twice is a
 window whose second embedding takes the first's pixels away.
@@ -203,10 +205,9 @@ two edges a window dragged past could not be dragged back from.
 onto the workspace showing there, with the keyboard. A float is in its own
 screen's pixels and a drag is in the page's, which are the desk's, so
 `floatDragged` converts by the screen's box. Until its middle crosses, the
-float is drawn whole at its place on the page, over both screens.
-A browser window stays on its screen, its middle held inside it, because each
-screen draws its own `<webview>` and another screen's is a new guest and a
-reload. See
+float is drawn whole at its place on the page, over both screens. A browser
+window crosses like any other: every window is one element for the desk, so
+its `<webview>` is not loaded again. See
 [ONE-PAGE-FOR-THE-DESK.md](../../docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 **Its edges resize it with no modifier held.** A ring around a floating window
@@ -808,7 +809,8 @@ shell that wants its own pictures owns its own list.
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/screens/Monitor.tsx` | Everything one screen of the desk shows: its bar, its windows, and the rectangles they are laid out in. Rendered once per screen by every page; drawn by the page whose window covers it. |
+| `src/screens/Monitor.tsx` | One screen of the desk's bar, rendered once per screen. |
+| `src/screens/stage-screens.ts` | What the `Stage` draws on each screen: its rectangles, the workspace it shows, and where that workspace's windows go. |
 | `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
 | `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
 | `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
@@ -834,7 +836,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/tree/frames.ts` | The tree as rectangles: every visible window's frame, and the tabs of any container. |
 | `src/window-management/placement.ts` | What is on screen right now: the tiling, the floats over it or the one window filling everything, and the order they stack in. |
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
-| `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
+| `src/window-management/Stage.tsx` | The windows on every screen, once for the desk, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/WindowTitleBar.tsx` | A window's own bar, tiled or floating: one component for both, so floating a window keeps its bar's element and the bar eases with the window. Draggable while it floats. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |
