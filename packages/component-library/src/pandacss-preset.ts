@@ -380,6 +380,14 @@ export const domicilePreset = definePreset({
         },
       },
       tokens: {
+        borderWidths: {
+          // A stroke around each letter in its own color, painted under it
+          // (`paintOrder: "stroke"`) so only its outer half shows: that reads
+          // as semibold without a heavier weight's wider letters, for emphasis
+          // that must not move the text around it. In `em` so it thickens
+          // with the type.
+          fauxBold: { value: "0.05em" },
+        },
         durations: {
           // A dissolve between two pictures — far longer than any of the
           // default durations, which measure how long a control takes to
