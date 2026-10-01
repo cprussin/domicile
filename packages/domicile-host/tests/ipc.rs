@@ -10,7 +10,9 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
-use domicile_protocol::{ChromeMessage, HostMessage, Theme, TrayItem, PROTOCOL_VERSION};
+use domicile_protocol::{
+    ChromeMessage, HostMessage, Notification, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+};
 
 #[test]
 fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
@@ -300,6 +302,68 @@ fn a_host_nobody_gave_a_tray_says_nothing_about_one() {
     assert!(!out
         .iter()
         .any(|message| matches!(message, HostMessage::Tray { .. })));
+}
+
+#[test]
+fn the_notifications_ride_with_the_handshake() {
+    // Last, after the tray: a page that reloads keeps the desk's history,
+    // which is the compositor's and not the page's.
+    let mut session = Session::new();
+    let notification = Notification {
+        id: 7,
+        app_name: "Firefox".into(),
+        summary: "New message".into(),
+        body: String::new(),
+        icon: None,
+        urgency: Urgency::Normal,
+        actions: Vec::new(),
+        clickable: false,
+        timeout_ms: None,
+        time: 1,
+    };
+    session.host_mut().set_tray(vec![]);
+    let told = session
+        .host_mut()
+        .set_notifications(vec![notification.clone()]);
+    assert_eq!(
+        told,
+        Some(HostMessage::Notifications {
+            items: vec![notification.clone()]
+        })
+    );
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert_eq!(
+        out.last(),
+        Some(&HostMessage::Notifications {
+            items: vec![notification]
+        })
+    );
+}
+
+#[test]
+fn notifications_that_did_not_change_say_nothing() {
+    let mut session = Session::new();
+    session.host_mut().set_notifications(vec![]);
+
+    assert_eq!(session.host_mut().set_notifications(vec![]), None);
+}
+
+#[test]
+fn a_host_nobody_gave_notifications_says_nothing_about_them() {
+    // The tray's reason: the `domicile` daemon has no bus to hear them on.
+    let mut session = Session::new();
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(!out
+        .iter()
+        .any(|message| matches!(message, HostMessage::Notifications { .. })));
 }
 
 /// Standing in for the real thing, which is some 40 kilobytes of

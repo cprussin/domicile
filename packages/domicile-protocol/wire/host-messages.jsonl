@@ -34,3 +34,4 @@
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
 {"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo="},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing"}]}
+{"type":"notifications","items":[{"id":7,"app_name":"Firefox","summary":"New message","body":"Ada: lunch?","icon":"data:image/png;base64,iVBORw0KGgo=","urgency":"normal","actions":[{"key":"reply","label":"Reply"}],"clickable":true,"time":1790000000000},{"id":8,"app_name":"","summary":"Battery low","body":"","urgency":"critical","actions":[],"clickable":false,"timeout_ms":0,"time":1790000060000}]}
