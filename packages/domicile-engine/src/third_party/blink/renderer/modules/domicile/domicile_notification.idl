@@ -1,0 +1,49 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// One notification: an application's call to org.freedesktop.Notifications,
+// which the compositor serves -- a page's own Web Notification included,
+// because the browser shows one by calling that server.
+//
+// An interface rather than a dictionary for DomicileTrayItem's reason: these
+// are read off a DomicileNotificationsEvent's array.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileNotification {
+  // What DomicileHost.dismissNotifications() and invokeNotificationAction()
+  // name this notification by. One its application replaced keeps its id.
+  readonly attribute unsigned long id;
+
+  // Who sent it, as it named itself. May be empty.
+  readonly attribute DOMString appName;
+
+  // The one line that says what happened.
+  readonly attribute DOMString summary;
+
+  // More, as plain text: the compositor tells senders it takes no markup.
+  readonly attribute DOMString body;
+
+  // The picture, as a `data:` URL, or empty for nothing to draw. A URL rather
+  // than a path for DomicileTrayItem.icon's reason.
+  readonly attribute DOMString icon;
+
+  // "low", "normal" or "critical": the spec's urgency hint. A word rather than
+  // an enum because it is only ever read, and the SDK parses it.
+  readonly attribute DOMString urgency;
+
+  // Its buttons. A press on the notification itself is `clickable`.
+  readonly attribute FrozenArray<DomicileNotificationAction> actions;
+
+  // Whether it offers the "default" action: a press on the notification.
+  readonly attribute boolean clickable;
+
+  // How long it asked to stay up, in milliseconds: 0 for until it is
+  // dismissed, -1 for the shell's choice.
+  readonly attribute long timeoutMs;
+
+  // When it arrived or was last replaced, in milliseconds since the epoch on
+  // the compositor's clock.
+  readonly attribute double time;
+};

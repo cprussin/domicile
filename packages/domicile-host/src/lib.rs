@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Theme, TrayItem};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
 pub mod app_icons;
 pub mod battery;
@@ -30,6 +30,7 @@ pub mod home_watch;
 pub mod index_file;
 pub mod index_location;
 pub mod ipc;
+pub mod notifications;
 mod png;
 pub mod theme_turnover;
 pub mod tray;
@@ -142,6 +143,10 @@ pub struct Host {
     /// `domicile` daemon has no session bus behind it, and an empty tray from
     /// it would be a claim about a desk it knows nothing of.
     tray: Option<Vec<TrayItem>>,
+    /// The desk's notifications, as every chrome is told them — `tray`'s
+    /// shape, for its reasons: `None` until the compositor's notification
+    /// server has said, because the daemon has no bus to hear any on.
+    notifications: Option<Vec<Notification>>,
 }
 
 impl Host {
@@ -286,6 +291,26 @@ impl Host {
     /// that has never been given one.
     pub fn describe_tray(&self) -> Option<HostMessage> {
         self.tray.clone().map(|items| HostMessage::Tray { items })
+    }
+
+    /// Take up the desk's notifications, and hand back what to tell the
+    /// chromes — or `None` where nothing moved. [`Host::set_tray`]'s shape.
+    pub fn set_notifications(&mut self, items: Vec<Notification>) -> Option<HostMessage> {
+        (self.notifications.as_ref() != Some(&items)).then(|| {
+            let message = HostMessage::Notifications {
+                items: items.clone(),
+            };
+            self.notifications = Some(items);
+            message
+        })
+    }
+
+    /// The notifications, in the message a chrome is told them as, or `None`
+    /// from a host that has never been given any.
+    pub fn describe_notifications(&self) -> Option<HostMessage> {
+        self.notifications
+            .clone()
+            .map(|items| HostMessage::Notifications { items })
     }
 
     /// Register a newly-mapped Wayland toplevel. Returns its assigned id and the
@@ -578,6 +603,8 @@ impl Host {
             | ChromeMessage::SearchApps { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::ActivateTrayItem { .. }
+            | ChromeMessage::DismissNotifications { .. }
+            | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
