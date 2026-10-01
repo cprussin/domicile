@@ -14,8 +14,7 @@ import { rectOf, stretched } from "./float";
  * The callbacks are latched here with the box for one reason rather than two:
  * they are what this drag does, and a drag is what it was when it started.
  * Keeping them here is also what lets a drag go on with nothing rendered at
- * all — its element gone with the window to another monitor's `Stage` — so no part of
- * it depends on a render having happened.
+ * all, so no part of it depends on a render having happened.
  */
 type Drag = {
   /** The window's box when it was taken hold of, which the delta is from. */

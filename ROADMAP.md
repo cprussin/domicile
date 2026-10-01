@@ -172,27 +172,20 @@ The evidence for each of those is in the doc that made the claim —
    tray click grants `activeTab`.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
-5. **A floating browser window across monitors.** A float goes to the screen
-   its middle is dragged onto and is drawn over both while it crosses, but a
-   browser window stays on its screen: each monitor's `Stage` in manganese
-   draws its own `<webview>`, so another screen's is a reload. Left: one
-   element per window for the desk.
-   [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
-
-6. **The system tray's menus.** Icons, titles and clicks work: the compositor
+5. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
    extensions'. Left: `com.canonical.dbusmenu`, without which most
    libappindicator items do nothing on a secondary click.
    [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
-7. **Which monitor toasts a notification.** The compositor serves
+6. **Which monitor toasts a notification.** The compositor serves
    `org.freedesktop.Notifications` — a site's Web Notification included — and
    manganese toasts them and keeps a drawer. Left: on one page over the desk,
    the toasts go to the top-right of the whole desk rather than the focused
    screen; and inline reply.
    [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
 
-8. **Native density on every monitor.** On a tty the shell is one page over
+7. **Native density on every monitor.** On a tty the shell is one page over
    the desk's bounding box, hosted on the fastest monitor and presented on the
    rest, rastered at the largest scale: a lower-density monitor is shown it
    downsampled. Left: a cc tiling per display scale.

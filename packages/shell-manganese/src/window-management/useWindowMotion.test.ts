@@ -38,9 +38,18 @@ const desktop = (
   windows,
 });
 
+/** The one screen of most of these desks. */
+const SCREEN = "screen";
+
 const showing = (shown: Shown) =>
-  renderHook((next: Shown) => useWindowMotion(next), {
+  renderHook((next: Shown) => useWindowMotion({ [SCREEN]: next }), {
     initialProps: shown,
+  });
+
+/** A desk of more than one screen, each showing its own workspace. */
+const showingDesk = (desk: Readonly<Record<string, Shown>>) =>
+  renderHook((next: Readonly<Record<string, Shown>>) => useWindowMotion(next), {
+    initialProps: desk,
   });
 
 const motionOf = (
@@ -68,7 +77,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "opening");
+        result.current.onPlayedOut(EDITOR.id, "opening", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -115,7 +124,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "closing");
+        result.current.onPlayedOut(EDITOR.id, "closing", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
@@ -152,7 +161,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "closing-tab");
+        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
@@ -195,7 +204,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "restacking");
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -226,8 +235,8 @@ describe("useWindowMotion", () => {
         rerender(floating(EDITOR.id, TERMINAL.id));
       });
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "restacking");
-        result.current.onPlayedOut(TERMINAL.id, "restacking");
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN);
+        result.current.onPlayedOut(TERMINAL.id, "restacking", SCREEN);
       });
 
       act(() => {
@@ -236,8 +245,8 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
 
       act(() => {
-        result.current.onPlayedOut(TERMINAL.id, "restacking-again");
-        result.current.onPlayedOut(EDITOR.id, "restacking-again");
+        result.current.onPlayedOut(TERMINAL.id, "restacking-again", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "restacking-again", SCREEN);
       });
       act(() => {
         rerender(floating(EDITOR.id, TERMINAL.id));
@@ -277,8 +286,8 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "revealing");
-        result.current.onPlayedOut(TERMINAL.id, "concealing");
+        result.current.onPlayedOut(EDITOR.id, "revealing", SCREEN);
+        result.current.onPlayedOut(TERMINAL.id, "concealing", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -369,10 +378,59 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "arriving-from-end");
+        result.current.onPlayedOut(EDITOR.id, "arriving-from-end", SCREEN);
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+  });
+
+  // ONE LIST FOR THE DESK. Every window is drawn once, on the screen showing
+  // it, and a workspace switch is that screen's alone.
+  describe("on a desk of two screens", () => {
+    const WINDOWS = [TERMINAL, EDITOR];
+    const desk = (left: string) => ({
+      left: desktop(left, WINDOWS, left === "1" ? [TERMINAL] : []),
+      right: desktop("2", WINDOWS, [EDITOR]),
+    });
+
+    it("draws each window once, on the screen showing it", () => {
+      const { result } = showingDesk(desk("1"));
+
+      expect(
+        result.current.drawn.map(({ screen, window }) => [window.id, screen]),
+      ).toStrictEqual([
+        [TERMINAL.id, "left"],
+        [EDITOR.id, "right"],
+      ]);
+    });
+
+    it("slides only the screen whose workspace switched", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+
+      act(() => {
+        rerender(desk("3"));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("leaving-to-start");
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+
+    it("ends a switch on the screen whose window says it has finished", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+      act(() => {
+        rerender(desk("3"));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(TERMINAL.id, "leaving-to-start", "right");
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("leaving-to-start");
+
+      act(() => {
+        result.current.onPlayedOut(TERMINAL.id, "leaving-to-start", "left");
+      });
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
     });
   });

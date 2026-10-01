@@ -40,9 +40,8 @@ type Options = {
    * a focus the pointer itself moved is one the warp must leave alone, or the
    * desktop chases its own cursor.
    *
-   * The desk's rather than this monitor's because the desk is one keyboard
-   * and several monitors: what answers a press is the monitor the focus
-   * landed on.
+   * The desk's, because the desk is one keyboard and several monitors: what
+   * answers a press is the monitor the focus landed on.
    */
   pressed: WindowState["pressed"];
   /**
@@ -167,8 +166,8 @@ export const usePointerWarp = ({
   const sent = useRef<readonly Spot[]>([]);
   const held = useRef<Focus | undefined>(undefined);
   const open = useRef<readonly string[]>([]);
-  // The presses this monitor has answered, from the count it came up to: a
-  // monitor plugged in mid-session has no press to answer.
+  // The presses this has answered, from the count it came up to: a desktop
+  // drawn mid-session has no press to answer.
   const answered = useRef(pressed);
 
   // Something turned up at `to`: the cursor, or a window at the cursor. Which

@@ -590,19 +590,20 @@ beforeEach(() => {
 
 describe("Shell", () => {
   describe("across the displays", () => {
-    it("gives every display a bar and windows of its own", () => {
+    it("gives every display a bar, and every window one element on the desk", () => {
       // A DESK OF SEVERAL MONITORS IS A DESKTOP ON EACH OF THEM, which is what
-      // a second monitor is for. Where the engine scans out each of these
-      // regions is a page of its own covering one monitor, and this is that
-      // same tree with both of them in one window.
+      // a second monitor is for: each has its own bar. The windows are drawn
+      // once for the desk, so one that moves screens is the element it was.
       const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("term");
 
-      expect(
-        screenNamed(container, "left")?.querySelector("main"),
-      ).toBeInTheDocument();
-      expect(
-        screenNamed(container, "right")?.querySelector("main"),
-      ).toBeInTheDocument();
+      for (const name of ["left", "right"]) {
+        expect(
+          screenNamed(container, name)?.querySelector("[aria-current]"),
+        ).toBeInTheDocument();
+      }
+      expect(container.querySelectorAll("main")).toHaveLength(1);
+      expect(container.querySelectorAll(APP_TAG_NAME)).toHaveLength(1);
     });
 
     it("shows a different workspace on each of them", () => {
@@ -653,15 +654,13 @@ describe("Shell", () => {
 
       domicile.describes([LEFT]);
 
-      expect(
-        screenNamed(container, "left")?.querySelector(APP_TAG_NAME),
-      ).toBeInTheDocument();
+      expect(appElement(container, "term")).not.toHaveAttribute("hidden");
     });
 
     it("follows the desktop when it changes", () => {
       const { container } = renderShell([LEFT, RIGHT]);
 
-      const stage = screenNamed(container, "right")?.querySelector("main");
+      const stage = container.querySelector("main");
       domicile.describes([RIGHT]);
 
       expect(screenNamed(container, "left")).toBeNull();
@@ -669,9 +668,7 @@ describe("Shell", () => {
       // rebuilt on a re-description reloads every embedded page to where it
       // started and re-creates every portal blank, with nothing on screen to
       // show for it. A monitor going is the commonest re-description there is.
-      expect(screenNamed(container, "right")?.querySelector("main")).toBe(
-        stage ?? null,
-      );
+      expect(container.querySelector("main")).toBe(stage);
     });
   });
 
@@ -1297,13 +1294,18 @@ describe("Shell", () => {
     // A WORKSPACE IS A SCREENFUL, SO IT SLIDES ONE. The two are side by side
     // in the row, so the one arriving starts a whole screen over and the one
     // leaving ends a whole screen over — the keyframes read the width off the
-    // stage.
+    // window, which is its own screen's.
     it("slides a workspace the width of its screen", () => {
-      renderShell();
+      const { container } = renderShell([LEFT, RIGHT]);
+
+      pointerAt(2000, 500);
+      clientAppears("term");
 
       expect(
-        screen.getByRole("main").style.getPropertyValue("--workspace-width"),
-      ).toBe("1920px");
+        appElement(container, "term").parentElement?.style.getPropertyValue(
+          "--workspace-width",
+        ),
+      ).toBe("1280px");
     });
 
     it("and the other way when the switch goes the other way", () => {
@@ -2008,14 +2010,34 @@ describe("Shell", () => {
       });
       fireEvent.pointerUp(window, { clientX: 110 + LEFT.width, clientY: 100 });
 
-      const right = screenNamed(container, "right");
-      if (right instanceof HTMLElement) {
-        expect(
-          Number.parseFloat(barFor(right, "app:term").style.insetInlineStart),
-        ).toBe(was + LEFT.width + 10);
-      } else {
-        throw new Error("test: no right screen");
-      }
+      expect(
+        Number.parseFloat(barFor(container, "app:term").style.insetInlineStart),
+      ).toBe(was + LEFT.width + 10);
+    });
+
+    it("drags a browser window onto the next screen without loading its page again", async () => {
+      // One `<webview>` for the window wherever it is: another would be a new
+      // guest, and the page in it loaded from scratch.
+      const { container } = renderShell([LEFT, RIGHT]);
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+      press("Tab", true);
+      const view = container.querySelector("webview");
+
+      fireEvent.pointerDown(barFor(container, "browser:1"), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: 100 + LEFT.width,
+        clientY: 100,
+      });
+      fireEvent.pointerUp(window, { clientX: 100 + LEFT.width, clientY: 100 });
+
+      expect(container.querySelectorAll("webview")).toHaveLength(1);
+      expect(container.querySelector("webview")).toBe(view);
     });
 
     it("draws a float over the edge between two screens once, whole", () => {
@@ -2358,13 +2380,12 @@ describe("Shell", () => {
       pointerAt(2000, 500);
       clientAppears("term");
 
-      // Drawn there rather than only kept there: every screen holds every
-      // window, and hides the ones its workspace does not have.
+      // Drawn there rather than only kept there.
+      const term = appElement(container, "term");
+      expect(term).not.toHaveAttribute("hidden");
       expect(
-        screenNamed(container, "right")?.querySelector(
-          `${APP_TAG_NAME}:not([hidden])`,
-        ),
-      ).toBeInTheDocument();
+        Number.parseFloat(term.style.insetInlineStart),
+      ).toBeGreaterThanOrEqual(RIGHT.x);
     });
 
     it("follows the seat when the compositor moves the keyboard itself", () => {
