@@ -1,11 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
-Date: Wed, 30 Sep 2026 00:00:00 +0000
+Date: Thu, 1 Oct 2026 00:00:00 +0000
 Subject: [PATCH] domicile: one page for the desk, shown on every monitor
 
-With --domicile-one-page the shell is one page over the desk's bounding
-box, hosted by one CRTC's window and shown on the rest
-(docs/architecture/ONE-PAGE-FOR-THE-DESK.md, phase 1):
+On a tty the shell is one page over the desk's bounding box, hosted by
+one CRTC's window and shown on the rest
+(docs/architecture/ONE-PAGE-FOR-THE-DESK.md):
 
 - RenderWidgetHostViewBase: a page tagged with the desk's ScreenInfos is
   told those, not its window's display (content/public/browser/
@@ -13,20 +13,24 @@ box, hosted by one CRTC's window and shown on the rest
 - BrowserViewAppLayoutImpl: a window tagged with the page's desk bounds
   lays its contents out there, bigger than the window and offset.
 - OzonePlatform::SetDomicileDeskHost: every pointer, scroll and key goes
-  to the host window, at its desk position (PointerInWindow), and the
-  host sets the cursor on every monitor.
+  to the host window, and the host sets the cursor on every monitor.
+- The host hears the pointer where the desk has it, whichever monitor it
+  is on (`PointerInWindow`): upstream's place on the engine's CRTC row is
+  somewhere else entirely on a desk of turned monitors at other densities.
+- A warp to anywhere on the desk lands on the monitor that holds it
+  (`PointerCrossingFor`), rather than clamped into the host's window.
 ---
- .../frame/layout/browser_view_app_layout_impl.cc     |  8 ++++++++
- content/browser/BUILD.gn                             |  2 ++
- .../renderer_host/render_widget_host_view_base.cc    |  9 +++++++++
- content/public/browser/BUILD.gn                      |  1 +
- ui/ozone/platform/drm/host/drm_cursor.cc             | 12 +++++++++++-
- ui/ozone/platform/drm/host/drm_cursor.h              |  7 +++++++
- ui/ozone/platform/drm/host/drm_window_host.cc        | 11 ++++++++++-
- ui/ozone/platform/drm/host/drm_window_host_manager.h |  6 ++++++
- ui/ozone/platform/drm/ozone_platform_drm.cc          |  9 +++++++++
- ui/ozone/public/ozone_platform.h                     |  5 +++++
- 10 files changed, 68 insertions(+), 2 deletions(-)
+ .../layout/browser_view_app_layout_impl.cc    |  8 +++++
+ content/browser/BUILD.gn                      |  2 ++
+ .../render_widget_host_view_base.cc           |  9 ++++++
+ content/public/browser/BUILD.gn               |  1 +
+ ui/ozone/platform/drm/host/drm_cursor.cc      | 29 ++++++++++++++++++-
+ ui/ozone/platform/drm/host/drm_cursor.h       | 13 +++++++++
+ ui/ozone/platform/drm/host/drm_window_host.cc | 22 ++++++++++++--
+ .../drm/host/drm_window_host_manager.h        |  6 ++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc   |  9 ++++++
+ ui/ozone/public/ozone_platform.h              |  5 ++++
+ 10 files changed, 101 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 index a6efac4..9eb0014 100644
@@ -107,7 +111,7 @@ index 790d665..d63c848 100644
      "download_manager.cc",
      "download_manager.h",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 8a6ea18..8db3f29 100644
+index fc56bbf..4c0829f 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -90,8 +90,12 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
@@ -124,10 +128,16 @@ index 8a6ea18..8db3f29 100644
  
    cursor_ = platform_cursor;
  
-@@ -188,6 +192,12 @@ gfx::PointF DrmCursor::ToWindow(gfx::AcceleratedWidget window,
-   return PointerInWindow(screens_, layout_, screen_location, window);
+@@ -182,11 +186,34 @@ void DrmCursor::SetDomicileDisplayLayout(
+   layout_ = layout;
  }
  
++gfx::PointF DrmCursor::ToWindow(gfx::AcceleratedWidget window,
++                                const gfx::PointF& screen_location) {
++  base::AutoLock lock(lock_);
++  return PointerInWindow(screens_, layout_, screen_location, window);
++}
++
 +void DrmCursor::SetDomicileDeskHost(gfx::AcceleratedWidget host) {
 +  DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
 +  base::AutoLock lock(lock_);
@@ -137,14 +147,36 @@ index 8a6ea18..8db3f29 100644
  void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
                               const gfx::PointF& location) {
    TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+   DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
+   base::AutoLock lock(lock_);
++  // DOMICILE: A WARP GOES WHERE THE DESK PUTS IT. The page a desk is asks for
++  // the pointer in its host window's pixels, and anywhere on the desk is
++  // somewhere past that window's edge: on the monitor that holds it, as a hand
++  // moving there would be. Clamped into the host's own window, a warp to
++  // another monitor pulled the pointer back onto the host's, and a shell that
++  // warps on a focus change chased it there over and over.
++  if (const std::optional<PointerCrossing> crossing =
++          PointerCrossingFor(screens_, layout_, window, location)) {
++    CrossLocked(*crossing);
++    return;
++  }
+   gfx::AcceleratedWidget old_window = window_;
+ 
+   if (window != old_window) {
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index 7678435..b3f0485 100644
+index 742a6c4..b3f0485 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
-@@ -94,6 +94,11 @@ class DrmCursor : public CursorDelegateEvdev {
-   gfx::PointF ToWindow(gfx::AcceleratedWidget window,
-                        const gfx::PointF& screen_location);
+@@ -88,6 +88,17 @@ class DrmCursor : public CursorDelegateEvdev {
+   void SetDomicileDisplayLayout(
+       const std::vector<DomicileDisplayLayout>& layout);
  
++  // DOMICILE: where `screen_location`, on the engine's desktop, is in
++  // `window`'s panel pixels -- for a window holding the pointer after it
++  // crossed onto another monitor. See `PointerInWindow`.
++  gfx::PointF ToWindow(gfx::AcceleratedWidget window,
++                       const gfx::PointF& screen_location);
++
 +  // DOMICILE: the window every pointer event goes to, whose cursor is drawn
 +  // on whichever monitor the pointer is on. See
 +  // `OzonePlatform::SetDomicileDeskHost`.
@@ -153,7 +185,7 @@ index 7678435..b3f0485 100644
    // CursorDelegateEvdev:
    void MoveCursorTo(gfx::AcceleratedWidget window,
                      const gfx::PointF& location) override;
-@@ -156,6 +161,8 @@ class DrmCursor : public CursorDelegateEvdev {
+@@ -150,6 +161,8 @@ class DrmCursor : public CursorDelegateEvdev {
    // thread and the window manager is the UI thread's.
    std::vector<PointerScreen> screens_ GUARDED_BY(lock_);
    std::vector<DomicileDisplayLayout> layout_ GUARDED_BY(lock_);
@@ -163,7 +195,7 @@ index 7678435..b3f0485 100644
    const raw_ptr<DrmWindowHostManager> window_manager_
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 1d4135d..3237488 100644
+index 1d1808c..1609a51 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -377,6 +377,15 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -179,25 +211,36 @@ index 1d4135d..3237488 100644
 +    return desk == widget_;
 +  }
 +
-   // DOMICILE: and a held button keeps the pointer in the window it was
-   // pressed in, the implicit grab X and Wayland give. See
-   // `PointerHolderAfter`.
-@@ -504,7 +513,7 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
-     // entirely: the drag went sideways, or nowhere. On the window the pointer
-     // is on it is the upstream arithmetic. See `PointerInWindow`.
-     const gfx::PointF location =
--        event->IsMouseEvent()
+   if (event->IsTouchEvent()) {
+     // Dispatch the event if it is from the touchscreen associated with the
+     // DrmWindowHost. We cannot check the event's location because if the
+@@ -485,8 +494,17 @@ uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
+         window_manager_->MouseOnWindow(window_on_mouse);
+     }
+ 
+-    gfx::PointF location = located_event->location_f();
+-    location -= gfx::Vector2dF(bounds_.OffsetFromOrigin());
++    // DOMICILE: THE DESK'S HOST HEARS THE POINTER WHERE THE DESK HAS IT,
++    // whichever monitor it is on. Upstream tells a window the pointer's place
++    // on the engine's row less its own corner -- panel pixels, every CRTC at
++    // y = 0 -- which on a desk of turned monitors at other densities is
++    // somewhere else entirely. On the host's own monitor it is the upstream
++    // arithmetic. See `PointerInWindow`.
++    const gfx::PointF location =
 +        event->IsMouseEvent() || event->IsScrollEvent()
-             ? cursor_->ToWindow(widget_, located_event->location_f())
-             : located_event->location_f() -
-                   gfx::Vector2dF(bounds_.OffsetFromOrigin());
++            ? cursor_->ToWindow(widget_, located_event->location_f())
++            : located_event->location_f() -
++                  gfx::Vector2dF(bounds_.OffsetFromOrigin());
+     located_event->set_location_f(location);
+     located_event->set_root_location_f(location);
+   }
 diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
-index e4924af..a711127 100644
+index 32c035b..b04e2bf 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
-@@ -82,6 +82,11 @@ class DrmWindowHostManager {
-     pointer_holder_ = widget;
-   }
+@@ -75,6 +75,11 @@ class DrmWindowHostManager {
+   // Gets the current widget recipient of mouse events.
+   gfx::AcceleratedWidget event_grabber() const { return event_grabber_; }
  
 +  // DOMICILE: the window every pointer and key event goes to, or null. See
 +  // `OzonePlatform::SetDomicileDeskHost`.
@@ -207,10 +250,10 @@ index e4924af..a711127 100644
   private:
    typedef std::map<gfx::AcceleratedWidget, DrmWindowHost*> WidgetToWindowMap;
  
-@@ -91,6 +96,7 @@ class DrmWindowHostManager {
+@@ -83,6 +88,7 @@ class DrmWindowHostManager {
+   raw_ptr<DrmWindowHost> window_mouse_currently_on_ = nullptr;
  
    gfx::AcceleratedWidget event_grabber_ = gfx::kNullAcceleratedWidget;
-   gfx::AcceleratedWidget pointer_holder_ = gfx::kNullAcceleratedWidget;
 +  gfx::AcceleratedWidget desk_host_ = gfx::kNullAcceleratedWidget;
  };
  

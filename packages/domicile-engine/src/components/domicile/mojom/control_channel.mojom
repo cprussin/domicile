@@ -150,11 +150,6 @@ struct DisplayInfo {
   uint32 mode_width;
   uint32 mode_height;
   DisplayTransform transform;
-  // This display is the whole page. The browser turns and scales its window,
-  // so the page is the logical box above, upright; the mode and transform say
-  // how it was drawn. False for every desktop the page's window is the whole
-  // of.
-  bool fills_the_window;
 };
 
 // One thing that was copied, as a row of the clipboard's history.
