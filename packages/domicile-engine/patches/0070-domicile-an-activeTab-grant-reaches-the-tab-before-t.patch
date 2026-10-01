@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 1 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an activeTab grant reaches the tab before the click
+ does
+
+ActiveTabPermissionGranter told the tab's renderer about a grant only in
+NotifyGranted, after a round trip to the network service for the
+extension's CORS allowlist. The tray grants and then dispatches
+action.onClicked at once, as ExtensionActionRunner::RunAction does, so a
+listener's scripting.executeScript could reach the tab ahead of the grant
+and be refused: "Cannot access contents of the page".
+guard-webview-active-tab.sh failed that way 7 ms after the click.
+
+GrantIfRequested now sends the tab's process its new permissions itself,
+before returning. The tab needs no allowlist, and the message goes over
+the channel any later ExecuteCode does, so it arrives first.
+NotifyGranted is unchanged and sends it again.
+---
+ .../permissions/active_tab_permission_granter.cc | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/extensions/browser/permissions/active_tab_permission_granter.cc b/extensions/browser/permissions/active_tab_permission_granter.cc
+index 37bd0fc..80df21b 100644
+--- a/extensions/browser/permissions/active_tab_permission_granter.cc
++++ b/extensions/browser/permissions/active_tab_permission_granter.cc
+@@ -188,6 +188,22 @@ void ActiveTabPermissionGranter::GrantIfRequested(const Extension* extension) {
+                                   new_hosts.Clone(), new_hosts.Clone());
+     permissions_data->UpdateTabSpecificPermissions(tab_id_, new_permissions);
+ 
++    // Domicile's engine fork: the tab's own renderer is told now, not after
++    // the network service has the new CORS allowlist. NotifyGranted waits for
++    // that round trip, and a caller that dispatches action.onClicked straight
++    // after granting -- ExtensionActionRunner::RunAction, and Domicile's tray
++    // -- has the listener's scripting.executeScript reach the tab first and be
++    // refused. The tab's process needs no allowlist, and this goes over the
++    // same channel as any ExecuteCode sent after it, so it arrives first.
++    // NotifyGranted still sends it again, with the extension processes'.
++    content::RenderProcessHost* tab_process =
++        web_contents()->GetPrimaryMainFrame()->GetProcess();
++    ScriptInjectionTracker::WillGrantActiveTab(
++        base::PassKey<ActiveTabPermissionGranter>(), *extension, *tab_process);
++    UpdateTabSpecificPermissions(extension->id(), new_hosts, tab_id_,
++                                 /*update_origin_allowlist=*/false,
++                                 tab_process);
++
+     SetCorsOriginAccessList(
+         browser_context, *extension,
+         base::BindOnce(&ActiveTabPermissionGranter::NotifyGranted,
+-- 
+2.43.0
+
