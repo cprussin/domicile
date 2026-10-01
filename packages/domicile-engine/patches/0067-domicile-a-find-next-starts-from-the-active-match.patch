@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 1 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a find next starts from the active match
+
+A find next is sent to the focused frame, and failing that to the first
+frame with matches in the direction asked. A shell's find box is in the
+shell's document, outside every frame of the guest being searched, so
+`CheckFrame` refuses the focused frame and every find next fell back to
+`GetInitialFrame`: forward happened to work, from the main frame, and
+backward started over from the LAST frame -- a page whose last match is
+in a cross-site <iframe> stepped from match 2 of 3 to 3 of 3 on "find
+previous". guard-webview-find.sh read exactly that.
+
+The frame holding the active match is where a find next means to start
+from, so it is tried after the focused frame and before the first. A
+browser whose find bar leaves the page's frame focused -- Chrome's --
+never reaches it, so nothing there changes.
+
+No other patch in the series touches this file, so its pre-image is the
+pin's.
+---
+ content/browser/find_request_manager.cc | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/content/browser/find_request_manager.cc b/content/browser/find_request_manager.cc
+index 9fbcd51..2c9abf7 100644
+--- a/content/browser/find_request_manager.cc
++++ b/content/browser/find_request_manager.cc
+@@ -685,11 +685,17 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
+     DCHECK_EQ(request.search_text, current_request_.search_text);
+ 
+     // The find next request will be directed at the focused frame if there is
+-    // one, or the first frame with matches otherwise.
++    // one, then at the frame holding the active match, or the first frame with
++    // matches otherwise. The active match's frame matters when focus is
++    // outside every frame searched -- an embedder's find box over a guest --
++    // where starting from the first frame would step backward from the last
++    // frame rather than from the active match.
+     auto* focused_web_contents = contents_->GetFocusedWebContents();
+     RenderFrameHost* target_rfh = focused_web_contents
+                                       ? focused_web_contents->GetFocusedFrame()
+                                       : nullptr;
++    if (!target_rfh || !CheckFrame(target_rfh))
++      target_rfh = active_frame_.get();
+     if (!target_rfh || !CheckFrame(target_rfh))
+       target_rfh = GetInitialFrame(request.options->forward);
+ 
+-- 
+2.43.0
+
