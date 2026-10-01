@@ -10,6 +10,6 @@ describe("entryKindOf", () => {
     expect(entryKindOf("song.flac")).toBe(EntryKind.Audio);
     expect(entryKindOf("paper.pdf")).toBe(EntryKind.Pdf);
     expect(entryKindOf("main.rs")).toBe(EntryKind.Code);
-    expect(entryKindOf("today.org")).toBe(EntryKind.Other);
+    expect(entryKindOf("todo.txt")).toBe(EntryKind.Other);
   });
 });

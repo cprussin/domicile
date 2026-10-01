@@ -6,10 +6,10 @@ describe("languageOf", () => {
   it("reads a language from an extension, or from a name with none", () => {
     expect(languageOf("src/main.TS")).toBe("ts");
     expect(languageOf("Makefile")).toBe("makefile");
+    expect(languageOf("Notes/today.org")).toBe("org");
   });
 
   it("is nothing for a file no grammar is for, or for plain text", () => {
-    expect(languageOf("Notes/today.org")).toBeUndefined();
     expect(languageOf("todo.txt")).toBeUndefined();
     expect(languageOf(".bashrc")).toBeUndefined();
   });
@@ -38,6 +38,59 @@ describe("highlight", () => {
         { scope: "subst", text: "${b}" },
         { scope: "string", text: "`" },
       ],
+    ]);
+  });
+
+  it("lights an org file's outline, markup and metadata", () => {
+    expect(
+      highlight(
+        "org",
+        [
+          "#+title: Today",
+          "* TODO Write *it* :work:",
+          "  SCHEDULED: <2026-10-01 Thu>",
+          "  - [X] see [[https://a.b][a]] or =c=",
+          "  :ID: /a/ ~b~ +c+",
+          "# not run",
+        ].join("\n"),
+      ),
+    ).toStrictEqual([
+      [
+        { scope: "meta", text: "#+title:" },
+        { scope: undefined, text: " Today" },
+      ],
+      [
+        { scope: "section", text: "* " },
+        { scope: "keyword", text: "TODO" },
+        { scope: "section", text: " Write " },
+        { scope: "strong", text: "*it*" },
+        { scope: "section", text: " " },
+        { scope: "symbol", text: ":work:" },
+      ],
+      [
+        { scope: undefined, text: "  " },
+        { scope: "keyword", text: "SCHEDULED:" },
+        { scope: undefined, text: " " },
+        { scope: "number", text: "<2026-10-01 Thu>" },
+      ],
+      [
+        { scope: "bullet", text: "  - " },
+        { scope: "literal", text: "[X]" },
+        { scope: undefined, text: " see " },
+        { scope: "link", text: "[[https://a.b][a]]" },
+        { scope: undefined, text: " or " },
+        { scope: "string", text: "=c=" },
+      ],
+      [
+        { scope: "attr", text: "  :ID:" },
+        { scope: undefined, text: " " },
+        { scope: "emphasis", text: "/a/" },
+        { scope: undefined, text: " " },
+        { scope: "string", text: "~b~" },
+        { scope: undefined, text: " " },
+        { scope: "deletion", text: "+c+" },
+      ],
+      [{ scope: "comment", text: "# not run" }],
     ]);
   });
 
