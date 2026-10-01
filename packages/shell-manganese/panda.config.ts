@@ -29,6 +29,15 @@ const RESTACKING = {
   },
 };
 
+// A head shaken: out to either side, less each time, and still.
+const LOCK_REFUSED = {
+  "0%, 100%": { transform: "translateX(0)" },
+  "15%": { transform: "translateX(calc(-1 * {spacing.3}))" },
+  "35%": { transform: "translateX({spacing.2.5})" },
+  "55%": { transform: "translateX(calc(-1 * {spacing.1.5}))" },
+  "75%": { transform: "translateX({spacing.1})" },
+};
+
 export default defineConfig({
   exclude: [],
   // The page is the desktop and nothing in it scrolls: every window is placed
@@ -105,6 +114,11 @@ export default defineConfig({
           "0%": { transform: "scaleY(0.3)" },
           "100%": { transform: "scaleY(1)" },
         },
+        // A passphrase the desk turned down: the lock screen's pane shakes
+        // its head, hard and then less. Twice, under two names, so that a
+        // second refusal runs it again — see `shaken` in `lock/Lock.tsx`.
+        lockRefused: LOCK_REFUSED,
+        lockRefusedAgain: LOCK_REFUSED,
         // A workspace slides in from the side it was on, and it is the whole
         // workspace that moves: every window on it goes the same distance, so
         // they arrive together rather than scatter.

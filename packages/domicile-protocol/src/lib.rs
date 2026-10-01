@@ -299,16 +299,18 @@ pub enum ChromeMessage {
     /// **AN ATTEMPT, AND THE COMPOSITOR IS WHAT DECIDES.** A shell draws the
     /// lock screen and collects what was typed; it does not check it, and it is
     /// not told directly whether this one was right. What it gets is
-    /// [`HostMessage::Locked`] — to *every* chrome, and only when the desk
-    /// actually opened — which is the same one-path-that-decides arrangement
+    /// [`HostMessage::Locked`] — to *every* chrome, once the check is over —
+    /// which is the same one-path-that-decides arrangement
     /// [`ChromeMessage::SetTheme`] has, for a harder reason: a page that
     /// cleared its own lock screen because it believed its own keystrokes would
     /// be a lock anybody could open by editing the page.
     ///
-    /// A wrong passphrase is answered with nothing at all. There is no count,
-    /// no delay and no "that was wrong" on this protocol yet; the desk stays
-    /// shut and the compositor says so in its own log, without the passphrase
-    /// in it. `ROADMAP.md` carries what is left of that.
+    /// **A WRONG PASSPHRASE IS `locked: true` AGAIN.** Nothing else sends one
+    /// to a desk being checked — that desk is already shut — so a page waiting
+    /// on its check reads it as the answer. A verifier that could not check
+    /// says the same, and the compositor tells the two apart only in its own
+    /// log, without the passphrase in it. There is no count and no delay on
+    /// this protocol yet; `ROADMAP.md` carries what is left of that.
     ///
     /// The passphrase is a [`Passphrase`] rather than a `String` so that it
     /// cannot be printed by accident — see that type.

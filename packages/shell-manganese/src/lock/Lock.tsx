@@ -4,6 +4,7 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { useEffect, useRef, useState } from "react";
 
+import { css, cva } from "../../styled-system/css";
 import { center, hstack, vstack } from "../../styled-system/patterns";
 import { LockClock } from "./LockClock";
 
@@ -13,11 +14,16 @@ const PASSPHRASE = "Passphrase";
 type Props = {
   /** Whether the compositor says this desk is locked. */
   locked: boolean;
+  /** Whether a passphrase is out with the compositor, unanswered. */
+  checking: boolean;
+  /** How many passphrases the compositor has turned down — see `useLocked`. */
+  refusals: number;
   /**
    * Offer this passphrase to the compositor.
    *
-   * Nothing comes back. What opens the desk is the compositor agreeing, and what
-   * says so is the `locked` message that turns {@link locked} off.
+   * What opens the desk is the compositor agreeing, and what says so is the
+   * `locked` message that turns {@link locked} off; what says it did not is
+   * {@link refusals} going up.
    */
   onUnlock: (passphrase: string) => void;
 };
@@ -52,19 +58,36 @@ type Props = {
  * of its ways out is a way past this. The only thing that takes this off the
  * screen is the desk opening.
  */
-export const Lock = ({ locked, onUnlock }: Props) => {
+export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
   const [typed, setTyped] = useState("");
+  const [wrong, setWrong] = useState(false);
   const field = useRef<HTMLInputElement>(null);
 
   // The sheet is up because the desk shut, so the keyboard belongs in the field:
   // a lock screen where the first thing typed goes nowhere is one somebody types
   // their passphrase into twice. Taken on the edge, which is the moment the desk
   // shut — the sheet itself is on the page the whole time.
+  //
+  // And cleared as it opens: the sheet outlives the lock to fade out, and a
+  // passphrase left in it would be one sitting in the page of an open desk.
   useEffect(() => {
     if (locked) {
       field.current?.focus();
+    } else {
+      setTyped("");
+      setWrong(false);
     }
   }, [locked]);
+
+  // A refusal is the only thing that says a try was wrong, so it is the only
+  // thing that empties the field while the desk is shut — and one left full
+  // after it would be a guess left on the screen of a locked desk.
+  useEffect(() => {
+    if (refusals > 0) {
+      setTyped("");
+      setWrong(true);
+    }
+  }, [refusals]);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the sheet is not a control and is not being made into one — these keep the focus in the field, which is the only thing on a locked desk to type into
@@ -88,43 +111,59 @@ export const Lock = ({ locked, onUnlock }: Props) => {
     >
       <div className={contentStyles}>
         <LockClock />
-        <form
-          className={formStyles}
-          onSubmit={(event) => {
-            // The page is the desktop and has nowhere to navigate to; a submit
-            // that reloaded it would throw away the connection this shell is
-            // drawn over.
-            event.preventDefault();
-            onUnlock(typed);
-            // Cleared whatever the answer is, because there is no answer to
-            // wait for: a refused passphrase produces no message at all, so a
-            // field left full is a person retyping over their own first guess
-            // — and one somebody walked away from is a guess left on the
-            // screen of a locked desk.
-            setTyped("");
-          }}
-        >
-          <Input
-            aria-label={PASSPHRASE}
-            name="passphrase"
-            onChange={(event) => {
-              setTyped(event.target.value);
+        <div className={entryStyles}>
+          <form
+            className={formStyles({ shaken: shaken(refusals), wrong })}
+            onSubmit={(event) => {
+              // The page is the desktop and has nowhere to navigate to; a
+              // submit that reloaded it would throw away the connection this
+              // shell is drawn over.
+              event.preventDefault();
+              // One out at a time, which is also what the compositor allows:
+              // a second offered while the first is being checked is dropped
+              // there unchecked.
+              if (!checking) {
+                onUnlock(typed);
+              }
             }}
-            placeholder={PASSPHRASE}
-            prefixIcon={<LockIcon />}
-            ref={field}
-            rounded
-            size="lg"
-            // The one attribute between a lock screen and a billboard: the
-            // screen of a locked desk is the screen somebody else is standing
-            // in front of.
-            type="password"
-            value={typed}
-          />
-          <Button label="Unlock" rounded size="lg" type="submit">
-            <ArrowRightIcon />
-          </Button>
-        </form>
+          >
+            <Input
+              aria-label={PASSPHRASE}
+              name="passphrase"
+              onChange={(event) => {
+                setTyped(event.target.value);
+                setWrong(false);
+              }}
+              placeholder={PASSPHRASE}
+              prefixIcon={<LockIcon />}
+              // Held as it was sent until the compositor answers, so what is
+              // being checked is what is on the screen.
+              readOnly={checking}
+              ref={field}
+              rounded
+              size="lg"
+              // The one attribute between a lock screen and a billboard: the
+              // screen of a locked desk is the screen somebody else is
+              // standing in front of.
+              type="password"
+              value={typed}
+            />
+            <Button
+              label="Unlock"
+              loading={checking}
+              rounded
+              size="lg"
+              type="submit"
+            >
+              <ArrowRightIcon />
+            </Button>
+          </form>
+          {wrong ? (
+            <p className={refusalStyles} role="alert">
+              Wrong passphrase
+            </p>
+          ) : undefined}
+        </div>
       </div>
     </div>
   );
@@ -186,34 +225,85 @@ const contentStyles = vstack({
     "opacity {durations.slowest} {easings.out}, transform {durations.slowest} {easings.emphasized}",
 });
 
+// Under the pane rather than in the column, so a refusal said and taken back
+// does not move the clock.
+const entryStyles = css({
+  position: "relative",
+});
+
 // A pane of the library's glass — see `ModalDialog`'s glass surface — around
 // the field and its button, with the line of light along its top edge that a
 // pane catches. The field is part of the pane rather than a card sitting on
 // it, as in the file picker's.
-const formStyles = hstack({
-  _before: {
-    background:
-      "linear-gradient(90deg, transparent, color-mix(in oklab, {colors.foreground} 45%, transparent), transparent)",
-    blockSize: "1px",
-    content: '""',
-    insetBlockStart: 0,
-    insetInline: 6,
-    position: "absolute",
+//
+// A refused passphrase shakes it, the way a head does, and edges it in
+// `danger` until somebody types again. Two keyframes of the same shake, taken
+// in turn, because an animation whose name does not change does not run
+// again — see `shaken`.
+const formStyles = cva({
+  base: hstack.raw({
+    _before: {
+      background:
+        "linear-gradient(90deg, transparent, color-mix(in oklab, {colors.foreground} 45%, transparent), transparent)",
+      blockSize: "1px",
+      content: '""',
+      insetBlockStart: 0,
+      insetInline: 6,
+      position: "absolute",
+    },
+    "& :has(> [data-control])": {
+      backgroundColor:
+        "color-mix(in oklab, {colors.background} 45%, transparent)",
+    },
+    "& > :first-child": {
+      flex: 1,
+    },
+    animationDuration: "{durations.slowest}",
+    animationTimingFunction: "{easings.out}",
+    backdropFilter: "blur({spacing.6}) saturate(180%)",
+    backgroundColor: "color-mix(in oklab, {colors.card} 55%, transparent)",
+    border:
+      "1px solid color-mix(in oklab, {colors.foreground} 14%, transparent)",
+    borderRadius: "full",
+    boxShadow: "modal",
+    gap: 2,
+    inlineSize: 96,
+    padding: 2,
+    position: "relative",
+    transition: "border-color {durations.normal} {easings.out}",
+  }),
+  variants: {
+    shaken: {
+      again: { animationName: "lockRefusedAgain" },
+      never: {},
+      once: { animationName: "lockRefused" },
+    },
+    wrong: {
+      false: {},
+      true: {
+        borderColor: "color-mix(in oklab, {colors.danger} 70%, transparent)",
+      },
+    },
   },
-  "& :has(> [data-control])": {
-    backgroundColor:
-      "color-mix(in oklab, {colors.background} 45%, transparent)",
-  },
-  "& > :first-child": {
-    flex: 1,
-  },
-  backdropFilter: "blur({spacing.6}) saturate(180%)",
-  backgroundColor: "color-mix(in oklab, {colors.card} 55%, transparent)",
-  border: "1px solid color-mix(in oklab, {colors.foreground} 14%, transparent)",
-  borderRadius: "full",
-  boxShadow: "modal",
-  gap: 2,
-  inlineSize: 96,
-  padding: 2,
-  position: "relative",
 });
+
+const refusalStyles = css({
+  color: "danger",
+  fontSize: "sm",
+  fontWeight: "medium",
+  insetBlockStart: "100%",
+  insetInline: 0,
+  marginBlockStart: 3,
+  position: "absolute",
+  textAlign: "center",
+  textShadow: "textOverPhoto",
+});
+
+/** Which of the two shakes the pane is on, for the {@link refusals}th refusal. */
+const shaken = (refusals: number): "never" | "once" | "again" => {
+  if (refusals === 0) {
+    return "never";
+  } else {
+    return refusals % 2 === 1 ? "once" : "again";
+  }
+};

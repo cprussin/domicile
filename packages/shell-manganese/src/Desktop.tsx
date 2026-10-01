@@ -117,7 +117,7 @@ export const Desktop = ({ desk, domicile }: Props) => {
   // what refuses to put a forwarded keystroke into the seat. So there is nothing
   // here to set — a reload of this page does not open the desk, and this hook is
   // told where it stands as the page connects.
-  const locked = useLocked(domicile);
+  const lock = useLocked(domicile);
 
   // The Shift of the chord that floats a window is spent whether or not there
   // was a window to float, because what it says is about the press rather than
@@ -246,10 +246,10 @@ export const Desktop = ({ desk, domicile }: Props) => {
         the desk opened — never this page's own click. See `lock/Lock.tsx`.
       */}
       <Lock
-        locked={locked}
-        onUnlock={(passphrase) => {
-          domicile.unlock(passphrase);
-        }}
+        checking={lock.checking}
+        locked={lock.locked}
+        onUnlock={lock.unlock}
+        refusals={lock.refusals}
       />
       <NoScreens />
     </>

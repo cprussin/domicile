@@ -3990,13 +3990,13 @@ impl DomicileCompositor {
     /// check here would be every client's frame held while somebody's typo is
     /// punished. See [`Lock::offered`].
     ///
-    /// **NOTHING GOES BACK TO THE PAGE THAT ASKED, AND THAT IS DELIBERATE.**
-    /// What a correct passphrase produces is [`HostMessage::Locked`] to *every*
-    /// chrome — a desk of three monitors is three pages, and the desk they are
-    /// drawing has one lock — so a shell clears its lock screen because the desk
-    /// opened rather than because it believed its own keystrokes. The same
-    /// one-path-that-decides arrangement `SetTheme` has, for a harder reason:
-    /// a page that cleared its own lock would be a lock anybody with the
+    /// **NOTHING GOES BACK TO THE PAGE THAT ASKED ALONE, AND THAT IS
+    /// DELIBERATE.** What a verdict produces is [`HostMessage::Locked`] to
+    /// *every* chrome — a desk of three monitors is three pages, and the desk
+    /// they are drawing has one lock — so a shell clears its lock screen because
+    /// the desk opened rather than because it believed its own keystrokes. The
+    /// same one-path-that-decides arrangement `SetTheme` has, for a harder
+    /// reason: a page that cleared its own lock would be a lock anybody with the
     /// devtools could open.
     fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
         let Some(lock) = self.lock.as_mut() else {
@@ -4017,21 +4017,24 @@ impl DomicileCompositor {
 
     /// The verifier has said what the passphrase it was handed does.
     ///
-    /// A refusal is a line in the log and no message at all, and so is a
-    /// verifier that could not check — louder, because that one is a desk
-    /// nobody can open until the machine changes. Each says what happened and
-    /// never what was typed: there is nothing in [`Unlocking`] to print, which
-    /// is what makes that structural rather than a rule to remember.
+    /// **EVERY VERDICT IS TOLD, AND A REFUSAL IS `locked: true` AGAIN.** A shell
+    /// holds what was typed until it hears, and the page waiting on a check has
+    /// nothing else to hear: nothing else sends `locked: true` to a desk being
+    /// checked, because that desk is already shut. So the state, said again,
+    /// is the answer — and it needs nothing from the engine that carries it.
+    ///
+    /// A refusal is also a line in the log, and so is a verifier that could not
+    /// check — louder, because that one is a desk nobody can open until the
+    /// machine changes. Each says what happened and never what was typed: there
+    /// is nothing in [`Unlocking`] to print, which is what makes that
+    /// structural rather than a rule to remember.
     fn heard_the_verdict(&mut self, verdict: Verdict) {
         let lock = self
             .lock
             .as_mut()
             .expect("a verdict comes only from this desk's own lock");
         match lock.answered(verdict) {
-            Unlocking::Opened => {
-                debug!("the passphrase opened this desktop");
-                self.tell_the_chromes_whether_the_desk_is_locked();
-            }
+            Unlocking::Opened => debug!("the passphrase opened this desktop"),
             Unlocking::Refused => {
                 warn!("a passphrase this desktop did not take; it stays locked")
             }
@@ -4040,6 +4043,7 @@ impl DomicileCompositor {
                 "this desktop could not check a passphrase, so it stays locked"
             ),
         }
+        self.tell_the_chromes_whether_the_desk_is_locked();
     }
 
     /// Keep a blanked desktop blanked through something that lit it.

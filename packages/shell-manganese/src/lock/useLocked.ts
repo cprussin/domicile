@@ -1,8 +1,21 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+/** Where this desk's lock stands, as the compositor last said. */
+type LockState = {
+  /** Whether the desk is locked. */
+  locked: boolean;
+  /** Whether a passphrase is out with the compositor, unanswered. */
+  checking: boolean;
+  /**
+   * How many passphrases the compositor has turned down. A count rather than a
+   * flag, so the same refusal twice is two changes a lock screen can answer.
+   */
+  refusals: number;
+};
 
 /**
- * Whether this desk is locked.
+ * Whether this desk is locked, and the way to offer it a passphrase.
  *
  * **Pushed rather than asked for, and held by the compositor rather than here.**
  * This page does not decide the lock and cannot: input on this system is
@@ -18,9 +31,21 @@ import { useEffect, useState } from "react";
  * from `true` would put a lock screen over every desktop for the length of one —
  * including the ones with no passphrase configured, which can never be asked for
  * one and would have nothing to clear it.
+ *
+ * **A REFUSAL IS `locked: true` WHILE A PASSPHRASE IS OUT.** The compositor
+ * answers every check that leaves the desk shut by telling every chrome the
+ * desk is locked again, and nothing else sends one to a desk being checked —
+ * that desk is already shut. So an answer that does not open the desk is told
+ * apart from the edge that shut it by whether this page was waiting on one.
  */
-export const useLocked = (domicile: DomicileClient): boolean => {
-  const [locked, setLocked] = useState(false);
+export const useLocked = (
+  domicile: DomicileClient,
+): LockState & { unlock: (passphrase: string) => void } => {
+  const [state, setState] = useState<LockState>({
+    checking: false,
+    locked: false,
+    refusals: 0,
+  });
 
   // Registered once and for the life of the shell, like `useClipboard`'s: `on`
   // is a single slot whose hold delivers whatever arrived before it, and the
@@ -28,9 +53,22 @@ export const useLocked = (domicile: DomicileClient): boolean => {
   // render is over.
   useEffect(() => {
     domicile.on("locked", (message) => {
-      setLocked(message.locked);
+      setState((was) => ({
+        checking: false,
+        locked: message.locked,
+        refusals:
+          was.checking && message.locked ? was.refusals + 1 : was.refusals,
+      }));
     });
   }, [domicile]);
 
-  return locked;
+  const unlock = useCallback(
+    (passphrase: string) => {
+      domicile.unlock(passphrase);
+      setState((was) => ({ ...was, checking: true }));
+    },
+    [domicile],
+  );
+
+  return { ...state, unlock };
 };
