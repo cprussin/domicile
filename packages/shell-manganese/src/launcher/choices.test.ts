@@ -17,7 +17,7 @@ const EDITOR = {
 
 /** A bookmark the desk offers, as the host would have answered. */
 const MAIL = {
-  label: undefined,
+  icon: undefined,
   name: "Mail",
   url: "https://mail.example.com",
 };

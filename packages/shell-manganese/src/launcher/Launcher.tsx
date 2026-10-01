@@ -451,17 +451,13 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
     case ChoiceKind.Bookmark: {
       return (
         <>
-          {/* Keyed on the URL, so a site that had no icon does not leave the
-              next one drawn as a glyph. */}
-          <SiteTile key={choice.url} url={choice.url} />
+          {choice.icon === undefined ? (
+            <RowTile icon={BookmarkSimpleIcon} />
+          ) : (
+            <PictureTile picture={choice.icon} />
+          )}
           <span className={rowNameStyles}>
             <Marked marks={marked(choice.name, query)} />
-            {choice.label !== undefined && (
-              <>
-                {" "}
-                <span className={rowVerbStyles}>for</span> {choice.label}
-              </>
-            )}
           </span>
         </>
       );
@@ -555,42 +551,27 @@ const RowTile = ({ icon: Icon }: { icon: typeof FileIcon }) => (
 /**
  * An application's tile: the icon its entry names, or a generic glyph for one
  * the host did not find.
- *
- * One picture rather than RowTile's pair: an application's icon is its own,
- * and there is no second weight of it to swap to when the row is reached.
  */
 const AppTile = ({ icon }: { icon: string | undefined }) =>
   icon === undefined ? (
     <RowTile icon={AppWindowIcon} />
   ) : (
-    <span className={rowTileStyles} data-row-tile="">
-      <img alt="" className={rowPictureStyles} src={icon} />
-    </span>
+    <PictureTile picture={icon} />
   );
 
 /**
- * A site's tile: the icon it serves at `/favicon.ico`, where every browser has
- * looked for one since there were any, or a bookmark's glyph for a site that
- * has none there — or that the engine could not reach.
+ * An icon that is a picture — an application's, a site's — in a glyph tile's
+ * place, and without its frame: the picture is its own shape, and a box round
+ * it is a box drawn round somebody else's logo.
+ *
+ * One picture rather than RowTile's pair: there is no second weight of it to
+ * swap to when the row is reached.
  */
-const SiteTile = ({ url }: { url: string }) => {
-  const [failed, setFailed] = useState(false);
-  return failed ? (
-    <RowTile icon={BookmarkSimpleIcon} />
-  ) : (
-    <span className={rowTileStyles} data-row-tile="">
-      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the icon failing to load, not something a person does to it */}
-      <img
-        alt=""
-        className={rowPictureStyles}
-        onError={() => {
-          setFailed(true);
-        }}
-        src={new URL("/favicon.ico", url).href}
-      />
-    </span>
-  );
-};
+const PictureTile = ({ picture }: { picture: string }) => (
+  <span className={pictureTileStyles}>
+    <img alt="" className={rowPictureStyles} src={picture} />
+  </span>
+);
 
 /**
  * What the pane shows, which is never nothing: a blank pane reads as a broken
@@ -1190,10 +1171,21 @@ const rowTileStyles = css({
     "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}",
 });
 
-// An application's icon at the glyph's size, whatever size the file is.
+// A picture in a glyph tile's place: the tile's size, with no frame to stay
+// inside of.
+const pictureTileStyles = css({
+  blockSize: 7,
+  display: "grid",
+  flexShrink: 0,
+  inlineSize: 7,
+  placeItems: "center",
+});
+
+// An icon a little bigger than the glyph, whatever size the file is: the frame
+// a glyph has is what makes up the difference.
 const rowPictureStyles = css({
-  blockSize: 4,
-  inlineSize: 4,
+  blockSize: 5,
+  inlineSize: 5,
   objectFit: "contain",
 });
 

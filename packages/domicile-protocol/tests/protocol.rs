@@ -128,7 +128,7 @@ fn a_desktop_entry_carries_the_command_it_runs() {
         bookmarks: vec![Bookmark {
             name: "Firefox Add-ons".into(),
             url: "https://addons.mozilla.org".into(),
-            label: Some("Work".into()),
+            icon: Some("data:image/png;base64,aWNv".into()),
         }],
     })
     .unwrap();
@@ -148,7 +148,7 @@ fn a_desktop_entry_carries_the_command_it_runs() {
             "bookmarks": [{
                 "name": "Firefox Add-ons",
                 "url": "https://addons.mozilla.org",
-                "label": "Work",
+                "icon": "data:image/png;base64,aWNv",
             }],
         })
     );
@@ -291,7 +291,7 @@ fn host_messages_round_trip() {
         bookmarks: vec![Bookmark {
             name: "Fire Drill".into(),
             url: "https://example.com/drill".into(),
-            label: None,
+            icon: None,
         }],
     });
     for preview in [

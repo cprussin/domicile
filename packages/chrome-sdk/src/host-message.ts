@@ -265,10 +265,10 @@ export type Bookmark = {
   name: string;
   url: string;
   /**
-   * Which of the bookmark's URLs `url` is, or `undefined` when the desk did
-   * not say.
+   * The icon the site names for itself, as a `data:` URL, or `undefined` for
+   * one the compositor has not found.
    */
-  label: string | undefined;
+  icon: string | undefined;
 };
 
 /** An application a desktop entry offers, as a launcher draws and runs it. */
@@ -565,7 +565,7 @@ export const foundFiles = (event: DomicileFilesEvent): FoundFilesMessage => ({
 });
 
 /**
- * What applications matched, with the engine's empty icon, preview and label
+ * What applications matched, with the engine's empty icons and preview
  * read as none.
  */
 export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
@@ -578,7 +578,7 @@ export const foundApps = (event: DomicileAppsEvent): FoundAppsMessage => ({
     preview: named(entry.preview),
   })),
   bookmarks: event.bookmarks.map((bookmark) => ({
-    label: named(bookmark.label),
+    icon: named(bookmark.icon),
     name: bookmark.name,
     url: bookmark.url,
   })),

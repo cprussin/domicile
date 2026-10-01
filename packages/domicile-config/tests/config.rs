@@ -4,12 +4,11 @@
 //! file on disk must NEVER take down the compositor — the last known-good
 //! config stays active and the error is surfaced.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, Shortcode, ThemeMode,
+    Bookmark, Config, ConfigError, ConfigStore, DisplayConfig, LockVerifier, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -428,77 +427,35 @@ url = "https://calendar.google.com"
         vec![Bookmark {
             name: "Calendar".into(),
             url: "https://calendar.google.com".into(),
-            label: None,
-            shortcodes: BTreeMap::new(),
         }]
     );
 }
 
 #[test]
-fn a_bookmark_can_say_what_its_url_is_for() {
-    let bookmarks = Config::parse(
+fn a_bookmark_is_a_name_and_a_url_and_nothing_else() {
+    // Shortcodes were a word in the query picking another URL; a bookmark per
+    // URL is what a desk says now, and a config still naming them is told so.
+    let err = Config::parse(
         r#"
 [[applications.bookmarks]]
 name = "Calendar"
 url = "https://calendar.google.com"
-label = "Home"
+shortcodes = { "!work" = "https://calendar.google.com?authuser=work" }
 "#,
     )
-    .unwrap()
-    .applications
-    .bookmarks;
-    assert_eq!(bookmarks[0].label.as_deref(), Some("Home"));
-}
-
-#[test]
-fn a_bookmark_names_the_url_each_of_its_shortcodes_opens_and_what_it_is_for() {
-    let bookmarks = Config::parse(
-        r#"
-[[applications.bookmarks]]
-name = "Calendar"
-url = "https://calendar.google.com"
-shortcodes."!work" = { url = "https://calendar.google.com?authuser=work", label = "Work" }
-shortcodes."!old" = { url = "https://calendar.google.com?authuser=old" }
-"#,
-    )
-    .unwrap()
-    .applications
-    .bookmarks;
-    assert_eq!(
-        bookmarks[0].shortcodes,
-        BTreeMap::from([
-            (
-                "!old".into(),
-                Shortcode {
-                    url: "https://calendar.google.com?authuser=old".into(),
-                    label: None,
-                }
-            ),
-            (
-                "!work".into(),
-                Shortcode {
-                    url: "https://calendar.google.com?authuser=work".into(),
-                    label: Some("Work".into()),
-                }
-            ),
-        ])
-    );
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 #[test]
 fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
     // A launcher draws the site's icon from the URL, and opens it as a page:
     // `calendar.google.com` with no scheme is neither.
-    for url in [
-        "url = \"calendar.google.com\"",
-        "url = \"https://a.example\"\nshortcodes.\"!w\" = { url = \"b.example\" }",
-    ] {
-        let err = Config::parse(&format!(
-            "[[applications.bookmarks]]\nname = \"Calendar\"\n{url}\n"
-        ))
-        .unwrap_err();
-        assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
-    }
+    let err = Config::parse(
+        "[[applications.bookmarks]]\nname = \"Calendar\"\nurl = \"calendar.google.com\"\n",
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 #[test]

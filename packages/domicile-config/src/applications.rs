@@ -8,8 +8,6 @@
 //! A bookmark is the other thing a launcher offers beside them: a name and a
 //! URL the desk opens itself, rather than a program handing it to a browser.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Deserializer};
 
 use crate::files::Omit;
@@ -41,26 +39,6 @@ pub struct Bookmark {
     /// What choosing it opens: an `http` or `https` URL.
     #[serde(deserialize_with = "web_url")]
     pub url: String,
-    /// Which of the bookmark's URLs `url` is, `Home` say, for a launcher's row
-    /// to say beside the name.
-    #[serde(default)]
-    pub label: Option<String>,
-    /// A word, `!mp` say, and what choosing it opens instead when a launcher's
-    /// query holds that word.
-    #[serde(default)]
-    pub shortcodes: BTreeMap<String, Shortcode>,
-}
-
-/// What a bookmark opens when a launcher's query holds one of its shortcodes.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Shortcode {
-    /// What choosing the bookmark opens: an `http` or `https` URL.
-    #[serde(deserialize_with = "web_url")]
-    pub url: String,
-    /// Which of the bookmark's URLs this is, for a launcher's row to say.
-    #[serde(default)]
-    pub label: Option<String>,
 }
 
 /// A URL a launcher can open as a page and draw a site's icon from, which is

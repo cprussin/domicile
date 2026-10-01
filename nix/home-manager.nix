@@ -260,9 +260,9 @@ in {
 
           applications.bookmarks = lib.mkOption {
             description = ''
-              URLs the launcher offers by name, beside the applications. The
-              shell opens one itself rather than handing it to a browser.
-              Followed on a reload.
+              URLs the launcher offers by name, beside the applications, each
+              drawn with the icon its site names. The shell opens one itself
+              rather than handing it to a browser. Followed on a reload.
             '';
             type = lib.types.listOf (lib.types.submodule {
               options = {
@@ -274,55 +274,17 @@ in {
                   description = "What choosing it opens: an `http` or `https` URL.";
                   type = lib.types.str;
                 };
-                label = lib.mkOption {
-                  description = ''
-                    Which of the bookmark's URLs `url` is, which the row says
-                    after the name: `Calendar for Home`. `null` says nothing.
-                  '';
-                  type = lib.types.nullOr lib.types.str;
-                  default = null;
-                  example = "Home";
-                };
-                shortcodes = lib.mkOption {
-                  description = ''
-                    Words a search can hold, each with the URL choosing the
-                    bookmark opens instead of `url`, and the `label` the row
-                    says for it. The word is not matched against the name or
-                    URL.
-                  '';
-                  type = lib.types.attrsOf (lib.types.submodule {
-                    options = {
-                      url = lib.mkOption {
-                        description = "What choosing the bookmark opens.";
-                        type = lib.types.str;
-                      };
-                      label = lib.mkOption {
-                        description = "Which of the bookmark's URLs this is, as `label` above.";
-                        type = lib.types.nullOr lib.types.str;
-                        default = null;
-                      };
-                    };
-                  });
-                  default = {};
-                  example = {
-                    "!work" = {
-                      url = "https://calendar.google.com?authuser=me@work.example";
-                      label = "Work";
-                    };
-                  };
-                };
               };
             });
             default = [];
             example = [
               {
-                name = "Calendar";
-                url = "https://calendar.google.com";
-                label = "Home";
-                shortcodes."!work" = {
-                  url = "https://calendar.google.com?authuser=me@work.example";
-                  label = "Work";
-                };
+                name = "Calendar - Home";
+                url = "https://calendar.google.com?authuser=me@home.example";
+              }
+              {
+                name = "Calendar - Work";
+                url = "https://calendar.google.com?authuser=me@work.example";
               }
             ];
           };
