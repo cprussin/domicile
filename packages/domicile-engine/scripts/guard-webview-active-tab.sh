@@ -15,10 +15,12 @@
 # Headless, with guard-extension-installer.sh's stand-in for the compositor
 # naming the fixture as `unpacked`. The fixture asks for `activeTab` and
 # `scripting` and no host; a click on its action paints the tab it is handed
-# `COLOR`. The shell shows one <webview> on its witness, focuses it, and once
-# the fixture is in the tray wearing the badge its worker sets once it listens,
-# `?activate=1` clicks it with activateExtension.
-# The page is served `--still`: a reload would wipe the paint.
+# `COLOR`. The shell shows one <webview> on its witness, focuses it once its
+# page says it loaded, and once the fixture is in the tray wearing the badge its
+# worker sets once it listens, `?activate=1` clicks it with activateExtension.
+# The page is served `--still`: a reload would wipe the paint. And it says it
+# loaded by moving to `#ready`, because a click on a page that has not
+# committed grants the wrong page, and is refused (cprussin/domicile#797).
 #
 # WHAT IT ASSERTS. That `COLOR` is then in the window, with the shell's
 # background as the witness -- and that the shell clicked and the tray
@@ -238,8 +240,8 @@ was installed"
 nothing to click: the installer, ExtensionTray, or its service worker never ran"
   ;;
 "painted 1 1 1 0 "*)
-  FAILURE="the shell never clicked: its window never showed its page, so it \
-was never focused. The guest, or the page server"
+  FAILURE="the shell never clicked: its window never showed its page at \
+#ready, so it was never focused. The guest, or the page server"
   ;;
 "painted 1 1 1 1 0")
   FAILURE="the shell clicked and the tray granted nothing: there was no \
