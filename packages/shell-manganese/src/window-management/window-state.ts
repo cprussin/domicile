@@ -125,10 +125,9 @@ export type WindowState = {
    * already in view moves the keyboard rather than the work. Never empty —
    * see {@link UNDESCRIBED_SCREEN}.
    *
-   * No two screens show the same workspace, and that is not a detail. A desk
-   * of several monitors is several pages of this shell, each drawing the
-   * screen its own window covers; one workspace on two screens is one window
-   * embedded twice, and the second embedding takes the first's pixels away.
+   * No two screens show the same workspace, and that is not a detail: one
+   * workspace on two screens is one window embedded twice, and the second
+   * embedding takes the first's pixels away.
    */
   screens: readonly DeskScreen[];
   /**
@@ -197,19 +196,14 @@ export type WindowState = {
    */
   popups: readonly Popup[];
   /**
-   * How many commands a key has run, and the screen the last of them was
-   * heard on.
+   * How many commands a key has run.
    *
-   * **THE PRESS IS THE DESK'S, NOT THE PAGE'S.** A key is what takes the
-   * pointer with the keyboard (`usePointerWarp`), and the page that moves the
-   * pointer is the one covering the screen the keyboard went to — which,
-   * for a key that sends a window to the next monitor, is not the page that
-   * heard it. Counted rather than flagged so every page can tell a press it
-   * has not answered from one it has; and where, because the keys go to the
-   * monitor the pointer is on, so a press heard on another screen says the
-   * pointer is there rather than wherever this page last saw it.
+   * A key is what takes the pointer with the keyboard (`usePointerWarp`), and
+   * the monitor that moves the pointer is the one the keyboard went to. Counted
+   * rather than flagged so a monitor can tell a press it has not answered from
+   * one it has.
    */
-  pressed: { count: number; on: string | undefined };
+  pressed: number;
   /** The windows in the scratchpad, the most recently hidden last. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
@@ -227,7 +221,7 @@ export const NO_WINDOWS: WindowState = {
   launcherOpen: false,
   mode: BindingMode.Default,
   popups: [],
-  pressed: { count: 0, on: undefined },
+  pressed: 0,
   previous: undefined,
   scratchpad: [],
   screens: [{ box: NOWHERE, current: "1", name: UNDESCRIBED_SCREEN }],
@@ -316,7 +310,6 @@ export enum WindowActionKind {
   ClipboardDismissed,
   ClipboardToggled,
   ContainerSplit,
-  DeskAdopted,
   DeskLocked,
   FileOpened,
   FloatToggled,
@@ -455,24 +448,6 @@ export const WindowAction = {
   }),
 
   /**
-   * Another page of this desk reduced the desktop, and this is what it is.
-   *
-   * **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES AND ONE DESKTOP.** One of
-   * them reduces and the others show what it says, because the workspaces span
-   * the monitors: `workspace 2` goes to whichever screen is showing it, and a
-   * window opens on the screen the keyboard is on. `desk-channel.ts` is how it
-   * crosses; this is the arm that takes it.
-   *
-   * Whole rather than as what changed, so that a page which came up late and a
-   * page which has been listening all along take the same thing: there is no
-   * catching up to get wrong.
-   */
-  DeskAdopted: (desk: WindowState) => ({
-    desk,
-    kind: WindowActionKind.DeskAdopted as const,
-  }),
-
-  /**
    * The user asked for the desk to be locked, which the compositor does.
    *
    * Nothing in the state moves: the lock screen goes up when the host says the
@@ -537,14 +512,10 @@ export const WindowAction = {
   }),
 
   /**
-   * A key ran the command handed over with this, on `on` — the screen the
-   * page that heard it covers, or `undefined` for a page that is the whole
-   * desktop. See {@link WindowState.pressed}.
+   * A key ran the command handed over with this. See
+   * {@link WindowState.pressed}.
    */
-  KeyPressed: (on: string | undefined) => ({
-    kind: WindowActionKind.KeyPressed as const,
-    on,
-  }),
+  KeyPressed: () => ({ kind: WindowActionKind.KeyPressed as const }),
 
   /**
    * The launcher was closed without launching anything — Escape, or a click
@@ -715,14 +686,11 @@ export const WindowAction = {
 
   /**
    * The user dragged a floating window to a new corner of the desktop: `x`,
-   * `y` in the pixels of the screen `on`, which is the one the drag started
-   * on. That need not be the screen the window is on by the time this is
-   * reduced — see `floatDragged`.
+   * `y` in the page's pixels, which are the desk's — see `floatDragged`.
    */
-  WindowMoved: (id: string, x: number, y: number, on: string) => ({
+  WindowMoved: (id: string, x: number, y: number) => ({
     id,
     kind: WindowActionKind.WindowMoved as const,
-    on,
     x,
     y,
   }),
@@ -862,9 +830,6 @@ const reduceAction = (
         containerSplit(workspace, action.axis),
       );
     }
-    case WindowActionKind.DeskAdopted: {
-      return action.desk;
-    }
     case WindowActionKind.AppLaunched:
     case WindowActionKind.FileOpened: {
       // The compositor spawns it and the host announces the window it opens,
@@ -898,10 +863,7 @@ const reduceAction = (
       );
     }
     case WindowActionKind.KeyPressed: {
-      return {
-        ...state,
-        pressed: { count: state.pressed.count + 1, on: action.on },
-      };
+      return { ...state, pressed: state.pressed + 1 };
     }
     case WindowActionKind.LauncherDismissed: {
       return { ...state, launcherOpen: false };
@@ -989,7 +951,7 @@ const reduceAction = (
       return id === undefined ? state : killWindow(state, id);
     }
     case WindowActionKind.WindowMoved: {
-      return floatDragged(state, action.id, action.x, action.y, action.on);
+      return floatDragged(state, action.id, action.x, action.y);
     }
     case WindowActionKind.WindowRenamed: {
       return renameWindow(state, action.id, action.title);
@@ -1237,13 +1199,12 @@ const showWorkspace = (state: WindowState, name: string): WindowState => {
 // moves came back from the host as a reach, and a browser window, which names
 // no client, never did.
 const pointAtWindow = (state: WindowState, id: string): WindowState => {
-  // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A desk of
-  // several monitors is several pages, each drawing its own screen's windows,
-  // so a pointer that crossed onto another monitor is that page saying so --
-  // and the keys go where the hand went, which is the whole of how a desk of
-  // several is worked. A window on a workspace no screen is showing is not
-  // one a pointer can be over: it has no box to point at, and reaching it
-  // would be a focus on something the user cannot see.
+  // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A pointer that
+  // crossed onto another monitor's window takes the keys with it, which is the
+  // whole of how a desk of several is worked. A window on a workspace no
+  // screen is showing is not one a pointer can be over: it has no box to
+  // point at, and reaching it would be a focus on something the user cannot
+  // see.
   const workspace = workspaceHolding(state, id);
   const screen =
     workspace === undefined ? undefined : screenShowing(state, workspace.name);
@@ -1273,7 +1234,7 @@ const pointAtShown = (
 // The screen under the pointer is the screen the keyboard is on. The same
 // object for a screen that already has it, because this is said on every move
 // of the hand; and for one the desk has not taken up yet, which is a monitor
-// plugged in whose page saw the pointer before this page was told of it.
+// plugged in that the pointer reached before the desk was told of it.
 const pointAtScreen = (state: WindowState, name: string): WindowState =>
   state.focused === name ||
   !state.screens.some((screen) => screen.name === name)
@@ -1412,22 +1373,18 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
 };
 
 /**
- * A floating window dragged to `x`, `y` in the pixels of the screen `on`, and
- * handed to the screen its middle is now over — sway's
- * `floating_fix_coordinates`.
+ * A floating window dragged to `x`, `y` in the page's pixels, and handed to
+ * the screen its middle is now over — sway's `floating_fix_coordinates`.
  *
- * **THE DRAG IS MEASURED FROM THE SCREEN IT STARTED ON.** A desk of several
- * monitors is several pages, and the page that was pressed keeps the drag
- * after the pointer has crossed onto the next one, so what it says is in its
- * own screen's pixels however far the window has gone. A float is in the
- * pixels of the screen showing its workspace, and the boxes of the two are
- * what converts one to the other.
+ * One page spans the desk, so the page's pixels are the desk's and a screen's
+ * box is where it is on the page. A float is in the pixels of the screen
+ * showing its workspace, and that screen's box is what converts.
  *
  * A middle over no screen at all — the gap an L of monitors leaves — keeps
- * the screen it has. A browser window never leaves its own: a `<webview>` on
- * another page is a new guest, and a site loaded again from scratch is not a
- * window moving. So its middle is kept on its screen instead. See
- * docs/architecture/WINDOWS-ACROSS-SCREENS.md.
+ * the screen it has. A browser window never leaves its own: each screen draws
+ * its own `<webview>`, and another screen's is a new guest — a site loaded
+ * again from scratch is not a window moving. So its middle is kept on its
+ * screen instead.
  *
  * A window on a workspace no screen is showing is not one a pointer can have
  * hold of, so a move that names one — a drag the keyboard switched the
@@ -1438,7 +1395,6 @@ const floatDragged = (
   id: string,
   x: number,
   y: number,
-  on: string,
 ): WindowState => {
   const workspace = workspaceHolding(state, id);
   const home =
@@ -1446,13 +1402,8 @@ const floatDragged = (
   if (workspace === undefined || home === undefined) {
     return state;
   } else {
-    const from = boxOf(state, on);
     const here = boxOf(state, home);
-    const moved = movedTo(
-      floatHeld(workspace, id),
-      x + from.x - here.x,
-      y + from.y - here.y,
-    );
+    const moved = movedTo(floatHeld(workspace, id), x - here.x, y - here.y);
     const onto = holdsBrowser(state, moved)
       ? home
       : (screenAt(state, middleOf(moved, here)) ?? home);
@@ -1463,11 +1414,7 @@ const floatDragged = (
       );
     } else {
       const there = boxOf(state, onto);
-      const arrived = movedTo(
-        moved,
-        moved.x + here.x - there.x,
-        moved.y + here.y - there.y,
-      );
+      const arrived = movedTo(moved, x - there.x, y - there.y);
       // The keyboard comes too: the pointer is already over there, and the
       // window the user has hold of is the one they are working in.
       return onWorkspace(

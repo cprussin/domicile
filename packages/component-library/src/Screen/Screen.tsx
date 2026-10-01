@@ -33,19 +33,6 @@ type Selection =
  * The page spans the whole desktop, so a screen is a region of it: the
  * rectangle comes straight from the display's normalized position and size.
  *
- * **Where the page IS one screen, which is every page on a tty, that region
- * is the whole page.** The engine opens a browser window per CRTC there and
- * draws it turned and scaled the way the monitor is, so the page is the
- * display's logical box, upright — and a region over it is that box at the
- * origin. There is no turn or density for a shell, or for this, to apply.
- *
- * **And on such a page only that screen is drawn on, whatever is selected.**
- * A page of one window is told the whole desk — a shell decides things about
- * it that one monitor cannot answer — and may draw on exactly one monitor of
- * it. So `everywhere` is every screen of the desktop and one region here,
- * because the other monitors are other pages rendering this same tree. See
- * {@link onThisPage}.
- *
  * **A region's identity is its position in the selection, not its display.**
  * The regions one `<Screen>` renders are the same children placed over
  * different rectangles, so they are keyed by order: a desktop re-described
@@ -77,38 +64,36 @@ export const Screen = ({
           the one place they collapse, because a `<Screen>` renders nothing for
           either. Kept as a default here rather than pushed into the context,
           so a shell that wants to tell them apart still can. */}
-      {onThisPage(displays ?? [])
-        .filter(selects(selection))
-        .map((display, index) => (
-          <div
-            className={region}
-            data-screen={display.name}
-            // Keyed by position and not by name. A region is the same children
-            // placed over a display, so the regions one `<Screen>` renders are
-            // interchangeable: what differs between them is a rectangle, and a
-            // rectangle is a style. A name key ties a region's identity to
-            // *which* display it is, so a desktop re-described with a different
-            // display first — a monitor unplugged, a config reloaded — tears the
-            // subtree down and builds it again. For a shell whose chrome is on
-            // one screen that is an embedded page reloaded to where it started
-            // and every portal re-created blank, with nothing to show that it
-            // happened. A shell wanting state per display keys it itself, off
-            // `data-screen`.
-            key={index}
-            // Physical `left`/`top`/`width`/`height`, not the logical inset and
-            // size properties: this is desktop geometry, and the left-hand
-            // monitor stays on the left and stays landscape in a right-to-left
-            // or vertical-writing locale.
-            style={{
-              height: `${String(display.size[1])}px`,
-              left: `${String(display.position[0])}px`,
-              top: `${String(display.position[1])}px`,
-              width: `${String(display.size[0])}px`,
-            }}
-          >
-            {children}
-          </div>
-        ))}
+      {(displays ?? []).filter(selects(selection)).map((display, index) => (
+        <div
+          className={region}
+          data-screen={display.name}
+          // Keyed by position and not by name. A region is the same children
+          // placed over a display, so the regions one `<Screen>` renders are
+          // interchangeable: what differs between them is a rectangle, and a
+          // rectangle is a style. A name key ties a region's identity to
+          // *which* display it is, so a desktop re-described with a different
+          // display first — a monitor unplugged, a config reloaded — tears the
+          // subtree down and builds it again. For a shell whose chrome is on
+          // one screen that is an embedded page reloaded to where it started
+          // and every portal re-created blank, with nothing to show that it
+          // happened. A shell wanting state per display keys it itself, off
+          // `data-screen`.
+          key={index}
+          // Physical `left`/`top`/`width`/`height`, not the logical inset and
+          // size properties: this is desktop geometry, and the left-hand
+          // monitor stays on the left and stays landscape in a right-to-left
+          // or vertical-writing locale.
+          style={{
+            height: `${String(display.size[1])}px`,
+            left: `${String(display.position[0])}px`,
+            top: `${String(display.position[1])}px`,
+            width: `${String(display.size[0])}px`,
+          }}
+        >
+          {children}
+        </div>
+      ))}
     </>
   );
 };
@@ -116,31 +101,6 @@ export const Screen = ({
 const region = css({
   position: "absolute",
 });
-
-/**
- * The displays this page may put a region on: the one its window covers, or
- * every display on a page that is the whole desktop.
- *
- * **A DESK OF SEVERAL MONITORS IS SEVERAL PAGES**, because one browser window
- * cannot span two CRTCs. Each of them is told the whole desk, moved so its own
- * display is at the origin — a shell decides things one monitor cannot answer,
- * like which screen the chrome goes on — and `scanout` is what marks the one
- * it is. Drawing the others would draw them *on top of this monitor*, since a
- * window's page has no coordinates outside itself, and it would put the
- * chrome and every window on every screen: a client's frame sink takes one
- * parent, so the last page to embed a window takes it off every other page,
- * and the terminal that keeps answering the keyboard stops drawing.
- *
- * Nothing is lost by it. The monitor a region was asked for is a page of its
- * own rendering this same tree, and it draws the region there.
- *
- * A desktop no page is a window of — a nested run, a plain browser — is every
- * display, which is the original behavior and the whole of the difference.
- */
-const onThisPage = (displays: readonly Display[]): readonly Display[] => {
-  const window = displays.find((display) => display.scanout !== undefined);
-  return window === undefined ? displays : [window];
-};
 
 /**
  * The predicate one of the three mutually exclusive props asks for.

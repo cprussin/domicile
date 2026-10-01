@@ -236,9 +236,9 @@ pub enum Event {
     ///
     /// `width` and `height` are the box in the page's device pixels, and
     /// `scale` is how many of them the page draws one of its CSS pixels with.
-    /// Per box rather than per desktop, because a desk of several monitors is
-    /// several pages and each draws at its own monitor's scale. `None` from an
-    /// engine older than the scale crossing, which only ever said the box.
+    /// Per box rather than per desktop, because only the engine knows the
+    /// scale a box was laid out at. `None` from an engine older than the scale
+    /// crossing, which only ever said the box.
     Configure {
         surface: SurfaceId,
         width: u32,
@@ -1179,10 +1179,9 @@ mod tests {
 
     #[test]
     fn a_configure_carries_the_scale_of_the_page_that_laid_it_out() {
-        // A desk of several monitors is several pages, each at its own
-        // monitor's scale, so the box one `<app>` states in device pixels
-        // comes back down to logical ones by its own page's scale -- which
-        // only the engine knows.
+        // The box one `<app>` states in device pixels comes back down to
+        // logical ones by the scale it was laid out at -- which only the
+        // engine knows.
         let events = RefCell::new(Vec::new());
         let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
         on_configure_at(queue, 3, 1200, 900, 1.5);

@@ -1,4 +1,3 @@
-import { asDisplayTransform } from "@domicile/chrome-sdk/display-transform";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import type {
@@ -59,25 +58,10 @@ export const hostDisplays = (domicile: DomicileClient): DisplaySource => ({
  * other than what a reader might assume: it is what *clients* on that screen
  * draw at, not what this page renders at. The shell is one page at one
  * `devicePixelRatio` however many screens it spans.
- *
- * **`scanout` is the one place the two shapes differ rather than regroup.**
- * The engine states three flat facts — the mode, the turn, and whether this
- * screen is the whole page — because WebIDL has no nullable dictionary
- * attribute. `<Screen>` wants the one thing they add up to: the monitor this
- * page is, or nothing. So the flag is read here and becomes a presence, which
- * puts the "is this my screen?" question in one place. The mode and the turn
- * ride along as description — the engine has already drawn the page with
- * them.
  */
 const asDisplay = (display: DomicileDisplay): Display => ({
   name: display.name,
   position: [display.x, display.y],
   scale: display.scale,
-  scanout: display.fillsTheWindow
-    ? {
-        size: [display.modeWidth, display.modeHeight],
-        transform: asDisplayTransform(display.transform),
-      }
-    : undefined,
   size: [display.width, display.height],
 });

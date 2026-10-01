@@ -14,7 +14,7 @@ import { rectOf, stretched } from "./float";
  * The callbacks are latched here with the box for one reason rather than two:
  * they are what this drag does, and a drag is what it was when it started.
  * Keeping them here is also what lets a drag go on with nothing rendered at
- * all — its element gone with the window to another monitor — so no part of
+ * all — its element gone with the window to another monitor's `Stage` — so no part of
  * it depends on a render having happened.
  */
 type Drag = {
@@ -96,16 +96,16 @@ type Options = {
  * click-through, and following the pointer for ever.
  *
  * **AND THE ELEMENT MAY GO WHILE THE HAND HOLDS ON.** A window dragged onto
- * the next monitor is drawn by that monitor's page from then on, and the
- * element pressed on this one is taken out of the document — but this page
- * still has the pointer, and the drag goes on in its pixels (see
- * `floatDragged`). So the listeners belong to the drag rather than to the
+ * the next monitor is drawn by that monitor's `Stage` from then on, and the
+ * element pressed on this one is taken out of the document — but the drag goes
+ * on, in the page's pixels (see `floatDragged`). So the listeners belong to
+ * the drag rather than to the
  * component: added by the press, in the handler itself, and taken off by the
  * release. In the handler rather than an effect for a second reason: an
  * effect runs after the commit, and a release that beat it — a click — would
  * be the release that never arrived.
  *
- * The state beside it is only what to draw, and a page that has stopped
+ * The state beside it is only what to draw, and a `Stage` that has stopped
  * drawing the element has nothing to draw it on.
  */
 export const useFloatDrag = ({
