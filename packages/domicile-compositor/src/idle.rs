@@ -326,6 +326,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::ActivateTrayItem { .. }
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
+        // And a slider dragged: the hand was on the shell's page.
+        | ClientRequest::SetBrightness { .. }
         // And so is a lock asked for: the chord that asked landed on the
         // shell, and a lock that lit the screens is still a lock.
         | ClientRequest::Lock => false,

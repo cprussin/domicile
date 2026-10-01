@@ -243,6 +243,16 @@ pub enum ChromeMessage {
     /// long as the desktop does, and `[theme]` is what it comes up as.
     SetTheme { theme: Theme },
 
+    /// Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
+    ///
+    /// Answered like [`ChromeMessage::SetTheme`]: with
+    /// [`HostMessage::Brightness`] to every chrome, once the kernel says the
+    /// backlight moved, rather than a reply a page could believe its own drag
+    /// by. The compositor asks logind to write it — the session's owner may,
+    /// where `/sys` is root's — and never goes all the way to zero, which on
+    /// most panels is a screen that is off. See `domicile_host::backlight`.
+    SetBrightness { level: f64 },
+
     /// This page is holding its old frame for the theme it was told: turn the
     /// desk's windows over now.
     ///
@@ -676,6 +686,17 @@ pub enum HostMessage {
     /// protocol inventing a reading, which is the failure the whole message
     /// exists to undo.
     Battery { charge: f64, charging: bool },
+
+    /// How bright the screen is, 0.0 through 1.0.
+    ///
+    /// Pushed like [`HostMessage::Battery`]: when the kernel announces the
+    /// backlight moved — a brightness key, another program, or
+    /// [`ChromeMessage::SetBrightness`] — and once more to a chrome that has
+    /// just connected. A fraction for the battery's reason: rounding belongs
+    /// where it is drawn. A machine with no backlight sends nothing, so a
+    /// desktop on an external monitor shows no slider rather than a dead one.
+    /// `domicile_host::backlight` is the reading.
+    Brightness { level: f64 },
 
     /// What has been copied on this desktop, newest first.
     ///

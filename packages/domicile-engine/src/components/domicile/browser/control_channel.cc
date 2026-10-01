@@ -420,6 +420,15 @@ void ControlChannel::Lock() {
   SendMessage(Typed("lock"));
 }
 
+// Relayed, like Lock: the backlight is the compositor's to set, and what comes
+// back up is `brightness` to every chrome. The page's `double` has already
+// refused a level that is not a number.
+void ControlChannel::SetBrightness(double level) {
+  base::DictValue message = Typed("set_brightness");
+  message.Set("level", level);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::ThemeCaptured(mojom::Theme theme) {
   base::DictValue message = Typed("theme_captured");
   message.Set("theme", std::string(ThemeToWire(theme)));
@@ -1018,6 +1027,17 @@ void ControlChannel::DispatchLine(const std::string& line,
       return;
     }
     client_->Battery(*charge, *charging, arrival);
+    return;
+  }
+
+  if (*type == "brightness") {
+    // Dropped rather than defaulted, for `battery`'s reason: a level that
+    // defaulted to zero would draw a slider at the bottom of a lit screen.
+    std::optional<double> level = message.FindDouble("level");
+    if (!level) {
+      return;
+    }
+    client_->Brightness(*level);
     return;
   }
 

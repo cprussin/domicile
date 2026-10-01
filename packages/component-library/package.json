@@ -43,6 +43,7 @@
     "./Screen": "./src/Screen/Screen.tsx",
     "./Select": "./src/Select/Select.tsx",
     "./SlideOver": "./src/SlideOver/SlideOver.tsx",
+    "./Slider": "./src/Slider/Slider.tsx",
     "./spacing": "./src/spacing.ts",
     "./standalone-theme-source": "./src/ThemeSwitch/standalone-theme-source.ts",
     "./TabRail": "./src/TabRail/TabRail.tsx",

@@ -105,6 +105,7 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod appearance;
+mod backlight;
 mod clipboard;
 mod coalesce;
 mod dmabuf_descriptor;
@@ -170,6 +171,9 @@ use domicile_config::{
     KeyboardConfig, Omit, ThemeMode,
 };
 use domicile_host::app_icons::AppIcons;
+use domicile_host::backlight::{
+    announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
+};
 use domicile_host::battery::{announces_a_power_supply, reading, Charge, RealPowerSupplies};
 use domicile_host::bookmarks::find as find_bookmarks;
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
@@ -433,6 +437,10 @@ enum ClientRequest {
     /// The shell asked for the desk to be locked now. See
     /// [`DomicileCompositor::shut_the_desk`].
     Lock,
+    /// Set the screen's backlight to a fraction 0.0 through 1.0.
+    SetBrightness {
+        level: f64,
+    },
 }
 
 /// Something a chrome asked that the connection it arrived on answers itself,
@@ -1432,6 +1440,12 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::Lock);
                 Vec::new()
             }
+            // To the Wayland thread, which reads the backlight it is setting;
+            // the answer is the `brightness` broadcast its uevent produces.
+            Ok(ChromeMessage::SetBrightness { level }) => {
+                hub.send_request(ClientRequest::SetBrightness { level });
+                Vec::new()
+            }
             // Compositor-level: the chrome's pixel density is the output's
             // scale, which is Wayland state rather than anything the brain
             // models — the scene is described in logical units either way.
@@ -2067,6 +2081,10 @@ struct DomicileCompositor {
     /// those readings is news. See `domicile_host::battery`, and the message's
     /// own docs in `domicile_protocol` for why the page cannot read it itself.
     charge: Charge,
+    /// What the chromes were last told about the brightness, and the writer
+    /// that sets it. See `domicile_host::backlight`.
+    brightness: Brightness,
+    backlight: backlight::Backlight,
     /// Whether anything has changed since the last frame was drawn.
     ///
     /// Compositing does not happen where the change is noticed. Submitting a
@@ -4659,6 +4677,42 @@ impl DomicileCompositor {
         }
     }
 
+    /// Tell every chrome the brightness, when it has moved far enough to draw.
+    fn tell_the_chromes_the_brightness(&mut self) {
+        let now = backlight_reading(&RealBacklights).map(|read| read.level());
+        if let Some(level) = self.brightness.moved_to(now) {
+            self.hub.broadcast(HostMessage::Brightness { level });
+        }
+    }
+
+    /// The brightness again, for a chrome that has only just connected.
+    fn tell_a_new_chrome_the_brightness(&self) {
+        if let Some(level) = self.brightness.again() {
+            self.hub.broadcast(HostMessage::Brightness { level });
+        }
+    }
+
+    /// Ask logind to set the backlight to `level`.
+    ///
+    /// Read fresh rather than from what the chromes were told: the raw value
+    /// is the device's, and a backlight that went away since says so here.
+    fn set_the_brightness(&self, level: f64) {
+        let Some(backlight) = backlight_reading(&RealBacklights) else {
+            warn!("a chrome asked to set the brightness of a desktop with no backlight");
+            return;
+        };
+        match backlight.raw_for(level) {
+            Some(raw) => self.backlight.set(backlight::Request {
+                device: backlight.device,
+                raw,
+            }),
+            None => warn!(
+                level,
+                "a chrome asked for a brightness that is not a number"
+            ),
+        }
+    }
+
     /// Tell every chrome what is on the clipboard.
     ///
     /// The whole list every time rather than the row that changed: a copy
@@ -5021,6 +5075,7 @@ impl DomicileCompositor {
                     warn!("a chrome asked to lock a desktop that has no lock");
                 }
             }
+            ClientRequest::SetBrightness { level } => self.set_the_brightness(level),
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // A turnover already under way is replaced rather than
                 // finished: its windows are about to be told a newer theme.
@@ -5063,6 +5118,8 @@ impl DomicileCompositor {
                 // when it moves, and a page that connected between two moves
                 // has never been told one.
                 self.tell_a_new_chrome_the_charge();
+                // And the brightness, for the charge's reason.
+                self.tell_a_new_chrome_the_brightness();
                 // The clipboard for the same reason, and with no second
                 // method for it: a history of nothing is a message this one
                 // can send, where a battery that has not been read is not.
@@ -7300,6 +7357,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         device_pixel_ratio: 1.0,
         modifiers: Held::default(),
         charge: Charge::default(),
+        brightness: Brightness::default(),
+        backlight: backlight::serve(),
         stop: Arc::new(AtomicBool::new(false)),
         engine,
         // Armed below rather than here, and re-armed on every engine that
@@ -7418,8 +7477,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             handle.insert_source(
                 Generic::new(socket, Interest::READ, Mode::Level),
                 |_, socket, data: &mut CalloopData| {
-                    if uevents::drain(socket, announces_a_power_supply) {
+                    let (mut charge, mut brightness) = (false, false);
+                    uevents::drain(socket, |datagram| {
+                        charge |= announces_a_power_supply(datagram);
+                        brightness |= announces_a_backlight(datagram);
+                        false
+                    });
+                    if charge {
                         data.state.tell_the_chromes_the_charge();
+                    }
+                    // A brightness key, another program, or logind writing
+                    // what the slider asked for: all a `SOURCE=` uevent.
+                    if brightness {
+                        data.state.tell_the_chromes_the_brightness();
                     }
                     Ok(PostAction::Continue)
                 },
@@ -7440,6 +7510,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // decided at startup would be wrong about a battery plugged in later.
     handle.insert_source(Timer::immediate(), |_, _, data: &mut CalloopData| {
         data.state.tell_the_chromes_the_charge();
+        // And the first reading of the brightness, which a firmware hotkey
+        // that sends no uevent is also caught up by.
+        data.state.tell_the_chromes_the_brightness();
         TimeoutAction::ToDuration(BATTERY_BACKSTOP)
     })?;
 
