@@ -26,6 +26,7 @@ const asks = (
       choose: (paths: readonly string[]) => {
         answers.push(`choose ${mode} ${paths.join(",")}`);
       },
+      home: "/home/someone",
       list: () => Promise.resolve([]),
       mode,
       suggestedName: "",
