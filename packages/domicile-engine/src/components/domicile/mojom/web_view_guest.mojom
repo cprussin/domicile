@@ -278,7 +278,9 @@ interface WebViewGuestClient {
   // `accept` is extensions, lower case and without the dot: the browser has
   // already turned `image/*` into them, because a picker has a name to match
   // and nothing else. Empty is anything. `suggested_name` is a save's
-  // suggestion and empty otherwise.
+  // suggestion and empty otherwise. `home` is the absolute home directory,
+  // where a picker starts and what its `~` means: the renderer has no other
+  // way to learn it.
   //
   // `paths` ARE ABSOLUTE OR RELATIVE TO THE HOME -- relative is the vocabulary
   // `found_files` already speaks, absolute is the rest of the filesystem a
@@ -288,7 +290,8 @@ interface WebViewGuestClient {
   // A pipe that closes first -- the element gone -- is a cancel too.
   FileChooserRequested(WebViewFileChooserMode mode,
                        array<string> accept,
-                       string suggested_name)
+                       string suggested_name,
+                       string home)
       => (array<string>? paths);
 
   // The page called window.close(), and its renderer allowed it.

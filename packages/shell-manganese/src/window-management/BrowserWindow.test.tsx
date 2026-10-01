@@ -21,19 +21,9 @@ import userEvent from "@testing-library/user-event";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
 
-/** A home with one file in it, which is all a picker here is asked about. */
-const HOME_FILES = ["notes.txt"];
-
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-  searchFiles: (query: string) =>
-    Promise.resolve({
-      files: HOME_FILES,
-      indexing: false,
-      matched: HOME_FILES.length,
-      query,
-    }),
 } as unknown as DomicileClient;
 
 /** A domicile client that keeps what the window told the host, in order. */
@@ -132,16 +122,18 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
       choose: (paths: readonly string[]) => {
         answers.push(`choose ${paths.join(",")}`);
       },
-      list: () => Promise.resolve([]),
+      home: "/home/someone",
+      // A home with one file in it, which is all a picker here is asked about.
+      list: () => Promise.resolve(["notes.txt"]),
       mode: "open",
       suggestedName: "",
     }),
   );
 };
 
-/** The picker's search box, which is where its keyboard is. */
+/** The picker's box, which is where its keyboard is. */
 const pickerBox = (): HTMLElement =>
-  screen.getByRole("combobox", { name: "Search your files" });
+  screen.getByRole("combobox", { name: "Filter or go to a path" });
 
 /**
  * The engine reporting where the guest now is and what it says about the
@@ -545,11 +537,11 @@ describe("BrowserWindow", () => {
       const { container } = render(<BrowserWindow {...windowProps} focused />);
       asksForAFile(view(container), answers);
 
-      await userEvent.click(
+      await userEvent.dblClick(
         await screen.findByRole("option", { name: "notes.txt" }),
       );
 
-      expect(answers).toStrictEqual(["choose notes.txt"]);
+      expect(answers).toStrictEqual(["choose /home/someone/notes.txt"]);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
