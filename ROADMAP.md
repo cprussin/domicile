@@ -179,7 +179,7 @@ The evidence for each of those is in the doc that made the claim —
    `fullscreen global` through the same mirrors, and browser windows, which
    stay on their screen because a `<webview>` on another page reloads.
    [WINDOWS-ACROSS-SCREENS.md](docs/architecture/WINDOWS-ACROSS-SCREENS.md).
-   What is left comes free with item 7.
+   What is left comes free with item 8.
 
 6. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
@@ -187,7 +187,14 @@ The evidence for each of those is in the doc that made the claim —
    libappindicator items do nothing on a secondary click.
    [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
-7. **One page for the desk.** On a tty the shell becomes one page over the
+7. **Which monitor toasts a notification.** The compositor serves
+   `org.freedesktop.Notifications` — a site's Web Notification included — and
+   manganese toasts them and keeps a drawer. Left: on one page over the desk,
+   the toasts go to the top-right of the whole desk rather than the focused
+   screen; and inline reply.
+   [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
+
+8. **One page for the desk.** On a tty the shell becomes one page over the
    desk's bounding box, shown on every monitor at its own density and refresh
    rate, instead of a page per monitor. Phase 1 (one host, presenters per
    CRTC, raster at the largest scale) is behind `--domicile-one-page`; left:

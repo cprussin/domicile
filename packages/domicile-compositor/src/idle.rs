@@ -321,8 +321,11 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // shell's own page and never came through here at all.
         | ClientRequest::ClipboardCopied { .. }
         | ClientRequest::CopyClipboardEntry { .. }
-        // And a tray click is `CloseApp`'s case exactly.
+        // And a tray click is `CloseApp`'s case exactly, and so is a press
+        // on a notification.
         | ClientRequest::ActivateTrayItem { .. }
+        | ClientRequest::DismissNotifications { .. }
+        | ClientRequest::InvokeNotificationAction { .. }
         // And so is a lock asked for: the chord that asked landed on the
         // shell, and a lock that lit the screens is still a lock.
         | ClientRequest::Lock => false,
@@ -962,6 +965,17 @@ mod tests {
                 ClientRequest::ActivateTrayItem {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
+                },
+            ),
+            (
+                "the shell clearing notifications",
+                ClientRequest::DismissNotifications { ids: vec![7] },
+            ),
+            (
+                "the shell pressing a notification",
+                ClientRequest::InvokeNotificationAction {
+                    id: 7,
+                    action: "default".into(),
                 },
             ),
             ("the shell locking the desk", ClientRequest::Lock),

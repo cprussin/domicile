@@ -50,6 +50,7 @@
     "./Textarea": "./src/Textarea/Textarea.tsx",
     "./ThemeProvider": "./src/ThemeSwitch/ThemeProvider.tsx",
     "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx",
+    "./Toaster": "./src/Toaster/Toaster.tsx",
     "./theme-core": "./src/ThemeSwitch/theme-core.ts",
     "./theme-source": "./src/ThemeSwitch/theme-source.ts",
     "./vite-shell": "./src/vite-shell.ts"

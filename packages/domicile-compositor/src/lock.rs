@@ -435,7 +435,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
             | ClientRequest::CopyClipboardEntry { .. }
-            | ClientRequest::ActivateTrayItem { .. },
+            | ClientRequest::ActivateTrayItem { .. }
+            | ClientRequest::DismissNotifications { .. }
+            | ClientRequest::InvokeNotificationAction { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -811,6 +813,17 @@ mod tests {
                 ClientRequest::ActivateTrayItem {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
+                },
+            ),
+            (
+                "notifications cleared",
+                ClientRequest::DismissNotifications { ids: vec![7] },
+            ),
+            (
+                "a notification's action taken",
+                ClientRequest::InvokeNotificationAction {
+                    id: 7,
+                    action: "default".into(),
                 },
             ),
         ] {

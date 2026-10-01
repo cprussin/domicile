@@ -1,0 +1,18 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// One button of a notification.
+//
+// An interface rather than a dictionary for DomicileTrayItem's reason: these
+// are read off a DomicileNotification's array.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileNotificationAction {
+  // What DomicileHost.invokeNotificationAction() names this button by.
+  readonly attribute DOMString key;
+
+  // What the button says.
+  readonly attribute DOMString label;
+};

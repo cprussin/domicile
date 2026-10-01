@@ -122,6 +122,7 @@ mod keymap;
 mod latency;
 mod lock;
 mod modifiers;
+mod notifications;
 mod outbound;
 mod pam;
 mod peer_process;
@@ -409,6 +410,18 @@ enum ClientRequest {
         id: String,
         action: TrayAction,
     },
+    /// The shell cleared notifications: the server lets them go and tells
+    /// their applications. Through this thread for `ActivateTrayItem`'s
+    /// reason — a locked desk refuses it.
+    DismissNotifications {
+        ids: Vec<u32>,
+    },
+    /// The shell pressed one of a notification's actions: the server tells
+    /// its application. Through this thread for the same reason.
+    InvokeNotificationAction {
+        id: u32,
+        action: String,
+    },
     /// Somebody typed a passphrase at the shell's lock screen.
     ///
     /// Here rather than in the brain because the lock is the *seat's*: what
@@ -522,6 +535,10 @@ struct ChromeHub {
     /// Unset in the unit tests, which have no bus, and a click there is
     /// nobody's.
     tray: OnceLock<tray::Tray>,
+    /// Where the shell's dismissals and presses of a notification go: the
+    /// server's worker, which tells the application. Set once, for `tray`'s
+    /// reason — see [`crate::notifications`].
+    notifications: OnceLock<notifications::NotificationServer>,
 }
 
 impl ChromeHub {
@@ -568,6 +585,7 @@ impl ChromeHub {
             favicons: favicons::Favicons::default(),
             appearance,
             tray: OnceLock::new(),
+            notifications: OnceLock::new(),
         });
         (hub, outbound_rx)
     }
@@ -1340,6 +1358,17 @@ fn read_chrome_messages(
             // desk raises no application's window.
             Ok(ChromeMessage::ActivateTrayItem { id, action }) => {
                 hub.send_request(ClientRequest::ActivateTrayItem { id, action });
+                Vec::new()
+            }
+            // To the Wayland thread too: a press on a notification is how an
+            // application's window is raised, and a locked desk raises none.
+            // What a shell sees of either is the next `notifications`.
+            Ok(ChromeMessage::DismissNotifications { ids }) => {
+                hub.send_request(ClientRequest::DismissNotifications { ids });
+                Vec::new()
+            }
+            Ok(ChromeMessage::InvokeNotificationAction { id, action }) => {
+                hub.send_request(ClientRequest::InvokeNotificationAction { id, action });
                 Vec::new()
             }
             Ok(ChromeMessage::SearchFiles { query }) => {
@@ -4944,6 +4973,17 @@ impl DomicileCompositor {
                     tray.activate(id, action);
                 }
             }
+            // On to the notification server's worker, for the tray's reason.
+            ClientRequest::DismissNotifications { ids } => {
+                if let Some(server) = self.hub.notifications.get() {
+                    server.dismiss(ids);
+                }
+            }
+            ClientRequest::InvokeNotificationAction { id, action } => {
+                if let Some(server) = self.hub.notifications.get() {
+                    server.invoke(id, action);
+                }
+            }
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
                 Some(text) => {
                     // The row becomes what a paste produces, which is not the
@@ -7028,6 +7068,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         move |items| {
             // Scoped, so the host is let go of before the broadcast queues.
             let told = publishing.host.lock().unwrap().set_tray(items);
+            if let Some(message) = told {
+                publishing.broadcast(message);
+            }
+        },
+    ));
+    // The notifications, published through the hub for the tray's reasons,
+    // and none first for its reason too. See `notifications`.
+    hub.host.lock().unwrap().set_notifications(Vec::new());
+    let publishing = Arc::clone(&hub);
+    let _ = hub.notifications.set(notifications::serve(
+        data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home_directory().as_deref(),
+        ),
+        move |items| {
+            let told = publishing.host.lock().unwrap().set_notifications(items);
             if let Some(message) = told {
                 publishing.broadcast(message);
             }
