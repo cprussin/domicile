@@ -148,6 +148,21 @@ describe("selectionOf", () => {
     ).toBeUndefined();
   });
 
+  it("rings the workspace's only tab group once `focus parent` selects it", () => {
+    // The commands have moved off the open tab to the group, and nothing else
+    // says so.
+    expect(
+      selected(
+        reduce(
+          NO_WINDOWS,
+          WindowAction.AppAppeared("one", "one"),
+          WindowAction.AppAppeared("two", "two"),
+          WindowAction.ParentFocused(),
+        ),
+      ),
+    ).toMatchObject({ group: true, rect: GEOMETRY.workspace });
+  });
+
   it("rings nothing while no window is being worked in", () => {
     expect(selected(NO_WINDOWS)).toBeUndefined();
   });
