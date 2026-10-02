@@ -68,6 +68,9 @@ It provides these:
   nothing.
   `domicile-close` is the page calling `window.close()` — an extension's popup
   closing itself — and removing the view is the shell's answer.
+  `domicile-content-size-change` says `contentWidth` / `contentHeight` moved:
+  the size the page's content wants, which Chrome sizes an extension's popup
+  from.
   `domicile-popup-window` is an extension's `chrome.windows.create` with a
   popup: `windowId`, `url`, `width` and `height` (0 where it named none). The
   shell opens a window whose view carries `popupwindow="<windowId>"` from its

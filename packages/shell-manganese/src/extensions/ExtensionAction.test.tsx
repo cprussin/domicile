@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Extension } from "@domicile/chrome-sdk/extension";
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_CLOSE_EVENT,
+  WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -142,6 +145,34 @@ describe("ExtensionAction", () => {
       await popupView();
 
       expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
+    });
+
+    it("sizes the popup's view to its content once the page says what that is", async () => {
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      const view = await popupView();
+      const before = [view.style.inlineSize, view.style.blockSize];
+
+      // The engine's answer, which the element holds and the event announces.
+      Object.defineProperties(view, {
+        contentHeight: { configurable: true, value: 170 },
+        contentWidth: { configurable: true, value: 230 },
+      });
+      fireEvent(view, new Event(WEBVIEW_CONTENT_SIZE_CHANGE_EVENT));
+
+      expect(before).toStrictEqual(["", ""]);
+      await waitFor(() => {
+        expect([view.style.inlineSize, view.style.blockSize]).toStrictEqual([
+          "230px",
+          "170px",
+        ]);
+      });
     });
   });
 

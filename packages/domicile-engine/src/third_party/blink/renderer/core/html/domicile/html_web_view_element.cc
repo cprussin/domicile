@@ -90,6 +90,11 @@ constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
 // are readable on the element.
 constexpr char kFindChangeEvent[] = "domicile-find-change";
 
+// And what it says when the page's content changes size. Carries nothing,
+// like the other state events: `contentWidth` and `contentHeight` are readable
+// on the element.
+constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
+
 // And what it asks when the page needs a file picked -- the one event here
 // that is a question, answered on the event itself. See
 // domicile_file_chooser_event.h.
@@ -519,6 +524,14 @@ void HTMLWebViewElement::FindChanged(int32_t matches, int32_t active_match) {
   find_active_match_ = active_match;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kFindChangeEvent)));
+}
+
+// Stored before it is announced, for the reason every state here is.
+void HTMLWebViewElement::ContentSizeChanged(int32_t width, int32_t height) {
+  content_width_ = width;
+  content_height_ = height;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kContentSizeChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

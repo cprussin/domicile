@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 2 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: a webview's guest sends its content size after a
+ layout
+
+WebViewImpl sends its preferred size from UpdatePreferredSize, which runs
+when preferred-size mode is turned on and then only from
+WebFrameWidgetImpl::BeginCommitCompositorFrame. An extension's popup in a
+<webview> lays out without committing a frame, so its size was sent once,
+while its page was still empty (0x0, which is not sent at all), and never
+again. MainFrameLayoutUpdated now also posts an update that brings the
+layout up to date and sends the size, at most one in flight, and only in
+preferred-size mode.
+
+Verified: not built. This repository cannot build Chromium;
+`guard-extension-tray.sh` measures it on `crux` with the rest of the
+engine job.
+---
+ .../renderer/core/exported/web_view_impl.cc   | 24 +++++++++++++++++++
+ .../renderer/core/exported/web_view_impl.h    | 11 +++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+index cff1b40..a5df84d 100644
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -4098,6 +4098,30 @@ void WebViewImpl::MainFrameLayoutUpdated() {
+     observer.DidUpdateMainFrameLayout();
+   }
+   needs_preferred_size_update_ = true;
++
++  // Domicile: a <webview>'s guest can lay out without committing a compositor
++  // frame -- an extension's popup does -- and BeginCommitCompositorFrame is the
++  // only other caller of UpdatePreferredSize, so its size would be sent only
++  // while its page was still empty. Send it after the layout instead.
++  if (send_preferred_size_changes_ && !preferred_size_update_posted_) {
++    preferred_size_update_posted_ = true;
++    GetPage()->GetAgentGroupScheduler().DefaultTaskRunner()->PostTask(
++        FROM_HERE,
++        blink::BindOnce(&WebViewImpl::UpdatePreferredSizeAfterLayout,
++                        preferred_size_weak_factory_.GetWeakPtr()));
++  }
++}
++
++void WebViewImpl::UpdatePreferredSizeAfterLayout() {
++  preferred_size_update_posted_ = false;
++  if (!MainFrameImpl() || !MainFrameWidget()) {
++    return;
++  }
++  // The preferred size requires an up-to-date layout tree, as in
++  // EnablePreferredSizeChangedMode.
++  MainFrameWidget()->UpdateLifecycle(WebLifecycleUpdate::kLayout,
++                                     DocumentUpdateReason::kSizeChange);
++  UpdatePreferredSize();
+ }
+ 
+ void WebViewImpl::DidChangeContentsSize() {
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
+index 1c4e22e..6995402 100644
+--- a/third_party/blink/renderer/core/exported/web_view_impl.h
++++ b/third_party/blink/renderer/core/exported/web_view_impl.h
+@@ -40,6 +40,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/raw_ref.h"
+ #include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/observer_list.h"
+ #include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/associated_receiver.h"
+@@ -178,6 +179,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+   void ResetScrollAndScaleState() override;
+   gfx::Size ContentsPreferredMinimumSize() override;
+   void UpdatePreferredSize() override;
++  // Domicile: UpdatePreferredSize, once a layout has finished. See
++  // MainFrameLayoutUpdated.
++  void UpdatePreferredSizeAfterLayout();
+   void EnablePreferredSizeChangedMode() override;
+   void SetZoomFactorForDeviceScaleFactor(float device_scale_factor,
+                                          float text_scale_multiplier) override;
+@@ -956,6 +960,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+   // to be called.
+   bool needs_preferred_size_update_ = true;
+ 
++  // Domicile: whether an UpdatePreferredSizeAfterLayout is already posted.
++  bool preferred_size_update_posted_ = false;
++
+   // Cache the preferred size of the page in order to prevent sending the IPC
+   // when layout() recomputes but doesn't actually change sizes.
+   gfx::Size preferred_size_in_dips_;
+@@ -1031,6 +1038,10 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+ 
+   // All the registered observers.
+   base::ObserverList<WebViewObserver> observers_;
++
++  // Domicile: for UpdatePreferredSizeAfterLayout. Last, so it is destroyed
++  // first.
++  base::WeakPtrFactory<WebViewImpl> preferred_size_weak_factory_{this};
+ };
+ 
+ // WebView is always implemented by WebViewImpl, so explicitly allow the
