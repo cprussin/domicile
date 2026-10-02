@@ -968,11 +968,13 @@ know either.
 
 ### A click in the page
 
-You never see it. The guest has a browsing context of its own, so no pointer
-event crosses out of it — and neither does the focus that click takes, because
-Blink dispatches `focus` and `focusin` only while the page is focused, and a
-guest taking focus is the moment your page loses it. So the element says so
-itself, in an event that is not a focus event:
+You never see the press. The guest has a browsing context of its own, so no
+pointer event crosses out of it. The focus it takes does: the `<webview>`
+becomes `document.activeElement` and gets a real `focus` and `focusin` — which
+upstream Blink holds back here, and the fork sends — so a popover's focus-out
+dismissal, a focus trap and React's `onFocus` all hear a click in a page as
+focus moving to the view. The element also says so in an event of its own,
+which is the one to raise windows on:
 
 ```ts
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
@@ -983,10 +985,10 @@ frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
 });
 ```
 
-One listener on the window covers the page and the chrome around it alike.
-Read it as "the user is working in this window now": it is the only half of
-that click you get, and a shell without it is a desktop where clicking a site
-does not raise the window showing it.
+Read it as "the user is working in this window now"; a shell without it is a
+desktop where clicking a site does not raise the window showing it. It is not
+the `focusin`: it also fires when the page gets focus back with your document,
+where `focusin` follows upstream's rules.
 
 ### The keyboard, which is the part that bites
 

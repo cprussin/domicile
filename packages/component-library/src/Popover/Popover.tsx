@@ -29,13 +29,6 @@ type Props = ExtendProps<
      * its own — a view of another page — which the padding would only frame.
      */
     flush?: boolean | undefined;
-    /**
-     * Events besides `focusin` that say focus moved, one landing outside the
-     * panel closing it like a `focusin` there would. For a host whose guest
-     * pages take focus without a `focusin` reaching this document — Domicile's
-     * `<webview>` says so in an event of its own.
-     */
-    outsideFocusEvents?: readonly string[] | undefined;
     side?: Side | undefined;
     title?: ReactNode | undefined;
     /**
@@ -59,8 +52,8 @@ type Props = ExtendProps<
  *
  * Non-modal: the page behind it stays scrollable and clickable, and pressing
  * outside or Escape closes it — and so does focus moving anywhere outside it,
- * including into a guest page whose press this document never sees (see
- * `outsideFocusEvents`). That is the difference between this and
+ * which is all this document hears of a press inside a frame of another
+ * process. That is the difference between this and
  * `ModalDialog`, which is for something the user has to answer before carrying
  * on.
  */
@@ -69,7 +62,6 @@ const PopoverComponent = ({
   align = "center",
   children,
   flush = false,
-  outsideFocusEvents = NO_EVENTS,
   side = "bottom",
   title,
   tone = "card",
@@ -100,7 +92,6 @@ const PopoverComponent = ({
           >
             <CloseOnFocusOut
               actions={actions}
-              events={outsideFocusEvents}
               popup={popupRef}
               trigger={triggerRef}
             />
@@ -212,26 +203,21 @@ const bodyStyles = cva({
   },
 });
 
-/** No events beyond `focusin`; one array, so the listener is not remade. */
-const NO_EVENTS: readonly string[] = [];
-
 /**
  * Close the open panel when focus lands outside it and its trigger. Mounted
  * inside the popup, so it listens only while the panel is open.
  */
 const CloseOnFocusOut = ({
   actions,
-  events,
   popup,
   trigger,
 }: {
   actions: RefObject<BasePopover.Root.Actions | null>;
-  events: readonly string[];
   popup: RefObject<HTMLDivElement | null>;
   trigger: RefObject<HTMLElement | null>;
 }) => {
   useEffect(() => {
-    const left = (event: Event) => {
+    const left = (event: FocusEvent) => {
       const target = event.target;
       if (
         target instanceof Node &&
@@ -241,15 +227,10 @@ const CloseOnFocusOut = ({
         actions.current?.close();
       }
     };
-    const names = ["focusin", ...events];
-    for (const name of names) {
-      document.addEventListener(name, left);
-    }
+    document.addEventListener("focusin", left);
     return () => {
-      for (const name of names) {
-        document.removeEventListener(name, left);
-      }
+      document.removeEventListener("focusin", left);
     };
-  }, [actions, events, popup, trigger]);
+  }, [actions, popup, trigger]);
   return undefined;
 };

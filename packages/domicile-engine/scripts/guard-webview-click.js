@@ -35,8 +35,9 @@
 //                                is the harness working rather than a finding
 //   GUARD window-reached target= the element said its guest took focus. THE
 //                                CLAIM, and `target=` is which element said it
-//   GUARD window-focusin target= an ordinary focus event arrived too, which is
-//                                a reading rather than an assertion: see below
+//   GUARD window-focusin target= an ordinary focus event arrived too. THE
+//                                OTHER CLAIM: what every focus-based handler
+//                                in a shell is written against
 //   GUARD window-reached-at-elem… the same event heard on the element rather
 //                                than on the document, which separates a
 //                                dispatch that did not travel from one that
@@ -118,12 +119,14 @@ view.style.border = "0";
 // on the element, because it bubbling is half of what makes it usable — a
 // chrome hangs one handler on the window it drew.
 //
-// NOT `focusin`, and that is the finding this guard produced rather than an
-// assumption it started with: focusing the element buys document.activeElement
-// and no event at all, because Document::SetFocusedElement dispatches focus
-// events only while the page is focused and a guest taking focus is the moment
-// the embedder's page loses it. A run before that was understood read
-// press=1 reach=0 with the element focused, which is exactly that.
+// NOT ONLY `focusin`, and that is the finding this guard produced rather than
+// an assumption it started with: upstream, focusing the element buys
+// document.activeElement and no event at all, because
+// Document::SetFocusedElement dispatches focus events only while the page is
+// focused and a guest taking focus is the moment the embedder's page loses it.
+// A run before that was understood read press=1 reach=0 with the element
+// focused, which is exactly that. The fork now sends both; this is the one a
+// shell raises windows on.
 document.addEventListener("domicile-guest-focus", (event) => {
   say(`window-reached target=${event.target.localName}`);
   if (document.activeElement === view) {
@@ -131,9 +134,10 @@ document.addEventListener("domicile-guest-focus", (event) => {
   }
 });
 
-// And the focus event that would have been the obvious way to hear it, kept as
-// a reading rather than an assertion: if it ever starts arriving, the element's
-// own event is no longer the only path and this page is where that shows up.
+// AND THE ORDINARY FOCUS EVENT, which upstream suppresses here and the fork
+// sends anyway — HTMLWebViewElement::DispatchSuppressedFocus — because a
+// shell's focus-out dismissal, its focus traps and React's onFocus are all
+// written against it and can hear nothing else.
 document.addEventListener("focusin", (event) => {
   say(`window-focusin target=${event.target.localName}`);
 });

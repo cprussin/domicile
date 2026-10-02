@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
   act,
-  fireEvent,
   render,
   screen,
   waitForElementToBeRemoved,
@@ -108,51 +107,6 @@ describe(Popover, () => {
       });
 
       await waitForElementToBeRemoved(() => screen.queryByText("Body"));
-    });
-
-    it("closes on a focus event of the host's landing outside it", async () => {
-      // A click inside a browser window lands in the guest's page, which
-      // fires no focusin here: the engine says so in an event of its own.
-      render(
-        <>
-          <Popover
-            outsideFocusEvents={["guest-focus"]}
-            title="Connection"
-            trigger={<Button>Details</Button>}
-          >
-            Body
-          </Popover>
-          <div data-testid="page" />
-        </>,
-      );
-      await userEvent.click(screen.getByRole("button", { name: "Details" }));
-
-      fireEvent(
-        screen.getByTestId("page"),
-        new Event("guest-focus", { bubbles: true }),
-      );
-
-      await waitForElementToBeRemoved(() => screen.queryByText("Body"));
-    });
-
-    it("stays open for a focus event of the host's landing inside it", async () => {
-      render(
-        <Popover
-          outsideFocusEvents={["guest-focus"]}
-          title="Connection"
-          trigger={<Button>Details</Button>}
-        >
-          <div data-testid="popup-page" />
-        </Popover>,
-      );
-      await userEvent.click(screen.getByRole("button", { name: "Details" }));
-
-      fireEvent(
-        screen.getByTestId("popup-page"),
-        new Event("guest-focus", { bubbles: true }),
-      );
-
-      expect(screen.getByTestId("popup-page")).toBeInTheDocument();
     });
 
     it("stays open when focus moves within it", async () => {

@@ -199,6 +199,10 @@ class CORE_EXPORT HTMLWebViewElement final
    * into a guest and read `activeElement=webview hasFocus=false` out of the
    * embedder's document with no event of any kind beside it.
    *
+   * The focus events are sent now too -- see DispatchSuppressedFocus -- and
+   * this stays beside them because it fires on every focus the element takes,
+   * by whichever route, which is what a shell raises windows on.
+   *
    * HUNG OFF SetFocused RATHER THAN OFF THE FOCUS CONTROLLER'S CALL, and that
    * is the same measurement read a second time. Document::SetFocusedElement
    * calls SetFocused on whatever it focuses, unconditionally, so an element
@@ -226,6 +230,28 @@ class CORE_EXPORT HTMLWebViewElement final
    * dispatch, which is how a run says whether this ran at all.
    */
   void DispatchGuestFocus();
+
+  /**
+   * The `focus` and `focusin` Document::SetFocusedElement held back, sent
+   * while the embedder's page is unfocused -- which a guest taking focus
+   * always leaves it -- and not otherwise, since a focused page has already
+   * had them from Document.
+   *
+   * Upstream holds them for the page's return ("if page lost focus, event
+   * will be dispatched on page focus, don't duplicate"), which is right for a
+   * page whose window went to the back and wrong here: the embedder's page
+   * lost focus to its OWN element's guest, so a shell's focus-out dismissal,
+   * a focus trap and React's onFocus all go on believing focus is wherever it
+   * was. The other half is already there: the element focus left had its
+   * `blur` and `focusout` when the page lost focus, in
+   * FocusController::FocusHasChanged.
+   *
+   * Dispatched directly rather than through Element::DispatchFocusInEvent,
+   * which queues on a ScopedEventQueue when one is open -- the shape of the
+   * first deferral that never arrived. guard-webview-click.sh reads the
+   * `focusin` out of a real click.
+   */
+  void DispatchSuppressedFocus(mojom::blink::FocusType);
 
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
 

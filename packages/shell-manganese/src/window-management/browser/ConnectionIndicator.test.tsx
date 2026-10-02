@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import {
   fireEvent,
   render,
@@ -134,7 +133,7 @@ describe("ConnectionIndicator", () => {
       await userEvent.click(indicator());
       await screen.findByText("docs.example.com");
 
-      fireEvent(page, new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }));
+      fireEvent.focusIn(page);
 
       await waitForElementToBeRemoved(() =>
         screen.queryByText("docs.example.com"),
