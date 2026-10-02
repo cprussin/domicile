@@ -51,13 +51,15 @@ a title bar, and both are moved, floated and closed by the same keys.
 
 ## Window management
 
-**The layout is sway's**, and so are the keys: the config it was written
-against is `config/modules/ui/sway` in the author's dotfiles, and what is not
-bound there is bound by `lib.mkOptionDefault` — sway's own defaults — so both
-halves are in the table below.
+**The layout is sway's**, and so are the commands. **The keys are the
+compositor's config** — `domicile.toml`, see [Keys](#keys) below for the
+commands and a sample — and the table below is that sample: the sway config
+this shell was written against, `config/modules/ui/sway` in the author's
+dotfiles, with `lib.mkOptionDefault`'s sway defaults under it. **A config that
+binds nothing leaves this desktop with no keys at all.**
 
-**The modifier is Meta** — `Mod4`, the Super key, which is what the config
-sets. Every `Mod+` below is Meta.
+**The modifier in the sample is Meta** — `Mod4`, the Super key, which is what
+the sway config sets. Every `Mod+` below is Meta.
 
 A workspace holds a tree. A window is a leaf; every layout is a container of
 them; opening a window puts it beside the one being worked in, and closing one
@@ -148,26 +150,148 @@ turns and scales each monitor's window itself, so the page is the monitor's
 logical box, upright, and a pointer is reported in the numbers a window is
 laid out at.
 
-### The keys are physical, and the layout is written down
+### Keys
 
-sway binds *keysyms* and resolves them through the active keymap. Nothing here
-can: a chord claimed from the compositor is an evdev keycode and a press this
-page hears is a `KeyboardEvent.code`, both of which name the physical key, and
-the engine does not tell a shell what the keymap is. So the layout is written
-down in `keyboard/programmers-dvorak.ts` — `dvp`, which is what this desktop
-comes up on when the config names no keyboard — and the bindings name the
-keysyms the sway config names. `mod+h` is the key a US keyboard calls J,
-because that is where Programmer's Dvorak puts `h`; the workspace chords are
-the number row, because `parenleft` is on it. Configure a different layout and
-the chords stay on these *keys*.
+The config binds a chord to an action, as sway's `bindsym` does, and this
+shell is the `manganese` in `[shells.manganese.*]`. The keysyms resolve through
+the keymap the compositor is running (`input.keyboard`), so `Meta+h` is the key
+your layout puts `h` on — the key a US keyboard calls J, under Programmer's
+Dvorak — and the workspace chords are the number row there, because
+`parenleft` is on it. Shift is taken literally: `Meta+Shift+parenleft` is the
+`parenleft` key with Shift held, not the key that types `parenleft` shifted.
+
+`mode <name>` is the SDK's (`bindKeys`), and the bar names a mode that is not
+`default`. **The mode is this monitor's page's**, not the desk's: a desk of
+several monitors is several pages, each keeping its own. Everything else is
+`send-shell <command>`, and these are the commands — **sway's, spelled as sway
+spells them**, so a sway config's lines carry over:
+
+| Command | What |
+|---|---|
+| `kill` | Close the window being worked in. |
+| `focus left` / `right` / `up` / `down` | Move the focus, wrapping at the ends of a container. |
+| `focus parent` / `focus child` | Point the commands at the container around the focus, or back at the window. |
+| `focus mode_toggle` | Swap the keyboard between the floating windows and the tiled ones. |
+| `move left` / `right` / `up` / `down` | Move the window. |
+| `move scratchpad` / `scratchpad show` | Hide the window in the scratchpad / bring the last one back. |
+| `move container to workspace <name>` | Send the window to a workspace, `1` to `10`, and stay. |
+| `workspace <name>` | Go to a workspace, `1` to `10` — or back to the last one, when it is the one on screen. |
+| `split h` / `split v` (`splith` / `splitv`) | Wrap the focus in a container of one. |
+| `layout stacking` / `layout tabbed` / `layout toggle split` | Lay out the container the focus is in. |
+| `fullscreen toggle` / `fullscreen toggle global` | Fill the screen, or every screen, with the window. |
+| `floating toggle` | Take the window out of the tiling, or put it back. |
+
+And the five sway has no word for, which are manganese's own:
+
+| Command | What |
+|---|---|
+| `terminal` | Launch a terminal (`kitty`). |
+| `lock` | Lock the desk. |
+| `launcher` | Open the launcher, or put it away. |
+| `clipboard` | Open the clipboard's history, or put it away. |
+| `resize grow left` / `right` / `up` / `down` | Grow the window that way; the neighbor gives way. |
+
+A command this shell does not know is said on the console and does nothing.
+**While the launcher is up only `launcher` is answered**: the panel is modal,
+and a workspace switched behind it is the desktop reacting to keys somebody
+pressed at the panel. (`mode` is the SDK's, so it is not held back.)
+
+This is the sample: the keys manganese shipped with when they were hard-coded,
+exactly.
+
+```toml
+# manganese's keys, as it shipped them hard-coded: sway's, on Meta (Mod4).
+# Keysyms resolve through the live keymap (`input.keyboard`), so these are the
+# keys Programmer's Dvorak puts them on there, and wherever your layout does.
+
+[shells.manganese.keybindings]
+"Meta+Return" = "send-shell terminal"
+"Meta+Shift+q" = "send-shell kill"
+"Meta+Shift+Return" = "send-shell lock"
+"Meta+space" = "send-shell launcher"
+"Meta+d" = "send-shell launcher"
+
+"Meta+h" = "send-shell focus left"
+"Meta+j" = "send-shell focus down"
+"Meta+k" = "send-shell focus up"
+"Meta+l" = "send-shell focus right"
+"Meta+Left" = "send-shell focus left"
+"Meta+Down" = "send-shell focus down"
+"Meta+Up" = "send-shell focus up"
+"Meta+Right" = "send-shell focus right"
+
+"Meta+Shift+h" = "send-shell move left"
+"Meta+Shift+j" = "send-shell move down"
+"Meta+Shift+k" = "send-shell move up"
+"Meta+Shift+l" = "send-shell move right"
+"Meta+Shift+Left" = "send-shell move left"
+"Meta+Shift+Down" = "send-shell move down"
+"Meta+Shift+Up" = "send-shell move up"
+"Meta+Shift+Right" = "send-shell move right"
+
+"Meta+Shift+v" = "send-shell clipboard"
+
+"Meta+b" = "send-shell split h"
+"Meta+v" = "send-shell split v"
+"Meta+s" = "send-shell layout stacking"
+"Meta+w" = "send-shell layout tabbed"
+"Meta+e" = "send-shell layout toggle split"
+"Meta+a" = "send-shell focus parent"
+"Meta+Shift+a" = "send-shell focus child"
+
+"Meta+f" = "send-shell fullscreen toggle"
+"Meta+Shift+f" = "send-shell fullscreen toggle global"
+
+"Meta+Tab" = "send-shell focus mode_toggle"
+"Meta+Shift+Tab" = "send-shell floating toggle"
+
+"Meta+minus" = "send-shell scratchpad show"
+"Meta+Shift+minus" = "send-shell move scratchpad"
+
+"Meta+r" = "mode resize"
+
+"Meta+parenleft" = "send-shell workspace 1"
+"Meta+parenright" = "send-shell workspace 2"
+"Meta+braceright" = "send-shell workspace 3"
+"Meta+plus" = "send-shell workspace 4"
+"Meta+braceleft" = "send-shell workspace 5"
+"Meta+bracketright" = "send-shell workspace 6"
+"Meta+bracketleft" = "send-shell workspace 7"
+"Meta+exclam" = "send-shell workspace 8"
+"Meta+equal" = "send-shell workspace 9"
+"Meta+asterisk" = "send-shell workspace 10"
+
+"Meta+Shift+parenleft" = "send-shell move container to workspace 1"
+"Meta+Shift+parenright" = "send-shell move container to workspace 2"
+"Meta+Shift+braceright" = "send-shell move container to workspace 3"
+"Meta+Shift+plus" = "send-shell move container to workspace 4"
+"Meta+Shift+braceleft" = "send-shell move container to workspace 5"
+"Meta+Shift+bracketright" = "send-shell move container to workspace 6"
+"Meta+Shift+bracketleft" = "send-shell move container to workspace 7"
+"Meta+Shift+exclam" = "send-shell move container to workspace 8"
+"Meta+Shift+equal" = "send-shell move container to workspace 9"
+"Meta+Shift+asterisk" = "send-shell move container to workspace 10"
+
+[shells.manganese.modes.resize]
+"Meta+h" = "send-shell resize grow left"
+"Meta+j" = "send-shell resize grow down"
+"Meta+k" = "send-shell resize grow up"
+"Meta+l" = "send-shell resize grow right"
+"Meta+Left" = "send-shell resize grow left"
+"Meta+Down" = "send-shell resize grow down"
+"Meta+Up" = "send-shell resize grow up"
+"Meta+Right" = "send-shell resize grow right"
+"Meta+Return" = "mode default"
+"Meta+Escape" = "mode default"
+```
 
 ### Resize mode needs the modifier, where sway's does not
 
-`mod+r` enters it and `mod+Return` or `mod+Escape` leaves it, as in the config
-— but inside it the resize keys are `mod+h/j/k/l` rather than bare `h/j/k/l`.
-A bare claim is not something this shell can take back: `grabShortcut` is
-never given up, so a mode that claimed `h` on the way in would take it from
-every client for the rest of the session. A tiled window resizes by a
+`mod+r` enters it and `mod+Return` or `mod+Escape` leaves it, as in the sway
+config — but in the sample the resize keys are `mod+h/j/k/l` rather than bare
+`h/j/k/l`. A claim is not something a shell can take back: `grabShortcut` is
+never given up, so a mode that bound a bare `h` would take it from every client
+for the rest of the session, mode or no mode. A tiled window resizes by a
 fiftieth of its container per press (sway says `10 px`, which a share of a
 container cannot mean); a floating one by ten pixels.
 
@@ -478,8 +602,9 @@ nothing else.
 
 ### Two claims for every chord
 
-Every binding is claimed twice over, because two different things can be
-holding the keyboard when the user presses one. The page listens for its own
+Every binding is claimed twice over — by the SDK's `bindKeys`, which this shell
+leaves it to — because two different things can be holding the keyboard when
+the user presses one. The page listens for its own
 `keydown`, which is what answers for every press that lands on this document —
 the shell's own chrome, and a focused Wayland window too, since an `<app>` is an
 element here and DOM focus never leaves the page. And `grabShortcut` claims the
@@ -813,9 +938,8 @@ shell that wants its own pictures owns its own list.
 | `src/screens/stage-screens.ts` | What the `Stage` draws on each screen: its rectangles, the workspace it shows, and where that workspace's windows go. |
 | `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
 | `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
-| `src/keyboard/bindings.ts` | The desktop's keys, as the sway config binds them: one table from a key to an action. |
-| `src/keyboard/programmers-dvorak.ts` | Which physical key each keysym is on, which is what the table above is resolved through. |
-| `src/keyboard/useShortcuts.ts` | The two paths a press can arrive by, and the claim that decides which one answers. |
+| `src/keyboard/command.ts` | The `send-shell` commands, sway's words read into the desktop's actions. |
+| `src/keyboard/useKeybindings.ts` | The config's keys, answered through the SDK's `bindKeys`: each command run, the launcher's modality, and the binding mode for the bar. |
 | `src/keyboard/useModifiers.ts` | Which modifiers are held, from both of the places that can know. |
 | `src/address/` | What a line of typed text means as a web address. The launcher's box and a browser window's address bar both ask, and a desktop where the two disagree about `localhost:5173` is one where the user has to remember which box they are in. |
 | `src/address/typed-address.ts` | Which of the two a typed line is: a site, or words to search for. |
@@ -900,27 +1024,23 @@ The parts of the config this shell cannot answer, and why:
 
 ## Configure
 
-`$XDG_CONFIG_HOME/domicile/manganese.json`, and nothing of Domicile's: this
-shell owns the file, and what the compositor needs is derived from it.
+The desk is the compositor's config, `domicile.toml` (see
+[/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)); nothing here reads a
+file of its own. What is manganese's in it is `[shells.manganese]` — its keys,
+under `keybindings` and `modes`, which [Keys](#keys) above lists with a sample.
+A reload that changes them reaches the running desk.
 
-```json
-{
-  "present": true,
-  "desktop": {
-    "displays": [{ "name": "left", "size": [1920, 1080] }],
-    "keyboard": { "layout": "us", "variant": "dvp", "options": ["caps:swapescape"] }
-  }
-}
+The keyboard is `[input.keyboard]`, and it is what the sample's keysyms resolve
+through. They were chosen on Programmer's Dvorak with Caps Lock and Escape
+swapped, which the compositor does not default to — it comes up on a plain
+`us` layout — so say so to get the keys where the sample meant them:
+
+```toml
+[input.keyboard]
+xkb_layout = "us"
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
 ```
-
-Everything is optional; a missing file is a first run rather than a mistake.
-`keyboard` is the exception worth knowing about: unset, this desktop comes up
-on Programmer's Dvorak with Caps Lock and Escape swapped, which is a preference
-rather than a neutral default — and it is the layout the keys above were
-written for. Naming one replaces it whole rather than merging into it — a
-variant belongs to a layout, so `{ "layout": "de" }` is a German keyboard and
-not a German one with `dvp` still under it. For an ordinary US layout, say so:
-`{ "layout": "us" }`.
 
 ## Build & run
 

@@ -8,7 +8,6 @@ import { appWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
   activeIdOf,
-  BindingMode,
   currentHere,
   currentOn,
   NO_WINDOWS,
@@ -621,10 +620,10 @@ describe("the keyed commands", () => {
     });
   });
 
-  it("changes the mode the keys are read in", () => {
-    const state = reduce(desktop(), WindowAction.ModeSet(BindingMode.Resize));
+  it("changes the mode the keys are read in, on every page of the desk", () => {
+    const state = reduce(desktop(), WindowAction.ModeSet("resize"));
 
-    expect(state.mode).toBe(BindingMode.Resize);
+    expect(state.mode).toBe("resize");
   });
 
   it("leaves the state alone for a terminal, which is the compositor's to spawn", () => {

@@ -703,6 +703,22 @@ interface ControlChannelClient {
   // lets go on it.
   WindowsThemeChanged(Theme theme, mojo_base.mojom.TimeTicks arrival);
 
+  // The shell's part of the desk's config -- its keybindings, each mode's, and
+  // the options the config keeps for a shell by name -- as the one JSON line
+  // the compositor sent, `type` and all.
+  //
+  // A STRING AND NOT A STRUCT, which is the opposite of every other member
+  // here and is deliberate. A shell's `options` are whatever its config says,
+  // and neither mojom nor WebIDL can type a value nobody has declared, so the
+  // page parses the line for itself; a struct for the half that can be typed
+  // would be the same message read in two places. The browser has already
+  // parsed it once, as it does every line, so what arrives is a JSON object in
+  // valid UTF-8 and nothing more is promised.
+  //
+  // Pushed like ThemeChanged: once to a chrome that has just connected, and
+  // again whenever a reload of the compositor's config moved what it carries.
+  ShellConfig(string config, mojo_base.mojom.TimeTicks arrival);
+
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
 
