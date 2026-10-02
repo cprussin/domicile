@@ -175,6 +175,29 @@ describe("TitleBar", () => {
     );
   });
 
+  it("lifts a tab that is not open under the pointer, and no other bar", () => {
+    // A hidden tab is a thing to click; an open tab or a window's own bar
+    // already shows what clicking it would.
+    const lift = css({
+      _hover: {
+        backgroundColor:
+          "color-mix(in oklab, {colors.card} 50%, {colors.background})",
+        color: "foreground",
+      },
+    });
+
+    const hidden = render(<TitleBar {...barProps} tabbed={Layout.Tabbed} />);
+    expect(bar(hidden.container).className).toContain(lift);
+
+    const open = render(
+      <TitleBar {...barProps} focus="selected" tabbed={Layout.Tabbed} />,
+    );
+    expect(bar(open.container).className).not.toContain(lift);
+
+    const own = render(<TitleBar {...barProps} />);
+    expect(bar(own.container).className).not.toContain(lift);
+  });
+
   it("leaves the bar being worked in the resting edge while its window is all the screen shows", () => {
     // Focused, but with nothing else on the screen to be picked out from.
     const { container } = render(

@@ -147,7 +147,7 @@ export const TitleBar = ({
   // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
   <div
     className={cx(
-      barStyles({ alone, focus }),
+      barStyles({ alone, focus, tab: tabbed !== undefined }),
       // Neither a line nor rounded corners around the screen's own edge.
       !fullscreen && edgeStyles,
       !fullscreen && topCornerStyles,
@@ -261,6 +261,20 @@ const barStyles = cva({
       css: { borderColor: "borderStrong" },
       focus: "focused",
     },
+    // A tab whose window is hidden is a thing to click, so the pointer lifts it
+    // halfway to the card an open tab sits on — short of it, so it is not
+    // taken for the open one.
+    {
+      css: {
+        _hover: {
+          backgroundColor:
+            "color-mix(in oklab, {colors.card} 50%, {colors.background})",
+          color: "foreground",
+        },
+      },
+      focus: "resting",
+      tab: true,
+    },
   ],
   variants: {
     alone: {
@@ -293,6 +307,11 @@ const barStyles = cva({
         color: "foreground",
         fontWeight: "medium",
       },
+    },
+    // Whether this bar is a container's tab rather than a window's own.
+    tab: {
+      false: {},
+      true: {},
     },
   },
 });
