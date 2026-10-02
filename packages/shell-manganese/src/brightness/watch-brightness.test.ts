@@ -21,9 +21,6 @@ const heldClient = () => {
     says: (level: number) => {
       handlers.get("brightness")?.({ level });
     },
-    get watching() {
-      return handlers.has("brightness");
-    },
   };
 };
 
@@ -41,14 +38,27 @@ describe("watchBrightness", () => {
     expect(levels).toEqual([0.5, 0.42]);
   });
 
-  it("stops listening when it is stopped", () => {
+  it("reports to the bar on every monitor, not only the last", () => {
     const host = heldClient();
-    const stop = watchBrightness(host.client, () => {
-      /* nothing to record */
-    });
+    const first: number[] = [];
+    const second: number[] = [];
+
+    watchBrightness(host.client, (level) => first.push(level));
+    watchBrightness(host.client, (level) => second.push(level));
+    host.says(0.5);
+
+    expect(first).toEqual([0.5]);
+    expect(second).toEqual([0.5]);
+  });
+
+  it("stops reporting when it is stopped", () => {
+    const host = heldClient();
+    const levels: number[] = [];
+    const stop = watchBrightness(host.client, (level) => levels.push(level));
 
     stop();
+    host.says(0.5);
 
-    expect(host.watching).toBe(false);
+    expect(levels).toEqual([]);
   });
 });
