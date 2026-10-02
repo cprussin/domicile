@@ -47,7 +47,8 @@
   X(locked, Locked)                       \
   X(extensions, Extensions)               \
   X(tray, Tray)                           \
-  X(notifications, Notifications)
+  X(notifications, Notifications)         \
+  X(openurl, Openurl)
 
 namespace blink::domicile_event_names {
 

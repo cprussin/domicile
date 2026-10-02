@@ -26,8 +26,8 @@ pub enum CliError {
          domicile ./my-desktop/dist/shell.js\n\n\
          Your monitors come from ~/.config/domicile/domicile.toml, or from \
          --config <path>.\n\
-         Or a command for the desktop already running: which-shell, or \
-         load-shell <path>.\n"
+         Or a command for the desktop already running: which-shell, \
+         load-shell <path>, or open-url <url>.\n"
     )]
     NoShell,
     #[error(
@@ -49,6 +49,16 @@ pub enum CliError {
          started — so there is no --config here either."
     )]
     ExtraToLoad { extra: String },
+    #[error(
+        "open-url takes the address to open, and was given nothing:\n\n    \
+         domicile open-url https://example.com\n"
+    )]
+    NothingToOpen,
+    #[error(
+        "open-url takes one address, and it was given {extra} as well. One \
+         address is one browser window."
+    )]
+    ExtraToOpen { extra: String },
     #[error(
         "--config takes the path to the compositor's config file and was given \
          nothing. Leaving the flag off reads ~/.config/domicile/domicile.toml \
@@ -87,6 +97,13 @@ pub enum Invocation {
     /// directory of whoever typed it — `shell_path` has those rules and an
     /// injected filesystem to ask them against, and this module has neither.
     Load { shell: String },
+    /// Tell the desktop that is already running to open this in a browser
+    /// window of its own.
+    ///
+    /// As typed, for [`Invocation::Load`]'s reason: a path is relative to the
+    /// directory it was typed in, and [`crate::address`] is what makes it a
+    /// URL.
+    Open { target: String },
 }
 
 /// Read the command line, or refuse it and say what to type instead.
@@ -132,6 +149,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NoShellToLoad),
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
+            },
+            Verb::Opening => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToOpen),
+                (Some(target), None) => Ok(Invocation::Open { target }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
             },
         };
     }
@@ -183,6 +205,8 @@ enum Verb {
     Asking(Request),
     /// `load-shell`: the word, with the shell still to come.
     Loading,
+    /// `open-url`: the word, with the address still to come.
+    Opening,
 }
 
 /// The verb a word names, if it names one.
@@ -194,6 +218,7 @@ fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
+        "open-url" => Some(Verb::Opening),
         _ => None,
     }
 }

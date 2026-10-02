@@ -19,10 +19,9 @@
 namespace domicile {
 namespace {
 
-// The one command there is. A second would be another `if` here and another
-// file beside this one; there is no dispatch table, because a table with one
-// row is a table nobody can read the shape of.
+// The commands there are. No dispatch table: two rows are an `if` each.
 constexpr char kLoadShell[] = "load_shell";
+constexpr char kOpenUrl[] = "open_url";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -33,11 +32,15 @@ std::string Line(base::DictValue reply) {
   return line;
 }
 
-std::string Loaded() {
+std::string Done(std::string_view type) {
   base::DictValue reply;
-  reply.Set("type", "loaded");
+  reply.Set("type", type);
   return Line(std::move(reply));
 }
+
+std::string AnswerLoadShell(const base::DictValue& request,
+                            LoadShell load_shell);
+std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
 
 }  // namespace
 
@@ -48,7 +51,9 @@ std::string RefusedCommand(std::string_view why) {
   return Line(std::move(reply));
 }
 
-std::string AnswerCommand(std::string_view line, LoadShell load_shell) {
+std::string AnswerCommand(std::string_view line,
+                          LoadShell load_shell,
+                          OpenUrl open_url) {
   const std::optional<base::DictValue> request =
       base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
   if (!request) {
@@ -76,19 +81,27 @@ std::string AnswerCommand(std::string_view line, LoadShell load_shell) {
   if (type == nullptr) {
     return RefusedCommand("a command needs a \"type\"");
   }
-  if (*type != kLoadShell) {
-    return RefusedCommand(base::StrCat({"\"", *type,
-                                        "\" is not a command this engine "
-                                        "knows; it takes \"",
-                                        kLoadShell, "\""}));
+  if (*type == kLoadShell) {
+    return AnswerLoadShell(*request, load_shell);
   }
+  if (*type == kOpenUrl) {
+    return AnswerOpenUrl(*request, open_url);
+  }
+  return RefusedCommand(base::StrCat(
+      {"\"", *type, "\" is not a command this engine knows; it takes \"",
+       kLoadShell, "\" and \"", kOpenUrl, "\""}));
+}
 
+namespace {
+
+std::string AnswerLoadShell(const base::DictValue& request,
+                            LoadShell load_shell) {
   // BOTH HALVES OR NEITHER. A shell is one module and the directory it is
   // served out of: a new module name against the old root is a 404 and an old
   // name against a new root is the wrong desktop. `ShellSource::Set` takes the
   // pair for the same reason, and this is where a request that carries one of
   // them stops.
-  const std::string* root = request->FindString("root");
+  const std::string* root = request.FindString("root");
   if (root == nullptr || root->empty()) {
     return RefusedCommand(
         "load_shell needs a \"root\": the directory the shell is served out "
@@ -103,7 +116,7 @@ std::string AnswerCommand(std::string_view line, LoadShell load_shell) {
          "relative one would serve some other directory without saying so."}));
   }
 
-  const std::string* module = request->FindString("module");
+  const std::string* module = request.FindString("module");
   if (module == nullptr || module->empty()) {
     return RefusedCommand(
         "load_shell needs a \"module\": the one JavaScript file a shell is, "
@@ -121,7 +134,28 @@ std::string AnswerCommand(std::string_view line, LoadShell load_shell) {
     return RefusedCommand(
         "this engine has no shell window to load a shell into");
   }
-  return Loaded();
+  return Done("loaded");
 }
 
+std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
+  const std::string* url = request.FindString("url");
+  if (url == nullptr) {
+    return RefusedCommand("open_url needs a \"url\": the address to open");
+  }
+  // Parsed here rather than by the shell, because a shell handed an address
+  // that is not one opens a window with nothing in it, and whoever ran the
+  // command is told it worked. `domicile open-url` has already made a path a
+  // `file://` URL in front of them; what reaches here unparseable is theirs.
+  const GURL parsed(*url);
+  if (!parsed.is_valid()) {
+    return RefusedCommand(
+        base::StrCat({"\"", *url, "\" is not a URL this engine can open"}));
+  }
+  if (!open_url(parsed)) {
+    return RefusedCommand("this engine has no shell page to open it in");
+  }
+  return Done("opened");
+}
+
+}  // namespace
 }  // namespace domicile

@@ -712,4 +712,11 @@ interface ControlChannelClient {
   // take what its user is typing into. Never empty -- a request comes from a
   // client, and the chrome asking itself for focus does not cross the wire.
   FocusRequested(string app_id, mojo_base.mojom.TimeTicks arrival);
+
+  // An address somebody asked this desktop to open -- `domicile open-url`,
+  // which is what `BROWSER` runs inside it. Not the compositor's: it comes
+  // from the engine's command socket, and is told to the newest shell page
+  // only (see UrlRegistry). Already a valid URL; which window, and whether,
+  // is the shell's.
+  OpenUrl(string url);
 };

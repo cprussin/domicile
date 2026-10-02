@@ -184,6 +184,7 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `found_apps`, `battery`, `brightness`, `clipboard`, `theme`,
 `focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`, `notifications`.
+Not off the socket: `open_url`, from the command socket below.
 
 `preview_file` is the one outbound member that names a path, which
 `search_files` exists not to. The path is relative to the home, as a
@@ -309,11 +310,19 @@ supervisor dials. One line of JSON in, one out, and the connection is over:
 ```
 {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
+
+{"type":"open_url","version":1,"url":"https://example.com/"}
+{"type":"opened"}   |   {"type":"refused","why":"…"}
 ```
 
 An engine given no such switch binds nothing and listens on nothing. Every
 desktop `domicile` starts is given one — a path under the run's own directory,
-which the supervisor then dials when somebody types `domicile load-shell`.
+which the supervisor then dials when somebody types `domicile load-shell` or
+`domicile open-url`.
+
+`open_url` is handed to the newest shell page `UrlRegistry` has, as an
+`openurl` event, so a page mid-reload does not open it twice. A URL the
+engine cannot parse, or no page to hand it to, is refused.
 
 **It is not the control channel, and that is the layering rather than a second
 transport for its own sake.** Which shell to serve is supervisor-to-engine
@@ -335,6 +344,7 @@ carries no number because both of its ends are one binary.
 | `components/domicile/browser/command_protocol.{h,cc}` | the wire. A line in, a line out, the applying injected — which is what makes it unit tests rather than a browser |
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket, and the shell's window. In `//chrome` because reloading the shell needs `GlobalBrowserCollection`, which belongs to `//chrome/browser/ui` |
 | `components/domicile/browser/shell_source.{h,cc}` | which shell this process is serving. Seeded from the two switches, replaced by a `load_shell` |
+| `components/domicile/browser/url_registry.{h,cc}` | the shell pages an `open_url` can be handed to, and which one gets it |
 
 ### The dev reload is this socket, and nothing in the document
 

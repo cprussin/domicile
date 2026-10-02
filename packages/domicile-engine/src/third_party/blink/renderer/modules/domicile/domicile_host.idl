@@ -393,4 +393,7 @@
   // yet cleared, whenever any of them changes and once more when this page
   // connects.
   attribute EventHandler onnotifications;
+  // An address to open, as a DomicileOpenUrlEvent: `domicile open-url`, which
+  // is what `BROWSER` runs for every app this desktop starts.
+  attribute EventHandler onopenurl;
 };

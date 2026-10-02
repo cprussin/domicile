@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use domicile_launch::command::{load_shell_line, reply, Reply};
+use domicile_launch::command::{load_shell_line, open_url_line, reply, Reply};
 
 #[test]
 fn a_load_shell_names_the_version_it_is_written_in() {
@@ -17,6 +17,19 @@ fn a_load_shell_names_the_version_it_is_written_in() {
         load_shell_line(Path::new("/x/dist"), Path::new("shell.js")),
         "{\"type\":\"load_shell\",\"version\":1,\"root\":\"/x/dist\",\"module\":\"shell.js\"}\n"
     );
+}
+
+#[test]
+fn an_open_url_names_the_version_it_is_written_in() {
+    assert_eq!(
+        open_url_line("https://example.com/?q=\"x\""),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/?q=\\\"x\\\"\"}\n"
+    );
+}
+
+#[test]
+fn an_engine_that_opened_the_address_says_so() {
+    assert_eq!(reply("{\"type\":\"opened\"}").unwrap(), Reply::Opened);
 }
 
 #[test]

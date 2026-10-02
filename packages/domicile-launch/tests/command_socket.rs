@@ -5,8 +5,8 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::command::load_shell_line;
-use domicile_launch::command_socket::{load_shell, LoadError};
+use domicile_launch::command::{load_shell_line, open_url_line};
+use domicile_launch::command_socket::{load_shell, open_url, CommandError};
 
 /// Long enough that a loaded machine does not report an engine that answered
 /// as one that did not, short enough that a test waiting it out is not why the
@@ -37,6 +37,19 @@ fn the_engine_is_sent_the_shell_and_says_it_is_serving_it() {
 }
 
 #[test]
+fn the_engine_is_sent_the_address_and_says_it_opened_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"opened\"}\n"));
+
+    open_url(&path, "https://example.com/", BRIEFLY).expect("the engine opened it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        open_url_line("https://example.com/")
+    );
+}
+
+#[test]
 fn an_engine_that_refused_is_carried_back_in_its_own_words() {
     let (_scratch, path) = scratch();
     let heard = an_engine(
@@ -54,7 +67,7 @@ fn an_engine_that_refused_is_carried_back_in_its_own_words() {
 
     assert_eq!(
         why,
-        LoadError::Refused {
+        CommandError::Refused {
             why: "no shell window to load a shell into".to_string()
         }
     );
@@ -82,7 +95,7 @@ fn an_engine_that_is_not_there_is_said_rather_than_waited_for() {
 
     assert_eq!(
         why,
-        LoadError::NoEngine {
+        CommandError::NoEngine {
             path: path.display().to_string()
         }
     );
@@ -107,7 +120,7 @@ fn an_engine_that_takes_the_command_and_says_nothing_is_not_a_shell_that_loaded(
 
     assert_eq!(
         why,
-        LoadError::NoAnswer {
+        CommandError::NoAnswer {
             path: path.display().to_string()
         }
     );

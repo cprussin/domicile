@@ -1,6 +1,6 @@
 //! `domicile ./my-desktop/dist/shell.js` — a desktop, in one command. And
-//! `domicile which-shell` or `domicile load-shell <path>` — commands for the
-//! desktop already running.
+//! `domicile which-shell`, `domicile load-shell <path>` or
+//! `domicile open-url <url>` — commands for the desktop already running.
 //!
 //! Everything with a decision in it is a module of `domicile_launch` with
 //! tests of its own; this is the part that reads the world and starts things.
@@ -19,8 +19,9 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use domicile_launch::address::url_for;
 use domicile_launch::cli::{invocation, Invocation};
-use domicile_launch::command_socket::load_shell;
+use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{components, Components};
 use domicile_launch::config_path::config_file;
 use domicile_launch::control::{answer, Request, Response};
@@ -68,6 +69,13 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Run { shell, config } => desktop(&shell, config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
+        Invocation::Open { target } => asked(&Request::OpenUrl {
+            url: url_for(
+                &target,
+                &std::env::current_dir()
+                    .map_err(|why| format!("cannot tell where this was typed: {why}"))?,
+            ),
+        }),
     }
 }
 
@@ -109,6 +117,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
+        Response::Opened => Ok(ExitCode::SUCCESS),
         // The desktop refused. It is a desktop of another build, or something
         // else is answering at that path — either way the asker gets the
         // sentence the desktop wrote rather than one invented here.
@@ -136,6 +145,10 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     let components =
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
+    // What `BROWSER` names for every app this desktop starts: the program
+    // beside this one, in the same place for the same reason its components
+    // are — see `domicile_launch::components`.
+    let browser = binary.with_file_name("domicile-open-url");
 
     // WHERE THIS WAS TYPED AND WHOSE HOME `~` IS, because `shell_path` decides
     // what a relative path and a tilde mean and neither is a question about
@@ -240,6 +253,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // is not. `domicile_launch::restart` holds why those are the two units.
     let policy = Policy::default();
     let desktop = Desktop {
+        browser: &browser,
         components: &components,
         config: config.path(),
         env: &env,
@@ -287,6 +301,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
 /// Everything one desktop is started from, worked out once and used for every
 /// desktop a run has.
 struct Desktop<'a> {
+    browser: &'a Path,
     components: &'a Components,
     config: Option<&'a Path>,
     env: &'a dyn Fn(&str) -> Option<String>,
@@ -361,6 +376,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
             &compositor(
                 &desktop.components.compositor,
                 &desktop.components.engine,
+                desktop.browser,
                 desktop.places,
                 desktop.config,
                 desktop.env,
@@ -518,7 +534,7 @@ fn wait_or_notice_a_stop(wait: Duration) {
 const CLEANLY: &str = "exit status: 0";
 
 /// Answer the control socket for as long as the desktop is up, with `engine`
-/// the socket the one command that routes is routed to.
+/// the socket the commands that route are routed to.
 ///
 /// On a thread of its own because the rest of this program is a supervisor
 /// that blocks: it waits on a file, then on a pair of children, and a command
@@ -546,9 +562,14 @@ fn answering(control: &Control, module: PathBuf, engine: PathBuf) -> Result<(), 
             match connection {
                 Ok(stream) => {
                     if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
-                        answer(line, &shell(&serving), &|root, module| {
-                            load_the_shell(&engine, root, module, &serving)
-                        })
+                        answer(
+                            line,
+                            &shell(&serving),
+                            &|root, module| load_the_shell(&engine, root, module, &serving),
+                            &|url| {
+                                open_url(&engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                            },
+                        )
                     }) {
                         eprintln!("domicile: a command went unanswered: {why}");
                     }
