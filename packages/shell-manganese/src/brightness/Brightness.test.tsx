@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Brightness } from "./Brightness";
@@ -130,5 +137,17 @@ describe("Brightness", () => {
       "data-tone",
       "overPhoto",
     );
+  });
+
+  it("closes when a click lands in a page", async () => {
+    const backlight = heldBacklight();
+    const page = document.createElement("webview");
+    document.body.append(page);
+    await opened(backlight);
+
+    fireEvent(page, new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }));
+
+    await waitForElementToBeRemoved(() => screen.queryByRole("slider"));
+    page.remove();
   });
 });

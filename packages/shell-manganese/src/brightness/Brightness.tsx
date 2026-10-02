@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import { PAGE_FOCUS } from "../page-focus";
 import { watchBrightness } from "./watch-brightness";
 
 /** How far one notch of the wheel over the icon moves the brightness. */
@@ -64,6 +65,7 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
     return (
       <Popover
         align="center"
+        outsideFocusEvents={PAGE_FOCUS}
         side="bottom"
         tone="overPhoto"
         trigger={
