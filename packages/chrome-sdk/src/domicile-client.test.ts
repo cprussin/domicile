@@ -544,6 +544,31 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ locked: true }]);
     });
 
+    it("delivers the keys the config binds, held until the shell asks", () => {
+      // Sent as the page connects, which is before any shell has bound its
+      // keys: a desktop that dropped it would answer no key at all.
+      host.dispatch(
+        "shellconfig",
+        Object.assign(new Event("shellconfig"), {
+          arrival: 0,
+          config: JSON.stringify({
+            keybindings: { default: [] },
+            shells: {},
+            type: "shell_config",
+          }),
+        }),
+      );
+
+      const seen: unknown[] = [];
+      domicile.on("shell_config", (message) => {
+        seen.push(message);
+      });
+
+      expect(seen).toStrictEqual([
+        { keybindings: new Map([["default", []]]), shells: new Map() },
+      ]);
+    });
+
     it("delivers an address to open", () => {
       // `domicile open-url`, which is what `BROWSER` runs inside a desktop.
       // Through the hold like the rest: an app can open a link while the
