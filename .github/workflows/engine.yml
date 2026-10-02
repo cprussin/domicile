@@ -422,6 +422,16 @@ jobs:
       # in: dropped here, the next run's pick could reset it under the checks.
       - name: Take a tree
         id: tree
+        env:
+          # A run waiting for a tree asks this as the compile slot's does.
+          DOMICILE_TREE_STILL_WANTED: >-
+            ${{ github.event_name == 'pull_request'
+                && github.event.pull_request.head.repo.full_name == github.repository
+                && '.github/scripts/crux-still-head.sh "$HEAD_REF" "$HEAD_SHA"'
+                || github.event_name == 'push' && '.github/scripts/crux-still-latest.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"'
+                || '' }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           tree="$(.github/scripts/engine-tree-pool.sh pick \
@@ -550,7 +560,7 @@ jobs:
       # lands, so the job does not end as a failure first. The `always()` drops
       # below still run on a canceled job.
       - name: Cancel this run, its commit was replaced
-        if: ${{ failure() && steps.slot.outputs.superseded == 'true' }}
+        if: ${{ failure() && (steps.slot.outputs.superseded == 'true' || steps.tree.outputs.superseded == 'true') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
