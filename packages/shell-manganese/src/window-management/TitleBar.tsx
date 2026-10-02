@@ -88,6 +88,13 @@ type Props = {
    * dragged by it, and the user reaching for the window a tab names.
    */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
+  /**
+   * What the open tab of its tabbed container says about the keyboard, for a
+   * tab that is not the open one: a line is drawn under this one in that
+   * tab's edge color, so the edge along the top of the window the strip opens
+   * onto runs under every tab. `undefined` for every other bar.
+   */
+  openTab?: TitleFocus | undefined;
   rect: Rect;
   /**
    * The shuffle the window it names is playing while it trades places with another float in
@@ -137,6 +144,7 @@ export const TitleBar = ({
   onMiddleClick,
   onMotionEnded,
   onPointerDown,
+  openTab,
   rect,
   restack,
   tabbed,
@@ -147,7 +155,12 @@ export const TitleBar = ({
   // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
   <div
     className={cx(
-      barStyles({ alone, focus, tab: tabbed !== undefined }),
+      barStyles({
+        alone,
+        focus,
+        openTab: openTab ?? "none",
+        tab: tabbed !== undefined,
+      }),
       // Neither a line nor rounded corners around the screen's own edge.
       !fullscreen && edgeStyles,
       !fullscreen && topCornerStyles,
@@ -239,9 +252,6 @@ export const TitleBar = ({
  */
 const barStyles = cva({
   base: hstack.raw({
-    // The frame's line is one line: the bar carries the top and the sides down
-    // to where the window picks them up, and the seam between them is not one.
-    borderBlockEndWidth: 0,
     gap: 1.5,
     justify: "space-between",
     overflow: "hidden",
@@ -275,6 +285,11 @@ const barStyles = cva({
       focus: "resting",
       tab: true,
     },
+    {
+      alone: true,
+      css: { borderBlockEndColor: "borderStrong" },
+      openTab: "focused",
+    },
   ],
   variants: {
     alone: {
@@ -306,6 +321,27 @@ const barStyles = cva({
         borderColor: "borderStrong",
         color: "foreground",
         fontWeight: "medium",
+      },
+    },
+    // The line under the bar, which only a tab its container is not showing
+    // has: there the strip meets the top of the window the open tab names,
+    // and the line is that edge, in the open tab's color — the accent while
+    // that window is being worked in, the resting edge otherwise. Every other
+    // bar has none: the frame's line is one line, the bar carrying the top and
+    // the sides down to where the window picks them up.
+    openTab: {
+      focused: {
+        borderBlockEndColor: "accent",
+        borderBlockEndWidth: "1px",
+      },
+      none: { borderBlockEndWidth: 0 },
+      resting: {
+        borderBlockEndColor: "borderStrong",
+        borderBlockEndWidth: "1px",
+      },
+      selected: {
+        borderBlockEndColor: "borderStrong",
+        borderBlockEndWidth: "1px",
       },
     },
     // Whether this bar is a container's tab rather than a window's own.

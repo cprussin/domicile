@@ -1832,6 +1832,25 @@ describe("Shell", () => {
       });
     });
 
+    it("runs the open tab's edge under the tabs beside it", () => {
+      // Beside a window of its own, or the tabs would be all the screen shows.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("e");
+      press("v");
+      clientAppears("three");
+
+      press("w");
+
+      expect(barFor(container, "app:two").className).toContain(
+        css({ borderBlockEndColor: "accent" }),
+      );
+      expect(barFor(container, "app:three").className).not.toContain(
+        css({ borderBlockEndColor: "accent" }),
+      );
+    });
+
     it("slides the ring across to a window that has just opened", () => {
       // The ring is where the keyboard is, and the eye follows it there from
       // the last window rather than hunting for where it reappeared.

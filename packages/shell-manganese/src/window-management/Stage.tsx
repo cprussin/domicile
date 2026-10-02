@@ -30,8 +30,10 @@ import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
+import type { TitleFocus } from "./title-focus";
 import { titleFocus } from "./title-focus";
 import { focusedWindowIn } from "./tree/tiling";
+import type { DrawnWindow } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
@@ -323,6 +325,7 @@ export const Stage = ({
                   onMove={(x, y) => {
                     onMove(window.id, x, y);
                   }}
+                  openTab={openTabFocus(motions.drawn, placement.openTab)}
                   rect={placement.bar}
                   restack={restack}
                   tabbed={placement.tabbed}
@@ -515,6 +518,7 @@ export const Stage = ({
               onPointerDown={() => {
                 onSelect(tab.id);
               }}
+              openTab={openTabFocus(motions.drawn, tab.openTab)}
               rect={tab.rect}
               title={titleOf(windows, tab.id)}
               window={tab.id}
@@ -630,6 +634,25 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
   placements
     .filter(({ depth, surface }) => depth === TILED && surface !== undefined)
     .map(({ frame, id }) => ({ frame, id }));
+
+/**
+ * What the open tab beside a tab says about the keyboard — see `TitleBar` —
+ * or `undefined` for a bar that is not beside one. Read off the window that
+ * tab is named after, which is drawn whether the tab is its own bar or stands
+ * for a container holding it.
+ */
+const openTabFocus = (
+  drawn: readonly DrawnWindow[],
+  openTab: string | undefined,
+): TitleFocus | undefined =>
+  openTab === undefined
+    ? undefined
+    : titleFocus({
+        hasKeyboard: drawn.some(
+          ({ focused, window }) => focused && window.id === openTab,
+        ),
+        shownByContainer: true,
+      });
 
 /**
  * What a window is called.

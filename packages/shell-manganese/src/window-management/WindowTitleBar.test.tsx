@@ -35,6 +35,7 @@ const tabProps = {
   onGrab: nothing,
   onMotionEnded: nothing,
   onMove: nothing,
+  openTab: undefined,
   rect: TAB,
   tabbed: Layout.Tabbed,
   targets: [{ frame: FRAME, id: "a" }, OTHER],

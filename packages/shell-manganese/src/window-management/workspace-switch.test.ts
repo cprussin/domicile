@@ -13,6 +13,7 @@ const placementOf = (id: string): Placement => ({
   depth: 0,
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,
+  openTab: undefined,
   surface: { height: 770, width: 1200, x: 0, y: 62 },
   tabbed: undefined,
 });

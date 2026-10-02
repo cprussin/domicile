@@ -33,6 +33,14 @@ export type Frame = {
   behind: Rect | undefined;
   id: string;
   /**
+   * The window the open tab of its tabbed container is named after, for a tab
+   * that is not the open one: what it draws the line under it in the color
+   * of, so the edge along the top of the window the strip opens onto runs
+   * under every tab. `undefined` for every other bar, a stack's included,
+   * whose bars each sit on the next one's edge.
+   */
+  openTab: string | undefined;
+  /**
    * Where its contents go, or `undefined` for a window a tabbed or stacking
    * container is not currently showing: the tab is on screen and the window
    * behind it is not.
@@ -58,6 +66,8 @@ export type Tab = {
   active: boolean;
   /** The window the container last had the focus in, which is what names it. */
   id: string;
+  /** The window its container's open tab is named after — see `Frame.openTab`. */
+  openTab: string | undefined;
   rect: Rect;
 };
 
@@ -145,6 +155,7 @@ const placed = (
             bar: barOf(area),
             behind: undefined,
             id: node.id,
+            openTab: undefined,
             surface: surfaceOf(area),
             tabbed: undefined,
           },
@@ -258,10 +269,12 @@ const titled = (
   selection: Rect | undefined,
 ): Tiled => {
   const contents = contentsOf(container, area);
+  const open = focusedWindowIn(container);
   return joined(
     container.children.map((child, at) => {
       const bar = titleOf(container, area, at);
       const showing = at === container.focused;
+      const openTab = layout === Layout.Tabbed && !showing ? open : undefined;
       switch (child.kind) {
         case NodeKind.Window: {
           return {
@@ -270,6 +283,7 @@ const titled = (
                 bar,
                 behind: showing ? undefined : contents,
                 id: child.id,
+                openTab,
                 surface: showing ? contents : undefined,
                 tabbed: container.children.length > 1 ? layout : undefined,
               },
@@ -282,6 +296,7 @@ const titled = (
           const tab = {
             active: showing,
             id: focusedWindowIn(child),
+            openTab,
             rect: bar,
           };
           const inside = showing
