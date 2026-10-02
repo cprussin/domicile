@@ -76,5 +76,21 @@ case "$delegate" in
     failed=$((failed + 1)) ;;
 esac
 
+# A tooltip has no parent, only a context: `TooltipAura::CreateTooltipWidget`
+# sets `params.context` and `force_software_compositing`. Asking for a parent
+# alone gave it a top-level window of its own, whose software compositor
+# aborts the GPU process on ozone/drm in `GbmSurfaceFactory::CreateCanvasForWidget`.
+case "$delegate" in
+  (*params.context*presents_every_window*)
+    echo '  ok    a tooltip, which has only a context, is drawn in its window' ;;
+  (*)
+    echo '  FAIL  a tooltip, which has only a context, is drawn in its window'
+    echo "    nothing the series adds to chrome_views_delegate_linux.cc reads"
+    echo "    params.context before presents_every_window, so a tooltip is a"
+    echo "    top-level window with a software compositor, and on ozone/drm"
+    echo "    that aborts the GPU process."
+    failed=$((failed + 1)) ;;
+esac
+
 [ "$failed" -eq 0 ] || { echo "$failed failed"; exit 1; }
 echo "all ok"
