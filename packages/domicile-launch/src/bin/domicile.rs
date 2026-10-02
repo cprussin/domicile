@@ -192,8 +192,10 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
         command: runtime.join("command.sock"),
         control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
         profile: profile.path.clone(),
+        shims: runtime.join("bin"),
         session: runtime.join("session.json"),
     };
+    shim_xdg_open(&places.shims, &binary.with_file_name("domicile-xdg-open"))?;
 
     // What was chosen, before anything is started: a failure below is about
     // this shell, and naming it after the failure is too late to be read. The
@@ -658,6 +660,16 @@ fn session(session: &Path) -> Milestone {
             .to_string(),
         patience: PATIENCE,
     }
+}
+
+/// `xdg-open` in `shims`, as `domicile-xdg-open` — see
+/// `domicile_launch::xdg_open`. A link rather than a copy: that program finds
+/// `domicile` beside itself, and a link resolves to where it really is.
+fn shim_xdg_open(shims: &Path, program: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(shims)
+        .map_err(|why| format!("cannot make {}: {why}", shims.display()))?;
+    std::os::unix::fs::symlink(program, shims.join("xdg-open"))
+        .map_err(|why| format!("cannot put xdg-open in {}: {why}", shims.display()))
 }
 
 /// A directory of this run's own, under the runtime directory when there is

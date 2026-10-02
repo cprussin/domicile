@@ -63,6 +63,10 @@ pub struct Runtime {
     /// The engine's own profile, kept between runs — see
     /// [`crate::profile_path`].
     pub profile: PathBuf,
+    /// The directory put first on every app's `PATH`: `xdg-open` in it is
+    /// `domicile-xdg-open` — see [`crate::xdg_open`]. Under the run's own
+    /// directory, made once per run.
+    pub shims: PathBuf,
     /// Where the compositor publishes what it bound, once it is serving.
     ///
     /// Named here rather than derived from `chrome_socket` inside
@@ -281,6 +285,10 @@ pub fn engine(
 /// browser of its own. A program rather than `domicile open-url`, because much
 /// of what reads `BROWSER` runs it as one word.
 ///
+/// `PATH` starts with [`Runtime::shims`], whose `xdg-open` is this desktop's,
+/// for the same reason: `BROWSER` is read by some programs and `xdg-open` run
+/// by more. Prepended, so everything else is still found.
+///
 /// `LD_LIBRARY_PATH` carries the engine's own directory because that is where
 /// `libdomicile_engine.so` is: the compositor `dlopen`s it rather than linking
 /// it, so that `cargo build` does not need a Chromium checkout. Prepended
@@ -295,6 +303,11 @@ pub fn compositor(
     config: Option<&Path>,
     inherited: &dyn Fn(&str) -> Option<String>,
 ) -> Spawn {
+    let mut path = OsString::from(&runtime.shims);
+    if let Some(theirs) = inherited("PATH") {
+        path.push(":");
+        path.push(theirs);
+    }
     let mut libraries = OsString::from(engine);
     if let Some(theirs) = inherited("LD_LIBRARY_PATH") {
         libraries.push(":");
@@ -321,6 +334,7 @@ pub fn compositor(
         env: vec![
             (VARIABLE.to_string(), runtime.control.clone().into()),
             ("BROWSER".to_string(), browser.into()),
+            ("PATH".to_string(), path),
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),

@@ -348,6 +348,7 @@
       #   bin/domicile
       #   bin/domicile-compositor
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
+      #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #
       # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
@@ -375,6 +376,8 @@
         # What `BROWSER` names inside a desktop, found beside `domicile` for the
         # reason the compositor is; copied for the same reason too.
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
+        # What a desktop links in as `xdg-open`, first on every app's PATH.
+        cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
         # The same program as the handler for web links, so `xdg-open` and
         # anything asking which browser is the default open a browser window of
         # the desktop it was run in. Hidden: it is not something to launch.
@@ -524,7 +527,7 @@
         # keeps it out of what this package installs.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
-          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open"
         ];
 
         # Not because they would fail — none needs a GPU, and CI runs them on

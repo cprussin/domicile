@@ -71,6 +71,7 @@ The modules, and the split is by what each needs to be tested:
 | `command` | yes | what the engine can be told about the shell it serves: the line, its version, and the reply |
 | `arguments` | yes | the compositor's command line, every value stated and nothing defaulted |
 | `config_path` | yes | which config file a run has: `--config`, the one where a config lives, or none — and which of those it was |
+| `xdg_open` | yes | `xdg-open` inside a desktop: an http(s) link goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
 | `address` | yes | what `open-url` hands the engine: a URL as given, a path as a `file://` URL against where it was typed |
 
 **`nix/home-manager.nix` is that file's other end**, and the only part of this
@@ -250,7 +251,10 @@ domicile open-url    ─▶ $DOMICILE_SOCK ─▶ the supervisor ─▶ the engi
 **`BROWSER` is `domicile-open-url`**, set on the compositor beside
 `DOMICILE_SOCK` so every app inherits it: a link an app opens is a browser
 window of this desktop. A second `[[bin]]` that execs `domicile open-url`,
-because most of what reads `BROWSER` runs it as one word. The engine hands the
+because most of what reads `BROWSER` runs it as one word. **`xdg-open` is the
+desktop's too**: `PATH` on the compositor starts with a directory of the run's
+where `xdg-open` links to `domicile-xdg-open`, so a link opens here whatever
+`mimeapps.list` says, and anything else goes to the next `xdg-open` on `PATH`. The engine hands the
 address to the newest shell page (`UrlRegistry`), so a page mid-reload does
 not open it twice, and the shell opens it.
 
