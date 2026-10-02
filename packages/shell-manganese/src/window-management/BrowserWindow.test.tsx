@@ -13,6 +13,7 @@ import {
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
+  WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
@@ -105,6 +106,23 @@ const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
   fireEvent(
     element,
     Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
+  );
+};
+
+/**
+ * The engine saying an extension called `chrome.windows.create` with a popup:
+ * the window it already has an id for, the address to show in it and the size
+ * it asked for. Dispatched on the browser window last worked in, which is what
+ * every window here may be. Built rather than constructed, like the new
+ * window's.
+ */
+const asksForAPopupWindow = (
+  element: HTMLWebViewElement,
+  popup: { height: number; url: string; width: number; windowId: number },
+): void => {
+  fireEvent(
+    element,
+    Object.assign(new Event(WEBVIEW_POPUP_WINDOW_EVENT), popup),
   );
 };
 
@@ -260,6 +278,7 @@ describe("BrowserWindow", () => {
         onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenPopupWindow={noWindows}
         onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -289,6 +308,7 @@ describe("BrowserWindow", () => {
         onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenPopupWindow={noWindows}
         onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -320,6 +340,7 @@ describe("BrowserWindow", () => {
         onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenPopupWindow={noWindows}
         onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -345,6 +366,7 @@ describe("BrowserWindow", () => {
         onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenPopupWindow={noWindows}
         onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={ON_SCREEN}
@@ -371,6 +393,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -406,6 +429,7 @@ describe("BrowserWindow", () => {
           onNavigate={(url) => {
             seen.push(url);
           }}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -437,6 +461,7 @@ describe("BrowserWindow", () => {
         motion: "resting",
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -475,6 +500,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -506,6 +532,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -543,6 +570,7 @@ describe("BrowserWindow", () => {
             onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={resolve}
             onReach={() => undefined}
             rect={ON_SCREEN}
@@ -552,6 +580,101 @@ describe("BrowserWindow", () => {
         asksForAWindow(view(container), "https://example.com/opened");
       });
       expect(wanted).toBe("https://example.com/opened");
+    });
+  });
+
+  // AN EXTENSION'S OWN WINDOW: Bitwarden's "Unlock" from its autofill menu is
+  // a `chrome.windows.create` with a popup. The engine has the window's id
+  // already and nothing to show it in, so it asks the desktop — and the
+  // desktop's answer is a browser window that IS that window.
+  describe("an extension's popup window", () => {
+    const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
+    const windowProps = {
+      clickThrough: false,
+      covered: false,
+      depth: 0,
+      domicile: silentDomicile,
+      dragging: false,
+      focused: true,
+      frame: FRAME,
+      fullscreen: false,
+      motion: "resting",
+      onClose: nothingClosed,
+      onMotionEnded: nothingEnded,
+      onNavigate: () => undefined,
+      onOpenWindow: noWindows,
+      onReach: () => undefined,
+      rect: ON_SCREEN,
+    } as const;
+
+    it("asks the desktop for the window an extension wanted", async () => {
+      const wanted = await new Promise((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            {...windowProps}
+            onOpenPopupWindow={resolve}
+            src="https://example.com"
+          />,
+        );
+        asksForAPopupWindow(view(container), {
+          height: 630,
+          url: POPUP,
+          width: 380,
+          windowId: 7,
+        });
+      });
+      expect(wanted).toStrictEqual({
+        height: 630,
+        url: POPUP,
+        width: 380,
+        windowId: 7,
+      });
+    });
+
+    // THE VIEW IS THE EXTENSION'S WINDOW for as long as it lives, and the
+    // engine reads which one once, as it asks for its guest: a view made again
+    // would be a second guest, and the window the extension holds an id for
+    // would be left with nothing in it.
+    it("is that window, in one view however often it is re-rendered", () => {
+      const { container, rerender } = render(
+        <BrowserWindow
+          {...windowProps}
+          onOpenPopupWindow={noWindows}
+          popupWindow={7}
+          src={POPUP}
+        />,
+      );
+      const first = view(container);
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          focused={false}
+          onOpenPopupWindow={noWindows}
+          popupWindow={7}
+          src={POPUP}
+        />,
+      );
+
+      expect(first.getAttribute("popupwindow")).toBe("7");
+      expect(view(container)).toBe(first);
+    });
+
+    // An extension's window is its page and nothing else, as Chrome draws one:
+    // an address bar over it is a page the user is invited to navigate away
+    // from, leaving the extension's window showing something it never opened.
+    it("draws no address bar", () => {
+      render(
+        <BrowserWindow
+          {...windowProps}
+          onOpenPopupWindow={noWindows}
+          popupWindow={7}
+          src={POPUP}
+        />,
+      );
+
+      expect(
+        screen.queryByRole("combobox", { name: "Address" }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -575,6 +698,7 @@ describe("BrowserWindow", () => {
             onClose={resolve}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={noWindows}
             onReach={() => undefined}
             rect={ON_SCREEN}
@@ -603,6 +727,7 @@ describe("BrowserWindow", () => {
       onClose: nothingClosed,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
+      onOpenPopupWindow: noWindows,
       onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,
@@ -712,6 +837,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -752,6 +878,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -777,6 +904,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -818,6 +946,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -845,6 +974,7 @@ describe("BrowserWindow", () => {
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -879,6 +1009,7 @@ describe("BrowserWindow", () => {
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -917,6 +1048,7 @@ describe("BrowserWindow", () => {
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -950,6 +1082,7 @@ describe("BrowserWindow", () => {
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => undefined,
         rect: ON_SCREEN,
@@ -992,6 +1125,7 @@ describe("BrowserWindow", () => {
             onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={noWindows}
             onReach={() => {
               resolve();
@@ -1020,6 +1154,7 @@ describe("BrowserWindow", () => {
             onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={noWindows}
             onReach={() => {
               resolve();
@@ -1052,6 +1187,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => {
             reaches.push("reach");
@@ -1088,6 +1224,7 @@ describe("BrowserWindow", () => {
             onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={noWindows}
             onReach={() => {
               resolve();
@@ -1119,6 +1256,7 @@ describe("BrowserWindow", () => {
             onClose={nothingClosed}
             onMotionEnded={nothingEnded}
             onNavigate={() => undefined}
+            onOpenPopupWindow={noWindows}
             onOpenWindow={noWindows}
             onReach={() => {
               resolve();
@@ -1150,6 +1288,7 @@ describe("BrowserWindow", () => {
         onClose: nothingClosed,
         onMotionEnded: nothingEnded,
         onNavigate: () => undefined,
+        onOpenPopupWindow: noWindows,
         onOpenWindow: noWindows,
         onReach: () => {
           reaches.push("reach");
@@ -1194,6 +1333,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => {
             reaches.push("reach");
@@ -1242,6 +1382,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1271,6 +1412,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1303,6 +1445,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1334,6 +1477,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1372,6 +1516,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1485,6 +1630,7 @@ describe("BrowserWindow", () => {
           onClose={nothingClosed}
           onMotionEnded={nothingEnded}
           onNavigate={() => undefined}
+          onOpenPopupWindow={noWindows}
           onOpenWindow={noWindows}
           onReach={() => undefined}
           rect={ON_SCREEN}
@@ -1605,6 +1751,7 @@ describe("BrowserWindow", () => {
         onClose={nothingClosed}
         onMotionEnded={nothingEnded}
         onNavigate={() => undefined}
+        onOpenPopupWindow={noWindows}
         onOpenWindow={noWindows}
         onReach={() => undefined}
         rect={undefined}
@@ -1631,6 +1778,7 @@ describe("BrowserWindow", () => {
       onClose: nothingClosed,
       onMotionEnded: nothingEnded,
       onNavigate: () => undefined,
+      onOpenPopupWindow: noWindows,
       onOpenWindow: noWindows,
       onReach: () => undefined,
       rect: ON_SCREEN,

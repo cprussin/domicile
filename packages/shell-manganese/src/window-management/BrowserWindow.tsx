@@ -6,6 +6,7 @@ import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
+  WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
@@ -28,6 +29,7 @@ import { useLoading } from "./useLoading";
 import { useReclaimFocus } from "./useReclaimFocus";
 import { useShownPage } from "./useShownPage";
 import { useZoom } from "./useZoom";
+import type { PopupWindowRequest } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving } from "./window-motion";
 import {
@@ -141,6 +143,16 @@ type Props = {
    */
   onOpenWindow: (url: string) => void;
   /**
+   * Called with the window an extension asked for — a
+   * `chrome.windows.create` with a popup — when this is the window the user
+   * was last working in, which is the one the engine asks.
+   *
+   * The desktop's to open, for {@link Props.onOpenWindow}'s reason. Dropped,
+   * it is an extension's "Unlock" that does nothing, and a `windows.create`
+   * that never answers.
+   */
+  onOpenPopupWindow: (request: PopupWindowRequest) => void;
+  /**
    * Called when the focus lands anywhere in this window — the page, the
    * address bar — without this window having put it there.
    *
@@ -159,6 +171,18 @@ type Props = {
    * the active window, and a click is still what raises it.
    */
   onReach: () => void;
+  /**
+   * The id of the extension's window this is, to `chrome.windows`, or
+   * `undefined` for a browser window of the user's own — see
+   * {@link Props.onOpenPopupWindow}.
+   *
+   * Read by the engine once, as the view asks for its guest, so it is the
+   * view's from its first render and never changes: a view made again for it
+   * would be a second guest. And an extension's window has no address bar,
+   * which is how Chrome draws one: it is the extension's page, not somewhere
+   * the user browses from.
+   */
+  popupWindow?: number | undefined;
   /**
    * Where the window's contents go, or `undefined` when it is not on screen
    * at all — on another workspace, or inside a container behind a tab.
@@ -195,8 +219,10 @@ export const BrowserWindow = ({
   onClose,
   onMotionEnded,
   onNavigate,
+  onOpenPopupWindow,
   onOpenWindow,
   onReach,
+  popupWindow,
   rect,
   restack,
   src,
@@ -335,6 +361,30 @@ export const BrowserWindow = ({
       };
     }
   }, [onOpenWindow, view]);
+
+  // A window an extension asked for, which is the same question from further
+  // away: the engine heard it from an extension rather than from this page,
+  // and asks the window the user last worked in because a question has to be
+  // dispatched somewhere. Copied off the event so what reaches the desktop is
+  // the ask rather than the event it came in.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const asked = ({
+        height,
+        url,
+        width,
+        windowId,
+      }: DomicilePopupWindowEvent) => {
+        onOpenPopupWindow({ height, url, width, windowId });
+      };
+      view.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, asked);
+      return () => {
+        view.removeEventListener(WEBVIEW_POPUP_WINDOW_EVENT, asked);
+      };
+    }
+  }, [onOpenPopupWindow, view]);
 
   // WHAT A BROWSER'S KEYS AND ITS ZOOM DO, in one place, because three
   // different things ask for them: a chord pressed in the address bar, a chord
@@ -636,45 +686,55 @@ export const BrowserWindow = ({
             }
       }
     >
-      <AddressBar
-        address={addressOf(shown.url, sent)}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        loading={loading}
-        onBack={drive((loaded) => {
-          loaded.goBack();
-        })}
-        onForward={drive((loaded) => {
-          loaded.goForward();
-        })}
-        onNavigate={navigate}
-        onReload={drive((loaded) => {
-          loaded.reload();
-        })}
-        onStop={drive((loaded) => {
-          loaded.stop();
-        })}
-        onZoomIn={() => {
-          run(BrowserCommand.ZoomIn);
-        }}
-        onZoomOut={() => {
-          run(BrowserCommand.ZoomOut);
-        }}
-        onZoomReset={() => {
-          run(BrowserCommand.ZoomReset);
-        }}
-        security={shown.security}
-        visited={shown.visited}
-        zoom={zoom}
-        zoomsAnnounced={zoomsAnnounced}
-      />
+      {popupWindow === undefined && (
+        <AddressBar
+          address={addressOf(shown.url, sent)}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          loading={loading}
+          onBack={drive((loaded) => {
+            loaded.goBack();
+          })}
+          onForward={drive((loaded) => {
+            loaded.goForward();
+          })}
+          onNavigate={navigate}
+          onReload={drive((loaded) => {
+            loaded.reload();
+          })}
+          onStop={drive((loaded) => {
+            loaded.stop();
+          })}
+          onZoomIn={() => {
+            run(BrowserCommand.ZoomIn);
+          }}
+          onZoomOut={() => {
+            run(BrowserCommand.ZoomOut);
+          }}
+          onZoomReset={() => {
+            run(BrowserCommand.ZoomReset);
+          }}
+          security={shown.security}
+          visited={shown.visited}
+          zoom={zoom}
+          zoomsAnnounced={zoomsAnnounced}
+        />
+      )}
       {/*
         The page, and the find bar and the picker it is waiting on over it: a
         box of their own so either covers the page and leaves the bar above it
         alone.
       */}
       <div className={pageStyles}>
-        <webview className={viewStyles} ref={setView} src={src} />
+        <webview
+          className={viewStyles}
+          // As an attribute on the first render, which React writes before it
+          // puts the element in the document — the one moment the engine reads
+          // it. See `popupWindow`.
+          popupwindow={popupWindow?.toString()}
+          ref={setView}
+          src={src}
+        />
         {finding && (
           <FindBar
             found={found}

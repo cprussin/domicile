@@ -63,17 +63,65 @@ TEST(DeskTabsTest, AnExtensionPageNeverTakesTheActiveTab) {
 TEST(DeskTabsTest, WhatHasNoDesktopMeaningIsRefused) {
   for (const char* refused :
        {"tabs.move", "tabs.group", "tabs.ungroup", "tabs.discard",
-        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit", "windows.create",
-        "windows.remove"}) {
+        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit"}) {
     EXPECT_TRUE(IsRefusedOnDesk(refused)) << refused;
   }
   for (const char* answered :
        {"tabs.query", "tabs.get", "tabs.update", "tabs.create", "tabs.remove",
         "tabs.reload", "tabs.setZoom", "tabs.getZoom", "tabs.setZoomSettings",
-        "tabs.getZoomSettings", "windows.get", "windows.update"}) {
+        "tabs.getZoomSettings", "windows.get", "windows.update",
+        "windows.create", "windows.remove"}) {
     EXPECT_FALSE(IsRefusedOnDesk(answered)) << answered;
   }
-  EXPECT_EQ(RefusedOnDesk().size(), 9u);
+  EXPECT_EQ(RefusedOnDesk().size(), 7u);
+}
+
+DeskWindowCreate APopup() {
+  return DeskWindowCreate{.type = "popup", .urls = 1};
+}
+
+TEST(DeskTabsTest, APopupWindowAtOneAddressIsOpened) {
+  // Bitwarden's sign-in: windows.create({type: "popup", url, width, height,
+  // focused}). The size is the shell's to honor, so it decides nothing here.
+  EXPECT_TRUE(DeskOpensWindow(APopup()));
+  // `panel` is Chrome's deprecated spelling of a popup, which Chrome opens as
+  // one.
+  DeskWindowCreate panel = APopup();
+  panel.type = "panel";
+  EXPECT_TRUE(DeskOpensWindow(panel));
+  DeskWindowCreate normal_state = APopup();
+  normal_state.state = "normal";
+  EXPECT_TRUE(DeskOpensWindow(normal_state));
+}
+
+TEST(DeskTabsTest, AWindowThatIsNotAPopupAtOneAddressIsRefused) {
+  // A normal window is the shell's browser window, which tabs.create already
+  // asks for; and a window with no address, two, a tab moved into it, an
+  // opener or an incognito profile is one the shell has no way to make.
+  DeskWindowCreate normal = APopup();
+  normal.type = "normal";
+  EXPECT_FALSE(DeskOpensWindow(normal));
+  DeskWindowCreate untyped = APopup();
+  untyped.type = "";
+  EXPECT_FALSE(DeskOpensWindow(untyped));
+  DeskWindowCreate nowhere = APopup();
+  nowhere.urls = 0;
+  EXPECT_FALSE(DeskOpensWindow(nowhere));
+  DeskWindowCreate two = APopup();
+  two.urls = 2;
+  EXPECT_FALSE(DeskOpensWindow(two));
+  DeskWindowCreate moved = APopup();
+  moved.tab_id = true;
+  EXPECT_FALSE(DeskOpensWindow(moved));
+  DeskWindowCreate incognito = APopup();
+  incognito.incognito = true;
+  EXPECT_FALSE(DeskOpensWindow(incognito));
+  DeskWindowCreate opened = APopup();
+  opened.set_self_as_opener = true;
+  EXPECT_FALSE(DeskOpensWindow(opened));
+  DeskWindowCreate maximized = APopup();
+  maximized.state = "maximized";
+  EXPECT_FALSE(DeskOpensWindow(maximized));
 }
 
 TEST(DeskTabsTest, ZeroZoomsToTheDefaultAndOutOfRangeIsRefused) {
@@ -107,7 +155,24 @@ DeskTabFacts Facts() {
                       .window_id = 40,
                       .audible = false,
                       .muted = false,
-                      .status = "complete"};
+                      .status = "complete",
+                      .window_type = "normal",
+                      .in_current_window = true,
+                      .in_last_focused_window = true};
+}
+
+// The one tab of a popup window an extension opened, seen from somewhere
+// other than that window.
+DeskTabFacts PopupFacts() {
+  return DeskTabFacts{.active = true,
+                      .index = 0,
+                      .window_id = 41,
+                      .audible = false,
+                      .muted = false,
+                      .status = "complete",
+                      .window_type = "popup",
+                      .in_current_window = false,
+                      .in_last_focused_window = false};
 }
 
 TEST(DeskTabsTest, AnEmptyQueryMatchesEveryTab) {
@@ -116,7 +181,7 @@ TEST(DeskTabsTest, AnEmptyQueryMatchesEveryTab) {
 
 TEST(DeskTabsTest, ThePopupQueryMatchesTheActiveTabOnly) {
   // tabs.query({active: true, currentWindow: true}), which is most popups'
-  // first line. The desk is every window's answer to "current".
+  // first line.
   DeskTabQuery query;
   query.active = true;
   query.current_window = true;
@@ -130,20 +195,49 @@ TEST(DeskTabsTest, ThePopupQueryMatchesTheActiveTabOnly) {
   EXPECT_FALSE(DeskTabMatches(elsewhere, Facts()));
 }
 
-TEST(DeskTabsTest, AWindowIsTheDeskOrNothing) {
+TEST(DeskTabsTest, APopupWindowsTabIsNotTheDesksActiveTab) {
+  // Its own window's active tab, which a query from the desk does not ask
+  // about: the page the popup was opened over is still the answer.
+  DeskTabQuery query;
+  query.active = true;
+  query.current_window = true;
+  EXPECT_FALSE(DeskTabMatches(query, PopupFacts()));
+  DeskTabFacts from_inside = PopupFacts();
+  from_inside.in_current_window = true;
+  EXPECT_TRUE(DeskTabMatches(query, from_inside));
+
+  DeskTabQuery last_focused;
+  last_focused.last_focused_window = true;
+  EXPECT_FALSE(DeskTabMatches(last_focused, PopupFacts()));
+  DeskTabFacts focused = PopupFacts();
+  focused.in_last_focused_window = true;
+  EXPECT_TRUE(DeskTabMatches(last_focused, focused));
+}
+
+TEST(DeskTabsTest, AWindowIsNamedByItsIdOrAsTheCurrentOne) {
   DeskTabQuery current;
   current.window_id = kCurrentWindowId;
   EXPECT_TRUE(DeskTabMatches(current, Facts()));
+  EXPECT_FALSE(DeskTabMatches(current, PopupFacts()));
   DeskTabQuery by_id;
   by_id.window_id = 40;
   EXPECT_TRUE(DeskTabMatches(by_id, Facts()));
+  EXPECT_FALSE(DeskTabMatches(by_id, PopupFacts()));
   by_id.window_id = 41;
   EXPECT_FALSE(DeskTabMatches(by_id, Facts()));
+  EXPECT_TRUE(DeskTabMatches(by_id, PopupFacts()));
+}
+
+TEST(DeskTabsTest, AWindowTypeIsTheTabsWindows) {
+  // Bitwarden finds its sign-in window with tabs.query({windowType: "popup"}).
   DeskTabQuery popup;
   popup.window_type = "popup";
   EXPECT_FALSE(DeskTabMatches(popup, Facts()));
-  popup.window_type = "normal";
-  EXPECT_TRUE(DeskTabMatches(popup, Facts()));
+  EXPECT_TRUE(DeskTabMatches(popup, PopupFacts()));
+  DeskTabQuery normal;
+  normal.window_type = "normal";
+  EXPECT_TRUE(DeskTabMatches(normal, Facts()));
+  EXPECT_FALSE(DeskTabMatches(normal, PopupFacts()));
 }
 
 TEST(DeskTabsTest, WhatADeskTabNeverIsMatchesNothing) {

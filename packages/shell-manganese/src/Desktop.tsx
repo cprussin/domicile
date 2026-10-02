@@ -292,6 +292,9 @@ export const Desktop = ({ domicile }: Props) => {
           onMove={(id, x, y) => {
             act(WindowAction.WindowMoved(id, x, y));
           }}
+          onOpenPopupWindow={(request) => {
+            act(WindowAction.PopupWindowOpened(request));
+          }}
           onOpenWindow={(url) => {
             act(WindowAction.BrowserOpened(url));
           }}

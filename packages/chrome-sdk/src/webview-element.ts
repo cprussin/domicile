@@ -160,6 +160,33 @@ export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 export const WEBVIEW_NEW_WINDOW_EVENT = "domicile-new-window";
 
 /**
+ * Fired when an extension asks for a window of its own:
+ * `chrome.windows.create({type: "popup", url})`. Bitwarden's "Unlock" from its
+ * autofill menu is one, and so is any extension's "pop out".
+ *
+ * THE ENGINE DISPATCHES THIS, on the view the user last worked in, and it
+ * carries what a second view needs: {@link DomicilePopupWindowEvent.windowId},
+ * the id the extension was already handed for the window, the address to show
+ * and the size it asked for. Where the window goes is the shell's, so it says
+ * nothing about where.
+ *
+ * WHAT A SHELL DOES WITH IT is open a browser window whose `<webview>` carries
+ * that id as its `popupwindow` attribute. The attribute is what makes the view
+ * the extension's window rather than one more tab of the desk's, and the engine
+ * reads it ONCE, as the element asks for its guest — so it is set before the
+ * view goes into the document, and changing it afterward does nothing. A shell
+ * that ignores this leaves the extension's window unopened and its
+ * `windows.create` unanswered.
+ *
+ * The view answers as any other does after that: `chrome.windows.remove(id)`
+ * is {@link WEBVIEW_CLOSE_EVENT} on it, and `chrome.windows.update(id,
+ * {focused: true})` is {@link WEBVIEW_FOCUS_REQUEST_EVENT}.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_POPUP_WINDOW_EVENT = "domicile-popup-window";
+
+/**
  * Fired when the page inside the view calls `window.close()`.
  *
  * THE ENGINE DISPATCHES THIS, and it carries nothing. The browser closes
@@ -417,6 +444,27 @@ declare global {
   }
 
   /**
+   * The event {@link WEBVIEW_POPUP_WINDOW_EVENT} names: an extension's window
+   * waiting for a view to be it. The engine's type, like the new window's —
+   * see `domicile_popup_window_event.idl` in the fork.
+   */
+  interface DomicilePopupWindowEvent extends Event {
+    /**
+     * The window's id to `chrome.windows`, which the extension already holds.
+     * What the view's `popupwindow` attribute is set to, in decimal.
+     */
+    readonly windowId: number;
+    /** The address to show, absolute. */
+    readonly url: string;
+    /**
+     * The size the extension asked for, in CSS pixels; 0 on an axis it did not
+     * ask about. The whole window's, as `chrome.windows.create` means it.
+     */
+    readonly width: number;
+    readonly height: number;
+  }
+
+  /**
    * The event {@link WEBVIEW_FILE_CHOOSER_EVENT} names: a page waiting for a
    * file to be picked.
    *
@@ -476,6 +524,7 @@ declare global {
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do
   interface HTMLElementEventMap {
     "domicile-new-window": DomicileNewWindowEvent;
+    "domicile-popup-window": DomicilePopupWindowEvent;
     "domicile-guest-keydown": KeyboardEvent;
     "domicile-file-chooser": DomicileFileChooserEvent;
   }

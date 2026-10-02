@@ -68,6 +68,11 @@ It provides these:
   nothing.
   `domicile-close` is the page calling `window.close()` — an extension's popup
   closing itself — and removing the view is the shell's answer.
+  `domicile-popup-window` is an extension's `chrome.windows.create` with a
+  popup: `windowId`, `url`, `width` and `height` (0 where it named none). The
+  shell opens a window whose view carries `popupwindow="<windowId>"` from its
+  first render — the engine reads it once, as the view is connected — and that
+  view is then the extension's window.
 - **`Extension`** (`./extension`) — one row of the tray, as
   `DomicileClient.on("extensions", …)` delivers it, and the Zod schema it is
   parsed with. A click on one is `DomicileClient.activateExtension(id)`, which
