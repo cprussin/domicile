@@ -192,6 +192,11 @@ The evidence for each of those is in the doc that made the claim —
    hardware check, and an `<app>`'s scale from the monitor under it.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
+8. **`domicile send-shell` from a terminal.** Keybindings are the config's and
+   their `send-shell` actions reach the shell; the same action typed as
+   `domicile send-shell focus right` has no route yet (supervisor → compositor
+   → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM

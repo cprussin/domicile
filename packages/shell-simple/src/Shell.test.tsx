@@ -4,7 +4,9 @@ import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type {
   HostMessageOf,
   HostMessageType,
+  ShellConfigMessage,
 } from "@domicile/chrome-sdk/host-message";
+import { KeyAction } from "@domicile/chrome-sdk/key-action";
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { Shell } from "./Shell";
@@ -19,6 +21,8 @@ type Host = {
   /** Deliver a host message to the shell, as the control channel would. */
   emit: <T extends HostMessageType>(type: T, message: HostMessageOf<T>) => void;
   focused: string[];
+  /** What the shell said it could not do. */
+  reported: string[];
   spawned: (readonly string[])[];
 };
 
@@ -29,6 +33,9 @@ const fakeHost = (): Host => {
     domicile: {
       focusApp: (appId: string) => host.focused.push(appId),
       grabShortcut: () => undefined,
+      off: (type: string) => {
+        handlers.delete(type);
+      },
       on: (type: string, handler: (message: never) => void) => {
         handlers.set(type, handler);
       },
@@ -40,15 +47,69 @@ const fakeHost = (): Host => {
       });
     },
     focused: [],
+    reported: [],
     spawned: [],
   };
   return host;
 };
 
-/** A rendered shell, with the client that drives it. */
-const shell = (): Host => {
+/** Enter's evdev code, which is what the compositor resolves `Return` to. */
+const ENTER = 28;
+
+/**
+ * The README's sample config, as the SDK delivers it: `"Alt+Return" =
+ * "send-shell terminal"` under `[shells.simple.keybindings]`.
+ */
+const configBinding = (
+  keycode: number,
+  modifiers: { altKey?: boolean; metaKey?: boolean },
+  args: readonly string[],
+): ShellConfigMessage => ({
+  keybindings: new Map([["default", []]]),
+  shells: new Map([
+    [
+      "simple",
+      {
+        keybindings: new Map([
+          [
+            "default",
+            [
+              {
+                action: KeyAction.SendShell(args),
+                shortcut: {
+                  altKey: modifiers.altKey ?? false,
+                  ctrlKey: false,
+                  keycode,
+                  metaKey: modifiers.metaKey ?? false,
+                  shiftKey: false,
+                },
+              },
+            ],
+          ],
+        ]),
+        options: {},
+      },
+    ],
+  ]),
+});
+
+/**
+ * A rendered shell, with the client that drives it, told the config the
+ * compositor sends as the page connects.
+ */
+const shell = (
+  config = configBinding(ENTER, { altKey: true }, ["terminal"]),
+): Host => {
   const host = fakeHost();
-  render(<Shell domicile={host.domicile} />);
+  render(
+    <Shell
+      domicile={host.domicile}
+      report={(error) => {
+        host.reported.push(error);
+      }}
+    />,
+  );
+  host.emit("shell_config", config);
   return host;
 };
 
@@ -85,7 +146,7 @@ const pointer = (
 };
 
 const press = (
-  key: string,
+  code: string,
   modifiers: Partial<KeyboardEventInit> = {},
 ): void => {
   act(() => {
@@ -94,7 +155,7 @@ const press = (
         altKey: true,
         bubbles: true,
         cancelable: true,
-        key,
+        code,
         ...modifiers,
       }),
     );
@@ -248,7 +309,7 @@ describe("Shell", () => {
   describe("the keyboard", () => {
     it("gives it to a window opened once the host has caught up", () => {
       // Nothing else would: the SDK routes keys to whichever window was last
-      // clicked, so without this Alt+Enter opens a terminal that hears nothing.
+      // clicked, so without this a terminal opened from a key hears nothing.
       const host = shell();
       host.emit("focus_changed", { app_id: undefined });
       host.emit("app_appeared", {
@@ -272,6 +333,22 @@ describe("Shell", () => {
       expect(host.focused).toStrictEqual([]);
     });
 
+    it("opens a terminal on the key the config binds to it", () => {
+      // Whatever key that is: `send-shell terminal` is the command, and the
+      // chord is the config's.
+      const host = shell(configBinding(20, { metaKey: true }, ["terminal"]));
+      press("KeyT", { altKey: false, metaKey: true });
+      press("Enter");
+      expect(host.spawned).toStrictEqual([["kitty"]]);
+    });
+
+    it("says which command it does not know, and does nothing", () => {
+      const host = shell(configBinding(ENTER, { altKey: true }, ["kill"]));
+      press("Enter");
+      expect(host.spawned).toStrictEqual([]);
+      expect(host.reported).toStrictEqual(["simple: no command `kill`"]);
+    });
+
     it("opens a terminal on Alt+Enter in the page", () => {
       const host = shell();
       press("Enter");
@@ -291,7 +368,7 @@ describe("Shell", () => {
       host.emit("shortcut", {
         altKey: true,
         ctrlKey: false,
-        keycode: 28,
+        keycode: ENTER,
         metaKey: false,
         shiftKey: false,
       });
@@ -351,9 +428,10 @@ describe("Shell", () => {
   });
 
   describe("the legend", () => {
-    it("names the keys the desktop answers to", () => {
+    it("names what the desktop answers to", () => {
       shell();
-      expect(screen.getByText("Alt + Enter")).toBeInTheDocument();
+      expect(screen.getByText("Alt + drag")).toBeInTheDocument();
+      expect(screen.getByText("send-shell terminal")).toBeInTheDocument();
     });
 
     it("stays on the background under a window that opened over it", () => {
@@ -363,7 +441,7 @@ describe("Shell", () => {
         size: [640, 480],
         title: undefined,
       });
-      expect(screen.getByText("Alt + Enter")).toBeInTheDocument();
+      expect(screen.getByText("Alt + drag")).toBeInTheDocument();
     });
   });
 });

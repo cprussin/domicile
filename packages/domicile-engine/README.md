@@ -183,7 +183,8 @@ Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
 `file_preview`, `found_apps`, `battery`, `brightness`, `clipboard`, `theme`,
-`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`, `notifications`.
+`focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`,
+`notifications`, `shell_config`.
 
 `preview_file` is the one outbound member that names a path, which
 `search_files` exists not to. The path is relative to the home, as a
@@ -199,6 +200,11 @@ it carries and its cover as a `data:` URL: the page may draw from
 opinion about the same box, and it disagreed by a border. The host no longer
 reads the message and the SDK no longer calls the method; taking the member out
 of the IDL is an engine change, and an engine change is a release.
+
+`shell_config` is the one inbound member relayed as a string: the page's
+`shellconfig` event carries the compositor's line verbatim as `config`. A
+shell's `options` are whatever its config says, which WebIDL cannot type, so
+the SDK parses it — and a keybinding added to the config costs no release.
 
 **The tray is not the control channel.** `window.domicile`'s `extensions`
 event and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,

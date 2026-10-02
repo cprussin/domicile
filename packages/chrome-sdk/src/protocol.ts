@@ -3,13 +3,18 @@
 // they are parsed with zod rather than cast — the schemas below are the only
 // place a raw frame becomes a typed value.
 //
-// **A page no longer reads any of this.** Under the fork the compositor's JSON
+// **A page reads almost none of this.** Under the fork the compositor's JSON
 // is decoded in the browser process and reaches the document as typed events on
 // `window.domicile`; `host-message.ts` is what a shell sees. What still
 // reads these schemas is `@domicile/e2e-harness`, a headless stand-in for a
 // chrome that connects to the compositor's own socket — because what those
 // scripts assert is what the *compositor* sends, and a harness that went
 // through the browser process would be asserting the browser process too.
+//
+// The one exception is `shell_config`. A shell's `options` table is whatever
+// its config said, which WebIDL cannot type, so the engine forwards the
+// compositor's line as a string and `host-message.ts` parses it with
+// {@link shellConfigSchema} — the page reads that one schema itself.
 //
 // That makes this and `packages/domicile-protocol` two halves of one contract
 // with no page between them, and they still have to move together: see
@@ -522,6 +527,45 @@ const windowsThemeMessageSchema = z.looseObject({
   type: z.literal("windows_theme"),
 });
 
+// What a key the config binds does: a command for the shell, or a change of
+// the binding mode the keys are read in. The config's own grammar — `send-shell
+// focus right`, `mode resize` — already parsed by the compositor, so what
+// crosses is the words rather than the line.
+const keyActionSchema = z.discriminatedUnion("type", [
+  z.looseObject({
+    args: z.array(z.string()).min(1),
+    type: z.literal("send_shell"),
+  }),
+  z.looseObject({ name: z.string().min(1), type: z.literal("mode") }),
+]);
+
+// One binding: a chord, as the compositor resolved its keysym to a key on the
+// live keymap, and what it does.
+const keybindingSchema = z.looseObject({
+  action: keyActionSchema,
+  shortcut: shortcutSchema,
+});
+
+// The bindings by mode. `default` is always there — the config's
+// `[keybindings]` is that mode, and an empty table is still one.
+const keybindingsSchema = z
+  .object({ default: z.array(keybindingSchema) })
+  .catchall(z.array(keybindingSchema));
+
+// The keys the config binds and what each shell is told besides: once after
+// the handshake and again whenever a reload moves any of it. The desk's
+// bindings are every shell's, and `shells` is what only the shell of that name
+// adds — its own bindings, and `options`, which is whatever that shell's table
+// said and nothing this side reads.
+export const shellConfigSchema = z.looseObject({
+  keybindings: keybindingsSchema,
+  shells: z.record(
+    z.string(),
+    z.looseObject({ keybindings: keybindingsSchema, options: z.unknown() }),
+  ),
+  type: z.literal("shell_config"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -556,6 +600,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   idleSchema,
   lockedSchema,
   windowsThemeMessageSchema,
+  shellConfigSchema,
 ]);
 
 /** A decoded host message. */
@@ -595,6 +640,7 @@ export type ThemeMessage = z.infer<typeof themeMessageSchema>;
 export type IdleMessage = z.infer<typeof idleSchema>;
 export type LockedMessage = z.infer<typeof lockedSchema>;
 export type WindowsThemeMessage = z.infer<typeof windowsThemeMessageSchema>;
+export type ShellConfigMessage = z.infer<typeof shellConfigSchema>;
 
 /** One thing that was copied, as a row of the clipboard's history. */
 export type ClipboardEntry = z.infer<typeof clipboardEntrySchema>;

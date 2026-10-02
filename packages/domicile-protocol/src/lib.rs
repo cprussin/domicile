@@ -1,9 +1,12 @@
 //! The wire contract between the Domicile host and the in-page client.
 //!
 //! The chrome runs a small JS client that mirrors these types. Messages are
-//! exchanged as JSON. Keep this crate dependency-light (serde only) so it stays
-//! a clean, portable description of the protocol; the host maps these onto its
-//! internal scene model, and the JS side mirrors them by hand.
+//! exchanged as JSON. Keep this crate dependency-light (serde, and
+//! `serde_json` for the one freeform value — [`ShellBindings::options`]) so it
+//! stays a clean, portable description of the protocol; the host maps these
+//! onto its internal scene model, and the JS side mirrors them by hand.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -860,6 +863,61 @@ pub enum HostMessage {
     /// every monitor's page has the same one. Which of them are *new* is
     /// the shell's to tell, by the ones it had not been told before.
     Notifications { items: Vec<Notification> },
+
+    /// The desk's keybindings and each shell's settings, from the config.
+    ///
+    /// `keybindings` is `[keybindings]` and `[modes.*]`, which every shell
+    /// has; `shells` is `[shells.<name>]`, which only the shell loaded under
+    /// that name reads. A shell merges its own table over the shared one, mode
+    /// by mode — the SDK's `bindKeys` does — so the merge is not done here,
+    /// where the compositor does not know which shell a page is.
+    ///
+    /// **THE KEYS ARE RESOLVED, THE ACTIONS ARE NOT.** The config names a
+    /// keysym and every [`Shortcut`] here is the evdev key it is on, in the
+    /// layout `input.keyboard` names, which only the compositor has a keymap
+    /// to work out. What a `send_shell` action means is the shell's alone.
+    ///
+    /// Sent to a chrome that has just connected, and to every chrome on a
+    /// reload that moved `[keybindings]`, `[modes]`, `[shells]` or the
+    /// keyboard — a keysym moves with the layout.
+    ShellConfig {
+        /// Bindings by mode. Always has `default`, which may be empty.
+        keybindings: ModeBindings,
+        shells: BTreeMap<String, ShellBindings>,
+    },
+}
+
+/// Bindings by the mode they are live in.
+///
+/// Ordered, so a message is written the same way every time.
+pub type ModeBindings = BTreeMap<String, Vec<KeyBinding>>;
+
+/// One chord, resolved to the key it is on, and what it does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyBinding {
+    pub shortcut: Shortcut,
+    pub action: KeyAction,
+}
+
+/// What a binding does, as the config's action grammar names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum KeyAction {
+    /// `send-shell <word>…`: words for the shell to interpret.
+    SendShell { args: Vec<String> },
+    /// `mode <name>`: the mode that is live from now on.
+    Mode { name: String },
+}
+
+/// What the config says to one shell.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShellBindings {
+    /// This shell's bindings by mode, over the shared ones. Always has
+    /// `default`, which may be empty.
+    pub keybindings: ModeBindings,
+    /// `[shells.<name>.options]`, as it was written: an object, empty where
+    /// the config wrote none.
+    pub options: serde_json::Map<String, serde_json::Value>,
 }
 
 /// An application a desktop entry offers, as a launcher is told about it.
