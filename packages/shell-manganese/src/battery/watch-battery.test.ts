@@ -25,9 +25,6 @@ const heldClient = () => {
     says: (reading: BatteryMessage) => {
       handlers.get("battery")?.(reading);
     },
-    get watching() {
-      return handlers.has("battery");
-    },
   };
 };
 
@@ -48,14 +45,27 @@ describe("watchBattery", () => {
     ]);
   });
 
-  it("stops listening when it is stopped", () => {
+  it("reports to the bar on every monitor, not only the last", () => {
     const host = heldClient();
-    const stop = watchBattery(host.client, () => {
-      /* nothing to record */
-    });
+    const first: BatteryMessage[] = [];
+    const second: BatteryMessage[] = [];
+
+    watchBattery(host.client, (reading) => first.push(reading));
+    watchBattery(host.client, (reading) => second.push(reading));
+    host.says({ charge: 0.5, charging: false });
+
+    expect(first).toEqual([{ charge: 0.5, charging: false }]);
+    expect(second).toEqual([{ charge: 0.5, charging: false }]);
+  });
+
+  it("stops reporting when it is stopped", () => {
+    const host = heldClient();
+    const readings: BatteryMessage[] = [];
+    const stop = watchBattery(host.client, (reading) => readings.push(reading));
 
     stop();
+    host.says({ charge: 0.5, charging: false });
 
-    expect(host.watching).toBe(false);
+    expect(readings).toEqual([]);
   });
 });

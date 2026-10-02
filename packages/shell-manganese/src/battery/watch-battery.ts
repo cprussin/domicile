@@ -1,6 +1,8 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { BatteryMessage } from "@domicile/chrome-sdk/host-message";
 
+import { watchShared } from "../host/watch-shared";
+
 /**
  * Watch the machine's battery: `onReading` is called with the charge as soon
  * as the host has said one and again whenever it moves, and what comes back
@@ -20,13 +22,11 @@ import type { BatteryMessage } from "@domicile/chrome-sdk/host-message";
  * and once more to a page that has just connected, and the client holds a
  * message that arrived before this registered — so a bar mounted a beat after
  * the handshake still gets the reading that crossed in between.
+ *
+ * Shared with every other bar on the page — see `watchShared`: the page draws
+ * a bar per monitor, and `on` is one slot.
  */
 export const watchBattery = (
   domicile: DomicileClient,
   onReading: (reading: BatteryMessage) => void,
-): (() => void) => {
-  domicile.on("battery", onReading);
-  return () => {
-    domicile.off("battery", onReading);
-  };
-};
+): (() => void) => watchShared(domicile, "battery", onReading);
