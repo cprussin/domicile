@@ -372,6 +372,16 @@ interface WebViewGuestClient {
   // An event, like CloseRequested.
   PopupWindowRequested(int32 window_id, url.mojom.Url url, int32 width,
                        int32 height);
+
+  // The size the page's content wants, in CSS pixels: its narrowest width
+  // (min-content) and its document's height at the width it is laid out at.
+  // What Chrome sizes an extension's popup bubble from, which a <webview>
+  // cannot tell by looking: the element is a box the shell sized, and the
+  // guest's document is laid out inside it.
+  //
+  // SENT ONLY WHEN IT CHANGES, like the reports above; a fresh guest sends its
+  // first page's once that page has laid out.
+  ContentSizeChanged(int32 width, int32 height);
 };
 
 // One guest, for as long as the element that asked for it lives.

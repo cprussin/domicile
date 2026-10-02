@@ -14,6 +14,10 @@
 //                                the row for `?expect=`, each time one arrives.
 //                                THE CLAIM about the tray
 //   GUARD page url=…             the <webview> is showing a page, and where
+//   GUARD size width=… height=… url=…
+//                                the <webview> dispatched
+//                                `domicile-content-size-change`, and the size
+//                                it holds. THE CLAIM about the size
 //   GUARD closed url=…           the <webview> dispatched `domicile-close`.
 //                                THE CLAIM about the close
 //
@@ -59,6 +63,12 @@ const show = (src) => {
   view.style.border = "0";
   view.addEventListener("domicile-page-change", () => {
     say(`page url=${view.url}`);
+  });
+  view.addEventListener("domicile-content-size-change", () => {
+    say(
+      `size width=${view.contentWidth} height=${view.contentHeight}` +
+        ` url=${view.url}`,
+    );
   });
   view.addEventListener("domicile-close", () => {
     say(`closed url=${view.url}`);

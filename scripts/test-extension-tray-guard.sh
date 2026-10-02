@@ -66,69 +66,77 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts> <closed>":
+# MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts> <closed>
+# <sized>":
 # whether the stand-in sent the list, whether the page heard any `extensions`
 # event, whether the fixture's row was in it (as expected, for the claim; at
 # all, for the control), whether the <webview> showed its page, whether the
 # popup's runtime.getContexts listed it as a TAB (any answer at all, for the
-# control), and whether the <webview> dispatched `domicile-close` (after any
-# answer, for the claim).
+# control), whether the <webview> dispatched `domicile-close` (after any
+# answer, for the claim), and whether it reported the popup's content size as
+# the fixture lays it out (that size at all, for the control).
 echo "the claim — the fixture in the tray, its popup opened, asked and closed"
-expect "all six is a pass" "pass" "$(verdict "tray 1 1 1 1 1 1")"
-expect "a list never sent is a failure" "fail" "$(verdict "tray 0 1 1 1 1 1")"
+expect "all seven is a pass" "pass" "$(verdict "tray 1 1 1 1 1 1 1")"
+expect "a list never sent is a failure" "fail" "$(verdict "tray 0 1 1 1 1 1 1")"
 expect "and blames the control channel" "yes" \
-  "$(says "tray 0 0 0 0 0 0" "control channel")"
-expect "no tray heard is a failure" "fail" "$(verdict "tray 1 0 0 0 0 0")"
+  "$(says "tray 0 0 0 0 0 0 0" "control channel")"
+expect "no tray heard is a failure" "fail" "$(verdict "tray 1 0 0 0 0 0 0")"
 expect "and blames the tray's binding" "yes" \
-  "$(says "tray 1 0 0 0 0 0" "ExtensionTray")"
+  "$(says "tray 1 0 0 0 0 0 0" "ExtensionTray")"
 expect "a tray without the fixture's row is a failure" "fail" \
-  "$(verdict "tray 1 1 0 0 0 0")"
-expect "and says which row" "yes" "$(says "tray 1 1 0 0 0 0" "row")"
+  "$(verdict "tray 1 1 0 0 0 0 0")"
+expect "and says which row" "yes" "$(says "tray 1 1 0 0 0 0 0" "row")"
 expect "a popup that never showed is a failure" "fail" \
-  "$(verdict "tray 1 1 1 0 0 0")"
+  "$(verdict "tray 1 1 1 0 0 0 0")"
 expect "and blames the navigation" "yes" \
-  "$(says "tray 1 1 1 0 0 0" "chrome-extension://")"
+  "$(says "tray 1 1 1 0 0 0 0" "chrome-extension://")"
 
 # THE CASE THE CONTEXTS READING IS FOR: getContexts on a guest with no view
 # type is a NOTREACHED, which takes the browser down before any answer.
 expect "a popup that never answered is a failure" "fail" \
-  "$(verdict "tray 1 1 1 1 0 0")"
+  "$(verdict "tray 1 1 1 1 0 0 1")"
 expect "and blames the guest's view type" "yes" \
-  "$(says "tray 1 1 1 1 0 0" "kTabContents")"
+  "$(says "tray 1 1 1 1 0 0 1" "kTabContents")"
 expect "a popup that answered anything but TAB is a failure" "fail" \
-  "$(verdict "tray 1 1 1 1 0 1")"
+  "$(verdict "tray 1 1 1 1 0 1 1")"
 expect "and says what it was asked" "yes" \
-  "$(says "tray 1 1 1 1 0 1" "getContexts")"
+  "$(says "tray 1 1 1 1 0 1 1" "getContexts")"
 expect "a popup that never closed is a failure" "fail" \
-  "$(verdict "tray 1 1 1 1 1 0")"
-expect "and blames the close" "yes" "$(says "tray 1 1 1 1 1 0" "CloseContents")"
+  "$(verdict "tray 1 1 1 1 1 0 1")"
+expect "and blames the close" "yes" "$(says "tray 1 1 1 1 1 0 1" "CloseContents")"
+expect "a popup whose size never arrived is a failure" "fail" \
+  "$(verdict "tray 1 1 1 1 1 1 0")"
+expect "and blames the preferred size" "yes" \
+  "$(says "tray 1 1 1 1 1 1 0" "UpdatePreferredSize")"
 
 echo
 echo "the control — the list empty, a page that never closes"
 expect "heard, absent, shown, unasked and open is the pass" "pass" \
-  "$(verdict "control 1 1 0 1 0 0")"
+  "$(verdict "control 1 1 0 1 0 0 0")"
 
 # THE CASE THE HEARD READING IS FOR: an absence nothing was asked about.
-expect "no tray heard is a failure" "fail" "$(verdict "control 1 0 0 1 0 0")"
+expect "no tray heard is a failure" "fail" "$(verdict "control 1 0 0 1 0 0 0")"
 expect "the fixture from an empty list is a failure" "fail" \
-  "$(verdict "control 1 1 1 1 0 0")"
-expect "and says so" "yes" "$(says "control 1 1 1 1 0 0" "not told")"
+  "$(verdict "control 1 1 1 1 0 0 0")"
+expect "and says so" "yes" "$(says "control 1 1 1 1 0 0 0" "not told")"
 expect "a page that never showed is a failure" "fail" \
-  "$(verdict "control 1 1 0 0 0 0")"
+  "$(verdict "control 1 1 0 0 0 0 0")"
 expect "an answer from a page that asked nothing is a failure" "fail" \
-  "$(verdict "control 1 1 0 1 1 0")"
+  "$(verdict "control 1 1 0 1 1 0 0")"
 
 # INVERTED: the close is the failure.
 expect "a close from a page that never asked is a failure" "fail" \
-  "$(verdict "control 1 1 0 1 0 1")"
-expect "and says so" "yes" "$(says "control 1 1 0 1 0 1" "never called")"
+  "$(verdict "control 1 1 0 1 0 1 0")"
+expect "and says so" "yes" "$(says "control 1 1 0 1 0 1 0" "never called")"
 expect "a list never sent fails the control too" "fail" \
-  "$(verdict "control 0 1 0 1 0 0")"
+  "$(verdict "control 0 1 0 1 0 0 0")"
+expect "the fixture's size from a page that is not the fixture is a failure" \
+  "fail" "$(verdict "control 1 1 0 1 0 0 1")"
 
 echo
 echo "a run that measured nothing at all"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
-expect "and so is a leg nobody runs" "fail" "$(verdict "elephant 1 1 1 1 1 1")"
+expect "and so is a leg nobody runs" "fail" "$(verdict "elephant 1 1 1 1 1 1 1")"
 
 echo
 echo "the fixture"
@@ -154,6 +162,11 @@ expect "and its popup closes itself" "yes" \
   "$(grep -q 'window.close()' "$FIXTURE/popup.js" && echo yes || echo no)"
 expect "and asks runtime.getContexts first" "yes" \
   "$(grep -qF 'runtime.getContexts({})' "$FIXTURE/popup.js" && echo yes || echo no)"
+WIDTH="$(sed -n 's/^readonly WIDTH="\([0-9]*\)"$/\1/p' "$GUARD")"
+HEIGHT="$(sed -n 's/^readonly HEIGHT="\([0-9]*\)"$/\1/p' "$GUARD")"
+expect "and lays its popup out at the size the guard reads" "yes" \
+  "$(grep -qF "width: ${WIDTH}px; height: ${HEIGHT}px" "$FIXTURE/popup.html" &&
+    echo yes || echo no)"
 CONTEXT="$(sed -n 's/^readonly CONTEXT="\(.*\)"$/\1/p' "$GUARD")"
 expect "the guard expects the popup to be a TAB, as Chrome's tab is" "TAB" \
   "$CONTEXT"

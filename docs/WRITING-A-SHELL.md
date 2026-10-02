@@ -1204,8 +1204,11 @@ view.addEventListener(WEBVIEW_CLOSE_EVENT, closePanel);
 panel.append(view);
 ```
 
-- **Give the view a size.** Chrome fits its popup to the document; a guest
-  reports none, so a panel here is a fixed box.
+- **Fit the view to the page.** Chrome fits its popup to the document. The
+  view reports it as `contentWidth` / `contentHeight` (0 until the page has
+  laid out), announced in `domicile-content-size-change`: size the view to
+  them, capped at the most the panel may take, and give it that box until
+  then. The width counts the gutter a classic vertical scrollbar takes.
 - **The panel is a thing to type into**, like a launcher: take the keyboard
   for it with `focusChrome` and give it back when it closes (see
   [Who gets the keyboard](#who-gets-the-keyboard)).
