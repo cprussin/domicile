@@ -11,7 +11,8 @@ use std::thread;
 
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
-    ChromeMessage, HostMessage, Notification, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    ChromeMessage, HostMessage, KeyAction, KeyBinding, Notification, Shortcut, Theme, TrayItem,
+    Urgency, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -250,6 +251,49 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
             unpacked: vec!["/home/you/src/my-extension".into()],
         }),
         "after the keymap, the other fact only the browser process reads"
+    );
+}
+
+#[test]
+fn the_keys_the_config_binds_ride_with_the_handshake() {
+    // A shell that reloads has a new page with no bindings in it, and the
+    // config is not going to be edited again to tell it. Right after the
+    // keymap, which is the layout every shortcut in it was resolved against.
+    let mut session = Session::new();
+    session.host_mut().set_keymap(KEYMAP.into());
+    let keybindings = [(
+        "default".to_string(),
+        vec![KeyBinding {
+            shortcut: Shortcut {
+                key: 28,
+                alt: false,
+                ctrl: false,
+                shift: false,
+                logo: true,
+            },
+            action: KeyAction::SendShell {
+                args: vec!["terminal".into()],
+            },
+        }],
+    )];
+    session
+        .host_mut()
+        .set_shell_config(keybindings.clone().into(), [].into());
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    let keymap_at = out
+        .iter()
+        .position(|message| matches!(message, HostMessage::Keymap { .. }))
+        .expect("the keymap rides with the handshake");
+    assert_eq!(
+        out.get(keymap_at + 1),
+        Some(&HostMessage::ShellConfig {
+            keybindings: keybindings.into(),
+            shells: [].into(),
+        })
     );
 }
 

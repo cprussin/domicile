@@ -1,12 +1,13 @@
 // The whole of this shell: an `<app>` per client the host announces, moved and
-// resized on the Alt key, and Alt+Enter for a terminal.
+// resized on the Alt key, and a terminal on whichever key the config binds to
+// `send-shell terminal`.
 
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
+import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { DomicileShortcut } from "@domicile/chrome-sdk/domicile-host";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
 import type { CSSProperties, PointerEvent } from "react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
 
 // `<app>` is the engine's own tag, not a custom element — a custom element's
 // name must contain a hyphen — so React has no entry for it and this is what
@@ -41,21 +42,29 @@ const SECONDARY_BUTTON = 2;
 
 const TERMINAL_COMMAND = ["kitty"] as const;
 
-/** Alt+Enter in the evdev keycodes the control channel speaks; 28 is Enter. */
-const ALT_ENTER: DomicileShortcut = {
-  altKey: true,
-  ctrlKey: false,
-  keycode: 28,
-  metaKey: false,
-  shiftKey: false,
-};
+/**
+ * The name this shell's section of the config goes under:
+ * `[shells.simple.keybindings]`.
+ */
+const SHELL = "simple";
 
+/**
+ * What the desktop answers to. The gestures are this shell's own; the
+ * terminal is on whichever key the config binds to the command, which a page
+ * is told as a key on the keyboard rather than as a name it could write here.
+ */
 const KEYBINDINGS = [
   ["Alt + press", "raise"],
   ["Alt + drag", "move (and raise)"],
   ["Alt + right-drag", "resize (and raise)"],
-  ["Alt + Enter", "open a terminal"],
+  ["send-shell terminal", "open a terminal"],
 ] as const;
+
+/** Where a command the config names and this shell does not know is said. */
+const logToConsole = (error: string): void => {
+  // biome-ignore lint/suspicious/noConsole: the config is the user's, and the console is where a shell tells them a line of it named nothing
+  console.error(error);
+};
 
 /** A window on the desktop: where this shell put it, and what its client said. */
 type ShellWindow = {
@@ -98,7 +107,14 @@ type Drag = {
  * the client underneath, so an un-taken Alt-drag also clicks into the client
  * and leaves it holding a button that never comes up.
  */
-export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
+export const Shell = ({
+  domicile,
+  report = logToConsole,
+}: {
+  domicile: DomicileClient;
+  /** Where an unknown command is reported. Injected so a test can read it. */
+  report?: typeof logToConsole;
+}) => {
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
   const [popups, setPopups] = useState<readonly Popup[]>([]);
   // Which ids are open, kept in step synchronously: two announcements in one
@@ -108,6 +124,16 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
   // the keyboard. Only a window after that is one the user just opened.
   const caughtUp = useRef(false);
   const drag = useRef<Drag | undefined>(undefined);
+
+  // The one command this shell has. Read when a key is pressed rather than
+  // bound with the keys, which are bound once: the config arrives once.
+  const onCommand = useEffectEvent((args: readonly string[]) => {
+    if (args.join(" ") === "terminal") {
+      domicile.spawn(TERMINAL_COMMAND);
+    } else {
+      report(`${SHELL}: no command \`${args.join(" ")}\``);
+    }
+  });
 
   useEffect(() => {
     domicile.on("app_appeared", ({ app_id, size }) => {
@@ -146,29 +172,14 @@ export const Shell = ({ domicile }: { domicile: DomicileClient }) => {
       caughtUp.current = true;
     });
 
-    // Alt+Enter is claimed twice because the keyboard is in two places: the
-    // page hears it until a client has focus, and the compositor after that.
-    const openTerminal = () => {
-      domicile.spawn(TERMINAL_COMMAND);
-    };
-    domicile.grabShortcut(ALT_ENTER);
-    domicile.on("shortcut", openTerminal);
-    // On `document`, because a key event never reaches an element — a Wayland
-    // client is a surface with nowhere to put focus — and in the capture phase,
-    // so the chord is taken before the SDK forwards it to the focused window.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isAltEnter(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!event.repeat) {
-          openTerminal();
-        }
-      }
-    };
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
+    // The SDK claims the chord the config binds to `send-shell terminal`, and
+    // hears it by whichever path the press took.
+    return bindKeys(domicile, SHELL, {
+      onCommand,
+      // A desktop with one command has no modes to draw, and no options.
+      onModeChanged: () => undefined,
+      onOptions: () => undefined,
+    }).unbind;
   }, [domicile]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -394,11 +405,3 @@ const take = (event: PointerEvent<HTMLDivElement>): void => {
   event.preventDefault();
   event.stopPropagation();
 };
-
-/** Every modifier is part of the chord, exactly as {@link ALT_ENTER} claims it. */
-const isAltEnter = (event: KeyboardEvent): boolean =>
-  event.key === "Enter" &&
-  event.altKey &&
-  !event.ctrlKey &&
-  !event.metaKey &&
-  !event.shiftKey;

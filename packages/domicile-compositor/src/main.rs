@@ -131,6 +131,7 @@ mod pnp_ids;
 mod restatement;
 mod scale;
 mod screens;
+mod shell_config;
 mod shm_upload;
 mod timing_window;
 mod tray;
@@ -163,6 +164,7 @@ use crate::peer_process::peer_pid;
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
+use crate::shell_config::Resolved;
 use crate::timing_window::TimingWindow;
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
@@ -273,6 +275,14 @@ mod grepped {
     /// desk that kept its layout deliberately from one where the save never
     /// arrived.
     pub const KEYMAP_REFUSED: &str = "keeping the keymap the desktop is typing on";
+    /// `tests/keybindings.rs::a_keysym_the_reload_cannot_resolve_leaves_the_shells_their_keys`:
+    /// the refusing arm of
+    /// [`rebind_the_keys`](crate::DomicileCompositor::rebind_the_keys).
+    ///
+    /// [`KEYMAP_REFUSED`]'s arrangement and its reason: a reload that refuses
+    /// the keys sends no message, so this line is all that tells a desk that
+    /// kept its bindings deliberately from one where the save never arrived.
+    pub const KEYS_REFUSED: &str = "keeping the keys the shells were last told";
 }
 
 /// The renderer client buffers are imported on.
@@ -4152,6 +4162,10 @@ impl DomicileCompositor {
         if let Some(keyboard) = &restated.keyboard {
             self.retype_the_desktop(keyboard);
         }
+        // After the keyboard, whose layout every chord is resolved on.
+        if restated.shell_config {
+            self.rebind_the_keys();
+        }
         if let Some(max_scale) = restated.max_scale {
             self.cap_the_scale_at(max_scale);
         }
@@ -4430,6 +4444,37 @@ impl DomicileCompositor {
                 };
                 self.hub.broadcast(
                     told.expect("a host that has just been given a keymap has one to state"),
+                );
+            }
+        }
+    }
+
+    /// Resolve the reloaded config's keys on its keyboard, and tell every
+    /// chrome them and the shells' settings.
+    ///
+    /// **A KEYSYM THE KEYBOARD CANNOT TYPE IS REFUSED, NOT FATAL** — at
+    /// startup it is fatal, and here it is [`retype_the_desktop`]'s trade for
+    /// the same reason: the desk is running, and a typo in a file somebody is
+    /// editing is not worth every binding its shells have. So nothing is sent,
+    /// the host keeps the last keys that resolved for the next chrome to
+    /// connect, and the refusal is said out loud. So is a keyboard xkb cannot
+    /// compile, which has no keymap to resolve anything on and is refused
+    /// twice over: once here, and once by `retype_the_desktop` beside it.
+    ///
+    /// [`retype_the_desktop`]: DomicileCompositor::retype_the_desktop
+    fn rebind_the_keys(&mut self) {
+        match shell_config::resolve(self.config.current()) {
+            Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
+            Ok(resolved) => {
+                // Retained and then broadcast, in that order, for the reason
+                // `retype_the_desktop` gives about the keymap.
+                let told = {
+                    let mut host = self.hub.host.lock().unwrap();
+                    hand_over_the_keys(&mut host, resolved);
+                    host.describe_shell_config()
+                };
+                self.hub.broadcast(
+                    told.expect("a host that has just been given keys has them to state"),
                 );
             }
         }
@@ -6529,6 +6574,12 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     );
 }
 
+/// Give the host the keys a config binds and what each shell is told, for
+/// every chrome that connects after.
+fn hand_over_the_keys(host: &mut Host, resolved: Resolved) {
+    host.set_shell_config(resolved.keybindings, resolved.shells);
+}
+
 /// The home directory whose files a launcher is offered.
 ///
 /// **One of two things this compositor reads from its environment that are
@@ -6885,6 +6936,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // keymap through the compositor state, and that value does not exist until
     // long after the chrome socket is accepting connections. See `keymap`.
     let keymap = compiled_keymap(keyboard)?;
+    // And every chord resolved on it, which is as fatal as the keymap and for
+    // its reason: a desk that came up with a binding on no key would be a
+    // shell whose key does nothing, and nothing would say why. On a reload it
+    // is refused instead — see `rebind_the_keys`.
+    let keys = shell_config::resolve(&config)?;
     seat.add_pointer();
 
     // Advertise an output per described display, or the one that follows
@@ -6957,6 +7013,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // decodes every key the shell is typed with, and off ChromeOS nothing
         // else in Chromium ever hands its layout engine one. See `keymap`.
         host.set_keymap(keymap);
+        // And the keys resolved on it, for the keymap's reason: a page that
+        // reloads has no bindings until it is told them again.
+        hand_over_the_keys(&mut host, keys);
         // And the extensions, which the same browser process installs and a
         // page that reloads has to be told again. See `EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);

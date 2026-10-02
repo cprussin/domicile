@@ -1,0 +1,106 @@
+import type { KeyBinding } from "@domicile/chrome-sdk/bind-keys";
+import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
+import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { useEffect, useEffectEvent, useRef } from "react";
+
+import type { WindowAction } from "../window-management/window-state";
+import { WindowActionKind } from "../window-management/window-state";
+import { parseCommand } from "./command";
+
+/** The name this shell's section of the config goes under: `[shells.manganese]`. */
+const SHELL = "manganese";
+
+/** Where a command the config names and this desktop does not know is said. */
+const logToConsole = (error: string): void => {
+  // biome-ignore lint/suspicious/noConsole: the config is the user's, and the console is where a shell tells them a line of it named nothing
+  console.error(error);
+};
+
+type Options = {
+  domicile: DomicileClient;
+  /** Whether the launcher is up, which silences every key but its own. */
+  launcherOpen: boolean;
+  /**
+   * The binding mode the desk is in, which the keys this page hears are read
+   * in — whichever page's key entered it.
+   */
+  mode: string;
+  /** What the desktop is being asked to do. */
+  onAction: (action: WindowAction) => void;
+  /** A key on this page entered a binding mode. */
+  onModeChanged: (mode: string) => void;
+  /** Where an unknown command is reported. Injected so a test can read it. */
+  report?: typeof logToConsole;
+};
+
+/**
+ * The keys the compositor's config binds for this desktop, answered.
+ *
+ * The SDK claims every chord, hears each press by whichever path it took, and
+ * reads it in the binding mode; what is left here is what manganese means by
+ * `send-shell <words>` — see `command.ts` — the launcher's modality, and the
+ * mode itself, which is the desk's rather than this page's.
+ *
+ * **THE MODE SPANS THE DESK.** A desk of several monitors is several pages,
+ * and the key that entered resize mode may have landed on another one than
+ * the next key does. So a mode a key enters goes out as `onModeChanged`, into
+ * the desktop every page shares, and the mode that desktop is in comes back as
+ * `mode` and is handed to the SDK — on this page and every other.
+ *
+ * Bound once per client, not once per render: the config arrives once and
+ * again only when it changes, so a binding torn down and made again would miss
+ * it. What changes between renders is read when a key is pressed.
+ *
+ */
+export const useKeybindings = ({
+  domicile,
+  launcherOpen,
+  mode,
+  onAction,
+  onModeChanged,
+  report = logToConsole,
+}: Options): void => {
+  const binding = useRef<KeyBinding | undefined>(undefined);
+
+  const onCommand = useEffectEvent((args: readonly string[]) => {
+    parseCommand(args).match({
+      Err: report,
+      Ok: (action) => {
+        if (!launcherOpen || heardOverLauncher(action)) {
+          onAction(action);
+        }
+      },
+    });
+  });
+
+  const modeChanged = useEffectEvent((entered: string) => {
+    onModeChanged(entered);
+  });
+
+  useEffect(() => {
+    const bound = bindKeys(domicile, SHELL, {
+      onCommand,
+      onModeChanged: modeChanged,
+      // Manganese reads no options yet.
+      onOptions: () => undefined,
+    });
+    binding.current = bound;
+    return bound.unbind;
+  }, [domicile]);
+
+  // After the binding above, which effects run in order of: the first mode
+  // reaches a binding that exists.
+  useEffect(() => {
+    binding.current?.setMode(mode);
+  }, [mode]);
+};
+
+/**
+ * Whether a press is answered while the launcher is up.
+ *
+ * Only its own key is, which is what closes it. The panel is modal, and a
+ * workspace switched or a window killed behind it is the desktop reacting to
+ * keys somebody pressed at the panel.
+ */
+const heardOverLauncher = (action: WindowAction): boolean =>
+  action.kind === WindowActionKind.LauncherToggled;
