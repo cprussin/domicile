@@ -813,8 +813,10 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
-**The brightness is beside it: a sun ringed by the level.** Click it for a
-slider; turn the wheel over it to step a twentieth without opening anything.
+**The brightness is beside it: a plain sun, dotted, rayed or filled as the
+screen is dim, middling or bright.** Click it for a slider in a dark pill hung
+under it, drawn like the bar (the Popover's `overPhoto` tone); turn the wheel
+over it to step a twentieth without opening anything.
 
 - **Read like the charge.** The compositor reads `/sys/class/backlight` (firmware
   over platform over raw, systemd's order), re-reads on the backlight's uevent,
@@ -827,6 +829,8 @@ slider; turn the wheel over it to step a twentieth without opening anything.
   compositor tells every chrome. Mid-drag it holds where the pointer is, since
   the answers to its own earlier asks arrive behind it.
 - **No backlight, no sun** — a desktop on an external monitor draws nothing.
+- **It closes when you leave it** — a press outside, or focus moving away,
+  which is all a press inside a page's `<webview>` tells the shell.
 
 ### Notifications
 

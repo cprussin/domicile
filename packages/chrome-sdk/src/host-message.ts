@@ -46,6 +46,7 @@ import type {
   DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileNotificationsEvent,
+  DomicileOpenUrlEvent,
   DomicileShellConfigEvent,
   DomicileShortcutEvent,
   DomicileThemeEvent,
@@ -495,6 +496,16 @@ export type NotificationsMessage = {
   items: readonly Notification[];
 };
 
+/**
+ * An address somebody asked this desktop to open: `domicile open-url`, which
+ * is what `BROWSER` runs for every app the desktop starts.
+ *
+ * Which window it goes in, and whether, is the shell's.
+ */
+export type OpenUrlMessage = {
+  url: string;
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -519,6 +530,7 @@ export type HostMessageMap = {
   extensions: ExtensionsMessage;
   tray: TrayMessage;
   notifications: NotificationsMessage;
+  open_url: OpenUrlMessage;
   /**
    * Which way round the desk's windows are drawn: `theme`'s other half,
    * arriving once they have turned. See {@link DomicileHost.themeCaptured}.
@@ -755,6 +767,14 @@ export const idle = (event: DomicileIdleEvent): IdleMessage => ({
  */
 export const locked = (event: DomicileLockedEvent): LockedMessage => ({
   locked: event.locked,
+});
+
+/**
+ * An address to open. A pass-through like {@link locked}: the engine has
+ * already refused one that is not a URL.
+ */
+export const openUrl = (event: DomicileOpenUrlEvent): OpenUrlMessage => ({
+  url: event.url,
 });
 
 /**

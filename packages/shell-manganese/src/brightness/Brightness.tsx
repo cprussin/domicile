@@ -3,7 +3,7 @@ import { Popover } from "@domicile/component-library/Popover";
 import { Slider } from "@domicile/component-library/Slider";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
-import type { CSSProperties, WheelEvent } from "react";
+import type { WheelEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
@@ -21,8 +21,9 @@ type Props = {
 };
 
 /**
- * The screen's brightness, on the bar: a sun ringed by the level, which opens
- * a slider — and which the wheel turns without opening anything.
+ * The screen's brightness, on the bar: a sun drawn brighter as the screen is,
+ * which opens a slider in a pill hung off the bar — and which the wheel turns
+ * without opening anything.
  *
  * **The slider follows the desk, not its own drag.** A move asks the
  * compositor, which asks logind, and what comes back is the level every chrome
@@ -62,33 +63,25 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
     };
     return (
       <Popover
-        align="end"
+        align="center"
         side="bottom"
-        title={
-          <span className={headerStyles}>
-            <span className={glowStyles} style={levelOf(shown)}>
-              <SunIcon size={18} weight="fill" />
-            </span>
-            <span className={titleStyles}>Brightness</span>
-            <span className={percentStyles}>{percent}%</span>
-          </span>
-        }
+        tone="overPhoto"
         trigger={
           <button
             aria-label={`Brightness ${percent}%`}
             className={triggerStyles}
+            data-intensity={intensityOf(shown)}
             onWheel={(event) => {
               ask(stepped(shown, event));
             }}
-            style={levelOf(shown)}
             type="button"
           >
-            <SunDimIcon size={14} weight="bold" />
+            <Sun level={shown} />
           </button>
         }
       >
         <span className={rowStyles}>
-          <SunDimIcon size={14} />
+          <SunDimIcon size={13} />
           <Slider
             label="Brightness"
             max={100}
@@ -103,7 +96,8 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
             step={1}
             value={percent}
           />
-          <SunIcon size={18} />
+          <SunIcon size={15} />
+          <span className={percentStyles}>{percent}%</span>
         </span>
       </Popover>
     );
@@ -112,26 +106,11 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
 
 // THE BAR'S BUTTON, AND NOT THE LIBRARY'S. `Button`'s ghost letters itself in
 // `muted`, which over a photograph is gray on whatever the picture is; this
-// bar is lettered white, and this takes the bar's color the way the workspace
-// chips and the theme toggle do.
-//
-// THE RING IS THE READING. A conic sweep of `--level` turns, masked down to a
-// rim, so the bar says how bright the screen is without being opened — the
-// battery's fill makes the same choice for the same reason.
+// bar is lettered white, and this takes the bar's color the way the
+// notification bell and the theme toggle do.
 const triggerStyles = css({
   _hover: {
-    backgroundColor:
-      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
-  },
-  "&::before": {
-    backgroundImage:
-      "conic-gradient(currentcolor calc(var(--level) * 1turn), color-mix(in oklab, currentcolor 25%, transparent) 0)",
-    borderRadius: "full",
-    content: '""',
-    inset: 0.5,
-    maskImage:
-      "radial-gradient(farthest-side, transparent calc(100% - {spacing.0.5}), black calc(100% - {spacing.0.5}))",
-    position: "absolute",
+    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
   },
   alignItems: "center",
   backgroundColor: "transparent",
@@ -144,53 +123,50 @@ const triggerStyles = css({
   inlineSize: 7,
   justifyContent: "center",
   padding: 0,
-  position: "relative",
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-const headerStyles = hstack({
-  gap: 2,
-  inlineSize: 64,
-});
-
-// A sun that brightens with the screen: larger, and haloed in the accent, as
-// `--level` climbs.
-const glowStyles = css({
-  color: "accent",
-  display: "inline-flex",
-  filter: "drop-shadow(0 0 calc(var(--level) * {spacing.2}) {colors.accent})",
-  scale: "calc(0.8 + var(--level) * 0.35)",
-  transition:
-    "scale {durations.normal} {easings.outBack}, filter {durations.normal} {easings.out}",
-});
-
-const titleStyles = css({
-  flexGrow: 1,
-});
-
-const percentStyles = css({
-  color: "foreground",
-  fontSize: "xl",
-  fontVariantNumeric: "tabular-nums",
-  fontWeight: "semibold",
-  letterSpacing: "tight",
-  lineHeight: "tight",
-});
-
 const rowStyles = hstack({
-  color: "muted",
-  gap: 2.5,
-  inlineSize: "100%",
-  paddingBlock: 1,
+  gap: 2,
+  inlineSize: 60,
 });
+
+// Ten pixels, the bar's own size, which no font-size token is — see the
+// battery's figures, which this sits beside in spirit.
+const percentStyles = css({
+  fontSize: "0.625rem",
+  fontVariantNumeric: "tabular-nums",
+  minInlineSize: 6,
+  textAlign: "end",
+});
+
+/** How bright the sun on the bar is drawn: three steps of one icon. */
+type Intensity = "dim" | "half" | "full";
+
+const intensityOf = (level: number): Intensity => {
+  if (level < 1 / 3) {
+    return "dim";
+  } else if (level < 2 / 3) {
+    return "half";
+  } else {
+    return "full";
+  }
+};
 
 /**
- * The level as a custom property, which the ring and the glow are drawn off.
- * Not a token, for the battery fill's reason: it is the reading itself.
+ * A plain sun whose weight follows the level — dotted when dim, rayed, then
+ * filled — so the bar says roughly how bright the screen is without a figure.
  */
-const levelOf = (level: number): CSSProperties =>
-  // `CSSProperties` has no index for custom properties; this is the one key.
-  ({ "--level": level }) as CSSProperties;
+const Sun = ({ level }: { level: number }) => {
+  switch (intensityOf(level)) {
+    case "dim":
+      return <SunDimIcon size={15} weight="bold" />;
+    case "half":
+      return <SunIcon size={15} weight="bold" />;
+    case "full":
+      return <SunIcon size={15} weight="fill" />;
+  }
+};
 
 /** A notch of the wheel from `level`, rounded to the percent and kept in range. */
 const stepped = (level: number, event: WheelEvent) => {

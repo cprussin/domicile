@@ -345,6 +345,16 @@ export const domicilePreset = definePreset({
             value:
               "color-mix(in oklab, {colors.foreground} 55%, {colors.background})",
           },
+          // Lettering and the panels it sits in, drawn straight onto a
+          // photograph — the wallpaper under the bar. The same in both
+          // themes, for `shadows.textOverPhoto`'s reason: a photograph is not
+          // a theme.
+          onPhoto: {
+            value: "white",
+          },
+          panelOverPhoto: {
+            value: "rgb(from black r g b / 55%)",
+          },
           skeleton: {
             value:
               "color-mix(in oklab, {colors.foreground} 25%, {colors.background})",

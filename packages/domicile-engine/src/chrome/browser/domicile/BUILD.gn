@@ -1,7 +1,8 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# The socket a running engine answers commands about its shell on.
+# The socket a running engine answers commands about its shell on, and the
+# addresses it hands that shell to open.
 #
 # A target of its own rather than sources on //chrome/browser:browser, because
 # that target has none any more -- "Do NOT add sources here; new code belongs
@@ -46,6 +47,7 @@ source_set("domicile") {
     "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",
     "//components/domicile:shell_windows",
+    "//components/domicile:url_registry",
     "//components/tabs:public",
     "//content/public/browser",
     "//net",

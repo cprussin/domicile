@@ -14,7 +14,7 @@ parses it; the SDK is where its shape is read.
 
 The event, its init dictionary and the mojom member are new files under
 src/; what cannot be a new file is a name in a generated-bindings list.
-Its context is the domicile block as 0067 leaves it, for the reason 0045
+Its context is the domicile block as 0075 leaves it, for the reason 0045
 gives.
 ---
  third_party/blink/renderer/bindings/generated_in_modules.gni | 4 ++++
@@ -22,7 +22,7 @@ gives.
  2 files changed, 6 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index d77509e..5065464 100644
+index 87afea4..350e49d 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -333,6 +333,8 @@ generated_dictionary_sources_in_modules = [
@@ -34,7 +34,7 @@ index d77509e..5065464 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
-@@ -2434,6 +2436,8 @@ generated_interface_sources_in_modules = [
+@@ -2436,6 +2438,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
@@ -44,7 +44,7 @@ index d77509e..5065464 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 448e5d1..54d7d39 100644
+index c6cfd4d..566ec65 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -307,6 +307,8 @@ static_idl_files_in_modules = [
@@ -56,3 +56,6 @@ index 448e5d1..54d7d39 100644
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
+-- 
+2.43.0
+

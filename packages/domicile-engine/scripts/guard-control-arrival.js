@@ -128,6 +128,7 @@ const EVENT_NAMES = [
   "tray",
   "shellconfig",
   "notifications",
+  "openurl",
 ];
 const missing = EVENT_NAMES.flatMap((name) => {
   const heard = { handler: false, listener: false };

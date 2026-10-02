@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 2 Oct 2026 06:40:01 +0000
+Subject: [PATCH] domicile: a tooltip is drawn inside the window it is over
+
+
+A desktop on a tty lost its GPU process about two minutes in, on a page in a
+browser window:
+
+    FATAL:ui/ozone/platform/drm/gpu/gbm_surface_factory.cc:355
+      DCHECK failed: thread_checker_.CalledOnValidThread().
+    #7 ui::GbmSurfaceFactory::CreateCanvasForWidget()
+    #8 viz::OutputSurfaceProviderImpl::CreateSoftwareOutputDeviceForPlatform()
+
+Nothing had disabled GPU compositing. One compositor asked for software:
+`TooltipAura::CreateTooltipWidget` sets `force_software_compositing`, and
+`DesktopWindowTreeHostPlatform::Init` forces it for any `TYPE_TOOLTIP`.
+ozone/drm cannot composite in software, so the root frame sink aborts.
+
+0051 keeps menus and tooltips out of top-level windows, but asks only for
+`params.parent`, and a tooltip names none -- `TooltipAura` sets
+`params.context`. So a tooltip still got a `DesktopNativeWidgetAura`, its own
+compositor and the abort. `NativeWidgetAura` takes a parent or a context
+(`DCHECK(params.parent || params.context)`), and with a context
+`ParentWindowWithContext` lands a tooltip in the root window, as on ash.
+
+`scripts/test-a-popup-is-drawn-inside-its-window.sh` reads the series for it.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KHQC9zsRk48yEYB7qPSwwY
+---
+ .../browser/ui/views/chrome_views_delegate_linux.cc  | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/chrome/browser/ui/views/chrome_views_delegate_linux.cc b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
+index c7a7a46..ead9a9f 100644
+--- a/chrome/browser/ui/views/chrome_views_delegate_linux.cc
++++ b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
+@@ -90,9 +90,15 @@ NativeWidgetType GetNativeWidgetTypeForInitParams(
+   // so that it can leave its parent's bounds, but on a platform that presents
+   // only the window filling a display that window is never drawn: on ozone/drm
+   // it binds to no CRTC. Draw it in its parent instead, as ash does.
+-  if (params.parent && !ui::OzonePlatform::GetInstance()
+-                            ->GetPlatformRuntimeProperties()
+-                            .presents_every_window) {
++  //
++  // A tooltip names no parent, only a context (TooltipAura), and asks for
++  // software compositing, which ozone/drm cannot do: as a top-level window its
++  // compositor aborts the GPU process in
++  // GbmSurfaceFactory::CreateCanvasForWidget. NativeWidgetAura takes either.
++  if ((params.parent || params.context) &&
++      !ui::OzonePlatform::GetInstance()
++           ->GetPlatformRuntimeProperties()
++           .presents_every_window) {
+     return NativeWidgetType::kNativeWidgetAura;
+   }
+ 
+-- 
+2.43.0
+

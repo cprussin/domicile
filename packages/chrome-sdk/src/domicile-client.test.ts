@@ -569,6 +569,23 @@ describe("DomicileClient", () => {
       ]);
     });
 
+    it("delivers an address to open", () => {
+      // `domicile open-url`, which is what `BROWSER` runs inside a desktop.
+      // Through the hold like the rest: an app can open a link while the
+      // shell is still on its first render.
+      const seen: unknown[] = [];
+      domicile.on("open_url", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "openurl",
+        Object.assign(new Event("openurl"), { url: "https://example.com/" }),
+      );
+
+      expect(seen).toStrictEqual([{ url: "https://example.com/" }]);
+    });
+
     it("delivers the smallest and largest a window will be", () => {
       const limits: unknown[] = [];
       domicile.on("app_min_size", (message) => {

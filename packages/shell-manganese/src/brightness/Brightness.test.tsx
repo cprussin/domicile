@@ -105,4 +105,30 @@ describe("Brightness", () => {
 
     expect(backlight.asked).toEqual([1]);
   });
+
+  it("draws a plain sun that dims with the level", () => {
+    const backlight = heldBacklight();
+    render(
+      <Brightness domicile={backlight.domicile} watch={backlight.watch} />,
+    );
+    const icon = () => screen.getByRole("button", { name: /^Brightness/ });
+
+    backlight.report(0.2);
+    expect(icon()).toHaveAttribute("data-intensity", "dim");
+    backlight.report(0.5);
+    expect(icon()).toHaveAttribute("data-intensity", "half");
+    backlight.report(0.9);
+    expect(icon()).toHaveAttribute("data-intensity", "full");
+  });
+
+  it("hangs its slider in a panel drawn like the bar", async () => {
+    const backlight = heldBacklight();
+
+    await opened(backlight);
+
+    expect(screen.getByRole("dialog")).toHaveAttribute(
+      "data-tone",
+      "overPhoto",
+    );
+  });
 });
