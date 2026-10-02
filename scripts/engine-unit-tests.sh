@@ -26,9 +26,11 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 9,
-# DomicileDisplayRegions 13, DomicileDeskTargeter 4.
+# DomicileDisplayRegions 18, DomicileDeskTargeter 4.
 #
-# 155, and it was 151 — where a pointer on another monitor lands in the desk's
+# 160, and it was 155 — which monitors' tilings a layer keeps and draws from,
+# and how many, is five more DomicileDisplayRegions cases. Before that 155, and
+# it was 151 — where a pointer on another monitor lands in the desk's
 # page is four DomicileDeskTargeter cases. Before that 151, and it was 137 — every monitor the desk is shown on, at its own
 # density, is one DeskGeometry case and thirteen DomicileDisplayRegions ones.
 # Before that 137, and it was 144 — one page for the desk has no window a second page
@@ -59,7 +61,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=155
+FLOOR=160
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
