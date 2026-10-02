@@ -169,6 +169,9 @@ export const Stage = ({
   );
   // Every screen's floats at once: a window is on one screen at a time.
   const floats = screens.flatMap((screen) => screen.floats);
+  // Whether the whole desk shows one thing, which leaves it unringed and its
+  // frame the resting color — see `showsOneThing`.
+  const alone = showsOneThing(screens.map(({ screenful }) => screenful));
   // The window being worked in as it is drawn, which is what the ring rings.
   const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Where a tiled window being moved would land, which is drawn over every
@@ -252,7 +255,7 @@ export const Stage = ({
             >
               {window.kind === WindowKind.App ? (
                 <AppWindow
-                  alone={on !== undefined && showsOneThing(on.screenful)}
+                  alone={on !== undefined && alone}
                   appId={window.appId}
                   behindPanel={behindPanel}
                   clickThrough={clickThrough}
@@ -271,7 +274,7 @@ export const Stage = ({
                 />
               ) : (
                 <BrowserWindow
-                  alone={on !== undefined && showsOneThing(on.screenful)}
+                  alone={on !== undefined && alone}
                   clickThrough={clickThrough}
                   covered={placement?.behind !== undefined}
                   depth={depth}
@@ -308,7 +311,7 @@ export const Stage = ({
             */}
               {placement !== undefined && (
                 <WindowTitleBar
-                  alone={on !== undefined && showsOneThing(on.screenful)}
+                  alone={on !== undefined && alone}
                   depth={placement.depth}
                   dragging={window.id === draggingId}
                   float={floating}
@@ -492,7 +495,7 @@ export const Stage = ({
         return (
           <Sliding key={tab.id} on={on}>
             <TitleBar
-              alone={on !== undefined && showsOneThing(on.screenful)}
+              alone={on !== undefined && alone}
               // With the float it is in, if it is in one.
               depth={tab.depth}
               // Nothing drags a tab: it belongs to a container, which moves with
@@ -543,6 +546,7 @@ export const Stage = ({
       {screens.map((on) => {
         const selection = selectionOf(
           on.screenful,
+          alone,
           activeId,
           on.fullscreenId,
           draggingId,

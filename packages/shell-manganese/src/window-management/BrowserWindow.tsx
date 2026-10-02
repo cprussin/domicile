@@ -49,7 +49,7 @@ import {
 
 type Props = {
   /**
-   * Whether it is all the screen shows, alone or as a tab group — see
+   * Whether it is all the desk shows, alone or as a tab group — see
    * `showsOneThing` — which leaves its frame the resting color even while it
    * is focused: there is nothing else for it to be picked out from.
    */

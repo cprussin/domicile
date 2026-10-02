@@ -1652,8 +1652,8 @@ describe("Shell", () => {
       );
     });
 
-    it("draws no frame in the accent around a screen's only tab group", () => {
-      // Nothing else on the screen for it to be picked out from.
+    it("draws no frame in the accent around the desk's only tab group", () => {
+      // Nothing else on the desk for it to be picked out from.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1669,11 +1669,25 @@ describe("Shell", () => {
       ).toBe(false);
     });
 
-    it("draws no edge in the accent on a screen's only window's bar", () => {
+    it("draws no edge in the accent on the desk's only window's bar", () => {
       const { container } = renderShell();
       clientAppears("one");
 
       expect(barFor(container, "app:one").className).not.toContain(
+        css({ borderColor: "accent" }),
+      );
+    });
+
+    it("rings a screen's only window while another screen shows one too", () => {
+      // Alone on its screen but not on the desk: the window on the next screen
+      // is something else the commands could be pointed at.
+      const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("one");
+      clientAppears("two");
+      press("parenright", true);
+
+      expect(selectionRing(container).dataset.selection).toBe("window");
+      expect(appElement(container, "one").className).toContain(
         css({ borderColor: "accent" }),
       );
     });
