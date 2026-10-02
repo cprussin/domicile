@@ -735,8 +735,18 @@ struct DomicileEngine {
     *created = id;
   }
 
+  // The broker is told, because closing this end's pipes does not reach it:
+  // the BrokeredFrameSink, and every buffer imported into it, otherwise lives
+  // as long as the connection does.
   void DestroySurfaceOnThread(DomicileSurfaceId surface) {
-    surfaces_.erase(surface);
+    auto iter = surfaces_.find(surface);
+    if (iter == surfaces_.end()) {
+      return;
+    }
+    if (broker_) {
+      broker_->DestroyFrameSink(iter->second->frame_sink_id());
+    }
+    surfaces_.erase(iter);
   }
 
   void ImportBufferOnThread(DomicileSurfaceId surface,

@@ -565,6 +565,18 @@ impl Engine {
         Ok(surface)
     }
 
+    /// Drops the surface and the frame sink the browser brokered for it. This
+    /// is a window going away.
+    pub fn destroy_surface(&self, surface: SurfaceId) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId)> =
+            match self.symbol(b"domicile_surface_destroy\0", "domicile_surface_destroy") {
+                Ok(symbol) => symbol,
+                Err(_) => return,
+            };
+        // SAFETY: as above.
+        unsafe { f(self.handle, surface) };
+    }
+
     /// Imports a client's dmabuf. `None` if the browser refused it — which on
     /// an ozone platform without `CreateNativePixmapFromHandle` it always will.
     ///

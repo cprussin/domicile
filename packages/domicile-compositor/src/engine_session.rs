@@ -460,7 +460,15 @@ impl EngineSession {
         let Some(surface) = self.surfaces.forget(app_id) else {
             return Vec::new();
         };
-        self.imports.retain(|_, (held, _)| *held != surface);
+        // The browser holds a SharedImage, and the GPU process the dmabuf's
+        // fds, for every buffer this window ever showed, until it is told
+        // otherwise. A window that went without saying so leaked them all, and
+        // a desk that opens and closes enough windows ran the GPU process out
+        // of fds -- which ended in a `CHECK` on a fence it could not dup.
+        for buffer in take_imports_of(&mut self.imports, surface) {
+            self.engine.forget(surface, buffer);
+        }
+        self.engine.destroy_surface(surface);
         let waited = self.waiting.take(surface).map(|frame| Release {
             buffer: frame.buffer,
             surface,
@@ -588,4 +596,32 @@ fn returned(holds: Vec<((SurfaceId, BufferId), Submitted)>, why: Returned) -> Ve
             why,
         })
         .collect()
+}
+
+/// Every import recorded against `surface`, taken out of `imports`, as the ids
+/// the engine has to be told to forget.
+fn take_imports_of<K>(
+    imports: &mut HashMap<K, (SurfaceId, BufferId)>,
+    surface: SurfaceId,
+) -> Vec<BufferId> {
+    imports
+        .extract_if(|_, (held, _)| *held == surface)
+        .map(|(_, (_, id))| id)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_surface_s_imports_are_taken_out_and_no_other_s() {
+        let mut imports = HashMap::from([(1, (7, 10)), (2, (7, 11)), (3, (8, 12))]);
+
+        let mut taken = take_imports_of(&mut imports, 7);
+
+        taken.sort();
+        assert_eq!(taken, vec![10, 11]);
+        assert_eq!(imports, HashMap::from([(3, (8, 12))]));
+    }
 }
