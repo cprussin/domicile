@@ -11,5 +11,8 @@
 # which is the series `scripts/test-the-pinned-engine-is-this-series.sh` holds
 # to the fork in this tree. Otherwise the checked one: slower, and never
 # missing a patch the tree has.
+#
+# The `stable` branch is the newest main for which this picks the official
+# engine; stable.yml moves it (.github/scripts/promote-stable.sh).
 { checked, official ? null }:
 if official != null && official.identity == checked.identity then official else checked
