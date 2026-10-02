@@ -9,6 +9,7 @@
 /** What a browser window can be told to do from the keyboard. */
 export enum BrowserCommand {
   Back = "Back",
+  Find = "Find",
   Forward = "Forward",
   Reload = "Reload",
   ZoomIn = "ZoomIn",
@@ -58,6 +59,10 @@ const altCommandFor = (key: string): BrowserCommand | undefined => {
 
 const ctrlCommandFor = (key: string): BrowserCommand | undefined => {
   switch (key) {
+    case "f":
+    case "F": {
+      return BrowserCommand.Find;
+    }
     case "r":
     case "R": {
       return BrowserCommand.Reload;

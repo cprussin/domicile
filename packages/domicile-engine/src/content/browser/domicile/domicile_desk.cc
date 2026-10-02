@@ -129,7 +129,18 @@ std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
     const display::ScreenInfos* infos =
         window->GetProperty(kDomicileDeskScreenInfosKey);
     if (infos != nullptr) {
-      return *infos;
+      // Where the page is on the engine's screen, which is where every
+      // widget in it is told it is: so a monitor's rect, from the page's
+      // corner, is put on that screen too, and a <webview> finds its own
+      // place among the monitors by its own rect.
+      display::ScreenInfos placed = *infos;
+      const gfx::Vector2d corner =
+          window->GetBoundsInScreen().origin().OffsetFromOrigin();
+      for (display::ScreenInfo& info : placed.screen_infos) {
+        info.rect += corner;
+        info.available_rect += corner;
+      }
+      return placed;
     }
   }
   return std::nullopt;

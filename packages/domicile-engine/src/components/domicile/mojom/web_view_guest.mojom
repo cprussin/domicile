@@ -256,6 +256,18 @@ interface WebViewGuestClient {
   // heard nothing.
   ZoomChanged(double factor);
 
+  // The icon the guest's page names for itself: of the `<link rel="icon">`s
+  // and touch icons it links -- or the `/favicon.ico` the renderer assumes for
+  // one that links none -- the one a launcher would draw best, an SVG before
+  // the biggest. An empty URL is a page that names none it can, and is sent
+  // as each new page commits, before its head has named any.
+  //
+  // WHAT A SIGNED-IN PAGE SAYS, which is the reason this exists: a site that
+  // shows its icon only to somebody signed in shows it here, where the guest
+  // is the user's own browser, and nowhere a compositor's anonymous fetch
+  // reaches. SENT ONLY WHEN IT CHANGES, like the reports above.
+  FaviconChanged(url.mojom.Url icon);
+
   // The user asked the page to zoom -- Ctrl and the wheel, over the page --
   // and the page did not take the wheel for itself.
   //
@@ -310,6 +322,21 @@ interface WebViewGuestClient {
   // ONE MESSAGE PER CALL. An event, like NewWindowRequested, so nothing is
   // compared against what was last sent.
   CloseRequested();
+
+  // What a find in the page has found: how many matches, and which of them is
+  // the one selected, counted from 1. Zero and zero is no find at all -- none
+  // asked for, one stopped, or one ended by the page it searched going away.
+  //
+  // THE BROWSER'S COUNT, from FindRequestManager, which searches every frame
+  // in the guest -- a cross-site one in another process included -- and adds
+  // them up. The renderer the element lives in can see none of those frames,
+  // so this is the only way it learns the answer.
+  //
+  // SENT ONLY WHEN IT CHANGES, like the reports above. A find answers in
+  // several replies as the count is scoped frame by frame, and each that
+  // moves the pair is one message; a fresh guest sends nothing, because it
+  // has found nothing and neither has the element.
+  FindChanged(int32 matches, int32 active_match);
 
   // An extension asked for this browser window to be the one in front:
   // `chrome.tabs.update(id, {active: true})` or `chrome.windows.update(id,
@@ -377,6 +404,26 @@ interface WebViewGuest {
   // that arrives here anyway did not come from the element, and is a bad
   // message.
   SetZoom(double factor);
+
+  // Find `text` in the page and select a match: the next one after the
+  // selection, or the one before it when `forward` is false. The answer comes
+  // back as WebViewGuestClient.FindChanged.
+  //
+  // THE SAME TEXT AGAIN IS "FIND NEXT", and different text is a new search --
+  // Chrome's find bar's rule, kept here in the browser rather than in the
+  // element, because it is the browser that knows whether a session is still
+  // open: the page navigating ends one.
+  //
+  // NEVER EMPTY. Content refuses to search for nothing, and the element sends
+  // StopFinding for an empty string instead -- so one that arrives here did
+  // not come from the element, and is a bad message.
+  Find(string text, bool forward);
+
+  // End the find: the highlights go, and the page is left with the match that
+  // was selected still selected when `keep_selection` is true -- Escape in a
+  // find bar -- or with nothing selected when it is false -- the text in it
+  // cleared. Reported as FindChanged(0, 0).
+  StopFinding(bool keep_selection);
 
   // The names in the directory at `path`, each a directory's ending in `/`,
   // for the shell's picker to walk -- so a file the index never found is one

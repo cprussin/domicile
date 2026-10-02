@@ -5,7 +5,10 @@ import type {
   FoundAppsMessage,
   FoundFilesMessage,
 } from "@domicile/chrome-sdk/host-message";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_FAVICON_CHANGE_EVENT,
+  WEBVIEW_GUEST_FOCUS_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { Input } from "@domicile/component-library/Input";
 import { Kbd } from "@domicile/component-library/Kbd";
 import { ModalDialog } from "@domicile/component-library/ModalDialog";
@@ -23,7 +26,14 @@ import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import type { ReactNode, RefObject } from "react";
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, hstack, vstack } from "../../styled-system/patterns";
@@ -34,6 +44,8 @@ import { ChoiceKind, choicesFor, launchOf } from "./choices";
 import { FolderPreview } from "./FolderPreview";
 import type { FileRow } from "./file-row";
 import type { Launch } from "./launch";
+import type { LearnedIcons } from "./learned-icons";
+import { learnedIcons, learnIcon } from "./learned-icons";
 import type { Mark } from "./marked";
 import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
@@ -98,6 +110,9 @@ type SearchApps = (query: string) => Promise<FoundAppsMessage>;
 
 /** How the panel asks what the highlighted file holds. */
 type Preview = (path: string) => Promise<FilePreviewMessage>;
+
+/** How a bookmark's preview says the icon its page named. */
+type Learn = (bookmark: string, icon: string) => void;
 
 /**
  * One box, over a backdrop, that runs an application or opens a file, a URL
@@ -219,6 +234,13 @@ const Query = ({
   );
   const box = useRef<HTMLInputElement>(null);
   const pane = useRef<HTMLElement>(null);
+  // The icons bookmarks' own pages named when they were previewed: read once
+  // as the panel opens, and again whenever a preview names one.
+  const [learned, setLearned] = useState(learnedIcons);
+  const learn = useCallback((bookmark: string, icon: string) => {
+    learnIcon(bookmark, icon);
+    setLearned(learnedIcons());
+  }, []);
 
   useEffect(() => keepKeyboardIn(mounted(box)), []);
   useEffect(() => scrollOnWheel(mounted(pane)), []);
@@ -334,7 +356,7 @@ const Query = ({
                 // one gesture rather than two.
                 tabIndex={-1}
               >
-                <ChoiceRow choice={choice} query={query} />
+                <ChoiceRow choice={choice} learned={learned} query={query} />
               </div>
             ))}
           </div>
@@ -348,7 +370,7 @@ const Query = ({
           {found.indexing && <StillIndexing />}
         </div>
         <section aria-label="Preview" className={previewStyles} ref={pane}>
-          <PreviewOf choice={shown} preview={preview} />
+          <PreviewOf choice={shown} onLearn={learn} preview={preview} />
         </section>
       </div>
     </div>
@@ -416,7 +438,15 @@ const scrollOnWheel = (pane: HTMLElement): (() => void) => {
 };
 
 /** What one row says, by the kind of thing Enter on it would do. */
-const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
+const ChoiceRow = ({
+  choice,
+  learned,
+  query,
+}: {
+  choice: Choice;
+  learned: LearnedIcons;
+  query: string;
+}) => {
   switch (choice.kind) {
     case ChoiceKind.App: {
       return (
@@ -431,11 +461,13 @@ const ChoiceRow = ({ choice, query }: { choice: Choice; query: string }) => {
     case ChoiceKind.Bookmark: {
       return (
         <>
-          {choice.icon === undefined ? (
-            <RowTile icon={BookmarkSimpleIcon} />
-          ) : (
-            <PictureTile picture={choice.icon} />
-          )}
+          {/* Keyed on what it would draw, so an icon that would not load does
+              not leave the next one learned drawn as the fallback. */}
+          <BookmarkTile
+            found={choice.icon}
+            key={`${choice.url} ${learned[choice.url] ?? ""}`}
+            learned={learned[choice.url]}
+          />
           <span className={rowNameStyles}>
             <Marked marks={marked(choice.name, query)} />
           </span>
@@ -540,6 +572,37 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
   );
 
 /**
+ * A bookmark's tile: the icon learned from its own page, or else the one the
+ * host found its site naming, or else a bookmark's glyph. A learned icon that
+ * will not load — a signed-in page's, say, once the user has signed out —
+ * gives way to the host's.
+ */
+const BookmarkTile = ({
+  found,
+  learned,
+}: {
+  found: string | undefined;
+  learned: string | undefined;
+}) => {
+  const [failed, setFailed] = useState(false);
+  const picture = failed || learned === undefined ? found : learned;
+  return picture === undefined ? (
+    <RowTile icon={BookmarkSimpleIcon} />
+  ) : (
+    <PictureTile
+      onError={
+        picture === learned
+          ? () => {
+              setFailed(true);
+            }
+          : undefined
+      }
+      picture={picture}
+    />
+  );
+};
+
+/**
  * An icon that is a picture — an application's, a site's — in a glyph tile's
  * place, and without its frame: the picture is its own shape, and a box round
  * it is a box drawn round somebody else's logo.
@@ -547,9 +610,16 @@ const AppTile = ({ icon }: { icon: string | undefined }) =>
  * One picture rather than RowTile's pair: there is no second weight of it to
  * swap to when the row is reached.
  */
-const PictureTile = ({ picture }: { picture: string }) => (
+const PictureTile = ({
+  onError,
+  picture,
+}: {
+  onError?: (() => void) | undefined;
+  picture: string;
+}) => (
   <span className={pictureTileStyles}>
-    <img alt="" className={rowPictureStyles} src={picture} />
+    {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: `error` is the picture failing to load, not something a person does to it */}
+    <img alt="" className={rowPictureStyles} onError={onError} src={picture} />
   </span>
 );
 
@@ -559,9 +629,11 @@ const PictureTile = ({ picture }: { picture: string }) => (
  */
 const PreviewOf = ({
   choice,
+  onLearn,
   preview,
 }: {
   choice: Choice | undefined;
+  onLearn: Learn;
   preview: Preview;
 }) =>
   choice === undefined ? (
@@ -571,7 +643,7 @@ const PreviewOf = ({
       title="Nothing selected"
     />
   ) : (
-    <ChoicePreview choice={choice} preview={preview} />
+    <ChoicePreview choice={choice} onLearn={onLearn} preview={preview} />
   );
 
 /**
@@ -652,9 +724,11 @@ const Placeholder = ({
  */
 const ChoicePreview = ({
   choice,
+  onLearn,
   preview,
 }: {
   choice: Choice;
+  onLearn: Learn;
   preview: Preview;
 }) => {
   switch (choice.kind) {
@@ -674,7 +748,13 @@ const ChoicePreview = ({
         />
       );
     }
-    case ChoiceKind.Bookmark:
+    case ChoiceKind.Bookmark: {
+      // Keyed on the address, so each bookmark has a guest of its own and no
+      // icon the last one's page names is heard as this one's.
+      return (
+        <BookmarkPreview key={choice.url} onLearn={onLearn} url={choice.url} />
+      );
+    }
     case ChoiceKind.Site:
     case ChoiceKind.Search:
     case ChoiceKind.TaggedSearch:
@@ -685,6 +765,41 @@ const ChoicePreview = ({
     }
   }
 };
+
+/**
+ * A bookmark's page, from which its icon is learned: the page is the user's
+ * browser, signed in as they are, so the icon it names is the one a site keeps
+ * for people signed in — which no anonymous lookup sees.
+ */
+const BookmarkPreview = ({ onLearn, url }: { onLearn: Learn; url: string }) => {
+  // `null` rather than `undefined` because that is what React's ref API hands
+  // a callback ref on unmount.
+  const [view, setView] = useState<HTMLWebViewElement | null>(null);
+
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      // Only from the bookmark's own site: signed out, its page is a sign-in
+      // page, and a link followed in the preview is another site's.
+      const heard = () => {
+        if (view.favicon !== "" && sameOrigin(view.url, url)) {
+          onLearn(url, view.favicon);
+        }
+      };
+      view.addEventListener(WEBVIEW_FAVICON_CHANGE_EVENT, heard);
+      return () => {
+        view.removeEventListener(WEBVIEW_FAVICON_CHANGE_EVENT, heard);
+      };
+    }
+  }, [onLearn, url, view]);
+
+  return <webview className={viewStyles} ref={setView} src={url} title={url} />;
+};
+
+/** Whether `a` and `b` are on one origin; an address that is none is not. */
+const sameOrigin = (a: string, b: string) =>
+  URL.canParse(a) && URL.canParse(b) && new URL(a).origin === new URL(b).origin;
 
 /** A file, drawn by the element its kind is drawn in. */
 const FileChoicePreview = ({

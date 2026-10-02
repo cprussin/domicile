@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "cc/domicile/display_regions.h"
 #include "ui/display/mojom/screen_orientation.mojom-shared.h"
 
 namespace domicile {
@@ -34,6 +35,7 @@ gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box) {
 }
 
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
+                                     const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like) {
   display::ScreenInfo told = like;
   told.rect = gfx::Rect(desk.box.size());
@@ -45,7 +47,20 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
       desk.box.width() >= desk.box.height()
           ? display::mojom::ScreenOrientation::kLandscapePrimary
           : display::mojom::ScreenOrientation::kPortraitPrimary;
-  return display::ScreenInfos(told);
+  display::ScreenInfos infos(told);
+  // Ids of their own: a ScreenInfos holds each once, and the page's screen
+  // already has the host's. Negative, which no display's is.
+  int64_t id = -1000;
+  for (const DeskPlace& place : lit) {
+    display::ScreenInfo shown;
+    shown.rect = place.desk - desk.box.OffsetFromOrigin();
+    shown.available_rect = shown.rect;
+    shown.device_scale_factor = place.scale;
+    shown.display_id = id--;
+    shown.label = cc::kDomicileDisplayLabel;
+    infos.screen_infos.push_back(shown);
+  }
+  return infos;
 }
 
 }  // namespace domicile

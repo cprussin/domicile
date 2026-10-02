@@ -99,4 +99,30 @@
   // range -- 0.25 to 5 -- is a RangeError rather than a zoom clamped into it,
   // because a shell that computed one has a bug worth hearing about.
   [RaisesException] undefined setZoom(double factor);
+
+  // The icon the page names for itself -- the best of the icons it links, an
+  // SVG before the biggest -- announced in `domicile-favicon-change`. The
+  // empty string for a page that names none, or has not said yet. It is the
+  // page's own word, signed in as the user is, which is what makes it the one
+  // a launcher learns a site's icon from.
+  readonly attribute USVString favicon;
+
+  // Find `text` in the page and select a match: the next one after the
+  // selection, or the one before it when `backward` is true. The same text
+  // again is "find next" and different text is a new search, as in a
+  // browser's find bar. The empty string is stopFinding() with the selection
+  // cleared rather than kept -- the text in a find bar deleted.
+  undefined find(DOMString text, optional boolean backward = false);
+
+  // End the find, leaving the match that was selected selected -- Escape in a
+  // find bar.
+  undefined stopFinding();
+
+  // What the find has found: how many matches, and which of them is
+  // selected, counted from 1. Both 0 while there is no find. The browser's
+  // answer, announced in `domicile-find-change` -- readonly properties for the
+  // reason the others are. Every frame in the page is counted, a cross-site
+  // one included.
+  readonly attribute long findMatches;
+  readonly attribute long findActiveMatch;
 };

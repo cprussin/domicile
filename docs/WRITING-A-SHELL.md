@@ -1015,8 +1015,16 @@ client — its page is inside your own. Three things follow, none optional:
   Ctrl+wheel over the page arrives as `domicile-zoom-in-request` or
   `domicile-zoom-out-request` and zooms nothing by itself. `view.setZoom(factor)`
   zooms, and `view.zoom` with `domicile-zoom-change` says where it landed — the
-  site's zoom, keyed by host the way Chrome keys it. Manganese's
-  `BrowserWindow.tsx` binds Chrome's defaults.
+  site's zoom, keyed by host the way Chrome keys it. Find in page is yours to
+  draw too: `view.find(text, backward)` searches — the same text again is the
+  next match — `view.stopFinding()` ends it, and `view.findMatches` and
+  `view.findActiveMatch` with `domicile-find-change` say what it found, every
+  frame counted. A new page ends a find. Manganese's `BrowserWindow.tsx` binds
+  Chrome's defaults, Ctrl+F among them.
+- **The icon the page names** is `view.favicon`, announced in
+  `domicile-favicon-change`: the best of the icons it links, an SVG before the
+  biggest, as an absolute URL, or `""` for none. It is the page's own word,
+  signed in as the user is.
 - **Your desktop chords still reach you**, because `bindKeys` claims them —
   see [Keybindings](#keybindings). The browser process is the only layer above
   a focused guest: a key pressed on a site reaches neither this page nor the

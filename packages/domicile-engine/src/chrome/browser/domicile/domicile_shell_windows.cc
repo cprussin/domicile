@@ -444,7 +444,7 @@ class ShellWindows : public display::DisplayObserver {
         host->GetActiveTabInterface()->GetContents();
     content::SetDomicileDeskScreenInfos(
         contents,
-        DeskScreenInfos(desk->geometry,
+        DeskScreenInfos(desk->geometry, desk->places,
                         display::Screen::Get()
                             ->GetScreenInfosNearestDisplay(desk->geometry.host)
                             .current()));

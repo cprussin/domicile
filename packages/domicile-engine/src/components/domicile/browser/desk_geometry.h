@@ -48,7 +48,12 @@ gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box);
 // What the page is told it is on: one screen, the size of the desk, at the
 // desk's scale and upright. Everything else -- depth, color space -- is `like`,
 // the host display's.
+//
+// And every monitor in `lit` it is shown on, after that one: where, from the
+// desk's corner, and how dense. Labeled `cc::kDomicileDisplayLabel`, which is
+// what a widget makes the regions it rasters natively for each from.
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
+                                     const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like);
 
 }  // namespace domicile

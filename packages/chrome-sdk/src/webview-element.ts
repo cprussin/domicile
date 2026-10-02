@@ -223,6 +223,15 @@ export const WEBVIEW_GUEST_KEYDOWN_EVENT = "domicile-guest-keydown";
 export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
 
 /**
+ * Fired when the icon the page names for itself changes, which is readable on
+ * the element as {@link HTMLWebViewElement.favicon}. Carries nothing, like the
+ * other state events.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
+
+/**
  * Fired when the user asks the page to zoom in or out — Ctrl and the wheel,
  * over a page that did not take the wheel for itself.
  *
@@ -235,6 +244,20 @@ export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
  */
 export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
 export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
+
+/**
+ * Fired when a find in the page has found something new, which is readable on
+ * the element as {@link HTMLWebViewElement.findMatches} and
+ * {@link HTMLWebViewElement.findActiveMatch}. Carries nothing, like the other
+ * state events.
+ *
+ * The count settles over several of these as the browser searches the page
+ * frame by frame, and goes back to nothing when the find is stopped or the page
+ * navigates away — a new page ends a find, as it does in Chrome.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_FIND_CHANGE_EVENT = "domicile-find-change";
 
 /**
  * Fired when the page inside the view needs a file picked: an
@@ -340,6 +363,30 @@ declare global {
      * {@link WEBVIEW_ZOOM_CHANGE_EVENT}.
      */
     setZoom(factor: number): void;
+    /**
+     * The icon the page names for itself — the best of the icons it links,
+     * an SVG before the biggest — as an absolute URL, or `""` for a page that
+     * names none or has not said yet. The page's own word, signed in as the
+     * user is. Changes are announced in {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
+     */
+    readonly favicon: string;
+    /**
+     * Find `text` in the page and select a match: the next one, or the one
+     * before when `backward` is true. The same text again steps through the
+     * matches and different text is a new search. `""` ends the find with
+     * nothing selected. The answer arrives as
+     * {@link WEBVIEW_FIND_CHANGE_EVENT}.
+     */
+    find(text: string, backward?: boolean): void;
+    /** End the find, leaving the match it was on selected. */
+    stopFinding(): void;
+    /**
+     * How many matches the find has found, across every frame in the page. 0
+     * while there is no find.
+     */
+    readonly findMatches: number;
+    /** Which of them is selected, counted from 1. 0 while there is none. */
+    readonly findActiveMatch: number;
     goBack(): void;
     goForward(): void;
     stop(): void;
