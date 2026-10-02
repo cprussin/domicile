@@ -57,6 +57,10 @@ void DrmMaster::Forget(const base::FilePath& device) {
   cards_.erase(device);
 }
 
+void DrmMaster::ForgetEvery() {
+  cards_.clear();
+}
+
 bool DrmMaster::Take() {
   display_is_ours_ = true;
   return ApplyToEveryCard(set_master_, "take");
