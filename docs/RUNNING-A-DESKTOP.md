@@ -157,7 +157,8 @@ is asked again a minute later, so a desk that came up before its network did
 has its icons once it is up. It fetches without the desk's cookies, so
 a site behind a sign-in is asked for its own `/favicon.ico` rather than the
 sign-in page's, and one that answers nothing to a stranger is drawn with a
-glyph.
+glyph — until its row is highlighted: the preview is the page itself, signed
+in, and the icon it names is remembered for that bookmark from then on.
 
 On NixOS those are `programs.domicile.settings.applications.omit` and
 `.bookmarks`, and a reload takes either up at the next keystroke.
