@@ -51,7 +51,7 @@ emits `.vite/renderer/main_window/shell.js`, which is the whole build. Point
 Domicile at it:
 
 ```sh
-nix run github:cprussin/domicile -- ./.vite/renderer/main_window/shell.js
+nix run github:cprussin/domicile/stable -- ./.vite/renderer/main_window/shell.js
 ```
 
 which serves the directory that module is in, starts the engine on it and the

@@ -3,13 +3,17 @@
 Needs Nix, and either a Wayland session or a console login. Nothing to clone.
 
 ```sh
-nix run github:cprussin/domicile#manganese   # tiling, sway's keys, address bar
-nix run github:cprussin/domicile#simple      # floating windows only
+nix run github:cprussin/domicile/stable#manganese   # tiling, sway's keys, address bar
+nix run github:cprussin/domicile/stable#simple      # floating windows only
 ```
 
 This is a guide, not a guideline: nothing here governs contributions to this
 repo. For that see [`/AGENTS.md`](/AGENTS.md).
 
+- `stable` is the newest `main` that runs the production engine (PGO, ThinLTO,
+  no DCHECKs). After an engine change, `main` runs a slower checked build until
+  the nightly official one is pinned, and `stable` waits for it. Drop `/stable`
+  for the bleeding edge.
 - Each desktop is its own app. `nix profile install` the one you want.
 - Inside a Wayland session you get a window; on a bare tty you get the screen.
   Nothing to set either way — a console login has `XDG_VTNR` and takes the DRM
@@ -27,7 +31,7 @@ repo. For that see [`/AGENTS.md`](/AGENTS.md).
   ([why](/docs/architecture/WINDOW-COMPOSITING.md)).
 
 A shell of your own goes on the command line, and Domicile itself is the app
-that takes one: `nix run github:cprussin/domicile -- ./dist/shell.js`. See
+that takes one: `nix run github:cprussin/domicile/stable -- ./dist/shell.js`. See
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 
 ## Launch an app into it

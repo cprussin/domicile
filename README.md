@@ -44,7 +44,7 @@ Domicile embeds Wayland surfaces directly into Chromium's layer tree. No screens
 A shell is a JavaScript module. You arrange the elements; Domicile handles the rest.
 
 ```sh
-nix run github:cprussin/domicile -- ./dist/shell.js
+nix run github:cprussin/domicile/stable -- ./dist/shell.js
 ```
 
 **[WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)** has the details.
@@ -55,7 +55,7 @@ nix run github:cprussin/domicile -- ./dist/shell.js
 Ever thought Sway was great, but needed more `<div>`s? We got you.
 
 ```sh
-nix run github:cprussin/domicile#manganese
+nix run github:cprussin/domicile/stable#manganese
 ```
 
 Tiling, workspaces, a bar, native apps, and browser windows. No clone or Chromium build required; that particular penance has already been paid.
