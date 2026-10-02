@@ -32,6 +32,13 @@ type Props = {
 };
 
 /**
+ * The attribute every window's frame carries, which is how a listener on the
+ * document tells a pointer over a window from one over the bare desk — see
+ * `useScreenFollowsPointer`.
+ */
+export const WINDOW_FRAME = "data-window-frame";
+
+/**
  * One window, whatever is in it: the element its bar and its contents share,
  * which hears the pointer for both.
  *
@@ -50,6 +57,7 @@ type Props = {
 export const WindowFrame = ({ children, onHover, onReach, width }: Props) => (
   <div
     className={frameStyles}
+    {...{ [WINDOW_FRAME]: "" }}
     onPointerDown={onReach}
     // `pointerover` rather than `pointerenter`: the one that bubbles from the
     // part it crossed into, which is where the place comes from.
