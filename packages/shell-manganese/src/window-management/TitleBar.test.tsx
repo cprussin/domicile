@@ -161,6 +161,34 @@ describe("TitleBar", () => {
     );
   });
 
+  it("grounds the bar being worked in in the card, and sinks the rest below it", () => {
+    // The card is the address bar's ground, so the focused bar reads as the
+    // top of the window under it; the rest recede towards the desktop.
+    const focused = render(<TitleBar {...barProps} focus="focused" />);
+    expect(bar(focused.container).className).toContain(
+      css({ backgroundColor: "card" }),
+    );
+
+    const resting = render(<TitleBar {...barProps} />);
+    expect(bar(resting.container).className).not.toContain(
+      css({ backgroundColor: "card" }),
+    );
+  });
+
+  it("leaves the bar being worked in the resting edge while its window is all the screen shows", () => {
+    // Focused, but with nothing else on the screen to be picked out from.
+    const { container } = render(
+      <TitleBar {...barProps} alone focus="focused" />,
+    );
+
+    expect(bar(container).className).toContain(
+      css({ borderColor: "borderStrong" }),
+    );
+    expect(bar(container).className).not.toContain(
+      css({ borderColor: "accent" }),
+    );
+  });
+
   it("rounds its top corners, and squares them and drops its edge while its window fills the screen", () => {
     const rounded = globalThis.getComputedStyle(
       bar(render(<TitleBar {...barProps} />).container),

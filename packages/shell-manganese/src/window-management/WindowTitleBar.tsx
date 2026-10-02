@@ -18,6 +18,8 @@ import type { WindowMotion } from "./window-motion";
 const PRIMARY_BUTTON = 0;
 
 type Props = {
+  /** Whether that window is all the screen shows — see {@link TitleBar}. */
+  alone: boolean;
   /** How it stacks, which is the depth of the window it names. */
   depth: number;
   /** Whether the user has hold of this window — see {@link TitleBar}. */
@@ -82,6 +84,7 @@ type Props = {
  * click, and only the desktop's modifier picks a lone tiled window up.
  */
 export const WindowTitleBar = ({
+  alone,
   depth,
   dragging,
   float,
@@ -128,6 +131,7 @@ export const WindowTitleBar = ({
   });
   return (
     <TitleBar
+      alone={alone}
       depth={depth}
       dragging={dragging}
       focus={focus}

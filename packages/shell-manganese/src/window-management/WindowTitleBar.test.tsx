@@ -19,6 +19,7 @@ const nothing = () => undefined;
 
 /** A tab of a tabbed container; each case overrides the part it is about. */
 const tabProps = {
+  alone: false,
   depth: 0,
   dragging: false,
   float: undefined,
