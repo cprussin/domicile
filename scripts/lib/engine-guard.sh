@@ -153,8 +153,14 @@ engine_guard_and_control_under_wayland() { # guard script name, args...
   NEGATIVE=1 engine_guard_under_wayland "$@"
 }
 
+# TIMED, for the one check `check.sh` cannot time from outside: latency, whose
+# wait for a quiet machine is meant to be long. What runs after that wait was
+# untimed, and a measurement that never returns held a crux runner for the
+# job's twelve hours. Each leg gets the budget `check.sh` gives a whole check.
 engine_guard_under_wayland() { # guard script name, args...
-  local guard="$1"; shift
-  "$ENGINE_SCRIPTS/under-wayland.sh" "$ENGINE_DIR" \
-    "$ENGINE_SCRIPTS/$guard" "$ENGINE_DIR" "$@"
+  local guard="$1" budget="${DOMICILE_ENGINE_CHECK_TIMEOUT:-1800}" status=0; shift
+  timeout -k 30 "$budget" "$ENGINE_SCRIPTS/under-wayland.sh" "$ENGINE_DIR" \
+    "$ENGINE_SCRIPTS/$guard" "$ENGINE_DIR" "$@" || status=$?
+  [ "$status" -ne 124 ] || echo "$guard ran past ${budget}s and was killed"
+  return "$status"
 }
