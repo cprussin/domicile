@@ -205,16 +205,16 @@ const barStyles = grid({
   // resolved against the root, which paints it under the wallpaper — a scrim
   // nobody can see, on a bar that looks exactly like one that has none.
   isolation: "isolate",
-  paddingInline: 2,
+  paddingInline: 3,
   position: "absolute",
   textShadow: "textOverPhoto",
 });
 
-const startStyles = hstack({ gap: 2 });
+const startStyles = hstack({ gap: 4 });
 
 const middleStyles = css({ justifySelf: "center" });
 
-const endStyles = hstack({ gap: 1, justify: "flex-end" });
+const endStyles = hstack({ gap: 3, justify: "flex-end" });
 
 // Not a color of its own: the bar's text is white over a photograph, and
 // what marks this out is that it is a word in capitals where the rest of the
