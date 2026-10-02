@@ -9,7 +9,7 @@ import { Tray } from "./Tray";
 /** An application's icon. */
 const sync: TrayItem = {
   icon: "data:image/png;base64,iVBORw0KGgo=",
-  id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
+  id: "syncthing",
   title: "Syncthing",
 };
 
@@ -33,7 +33,7 @@ const off: Extension = {
   title: "Off",
 };
 
-const SYNC = "status-notifier:Syncthing";
+const SYNC = `status-notifier:${sync.id}`;
 const COUNTER = `extension:${counter.id}`;
 
 /** A client that keeps every click the tray hands on, in order. */
@@ -120,6 +120,16 @@ describe("Tray", () => {
       );
 
       expect(labels()).toStrictEqual(["Syncthing (paused)"]);
+    });
+
+    it("keeps an application's place when it retitles its icon", () => {
+      // A tooltip that says how many are unread, or which network is up.
+      renderTray({
+        items: [{ ...sync, title: "Syncthing (paused)" }],
+        order: [SYNC, COUNTER],
+      });
+
+      expect(labels()).toStrictEqual(["Syncthing (paused)", "Counter"]);
     });
 
     it("leaves no picture for the engine to drag instead", () => {

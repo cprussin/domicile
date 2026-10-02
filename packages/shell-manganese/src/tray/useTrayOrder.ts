@@ -6,7 +6,7 @@ import {
   rememberedOrder,
   rememberOrder,
 } from "./remembered-order";
-import { moveTo } from "./tray-order";
+import { moveTo, place } from "./tray-order";
 
 export type TrayOrder = {
   /** The order the user put the tray in; see `arrange`. */
@@ -23,9 +23,21 @@ export type TrayOrder = {
  * on one is a drag on all of them. A desk that is a page per monitor hears the
  * others' drags as `storage` events, which the browser sends every page of the
  * origin but the one that wrote.
+ *
+ * `shown` is the keys of every icon on the tray. One the order has never
+ * placed is placed as it arrives, and written down, so an application closed
+ * and opened again comes back where it was rather than last.
  */
-export const useTrayOrder = (): TrayOrder => {
+export const useTrayOrder = (shown: readonly string[]): TrayOrder => {
   const [order, setOrder] = useState(rememberedOrder);
+
+  useEffect(() => {
+    const next = place(order, shown);
+    if (next.length > order.length) {
+      setOrder(next);
+      rememberOrder(next);
+    }
+  }, [order, shown]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {

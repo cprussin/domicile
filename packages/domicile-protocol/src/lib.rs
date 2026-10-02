@@ -1165,9 +1165,11 @@ pub enum Theme {
 /// One icon in the system tray, as a shell is told about it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrayItem {
-    /// What [`ChromeMessage::ActivateTrayItem`] names this icon by: the bus
-    /// name the application answers on and the object path it answers at,
-    /// written together.
+    /// What [`ChromeMessage::ActivateTrayItem`] names this icon by: its
+    /// StatusNotifierItem `Id`, which stays the same when the application is
+    /// closed and opened again, so a shell can keep the icon's place by it.
+    /// A second icon with the same `Id` has `#2` after it, and so on; one
+    /// with none is named by its bus name and object path, written together.
     pub id: String,
     /// What the icon is, in words: its tooltip's title where it has one, its
     /// `Title` where it does not, and its `Id` where it has neither — so

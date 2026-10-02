@@ -22,7 +22,11 @@ export type TrayAction = z.infer<typeof trayActionSchema>;
 
 /** One icon in the tray. */
 export type TrayItem = {
-  /** What {@link DomicileClient.activateTrayItem} names it by. */
+  /**
+   * What {@link DomicileClient.activateTrayItem} names it by, and the same
+   * when its application is closed and opened again — what a shell keeps its
+   * place by.
+   */
   id: string;
   /** What it is, in words, and never empty: what a shell labels it with. */
   title: string;

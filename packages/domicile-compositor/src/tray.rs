@@ -209,7 +209,9 @@ fn answer(
                 if asked.get(&id) == Some(&sequence) {
                     match properties {
                         Ok(properties) => {
-                            registry.show(&id, item(&id, parse(properties), &mut icons));
+                            let properties = parse(properties);
+                            let name = registry.named(&id, &properties.id);
+                            registry.show(&id, item(&name, properties, &mut icons));
                         }
                         // Held but not shown: an application whose tray code
                         // is broken, and nothing on this side can draw an
@@ -301,14 +303,14 @@ fn read(
     });
 }
 
-/// Call what a click with `action` means on the item `id`.
+/// Call what a click with `action` means on the item a shell knows as `id`.
 ///
 /// No reply is waited for. `Activate` on an item that has only a menu is an
 /// error the item returns, and a click that did nothing is what the person
 /// already saw; and an application that is slow to answer must not hold the
 /// tray's other icons up.
 fn activate(connection: &Connection, registry: &Registry, id: &str, action: TrayAction) {
-    let Some((bus, path)) = registry.address(id) else {
+    let Some((bus, path)) = registry.clicked(id) else {
         debug!(%id, "a click on a tray icon that has gone");
         return;
     };
