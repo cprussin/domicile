@@ -62,6 +62,17 @@ TEST(DomicileDisplayRegionsTest, ALayerOnTheDensestMonitorHasNone) {
       DomicileRatiosMeeting(Desk(), gfx::Rect(3000, 0, 400, 400)).empty());
 }
 
+TEST(DomicileDisplayRegionsTest, ALayerOnMoreDensitiesThanTilingsHasTheLeast) {
+  const DomicileDisplayRegions four = {
+      {gfx::Rect(0, 0, 100, 100), 0.75f},
+      {gfx::Rect(100, 0, 100, 100), 0.5f},
+      {gfx::Rect(200, 0, 100, 100), 0.6f},
+      {gfx::Rect(300, 0, 100, 100), 0.4f},
+  };
+  EXPECT_EQ(DomicileRatiosMeeting(four, gfx::Rect(0, 0, 400, 100)),
+            std::vector<float>({0.4f, 0.5f, 0.6f}));
+}
+
 TEST(DomicileDisplayRegionsTest, TwoMonitorsOfOneDensityAreOneRatio) {
   const DomicileDisplayRegions twins = {
       {gfx::Rect(0, 0, 100, 100), 0.5f},
@@ -120,6 +131,41 @@ TEST(DomicileDisplayRegionsTest, CoverageOfATurnedLayerIsAllOfItAtOne) {
   ASSERT_EQ(pieces.size(), 1u);
   EXPECT_EQ(pieces[0].rect, gfx::Rect(0, 0, 10, 10));
   EXPECT_EQ(pieces[0].ratio, 1.f);
+}
+
+TEST(DomicileDisplayRegionsTest, ALayerInThePageKeepsAndDrawsItsTilings) {
+  const DomicileLayer layer = {.to_page_is_scale_or_translation = true,
+                               .draws_into_page = true,
+                               .is_directly_composited_image = false};
+  EXPECT_TRUE(DomicileKeepsDisplayTilings(layer));
+  EXPECT_TRUE(DomicileDrawsFromDisplayTilings(layer));
+}
+
+TEST(DomicileDisplayRegionsTest, ALayerInASurfaceOfItsOwnKeepsItsTilings) {
+  // A window being dragged, at an opacity: a surface of its own until it is
+  // dropped. Given up here, its tilings were rebuilt empty on the drop, and
+  // the monitor showed the page's tiles, shrunk, until they were rastered.
+  const DomicileLayer layer = {.to_page_is_scale_or_translation = true,
+                               .draws_into_page = false,
+                               .is_directly_composited_image = false};
+  EXPECT_TRUE(DomicileKeepsDisplayTilings(layer));
+  EXPECT_FALSE(DomicileDrawsFromDisplayTilings(layer));
+}
+
+TEST(DomicileDisplayRegionsTest, ATurnedLayerHasNoTilings) {
+  const DomicileLayer layer = {.to_page_is_scale_or_translation = false,
+                               .draws_into_page = false,
+                               .is_directly_composited_image = false};
+  EXPECT_FALSE(DomicileKeepsDisplayTilings(layer));
+  EXPECT_FALSE(DomicileDrawsFromDisplayTilings(layer));
+}
+
+TEST(DomicileDisplayRegionsTest, ADirectlyCompositedImageHasNoTilings) {
+  const DomicileLayer layer = {.to_page_is_scale_or_translation = true,
+                               .draws_into_page = true,
+                               .is_directly_composited_image = true};
+  EXPECT_FALSE(DomicileKeepsDisplayTilings(layer));
+  EXPECT_FALSE(DomicileDrawsFromDisplayTilings(layer));
 }
 
 TEST(DomicileDisplayRegionsTest, CoverageWithNoRegionsIsAllOfItAtOne) {
