@@ -4,6 +4,7 @@
 #ifndef CC_DOMICILE_DISPLAY_REGIONS_H_
 #define CC_DOMICILE_DISPLAY_REGIONS_H_
 
+#include <cstddef>
 #include <vector>
 
 #include "ui/gfx/geometry/rect.h"
@@ -57,9 +58,39 @@ DomicileDisplayRegions DomicileDisplayRegionsOf(
     const gfx::Point& widget_origin,
     float page_scale);
 
-// The ratios of the regions `rect_in_target` meets, each once, ascending.
+// How many monitors' tilings a layer keeps at most: the raster queue has an
+// iterator for each (TilingSetRasterQueueAll's DOMICILE_DISPLAY_*), and a
+// tiling activation waits on but that is never rastered would hold the page
+// up.
+inline constexpr size_t kDomicileMostDisplayTilings = 3;
+
+// The ratios of the regions `rect_in_target` meets, each once, ascending: the
+// least dense kDomicileMostDisplayTilings, whose monitors shrink the page's
+// own tiles the most.
 std::vector<float> DomicileRatiosMeeting(const DomicileDisplayRegions& regions,
                                          const gfx::Rect& rect_in_target);
+
+// What of a layer decides whether it has a tiling for each monitor it is on.
+struct DomicileLayer {
+  // From the layer into the page's viewport. Its regions are found through
+  // this, so only a scale and a translation can find them.
+  bool to_page_is_scale_or_translation = false;
+  // Drawn straight into the page by a scale and a translation, rather than
+  // into a surface of its own that is then drawn into the page at the page's
+  // scale.
+  bool draws_into_page = false;
+  // Drawn at the image's own scale, whatever the page's.
+  bool is_directly_composited_image = false;
+};
+
+// Whether `layer` keeps a tiling for each monitor it is on, rastered on both
+// trees. It does through a surface of its own, which it cannot draw from them
+// through: a tiling given up there comes back empty, and until it is rastered
+// again its monitor shows the page's tiles, shrunk, then its own -- a flash.
+bool DomicileKeepsDisplayTilings(const DomicileLayer& layer);
+
+// Whether `layer` draws each monitor's part from that monitor's tiling.
+bool DomicileDrawsFromDisplayTilings(const DomicileLayer& layer);
 
 // Around every region of `ratio`, in the space `to_target` maps from -- a
 // layer's own. Empty unless `to_target` is a scale and a translation: a
