@@ -11,6 +11,7 @@
 
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace domicile {
@@ -55,6 +56,21 @@ gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box);
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
                                      const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like);
+
+// Which display a pointer warped to `at`, in `host`'s logical pixels, lands
+// on: the one in `lit` holding that place on the desk, or `host` where none
+// does, since the cursor crosses onto nothing. `std::nullopt` for a `host`
+// that is not on the desk.
+//
+// THE ARROW IS DRAWN FOR THE MONITOR IT IS ON, turned and at its density, and
+// every window shares the one cursor that draws it. A warp is asked of the
+// desk's host and lands anywhere on the desk (`PointerCrossingFor`), but aura
+// draws it for the host's display. The move that follows the warp redraws it
+// only for a pointer that changed monitors, so a warp across a turned monitor
+// left the laptop's arrow drawn on it, sideways.
+std::optional<int64_t> WarpLandsOn(const std::vector<DeskPlace>& lit,
+                                   int64_t host,
+                                   const gfx::Point& at);
 
 }  // namespace domicile
 
