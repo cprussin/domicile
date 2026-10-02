@@ -27,6 +27,11 @@ import {
 const MIDDLE_BUTTON = 1;
 
 type Props = {
+  /**
+   * Whether the window this bar names is all the screen shows, alone or as a
+   * tab group — see `alone.ts`. Its edge is not drawn in the accent then.
+   */
+  alone?: boolean;
   /** How it stacks: the depth of the window it names. */
   depth: number;
   /**
@@ -119,6 +124,7 @@ type Props = {
  * why it sees corner radius, transforms and stacking.
  */
 export const TitleBar = ({
+  alone = false,
   depth,
   dragging,
   focus,
@@ -141,7 +147,7 @@ export const TitleBar = ({
   // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
   <div
     className={cx(
-      barStyles({ focus }),
+      barStyles({ alone, focus }),
       // Neither a line nor rounded corners around the screen's own edge.
       !fullscreen && edgeStyles,
       !fullscreen && topCornerStyles,
@@ -221,10 +227,10 @@ export const TitleBar = ({
  *
  * **What finds the window at a glance is the ring around it** — see
  * `SelectionRing`. The bar only has to agree with it, and to go on saying
- * where the keyboard is once the ring has grown out to a group: a wash of the
- * accent and a heavier face. A bar *filled* with the accent is a desktop of
- * windows shouting one color — the wash carries the window without taking
- * the screen over.
+ * where the keyboard is once the ring has grown out to a group: the card
+ * under an edge in the accent, and a heavier face. The card is the address
+ * bar's ground, so the focused bar reads as the top of the window it names;
+ * every other bar sinks below it to the page's own ground.
  *
  * Every state names every one of the four rather than overriding one of them.
  * Two rules setting `border-color` on one element are decided by the order
@@ -245,12 +251,25 @@ const barStyles = cva({
     paddingInlineStart: 2,
     position: "absolute",
   }),
+  // A window alone on the screen has nothing to be picked out from, so its
+  // edge is the resting one, as the ring and its frame are — see `alone.ts`.
+  // `cva` merges this over the variant into one style before it makes a
+  // class, so the override is not left to the order Panda emits rules in.
+  compoundVariants: [
+    {
+      alone: true,
+      css: { borderColor: "borderStrong" },
+      focus: "focused",
+    },
+  ],
   variants: {
+    alone: {
+      false: {},
+      true: {},
+    },
     focus: {
       focused: {
-        // A wash of the accent through the card rather than a fill of it.
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 16%, {colors.card})",
+        backgroundColor: "card",
         borderColor: "accent",
         color: "foreground",
         // Set in a heavier face as well, which is the half of standing out
@@ -260,16 +279,17 @@ const barStyles = cva({
       // And every other bar recedes rather than competing: the window under it
       // is what the user is looking at.
       resting: {
-        backgroundColor: "card",
+        backgroundColor: "background",
         borderColor: "borderStrong",
         color: "muted",
         fontWeight: "normal",
       },
-      // A container's open tab, with the keyboard somewhere else: marked as
-      // open by its edge and its text, and not mistakable for the rule above.
+      // A container's open tab, with the keyboard somewhere else: raised to
+      // the card and set in the heavier face, but without the accent that
+      // would make it a second window claiming the keystrokes.
       selected: {
         backgroundColor: "card",
-        borderColor: "accent",
+        borderColor: "borderStrong",
         color: "foreground",
         fontWeight: "medium",
       },
