@@ -78,7 +78,19 @@ std::vector<float> DomicileRatiosMeeting(const DomicileDisplayRegions& regions,
     }
   }
   std::ranges::sort(ratios);
+  if (ratios.size() > kDomicileMostDisplayTilings) {
+    ratios.resize(kDomicileMostDisplayTilings);
+  }
   return ratios;
+}
+
+bool DomicileKeepsDisplayTilings(const DomicileLayer& layer) {
+  return layer.to_page_is_scale_or_translation &&
+         !layer.is_directly_composited_image;
+}
+
+bool DomicileDrawsFromDisplayTilings(const DomicileLayer& layer) {
+  return layer.draws_into_page && DomicileKeepsDisplayTilings(layer);
 }
 
 gfx::Rect DomicileRegionInLayer(const DomicileDisplayRegions& regions,

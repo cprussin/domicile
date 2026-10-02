@@ -84,27 +84,41 @@ shows also keeps a tiling at that monitor's scale (patch 0072,
   each with the ratio `s_i/S` (`DomicileDisplayRegionsOf`), and hands them to
   `LayerTreeHost::SetDomicileDisplayRegions`. A `<webview>` finds its regions
   by its own screen rect, so it is native too.
-- On the active tree, `PictureLayerImpl::UpdateDomicileDisplayTilings` keeps a
-  tiling at the high-res scale times each ratio the layer meets. Its priority
-  rects are clipped to that monitor's region, so a gap or another monitor is
-  never rastered at that scale. It is NON_IDEAL but still makes tiles, and
+- On both trees, `PictureLayerImpl::UpdateDomicileDisplayTilings` keeps a
+  tiling at the high-res scale times each ratio the layer meets (at most
+  three), found through its screen space transform. Its priority rects are
+  clipped to that monitor's region, so a gap or another monitor is never
+  rastered at that scale. It is NON_IDEAL but still makes tiles, and
   `CleanUpTilingsOnActiveLayer` skips it while the monitor shows the layer.
-- `TilingSetRasterQueueAll` rasters up to three such tilings, each after the
-  high-res tiling in every bin.
+- The pending tree's is a twin of the active one (patch 0079): it rasters
+  what a commit invalidated, and activation waits on those tiles as on high
+  res (`IsTileRequiredForActivation`, `TilingSetRasterQueueRequired`). A
+  monitor never shows high res, shrunk, where its own tiles were.
+- `TilingSetRasterQueueAll` rasters them, each after the high-res tiling in
+  every bin.
 - `TileBasedLayerImpl::AppendQuads` covers each region from that tiling
-  (`DomicileCoverage`), falling back to high res where a tile is not ready.
+  (`DomicileCoverage`), falling back to high res where a tile is not ready —
+  only a tiling's first raster, or eviction.
 
 A tile rastered at `s_i` lands 1:1 on display `i`'s pixels after viz's
 `s_i/S`.
 
-The high-res tiling still covers the whole layer: the pending tree has only it,
-and it is what activation waits on and what a region falls back to. So a
-lower-density monitor costs extra raster, not less.
+The high-res tiling still covers the whole layer. So a lower-density monitor
+costs extra raster and activation latency, not less.
 
 **Falls back to S:** layers under a non-root render surface (filters, blur,
-masks, opacity groups), layers turned or with an animating transform, and
+masks, opacity groups — a window dragged at an opacity), turned layers, and
 directly composited images. viz renders those at the frame's scale, so they
-are resampled on a lower-density display.
+are resampled on a lower-density display. A layer under a surface keeps its
+tilings rastered (`DomicileKeepsDisplayTilings`), so leaving the surface is
+one switch, not a rebuild. A moving layer draws from its tilings.
+
+**Tile memory.** The budget is `GetGpuMemoryPolicy`'s: 1152 MB scaled by the
+widget's initial screen area, floored at 512 MB, capped at a quarter of RAM;
+`--force-gpu-mem-available-mb` overrides it. A desk of ~40 Mpx at S is
+~160 MB of tiles per full-desk layer, and a monitor at ratio `r` adds `r²` of
+its own share. Out of budget, required tiles are marked OOM and drawn as
+checkerboard, so a monitor's tiling there costs more than a resample.
 
 ### Frames
 
@@ -172,6 +186,7 @@ Phase 2: native density.
 - [x] Raster queue and cleanup keep it
 - [x] `AppendQuads` per region
 - [x] Fall back to S under non-root render surfaces
+- [x] Activation waits on the monitors' tilings; kept through surfaces (0079)
 - [ ] Hardware check: text on the lower-density monitor is crisp
 - [ ] `<app>` scale from the display under its center
 
