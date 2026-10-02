@@ -34,9 +34,11 @@ export type Selection = {
  * says nothing the fullscreen window does not already, and a group's is drawn
  * over a window that covers it.
  *
- * Nor while the screen shows one thing alone — see {@link showsOneThing}:
- * there is nothing else the commands could be pointed at, so it would be a
- * line that says nothing.
+ * Nor around the window while the screen shows one thing alone — see
+ * {@link showsOneThing}: there is nothing else the commands could be pointed
+ * at, so it would be a line that says nothing. A group `focus parent`
+ * selected is still ringed then, since nothing else says the commands left
+ * the window for it.
  */
 export const selectionOf = (
   screenful: Screenful,
@@ -46,7 +48,7 @@ export const selectionOf = (
 ): Selection | undefined => {
   const { placements, selection } = screenful;
   const active = placements.find(({ id }) => id === activeId);
-  if (fullscreenId !== undefined || showsOneThing(screenful)) {
+  if (fullscreenId !== undefined) {
     return undefined;
   } else if (selection !== undefined) {
     return {
@@ -56,7 +58,7 @@ export const selectionOf = (
       group: true,
       rect: selection.rect,
     };
-  } else if (active === undefined) {
+  } else if (active === undefined || showsOneThing(screenful)) {
     return undefined;
   } else {
     return {
