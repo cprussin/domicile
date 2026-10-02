@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ConnectionSafety } from "../../address/connection-safety";
@@ -114,6 +120,26 @@ describe("ConnectionIndicator", () => {
       await userEvent.click(indicator());
 
       expect(await screen.findByText(/has not reported/)).toBeInTheDocument();
+    });
+
+    it("closes when a click lands in the page", async () => {
+      const page = document.createElement("webview");
+      document.body.append(page);
+      render(
+        <ConnectionIndicator
+          security={ConnectionSafety.Secure}
+          url="https://docs.example.com/guide"
+        />,
+      );
+      await userEvent.click(indicator());
+      await screen.findByText("docs.example.com");
+
+      fireEvent(page, new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }));
+
+      await waitForElementToBeRemoved(() =>
+        screen.queryByText("docs.example.com"),
+      );
+      page.remove();
     });
   });
 });

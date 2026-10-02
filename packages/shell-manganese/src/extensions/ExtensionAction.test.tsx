@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { Extension } from "@domicile/chrome-sdk/extension";
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import {
+  WEBVIEW_CLOSE_EVENT,
+  WEBVIEW_GUEST_FOCUS_EVENT,
+} from "@domicile/chrome-sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -235,6 +238,39 @@ describe("ExtensionAction", () => {
       await userEvent.click(document.body);
 
       expect(await asked).toBeUndefined();
+    });
+
+    it("closes when a click lands in a page outside it", async () => {
+      const page = document.createElement("webview");
+      document.body.append(page);
+      const asked = trayAsking(blocker, BLOCKER);
+      await popupView();
+
+      fireEvent(page, new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }));
+
+      expect(await asked).toBeUndefined();
+      page.remove();
+    });
+
+    it("stays open when a click lands in its own popup", async () => {
+      let asked: string | undefined | null = null;
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={(id) => {
+            asked = id;
+          }}
+          opened={BLOCKER}
+        />,
+      );
+
+      fireEvent(
+        await popupView(),
+        new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }),
+      );
+
+      expect(asked).toBeNull();
     });
   });
 });
