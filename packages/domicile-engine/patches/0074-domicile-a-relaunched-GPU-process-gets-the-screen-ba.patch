@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 2 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a relaunched GPU process gets the screen back
+
+A GPU process that died on a tty took the desktop with it, though the
+browser relaunched it:
+
+    GPU process exited unexpectedly: exit_code=134
+    failed to take DRM master on /sys/devices/.../drm/card1: -1
+    failed to take DRM master on card0: -1
+
+`DrmMaster` (0019) keeps the browser's own `dup` of every card it hands
+the GPU process. When the GPU process dies its copy closes and the dup
+does not, so the card's master stays open in the browser.
+`OnGpuProcessLaunched` then opens the card again: an `open` takes master
+only on a card that has none, and `drmSetMaster` on a file that never
+had it is EACCES without CAP_SYS_ADMIN. `DrmMaster::Add` logged that,
+then replaced the old dup, closing the last master the card had. The
+new GPU process drew into a card nobody was master of.
+
+So the browser lets go of every card it held, next to upstream's own
+`drm_devices_.clear()`, before it opens the primary card again.
+
+`DrmMasterTest.ADeadGpuProcessCardsAreLetGoOf` covers `ForgetEvery`;
+`scripts/test-a-relaunched-gpu-process-gets-the-screen.sh` reads the
+series for the call before the reopen.
+---
+ ui/ozone/platform/drm/host/drm_display_host_manager.cc | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
+index 13fdfa4..716f83a 100644
+--- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
++++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
+@@ -560,6 +560,14 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {
+   {
+     base::ScopedAllowBlocking scoped_allow_blocking;
+ 
++    // DOMICILE: a GPU process launched AGAIN cannot be master through cards
++    // opened while the dead one's are still held. Those are this process's
++    // dups, and they kept the card's master open after the GPU process that
++    // drew through them died. The `open` below takes master only on a card
++    // that has none, and `drmSetMaster` cannot give it to a file that never
++    // had it -- so with them still held the new GPU process gets the card
++    // without the screen, and the desktop does not come back. See `DrmMaster`.
++    drm_master_.ForgetEvery();
+     drm_devices_.clear();
+     drm_devices_[primary_graphics_card_path_] =
+         MapDevPathToSysPath(primary_graphics_card_path_);

@@ -1611,6 +1611,21 @@ describe("Shell", () => {
       expect(appElement(container, "two").className).toContain(
         css({ borderColor: "borderStrong" }),
       );
+      // Nor its focused tab's edge, which is the top of that frame.
+      expect(
+        titleBars(container).some((bar) =>
+          bar.className.includes(css({ borderColor: "accent" })),
+        ),
+      ).toBe(false);
+    });
+
+    it("draws no edge in the accent on a screen's only window's bar", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+
+      expect(barFor(container, "app:one").className).not.toContain(
+        css({ borderColor: "accent" }),
+      );
     });
   });
 

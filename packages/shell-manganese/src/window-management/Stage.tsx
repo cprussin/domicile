@@ -297,6 +297,7 @@ export const Stage = ({
             */}
               {placement !== undefined && (
                 <WindowTitleBar
+                  alone={on !== undefined && showsOneThing(on.screenful)}
                   depth={placement.depth}
                   dragging={window.id === draggingId}
                   float={floating}
@@ -474,49 +475,53 @@ export const Stage = ({
         one that container last had the focus in, and picking one is reaching
         for that window.
       */}
-      {motions.tabs.map(({ focused, motion, screen, tab }) => (
-        <Sliding key={tab.id} on={screenNamed(screens, screen)}>
-          <TitleBar
-            // With the float it is in, if it is in one.
-            depth={tab.depth}
-            // Nothing drags a tab: it belongs to a container, which moves with
-            // its float or not at all.
-            dragging={false}
-            // The tab of a container the keyboard is not in is still the open
-            // one, and saying so with the fill would be a second window claiming
-            // the keystrokes.
-            focus={titleFocus({
-              hasKeyboard: focused,
-              shownByContainer: tab.active,
-            })}
-            // A tab is the whole of what the window behind it has on screen, so
-            // it turns about its own middle.
-            frame={tab.rect}
-            // A workspace showing a fullscreen window draws no tabs at all — see
-            // `placement.ts` — so this one never names it.
-            fullscreen={fillsScreen(screens, tab.id)}
-            motion={motion}
-            onClose={() => {
-              onClose(tab.id);
-            }}
-            onFullscreen={() => {
-              onFullscreen(tab.id);
-            }}
-            onMiddleClick={() => {
-              onClose(tab.id);
-            }}
-            onMotionEnded={() => {
-              motions.onPlayedOut(tab.id, motion, screen);
-            }}
-            onPointerDown={() => {
-              onSelect(tab.id);
-            }}
-            rect={tab.rect}
-            title={titleOf(windows, tab.id)}
-            window={tab.id}
-          />
-        </Sliding>
-      ))}
+      {motions.tabs.map(({ focused, motion, screen, tab }) => {
+        const on = screenNamed(screens, screen);
+        return (
+          <Sliding key={tab.id} on={on}>
+            <TitleBar
+              alone={on !== undefined && showsOneThing(on.screenful)}
+              // With the float it is in, if it is in one.
+              depth={tab.depth}
+              // Nothing drags a tab: it belongs to a container, which moves with
+              // its float or not at all.
+              dragging={false}
+              // The tab of a container the keyboard is not in is still the open
+              // one, and saying so with the accent would be a second window
+              // claiming the keystrokes.
+              focus={titleFocus({
+                hasKeyboard: focused,
+                shownByContainer: tab.active,
+              })}
+              // A tab is the whole of what the window behind it has on screen, so
+              // it turns about its own middle.
+              frame={tab.rect}
+              // A workspace showing a fullscreen window draws no tabs at all — see
+              // `placement.ts` — so this one never names it.
+              fullscreen={fillsScreen(screens, tab.id)}
+              motion={motion}
+              onClose={() => {
+                onClose(tab.id);
+              }}
+              onFullscreen={() => {
+                onFullscreen(tab.id);
+              }}
+              onMiddleClick={() => {
+                onClose(tab.id);
+              }}
+              onMotionEnded={() => {
+                motions.onPlayedOut(tab.id, motion, screen);
+              }}
+              onPointerDown={() => {
+                onSelect(tab.id);
+              }}
+              rect={tab.rect}
+              title={titleOf(windows, tab.id)}
+              window={tab.id}
+            />
+          </Sliding>
+        );
+      })}
       {/*
         And over all of it, what the commands are pointed at — after the
         windows and their bars, because it rings them: two elements at one

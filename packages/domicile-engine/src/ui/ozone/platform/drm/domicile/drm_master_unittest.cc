@@ -183,6 +183,29 @@ TEST(DrmMasterTest, ACardThatWentAwayIsNotTouched) {
   EXPECT_EQ(drop.calls(), std::vector<int>({first_fd}));
 }
 
+TEST(DrmMasterTest, ADeadGpuProcessCardsAreLetGoOf) {
+  RecordedCall set;
+  RecordedCall drop;
+  DrmMaster master(set.Bind(), drop.Bind());
+
+  base::ScopedFD first = OpenScratchFd();
+  base::ScopedFD second = OpenScratchFd();
+  const int first_fd = first.get();
+  const int second_fd = second.get();
+  master.Add(base::FilePath(kCard0), std::move(first));
+  master.Add(base::FilePath(kCard1), std::move(second));
+
+  master.ForgetEvery();
+
+  // CLOSED, NOT JUST UNLISTED. A held descriptor is a card's master kept open
+  // after the GPU process drawing through it died, and while it is open the
+  // card the new GPU process is handed opens without master and cannot take it.
+  EXPECT_EQ(fcntl(first_fd, F_GETFD), -1);
+  EXPECT_EQ(fcntl(second_fd, F_GETFD), -1);
+  EXPECT_FALSE(master.Drop());
+  EXPECT_TRUE(drop.calls().empty());
+}
+
 TEST(DrmMasterTest, ADropWithNothingHeldIsARefusal) {
   RecordedCall set;
   RecordedCall drop;

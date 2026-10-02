@@ -83,6 +83,14 @@ class DrmMaster {
   // because that is what a removal carries.
   void Forget(const base::FilePath& device);
 
+  // Loses every card, for a GPU process that died. THE DESCRIPTORS HELD HERE
+  // ARE ITS MASTER, kept open after it: its copies closed and these did not.
+  // The new GPU process is handed a fresh `open` of each card, and an `open`
+  // takes master only on a card that has none -- one taken while these are
+  // still open is not master, and `drmSetMaster` cannot make it so without
+  // CAP_SYS_ADMIN. So these go before the card is opened again.
+  void ForgetEvery();
+
   // Takes master on every card held; answers whether every one of them agreed.
   bool Take();
 
