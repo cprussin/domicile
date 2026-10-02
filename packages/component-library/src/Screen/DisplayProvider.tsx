@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import type { CSSProperties, PropsWithChildren } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import type { Display, DisplaySource } from "./display-source";
@@ -69,5 +69,37 @@ export const useDisplays = (): readonly Display[] | undefined => {
     throw new Error("useDisplays must be used within a <DisplayProvider>");
   } else {
     return held.displays;
+  }
+};
+
+/**
+ * Where on the page the display `name` is, as the physical `left`, `top`,
+ * `width` and `height` of an element laid out over it — what a dialog's
+ * viewport takes to sit on one monitor of a page that spans several, rather
+ * than centered on all of them. `<Screen>` places its regions the same way.
+ *
+ * `undefined` — the page — for no name, which needs no provider; and for a
+ * name no display carries: a monitor unplugged under an open dialog is gone a
+ * render before the shell has moved off it, and that render should not take
+ * the page down.
+ */
+export const useScreenRegion = (
+  name: string | undefined,
+): CSSProperties | undefined => {
+  const held = useContext(DisplayContext);
+  if (name === undefined) {
+    return undefined;
+  } else if (held === undefined) {
+    throw new Error("useScreenRegion must be used within a <DisplayProvider>");
+  } else {
+    const display = held.displays?.find((display) => display.name === name);
+    return display === undefined
+      ? undefined
+      : {
+          height: `${String(display.size[1])}px`,
+          left: `${String(display.position[0])}px`,
+          top: `${String(display.position[1])}px`,
+          width: `${String(display.size[0])}px`,
+        };
   }
 };

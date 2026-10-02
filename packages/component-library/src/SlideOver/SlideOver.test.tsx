@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Button } from "../Button/Button";
+import { DisplayProvider } from "../Screen/DisplayProvider";
 
 import { SlideOver } from "./SlideOver";
 
@@ -25,6 +26,32 @@ describe(SlideOver, () => {
     expect(screen.getByText("Transcript")).toBeInTheDocument();
     expect(screen.getByText("Body")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("slides in over the screen it is asked for", () => {
+    render(
+      <DisplayProvider
+        source={{
+          displays: [
+            { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
+            {
+              name: "right",
+              position: [1920, 0],
+              scale: 1,
+              size: [1920, 1080],
+            },
+          ],
+          onDisplays: () => () => undefined,
+        }}
+      >
+        <SlideOver open screen="left" title="Transcript">
+          Body
+        </SlideOver>
+      </DisplayProvider>,
+    );
+    const viewport = screen.getByRole("dialog").parentElement;
+    expect(viewport?.style.left).toBe("0px");
+    expect(viewport?.style.width).toBe("1920px");
   });
 
   it("renders the trigger and keeps the panel closed until clicked", async () => {

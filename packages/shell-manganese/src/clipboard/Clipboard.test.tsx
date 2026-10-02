@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { OnOneScreen, SCREEN } from "../screens/fixture";
 import { Clipboard } from "./Clipboard";
 
 const HISTORY = [
@@ -24,7 +25,9 @@ const clipboard = (entries = HISTORY) => {
         dismissed.push(true);
       }}
       open
+      screen={SCREEN}
     />,
+    { wrapper: OnOneScreen },
   );
   return { copied, dismissed, user: userEvent.setup() };
 };
@@ -37,7 +40,9 @@ describe("Clipboard", () => {
         onCopy={() => undefined}
         onDismiss={() => undefined}
         open={false}
+        screen={SCREEN}
       />,
+      { wrapper: OnOneScreen },
     );
 
     expect(screen.queryByRole("option")).toBeNull();

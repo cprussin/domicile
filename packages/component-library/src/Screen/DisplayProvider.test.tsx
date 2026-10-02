@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { act, render, screen } from "@testing-library/react";
-import { DisplayProvider, useDisplays } from "./DisplayProvider";
+import {
+  DisplayProvider,
+  useDisplays,
+  useScreenRegion,
+} from "./DisplayProvider";
 import type { Display, DisplaySource } from "./display-source";
 
 /**
@@ -253,5 +257,50 @@ describe("useDisplays", () => {
       </DisplayProvider>,
     );
     expect(listening()).toBe(false);
+  });
+});
+
+describe("useScreenRegion", () => {
+  /** Renders the region `useScreenRegion` returned, as JSON. */
+  const RegionReader = ({ name }: { name: string | undefined }) => (
+    <span data-testid="read">
+      {JSON.stringify(useScreenRegion(name)) ?? "(the page)"}
+    </span>
+  );
+
+  it("is the rectangle of the display it names, in the page's pixels", () => {
+    render(
+      <DisplayProvider source={alreadyTold([LEFT, RIGHT])}>
+        <RegionReader name="right" />
+      </DisplayProvider>,
+    );
+    expect(JSON.parse(read())).toStrictEqual({
+      height: "1440px",
+      left: "1920px",
+      top: "0px",
+      width: "2560px",
+    });
+  });
+
+  it("is the page for no display, and needs no provider for it", () => {
+    render(<RegionReader name={undefined} />);
+    expect(read()).toBe("(the page)");
+  });
+
+  it("is the page for a display that has gone from the desktop", () => {
+    // A monitor unplugged under an open dialog is gone a render before the
+    // shell has moved off it, and that render should not take the page down.
+    render(
+      <DisplayProvider source={alreadyTold([LEFT])}>
+        <RegionReader name="right" />
+      </DisplayProvider>,
+    );
+    expect(read()).toBe("(the page)");
+  });
+
+  it("throws for a display named outside a provider", () => {
+    expect(() => {
+      render(<RegionReader name="right" />);
+    }).toThrow(/DisplayProvider/);
   });
 });

@@ -21,6 +21,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -69,6 +70,15 @@ const TOP_BAR = 32;
 /** The region a `<Screen>` renders for the display of this name. */
 const screenNamed = (container: HTMLElement, name: string): Element | null =>
   container.querySelector(`[data-screen="${name}"]`);
+
+/** Where the open dialog is laid out: the left edge and width of its box. */
+const dialogBox = (): { left: string; width: string } => {
+  const viewport = screen.getByRole("dialog").parentElement;
+  return {
+    left: viewport?.style.left ?? "",
+    width: viewport?.style.width ?? "",
+  };
+};
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
@@ -1043,6 +1053,16 @@ describe("Shell", () => {
       ).toStrictEqual(["the newest", "the oldest"]);
     });
 
+    it("opens on the screen the keyboard is on", () => {
+      renderShell([LEFT, RIGHT]);
+      clientAppears("one");
+      press("l");
+
+      press("v", true);
+
+      expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
+    });
+
     it("puts the row that was picked back on the clipboard", () => {
       // By the id the compositor gave it and never by its text: what the page
       // may do to the seat's clipboard is choose among what is already on it.
@@ -1142,6 +1162,17 @@ describe("Shell", () => {
       );
 
       expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
+    });
+
+    it("opens the drawer on the screen whose bell was pressed", async () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      const left = screenNamed(container, "left") as HTMLElement;
+
+      await userEvent.click(
+        within(left).getByRole("button", { name: "Notifications" }),
+      );
+
+      expect(dialogBox()).toStrictEqual({ left: "0px", width: "1920px" });
     });
 
     it("is the far end of the bar", () => {
@@ -2710,6 +2741,16 @@ describe("the launcher", () => {
     renderShell();
 
     expect(launcherBox()).toBeNull();
+  });
+
+  it("opens on the screen the keyboard is on", () => {
+    renderShell([LEFT, RIGHT]);
+    clientAppears("one");
+    press("l");
+
+    press("space");
+
+    expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
   });
 
   it("opens on mod+space and asks the host what matches its empty box", () => {

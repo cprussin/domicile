@@ -100,6 +100,8 @@ type Props = {
   search: Search;
   /** Which installed applications match a query, answered by the host. */
   searchApps: SearchApps;
+  /** The screen it opens on: the one the keyboard is on. */
+  screen: string;
 };
 
 /** How the panel asks what matches what is in its box. */
@@ -136,6 +138,7 @@ export const Launcher = ({
   open,
   opening,
   preview,
+  screen,
   search,
   searchApps,
 }: Props) => (
@@ -154,6 +157,7 @@ export const Launcher = ({
     // Where a launcher has always been, and where it covers least of the
     // desktop it is opening something onto.
     placement="top"
+    screen={screen}
     // Wide, because a row is a name and the directory it is in, and beside
     // the rows is a preview of the one the highlight is on.
     size="xl"

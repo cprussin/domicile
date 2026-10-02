@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
 
 import { Button } from "../Button/Button";
+import { DisplayProvider } from "../Screen/DisplayProvider";
 
 import { createHandle, ModalDialog } from "./ModalDialog";
 
@@ -126,6 +127,34 @@ describe(ModalDialog, () => {
       await waitFor(() => {
         expect(baseElement.querySelector("[data-backdrop]")).toBeNull();
       });
+    });
+
+    it("puts the popup over the screen it is asked for", () => {
+      render(
+        <DisplayProvider
+          source={{
+            displays: [
+              { name: "left", position: [0, 0], scale: 1, size: [1920, 1080] },
+              {
+                name: "right",
+                position: [1920, 120],
+                scale: 2,
+                size: [2560, 1440],
+              },
+            ],
+            onDisplays: () => () => undefined,
+          }}
+        >
+          <ModalDialog open screen="right" title="Settings">
+            Body
+          </ModalDialog>
+        </DisplayProvider>,
+      );
+      const viewport = screen.getByRole("dialog").parentElement;
+      expect(viewport?.style.left).toBe("1920px");
+      expect(viewport?.style.top).toBe("120px");
+      expect(viewport?.style.width).toBe("2560px");
+      expect(viewport?.style.height).toBe("1440px");
     });
 
     it("renders the trigger when provided and keeps the dialog closed", () => {

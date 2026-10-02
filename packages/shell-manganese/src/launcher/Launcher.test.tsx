@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
+import { OnOneScreen, SCREEN } from "../screens/fixture";
 import { Launcher } from "./Launcher";
 import { Launch } from "./launch";
 import { learnedIcons, learnIcon } from "./learned-icons";
@@ -157,9 +158,11 @@ const launcher = (
       open
       opening={{ apps, bookmarks }}
       preview={previewing}
+      screen={SCREEN}
       search={searching(files, indexing)}
       searchApps={searchingApps(apps, bookmarks)}
     />,
+    { wrapper: OnOneScreen },
   );
   return {
     [Symbol.dispose]: unmount,
@@ -201,9 +204,11 @@ describe("Launcher", () => {
         open={false}
         opening={{ apps: [], bookmarks: [] }}
         preview={previewing}
+        screen={SCREEN}
         search={searching(FILES, false)}
         searchApps={searchingApps([], [])}
       />,
+      { wrapper: OnOneScreen },
     );
 
     expect(screen.queryByRole("combobox")).toBeNull();
@@ -291,9 +296,11 @@ describe("Launcher", () => {
         open
         opening={{ apps: [EDITOR], bookmarks: [MAIL] }}
         preview={previewing}
+        screen={SCREEN}
         search={() => new Promise(() => undefined)}
         searchApps={() => new Promise(() => undefined)}
       />,
+      { wrapper: OnOneScreen },
     );
 
     expect(
