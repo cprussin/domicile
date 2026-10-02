@@ -2,7 +2,7 @@
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
 under a transparent bar carrying the tray, the
-workspaces, a clock and the charge. It is
+workspaces, a clock, the brightness and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
@@ -37,16 +37,13 @@ you get there — and so does `focus <direction>`: off the edge of a workspace,
 or out of a fullscreen window, it goes on to the screen that way, empty or not,
 before it wraps round.
 
-**A desk of several monitors is several pages of this shell**, because one
-browser window cannot span two CRTCs — the engine opens one per display and
-each loads this shell. So `src/screens/Monitor.tsx` is rendered once per screen
-by every page, and `<Screen>` draws the one whose display that page's window
-covers. There is still one desktop: the page covering the first screen reduces
-it and the others ask it to and show what it says, over
-`src/window-management/desk-channel.ts`. Two screens never show one workspace,
-and that is load-bearing rather than tidy — a client's window is a frame sink
-and a frame sink has one parent, so a window laid out on two pages is a window
-whose second embedding takes the first's pixels away.
+**One page spans the desk**, and `src/screens/Monitor.tsx` — the bar — is
+rendered once per screen, each in its own `<Screen>` region. The windows are
+drawn once for the desk, by one `Stage` over every screen, so a window that
+changes screens is the element it was. Two screens never show one
+workspace, and that is load-bearing rather than tidy — a client's window is a
+frame sink and a frame sink has one parent, so a window laid out twice is a
+window whose second embedding takes the first's pixels away.
 
 A window is either a Wayland client the host announced or a browser window the
 shell opened itself. Both are tiled on the workspace being looked at, both have
@@ -122,11 +119,10 @@ a tab of the container it is sitting on. A screen with nothing on it takes the
 pointer to its middle. The page cannot move a pointer; the engine can, and
 `warpPointer` is what asks it to.
 
-Across monitors the page that warps is the one covering the screen the focus
-went to, not the one that heard the key: a warp is kept inside the page that
-asks, so the press is counted in the desk every page is shown
-(`WindowState.pressed`), with the screen it was heard on — which is where the
-pointer is, whatever the target page last saw.
+Across monitors the monitor that warps is the one the focus went to, so the
+press is counted in the desktop (`WindowState.pressed`) rather than where it
+was heard. A warp is in page coordinates, and the engine puts it on whichever
+monitor that is.
 
 **The other half of that is a rule rather than a move: the pointer moves the
 focus when the pointer has moved.** A warp is a render late and aimed at a box
@@ -331,15 +327,12 @@ two edges a window dragged past could not be dragged back from.
 
 **A float goes to the screen its middle is dragged onto** — sway's rule —
 onto the workspace showing there, with the keyboard. A float is in its own
-screen's pixels, and the page that was pressed keeps the drag after the pointer
-crosses to the next monitor's page, so a move says which screen it is measured
-from and `floatDragged` converts. On a tty, where each monitor is a page, the
-part over the edge is drawn by the next monitor's page as an `<app mirror>`
-(`withOverhangs` in `placement.ts`): shown there, configured by the page the
-window is on.
-A browser window stays on its screen, its middle held inside it, because a
-`<webview>` on another page is a new guest and a reload. See
-[WINDOWS-ACROSS-SCREENS.md](../../docs/architecture/WINDOWS-ACROSS-SCREENS.md).
+screen's pixels and a drag is in the page's, which are the desk's, so
+`floatDragged` converts by the screen's box. Until its middle crosses, the
+float is drawn whole at its place on the page, over both screens. A browser
+window crosses like any other: every window is one element for the desk, so
+its `<webview>` is not loaded again. See
+[ONE-PAGE-FOR-THE-DESK.md](../../docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 **Its edges resize it with no modifier held.** A ring around a floating window
 — a strip a little inside and a little outside each edge, and a bigger square
@@ -532,7 +525,7 @@ a reach that moves nothing returns the state it was given.
 
 **The screen under the pointer is the screen the keyboard is on**, window or
 none — sway's focus following the mouse from one output to the next. A monitor
-with nothing on it has no window to cross into, so each page watches its own
+with nothing on it has no window to cross into, so the page watches the
 pointer (`src/screens/useScreenFollowsPointer.ts`) and moves the keyboard there
 when it is somewhere else; the next window opens where the hand is.
 
@@ -820,6 +813,21 @@ Nothing is drawn until the host has said a charge, and a machine with no
 battery looks exactly the same: the compositor sends nothing for a desktop PC,
 and a bar that drew `100%` for one would be the same lie in a different hat.
 
+**The brightness is beside it: a sun ringed by the level.** Click it for a
+slider; turn the wheel over it to step a twentieth without opening anything.
+
+- **Read like the charge.** The compositor reads `/sys/class/backlight` (firmware
+  over platform over raw, systemd's order), re-reads on the backlight's uevent,
+  and pushes the level when it moves a whole percent and once to a page that
+  has just connected. `domicile_host::backlight` is the reading.
+- **Set through logind.** `/sys` is root's; `Session.SetBrightness` lets the
+  session's owner write its own backlight. Never all the way to zero, which on
+  most panels is a screen that is off.
+- **The slider follows the desk.** A drag asks; what it draws is the level the
+  compositor tells every chrome. Mid-drag it holds where the pointer is, since
+  the answers to its own earlier asks arrive behind it.
+- **No backlight, no sun** — a desktop on an external monitor draws nothing.
+
 ### Notifications
 
 Every application's and site's notification is a toast in the top-right
@@ -914,18 +922,20 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the charge and the bell. |
+| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the brightness, the charge and the bell. |
 | `src/tray/` | The tray: applications' and extensions' icons in one row, and the order the user dragged them into. |
 | `src/extensions/` | An extension's action on the tray, the popup panel under its icon, and the engine's list it draws. |
 | `src/notifications/` | The toasts, the bell and the drawer, and the desk's notifications they are drawn from. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
+| `src/brightness/` | The sun on the bar, the slider it opens, and the host message the level is read from. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications and the desk's bookmarks as one list by name (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the icon the compositor found its site naming), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme, drawn without the frame a glyph's tile has; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |
 | `src/screens/viewport-displays.ts` | The same, for a shell with no host: the window is the only display there is. |
-| `src/screens/Monitor.tsx` | Everything one screen of the desk shows: its bar, its windows, and the rectangles they are laid out in. Rendered once per screen by every page; drawn by the page whose window covers it. |
+| `src/screens/Monitor.tsx` | One screen of the desk's bar, rendered once per screen. |
+| `src/screens/stage-screens.ts` | What the `Stage` draws on each screen: its rectangles, the workspace it shows, and where that workspace's windows go. |
 | `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
 | `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
 | `src/keyboard/command.ts` | The `send-shell` commands, sway's words read into the desktop's actions. |
@@ -939,8 +949,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/` | The windows: what one is, everything that changes them, and where they are drawn. |
 | `src/window-management/window.ts` | The window model: a client's portal or a browser window. |
 | `src/window-management/window-state.ts` | Every change the desktop can undergo, as one pure reduction — and sway's commands as the actions it takes. The screens of the desk are in it, because which workspace is where is a fact about the desk rather than about a screen. |
-| `src/window-management/desk-channel.ts` | How the pages of one desk stay one desktop: who reduces it, and what crosses between them. |
-| `src/window-management/useWindows.ts` | The reduction wired to the host and to the other pages — which of the two this page is, and what it does with what it hears. |
+| `src/window-management/useWindows.ts` | The reduction wired to the host. |
 | `src/window-management/workspace.ts` | One workspace: the tiling, the floats over it, and which of the two the keyboard is in. |
 | `src/window-management/tree/` | The layout tree: sway's own model, one module per thing that can happen to it. |
 | `src/window-management/tree/node.ts` | What a node is: a window, or a container in one of the four layouts. |
@@ -951,7 +960,7 @@ shell that wants its own pictures owns its own list.
 | `src/window-management/tree/frames.ts` | The tree as rectangles: every visible window's frame, and the tabs of any container. |
 | `src/window-management/placement.ts` | What is on screen right now: the tiling, the floats over it or the one window filling everything, and the order they stack in. |
 | `src/window-management/rect.ts` | A rectangle of the desktop, and the bar the top of one carries. |
-| `src/window-management/Stage.tsx` | The windows on screen, each at the rectangle the layout gave it, and the ones still leaving. |
+| `src/window-management/Stage.tsx` | The windows on every screen, once for the desk, each at the rectangle the layout gave it, and the ones still leaving. |
 | `src/window-management/TitleBar.tsx` | The bar every window has: what it is called, and the way out of it. |
 | `src/window-management/WindowTitleBar.tsx` | A window's own bar, tiled or floating: one component for both, so floating a window keeps its bar's element and the bar eases with the window. Draggable while it floats. |
 | `src/window-management/title-focus.ts` | Which of sway's three client colors a bar is drawn in, and why a tab needs the third. |

@@ -318,6 +318,16 @@ export type BatteryMessage = {
 };
 
 /**
+ * How bright the screen is, as a shell reads it: a fraction, 0 through 1.
+ *
+ * Pushed like the battery, and like it absent rather than zero on a machine
+ * with nothing to report — no backlight is no slider.
+ */
+export type BrightnessMessage = {
+  level: number;
+};
+
+/**
  * What has been copied on this desktop, newest first.
  *
  * Pushed rather than asked for, like the battery: it arrives whenever the
@@ -501,6 +511,7 @@ export type HostMessageMap = {
   modifiers: ModifiersMessage;
   displays: DisplaysMessage;
   battery: BatteryMessage;
+  brightness: BrightnessMessage;
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
   idle: IdleMessage;

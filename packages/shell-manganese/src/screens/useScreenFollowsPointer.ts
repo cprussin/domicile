@@ -21,9 +21,8 @@ type Options = {
  * cross into, and the pointer could arrive there and leave the keyboard — and
  * so the next window to open — on the monitor it came from.
  *
- * Asked only when the keyboard is somewhere else. Every move of the hand is a
- * `pointermove`, and on a page that does not reduce the desk every `act` is a
- * message to the page that does.
+ * Asked only when the keyboard is somewhere else: every move of the hand is a
+ * `pointermove`.
  */
 export const useScreenFollowsPointer = ({
   act,

@@ -10,9 +10,9 @@
 {"type":"app_max_size","app_id":"app-2","size":[0.0,0.0]}
 {"type":"app_closed","app_id":"app-1"}
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
-{"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1,"mode":[1920,1080],"transform":"normal","fills_the_window":false},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2,"mode":[5120,2880],"transform":"normal","fills_the_window":false}]}
-{"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1,"mode":[1280,800],"transform":"normal","fills_the_window":false}]}
-{"type":"displays","displays":[{"name":"drm-3","position":[0,0],"size":[1800,3200],"scale":2,"mode":[3840,2160],"transform":"rotate-270","fills_the_window":true}]}
+{"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1,"mode":[1920,1080],"transform":"normal"},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2,"mode":[5120,2880],"transform":"normal"}]}
+{"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1,"mode":[1280,800],"transform":"normal"}]}
+{"type":"displays","displays":[{"name":"drm-3","position":[0,0],"size":[1800,3200],"scale":2,"mode":[3840,2160],"transform":"rotate-270"}]}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
 {"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"]}
 {"type":"focus_changed","app_id":"app-2"}
@@ -28,6 +28,7 @@
 {"type":"found_apps","query":"fire","apps":[{"id":"firefox.desktop","name":"Firefox","comment":"Browse the web","command":["firefox","--new-window"],"icon":"data:image/png;base64,cm93","preview":"data:image/svg+xml;base64,PHN2Zz4="},{"id":"xterm.desktop","name":"XTerm","comment":"","command":["xterm"]}],"bookmarks":[{"name":"Fire Drill","url":"https://example.com/drill","icon":"data:image/png;base64,aWNv"},{"name":"Fire Map","url":"https://example.com/map"}]}
 {"type":"found_apps","query":"zzz","apps":[],"bookmarks":[]}
 {"type":"battery","charge":0.42,"charging":true}
+{"type":"brightness","level":0.42}
 {"type":"theme","theme":"light"}
 {"type":"windows_theme","theme":"light"}
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}

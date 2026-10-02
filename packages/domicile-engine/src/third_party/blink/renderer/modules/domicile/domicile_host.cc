@@ -204,6 +204,16 @@ void DomicileHost::lock(ScriptState*, ExceptionState& exception_state) {
   }
 }
 
+// A request too: what this page hears is the `brightnesschanged` every chrome
+// on the desk hears once the backlight has moved.
+void DomicileHost::setBrightness(ScriptState*,
+                                 double level,
+                                 ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetBrightness(level);
+  }
+}
+
 // The whole of what a page may do to the seat's clipboard, and it names a row
 // rather than carrying text: a call that took bytes would let this document
 // write the desktop's clipboard, where this one only chooses among what has
@@ -569,7 +579,7 @@ void DomicileHost::Displays(
     described.push_back(MakeGarbageCollected<DomicileDisplay>(
         display->name, display->x, display->y, display->width, display->height,
         display->scale, display->mode_width, display->mode_height,
-        TransformName(display->transform), display->fills_the_window));
+        TransformName(display->transform)));
   }
   displays_ = MakeGarbageCollected<FrozenArray<DomicileDisplay>>(
       std::move(described));
@@ -662,6 +672,13 @@ void DomicileHost::Battery(double charge,
                            base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileBatteryEvent>(
       domicile_event_names::Battery(), charge, charging, Arrival(arrival)));
+}
+
+// Kept, like Displays: the event says the brightness moved and the attribute
+// says where it is, so a slider that mounts later still has a reading.
+void DomicileHost::Brightness(double level) {
+  brightness_ = level;
+  DispatchEvent(*Event::Create(domicile_event_names::Brightnesschanged()));
 }
 
 // Pushed, like Battery and unlike Files: the compositor hears a copy without

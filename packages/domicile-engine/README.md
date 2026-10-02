@@ -175,13 +175,13 @@ a new message.
 **Implemented — every member the fork keeps.** Outbound: `spawn`,
 `search_files`, `preview_file`, `search_apps`, `copy_clipboard_entry`,
 `activate_tray_item`, `dismiss_notifications`, `invoke_notification_action`, `focus_app`, `focus_chrome`, `close_app`, `resize_app`, `set_desktop_size`,
-`set_device_pixel_ratio`, `set_theme`, `unlock`, `lock`, `grab_shortcut`, `warp_pointer`, `key`,
+`set_device_pixel_ratio`, `set_theme`, `unlock`, `lock`, `set_brightness`, `grab_shortcut`, `warp_pointer`, `key`,
 `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
 Inbound: `welcome`, `app_appeared`, `app_titled`, `app_resized`,
 `app_min_size`, `app_max_size`,
 `popup_placed`,
 `app_closed`, `app_cursor`, `shortcut`, `modifiers`, `found_files`,
-`file_preview`, `found_apps`, `battery`, `clipboard`, `theme`,
+`file_preview`, `found_apps`, `battery`, `brightness`, `clipboard`, `theme`,
 `focus_changed`, `focus_requested`, `displays`, `keymap`, `extensions`, `tray`,
 `notifications`, `shell_config`.
 
@@ -464,7 +464,10 @@ another run can take in between:
   asked for in longest. An unused tree goes before a used one, so the first pins
   fill the pool rather than evicting each other;
 - a tree another run holds is passed over, which is what lets two engine jobs
-  run at once. `crux` has two heavy runners for that.
+  run at once. `crux` has two heavy runners for that;
+- when every tree is held, one run waits up to 45 minutes for one
+  (`DOMICILE_TREE_WAIT`) and any other is refused: two waiters would hold both
+  runners, and a tree is only dropped by its run's engine job, which needs one.
 
 **What two runs cannot share is the machine's memory.** 62G, no swap, and a
 cold Chromium link is most of it, so `.github/scripts/engine-compile-slot.sh`

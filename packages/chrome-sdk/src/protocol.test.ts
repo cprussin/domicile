@@ -177,7 +177,6 @@ describe("parseHostMessage", () => {
         JSON.stringify({
           displays: [
             {
-              fills_the_window: false,
               mode: [1920, 1080],
               name: "left",
               position: [0, 0],
@@ -186,7 +185,6 @@ describe("parseHostMessage", () => {
               transform: "normal",
             },
             {
-              fills_the_window: false,
               mode: [5120, 2880],
               name: "right",
               position: [1920, 0],
@@ -201,7 +199,6 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
-          fills_the_window: false,
           mode: [1920, 1080],
           name: "left",
           position: [0, 0],
@@ -210,7 +207,6 @@ describe("parseHostMessage", () => {
           transform: "normal",
         },
         {
-          fills_the_window: false,
           mode: [5120, 2880],
           name: "right",
           position: [1920, 0],
@@ -223,7 +219,7 @@ describe("parseHostMessage", () => {
     });
   });
 
-  it("decodes a monitor on its side, and that its window is that monitor", () => {
+  it("decodes a monitor on its side", () => {
     // The three fields a `<Screen>` turns into a CSS transform. `size` is the
     // box the shell lays out in, `mode` is the pixels the panel has, and
     // neither is derivable from the other: `scale` on the wire is the integer
@@ -233,7 +229,6 @@ describe("parseHostMessage", () => {
         JSON.stringify({
           displays: [
             {
-              fills_the_window: true,
               mode: [3840, 2160],
               name: "drm-3",
               position: [0, 0],
@@ -248,7 +243,6 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
-          fills_the_window: true,
           mode: [3840, 2160],
           name: "drm-3",
           position: [0, 0],
@@ -265,10 +259,8 @@ describe("parseHostMessage", () => {
     // Not a compatibility floor — nothing completes a handshake and then sends
     // a `displays` without these. It is that a captured session or a
     // hand-written frame is still something a shell reads, and the answer for
-    // all three is the desktop that had no notion of them: lying down, and not
-    // anybody's viewport. `[0, 0]` and not the size, because a mode nobody
-    // stated is not a mode — and `fills_the_window` is what decides whether
-    // anybody divides by it.
+    // both is the desktop that had no notion of them: lying down. `[0, 0]` and
+    // not the size, because a mode nobody stated is not a mode.
     expect(
       parseHostMessage(
         JSON.stringify({
@@ -281,7 +273,6 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({
       displays: [
         {
-          fills_the_window: false,
           mode: [0, 0],
           name: "left",
           position: [0, 0],

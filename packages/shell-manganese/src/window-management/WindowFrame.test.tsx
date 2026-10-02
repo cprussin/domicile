@@ -23,6 +23,7 @@ describe("WindowFrame", () => {
           crossed.push(at);
         }}
         onReach={noReach}
+        width={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -46,6 +47,7 @@ describe("WindowFrame", () => {
         onReach={() => {
           reached.push("reach");
         }}
+        width={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -54,5 +56,21 @@ describe("WindowFrame", () => {
     fireEvent.pointerDown(screen.getByRole("button"));
 
     expect(reached).toStrictEqual(["reach"]);
+  });
+
+  it("slides its parts the width of the screen it is on", () => {
+    // A workspace switch moves a screenful, and the window's own screen is
+    // the one whose width that is.
+    render(
+      <WindowFrame onHover={noHover} onReach={noReach} width={1280}>
+        <button type="button">part</button>
+      </WindowFrame>,
+    );
+
+    expect(
+      screen
+        .getByRole("button")
+        .parentElement?.style.getPropertyValue("--workspace-width"),
+    ).toBe("1280px");
   });
 });

@@ -1342,10 +1342,10 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
             // check can see it both given and taken away. Chromium reads this
             // as whether its page has focus, and a page that thinks it has
             // none takes characters but ignores Backspace and every shortcut.
-            let activated = states.chunks_exact(4).any(|state| {
-                u32::from_ne_bytes(state.try_into().unwrap())
-                    == xdg_toplevel::State::Activated as u32
-            });
+            let activated =
+                states.as_chunks::<4>().0.iter().any(|state| {
+                    u32::from_ne_bytes(*state) == xdg_toplevel::State::Activated as u32
+                });
             crate::say!(toplevel.id(), "activated({activated})");
             // Zero is a compositor saying "you choose", so there is nothing
             // to follow. Negative cannot happen — the protocol's own type is

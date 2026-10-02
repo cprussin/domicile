@@ -150,11 +150,6 @@ struct DisplayInfo {
   uint32 mode_width;
   uint32 mode_height;
   DisplayTransform transform;
-  // This display is the whole page. The browser turns and scales its window,
-  // so the page is the logical box above, upright; the mode and transform say
-  // how it was drawn. False for every desktop the page's window is the whole
-  // of.
-  bool fills_the_window;
 };
 
 // One thing that was copied, as a row of the clipboard's history.
@@ -403,6 +398,13 @@ interface ControlChannel {
   // nothing to shut, and answers nothing.
   Lock();
 
+  // Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
+  //
+  // Answered like SetTheme: with ControlChannelClient::Brightness to every
+  // chrome, once the kernel says the backlight moved. The compositor asks
+  // logind to write it and never turns the screen all the way off.
+  SetBrightness(double level);
+
   // This page's old frame is held for `theme`: the desk's windows may turn.
   //
   // Called from inside the shell's wipe, once the frame it wipes away from is
@@ -593,6 +595,14 @@ interface ControlChannelClient {
   // page can distinguish from a real full battery. A machine with no battery
   // sends nothing rather than a zero, for the same reason.
   Battery(double charge, bool charging, mojo_base.mojom.TimeTicks arrival);
+
+  // How bright the screen is, 0.0 through 1.0.
+  //
+  // Pushed like Battery: when the backlight moves -- a key, another program,
+  // or SetBrightness -- and once more to a chrome that has just connected. A
+  // machine with no backlight sends none. No arrival: the page keeps it as an
+  // attribute, like Displays, rather than handing it out on an event.
+  Brightness(double level);
 
   // What has been copied on this desktop, newest first.
   //

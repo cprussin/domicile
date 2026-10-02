@@ -4,6 +4,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_DOMICILE_DOMICILE_HOST_H_
 
+#include <optional>
+
 #include "base/time/time.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
@@ -109,6 +111,8 @@ class MODULES_EXPORT DomicileHost final
   void unlock(ScriptState*, const String& passphrase, ExceptionState&);
   // Lock the desk now. Answered with a `locked` event to every chrome.
   void lock(ScriptState*, ExceptionState&);
+  // Set the backlight. Answered with `brightnesschanged` to every chrome.
+  void setBrightness(ScriptState*, double level, ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with a `windowstheme` event once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
@@ -159,6 +163,9 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileDisplay>* displays() const {
     return displays_.Get();
   }
+
+  // The screen's brightness, or null until the compositor has said one.
+  std::optional<double> brightness() const { return brightness_; }
 
   // EventTarget:
   const AtomicString& InterfaceName() const override;
@@ -232,6 +239,7 @@ class MODULES_EXPORT DomicileHost final
   void Battery(double charge,
                bool charging,
                base::TimeTicks arrival) override;
+  void Brightness(double level) override;
   void Clipboard(Vector<domicile::mojom::blink::ClipboardEntryPtr> entries,
                  base::TimeTicks arrival) override;
   void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items,
@@ -291,6 +299,7 @@ class MODULES_EXPORT DomicileHost final
   // Replaced wholesale on every description rather than edited: the compositor
   // sends the whole desktop each time, and a `FrozenArray` is frozen.
   Member<FrozenArray<DomicileDisplay>> displays_;
+  std::optional<double> brightness_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;

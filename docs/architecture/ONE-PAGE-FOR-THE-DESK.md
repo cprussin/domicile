@@ -6,22 +6,14 @@ The engine shows that page on every monitor at the monitor's own density and
 refresh rate: one layout, one frame, and tiles rastered per monitor at that
 monitor's scale. A shell never sees rotation, density or a second page.
 
-## Problem
+## Why one page
 
-On a tty the engine opens one browser window per CRTC and loads the shell in
-each ([A-DESKTOP-ON-A-TTY.md](A-DESKTOP-ON-A-TTY.md#turning-a-monitor-is-the-engines-job)).
-Every shell pays for it:
-
-| Cost | Where it shows today |
-|---|---|
-| N copies of the shell's state, kept in step | `desk-channel.ts`, `leadsTheDesk` in manganese |
-| A window can't be on two monitors | `withOverhangs`, `<app mirror>`, `ExternalSurfaceProvider.Mirror` |
-| A drag can't leave its page | `pressed.on`, patch 0064's pointer holder |
-| Nothing animates across a seam | two documents, two clocks |
-| A `<webview>` can't cross | a guest has one embedder, so it reloads |
-
-Nested and headless already run one page over the whole desk
-(`Screens::described`). This makes the tty path do the same.
+On a tty a window is bound to a CRTC only if it is exactly that CRTC's
+rectangle (`ScreenManager::FindWindowAt`), so the engine needs a window per
+monitor. A page per window cost every shell: N copies of its state kept in
+step, a window that could not be on two monitors, a drag that could not leave
+its page, and nothing animating across a seam. So the windows only present;
+the shell is one page, as it already was nested (`Screens::described`).
 
 ## Design
 
@@ -36,13 +28,12 @@ Nested and headless already run one page over the whole desk
 
 ### The shell's contract
 
-| | Today on a tty | Now |
-|---|---|---|
-| `innerWidth`×`innerHeight` | one monitor's logical box | the desk's bounding box |
-| `domicile.displays[i].{x,y,width,height}` | re-origined per page | rects in that box, in `desk` coordinates from the profile |
-| `fillsTheWindow` | true on one display | removed |
-| `devicePixelRatio` | the monitor's scale | `S`, the largest scale on the desk |
-| pages | N | 1 |
+| | |
+|---|---|
+| `innerWidth`×`innerHeight` | the desk's bounding box |
+| `domicile.displays[i].{x,y,width,height}` | rects in that box, from the profile's `desk` rectangles |
+| `devicePixelRatio` | `S`, the largest scale on the desk |
+| pages | 1 |
 
 A gap between monitors is part of the box and never shown; the pointer never
 enters one (the crossing already follows `desk`).
@@ -65,12 +56,15 @@ enters one (the crossing already follows `desk`).
 
 ### Input
 
-- `DrmWindowHost` sends every pointer event to the host window, at its `desk`
-  position (`PointerCrossingFor`'s mapping, turned the other way). Keys go to
-  the host.
-- The cursor stays per CRTC (`DrmCursor`).
-- Patch 0064's holder goes: one window gets everything, so X's implicit grab is
-  Chromium's own again.
+- `DrmWindowHost` sends every pointer, scroll and key event to the host window
+  (`OzonePlatform::SetDomicileDeskHost`), at its `desk` position
+  (`PointerInWindow`). One window gets everything, so X's implicit grab is
+  Chromium's own.
+- A warp is asked for in the host's pixels and lands on the monitor holding
+  that place on the desk (`DrmCursor::MoveCursorTo` through
+  `PointerCrossingFor`).
+- The cursor stays per CRTC (`DrmCursor`); the host sets its shape on every
+  monitor.
 
 ### Raster: one tiling per display scale
 
@@ -111,6 +105,20 @@ buffer scale the client is configured at) is that of the display under the
 `<app>`'s center; the other monitor resamples the client's buffer, as every
 compositor does.
 
+### Floats across screens (manganese)
+
+- A `Float`'s `x`/`y` are in the pixels of the screen showing its workspace; a
+  drag (`WindowMoved`) is in page pixels. `floatDragged` converts by the home
+  screen's box, and when the float's **center** lands on another screen it
+  moves to the workspace that screen shows, with the keyboard (sway's
+  `floating_fix_coordinates`). A center in a gap stays put.
+- Until then it is drawn once, at its page position, over both screens: windows
+  are `position: fixed` in page pixels, and nothing clips a `<Screen>`.
+- Every window is drawn once for the desk: one `Stage` after every monitor's
+  bar, keyed by window id, so a float that changes screens keeps its element
+  and a browser window's `<webview>` does not reload. A workspace switch still
+  slides only its own screen, by that screen's width.
+
 ## Key decisions
 
 - **One frame with per-region tilings, over one commit to N `LayerTreeHostImpl`s
@@ -124,21 +132,22 @@ compositor does.
   display, which has more to lose.
 - **The host is the fastest display.** It drives BeginFrames, and a 144 Hz
   panel sampling a 60 Hz page would stutter.
+- **Center over pointer** for which screen owns a float. It matches sway, and
+  a window dragged by its far edge does not change owner the moment the hand
+  crosses.
 - **Presenters instead of one window over every CRTC.** `FindWindowAt`, per-CRTC
   page flips and rotation all assume a window per CRTC, and stay upstream.
 
 ## Plan
 
-Phase 1: one page, raster at S. Behind `--domicile-one-page` until phase 2,
-because a lower-density display is downsampled until then.
+Phase 1: one page, raster at S. Done, and the only model: a lower-density
+display is shown the page downsampled until phase 2.
 
 - [x] `ShellWindows`: one host, `DeskPresenters` for the rest
 - [x] The host's view sized to the desk box and offset; page `ScreenInfos` from the profile
-- [x] `DeskPresenters` show the page's surface; host chosen by refresh rate
-- [x] Pointer, scroll and keys to the host at `desk` positions (patch 0065)
-- [x] No `set_screen` with `--domicile-one-page`, so the compositor describes the whole desk (no compositor change)
-- [ ] Hardware check on `home-office-right-two`: `DOMICILE_ENGINE_ARGS=--domicile-one-page`
-- [ ] Pointer warp onto another display (clamped to the host's today)
+- [x] Pointer, scroll, keys and warps through the host at `desk` positions
+- [x] The N-page model removed: `set_screen`, `fills_the_window`, `<app mirror>`, the pointer holder, manganese's desk channel and overhangs
+- [x] Hardware check on `home-office-right-two`: geometry, input, floats across screens
 
 Phase 2: native density.
 
@@ -148,15 +157,11 @@ Phase 2: native density.
 - [ ] `AppendQuads` per display rect
 - [ ] Fall back to S under non-root render surfaces
 - [ ] `<app>` scale from the display under its center
-- [ ] `--domicile-one-page` on by default
 
-Phase 3: take the N-page model out.
+Phase 3: floats drawn once at desk level.
 
-- [ ] manganese: `desk-channel.ts`, `leadsTheDesk`, `withOverhangs`, `pressed.on`, `alone`/`coveredHere`
-- [ ] `<Screen>`'s `onThisPage`, `fillsTheWindow`, `scanout`
-- [ ] Engine: `<app mirror>`, `ExternalSurfaceProvider.Mirror`, patch 0064's holder, `ScreenOf`
-- [ ] Compositor: `set_screen`, `as_seen_from`, `Chrome.screen`
-- [ ] WRITING-A-SHELL, A-DESKTOP-ON-A-TTY, WINDOWS-ACROSS-SCREENS rewritten to one page
+- [x] Floats drawn once at desk level
+- [x] Browser windows cross screens without reloading
 
 ## Open questions
 

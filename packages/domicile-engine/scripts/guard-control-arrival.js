@@ -115,6 +115,7 @@ const EVENT_NAMES = [
   "filepreview",
   "apps",
   "battery",
+  "brightnesschanged",
   "clipboard",
   "theme",
   "windowstheme",

@@ -181,26 +181,6 @@ gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
   return ToPanel(*to, there->FromDesk(on_the_desk, UprightSize(*to)));
 }
 
-gfx::AcceleratedWidget PointerHolderAfter(gfx::AcceleratedWidget holder,
-                                          gfx::AcceleratedWidget window,
-                                          EventType type,
-                                          int flags,
-                                          int changed_button_flags) {
-  constexpr int kButtons = EF_LEFT_MOUSE_BUTTON | EF_MIDDLE_MOUSE_BUTTON |
-                           EF_RIGHT_MOUSE_BUTTON | EF_BACK_MOUSE_BUTTON |
-                           EF_FORWARD_MOUSE_BUTTON;
-  switch (type) {
-    case EventType::kMousePressed:
-      return holder == gfx::kNullAcceleratedWidget ? window : holder;
-    case EventType::kMouseReleased:
-      return (flags & ~changed_button_flags & kButtons) == 0
-                 ? gfx::kNullAcceleratedWidget
-                 : holder;
-    default:
-      return holder;
-  }
-}
-
 bool HasTheKeyboard(const gfx::Rect& bounds_in_screen,
                     const gfx::PointF& pointer) {
   return bounds_in_screen.Contains(gfx::ToFlooredPoint(pointer));

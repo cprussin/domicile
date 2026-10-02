@@ -33,6 +33,8 @@ export type DrawnWindow = {
    * or `undefined` unless its motion is one of the two shuffles.
    */
   restack: Restack | undefined;
+  /** The screen it is drawn on, or `undefined` when it is on none. */
+  screen: string | undefined;
   window: ShellWindow;
 };
 
@@ -40,14 +42,26 @@ export type DrawnWindow = {
 export type DrawnTab = {
   focused: boolean;
   motion: WindowMotion;
+  /** The screen it is drawn on. */
+  screen: string;
   tab: PlacedTab;
 };
+
+/** What each screen of the desk shows, by the screen's name. */
+type Desk = Readonly<Record<string, Shown>>;
 
 export type WindowMotions = {
   /** The windows to draw, in the order they were opened. */
   drawn: readonly DrawnWindow[];
-  /** Called by a window or a bar that has finished what it was doing. */
-  onPlayedOut: (id: string, motion: WindowMotion) => void;
+  /**
+   * Called by a window or a bar on `screen` that has finished what it was
+   * doing. The screen is what says whose workspace switch has ended.
+   */
+  onPlayedOut: (
+    id: string,
+    motion: WindowMotion,
+    screen: string | undefined,
+  ) => void;
   /** The tabs to draw, the ones sliding off among them. */
   tabs: readonly DrawnTab[];
 };
@@ -55,9 +69,12 @@ export type WindowMotions = {
 /** A shuffle playing, and which of the two animations it is playing as. */
 type Shuffling = { motion: Shuffle; restack: Restack };
 
+/** A window closing, and the screen it is closing on. */
+type ClosingOn = Closing & { screen: string };
+
 /** What is still playing out, and so still being drawn. */
 type Playing = {
-  closing: readonly Closing[];
+  closing: readonly ClosingOn[];
   /** The windows that have just opened and are still growing in. */
   opening: readonly string[];
   /** The floats still shuffling over, or under, one another. */
@@ -67,7 +84,8 @@ type Playing = {
    * played: the next one it is given is the other — see {@link nextShuffle}.
    */
   shuffled: readonly { id: string; motion: Shuffle }[];
-  switching: WorkspaceSwitch | undefined;
+  /** The workspace each screen has just switched away from, by screen. */
+  switching: Readonly<Record<string, WorkspaceSwitch>>;
   /**
    * The windows a tab switch is crossfading between: the ones fading in, and
    * the ones they are fading in over.
@@ -80,7 +98,7 @@ const NOTHING_PLAYING: Playing = {
   opening: [],
   restacking: [],
   shuffled: [],
-  switching: undefined,
+  switching: {},
   tabbing: [],
 };
 
@@ -104,8 +122,13 @@ const NOTHING_PLAYING: Playing = {
  * here says so. How long any of this takes is the stylesheet's — see
  * `movingStyles` — and a duration written here as well would be a second copy
  * of it to keep in step.
+ *
+ * **One list for the whole desk.** Each window is drawn once, on the screen
+ * showing it, so a float dragged onto the next screen is the element it was —
+ * and a `<webview>` that stays put is a page that does not load again. A
+ * workspace switch is its screen's alone.
  */
-export const useWindowMotion = (shown: Shown): WindowMotions => {
+export const useWindowMotion = (shown: Desk): WindowMotions => {
   // One state rather than two, so that what was last drawn and what is
   // playing because of it are never out of step: two updates made while
   // rendering are two updates React can keep one of — the desktop the raise
@@ -119,15 +142,18 @@ export const useWindowMotion = (shown: Shown): WindowMotions => {
     setState({ before: shown, playing: advanced(playing, before, shown) });
   }
 
-  const onPlayedOut = useCallback((id: string, motion: WindowMotion) => {
-    setState((now) => {
-      const next = played(now.playing, id, motion);
-      return next === now.playing ? now : { ...now, playing: next };
-    });
-  }, []);
+  const onPlayedOut = useCallback(
+    (id: string, motion: WindowMotion, screen: string | undefined) => {
+      setState((now) => {
+        const next = played(now.playing, id, motion, screen);
+        return next === now.playing ? now : { ...now, playing: next };
+      });
+    },
+    [],
+  );
 
   return {
-    drawn: withClosing(shown.windows, playing.closing).map((window) =>
+    drawn: withClosing(windowsOf(shown), playing.closing).map((window) =>
       drawnWindow(shown, playing, window),
     ),
     onPlayedOut,
@@ -136,34 +162,69 @@ export const useWindowMotion = (shown: Shown): WindowMotions => {
 };
 
 /** Whether anything the page draws from has changed since the last render. */
-const moved = (before: Shown, shown: Shown): boolean =>
-  before.activeId !== shown.activeId ||
-  before.current !== shown.current ||
-  before.placements !== shown.placements ||
-  before.tabs !== shown.tabs ||
-  before.windows !== shown.windows;
+const moved = (before: Desk, shown: Desk): boolean =>
+  Object.keys(before).length !== Object.keys(shown).length ||
+  Object.entries(shown).some(([name, now]) => {
+    const was = before[name];
+    return (
+      was === undefined ||
+      was.activeId !== now.activeId ||
+      was.current !== now.current ||
+      was.placements !== now.placements ||
+      was.tabs !== now.tabs ||
+      was.windows !== now.windows
+    );
+  });
+
+/**
+ * The windows the desk has open: every screen's list, which is the same list.
+ * None on a desk of no screens, which draws nothing.
+ */
+const windowsOf = (desk: Desk): readonly ShellWindow[] =>
+  Object.values(desk)[0]?.windows ?? [];
 
 /** What is playing once the desktop has moved from `before` to `shown`. */
-const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
-  const shuffles = restacked(before, shown).map((restack) => ({
-    motion: nextShuffle(playing, restack.id),
-    restack,
-  }));
-  const { concealed, revealed } = tabSwitched(before, shown);
+const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
+  // The screens there were and still are: one just plugged in has nothing to
+  // have moved from.
+  const screens = Object.entries(shown).flatMap(([name, now]) => {
+    const was = before[name];
+    return was === undefined ? [] : [{ name, now, was }];
+  });
+  const windows = windowsOf(shown);
+  const shuffles = screens
+    .flatMap(({ now, was }) => restacked(was, now))
+    .map((restack) => ({
+      motion: nextShuffle(playing, restack.id),
+      restack,
+    }));
+  const switched = screens.map(({ now, was }) => tabSwitched(was, now));
   const fades = [
-    ...concealed.map((id) => ({ id, motion: "concealing" as const })),
-    ...revealed.map((id) => ({ id, motion: "revealing" as const })),
+    ...switched.flatMap(({ concealed }) =>
+      concealed.map((id) => ({ id, motion: "concealing" as const })),
+    ),
+    ...switched.flatMap(({ revealed }) =>
+      revealed.map((id) => ({ id, motion: "revealing" as const })),
+    ),
   ];
   return {
-    closing: [...playing.closing, ...departed(before, shown.windows)],
+    closing: [
+      ...playing.closing,
+      ...screens.flatMap(({ name, now, was }) =>
+        departed(was, now.windows).map((closing) => ({
+          ...closing,
+          screen: name,
+        })),
+      ),
+    ],
     // The ones still open, and the ones that have just appeared. A window that
     // closed while it was still growing in never says it has arrived — it is
     // playing its departure instead — so the ones that are gone are dropped
     // here rather than waiting to be told.
     opening: [
-      ...playing.opening.filter((id) => holds(shown.windows, id)),
-      ...shown.windows
-        .filter(({ id }) => !holds(before.windows, id))
+      ...playing.opening.filter((id) => holds(windows, id)),
+      ...windows
+        .filter(({ id }) => !holds(windowsOf(before), id))
         .map(({ id }) => id),
     ],
     // A window raised again before it has settled plays the latest raise
@@ -171,23 +232,27 @@ const advanced = (playing: Playing, before: Shown, shown: Shown): Playing => {
     restacking: [
       ...playing.restacking.filter(
         ({ restack }) =>
-          holds(shown.windows, restack.id) && !shuffling(shuffles, restack.id),
+          holds(windows, restack.id) && !shuffling(shuffles, restack.id),
       ),
       ...shuffles,
     ],
     shuffled: [
       ...playing.shuffled.filter(
-        ({ id }) => holds(shown.windows, id) && !shuffling(shuffles, id),
+        ({ id }) => holds(windows, id) && !shuffling(shuffles, id),
       ),
       ...shuffles.map(({ motion, restack }) => ({ id: restack.id, motion })),
     ],
-    switching: switchedTo(before, shown) ?? playing.switching,
+    switching: Object.fromEntries(
+      screens.flatMap(({ name, now, was }) => {
+        const switching = switchedTo(was, now) ?? playing.switching[name];
+        return switching === undefined ? [] : [[name, switching]];
+      }),
+    ),
     // A window switched back before it has finished plays the latest half —
     // which is always the other one, so the browser starts it over.
     tabbing: [
       ...playing.tabbing.filter(
-        ({ id }) =>
-          holds(shown.windows, id) && !fades.some((fade) => fade.id === id),
+        ({ id }) => holds(windows, id) && !fades.some((fade) => fade.id === id),
       ),
       ...fades,
     ],
@@ -216,7 +281,7 @@ const nextShuffle = (playing: Playing, id: string): Shuffle =>
     : "restacking";
 
 /**
- * What is left playing once `id` says it has finished `motion`.
+ * What is left playing once `id` on `screen` says it has finished `motion`.
  *
  * The same state back when nothing moved, so that React bails out rather than
  * re-rendering the desktop. Every element of every window that was arriving or
@@ -226,6 +291,7 @@ const played = (
   playing: Playing,
   id: string,
   motion: WindowMotion,
+  screen: string | undefined,
 ): Playing => {
   switch (motion) {
     case "arriving-from-end":
@@ -234,10 +300,17 @@ const played = (
     case "leaving-to-start": {
       // Whichever of them speaks first: they were all started together and
       // they all run for the same length, so the first to finish is the
-      // switch finishing.
-      return playing.switching === undefined
+      // switch finishing — on its own screen, whose switch it was.
+      return screen === undefined || playing.switching[screen] === undefined
         ? playing
-        : { ...playing, switching: undefined };
+        : {
+            ...playing,
+            switching: Object.fromEntries(
+              Object.entries(playing.switching).filter(
+                ([name]) => name !== screen,
+              ),
+            ),
+          };
     }
     case "closing":
     case "closing-tab": {
@@ -282,12 +355,17 @@ const played = (
 };
 
 const drawnWindow = (
-  shown: Shown,
+  shown: Desk,
   playing: Playing,
   window: ShellWindow,
 ): DrawnWindow => {
   const closing = playing.closing.find((gone) => gone.window.id === window.id);
-  const placement = shown.placements.find(({ id }) => id === window.id);
+  // The screen showing it. One at most: a workspace is on one screen at a
+  // time, and a window is on one workspace.
+  const placed = Object.entries(shown).flatMap(([screen, { placements }]) => {
+    const placement = placements.find(({ id }) => id === window.id);
+    return placement === undefined ? [] : [{ placement, screen }];
+  })[0];
   if (closing !== undefined) {
     return {
       focused: closing.focused,
@@ -297,34 +375,41 @@ const drawnWindow = (
         closing.placement.tabbed === undefined ? "closing" : "closing-tab",
       placement: closing.placement,
       restack: undefined,
+      screen: closing.screen,
       window,
     };
-  } else if (placement === undefined) {
+  } else if (placed === undefined) {
     return leavingWindow(playing.switching, window);
   } else {
-    const motion = arriving(playing, window.id);
+    const motion = arriving(playing, placed.screen, window.id);
     return {
-      focused: shown.activeId === window.id,
+      focused: shown[placed.screen]?.activeId === window.id,
       motion,
-      placement,
+      placement: placed.placement,
       restack: playing.restacking.find(
         (shuffle) =>
           shuffle.restack.id === window.id && shuffle.motion === motion,
       )?.restack,
+      screen: placed.screen,
       window,
     };
   }
 };
 
 /**
- * How a window that is on screen got there, or what it last did there.
+ * How a window that is on `screen` got there, or what it last did there.
  *
  * Arriving outranks a raise: a window that is still growing in or sliding on
  * is not done arriving because something was put over it.
  */
-const arriving = (playing: Playing, id: string): WindowMotion => {
-  if (playing.switching !== undefined) {
-    return arrivalFrom(playing.switching.towards);
+const arriving = (
+  playing: Playing,
+  screen: string,
+  id: string,
+): WindowMotion => {
+  const switching = playing.switching[screen];
+  if (switching !== undefined) {
+    return arrivalFrom(switching.towards);
   } else if (playing.opening.includes(id)) {
     return "opening";
   } else {
@@ -349,52 +434,61 @@ const arriving = (playing: Playing, id: string): WindowMotion => {
  * surface and its page alive.
  */
 const leavingWindow = (
-  switching: WorkspaceSwitch | undefined,
+  switching: Playing["switching"],
   window: ShellWindow,
 ): DrawnWindow => {
-  const placement = switching?.placements.find(({ id }) => id === window.id);
-  if (switching === undefined || placement === undefined) {
+  const leaving = Object.entries(switching).flatMap(([screen, left]) => {
+    const placement = left.placements.find(({ id }) => id === window.id);
+    return placement === undefined ? [] : [{ left, placement, screen }];
+  })[0];
+  if (leaving === undefined) {
     return {
       focused: false,
       motion: "resting",
       placement: undefined,
       restack: undefined,
+      screen: undefined,
       window,
     };
   } else {
     return {
-      focused: switching.activeId === window.id,
-      motion: departureFor(switching.towards),
-      placement,
+      focused: leaving.left.activeId === window.id,
+      motion: departureFor(leaving.left.towards),
+      placement: leaving.placement,
       restack: undefined,
+      screen: leaving.screen,
       window,
     };
   }
 };
 
 /**
- * The tabs on screen, and the ones the workspace being left had.
+ * The tabs on every screen, and the ones the workspace each is leaving had.
  *
  * A tab names a container rather than a window, so nothing about it opens or
  * closes: the only thing a tab can be doing is riding a workspace on or off.
  */
 const drawnTabs = (
-  shown: Shown,
-  switching: WorkspaceSwitch | undefined,
-): readonly DrawnTab[] => [
-  ...shown.tabs.map((tab) => ({
-    focused: shown.activeId === tab.id,
-    motion:
-      switching === undefined
-        ? ("resting" as const)
-        : arrivalFrom(switching.towards),
-    tab,
-  })),
-  ...(switching === undefined
-    ? []
-    : switching.tabs.map((tab) => ({
-        focused: switching.activeId === tab.id,
-        motion: departureFor(switching.towards),
+  shown: Desk,
+  switching: Playing["switching"],
+): readonly DrawnTab[] =>
+  Object.entries(shown).flatMap(([screen, { activeId, tabs }]) => {
+    const left = switching[screen];
+    return [
+      ...tabs.map((tab) => ({
+        focused: activeId === tab.id,
+        motion:
+          left === undefined ? ("resting" as const) : arrivalFrom(left.towards),
+        screen,
         tab,
-      }))),
-];
+      })),
+      ...(left === undefined
+        ? []
+        : left.tabs.map((tab) => ({
+            focused: left.activeId === tab.id,
+            motion: departureFor(left.towards),
+            screen,
+            tab,
+          }))),
+    ];
+  });

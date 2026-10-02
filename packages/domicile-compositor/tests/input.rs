@@ -236,13 +236,9 @@ fn a_key_and_a_click_the_chrome_forwarded_reach_the_client() {
 
 /// A release nobody pressed is not a key.
 ///
-/// A desk of several monitors is several pages, and the engine hands the keys
-/// to whichever one the pointer is on — so a key pressed on one monitor comes
-/// up on the next when the pointer crosses while it is held, and that page
-/// sends the release without having sent the press. Which means every page
-/// sends every release it hears, and the seat is what knows which of them
-/// were ever down: a key the page typed into its own launcher comes up the
-/// same way, and it is not the window's.
+/// A page sends every release it hears, and the seat is what knows which of
+/// them were ever down: a key the page typed into its own launcher comes up
+/// the same way, and it is not the window's.
 #[test]
 fn a_release_the_seat_never_saw_pressed_does_not_reach_the_client() {
     let compositor = Compositor::started_with(ONE_DISPLAY);

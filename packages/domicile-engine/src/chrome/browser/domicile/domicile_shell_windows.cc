@@ -18,8 +18,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
-#include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/domicile/domicile_desk_presenters.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
@@ -33,8 +31,8 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/domicile_desk.h"
-#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
@@ -60,10 +58,6 @@ namespace {
 // string is not worth a dependency on //ui/ozone.
 constexpr char kScanoutPlatform[] = "drm";
 constexpr char kOzonePlatformSwitch[] = "ozone-platform";
-// See docs/architecture/ONE-PAGE-FOR-THE-DESK.md. Off until a page rasters at
-// every display's own scale: until then a lower-density display is shown the
-// page downsampled.
-constexpr char kOnePageSwitch[] = "domicile-one-page";
 
 // Whether this engine is the one that scans out.
 //
@@ -77,12 +71,6 @@ constexpr char kOnePageSwitch[] = "domicile-one-page";
 bool ScansOut() {
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
              kOzonePlatformSwitch) == kScanoutPlatform;
-}
-
-// Whether the desk is one page, hosted on one display and presented on the
-// rest, rather than a page per display.
-bool OnePage() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(kOnePageSwitch);
 }
 
 // The one page a desk is, from the layout the compositor last stated and the
@@ -219,7 +207,29 @@ std::vector<SightedShellWindow> SightingsOf(
   return sighted;
 }
 
-// Keeps one shell window per display, through startup and every hotplug.
+// Says when the page in a shell window has arrived or been replaced.
+//
+// WHAT LIGHTS A COLD DESK. The first reconciliation runs at
+// `PostBrowserStart`, before the shell's page has committed, so there is no
+// page to lay out or present yet; the page arriving is what asks again. And a
+// renderer that died and came back is a new view, which every presenter has to
+// mirror instead of the old one.
+class ShellPageWatch : public content::WebContentsObserver {
+ public:
+  ShellPageWatch(content::WebContents* contents, base::RepeatingClosure changed)
+      : content::WebContentsObserver(contents), changed_(std::move(changed)) {}
+
+  // content::WebContentsObserver:
+  void PrimaryPageChanged(content::Page&) override { changed_.Run(); }
+  void RenderViewReady() override { changed_.Run(); }
+
+ private:
+  base::RepeatingClosure changed_;
+};
+
+// Keeps the one shell page on the fastest display, laid out over the desk and
+// presented on every other display, through startup and every hotplug. See
+// docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 class ShellWindows : public display::DisplayObserver {
  public:
   ShellWindows()
@@ -235,29 +245,6 @@ class ShellWindows : public display::DisplayObserver {
   ShellWindows& operator=(const ShellWindows&) = delete;
 
   ~ShellWindows() override = default;
-
-  // A shell page has loaded in `window`: the display that window is on, by
-  // the time this answers.
-  //
-  // THE DESK IS RECONCILED FIRST, and that is two things at once.
-  //
-  // It places the window startup opened, which is nobody's to open -- `--app=`
-  // made it before this class existed -- so nothing has recorded it and the
-  // page in it asks this as it loads. Placing it here pins it where its
-  // rectangle is, once, which at that moment is right; from then on it is
-  // remembered, so the reconciliation and the page's own name for its screen
-  // are one answer.
-  //
-  // AND IT IS WHAT LIGHTS A COLD DESK. The first reconciliation runs at
-  // `PostBrowserStart`, where the shell's own window has not committed its URL
-  // yet -- so there is no window to copy, every other monitor is passed over
-  // with a line saying so, and nothing asks again until a hotplug. A desk
-  // booted with three monitors plugged in came up with one lit. A shell page
-  // loading is exactly the thing that was missing, so it is what asks again.
-  int64_t DisplayOfPageIn(BrowserWindowInterface* window) {
-    Reconcile();
-    return places_.Of(Identity(window));
-  }
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display&) override { ReconcileSoon(); }
@@ -295,9 +282,7 @@ class ShellWindows : public display::DisplayObserver {
     }
     // And the presenter on it, which is only a window the reconciliation
     // knows about.
-    if (OnePage()) {
-      ReconcileSoon();
-    }
+    ReconcileSoon();
   }
 
  private:
@@ -368,9 +353,9 @@ class ShellWindows : public display::DisplayObserver {
     // ONE PAGE IS ONE WINDOW, on the display that hosts it; the others are
     // presenters. Before the compositor states a layout there is no desk to
     // host, and the primary holds the page until there is.
-    const std::optional<Desk> desk = OnePage() ? DeskOf(all) : std::nullopt;
+    const std::optional<Desk> desk = DeskOf(all);
     std::vector<display::Display> displays = all;
-    if (OnePage() && !all.empty()) {
+    if (!all.empty()) {
       const int64_t host =
           desk.has_value() ? desk->geometry.host : all.front().id();
       std::erase_if(displays, [host](const display::Display& display) {
@@ -388,9 +373,37 @@ class ShellWindows : public display::DisplayObserver {
     for (int64_t id : plan.close) {
       Close(id, held, placed);
     }
-    if (OnePage()) {
-      Present(desk, all);
-    }
+    Watch();
+    Present(desk, all);
+  }
+
+  // Watches every browser window's page, so the page arriving or being
+  // replaced reconciles. A watch whose contents went away is dropped.
+  void Watch() {
+    std::erase_if(watches_, [](const std::unique_ptr<ShellPageWatch>& watch) {
+      return watch->web_contents() == nullptr;
+    });
+    GlobalBrowserCollection::GetInstance()->ForEach(
+        [this](BrowserWindowInterface* browser) {
+          tabs::TabInterface* tab = browser->GetActiveTabInterface();
+          if (tab == nullptr) {
+            return true;
+          }
+          content::WebContents* contents = tab->GetContents();
+          if (std::ranges::none_of(
+                  watches_,
+                  [contents](const std::unique_ptr<ShellPageWatch>& watch) {
+                    return watch->web_contents() == contents;
+                  })) {
+            watches_.push_back(std::make_unique<ShellPageWatch>(
+                contents,
+                // A NoDestructor, as `ReconcileSoon` says.
+                base::BindRepeating(&ShellWindows::ReconcileSoon,
+                                    base::Unretained(this))));
+          }
+          return true;
+        },
+        BrowserCollection::Order::kCreation);
   }
 
   // Lays the host's page out over the desk, and shows it on every other
@@ -466,10 +479,9 @@ class ShellWindows : public display::DisplayObserver {
     // the log about why.
     if (held.empty()) {
       // ORDINARY AT STARTUP and fatal nowhere: the first reconciliation runs
-      // before the shell's own window has committed its URL. `ScreenOf` asks
-      // again the moment a shell page loads, which is the soonest there is
-      // anything to copy -- so a monitor named here is lit a beat later
-      // rather than left dark.
+      // before the shell's own window has committed its URL. A shell page
+      // loading asks again (`ShellPageWatch`), which is the soonest there is
+      // anything to copy.
       VLOG(1) << "domicile: display " << id
               << " wants a shell window and there is no shell to copy yet";
       return;
@@ -537,9 +549,9 @@ class ShellWindows : public display::DisplayObserver {
                  << "; it stays dark until something asks again";
       return;
     }
-    // BEFORE THE PAGE IS LOADED, because the page's own channel asks which
-    // display it is on as it connects -- `ScreenOf` -- and this is the side
-    // that knows. Recorded outright rather than left to the first sighting:
+    // BEFORE THE PAGE IS LOADED, because its loading reconciles and the
+    // reconciliation has to know which display it is on. Recorded outright
+    // rather than left to the first sighting:
     // the window is placed on `id` by its bounds, and a hotplug between now
     // and the next reading would make that rectangle say something else.
     places_.Place(Identity(window), id);
@@ -578,71 +590,16 @@ class ShellWindows : public display::DisplayObserver {
   std::vector<int64_t> opening_;
   // Whether a `ReconcilePosted` is already on its way.
   bool reconcile_posted_ = false;
-  // Which display each window is on. Read by `ScreenOf` as well, through
-  // `TheShellWindows` below: a page told one monitor and a window opened for
-  // another is a monitor showing another monitor's desktop.
+  // Which display each window is on.
   ShellWindowPlaces places_;
-  // With --domicile-one-page, the windows showing the host's page.
+  // The windows showing the host's page on every other display.
   DeskPresenters presenters_;
+  // One per browser window's contents, so a page arriving reconciles.
+  std::vector<std::unique_ptr<ShellPageWatch>> watches_;
   base::CallbackListSubscription desk_laid_out_;
 };
 
-// The one instance, or null until `StartShellWindows` has made it.
-//
-// `ScreenOf` reads the displays it keeps and must not be what brings it into
-// being: constructing it reconciles the desk, and a page asking which monitor
-// it is on is no reason to open windows.
-ShellWindows*& TheShellWindows() {
-  static ShellWindows* one = nullptr;
-  return one;
-}
-
-// The shell window `frame` is the page of, or null for a frame that is in no
-// window of this browser's -- a unit test, a guest, a view on its way out.
-BrowserWindowInterface* WindowOf(content::RenderFrameHost* frame) {
-  content::WebContents* contents =
-      content::WebContents::FromRenderFrameHost(frame);
-  if (contents == nullptr) {
-    return nullptr;
-  }
-  BrowserWindowInterface* found = nullptr;
-  GlobalBrowserCollection::GetInstance()->ForEach(
-      [contents, &found](BrowserWindowInterface* browser) {
-        tabs::TabInterface* tab = browser->GetActiveTabInterface();
-        if (tab != nullptr && tab->GetContents() == contents) {
-          found = browser;
-          return false;
-        }
-        return true;
-      },
-      BrowserCollection::Order::kCreation);
-  return found;
-}
-
 }  // namespace
-
-std::string ScreenOf(content::RenderFrameHost* frame) {
-  if (!ScansOut() || frame == nullptr || TheShellWindows() == nullptr) {
-    return std::string();
-  }
-  BrowserWindowInterface* window = WindowOf(frame);
-  if (window == nullptr) {
-    return std::string();
-  }
-  // THE DISPLAY THIS WINDOW WAS OPENED FOR, not the one its rectangle reads
-  // as. The two disagree for as long as a hotplug is in flight, and this is
-  // read exactly then: a monitor plugged in is a window made, and the page in
-  // it connects while the rest of the desk is still being laid out. Read off
-  // the geometry, two pages claimed one monitor and a third monitor had a
-  // page that named somebody else's.
-  const int64_t on = TheShellWindows()->DisplayOfPageIn(window);
-  // ONE PAGE IS ON NO ONE DISPLAY. Named none, the compositor describes the
-  // whole desk to it, about the desk's own corner -- which is the page's.
-  if (OnePage() || on == display::kInvalidDisplayId) {
-    return std::string();
-  }
-  return base::StrCat({"drm-", base::NumberToString(on)});
-}
 
 void StartShellWindows() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -655,7 +612,6 @@ void StartShellWindows() {
   // for the life of the browser, and the browser outliving its own teardown
   // order is what a NoDestructor is for.
   static base::NoDestructor<ShellWindows> windows;
-  TheShellWindows() = windows.get();
 }
 
 }  // namespace domicile

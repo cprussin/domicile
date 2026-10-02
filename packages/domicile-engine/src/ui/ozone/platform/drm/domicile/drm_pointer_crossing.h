@@ -8,8 +8,6 @@
 #include <vector>
 
 #include "ui/display/display.h"
-#include "ui/events/event_constants.h"
-#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
@@ -44,7 +42,9 @@ struct PointerCrossing {
 // learns there is more than one monitor under it.
 //
 // `from` is the window the pointer is on, and `location` is where the hand's
-// motion took it in that window's panel pixels, before it is clamped in.
+// motion took it in that window's panel pixels, before it is clamped in -- or
+// where the desk's host asked for it to be warped to, which is anywhere on the
+// desk and so anywhere past the host's edge.
 //
 // ACROSS THE DESKTOP A PROFILE PLACES, NOT THE ENGINE'S. The compositor steps
 // the CRTCs across one row whatever the profile says, so the row knows
@@ -66,16 +66,15 @@ std::optional<PointerCrossing> PointerCrossingFor(
     const gfx::PointF& location);
 
 // Where a pointer at `location` on the engine's desktop is in `window`'s
-// panel pixels, which is where a window holding the pointer is told it is.
+// panel pixels, which is where the desk's host is told it is.
 //
-// A WINDOW THAT WAS PRESSED HOLDS THE POINTER UNTIL IT IS LET GO, wherever the
-// hand takes it -- a float dragged onto the next monitor is dragged by the
-// page it was pressed on. Upstream tells that window the pointer's place on
-// the engine's desktop less its own corner, and the engine's desktop is the
-// row the compositor steps the CRTCs across: it knows nothing of where a
-// profile put the monitors, how they are turned or how dense each is. So the
-// place is read off the screen the pointer is on, onto the desk, and back
-// onto `window` -- unclamped, since a pointer past its edge is the point.
+// THE HOST HEARS THE POINTER ON EVERY MONITOR. Upstream tells a window the
+// pointer's place on the engine's desktop less its own corner, and the
+// engine's desktop is the row the compositor steps the CRTCs across: it knows
+// nothing of where a profile put the monitors, how they are turned or how
+// dense each is. So the place is read off the screen the pointer is on, onto
+// the desk, and back onto `window` -- unclamped, since a pointer past its edge
+// is the point.
 //
 // On `window` itself, or where the layout places either screen nowhere, it is
 // the engine's arithmetic as upstream does it.
@@ -83,22 +82,6 @@ gfx::PointF PointerInWindow(const std::vector<PointerScreen>& screens,
                             const std::vector<DomicileDisplayLayout>& layout,
                             const gfx::PointF& location,
                             gfx::AcceleratedWidget window);
-
-// Which window holds the pointer once `window` has been sent a mouse event of
-// `type`, given the one that held it before (or none).
-//
-// A PRESS HOLDS THE POINTER IN ITS WINDOW UNTIL THE LAST BUTTON IS LET GO.
-// X and Wayland both give a pressed window every motion until the release --
-// the implicit grab -- and a page counts on it: a drag reads its moves off the
-// window it was pressed in. Upstream DRM routes each event to the window under
-// the pointer unless something called `SetCapture`, so a drag carried onto the
-// next monitor went on in that monitor's page, which had not been pressed,
-// and the page doing the drag heard nothing more.
-gfx::AcceleratedWidget PointerHolderAfter(gfx::AcceleratedWidget holder,
-                                          gfx::AcceleratedWidget window,
-                                          EventType type,
-                                          int flags,
-                                          int changed_button_flags);
 
 // Whether a window at `bounds_in_screen` takes a key, with the pointer at
 // `pointer` on the engine's desktop.

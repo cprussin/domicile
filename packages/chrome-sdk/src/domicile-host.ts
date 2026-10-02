@@ -110,8 +110,8 @@ export type DomicileDisplay = {
    * integer `wl_output` one, so 1800 times 2 is not 2160.
    *
    * Zero where the compositor said nothing, which is a desktop with no notion
-   * of modes rather than a panel with no pixels. Nothing divides by it unless
-   * {@link fillsTheWindow} says to.
+   * of modes rather than a panel with no pixels. Description only: nothing
+   * divides by it.
    */
   readonly modeWidth: number;
   readonly modeHeight: number;
@@ -126,16 +126,6 @@ export type DomicileDisplay = {
    * its left side needs.
    */
   readonly transform: string;
-  /**
-   * This screen is the whole page.
-   *
-   * True where the engine scans out — one window per CRTC, each told the
-   * single display it covers, and each turned and scaled by the engine so the
-   * page is this screen's logical box, upright. Nothing to map: the mode and
-   * transform above say how the engine drew it. False for every desktop the
-   * page's window is the whole of.
-   */
-  readonly fillsTheWindow: boolean;
 };
 
 /**
@@ -905,6 +895,11 @@ export type DomicileHostEventMap = {
    * is now.
    */
   displayschanged: Event;
+  /**
+   * The brightness moved. Bare — read {@link DomicileHost.brightness} for
+   * where it is now.
+   */
+  brightnesschanged: Event;
 };
 
 /**
@@ -1078,6 +1073,15 @@ export type DomicileHost = {
   lock(): void;
 
   /**
+   * Set the screen's backlight to `level`, 0 through 1.
+   *
+   * A request, like {@link setTheme}: answered with `brightnesschanged` to
+   * every chrome once the backlight has moved. The compositor never turns the
+   * screen all the way off, and a level that is not a number throws.
+   */
+  setBrightness(level: number): void;
+
+  /**
    * This page's old frame is held for `theme`: turn the desk's windows now.
    *
    * Called from inside a shell's wipe, once the frame it wipes away from is
@@ -1155,6 +1159,13 @@ export type DomicileHost = {
    * sends the whole desktop each time it changes.
    */
   readonly displays: readonly DomicileDisplay[] | null;
+
+  /**
+   * How bright the screen is, 0 through 1 — an attribute for the reason
+   * {@link displays} is one. `null` until the compositor has said, and for
+   * ever on a machine with no backlight.
+   */
+  readonly brightness: number | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,

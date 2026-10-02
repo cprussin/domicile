@@ -9,7 +9,6 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -42,10 +41,6 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
              const gfx::Size& size,
              double scale,
              EmbedCallback callback) override;
-  void Mirror(const std::string& app_id,
-              const viz::FrameSinkId& parent_frame_sink_id,
-              mojo::PendingRemote<mojom::ExternalSurfaceClient> client)
-      override;
 
  private:
   const raw_ptr<FrameSinkBroker> broker_;

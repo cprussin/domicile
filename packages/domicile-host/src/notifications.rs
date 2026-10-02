@@ -213,10 +213,12 @@ impl Notifications {
         let from_a_page = notify.hints.origin_name.is_some();
         let pairs: Vec<NotificationAction> = notify
             .actions
-            .chunks_exact(2)
-            .map(|pair| NotificationAction {
-                key: pair[0].clone(),
-                label: pair[1].clone(),
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|[key, label]| NotificationAction {
+                key: key.clone(),
+                label: label.clone(),
             })
             .filter(|action| !(from_a_page && action.key == BROWSER_SETTINGS_ACTION))
             .collect();

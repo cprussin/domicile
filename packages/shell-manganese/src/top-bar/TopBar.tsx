@@ -6,6 +6,7 @@ import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
+import { Brightness } from "../brightness/Brightness";
 import { Clock } from "../clock/Clock";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { Tray } from "../tray/Tray";
@@ -26,8 +27,9 @@ type Props = {
   /** The workspace on screen, which the bar marks. */
   current: string;
   /**
-   * Where the charge comes from — the bar reads nothing off the machine — and
-   * what an extension's action is clicked through.
+   * Where the charge and the brightness come from — the bar reads nothing off
+   * the machine — and what an extension's action and a new brightness are
+   * clicked through.
    */
   domicile: DomicileClient;
   /** The extensions with an action, which the tray shows. */
@@ -58,7 +60,7 @@ type Props = {
 
 /**
  * The bar across the top of the screen the chrome is on: the tray and the
- * workspaces, the clock, and the charge.
+ * workspaces, the clock, the brightness and the charge.
  *
  * **It launches nothing.** Everything this desktop does is on a key, and two
  * buttons for two of those keys were a ranking nobody made — the terminal is
@@ -73,7 +75,11 @@ type Props = {
  * extension's toolbar button, in one row in the order the user dragged them
  * into, whose clicks are theirs and have no key.
  *
- * **The theme toggle is the desktop's one control here, and it is not a
+ * **The brightness is the theme toggle's case, below**: it changes the screen
+ * already in front of you rather than putting anything on it. Its slider
+ * opens off the sun; the wheel over the sun moves it without opening.
+ *
+ * **The theme toggle is the desktop's other control here, and it is not a
  * launcher.** It changes what is already on screen rather than putting
  * something new on it,
  * which is the line the paragraph above draws — and there is no key to press
@@ -145,6 +151,7 @@ export const TopBar = ({
     <div className={endStyles}>
       {mode !== "default" && <span className={modeStyles}>{mode}</span>}
       <ThemeSwitch />
+      <Brightness domicile={domicile} />
       <Battery domicile={domicile} />
       <NotificationBell onOpen={onOpenNotifications} unread={unread} />
     </div>

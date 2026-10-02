@@ -16,8 +16,6 @@
 
 namespace blink {
 
-class LocalFrame;
-
 // <app> — a window belonging to a Wayland client, laid out by this page.
 //
 // It is a cc::SurfaceLayer embedding a viz surface that domicile-compositor
@@ -84,16 +82,6 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   void Embed();
   void OnEmbedded(const std::optional<viz::SurfaceId>&);
 
-  // Embed()'s other half, for an element with `mirror`: shows whatever
-  // surface the page configuring the window chose, and configures nothing.
-  void Mirror(const AtomicString& app_id, LocalFrame& frame);
-  void OnMirrored(const viz::SurfaceId&);
-
-  // Drops what this element has asked the browser for, so the next Embed()
-  // starts over -- as a mirror, or as the page configuring the window.
-  void ForgetEmbed();
-  void ForgetEmbedIfMirroring();
-
   bool CreateLayer();
 
   // The size last sent to the producer. Kept so that a layout that did not
@@ -110,12 +98,6 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // answer in flight is for the wrong app or the wrong size, so re-ask once it
   // lands.
   bool embed_stale_ = false;
-
-  // Set when this element stopped mirroring, so its next embed allocates a
-  // surface newer than any this renderer has embedded the window at. It is
-  // taking the window over from another page, and the surface it adopts may
-  // be one the producer has since submitted past.
-  bool reallocate_ = false;
 
   std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
   std::unique_ptr<ExternalSurfaceEmbedder> external_surface_embedder_;

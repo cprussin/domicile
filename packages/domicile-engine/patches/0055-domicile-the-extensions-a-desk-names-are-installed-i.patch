@@ -28,7 +28,7 @@ before it, and both blobs are that file's.
  2 files changed, 19 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 255979b041..59ff02e6c5 100644
+index 52afd43cca..b465203b7e 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -37,12 +37,14 @@ index 255979b041..59ff02e6c5 100644
  #include "base/task/bind_post_task.h"
 +#include "chrome/browser/domicile/domicile_extension_installer.h"
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
- #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/color_scheme.h"
-@@ -528,6 +529,18 @@
+ #include "components/domicile/browser/control_channel.h"
+@@ -526,7 +527,19 @@ void PopulateChromeFrameBinders(
+                 // reason above: NativeTheme belongs to the UI thread.
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
-                     base::BindRepeating(&domicile::SetProcessColorScheme)),
+-                    base::BindRepeating(&domicile::SetProcessColorScheme))));
++                    base::BindRepeating(&domicile::SetProcessColorScheme)),
 +                // AND WHICH EXTENSIONS THE PROFILE HOLDS. The desk's config
 +                // names them, and they are installed into this page's
 +                // profile, which is the one every browser window uses. Bound
@@ -54,10 +56,10 @@ index 255979b041..59ff02e6c5 100644
 +                    base::BindRepeating(
 +                        &domicile::InstallExtensionsInto,
 +                        Profile::FromBrowserContext(frame->GetBrowserContext())
-+                            ->GetWeakPtr())),
-                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
-                 // several windows, each loading the same shell, and the only
-                 // thing that differs between them is the display they cover.
++                            ->GetWeakPtr()))));
+       }));
+ 
+   // Domicile's engine fork: a <webview> asking for a guest to put behind it.
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
 index 35b02686a1..c84607a977 100644
 --- a/chrome/browser/prefs/browser_prefs.cc

@@ -79,6 +79,7 @@ fn chrome_messages_round_trip() {
         passphrase: Passphrase::from("open sesame"),
     });
     chrome_round_trip(&ChromeMessage::Lock);
+    chrome_round_trip(&ChromeMessage::SetBrightness { level: 0.25 });
 }
 
 /// The launcher's ask carries a query and no path, and that is the security
@@ -266,6 +267,7 @@ fn host_messages_round_trip() {
         charge: 0.42,
         charging: true,
     });
+    host_round_trip(&HostMessage::Brightness { level: 0.8 });
     host_round_trip(&HostMessage::AppClosed {
         app_id: "term".into(),
     });
@@ -494,6 +496,26 @@ fn an_empty_battery_is_a_reading_rather_than_a_silence() {
     assert_eq!(v["charging"], false);
 }
 
+/// The screen's brightness, as a fraction like the charge: the slider is drawn
+/// off it and the figures rounded where they are shown.
+#[test]
+fn the_brightness_is_a_fraction() {
+    let v = serde_json::to_value(HostMessage::Brightness { level: 0.42 }).unwrap();
+    assert_eq!(v["type"], "brightness");
+    assert_eq!(v["level"], 0.42);
+}
+
+/// A shell asks for a level and is answered with [`HostMessage::Brightness`],
+/// to every chrome, once the backlight has moved.
+#[test]
+fn setting_the_brightness_carries_the_level_and_nothing_else() {
+    let sent = r#"{"type":"set_brightness","level":0.5}"#;
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(sent).unwrap(),
+        ChromeMessage::SetBrightness { level: 0.5 }
+    );
+}
+
 /// Whether anybody is at the desk, in the one field that says it.
 ///
 /// A state and not an edge, which is the difference between this and
@@ -620,7 +642,6 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 1,
                 mode: [1920, 1080],
                 transform: DisplayTransform::Normal,
-                fills_the_window: false,
             },
             DisplayInfo {
                 name: "right".into(),
@@ -629,7 +650,6 @@ fn the_desktop_is_described_to_the_chrome() {
                 scale: 2,
                 mode: [5120, 2880],
                 transform: DisplayTransform::Normal,
-                fills_the_window: false,
             },
         ],
     };
@@ -645,7 +665,6 @@ fn the_desktop_is_described_to_the_chrome() {
     assert_eq!(v["displays"][1]["scale"], 2);
     assert_eq!(v["displays"][1]["mode"], serde_json::json!([5120, 2880]));
     assert_eq!(v["displays"][1]["transform"], "normal");
-    assert_eq!(v["displays"][1]["fills_the_window"], false);
 }
 
 #[test]
@@ -666,13 +685,11 @@ fn a_monitor_on_its_side_says_so_and_says_what_it_scans_out() {
         scale: 2,
         mode: [3840, 2160],
         transform: DisplayTransform::Rotate270,
-        fills_the_window: true,
     })
     .unwrap();
     assert_eq!(v["size"], serde_json::json!([1800, 3200]));
     assert_eq!(v["mode"], serde_json::json!([3840, 2160]));
     assert_eq!(v["transform"], "rotate-270");
-    assert_eq!(v["fills_the_window"], true);
 }
 
 #[test]
@@ -681,16 +698,12 @@ fn a_display_that_predates_these_fields_still_reads() {
     // send a `displays` without them. It is that a captured session, a
     // hand-written line, or a fixture from before the fork scanned anything
     // out is still a thing this crate reads, and the answer it gives for the
-    // three is the desktop that had no notion of them: lying down, and not
-    // anybody's viewport.
+    // two is the desktop that had no notion of them: lying down.
     let old: DisplayInfo =
         serde_json::from_str(r#"{"name":"left","position":[0,0],"size":[1920,1080],"scale":1}"#)
             .expect("it reads");
     assert_eq!(old.transform, DisplayTransform::Normal);
-    assert!(!old.fills_the_window);
-    // `[0, 0]` and not the size: a mode nobody stated is not a mode, and
-    // `fills_the_window` is false, which is the field that decides whether
-    // anybody divides by it.
+    // `[0, 0]` and not the size: a mode nobody stated is not a mode.
     assert_eq!(old.mode, [0, 0]);
 }
 

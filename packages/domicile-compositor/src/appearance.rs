@@ -57,8 +57,8 @@ use std::thread;
 
 use domicile_protocol::Theme;
 use tracing::{debug, warn};
+use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
-use zbus::SignalContext;
 
 /// The namespace every toolkit reads a color scheme out of.
 ///
@@ -235,11 +235,11 @@ fn answer(
         }
         // `block_on` is zbus's own re-export of the executor its `blocking`
         // module is built on, and the one thing that module does not wrap: a
-        // signal is emitted through the async `SignalContext` whichever API
+        // signal is emitted through the async `SignalEmitter` whichever API
         // you hold. This thread exists to block, so blocking here is what it
         // is for.
         zbus::block_on(Settings::setting_changed(
-            served.signal_context(),
+            served.signal_emitter(),
             NAMESPACE,
             COLOR_SCHEME,
             Value::from(color_scheme(next)),
@@ -402,7 +402,7 @@ impl Settings {
 
     #[zbus(signal)]
     async fn setting_changed(
-        context: &SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         namespace: &str,
         key: &str,
         value: Value<'_>,

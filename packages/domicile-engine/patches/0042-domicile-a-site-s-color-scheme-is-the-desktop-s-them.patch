@@ -35,28 +35,30 @@ index b6704b087d..7fa3deed6c 100644
      "//components/domicile:keyboard_layout",
      "//components/domicile:shell_scheme",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 0e90e7074e..255979b041 100644
+index 260b967dfc..52afd43cca 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -7,6 +7,7 @@
+@@ -6,6 +6,7 @@
+ 
  #include "base/task/bind_post_task.h"
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
- #include "chrome/browser/domicile/domicile_shell_windows.h"
 +#include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -520,6 +521,13 @@ void PopulateChromeFrameBinders(
+@@ -518,7 +519,14 @@ void PopulateChromeFrameBinders(
+                 base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::WarpPointerIn,
-                                         frame->GetGlobalId())),
+-                                        frame->GetGlobalId()))));
++                                        frame->GetGlobalId())),
 +                // AND WHICH WAY ROUND EVERY PAGE IS DRAWN. The desktop's
 +                // theme is the process's color scheme, which is what a site's
 +                // `prefers-color-scheme` reads. Bound here for the keymap's
 +                // reason above: NativeTheme belongs to the UI thread.
 +                base::BindPostTask(
 +                    content::GetUIThreadTaskRunner({}),
-+                    base::BindRepeating(&domicile::SetProcessColorScheme)),
-                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
-                 // several windows, each loading the same shell, and the only
-                 // thing that differs between them is the display they cover.
++                    base::BindRepeating(&domicile::SetProcessColorScheme))));
+       }));
+ 
+   // Domicile's engine fork: a <webview> asking for a guest to put behind it.

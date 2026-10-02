@@ -36,7 +36,7 @@ is what will say so, on the next patch that touches this file.
  1 file changed, 11 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index b00851ab8b..0e90e7074e 100644
+index ec672a5d5f..260b967dfc 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -44,13 +44,15 @@ index b00851ab8b..0e90e7074e 100644
  
  #include "base/task/bind_post_task.h"
 +#include "chrome/browser/domicile/domicile_pointer_warp.h"
- #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -509,6 +510,16 @@ void PopulateChromeFrameBinders(
+ #include "components/domicile/browser/web_view_guest.h"
+@@ -507,7 +508,17 @@ void PopulateChromeFrameBinders(
+                 &domicile::BindControlChannel, std::move(receiver),
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
-                     base::BindRepeating(&domicile::SetProcessKeymap)),
+-                    base::BindRepeating(&domicile::SetProcessKeymap))));
++                    base::BindRepeating(&domicile::SetProcessKeymap)),
 +                // AND WHERE THIS PAGE'S POINTER GOES WHEN IT ASKS. Bound
 +                // here for the keymap's reason above: the cursor belongs to
 +                // the UI thread, along with the window it is moved within,
@@ -60,7 +62,7 @@ index b00851ab8b..0e90e7074e 100644
 +                base::BindPostTask(
 +                    content::GetUIThreadTaskRunner({}),
 +                    base::BindRepeating(&domicile::WarpPointerIn,
-+                                        frame->GetGlobalId())),
-                 // AND WHICH WINDOW THIS PAGE IS. A desk of several monitors is
-                 // several windows, each loading the same shell, and the only
-                 // thing that differs between them is the display they cover.
++                                        frame->GetGlobalId()))));
+       }));
+ 
+   // Domicile's engine fork: a <webview> asking for a guest to put behind it.

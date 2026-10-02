@@ -71,6 +71,9 @@ class FakeHost implements DomicileHost {
   /** Empty until the compositor has described the desktop, as the fork's is. */
   displays: readonly DomicileDisplay[] | null = null;
 
+  /** Null until the compositor has said a brightness, as the fork's is. */
+  brightness: number | null = null;
+
   readonly #listeners = new Map<string, (event: never) => void>();
 
   addEventListener<T extends keyof DomicileHostEventMap>(
@@ -127,6 +130,9 @@ class FakeHost implements DomicileHost {
   lock(): void {
     this.calls.push(["lock"]);
   }
+  setBrightness(level: number): void {
+    this.calls.push(["setBrightness", level]);
+  }
   themeCaptured(theme: Theme): void {
     this.calls.push(["themeCaptured", theme]);
   }
@@ -180,17 +186,19 @@ class FakeHost implements DomicileHost {
     this.dispatch("displayschanged", new Event("displayschanged"));
   }
 
+  /** The backlight moving: the attribute, then the bare event. */
+  brightens(level: number): void {
+    this.brightness = level;
+    this.dispatch("brightnesschanged", new Event("brightnesschanged"));
+  }
+
   lastCall(): Call | undefined {
     return this.calls.at(-1);
   }
 }
 
-// A monitor of a desktop the page's window is the whole of, which is what
-// every test in this file is about. `domicile-host.ts` documents what the
-// other three mean; a screen that IS its window is
-// `shell-manganese/src/screens/host-displays.test.ts`.
+// A monitor of the desk. `domicile-host.ts` documents what each field means.
 const LEFT: DomicileDisplay = {
-  fillsTheWindow: false,
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
@@ -313,6 +321,17 @@ describe("DomicileClient", () => {
       );
 
       expect(seen).toStrictEqual([{ charge: 0.42, charging: true }]);
+    });
+
+    it("delivers the brightness off the attribute the bare event names", () => {
+      const seen: unknown[] = [];
+      domicile.on("brightness", (message) => {
+        seen.push(message);
+      });
+
+      host.brightens(0.42);
+
+      expect(seen).toStrictEqual([{ level: 0.42 }]);
     });
 
     it("delivers the clipboard's history nobody asked for", () => {
@@ -802,6 +821,10 @@ describe("DomicileClient", () => {
       domicile.lock();
       expect(host.lastCall()).toStrictEqual(["lock"]);
 
+      // And the brightness, which comes back as a `brightness` message.
+      domicile.setBrightness(0.3);
+      expect(host.lastCall()).toStrictEqual(["setBrightness", 0.3]);
+
       domicile.themeCaptured("light");
       expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);
 
@@ -1085,7 +1108,6 @@ describe("DomicileClient", () => {
       // displays configured the desktop is Domicile's own window, so every
       // resize and every density change re-describes it.
       const RIGHT: DomicileDisplay = {
-        fillsTheWindow: false,
         height: 1440,
         modeHeight: 2880,
         modeWidth: 5120,
