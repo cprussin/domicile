@@ -72,6 +72,7 @@ source_set("domicile") {
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
     "//skia",
+    "//ui/aura/domicile:desk_targeter",
     "//ui/gfx",
     "//ui/gfx/codec",
     "//url",
