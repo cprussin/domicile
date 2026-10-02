@@ -15,11 +15,10 @@ export enum TrayEntryKind {
  *
  * **The key outlives the icon**, which is the point of it: an application
  * closed and opened again, or an extension turned off and on, comes back where
- * the user put it. An extension's id is its own for good. An application's
- * `id` is not — it is the bus name the application answered on this time — so
- * its key is its title, which is the nearest thing to a name the compositor
- * sends. An application that retitles its icon, as a network indicator does
- * when the connection changes, is a new icon to the order.
+ * the user put it. Both ids are: an extension's is its own for good, and the
+ * compositor names an application's icon by what the application calls
+ * itself rather than by the bus name it answered on this time. Not its title,
+ * which a network indicator changes with the connection.
  */
 export const TrayEntry = {
   Extension: (extension: Extension) => ({
@@ -29,7 +28,7 @@ export const TrayEntry = {
   }),
   StatusNotifier: (item: TrayItem) => ({
     item,
-    key: `status-notifier:${item.title}`,
+    key: `status-notifier:${item.id}`,
     kind: TrayEntryKind.StatusNotifier as const,
   }),
 };

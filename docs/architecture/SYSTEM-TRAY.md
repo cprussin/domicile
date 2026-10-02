@@ -35,6 +35,9 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 - **Pictures as `data:` URLs.** Named icons are looked up in `hicolor`
   (`status`, `apps`, `devices`, `panel`) and the item's `IconThemePath`; pixels
   are encoded as a stored-deflate PNG, no dependency added.
+- **An icon is named by its `Id`**, not its bus name, which is new every run:
+  manganese keeps an icon's place by it, so a reopened application comes back
+  where it was. Two with one `Id` get `#2`; one with none, its bus and path.
 - **`Passive` items are not sent.** Every tray hides them.
 - **A click passes the lock.** It goes through the Wayland thread, and a locked
   desk refuses it as a command, like `Spawn`.

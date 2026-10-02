@@ -115,11 +115,11 @@ pub fn method(action: TrayAction) -> &'static str {
 /// Every item registered with the watcher, in the order it registered, and
 /// what each is shown as.
 ///
-/// An item is known by three names, and this is what keeps them straight: the
-/// id a shell is told (its bus name and path, written together), the bus name
-/// it is called on — which may be a well-known one — and the unique name of
-/// the connection behind it, which is what its signals and its going away
-/// arrive under.
+/// An item is known by four names, and this is what keeps them straight: its
+/// id here (its bus name and path, written together), the name a shell is told
+/// (see [`Registry::named`]), the bus name it is called on — which may be a
+/// well-known one — and the unique name of the connection behind it, which is
+/// what its signals and its going away arrive under.
 #[derive(Debug, Default)]
 pub struct Registry {
     entries: Vec<Entry>,
@@ -131,6 +131,8 @@ struct Entry {
     bus: String,
     owner: String,
     path: String,
+    /// The name a shell is told: `None` until its properties have been read.
+    name: Option<String>,
     /// `None` until its properties have been read, and while it is passive.
     shown: Option<TrayItem>,
 }
@@ -146,6 +148,7 @@ impl Registry {
                 bus: bus.to_string(),
                 owner: owner.to_string(),
                 path: path.to_string(),
+                name: None,
                 shown: None,
             });
             id
@@ -166,6 +169,53 @@ impl Registry {
         self.entries
             .iter()
             .find(|entry| entry.id == id)
+            .map(|entry| (entry.bus.clone(), entry.path.clone()))
+    }
+
+    /// The name the item `id` is told to a shell by, which `calls_itself` —
+    /// its `Id` — settles the first time it is asked.
+    ///
+    /// **A name that outlives the item**, because a shell keeps an icon's
+    /// place by it: the spec has an item's `Id` stay the same between runs,
+    /// where the bus name in `id` is a new one each time. Two items calling
+    /// themselves one thing are told apart by a number, and one calling
+    /// itself nothing is named by `id`.
+    pub fn named(&mut self, id: &str, calls_itself: &str) -> String {
+        let taken: Vec<String> = self
+            .entries
+            .iter()
+            .filter_map(|entry| entry.name.clone())
+            .collect();
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.id == id)
+            .expect("only an item held is named");
+        entry
+            .name
+            .get_or_insert_with(|| {
+                let base = if calls_itself.is_empty() {
+                    id
+                } else {
+                    calls_itself
+                };
+                (1..)
+                    .map(|n| match n {
+                        1 => base.to_string(),
+                        n => format!("{base}#{n}"),
+                    })
+                    .find(|name| !taken.contains(name))
+                    .expect("a name nobody holds")
+            })
+            .clone()
+    }
+
+    /// Where the item a shell named `name` is called: its bus name and its
+    /// path.
+    pub fn clicked(&self, name: &str) -> Option<(String, String)> {
+        self.entries
+            .iter()
+            .find(|entry| entry.name.as_deref() == Some(name))
             .map(|entry| (entry.bus.clone(), entry.path.clone()))
     }
 

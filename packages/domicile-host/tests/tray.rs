@@ -433,6 +433,72 @@ mod registry {
     }
 
     #[test]
+    fn an_item_is_named_to_a_shell_by_what_it_calls_itself() {
+        // Its `Id`, which the spec says stays the same between runs, where its
+        // bus name is a new one each time: a shell keeps an icon's place by
+        // this name, so an application closed and opened again comes back
+        // where the user put it.
+        let mut registry = two();
+        assert_eq!(
+            registry.named(":1.42/org/ayatana/nm", "nm-applet"),
+            "nm-applet"
+        );
+        registry.vanished(":1.42");
+        registry.register(":1.88", ":1.88", "/org/ayatana/nm");
+
+        assert_eq!(
+            registry.named(":1.88/org/ayatana/nm", "nm-applet"),
+            "nm-applet"
+        );
+    }
+
+    #[test]
+    fn an_item_keeps_its_name_once_named() {
+        let mut registry = two();
+        registry.named(":1.42/org/ayatana/nm", "nm-applet");
+
+        assert_eq!(
+            registry.named(":1.42/org/ayatana/nm", "nm-applet"),
+            "nm-applet"
+        );
+        assert_eq!(
+            registry.named(":1.42/org/ayatana/nm", "renamed"),
+            "nm-applet"
+        );
+    }
+
+    #[test]
+    fn two_items_calling_themselves_one_thing_are_told_apart() {
+        let mut registry = two();
+        registry.named(":1.42/org/ayatana/nm", "nm-applet");
+
+        assert_eq!(
+            registry.named("org.kde.SNI-1/StatusNotifierItem", "nm-applet"),
+            "nm-applet#2"
+        );
+    }
+
+    #[test]
+    fn an_item_calling_itself_nothing_is_named_by_its_bus_and_its_path() {
+        assert_eq!(
+            two().named(":1.42/org/ayatana/nm", ""),
+            ":1.42/org/ayatana/nm"
+        );
+    }
+
+    #[test]
+    fn a_click_finds_its_item_by_the_name_a_shell_was_told() {
+        let mut registry = two();
+        registry.named(":1.42/org/ayatana/nm", "nm-applet");
+
+        assert_eq!(
+            registry.clicked("nm-applet"),
+            Some((":1.42".into(), "/org/ayatana/nm".into()))
+        );
+        assert_eq!(registry.clicked(":1.42/org/ayatana/nm"), None);
+    }
+
+    #[test]
     fn every_item_is_listed_by_id() {
         assert_eq!(
             two().ids(),

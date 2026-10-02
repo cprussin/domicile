@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { arrange, moveTo } from "./tray-order";
+import { arrange, moveTo, place } from "./tray-order";
 
 const identity = (key: string) => key;
 
@@ -18,6 +18,18 @@ describe("arrange", () => {
     expect(
       arrange(["new", "b", "a", "newer"], identity, ["x", "a", "b"]),
     ).toStrictEqual(["a", "b", "new", "newer"]);
+  });
+});
+
+describe("place", () => {
+  it("places shown items it had never placed after the rest, as they arrived", () => {
+    // And one it placed that is not shown keeps its place.
+    expect(place(["a", "gone"], ["new", "a", "newer"])).toStrictEqual([
+      "a",
+      "gone",
+      "new",
+      "newer",
+    ]);
   });
 });
 

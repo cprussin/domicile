@@ -22,6 +22,19 @@ export const arrange = <T>(
 };
 
 /**
+ * `order` with every one of the `shown` keys it had never placed placed after
+ * the rest, as they arrived — so an icon comes back where it first appeared
+ * rather than after whatever arrived while it was gone.
+ */
+export const place = (
+  order: readonly string[],
+  shown: readonly string[],
+): readonly string[] => [
+  ...order,
+  ...shown.filter((key) => !order.includes(key)),
+];
+
+/**
  * `order` with `dragged` moved to where `target` is: after it when it was
  * dragged rightward, before it when leftward — so the item under the pointer
  * is always the one that makes way.
@@ -36,7 +49,7 @@ export const moveTo = (
   dragged: string,
   target: string,
 ): readonly string[] => {
-  const full = [...order, ...shown.filter((key) => !order.includes(key))];
+  const full = place(order, shown);
   const rightward = full.indexOf(dragged) < full.indexOf(target);
   const without = full.filter((key) => key !== dragged);
   const at = without.indexOf(target) + (rightward ? 1 : 0);
