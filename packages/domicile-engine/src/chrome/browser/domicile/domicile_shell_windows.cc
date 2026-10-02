@@ -33,6 +33,7 @@
 #include "content/public/browser/domicile_desk.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/aura/domicile/desk_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/base_window.h"
@@ -442,6 +443,9 @@ class ShellWindows : public display::DisplayObserver {
     }
     content::WebContents* contents =
         host->GetActiveTabInterface()->GetContents();
+    // And aura hands the page what lands past the host window's edge, which
+    // is every pointer on another monitor.
+    aura::TargetDeskPage(window->GetRootWindow(), contents->GetNativeView());
     content::SetDomicileDeskScreenInfos(
         contents,
         DeskScreenInfos(desk->geometry, desk->places,
