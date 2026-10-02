@@ -67,6 +67,7 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
     SAW_CHROME=1
     SAW_GUEST=1
     SAW_REACHED=1
+    SAW_FOCUSIN=1
     SAW_ACTIVE=1
     SAW_BLUR=1
     SAW_GUEST_FOCUS=1
@@ -102,6 +103,7 @@ reason() { # $1 NEGATIVE, then NAME=value overrides
     SAW_CHROME=1
     SAW_GUEST=1
     SAW_REACHED=1
+    SAW_FOCUSIN=1
     SAW_ACTIVE=1
     SAW_BLUR=1
     SAW_GUEST_FOCUS=1
@@ -261,6 +263,21 @@ expect "a branch that never ran does not blame the refusal" "no" \
     SAW_SET_FOCUSED=0)"
 
 echo
+echo "the focus event, which every focus-based handler in a shell is written against"
+# THE ENGINE'S OWN EVENT IS NOT ENOUGH ON ITS OWN. A popover's focus-out
+# dismissal, a focus trap and React's onFocus all listen for `focusin`, so a
+# run where only the element's announcement arrived is one where every one of
+# them is still blind to a click in a page.
+expect "an announcement with no focusin is a failure" "fail" \
+  "$(verdict 0 SAW_FOCUSIN=0)"
+expect "an announcement with no focusin names the focus event" "yes" \
+  "$(blames "NO FOCUS EVENT" 0 SAW_FOCUSIN=0)"
+expect "no focusin is asked after the reach it cannot explain" "no" \
+  "$(blames "NO FOCUS EVENT" 0 SAW_FOCUSIN=0 SAW_REACHED=0 SAW_AT_ELEMENT=0)"
+expect "a focusin with nothing clicked is the control's failure" "fail" \
+  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0)"
+
+echo
 echo "activeElement, which is a reading short rather than a failure"
 expect "a reach with no activeElement is still a pass" "pass" \
   "$(verdict 0 SAW_ACTIVE=0)"
@@ -272,7 +289,7 @@ expect "activeElement is checked after the readings it cannot excuse" "fail" \
 echo
 echo "the control run — nothing clicked in the window, so nothing may cross"
 expect "nothing reached is the pass" "pass" \
-  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0)"
+  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_FOCUSIN=0)"
 expect "a reach is the failure" "fail" "$(verdict 1 SAW_GUEST=0)"
 expect "a reach says the positive run would be measuring the configuration" \
   "yes" "$(blames "not evidence" 1 SAW_GUEST=0)"
@@ -285,9 +302,9 @@ expect "a press in the guest blames the geometry" "yes" \
 # The control is a control whatever the rest of the readings say: it never
 # clicks into the window, so what the window contains is not its business.
 expect "an empty window is not the control's business" "pass" \
-  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_PAGE=0)"
+  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_FOCUSIN=0 SAW_PAGE=0)"
 expect "activeElement is not the control's business" "pass" \
-  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_ACTIVE=0)"
+  "$(verdict 1 SAW_GUEST=0 SAW_REACHED=0 SAW_FOCUSIN=0 SAW_ACTIVE=0)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

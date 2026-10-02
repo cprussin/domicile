@@ -283,10 +283,11 @@ SAW_GUEST=$(saw "GUARD guest-mousedown")
 # nothing, so a reach reported about anything else in this document would be a
 # reading about something other than the window.
 SAW_REACHED=$(saw "GUARD window-reached target=webview")
-# The focus event that is NOT how this works, kept as a reading: it is
-# suppressed because the embedder's page has lost focus by the time the element
-# is focused, and a run where it starts arriving is a run where the engine
-# changed under this.
+# The ordinary focus event, which upstream suppresses here -- the embedder's
+# page has lost focus by the time the element is focused -- and the fork
+# dispatches anyway. A CLAIM beside the element's own announcement: a shell's
+# focus-out dismissal, focus traps and React's onFocus are all written against
+# `focusin`, and none of them can hear the announcement.
 SAW_FOCUSIN=$(saw "GUARD window-focusin target=webview")
 # The claim's own event heard at the element instead of at the document. Only
 # ever read when the claim is missing, and then it is the whole difference
@@ -357,7 +358,7 @@ elif [ "$NEGATIVE" = "1" ]; then
 from. The strip and the click are derived from one number here, so this is \
 geometry: the window is not the size the run asked for, or the element does \
 not start where the strip ends"
-  elif [ "$SAW_REACHED" = "1" ]; then
+  elif [ "$SAW_REACHED" = "1" ] || [ "$SAW_FOCUSIN" = "1" ]; then
     FAILURE="the element was reached with nothing clicked in the guest. Then \
 the positive run's reading could be the attach, the load, or a shell focusing \
 its own element, and it is not evidence that a press crossed out of a guest"
@@ -435,6 +436,14 @@ past. So focus never reached this renderer's FocusController with the guest's \
 frame, and no patch in it can be the fix; what is missing is in the browser \
 process, between the press and SetFocusedFrameTree. Whether the guest's own \
 window took focus (focus= above) says whether it moved there at all"
+elif [ "$SAW_FOCUSIN" != "1" ]; then
+  FAILURE="THE ELEMENT ANNOUNCED ITSELF AND NO FOCUS EVENT FOLLOWED: \
+domicile-guest-focus reached the document and focusin did not, so every \
+focus-based handler in a shell -- a popover's focus-out dismissal, a focus \
+trap, React's onFocus -- is still blind to a click in a page. \
+HTMLWebViewElement::DispatchSuppressedFocus is what sends it, and only while \
+the embedder's page is unfocused; the engine log's line from it says whether \
+it ran"
 elif [ "$SAW_ACTIVE" != "1" ]; then
   PASSED="a press inside a browser window reached the shell's document as a \
 focusin on the element the guest hangs off, which is what raises the window. \

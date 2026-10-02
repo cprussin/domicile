@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
 import {
   act,
   fireEvent,
@@ -145,7 +144,7 @@ describe("Brightness", () => {
     document.body.append(page);
     await opened(backlight);
 
-    fireEvent(page, new Event(WEBVIEW_GUEST_FOCUS_EVENT, { bubbles: true }));
+    fireEvent.focusIn(page);
 
     await waitForElementToBeRemoved(() => screen.queryByRole("slider"));
     page.remove();

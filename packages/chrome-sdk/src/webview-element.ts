@@ -17,12 +17,12 @@
  *
  * THE ENGINE DISPATCHES THIS, and the name is the contract between it and a
  * shell: the page in the view is a guest with a browsing context of its own, so
- * no pointer event inside it crosses back out, and the focus it takes cannot
- * cross either — `Document::SetFocusedElement` dispatches `focus` and `focusin`
- * only while the page is focused, and a guest taking focus is the moment the
- * embedder's page loses it. So the fork's element says so in an event that is
- * not a focus event. It bubbles, so a chrome can listen on the window it drew
- * rather than on the view.
+ * no pointer event inside it crosses back out. The focus it takes does — the
+ * fork sends the view a real `focus` and `focusin`, which upstream holds back
+ * while the embedder's page is unfocused — so focus-based code needs nothing
+ * from this. This is for raising windows: it fires on every focus the element
+ * takes, by whichever route. It bubbles, so a chrome can listen on the window
+ * it drew rather than on the view.
  *
  * A shell reads it as "the user is working in this window now". See
  * `HTMLWebViewElement::GuestTookFocus` in the engine.

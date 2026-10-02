@@ -9,6 +9,7 @@ import {
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
+import type { FocusEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
@@ -513,12 +514,14 @@ export const BrowserWindow = ({
   };
 
   // Focus arriving anywhere in this window is the user starting to work in it.
-  const reach = () => {
+  const reach = (event: FocusEvent) => {
     // Whichever window was the active one: focus follows the cursor here, so
     // the pointer made this window the active one on its way in and a click is
-    // still what raises it. The one reach that is not the user's is the focus
-    // this window gives its own page — see `focusing`.
-    if (!focusing.current) {
+    // still what raises it. The reaches that are not the user's are the focus
+    // this window gives its own page — see `focusing` — and a page under
+    // another tab taking it back, which the engine reports as a `focusin` on
+    // the view as well as in its own event — see the effect above.
+    if (!(focusing.current || (covered && event.target === view))) {
       onReach();
     }
   };
