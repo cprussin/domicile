@@ -1324,7 +1324,10 @@ the timer cannot be stopped, and it fires on a healthy machine. Patch `0023`.
 context menu are each a top-level window of their own on desktop Linux, so on
 a tty they opened, took the capture, and were never drawn. Patch `0051` keeps
 them inside the window they opened over, as ash does, wherever
-`presents_every_window` is false.
+`presents_every_window` is false. A tooltip is worse than invisible: it asks for
+software compositing, which ozone/drm aborts the GPU process on (*Scanout and
+rendering can be different cards*), and it names a context rather than a parent,
+which `0051` first missed. Patch `0076`.
 
 ### How to see a modeset
 
