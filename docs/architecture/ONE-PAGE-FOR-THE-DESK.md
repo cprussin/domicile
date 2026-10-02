@@ -60,6 +60,10 @@ enters one (the crossing already follows `desk`).
   (`OzonePlatform::SetDomicileDeskHost`), at its `desk` position
   (`PointerInWindow`). One window gets everything, so X's implicit grab is
   Chromium's own.
+- A position on another monitor is past the host window's edge. aura explores a
+  window only where its bounds reach, so the host's root targets the page for
+  anything it would otherwise keep (`aura::TargetDeskPage`). Capture and a
+  pressed button's window still come first.
 - A warp is asked for in the host's pixels and lands on the monitor holding
   that place on the desk (`DrmCursor::MoveCursorTo` through
   `PointerCrossingFor`).
