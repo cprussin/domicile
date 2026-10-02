@@ -111,15 +111,22 @@ export const Desktop = ({ domicile }: Props) => {
   const notifications = useNotifications(domicile, toasts);
   const { read } = notifications;
   const now = useNow();
-  // Whether the drawer is out. Opening it is reading everything in it, and
+  // The screen the drawer is out on — the one whose bell was pressed — or
+  // `undefined` while it is in. Opening it is reading everything in it, and
   // takes every toast down: each one is in the drawer, and a deck over the
   // drawer would be the same notifications twice.
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const openNotifications = useCallback(() => {
-    setNotificationsOpen(true);
-    read();
-    toasts.close();
-  }, [read, toasts]);
+  const [notificationsOn, setNotificationsOn] = useState<string | undefined>(
+    undefined,
+  );
+  const notificationsOpen = notificationsOn !== undefined;
+  const openNotifications = useCallback(
+    (screen: string) => {
+      setNotificationsOn(screen);
+      read();
+      toasts.close();
+    },
+    [read, toasts],
+  );
 
   // And whether the desk is locked, which is pushed for a harder reason: it is
   // the compositor's state rather than this page's, because the compositor is
@@ -225,7 +232,9 @@ export const Desktop = ({ domicile }: Props) => {
           key={name}
           name={name}
           notifications={{
-            onOpen: openNotifications,
+            onOpen: () => {
+              openNotifications(name);
+            },
             unread: notifications.unread,
           }}
           onOpenExtension={(extension) => {
@@ -350,6 +359,7 @@ export const Desktop = ({ domicile }: Props) => {
         open={windows.launcherOpen}
         opening={opening}
         preview={preview}
+        screen={windows.focused}
         search={search}
         searchApps={searchApps}
       />
@@ -363,6 +373,7 @@ export const Desktop = ({ domicile }: Props) => {
           act(WindowAction.ClipboardDismissed());
         }}
         open={windows.clipboardOpen}
+        screen={windows.focused}
       />
       {/*
         Over the windows and under every panel: a toast over the launcher
@@ -381,14 +392,15 @@ export const Desktop = ({ domicile }: Props) => {
         now={now}
         onAction={notifications.invoke}
         onDismiss={notifications.dismiss}
+        // Opened only by a bell, which says which screen it is on, so all
+        // the drawer itself reports is closing.
         onOpenChange={(open) => {
-          if (open) {
-            openNotifications();
-          } else {
-            setNotificationsOpen(false);
+          if (!open) {
+            setNotificationsOn(undefined);
           }
         }}
         open={notificationsOpen && !lock.locked}
+        screen={notificationsOn}
       />
       {/*
         Last, and over every panel above it: the launcher and the clipboard are

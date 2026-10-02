@@ -22,6 +22,7 @@ const drawer = (
       }}
       onOpenChange={() => undefined}
       open
+      screen={undefined}
     />,
   );
 

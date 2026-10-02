@@ -16,6 +16,8 @@ type Props = {
   /** Escape, a click on the backdrop, or a row chosen. The desktop decides. */
   onDismiss: () => void;
   open: boolean;
+  /** The screen it opens on: the one the keyboard is on. */
+  screen: string;
 };
 
 /**
@@ -35,7 +37,13 @@ type Props = {
  * both the choice and the dismissal, because a panel still up over the window
  * you are about to paste into has not finished the job.
  */
-export const Clipboard = ({ entries, onCopy, onDismiss, open }: Props) => (
+export const Clipboard = ({
+  entries,
+  onCopy,
+  onDismiss,
+  open,
+  screen,
+}: Props) => (
   <ModalDialog
     onOpenChange={(next) => {
       if (!next) {
@@ -43,6 +51,7 @@ export const Clipboard = ({ entries, onCopy, onDismiss, open }: Props) => (
       }
     }}
     open={open}
+    screen={screen}
     title="Clipboard"
   >
     {/*

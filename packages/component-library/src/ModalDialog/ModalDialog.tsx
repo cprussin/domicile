@@ -5,6 +5,7 @@ import { css, cva } from "../../styled-system/css";
 import { center, flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import type { ExtendProps } from "../extend-props";
+import { useScreenRegion } from "../Screen/DisplayProvider";
 
 export const { createHandle } = BaseDialog;
 
@@ -63,6 +64,12 @@ type Props = ExtendProps<
      * one the keyboard is on while the others are only dimmed under it.
      */
     popup?: boolean | undefined;
+    /**
+     * The display the popup is drawn over, by name — the one the keyboard is
+     * on. A page spanning several monitors otherwise centers it on the whole
+     * desk, which is the middle monitor. Needs a `DisplayProvider`.
+     */
+    screen?: string | undefined;
     size?: Size | undefined;
     surface?: Surface | undefined;
     title?: ReactNode | undefined;
@@ -76,74 +83,80 @@ const ModalDialogComponent = ({
   footer,
   placement = "center",
   popup = true,
+  screen,
   size = "md",
   surface = "card",
   title,
   trigger,
   ...rootProps
-}: Props) => (
-  <BaseDialog.Root {...rootProps}>
-    {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
-    <BaseDialog.Portal>
-      <BaseDialog.Backdrop
-        className={backdropStyles({ surface })}
-        data-backdrop=""
-        data-surface={surface}
-      />
-      {/*
+}: Props) => {
+  const region = useScreenRegion(screen);
+  return (
+    <BaseDialog.Root {...rootProps}>
+      {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop
+          className={backdropStyles({ surface })}
+          data-backdrop=""
+          data-surface={surface}
+        />
+        {/*
         Without its popup, a dialog still gets one to close on, drawn as
         nothing. The dialog finishes closing when its popup has, so one with
         none would never finish, and its backdrop would go on taking every
         click on the page.
       */}
-      {!popup && <BaseDialog.Popup hidden />}
-      {popup && (
-        <BaseDialog.Viewport className={viewportStyles}>
-          {/* The placement, the size and the surface are written on the popup rather than
+        {!popup && <BaseDialog.Popup hidden />}
+        {popup && (
+          <BaseDialog.Viewport className={viewportStyles} style={region}>
+            {/* The placement, the size and the surface are written on the popup rather than
             carried in its class name so that what a dialog is doing is
             legible in the inspector — and so a test has something to read. */}
-          <BaseDialog.Popup
-            className={popupStyles}
-            data-placement={placement}
-            data-size={size}
-            data-surface={surface}
-          >
-            {title !== undefined && (
-              <header className={headerStyles({ hasCloseButton: closeButton })}>
-                <BaseDialog.Title className={titleStyles}>
-                  {title}
-                </BaseDialog.Title>
-              </header>
-            )}
-            {closeButton && (
-              <span className={closeStyles}>
-                <BaseDialog.Close
-                  render={
-                    <Button label="Close" variant="ghost">
-                      <XIcon />
-                    </Button>
-                  }
-                />
-              </span>
-            )}
-            <div
-              className={bodyStyles({
-                hasCloseButton: closeButton,
-                hasFooter: footer !== undefined,
-                hasTitle: title !== undefined,
-              })}
+            <BaseDialog.Popup
+              className={popupStyles}
+              data-placement={placement}
+              data-size={size}
+              data-surface={surface}
             >
-              {children}
-            </div>
-            {footer !== undefined && (
-              <footer className={footerStyles}>{footer}</footer>
-            )}
-          </BaseDialog.Popup>
-        </BaseDialog.Viewport>
-      )}
-    </BaseDialog.Portal>
-  </BaseDialog.Root>
-);
+              {title !== undefined && (
+                <header
+                  className={headerStyles({ hasCloseButton: closeButton })}
+                >
+                  <BaseDialog.Title className={titleStyles}>
+                    {title}
+                  </BaseDialog.Title>
+                </header>
+              )}
+              {closeButton && (
+                <span className={closeStyles}>
+                  <BaseDialog.Close
+                    render={
+                      <Button label="Close" variant="ghost">
+                        <XIcon />
+                      </Button>
+                    }
+                  />
+                </span>
+              )}
+              <div
+                className={bodyStyles({
+                  hasCloseButton: closeButton,
+                  hasFooter: footer !== undefined,
+                  hasTitle: title !== undefined,
+                })}
+              >
+                {children}
+              </div>
+              {footer !== undefined && (
+                <footer className={footerStyles}>{footer}</footer>
+              )}
+            </BaseDialog.Popup>
+          </BaseDialog.Viewport>
+        )}
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
+  );
+};
 
 export const ModalDialog = Object.assign(ModalDialogComponent, {
   Close: BaseDialog.Close,
@@ -189,7 +202,10 @@ const backdropStyles = cva({
   },
 });
 
+// A size container, so the popup's offsets and widths are fractions of the
+// screen it is over rather than of a page that may span several.
 const viewportStyles = center({
+  containerType: "size",
   inset: 0,
   overflowY: "auto",
   paddingBlock: "4vh",
@@ -210,18 +226,17 @@ const popupStyles = flex({
   },
   // Centered by the auto margins on both sides; at the top by dropping the
   // one at the start for a fixed offset, which leaves the end margin to take
-  // up the slack. A `vh` rather than a spacing token because what it is a
-  // fraction of is the screen — the same reason the viewport's own padding
-  // above is one.
+  // up the slack. A `cqh` rather than a spacing token because what it is a
+  // fraction of is the screen — the viewport's, which is a container.
   "&[data-placement=top]": {
     marginBlockEnd: "auto",
-    marginBlockStart: "8vh",
+    marginBlockStart: "8cqh",
   },
   "&[data-size=lg]": {
-    inlineSize: "min({spacing.180}, 92vw)",
+    inlineSize: "min({spacing.180}, 92cqw)",
   },
   "&[data-size=xl]": {
-    inlineSize: "min({spacing.320}, 92vw)",
+    inlineSize: "min({spacing.320}, 92cqw)",
   },
   "&[data-surface=glass]": {
     _before: {
@@ -263,7 +278,7 @@ const popupStyles = flex({
   borderRadius: "lg",
   boxShadow: "modal",
   direction: "column",
-  inlineSize: "min({spacing.120}, 92vw)",
+  inlineSize: "min({spacing.120}, 92cqw)",
   marginBlock: "auto",
   opacity: 1,
   outlineStyle: "none",

@@ -5,6 +5,7 @@ import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import type { ExtendProps } from "../extend-props";
+import { useScreenRegion } from "../Screen/DisplayProvider";
 
 export const { createHandle } = BaseDialog;
 
@@ -21,6 +22,12 @@ type Props = ExtendProps<
   {
     children: ReactNode;
     footer?: ReactNode | undefined;
+    /**
+     * The display whose edge the panel slides in from, by name. A page
+     * spanning several monitors otherwise slides it in from the desk's far
+     * edge. Needs a `DisplayProvider`.
+     */
+    screen?: string | undefined;
     title?: ReactNode | undefined;
     trigger?: ReactElement | undefined;
   }
@@ -29,41 +36,45 @@ type Props = ExtendProps<
 const SlideOverComponent = ({
   children,
   footer,
+  screen,
   title,
   trigger,
   ...rootProps
-}: Props) => (
-  <BaseDialog.Root {...rootProps}>
-    {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
-    <BaseDialog.Portal>
-      <BaseDialog.Backdrop className={backdropStyles} />
-      <BaseDialog.Viewport className={viewportStyles}>
-        <BaseDialog.Popup className={popupStyles}>
-          <header className={headerStyles}>
-            {title !== undefined && (
-              <BaseDialog.Title className={titleStyles}>
-                {title}
-              </BaseDialog.Title>
+}: Props) => {
+  const region = useScreenRegion(screen);
+  return (
+    <BaseDialog.Root {...rootProps}>
+      {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop className={backdropStyles} />
+        <BaseDialog.Viewport className={viewportStyles} style={region}>
+          <BaseDialog.Popup className={popupStyles}>
+            <header className={headerStyles}>
+              {title !== undefined && (
+                <BaseDialog.Title className={titleStyles}>
+                  {title}
+                </BaseDialog.Title>
+              )}
+              <BaseDialog.Close
+                render={
+                  <Button label="Close" variant="ghost">
+                    <XIcon />
+                  </Button>
+                }
+              />
+            </header>
+            <div className={bodyStyles({ hasFooter: footer !== undefined })}>
+              {children}
+            </div>
+            {footer !== undefined && (
+              <footer className={footerStyles}>{footer}</footer>
             )}
-            <BaseDialog.Close
-              render={
-                <Button label="Close" variant="ghost">
-                  <XIcon />
-                </Button>
-              }
-            />
-          </header>
-          <div className={bodyStyles({ hasFooter: footer !== undefined })}>
-            {children}
-          </div>
-          {footer !== undefined && (
-            <footer className={footerStyles}>{footer}</footer>
-          )}
-        </BaseDialog.Popup>
-      </BaseDialog.Viewport>
-    </BaseDialog.Portal>
-  </BaseDialog.Root>
-);
+          </BaseDialog.Popup>
+        </BaseDialog.Viewport>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
+  );
+};
 
 export const SlideOver = Object.assign(SlideOverComponent, {
   Close: BaseDialog.Close,
@@ -87,9 +98,11 @@ const backdropStyles = css({
 });
 
 // The full-viewport layer that pins the panel to the trailing (right) edge and
-// stretches it to full height, so the popup itself only owns its own width.
+// stretches it to full height, so the popup itself only owns its own width. A
+// size container, so that width is a fraction of the screen it is over.
 const viewportStyles = flex({
   align: "stretch",
+  containerType: "size",
   inset: 0,
   justify: "flex-end",
   position: "fixed",
@@ -113,7 +126,7 @@ const popupStyles = flex({
   borderInlineStartWidth: "1px",
   boxShadow: "modal",
   direction: "column",
-  inlineSize: "min({spacing.120}, 92vw)",
+  inlineSize: "min({spacing.120}, 92cqw)",
   outlineStyle: "none",
   transform: "translateX(0)",
   transition: "transform {durations.normal} {easings.out}",

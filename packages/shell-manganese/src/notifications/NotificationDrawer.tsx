@@ -14,6 +14,8 @@ type Props = {
   /** The time now, for how long ago each arrived. */
   now: number;
   open: boolean;
+  /** The screen it slides out on: the one whose bell opened it. */
+  screen: string | undefined;
   onOpenChange: (open: boolean) => void;
   /** Clear `ids`. */
   onDismiss: (ids: readonly number[]) => void;
@@ -36,6 +38,7 @@ export const NotificationDrawer = ({
   onDismiss,
   onOpenChange,
   open,
+  screen,
 }: Props) => (
   <SlideOver
     footer={
@@ -61,6 +64,7 @@ export const NotificationDrawer = ({
     }
     onOpenChange={onOpenChange}
     open={open}
+    screen={screen}
     title="Notifications"
   >
     {items.length === 0 ? (
