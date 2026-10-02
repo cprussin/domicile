@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 2 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: an extension's popup window is the shell's to draw
+
+Three lists, so that the event a `<webview>` dispatches when an extension
+asks for a popup window -- `chrome.windows.create({type: "popup", url})`,
+which is Bitwarden's sign-in -- is compiled and reaches the page:
+`core/html/build.gni` builds `DomicilePopupWindowEvent`, `idl_in_core.gni`
+generates its bindings, and `generated_in_core.gni` names the generated pair.
+
+Everything else is new files under src/: the event, the element's
+`popupwindow` attribute carried in CreateGuest, the `PopupWindowRequested`
+member on WebViewGuestClient, and the desk's popup windows and its
+windows.create and windows.remove.
+
+The position in each list is beside patch 0053's file chooser event, and the
+context is the lists as 0053 leaves them. The post-image blob hashes are
+zeroed, for the reason patch 0035 gives.
+
+Verified: not built. This repository cannot build Chromium;
+`guard-extension-popup-window.sh` measures it on `crux` with the rest of
+the engine job.
+---
+ third_party/blink/renderer/bindings/generated_in_core.gni | 2 ++
+ third_party/blink/renderer/bindings/idl_in_core.gni       | 1 +
+ third_party/blink/renderer/core/html/build.gni            | 2 ++
+ 3 files changed, 5 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
+index 9b1be4d..0000000 100644
+--- a/third_party/blink/renderer/bindings/generated_in_core.gni
++++ b/third_party/blink/renderer/bindings/generated_in_core.gni
+@@ -1198,6 +1198,8 @@ generated_interface_sources_in_core = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_file_chooser_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_popup_window_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_popup_window_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
+index 2623a3b..0000000 100644
+--- a/third_party/blink/renderer/bindings/idl_in_core.gni
++++ b/third_party/blink/renderer/bindings/idl_in_core.gni
+@@ -461,6 +461,7 @@ static_idl_files_in_core = [
+   "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_new_window_event.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_popup_window_event.idl",
+   "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
+   "//third_party/blink/renderer/core/html/html_head_element.idl",
+   "//third_party/blink/renderer/core/html/html_heading_element.idl",
+diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
+index b347f08..0000000 100644
+--- a/third_party/blink/renderer/core/html/build.gni
++++ b/third_party/blink/renderer/core/html/build.gni
+@@ -98,6 +98,8 @@ blink_core_sources_html = [
+   "domicile/domicile_file_chooser_event.h",
+   "domicile/domicile_new_window_event.cc",
+   "domicile/domicile_new_window_event.h",
++  "domicile/domicile_popup_window_event.cc",
++  "domicile/domicile_popup_window_event.h",
+   "domicile/html_app_element.cc",
+   "domicile/html_app_element.h",
+   "domicile/html_web_view_element.cc",
+-- 
+2.43.0

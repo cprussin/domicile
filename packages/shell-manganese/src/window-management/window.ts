@@ -53,6 +53,18 @@ export type ClientWindow = {
 };
 
 /**
+ * The window an extension asked for with `chrome.windows.create` — see
+ * `WEBVIEW_POPUP_WINDOW_EVENT`: the id `chrome.windows` already gave it, the
+ * address to show and the size it wanted, 0 on an axis it did not ask about.
+ */
+export type PopupWindowRequest = {
+  height: number;
+  url: string;
+  width: number;
+  windowId: number;
+};
+
+/**
  * How far a client will size its window, per axis, in the pixels its box is
  * laid out in — `undefined` on an axis it does not limit.
  */
@@ -87,8 +99,24 @@ export const ShellWindow = {
   Browser: (ordinal: number, src: string) => ({
     id: `browser:${ordinal.toString()}`,
     kind: WindowKind.Browser as const,
+    popupWindow: undefined,
     src,
     title: siteOf(src),
+  }),
+
+  /**
+   * A browser window that is an extension's window — see
+   * {@link PopupWindowRequest}. A browser window in every other way, which is
+   * why it is one: tiled, floated and closed the same, sharing their ids.
+   * `popupWindow` is its id to `chrome.windows`, which the view is handed as
+   * it is made.
+   */
+  PopupWindow: (ordinal: number, { url, windowId }: PopupWindowRequest) => ({
+    id: `browser:${ordinal.toString()}`,
+    kind: WindowKind.Browser as const,
+    popupWindow: windowId,
+    src: url,
+    title: siteOf(url),
   }),
 };
 

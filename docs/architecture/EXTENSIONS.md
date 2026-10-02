@@ -3,7 +3,8 @@
 A desk's config names Chrome extensions, and the engine installs them into the
 profile its browser windows already use. Each extension's action shows in the
 shell's tray and opens its popup in a `<webview>`. To `chrome.tabs`, every
-`<webview>` is a tab, and the whole desktop is one `chrome.windows` window.
+`<webview>` is a tab, and the whole desktop is one `chrome.windows` window —
+plus a `popup` window for each one an extension opens, which the shell draws.
 
 ## Problem
 
@@ -119,9 +120,38 @@ Mutations go where the thing they change lives:
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | The shell, as `domicile-focus-request` on that element |
 | `tabs.remove(id)` | The shell, as `domicile-close` on that element. Answered once asked |
 | `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
-| `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`, `windows.create`, `windows.remove`; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update`'s bounds and state | An error: `not supported on a Domicile desk` |
+| `windows.create({type: "popup", url})` | A popup window; see below |
+| `windows.remove(id)` | A popup window's tab, as `tabs.remove`. The desk's own window is refused |
+| `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`; `windows.create` of anything but a popup at one address; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update`'s bounds and state | An error: `not supported on a Domicile desk` |
 | `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, the element's own zoom path, per site through `HostZoomMap`. The element hears it as `domicile-zoom-change`. `0` is the default; outside blink's browser range is refused |
 | `tabs.getZoomSettings`, `setZoomSettings` | The desk: `automatic`, `per-origin`, the guest's one mode. Setting it is answered; any other is refused with the error above |
+
+### Popup windows: the desk's, drawn by the shell
+
+Bitwarden's sign-in is `windows.create({type: "popup", url, width, height})`,
+closed with `windows.remove` once signed in. A popup window is a second
+`DomicileWindowController`, type `popup`, owned by the desk's:
+
+| Step | Where |
+|---|---|
+| `windows.create` makes the window, with no tab, and fires `windows.onCreated` | `DomicileWindowController::OpenPopup` |
+| The shell is asked for its tab on the active tab's element: `domicile-popup-window` with `windowId`, `url`, `width`, `height` (0 for none) | `WebViewGuestClient.PopupWindowRequested`, `DomicilePopupWindowEvent` (patch 0078) |
+| The shell opens `<webview popupwindow={windowId} src={url}>`; the element sends the id in `CreateGuest`, and its guest becomes the window's one tab | `HTMLWebViewElement::PopupWindow`, `AddToDesk` |
+| `windows.create` answers with the window, populated | `WhenNextTab` |
+| `windows.remove`, or the page's `window.close()`, is `domicile-close` on that element; the window goes with its tab, firing `windows.onRemoved` | `DeskWindowsRemoveFunction`, `PopupEmptied` |
+
+What the window answers to:
+
+| Call | A popup window |
+|---|---|
+| `windows.getCurrent`, `tabs.query({currentWindow})` | from its own page, itself; from no tab (a service worker), the desk's |
+| `windows.getLastFocused`, `lastFocusedWindow` | itself once its tab took focus, until a desk tab does |
+| `windows.getAll`, `tabs.query({windowType})` | listed with the desk's, filtered by type |
+| `windows.update(id, {focused: true})` | `domicile-focus-request` on its element |
+
+The desk's own window says `left: 0, top: 0`, the desktop's origin. Bitwarden
+places its popup from the window it came from, and without them asks
+`windows.create` for `NaN`.
 
 ## Key decisions
 
@@ -130,6 +160,8 @@ Mutations go where the thing they change lives:
 - **The default profile, not a partition of its own.** It is the partition browser windows use (see `web_view_guest.h`, *NO GUEST SiteInstance*), so content scripts and network rules see the pages the user actually browses.
 - **One window, not one per `<webview>`.** A shell's browser windows are what Chrome calls tabs, and extensions assume many tabs and one active tab per window.
 - **Refuse what has no desktop meaning; never fake it.** A `tabs.move` that answers success and does nothing is a bug the extension cannot see.
+- **A popup window is a window, not the tray's panel.** It has its own id, so `windows.remove` closes it and not the desk, and `tabs.query({windowType: "popup"})` finds it. The engine makes the window and the shell draws it; the attribute ties the two, because the browser cannot tell one `<webview>` from another.
+- **Only a popup.** A `normal` window is the shell's browser window, which `tabs.create` already asks for; a tab moved in, an opener, a second address or incognito have no desk meaning. A size is passed on; a position is the shell's, as on a Wayland desktop in Chrome itself.
 - **Passkeys come from an extension.** The browser draws no WebAuthn UI (patch `0048`), so a password manager's extension is where passkeys live: by a content script wrapping `navigator.credentials`, or by `chrome.webAuthenticationProxy`. `guard-webview-passkey-extension.sh` reads the second answering a page in a `<webview>`; its control, the same page refused with `PublicKeyCredential` present, is what the first needs.
 - **Manifest V3 only.** Chromium at the pin no longer loads MV2, so uBlock Origin will not run and uBlock Origin Lite will. That is upstream's decision, not the desk's.
 
@@ -167,3 +199,5 @@ Slice 2: tabs.
 Follow-ups:
 
 - [x] `activeTab` granted on a tray click, popup or not: `ExtensionTray::Activate`. `guard-webview-active-tab.sh`: a fixture with `activeTab` and no host paints the focused `<webview>` with `scripting.executeScript` from its `onClicked`; its control does not click
+- [x] popup windows: `windows.create({type: "popup"})`, `windows.remove`, and every window read across the desk's and its popups'. `guard-webview-popup-window.sh`: the fixture's window page finds itself a `popup` and removes itself; its control opens the same `<webview>` without `popupwindow`
+- [x] manganese draws a popup window floating, at the size asked for

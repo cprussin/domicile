@@ -3,14 +3,18 @@
 
 #include "chrome/browser/domicile/domicile_desk.h"
 
+#include <optional>
+
 #include "base/check.h"
 #include "base/functional/callback.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/domicile_desk_hooks.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/tabs.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/web_contents.h"
 
 namespace domicile {
@@ -30,32 +34,35 @@ class DeskHooks final : public extensions::domicile_desk::Desk {
                content::WebContents** contents,
                int* index) override {
     DomicileWindowController* desk = DomicileWindowController::Find(context);
-    content::WebContents* tab =
-        desk == nullptr ? nullptr : desk->TabWithId(tab_id);
-    if (tab == nullptr) {
+    DomicileWindowController* found =
+        desk == nullptr ? nullptr : desk->WindowWithTab(tab_id);
+    if (found == nullptr) {
       return false;
     }
+    content::WebContents* tab = found->TabWithId(tab_id);
     if (window != nullptr) {
-      *window = desk;
+      *window = found;
     }
     if (contents != nullptr) {
       *contents = tab;
     }
     if (index != nullptr) {
-      *index = desk->IndexOf(*tab);
+      *index = found->IndexOf(*tab);
     }
     return true;
   }
 
   // CreateTabObject found no tab strip for a guest, so it said index -1 and
-  // inactive. The desk knows both.
+  // inactive. The window it is a tab of knows both.
   void AmendTab(content::WebContents& contents,
                 extensions::api::tabs::Tab& tab) override {
     DomicileWindowController* desk =
         DomicileWindowController::Find(contents.GetBrowserContext());
-    if (desk != nullptr && desk->Contains(contents)) {
-      const bool active = desk->IsActive(contents);
-      tab.index = desk->IndexOf(contents);
+    DomicileWindowController* window =
+        desk == nullptr ? nullptr : desk->WindowOf(contents);
+    if (window != nullptr) {
+      const bool active = window->IsActive(contents);
+      tab.index = window->IndexOf(contents);
       tab.active = active;
       tab.selected = active;
       tab.highlighted = active;
@@ -64,9 +71,9 @@ class DeskHooks final : public extensions::domicile_desk::Desk {
 
   void ForEachTab(const base::RepeatingCallback<void(content::WebContents*)>&
                       callback) override {
-    for (DomicileWindowController* desk : DomicileWindowController::All()) {
-      for (int i = 0; i < desk->GetTabCount(); ++i) {
-        callback.Run(desk->GetWebContentsAt(i));
+    for (DomicileWindowController* window : DomicileWindowController::All()) {
+      for (int i = 0; i < window->GetTabCount(); ++i) {
+        callback.Run(window->GetWebContentsAt(i));
       }
     }
   }
@@ -91,9 +98,31 @@ void StartDesk(Profile* profile) {
 }
 
 void AddToDesk(content::WebContents& guest) {
-  DomicileWindowController::For(
-      Profile::FromBrowserContext(guest.GetBrowserContext()))
-      .Add(guest);
+  DomicileWindowController& desk = DomicileWindowController::For(
+      Profile::FromBrowserContext(guest.GetBrowserContext()));
+  WebViewGuest* web_view = WebViewGuest::FromWebContents(&guest);
+  CHECK(web_view);
+  const std::optional<int> popup_window = web_view->popup_window();
+  if (!popup_window.has_value()) {
+    desk.Add(guest);
+    return;
+  }
+  // The <webview> a shell opened for a popup window, naming it. A window that
+  // is not waiting for its tab -- gone, never made, or given one already -- is
+  // a shell that opened a second <webview> for it, or one too late. A guest
+  // has to be some window's tab, and the desk's is the one it would have been
+  // without the attribute; said, so that is not silent.
+  DomicileWindowController* popup = desk.PopupAwaitingTab(*popup_window);
+  if (popup == nullptr) {
+    LOG(WARNING) << "domicile: a <webview> named popup window " << *popup_window
+                 << ", which is not waiting for a tab; it is a tab of the "
+                    "desk.";
+    desk.Add(guest);
+    return;
+  }
+  LOG(INFO) << "domicile: a <webview> is the tab of popup window "
+            << *popup_window << ".";
+  popup->Add(guest);
 }
 
 content::WebContents* ActiveDeskTab(content::BrowserContext* context) {

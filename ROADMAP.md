@@ -168,8 +168,9 @@ The evidence for each of those is in the doc that made the claim —
    `<webview>` a tab to `chrome.tabs`. Slice 1 is done: the fork installs what
    the config names, and manganese draws the actions in a tray on its bar and
    opens their popups in a `<webview>` under them. Slice 2 is in the fork:
-   every `<webview>` is a tab and the desk one window, zoom included, and a
-   tray click grants `activeTab`.
+   every `<webview>` is a tab and the desk one window, zoom included, a
+   tray click grants `activeTab`, and an extension's popup window is one the
+   shell draws.
    [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 
 5. **The system tray's menus.** Icons, titles and clicks work: the compositor

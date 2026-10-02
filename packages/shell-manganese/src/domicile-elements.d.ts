@@ -1,8 +1,8 @@
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 // The fork's `<app>`, as JSX. React has no entry for it — it has had one for
-// `<webview>` since Electron, which is why that tag needs nothing here — so this
-// is what lets the chrome write the tag at all.
+// `<webview>` since Electron, which is why that tag needs only the one attribute
+// below — so this is what lets the chrome write the tag at all.
 //
 // One attribute, and nothing else. `className`, `style`, `hidden` and `ref` are
 // `HTMLAttributes`' already, and the element's own event is deliberately not
@@ -20,6 +20,13 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 // whatever React resolved — the trap `<webview>` fell into.
 
 declare module "react" {
+  // And the one attribute of `<webview>`'s React's Electron-era entry lacks:
+  // `popupwindow`, which makes a view the extension's window it names — see
+  // `WEBVIEW_POPUP_WINDOW_EVENT`. A string because an attribute is one.
+  interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
+    popupwindow?: string | undefined;
+  }
+
   // biome-ignore lint/style/noNamespace: React declares its JSX types as a namespace; augmenting IntrinsicElements has to match that shape
   namespace JSX {
     // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging into IntrinsicElements requires an interface

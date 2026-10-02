@@ -3,6 +3,10 @@
 
 #include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
 
+#include <cstdint>
+#include <limits>
+#include <optional>
+
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -18,6 +22,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_popup_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -97,6 +102,18 @@ constexpr char kCloseEvent[] = "domicile-close";
 // And what it says when an extension asks for this window to be in front.
 // Carries nothing: the element is the target.
 constexpr char kFocusRequestEvent[] = "domicile-focus-request";
+
+// And what it says when an extension asks for a popup window of its own.
+// Carries the window, like the new-window event carries its address: nothing
+// is showing it yet. See domicile_popup_window_event.h.
+constexpr char kPopupWindowEvent[] = "domicile-popup-window";
+
+// The attribute a shell names that popup window by, on the <webview> it opens
+// for it. Read once, when the element asks for its guest: which window a tab
+// is in is settled as the tab is made. Not one of html_names, because a name
+// there is a patch to Chromium's own list and this element is the only one
+// that reads it.
+constexpr char kPopupWindowAttr[] = "popupwindow";
 
 // The four values `security` can take, which are the four the browser's own
 // omnibox draws. Strings rather than an IDL enum -- see the .idl for why -- and
@@ -200,7 +217,25 @@ void HTMLWebViewElement::RequestGuest() {
   // thing a guest does is commit a page.
   host_->CreateGuest(placeholder->GetLocalFrameToken(),
                      guest_.BindNewPipeAndPassReceiver(task_runner),
-                     client_receiver_.BindNewPipeAndPassRemote(task_runner));
+                     client_receiver_.BindNewPipeAndPassRemote(task_runner),
+                     PopupWindow());
+}
+
+std::optional<int32_t> HTMLWebViewElement::PopupWindow() const {
+  const AtomicString& named = getAttribute(AtomicString(kPopupWindowAttr));
+  if (named.IsNull()) {
+    return std::nullopt;
+  }
+  // A window id is a SessionID, which is positive. One that does not parse is
+  // the shell's mistake, and says so rather than making a desk tab quietly.
+  unsigned window_id = 0;
+  if (!ParseHTMLNonNegativeInteger(named, window_id) || window_id == 0 ||
+      window_id > static_cast<unsigned>(std::numeric_limits<int32_t>::max())) {
+    LOG(WARNING) << "domicile: a <webview>'s popupwindow=\"" << named.Utf8()
+                 << "\" names no window; its guest is a tab of the desk.";
+    return std::nullopt;
+  }
+  return static_cast<int32_t>(window_id);
 }
 
 void HTMLWebViewElement::NavigateGuest() {
@@ -520,6 +555,15 @@ void HTMLWebViewElement::CloseRequested() {
 // Bubbling, for CloseRequested's reason.
 void HTMLWebViewElement::FocusRequested() {
   DispatchEvent(*Event::CreateBubble(AtomicString(kFocusRequestEvent)));
+}
+
+void HTMLWebViewElement::PopupWindowRequested(int32_t window_id,
+                                              const KURL& url,
+                                              int32_t width,
+                                              int32_t height) {
+  DispatchEvent(*MakeGarbageCollected<DomicilePopupWindowEvent>(
+      AtomicString(kPopupWindowEvent), window_id, url.GetString(), width,
+      height));
 }
 
 void HTMLWebViewElement::FileChooserAnswered(DomicileFileChooserEvent& event) {

@@ -115,11 +115,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // attached or navigated -- the moment a tab's helpers are attached in
   // Chrome, and for the same reason: a helper that keys on the tab's id has to
   // be there before the first navigation it would record.
+  //
+  // `popup_window` is the element's, from CreateGuest: see popup_window().
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
       mojo::PendingReceiver<mojom::WebViewGuest> receiver,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
+      std::optional<int> popup_window,
       const GuestCreatedCallback& created);
 
   WebViewGuest(const WebViewGuest&) = delete;
@@ -154,6 +157,20 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RequestFocus();
   void RequestClose();
   void RequestWindow(const GURL& url);
+
+  // And a popup window opened, which is the element's
+  // `domicile-popup-window`: chrome.windows.create's, for popup window
+  // `window_id`. `width` and `height` are 0 where the extension asked for
+  // none.
+  void RequestPopupWindow(int window_id,
+                          const GURL& url,
+                          int width,
+                          int height);
+
+  // The popup window the element named this guest the tab of -- its
+  // `popupwindow` attribute -- or nothing for every other <webview>. Read by
+  // the desk as the guest becomes a tab, which is before it is attached.
+  std::optional<int> popup_window() const { return popup_window_; }
 
   // Hear the element take focus, for as long as the subscription is held.
   // What makes this guest the active tab.
@@ -427,7 +444,8 @@ class WebViewGuest : public mojom::WebViewGuest,
  private:
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
-               mojo::PendingRemote<mojom::WebViewGuestClient> client);
+               mojo::PendingRemote<mojom::WebViewGuestClient> client,
+               std::optional<int> popup_window);
 
   // Tell the element a page asked for a window of its own, at `target_url`.
   //
@@ -519,6 +537,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Set by Attach. Self-destruction in WebContentsDestroyed is only correct
   // once nobody else holds a unique_ptr to this.
   bool self_owned_ = false;
+
+  // See popup_window().
+  const std::optional<int> popup_window_;
 
   mojo::Receiver<mojom::WebViewGuest> receiver_;
   // How many of this guest's file choosers the shell has yet to answer, which
