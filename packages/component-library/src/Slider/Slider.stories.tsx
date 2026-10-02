@@ -62,7 +62,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "One value picked off a range, as a fat pill whose fill runs to a knob riding inside it. Wraps the @base-ui/react Slider primitive.",
+          "One value picked off a range: a thin track in the color of its container, filled up to a round knob. Wraps the @base-ui/react Slider primitive.",
       },
     },
   },
@@ -85,5 +85,5 @@ export const Disabled: StoryObj<typeof SliderComponent> = {
   },
 };
 
-// A width to fill: the pill is as wide as whatever holds it.
+// A width to fill: the slider is as wide as whatever holds it.
 const frameStyles = css({ inlineSize: 64 });
