@@ -44,6 +44,8 @@ type Props = {
   onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
+  /** What the open tab beside this one says — see {@link TitleBar}. */
+  openTab: TitleFocus | undefined;
   /**
    * Where the bar is drawn: the placement's rather than the float's own, which
    * a fullscreen window has left for the whole screen.
@@ -100,6 +102,7 @@ export const WindowTitleBar = ({
   onGrab,
   onMotionEnded,
   onMove,
+  openTab,
   rect,
   restack,
   tabbed,
@@ -142,6 +145,7 @@ export const WindowTitleBar = ({
       onFullscreen={onFullscreen}
       onMiddleClick={tabbed === undefined ? undefined : onClose}
       onMotionEnded={onMotionEnded}
+      openTab={openTab}
       rect={rect}
       restack={restack}
       tabbed={tabbed}

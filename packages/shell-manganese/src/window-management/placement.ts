@@ -46,6 +46,8 @@ export type Placement = {
    */
   frame: Rect;
   id: string;
+  /** The window its container's open tab is named after — see `Frame.openTab`. */
+  openTab: string | undefined;
   /**
    * Where its contents go, or `undefined` for a window a tabbed container is
    * not showing: the tab is on screen and the window behind it is not.
@@ -228,6 +230,7 @@ const fullscreen = (
         bar: barOf(area),
         behind: undefined,
         id: full.id,
+        openTab: undefined,
         surface: surfaceOf(area),
         tabbed: undefined,
       },
@@ -244,7 +247,7 @@ const fullscreen = (
  * window reaches the screen.
  */
 const placed = (
-  { bar, behind, id, surface, tabbed }: Frame,
+  { bar, behind, id, openTab, surface, tabbed }: Frame,
   depth: number,
 ): Placement => ({
   bar,
@@ -252,6 +255,7 @@ const placed = (
   depth,
   frame: surface === undefined ? bar : spanning(bar, surface),
   id,
+  openTab,
   surface,
   tabbed,
 });

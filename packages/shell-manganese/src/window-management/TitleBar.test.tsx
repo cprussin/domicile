@@ -212,6 +212,44 @@ describe("TitleBar", () => {
     );
   });
 
+  // So the edge along the top of the window the strip opens onto runs under
+  // every tab, in the one color the open tab is drawn in.
+  describe("the line under a tab its container is not showing", () => {
+    const under = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
+      bar(
+        render(<TitleBar {...barProps} tabbed={Layout.Tabbed} {...props} />)
+          .container,
+      );
+
+    it("is the accent while the open tab is being worked in", () => {
+      const tab = under({ openTab: "focused" });
+
+      expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe("1px");
+      expect(tab.className).toContain(css({ borderBlockEndColor: "accent" }));
+    });
+
+    it("is the resting edge while it is not, or is all the screen shows", () => {
+      for (const tab of [
+        under({ openTab: "selected" }),
+        under({ openTab: "resting" }),
+        under({ alone: true, openTab: "focused" }),
+      ]) {
+        expect(globalThis.getComputedStyle(tab).borderBlockEndWidth).toBe(
+          "1px",
+        );
+        expect(tab.className).toContain(
+          css({ borderBlockEndColor: "borderStrong" }),
+        );
+      }
+    });
+
+    it("is not drawn under a bar that is not such a tab", () => {
+      expect(
+        globalThis.getComputedStyle(under({})).borderBlockEndWidth,
+      ).not.toBe("1px");
+    });
+  });
+
   it("rounds its top corners, and squares them and drops its edge while its window fills the screen", () => {
     const rounded = globalThis.getComputedStyle(
       bar(render(<TitleBar {...barProps} />).container),

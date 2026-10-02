@@ -71,6 +71,7 @@ describe("placementsOf", () => {
       depth: 0,
       frame: { height: 1048, width: 1920, x: 0, y: 32 },
       id: appWindowId("kitty"),
+      openTab: undefined,
       surface: {
         height: 1048 - TITLE_BAR,
         width: 1920,

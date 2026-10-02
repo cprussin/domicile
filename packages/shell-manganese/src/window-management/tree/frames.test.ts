@@ -51,6 +51,7 @@ describe("framesOf", () => {
       bar: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
       behind: undefined,
       id: "a",
+      openTab: undefined,
       surface: {
         height: 1000 - TITLE_BAR,
         width: 1000,
@@ -232,6 +233,72 @@ describe("framesOf", () => {
     ).toBeUndefined();
   });
 
+  // What a tab that is not open draws a line under itself in the color of:
+  // the open one's, so the strip's edge runs unbroken along the window's top.
+  it("names the open tab to a tabbed container's other tabs, and to no other bar", () => {
+    const tiled = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(
+          Layout.Tabbed,
+          [
+            LayoutNode.Window("a"),
+            LayoutNode.Container(
+              Layout.SplitH,
+              [LayoutNode.Window("b"), LayoutNode.Window("c")],
+              1,
+            ),
+          ],
+          1,
+        ),
+      },
+      AREA,
+      0,
+    );
+
+    expect(frameFor(tiled, "a").openTab).toBe("c");
+    expect(tiled.tabs.map(({ openTab }) => openTab)).toStrictEqual([undefined]);
+    expect(frameFor(tiled, "b").openTab).toBeUndefined();
+
+    const behind = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(
+          Layout.Tabbed,
+          [
+            LayoutNode.Window("a"),
+            LayoutNode.Container(Layout.SplitH, [
+              LayoutNode.Window("b"),
+              LayoutNode.Window("c"),
+            ]),
+          ],
+          0,
+        ),
+      },
+      AREA,
+      0,
+    );
+    expect(frameFor(behind, "a").openTab).toBeUndefined();
+    expect(behind.tabs.map(({ openTab }) => openTab)).toStrictEqual(["a"]);
+
+    // A stack's bars sit one on another, each over the next one's edge.
+    const stacked = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Stacking, [
+          LayoutNode.Window("a"),
+          LayoutNode.Window("b"),
+        ]),
+      },
+      AREA,
+      0,
+    );
+    expect(stacked.frames.map(({ openTab }) => openTab)).toStrictEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("titles a tab that holds a container by the window in it", () => {
     const tiled = framesOf(
       {
@@ -252,6 +319,7 @@ describe("framesOf", () => {
       {
         active: true,
         id: "a",
+        openTab: undefined,
         rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
       },
     ]);
@@ -285,6 +353,7 @@ describe("framesOf", () => {
       {
         active: false,
         id: "a",
+        openTab: "c",
         rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
       },
     ]);
