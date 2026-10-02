@@ -61,6 +61,8 @@ concurrency:
 # DOMICILE_WRITEBACK_TOKEN's, not this token's.
 permissions:
   contents: write
+  # The compile slot asks whether its holder's run is over.
+  actions: read
 
 jobs:
   release:
@@ -142,6 +144,10 @@ jobs:
       # whichever workflow is running it.
       # See .github/scripts/engine-compile-slot.sh.
       - name: Take the compile slot
+        env:
+          # A holder whose run is over holds nothing (crux-run-finished.sh).
+          DOMICILE_COMPILE_SLOT_HOLDER_DONE: '.github/scripts/crux-run-finished.sh "$HOLDER"'
+          GH_TOKEN: ${{ github.token }}
         run: .github/scripts/engine-compile-slot.sh take "$LOCK_OWNER"
 
       # AFTER THE LOCK AND AFTER THE TREE IS CHOSEN, AND BOTH HALVES OF THAT
