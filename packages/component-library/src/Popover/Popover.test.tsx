@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Button } from "../Button/Button";
@@ -45,6 +50,18 @@ describe(Popover, () => {
       expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
     });
 
+    it("says when it is drawn over a photograph, so the stylesheet can glass it", () => {
+      render(
+        <Popover open tone="overPhoto">
+          Body
+        </Popover>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute(
+        "data-tone",
+        "overPhoto",
+      );
+    });
+
     it("is padded unless it is drawn flush", () => {
       render(<Popover open>Body</Popover>);
       expect(screen.getByRole("dialog")).not.toHaveAttribute("data-flush");
@@ -72,6 +89,42 @@ describe(Popover, () => {
       await userEvent.click(screen.getByRole("button", { name: "Details" }));
 
       expect(screen.getByText("Body")).toBeInTheDocument();
+    });
+
+    it("closes when focus moves to something outside it", async () => {
+      // The press that does this is one the page never sees: a click inside
+      // a browser window lands in the guest's page, and all this document is
+      // told is that its <webview> took focus.
+      render(
+        <>
+          <Popover title="Connection" trigger={<Button>Details</Button>}>
+            Body
+          </Popover>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      act(() => {
+        screen.getByRole("button", { name: "Elsewhere" }).focus();
+      });
+
+      await waitForElementToBeRemoved(() => screen.queryByText("Body"));
+    });
+
+    it("stays open when focus moves within it", async () => {
+      render(
+        <Popover title="Connection" trigger={<Button>Details</Button>}>
+          <button type="button">Inside</button>
+        </Popover>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      act(() => {
+        screen.getByRole("button", { name: "Inside" }).focus();
+      });
+
+      expect(screen.getByRole("button", { name: "Inside" })).toBeVisible();
     });
   });
 });

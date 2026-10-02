@@ -186,6 +186,7 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `danger` / `warning` / `success` | Status colors |
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
+| `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper, the same in both themes |
 
 **Do not reach for the palette** (`colors.red.500`, etc.). The palette is
 for the preset to derive semantic tokens *from* — not for consumer-side

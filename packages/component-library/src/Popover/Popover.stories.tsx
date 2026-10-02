@@ -3,7 +3,12 @@ import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { Button } from "../Button/Button";
-import { ALIGNMENTS, Popover as PopoverComponent, SIDES } from "./Popover";
+import {
+  ALIGNMENTS,
+  Popover as PopoverComponent,
+  SIDES,
+  TONES,
+} from "./Popover";
 
 const meta = {
   args: {
@@ -12,6 +17,7 @@ const meta = {
       "The connection to this site is encrypted. Nothing else on the network can read what is sent.",
     side: "bottom",
     title: "Connection",
+    tone: "card",
     trigger: <Button beforeIcon={<InfoIcon />}>Details</Button>,
   },
   argTypes: {
@@ -45,6 +51,11 @@ const meta = {
       control: "text",
       table: { category: "Contents" },
     },
+    tone: {
+      control: "inline-radio",
+      options: TONES,
+      table: { category: "Style" },
+    },
     trigger: {
       control: false,
       table: { category: "Contents" },
@@ -70,6 +81,7 @@ export const Popover: StoryObj<typeof PopoverComponent> = {
     defaultOpen: false,
     flush: false,
     side: "bottom",
+    tone: "card",
   },
 };
 
@@ -79,6 +91,7 @@ export const OpenByDefault = {
     defaultOpen: true,
     flush: false,
     side: "bottom",
+    tone: "card",
   },
 } satisfies StoryObj<typeof PopoverComponent>;
 
@@ -89,6 +102,7 @@ export const AlignedToAnIndicator = {
     flush: false,
     side: "bottom",
     title: "Connection is encrypted",
+    tone: "card",
     trigger: (
       <Button label="Connection" size="sm" variant="ghost">
         <LockIcon />
@@ -112,6 +126,7 @@ export const WithoutATitle = {
     flush: false,
     side: "top",
     title: undefined,
+    tone: "card",
   },
 } satisfies StoryObj<typeof PopoverComponent>;
 
@@ -123,6 +138,7 @@ export const Flush = {
     flush: true,
     side: "bottom",
     title: undefined,
+    tone: "card",
   },
   parameters: {
     docs: {
@@ -133,3 +149,15 @@ export const Flush = {
     },
   },
 } satisfies StoryObj<typeof PopoverComponent>;
+
+export const OverPhoto: StoryObj<typeof PopoverComponent> = {
+  args: {
+    align: "center",
+    children: "A pill hung off a bar drawn onto the wallpaper.",
+    defaultOpen: true,
+    flush: false,
+    side: "bottom",
+    title: undefined,
+    tone: "overPhoto",
+  },
+};
