@@ -60,6 +60,16 @@ describe("browserCommandFor", () => {
     ).toBe(BrowserCommand.ZoomOut);
   });
 
+  // Shift either way, as a reload is: Chrome finds on Ctrl+F and Ctrl+Shift+F.
+  it("finds in the page on Ctrl+F", () => {
+    expect(browserCommandFor(press("f", { ctrlKey: true }))).toBe(
+      BrowserCommand.Find,
+    );
+    expect(
+      browserCommandFor(press("F", { ctrlKey: true, shiftKey: true })),
+    ).toBe(BrowserCommand.Find);
+  });
+
   it("resets the zoom on Ctrl+0", () => {
     expect(browserCommandFor(press("0", { ctrlKey: true }))).toBe(
       BrowserCommand.ZoomReset,

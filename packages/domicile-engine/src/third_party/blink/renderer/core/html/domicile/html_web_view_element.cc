@@ -75,6 +75,11 @@ constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 // readable on the element.
 constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
 
+// And what it says when a find in the page has found something new. Carries
+// nothing, like the other state events: `findMatches` and `findActiveMatch`
+// are readable on the element.
+constexpr char kFindChangeEvent[] = "domicile-find-change";
+
 // And what it asks when the page needs a file picked -- the one event here
 // that is a question, answered on the event itself. See
 // domicile_file_chooser_event.h.
@@ -336,6 +341,29 @@ void HTMLWebViewElement::setZoom(double factor,
   }
 }
 
+// NOT STORED HERE either, for setZoom's reason: what a find found is the
+// browser's to count, across frames this renderer cannot see.
+//
+// AN UNBOUND REMOTE IS A NO-OP, as it is for the history controls: an element
+// that is not in a document has no page to search.
+void HTMLWebViewElement::find(const String& text, bool backward) {
+  if (guest_.is_bound()) {
+    if (text.empty()) {
+      // A find bar emptied is a find over, and content refuses to search for
+      // nothing: see WebViewGuest.Find.
+      guest_->StopFinding(/*keep_selection=*/false);
+    } else {
+      guest_->Find(text, !backward);
+    }
+  }
+}
+
+void HTMLWebViewElement::stopFinding() {
+  if (guest_.is_bound()) {
+    guest_->StopFinding(/*keep_selection=*/true);
+  }
+}
+
 // The browser's answer arriving, which is the only way this element has one.
 //
 // STORED FIRST AND ANNOUNCED SECOND, because the announcement is what makes a
@@ -423,6 +451,14 @@ void HTMLWebViewElement::FaviconChanged(const KURL& icon) {
   favicon_ = icon.IsValid() ? icon.GetString() : String("");
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kFaviconChangeEvent)));
+}
+
+// Stored before it is announced, for the reason every state here is.
+void HTMLWebViewElement::FindChanged(int32_t matches, int32_t active_match) {
+  find_matches_ = matches;
+  find_active_match_ = active_match;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kFindChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {
