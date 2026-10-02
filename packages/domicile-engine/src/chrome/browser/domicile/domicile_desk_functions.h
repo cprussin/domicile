@@ -12,22 +12,30 @@ namespace domicile {
 //
 // Mutations go where the thing they change lives (EXTENSIONS.md's table):
 //
-//   tabs.query                    the desk's tabs, matched by
+//   tabs.query                    every window's tabs, matched by
 //                                 //components/domicile:desk_tabs
 //   tabs.update {url, muted}      the guest; the browser holds its WebContents
 //   tabs.update {active}          the shell, as `domicile-focus-request`
-//   windows.update {focused}      the same, on the active tab's element
+//   windows.update {focused}      the same, on that window's active tab
 //   tabs.create {url}             the shell, as `domicile-new-window` on the
 //                                 active tab's element. Answered with the next
 //                                 tab the desk gains
+//   windows.create {type: popup,  a popup window, made here with no tab; the
+//   url}                          shell is asked for its tab as
+//                                 `domicile-popup-window` on the active tab's
+//                                 element. Answered once the <webview> naming
+//                                 it in `popupwindow` is its tab
 //   tabs.remove                   the shell, as `domicile-close`. Answered at
 //                                 once: the shell is asked, not waited for
+//   windows.remove                a popup window's tab, the same way. The
+//                                 desk's own window is refused
 //   tabs.setZoom, getZoom         the guest's zoom, as its element's setZoom
 //                                 sets it: per site, through HostZoomMap
 //   tabs.getZoomSettings,         automatic and per-origin, the guest's one
 //   setZoomSettings               mode; setting any other is refused
-//   windows.get, getCurrent,      the desk, which is the one window
-//   getLastFocused, getAll
+//   windows.get, getCurrent,      the desk's window and its popup windows.
+//   getLastFocused, getAll        "Current" is the caller's tab's window, or
+//                                 the desk's for a caller in no tab
 //   RefusedOnDesk()               `not supported on a Domicile desk`
 //
 // Anything else -- tabs.get, reload, sendMessage, executeScript, goBack --

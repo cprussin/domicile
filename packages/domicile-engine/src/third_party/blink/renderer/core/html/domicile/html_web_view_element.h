@@ -4,6 +4,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_DOMICILE_HTML_WEB_VIEW_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_DOMICILE_HTML_WEB_VIEW_ELEMENT_H_
 
+#include <cstdint>
+#include <optional>
+
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
@@ -361,6 +364,19 @@ class CORE_EXPORT HTMLWebViewElement final
   // Dispatched as `domicile-focus-request`: which window is in front is the
   // shell's, so the browser raises nothing. An event, like CloseRequested.
   void FocusRequested() override;
+
+  // And an extension asking for a popup window of its own. Dispatched as
+  // `domicile-popup-window`, carrying the window: the browser has made the
+  // window and not its tab, which is the <webview> a shell opens for it with
+  // `popupwindow` naming `window_id`. An event, like NewWindowRequested.
+  void PopupWindowRequested(int32_t window_id,
+                            const KURL& url,
+                            int32_t width,
+                            int32_t height) override;
+
+  // The popup window this element's `popupwindow` names, for CreateGuest, or
+  // nothing: no attribute, or one that names no window id.
+  std::optional<int32_t> PopupWindow() const;
 
   // The pipe the guest was asked for on, kept for as long as this element
   // lives. Not a one-shot: the request can reach the browser before the

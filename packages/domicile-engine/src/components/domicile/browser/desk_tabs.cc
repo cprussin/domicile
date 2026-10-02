@@ -21,8 +21,6 @@ constexpr auto kRefused = std::to_array<const char*>({
     "tabs.duplicate",
     "tabs.createSplit",
     "tabs.unsplit",
-    "windows.create",
-    "windows.remove",
 });
 
 // Whether `asked` allows `is`: an absent question allows anything.
@@ -62,6 +60,13 @@ bool TakesActiveOnFocus(std::string_view scheme) {
   return scheme != "chrome-extension";
 }
 
+bool DeskOpensWindow(const DeskWindowCreate& create) {
+  return (create.type == "popup" || create.type == "panel") &&
+         create.urls == 1 && !create.tab_id && !create.incognito &&
+         !create.set_self_as_opener &&
+         (create.state.empty() || create.state == "normal");
+}
+
 DeskTabs::DeskTabs() = default;
 DeskTabs::~DeskTabs() = default;
 
@@ -98,12 +103,14 @@ DeskTabQuery::~DeskTabQuery() = default;
 
 bool DeskTabMatches(const DeskTabQuery& query, const DeskTabFacts& tab) {
   const bool window_matches =
-      !query.window_id.has_value() || *query.window_id == kCurrentWindowId ||
-      *query.window_id < 0 || *query.window_id == tab.window_id;
+      !query.window_id.has_value() ||
+      (*query.window_id == kCurrentWindowId
+           ? tab.in_current_window
+           : *query.window_id < 0 || *query.window_id == tab.window_id);
   return window_matches && Allows(query.active, tab.active) &&
          Allows(query.highlighted, tab.active) &&
-         Allows(query.current_window, true) &&
-         Allows(query.last_focused_window, true) &&
+         Allows(query.current_window, tab.in_current_window) &&
+         Allows(query.last_focused_window, tab.in_last_focused_window) &&
          Allows(query.pinned, false) && Allows(query.audible, tab.audible) &&
          Allows(query.muted, tab.muted) && Allows(query.discarded, false) &&
          Allows(query.frozen, false) && Allows(query.auto_discardable, true) &&
@@ -111,7 +118,8 @@ bool DeskTabMatches(const DeskTabQuery& query, const DeskTabFacts& tab) {
          (!query.group_id.has_value() || *query.group_id == -1) &&
          (!query.split_view_id.has_value() || *query.split_view_id == -1) &&
          (!query.status.has_value() || *query.status == tab.status) &&
-         (!query.window_type.has_value() || *query.window_type == "normal");
+         (!query.window_type.has_value() ||
+          *query.window_type == tab.window_type);
 }
 
 }  // namespace domicile

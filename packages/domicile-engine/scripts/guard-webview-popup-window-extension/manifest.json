@@ -1,0 +1,12 @@
+{
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Domicile popup window guard"
+  },
+  "description": "A popup that opens a popup window with windows.create, whose page says which window it is in and removes it, for guard-webview-popup-window.sh.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnDyKU0LCwNTvxsFP0ArobLSirGGbWmzM4+YJCR+0CswtvtbqPDPjzc5eiBHogCttkZW2LQMOvU0bGTxQ0Un34UN8EyMianZq5ToygR6HdDKJbAURumL4t/E41oJQJmOcKbZ/YLj5fG6eiMlAZfBupXnEB09D8pTR4pLApx7HjP/mC4PdJP3oC1SqOu4D7DDlyhNoz0jSTWuHanOtKzPwke2ngCVRkcfvtdz/Vl7sRGPYVQXPX9+ej5cA2K++PwmHlKaeqiJrlODYpADWWzy1aJMtQg2dr4q72hBjmW22+GHDFdAqjnkEBi+prdFBlHc8kPymFw7vi3AZ0C8hStcwuQIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile popup window guard",
+  "permissions": ["tabs"],
+  "version": "1"
+}

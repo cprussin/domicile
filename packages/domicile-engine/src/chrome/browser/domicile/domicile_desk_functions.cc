@@ -62,16 +62,51 @@ DomicileWindowController* DeskOf(ExtensionFunction& function) {
   return DomicileWindowController::Find(function.browser_context());
 }
 
-// The tab named, or with no id the active one: Chrome's default for every
-// tabs call whose id is optional is the current window's active tab. Null
-// where the desk has neither.
+// The window `function` was called from, which is chrome.windows' "current":
+// the window of the tab it was called in -- a popup window's own page is in
+// its popup window -- and the desk's for a caller in no tab, like a
+// background service worker. Null where there is no desk.
+DomicileWindowController* CurrentWindowOf(ExtensionFunction& function) {
+  DomicileWindowController* desk = DeskOf(function);
+  if (desk == nullptr) {
+    return nullptr;
+  }
+  content::WebContents* sender = function.GetSenderWebContents();
+  DomicileWindowController* window =
+      sender == nullptr ? nullptr : desk->WindowOf(*sender);
+  return window == nullptr ? desk : window;
+}
+
+// The window `window_id` names, the current one included, or null.
+DomicileWindowController* WindowNamed(ExtensionFunction& function,
+                                      int window_id) {
+  DomicileWindowController* desk = DeskOf(function);
+  if (desk == nullptr) {
+    return nullptr;
+  }
+  return window_id == kCurrentWindowId ? CurrentWindowOf(function)
+                                       : desk->WindowWithId(window_id);
+}
+
+std::string WindowNotFound(int window_id) {
+  return extensions::ErrorUtils::FormatErrorMessage(
+      ExtensionTabUtil::kWindowNotFoundError, base::NumberToString(window_id));
+}
+
+// The tab named, in any window, or with no id the current window's active
+// one: Chrome's default for every tabs call whose id is optional. Null where
+// there is neither.
 content::WebContents* TabOrActive(ExtensionFunction& function,
                                   std::optional<int> tab_id) {
   DomicileWindowController* desk = DeskOf(function);
   if (desk == nullptr) {
     return nullptr;
   }
-  return tab_id ? desk->TabWithId(*tab_id) : desk->GetActiveTab();
+  if (!tab_id.has_value()) {
+    return CurrentWindowOf(function)->GetActiveTab();
+  }
+  DomicileWindowController* window = desk->WindowWithTab(*tab_id);
+  return window == nullptr ? nullptr : window->TabWithId(*tab_id);
 }
 
 std::string TabNotFound(std::optional<int> tab_id) {
@@ -127,16 +162,22 @@ DeskTabQuery AsDeskTabQuery(const tabs::Query::Params::QueryInfo& info) {
   return query;
 }
 
-// A desk tab as much as a query compares.
+// A tab of `window` as much as a query compares, asked from `current`.
 DeskTabFacts FactsOf(DomicileWindowController& desk,
+                     DomicileWindowController& window,
+                     DomicileWindowController& current,
                      content::WebContents& tab) {
-  return DeskTabFacts{.active = desk.IsActive(tab),
-                      .index = desk.IndexOf(tab),
-                      .window_id = desk.GetWindowId(),
-                      .audible = tab.IsCurrentlyAudible(),
-                      .muted = tab.IsAudioMuted(),
-                      .status = std::string(tabs::ToString(
-                          ExtensionTabUtil::GetLoadingStatus(&tab)))};
+  return DeskTabFacts{
+      .active = window.IsActive(tab),
+      .index = window.IndexOf(tab),
+      .window_id = window.GetWindowId(),
+      .audible = tab.IsCurrentlyAudible(),
+      .muted = tab.IsAudioMuted(),
+      .status =
+          std::string(tabs::ToString(ExtensionTabUtil::GetLoadingStatus(&tab))),
+      .window_type = window.GetWindowTypeText(),
+      .in_current_window = &window == &current,
+      .in_last_focused_window = &window == &desk.LastFocused()};
 }
 
 // `title` and `url`, which are privileged: a tab whose data the extension may
@@ -203,11 +244,17 @@ class DeskTabsQueryFunction : public ExtensionFunction {
     const DeskTabQuery query = AsDeskTabQuery(info);
     base::ListValue result;
     DomicileWindowController* desk = DeskOf(*this);
-    for (int i = 0; desk != nullptr && i < desk->GetTabCount(); ++i) {
-      content::WebContents& tab = *desk->GetWebContentsAt(i);
-      if (DeskTabMatches(query, FactsOf(*desk, tab)) &&
-          MatchesPrivileged(*this, info, url_patterns, tab)) {
-        result.Append(TabValue(*this, tab));
+    if (desk == nullptr) {
+      return RespondNow(WithArguments(std::move(result)));
+    }
+    DomicileWindowController& current = *CurrentWindowOf(*this);
+    for (DomicileWindowController* window : desk->Windows()) {
+      for (int i = 0; i < window->GetTabCount(); ++i) {
+        content::WebContents& tab = *window->GetWebContentsAt(i);
+        if (DeskTabMatches(query, FactsOf(*desk, *window, current, tab)) &&
+            MatchesPrivileged(*this, info, url_patterns, tab)) {
+          result.Append(TabValue(*this, tab));
+        }
       }
     }
     return RespondNow(WithArguments(std::move(result)));
@@ -311,8 +358,10 @@ class DeskTabsCreateFunction : public ExtensionFunction {
     return RespondLater();
   }
 
-  void Created(content::WebContents& tab) {
-    Respond(WithArguments(TabValue(*this, tab)));
+  // Never null: the desk's own window is never closed.
+  void Created(content::WebContents* tab) {
+    CHECK(tab);
+    Respond(WithArguments(TabValue(*this, *tab)));
   }
 };
 
@@ -337,11 +386,9 @@ class DeskTabsRemoveFunction : public ExtensionFunction {
 
     // Every id found before any is asked to close, so that one bad id closes
     // nothing.
-    DomicileWindowController* desk = DeskOf(*this);
     std::vector<content::WebContents*> found;
     for (int id : ids) {
-      content::WebContents* tab =
-          desk == nullptr ? nullptr : desk->TabWithId(id);
+      content::WebContents* tab = TabOrActive(*this, id);
       if (tab == nullptr) {
         return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
             kTabNotFoundError, base::NumberToString(id))));
@@ -465,25 +512,26 @@ class DeskTabsGetZoomSettingsFunction : public ExtensionFunction {
   }
 };
 
-// The four chrome.windows reads. The desk is the one window, so every one of
-// them answers with it -- `get` only by its own id.
+// The four chrome.windows reads: the desk's window, and the popup windows
+// its extensions opened.
 class DeskWindowReadFunction : public ExtensionFunction {
  protected:
   ~DeskWindowReadFunction() override = default;
 
-  ResponseAction RespondWithDesk(
+  // `window`, or the error for having none: no desk at all.
+  ResponseAction RespondWithWindow(
+      DomicileWindowController* window,
       const std::optional<windows::QueryOptions>& options) {
-    DomicileWindowController* desk = DeskOf(*this);
-    if (desk == nullptr) {
+    if (window == nullptr) {
       return RespondNow(Error(ExtensionTabUtil::kNoCurrentWindowError));
     }
-    return RespondNow(WithArguments(DeskValue(*desk, options)));
+    return RespondNow(WithArguments(WindowValue(*window, options)));
   }
 
-  base::DictValue DeskValue(
-      DomicileWindowController& desk,
+  base::DictValue WindowValue(
+      DomicileWindowController& window,
       const std::optional<windows::QueryOptions>& options) {
-    return desk.CreateWindowValueForExtension(
+    return window.CreateWindowValueForExtension(
         extension(),
         options && options->populate.value_or(false)
             ? extensions::WindowController::kPopulateTabs
@@ -503,14 +551,11 @@ class DeskWindowsGetFunction : public DeskWindowReadFunction {
     std::optional<windows::Get::Params> params =
         windows::Get::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    DomicileWindowController* desk = DeskOf(*this);
-    if (desk == nullptr || (params->window_id != kCurrentWindowId &&
-                            params->window_id != desk->GetWindowId())) {
-      return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
-          ExtensionTabUtil::kWindowNotFoundError,
-          base::NumberToString(params->window_id))));
+    DomicileWindowController* window = WindowNamed(*this, params->window_id);
+    if (window == nullptr) {
+      return RespondNow(Error(WindowNotFound(params->window_id)));
     }
-    return RespondWithDesk(params->query_options);
+    return RespondWithWindow(window, params->query_options);
   }
 };
 
@@ -525,7 +570,7 @@ class DeskWindowsGetCurrentFunction : public DeskWindowReadFunction {
     std::optional<windows::GetCurrent::Params> params =
         windows::GetCurrent::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    return RespondWithDesk(params->query_options);
+    return RespondWithWindow(CurrentWindowOf(*this), params->query_options);
   }
 };
 
@@ -540,7 +585,9 @@ class DeskWindowsGetLastFocusedFunction : public DeskWindowReadFunction {
     std::optional<windows::GetLastFocused::Params> params =
         windows::GetLastFocused::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    return RespondWithDesk(params->query_options);
+    DomicileWindowController* desk = DeskOf(*this);
+    return RespondWithWindow(desk == nullptr ? nullptr : &desk->LastFocused(),
+                             params->query_options);
   }
 };
 
@@ -555,9 +602,21 @@ class DeskWindowsGetAllFunction : public DeskWindowReadFunction {
     std::optional<windows::GetAll::Params> params =
         windows::GetAll::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
+    // `windowTypes` filters, as Chrome's does; without it every window is
+    // one an extension sees.
+    const std::optional<std::vector<windows::WindowType>>& types =
+        params->query_options ? params->query_options->window_types
+                              : std::nullopt;
     base::ListValue all;
     if (DomicileWindowController* desk = DeskOf(*this)) {
-      all.Append(DeskValue(*desk, params->query_options));
+      for (DomicileWindowController* window : desk->Windows()) {
+        if (!types.has_value() ||
+            window->MatchesFilter(
+                extensions::WindowController::GetFilterFromWindowTypes(
+                    *types))) {
+          all.Append(WindowValue(*window, params->query_options));
+        }
+      }
     }
     return RespondNow(WithArguments(std::move(all)));
   }
@@ -583,21 +642,142 @@ class DeskWindowsUpdateFunction : public DeskWindowReadFunction {
         !update.focused.value_or(true)) {
       return RespondNow(Error(kNotOnADesk));
     }
-    DomicileWindowController* desk = DeskOf(*this);
-    if (desk == nullptr || (params->window_id != kCurrentWindowId &&
-                            params->window_id != desk->GetWindowId())) {
-      return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
-          ExtensionTabUtil::kWindowNotFoundError,
-          base::NumberToString(params->window_id))));
+    DomicileWindowController* window = WindowNamed(*this, params->window_id);
+    if (window == nullptr) {
+      return RespondNow(Error(WindowNotFound(params->window_id)));
     }
     if (update.focused.value_or(false)) {
-      content::WebContents* active = desk->GetActiveTab();
+      content::WebContents* active = window->GetActiveTab();
       if (active == nullptr) {
         return RespondNow(Error(kNoWindowToAskError));
       }
       GuestOf(*active).RequestFocus();
     }
-    return RespondNow(WithArguments(DeskValue(*desk, std::nullopt)));
+    return RespondNow(WithArguments(WindowValue(*window, std::nullopt)));
+  }
+};
+
+// windows.create, for the one window a desk opens: a popup at one address,
+// which is the shell's to draw. See //components/domicile:desk_tabs's
+// DeskOpensWindow for what is refused.
+//
+// The window is made here, with no tab, and the shell is asked for its tab
+// through the active tab's element, as tabs.create asks for a browser window.
+// Answered with the window once the shell's <webview> is its tab.
+class DeskWindowsCreateFunction : public DeskWindowReadFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windows.create", WINDOWS_CREATE)
+
+ private:
+  ~DeskWindowsCreateFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<windows::Create::Params> params =
+        windows::Create::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    // No createData at all is a normal window at the new tab page.
+    if (!params->create_data) {
+      return RespondNow(Error(kNotOnADesk));
+    }
+    const windows::Create::Params::CreateData& create = *params->create_data;
+
+    std::vector<std::string> urls;
+    if (create.url && create.url->as_string) {
+      urls.push_back(*create.url->as_string);
+    } else if (create.url && create.url->as_strings) {
+      urls = *create.url->as_strings;
+    }
+    const DeskWindowCreate asked{
+        .type = create.type == windows::CreateType::kNone
+                    ? std::string()
+                    : std::string(windows::ToString(create.type)),
+        .urls = static_cast<int>(urls.size()),
+        .tab_id = create.tab_id.has_value(),
+        .incognito = create.incognito.value_or(false),
+        .state = create.state == windows::WindowState::kNone
+                     ? std::string()
+                     : std::string(windows::ToString(create.state)),
+        .set_self_as_opener = create.set_self_as_opener.value_or(false)};
+    if (!DeskOpensWindow(asked)) {
+      return RespondNow(Error(kNotOnADesk));
+    }
+
+    base::expected<GURL, std::string> url =
+        ExtensionTabUtil::PrepareURLForNavigation(urls.front(), extension(),
+                                                  browser_context());
+    if (!url.has_value()) {
+      return RespondNow(Error(std::move(url.error())));
+    }
+
+    DomicileWindowController* desk = DeskOf(*this);
+    content::WebContents* asker =
+        desk == nullptr ? nullptr : desk->GetActiveTab();
+    if (asker == nullptr) {
+      return RespondNow(Error(kNoWindowToAskError));
+    }
+    DomicileWindowController& popup = desk->OpenPopup();
+    // Retained: this function lives until the shell has given the window its
+    // tab, or the window is removed first.
+    popup.WhenNextTab(base::BindOnce(&DeskWindowsCreateFunction::Opened,
+                                     base::WrapRefCounted(this),
+                                     popup.GetWindowId()));
+    GuestOf(*asker).RequestPopupWindow(popup.GetWindowId(), *url,
+                                       create.width.value_or(0),
+                                       create.height.value_or(0));
+    return RespondLater();
+  }
+
+  // Populated, as Chrome answers windows.create: the tab is what was asked
+  // for.
+  void Opened(int window_id, content::WebContents* tab) {
+    if (tab == nullptr) {
+      Respond(Error(WindowNotFound(window_id)));
+      return;
+    }
+    DomicileWindowController* desk = DeskOf(*this);
+    CHECK(desk);
+    DomicileWindowController* popup = desk->WindowWithId(window_id);
+    CHECK(popup);
+    windows::QueryOptions populated;
+    populated.populate = true;
+    Respond(WithArguments(WindowValue(*popup, std::move(populated))));
+  }
+};
+
+// windows.remove, for a popup window: its tab closed, as tabs.remove closes
+// one -- the shell is asked, and the window goes with its tab. One the shell
+// has yet to open goes now. The desk's own window is the whole desktop, and
+// is refused.
+class DeskWindowsRemoveFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windows.remove", WINDOWS_REMOVE)
+
+ private:
+  ~DeskWindowsRemoveFunction() override = default;
+
+  ResponseAction Run() override {
+    std::optional<windows::Remove::Params> params =
+        windows::Remove::Params::Create(args());
+    EXTENSION_FUNCTION_VALIDATE(params);
+    DomicileWindowController* desk = DeskOf(*this);
+    DomicileWindowController* window =
+        desk == nullptr ? nullptr : desk->WindowWithId(params->window_id);
+    if (window == nullptr) {
+      return RespondNow(Error(WindowNotFound(params->window_id)));
+    }
+    if (!window->IsPopup()) {
+      return RespondNow(Error(kNotOnADesk));
+    }
+    // Asked, not waited for, as tabs.remove: windows.onRemoved says when the
+    // window has gone.
+    if (window->GetTabCount() == 0) {
+      desk->ClosePopup(params->window_id);
+    } else {
+      for (int i = 0; i < window->GetTabCount(); ++i) {
+        GuestOf(*window->GetWebContentsAt(i)).RequestClose();
+      }
+    }
+    return RespondNow(NoArguments());
   }
 };
 
@@ -619,6 +799,8 @@ void RegisterDeskFunctions() {
   registry.RegisterFunction<DeskWindowsGetLastFocusedFunction>();
   registry.RegisterFunction<DeskWindowsGetAllFunction>();
   registry.RegisterFunction<DeskWindowsUpdateFunction>();
+  registry.RegisterFunction<DeskWindowsCreateFunction>();
+  registry.RegisterFunction<DeskWindowsRemoveFunction>();
   // Histogram UNKNOWN: a refusal is not the call it refused.
   for (const char* name : RefusedOnDesk()) {
     registry.Register(ExtensionFunctionRegistry::FactoryEntry(

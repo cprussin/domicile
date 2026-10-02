@@ -37,7 +37,7 @@ import type { DrawnWindow } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
-import type { ShellWindow } from "./window";
+import type { PopupWindowRequest, ShellWindow } from "./window";
 import { WindowKind } from "./window";
 import { barMotion } from "./window-motion";
 import { slidAcross } from "./window-styles";
@@ -87,6 +87,12 @@ type Props = {
    * opens where any window the user opens now would.
    */
   onOpenWindow: (url: string) => void;
+  /**
+   * An extension asked for a window of its own, through the browser window
+   * the user was last in — see `BrowserWindow`. The desktop's to place, for
+   * the reason a page's is.
+   */
+  onOpenPopupWindow: (request: PopupWindowRequest) => void;
   /** A browser window's page navigated, so its title says somewhere new. */
   onRename: (id: string, url: string) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
@@ -143,6 +149,7 @@ export const Stage = ({
   onGrab,
   onHover,
   onMove,
+  onOpenPopupWindow,
   onOpenWindow,
   onRename,
   onResize,
@@ -281,10 +288,12 @@ export const Stage = ({
                   onNavigate={(url) => {
                     onRename(window.id, url);
                   }}
+                  onOpenPopupWindow={onOpenPopupWindow}
                   onOpenWindow={onOpenWindow}
                   onReach={() => {
                     onSelect(window.id);
                   }}
+                  popupWindow={window.popupWindow}
                   rect={contents?.rect}
                   restack={restack}
                   src={window.src}

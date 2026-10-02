@@ -26,7 +26,12 @@ import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import type { Layout } from "./tree/node";
 import { NodeKind } from "./tree/node";
-import type { ClientWindow, ShellWindow, SizeLimit } from "./window";
+import type {
+  ClientWindow,
+  PopupWindowRequest,
+  ShellWindow,
+  SizeLimit,
+} from "./window";
 import { appWindowId, ShellWindow as Window, WindowKind } from "./window";
 import type { Workspace } from "./workspace";
 import {
@@ -49,6 +54,7 @@ import {
   holds,
   modeToggled,
   opened,
+  openedFloating,
   parentFocused,
   pointedOn,
   reached,
@@ -321,6 +327,7 @@ export enum WindowActionKind {
   ModeSwapped,
   ParentFocused,
   PopupPlaced,
+  PopupWindowOpened,
   ScratchpadShown,
   ScreenHovered,
   ScreensDescribed,
@@ -558,6 +565,15 @@ export const WindowAction = {
   PopupPlaced: (popup: Popup) => ({
     kind: WindowActionKind.PopupPlaced as const,
     popup,
+  }),
+
+  /**
+   * An extension asked for a window of its own — `chrome.windows.create` with
+   * a popup — and the browser window the user was in passed it on.
+   */
+  PopupWindowOpened: (request: PopupWindowRequest) => ({
+    kind: WindowActionKind.PopupWindowOpened as const,
+    request,
   }),
 
   /** `scratchpad show`. */
@@ -893,6 +909,9 @@ const reduceAction = (
           : [...state.popups, placed],
       };
     }
+    case WindowActionKind.PopupWindowOpened: {
+      return openPopupWindow(state, action.request);
+    }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);
     }
@@ -1070,6 +1089,23 @@ const openBrowser = (state: WindowState, src: string): WindowState => {
   return openWindow(
     { ...state, browsersOpened, launcherOpen: false },
     Window.Browser(browsersOpened, src),
+  );
+};
+
+// An extension's window floats, where every other window opening tiles: it is
+// a dialog the extension sized for its own page, and a tile is whatever the
+// layout has left, which is no size that page was drawn for. sway floats a client's dialog for the same reason.
+// The launcher is left as it is: nothing in it asked.
+const openPopupWindow = (
+  state: WindowState,
+  request: PopupWindowRequest,
+): WindowState => {
+  const browsersOpened = state.browsersOpened + 1;
+  const window = Window.PopupWindow(browsersOpened, request);
+  return onCurrent(
+    { ...state, browsersOpened, windows: [...state.windows, window] },
+    (workspace) =>
+      openedFloating(workspace, window.id, request.width, request.height),
   );
 };
 

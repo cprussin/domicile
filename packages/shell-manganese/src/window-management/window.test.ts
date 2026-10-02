@@ -37,6 +37,7 @@ describe("ShellWindow", () => {
       expect(ShellWindow.Browser(2, "https://www.google.com/search")).toEqual({
         id: "browser:2",
         kind: WindowKind.Browser,
+        popupWindow: undefined,
         src: "https://www.google.com/search",
         title: "www.google.com",
       });

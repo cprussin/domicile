@@ -12,6 +12,7 @@ import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
+  WEBVIEW_POPUP_WINDOW_EVENT,
 } from "@domicile/chrome-sdk/webview-element";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
 import {
@@ -633,6 +634,32 @@ const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
     fireEvent(
       view,
       Object.assign(new Event(WEBVIEW_NEW_WINDOW_EVENT), { url }),
+    );
+  }
+};
+
+/**
+ * An extension asking for a window of its own, `chrome.windows.create` with a
+ * popup, which the engine dispatches on the browser window last worked in —
+ * the first here, in every case that asks.
+ */
+const extensionAsksForAWindow = (
+  container: HTMLElement,
+  url: string,
+  windowId: number,
+): void => {
+  const view = container.querySelector("webview");
+  if (view === null) {
+    throw new Error("test: no browser window for an extension to ask through");
+  } else {
+    fireEvent(
+      view,
+      Object.assign(new Event(WEBVIEW_POPUP_WINDOW_EVENT), {
+        height: 630,
+        url,
+        width: 380,
+        windowId,
+      }),
     );
   }
 };
@@ -1506,6 +1533,29 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(addressesShowing()).toContain("https://example.com/opened");
+    });
+
+    // Bitwarden's "Unlock", end to end: an extension's `chrome.windows.create`
+    // is a window the engine has an id for and nothing to show it in, and the
+    // desktop's answer is a browser window whose view is that window.
+    it("opens the window an extension asks for, as that window", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+
+      extensionAsksForAWindow(
+        container,
+        "chrome-extension://vault/popup.html",
+        7,
+      );
+
+      expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
+      const popup = container.querySelector("webview[popupwindow='7']");
+      expect(popup?.getAttribute("src")).toBe(
+        "chrome-extension://vault/popup.html",
+      );
     });
 
     // `window.close()` in the page, or an extension's `chrome.tabs.remove`:

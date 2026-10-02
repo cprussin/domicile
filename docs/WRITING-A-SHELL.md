@@ -1224,12 +1224,41 @@ element, as the page's own asks do:
 | Extension call | Event on the `<webview>` |
 |---|---|
 | `tabs.create({url})` | `domicile-new-window`, on the active tab's view |
+| `windows.create({type: "popup", url})` | `domicile-popup-window`, on the active tab's view: open a window for it (below) |
 | `tabs.remove(id)` | `domicile-close`: close that window ([A close the page asks for](#a-close-the-page-asks-for)) |
 | `tabs.update(id, {active: true})`, `windows.update(id, {focused: true})` | `domicile-focus-request`: raise that window (`WEBVIEW_FOCUS_REQUEST_EVENT`) |
 | `tabs.setZoom(id, factor)` | `domicile-zoom-change`: already zoomed, as `view.setZoom` would have |
 
-`tabs.move`, `tabs.group`, `tabs.discard`, `windows.create` and the rest
-without a desktop meaning answer `not supported on a Domicile desk`.
+`tabs.move`, `tabs.group`, `tabs.discard` and the rest without a desktop
+meaning answer `not supported on a Domicile desk`.
+
+**A window an extension opens** — `chrome.windows.create({type: "popup",
+url})`, which is Bitwarden's "Unlock" — is yours to open too. The active tab's
+view fires `domicile-popup-window` with `windowId` (its id to
+`chrome.windows`), `url`, and the `width` and `height` asked for (0 where none
+was; where it goes is yours). Open a browser window whose `<webview>` carries
+`popupwindow` set to that id:
+
+```ts
+import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+
+frame.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, (event) => {
+  const view = document.createElement("webview");
+  view.setAttribute("popupwindow", String(event.windowId)); // before append
+  view.setAttribute("src", event.url);
+  openPopupWindow(view, event.width, event.height);
+});
+```
+
+- **Set `popupwindow` before the view is in the document.** The engine reads
+  it once, as the view asks for its guest; set later, it does nothing. In
+  React, a JSX attribute on the first render is in time — but never remount
+  that view, which would be a second guest.
+- **It is that window from then on.** `windows.remove(windowId)` is
+  `domicile-close` on it and `windows.update(windowId, {focused: true})` is
+  `domicile-focus-request`, as for any view.
+- **Ignore it and the extension's window never opens**, and its
+  `windows.create` never answers.
 
 [`extensions/ExtensionAction.tsx`](/packages/shell-manganese/src/extensions/ExtensionAction.tsx)
 is manganese's.

@@ -124,6 +124,53 @@ describe("the browser windows the shell opens itself", () => {
   });
 });
 
+// `chrome.windows.create` with a popup — Bitwarden's "Unlock" — which the
+// desktop opens as a browser window that is the extension's window.
+describe("the windows an extension asks for", () => {
+  const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
+
+  /** The one float on the workspace on screen. */
+  const floatOf = (state: WindowState) => {
+    const [float] = workspaceHere(state).floats;
+    if (float === undefined) {
+      throw new Error("nothing is floating");
+    } else {
+      return float;
+    }
+  };
+
+  it("opens one floating in front, the size it asked for, and works in it", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.PopupWindowOpened({
+        height: 630,
+        url: POPUP,
+        width: 380,
+        windowId: 7,
+      }),
+    );
+
+    expect(activeIdOf(state)).toBe("browser:1");
+    expect(state.windows[1]).toMatchObject({ popupWindow: 7, src: POPUP });
+    expect(floatOf(state)).toMatchObject({ height: 630, width: 380 });
+  });
+
+  // 0 is the engine saying the extension named no size on that axis.
+  it("opens at a float's own size on an axis it did not ask about", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.PopupWindowOpened({
+        height: 630,
+        url: POPUP,
+        width: 0,
+        windowId: 7,
+      }),
+    );
+
+    expect(floatOf(state)).toMatchObject({ height: 630, width: 640 });
+  });
+});
+
 describe("the screens", () => {
   it("is one screen nobody has named until the host describes a desk", () => {
     // A window can open before the handshake is answered, so there is always

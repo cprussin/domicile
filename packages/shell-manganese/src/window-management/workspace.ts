@@ -16,6 +16,7 @@
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
 import {
+  floatAskedFor,
   floatFor,
   floatHolds,
   grown,
@@ -246,6 +247,27 @@ export const shown = (workspace: Workspace, id: string): Workspace => ({
     floatFor(Node.Window(id), workspace.floats.length, true),
   ],
 });
+
+/**
+ * A window opening floating rather than tiled, in front with the keyboard, at
+ * the size it asked for — see `floatAskedFor`.
+ */
+export const openedFloating = (
+  workspace: Workspace,
+  id: string,
+  width: number,
+  height: number,
+): Workspace =>
+  floatFocused(
+    {
+      ...workspace,
+      floats: [
+        ...workspace.floats,
+        floatAskedFor(Node.Window(id), workspace.floats.length, width, height),
+      ],
+    },
+    id,
+  );
 
 /** `focus mode_toggle`: the keyboard swaps between the two layers. */
 export const modeToggled = (workspace: Workspace): Workspace => {

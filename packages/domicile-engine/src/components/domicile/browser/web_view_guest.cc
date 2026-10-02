@@ -91,14 +91,15 @@ class WebViewGuestHost final
     blink::LocalFrameToken placeholder_frame;
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
+    std::optional<int> popup_window;
     mojo::ReportBadMessageCallback report_bad_message;
   };
 
   // mojom::WebViewGuestHost:
-  void CreateGuest(
-      const blink::LocalFrameToken& placeholder_frame,
-      mojo::PendingReceiver<mojom::WebViewGuest> guest,
-      mojo::PendingRemote<mojom::WebViewGuestClient> client) override {
+  void CreateGuest(const blink::LocalFrameToken& placeholder_frame,
+                   mojo::PendingReceiver<mojom::WebViewGuest> guest,
+                   mojo::PendingRemote<mojom::WebViewGuestClient> client,
+                   std::optional<int32_t> popup_window) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
     if (placeholder == nullptr) {
@@ -115,7 +116,7 @@ class WebViewGuestHost final
                    "arrived; waiting for it.";
       waiting_ =
           WaitingRequest{placeholder_frame, std::move(guest), std::move(client),
-                         mojo::GetBadMessageCallback()};
+                         popup_window, mojo::GetBadMessageCallback()};
       return;
     }
 
@@ -133,7 +134,7 @@ class WebViewGuestHost final
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
                                   std::move(guest), std::move(client),
-                                  created_);
+                                  popup_window, created_);
   }
 
   // content::WebContentsObserver:
@@ -179,9 +180,9 @@ class WebViewGuestHost final
       return;
     }
 
-    WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
-                                  std::move(request.guest),
-                                  std::move(request.client), created_);
+    WebViewGuest::CreateAndAttach(
+        render_frame_host(), *placeholder, std::move(request.guest),
+        std::move(request.client), request.popup_window, created_);
   }
 
   // The frame `placeholder_frame` names, or null if the browser has none.
@@ -382,9 +383,10 @@ void WebViewGuest::CreateAndAttach(
     content::RenderFrameHost& placeholder,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
+    std::optional<int> popup_window,
     const GuestCreatedCallback& created) {
-  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
-      new WebViewGuest(owner, std::move(receiver), std::move(client)));
+  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
+      owner, std::move(receiver), std::move(client), popup_window));
 
   // `guest_delegate` is what makes the new WebContents a guest, and content
   // asks it for its owner while constructing -- which is why the delegate is
@@ -475,8 +477,10 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
 WebViewGuest::WebViewGuest(
     content::RenderFrameHost& owner,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
-    mojo::PendingRemote<mojom::WebViewGuestClient> client)
+    mojo::PendingRemote<mojom::WebViewGuestClient> client,
+    std::optional<int> popup_window)
     : owner_rfh_id_(owner.GetGlobalId()),
+      popup_window_(popup_window),
       receiver_(this, std::move(receiver)),
       client_(std::move(client)) {}
 
@@ -1210,6 +1214,17 @@ void WebViewGuest::RequestClose() {
 
 void WebViewGuest::RequestWindow(const GURL& url) {
   ReportNewWindow(url);
+}
+
+void WebViewGuest::RequestPopupWindow(int window_id,
+                                      const GURL& url,
+                                      int width,
+                                      int height) {
+  // What guard-extension-popup-window.sh reads to tell "the shell was never
+  // asked" from "the shell was asked and opened nothing".
+  LOG(INFO) << "domicile: an extension asked for popup window " << window_id
+            << "; the shell was asked to open it.";
+  client_->PopupWindowRequested(window_id, url, width, height);
 }
 
 base::CallbackListSubscription WebViewGuest::AddFocusedCallback(

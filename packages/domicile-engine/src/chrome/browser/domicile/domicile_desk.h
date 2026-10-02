@@ -24,6 +24,10 @@ namespace domicile {
 //               creation order
 //   Active tab  the guest whose element last took focus -- see
 //               //components/domicile:desk_tabs for the rule
+//   Popup       a window an extension opened with windows.create, owned by
+//               the desk's: another DomicileWindowController, of type
+//               `popup`, whose one tab is the guest of the <webview> the
+//               shell opened for it -- the element names it in `popupwindow`
 //
 // HOW CHROME FINDS THEM. Its lookups walk browser windows' tab strips, which a
 // guest is in none of. Four of them ask this desk through
@@ -32,18 +36,21 @@ namespace domicile {
 // ForEachTab, and ChromeExtensionFunctionDetails::GetCurrentWindowController.
 //
 // WHAT IS NOT A LOOKUP IS NOT PATCHED. chrome.tabs.query, update, create,
-// remove and the zoom four, and chrome.windows.get* and update, are this
-// desk's own ExtensionFunctions, registered over Chrome's under the same names
-// -- see domicile_desk_functions.h -- and so are the refusals. Tab events come
-// from the guests' own lifecycle, dispatched through the profile's EventRouter
-// exactly as TabsEventRouter dispatches them, rather than from a tab strip.
+// remove and the zoom four, and chrome.windows.get*, update, create and
+// remove, are this desk's own ExtensionFunctions, registered over Chrome's
+// under the same names -- see domicile_desk_functions.h -- and so are the
+// refusals. Tab events come from the guests' own lifecycle, dispatched through
+// the profile's EventRouter exactly as TabsEventRouter dispatches them, rather
+// than from a tab strip; windows.onCreated and onRemoved come from the desk's
+// popup windows, which WindowsEventRouter skips for having no Browser.
 
 // Install the desk: the lookups' hooks, the functions over Chrome's, and
 // `profile`'s window. Once per profile, from ChromeBrowserMainParts::
 // PostProfileInit; the process-wide half is done the first time only.
 void StartDesk(Profile* profile);
 
-// Make `guest` a tab of its profile's desk. Run by AttachTabHelpers, after the
+// Make `guest` a tab of its profile's desk: of the popup window its element
+// named, or of the desk's own window. Run by AttachTabHelpers, after the
 // helpers that give it its id.
 void AddToDesk(content::WebContents& guest);
 

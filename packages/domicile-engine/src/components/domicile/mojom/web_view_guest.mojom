@@ -102,9 +102,18 @@ interface WebViewGuestHost {
   // report it to -- and the element would have to either replay that change or
   // lose it. It also costs a second round trip for a pipe the element always
   // wants.
+  //
+  // `popup_window` IS THE ELEMENT'S `popupwindow` ATTRIBUTE: the chrome.windows
+  // id of a popup window an extension asked for, which a shell names on the
+  // <webview> it opens in answer to PopupWindowRequested. The guest is then
+  // that window's one tab rather than a tab of the desk's window. Null for
+  // every other <webview>. An id that names no popup window waiting for its
+  // tab is a guest the desk takes as its own; see
+  // //chrome/browser/domicile/domicile_desk.h.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
-              pending_remote<WebViewGuestClient> client);
+              pending_remote<WebViewGuestClient> client,
+              int32? popup_window);
 };
 
 // The leg back: what the browser tells a <webview> about the guest behind it.
@@ -345,6 +354,24 @@ interface WebViewGuestClient {
   //
   // An event, like CloseRequested.
   FocusRequested();
+
+  // An extension asked for a popup window of its own at `url`:
+  // `chrome.windows.create({type: "popup", url})`, which is how Bitwarden asks
+  // to be signed in to. Sent to the active tab's element, as tabs.create's
+  // NewWindowRequested is, because a window is the shell's to draw and this is
+  // the element the user was last in.
+  //
+  // THE WINDOW EXISTS ALREADY, AND HAS NO TAB. `window_id` is the id
+  // chrome.windows knows it by, and the shell names it as the `popupwindow`
+  // attribute of the <webview> it opens -- which makes that <webview>'s guest
+  // the window's one tab. Until then windows.create has not answered.
+  //
+  // `width` and `height` are the size the extension asked for, in CSS pixels,
+  // or 0 where it asked for none. Where the window goes is the shell's.
+  //
+  // An event, like CloseRequested.
+  PopupWindowRequested(int32 window_id, url.mojom.Url url, int32 width,
+                       int32 height);
 };
 
 // One guest, for as long as the element that asked for it lives.

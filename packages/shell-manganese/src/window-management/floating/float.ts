@@ -91,6 +91,25 @@ export const floatFor = (
 });
 
 /**
+ * A box for a window that asked for a size of its own — an extension's
+ * `chrome.windows.create` — cascaded as {@link floatFor}'s are. An axis asked
+ * for as 0 is one it did not ask about, and opens at a float's own size.
+ */
+export const floatAskedFor = (
+  root: LayoutNode,
+  floating: number,
+  width: number,
+  height: number,
+): Float => {
+  const float = floatFor(root, floating);
+  return sizedTo(
+    float,
+    width === 0 ? float.width : width,
+    height === 0 ? float.height : height,
+  );
+};
+
+/**
  * The same box with its tree changed by `into` — the same object when nothing
  * changed, so the pointer crossing a window re-renders nothing. Throws when
  * that leaves the box empty: none of the commands that reach in here take a

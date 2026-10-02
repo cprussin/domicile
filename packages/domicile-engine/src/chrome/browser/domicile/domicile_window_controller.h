@@ -13,6 +13,7 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/domicile/domicile_desk.h"
@@ -71,12 +72,17 @@ class DeskWindow final : public ui::BaseWindow {
 // //components/domicile:desk_tabs's DeskTakesZoomSettings).
 extensions::api::tabs::ZoomSettings DeskZoomSettings();
 
-// A profile's desk, as chrome.windows sees it: one window, whose tabs are the
-// profile's <webview>s. See domicile_desk.h.
+// A chrome.windows window of a profile's desk. See domicile_desk.h.
 //
-// OWNED BY THE PROFILE, as its user data, so it goes when the profile does --
-// after every guest in it, which is what makes a tab outliving its window
-// impossible rather than handled.
+// THE DESK'S OWN WINDOW, whose tabs are the profile's <webview>s, is one of
+// these: type `normal`, and OWNED BY THE PROFILE, as its user data, so it goes
+// when the profile does -- after every guest in it, which is what makes a tab
+// outliving its window impossible rather than handled.
+//
+// AND SO IS EVERY POPUP WINDOW AN EXTENSION OPENED with windows.create: type
+// `popup`, owned by the desk's window, and with one tab -- the <webview> the
+// shell opened for it, whose element named it in `popupwindow`. It goes when
+// that tab does, or at windows.remove before the shell opened one.
 class DomicileWindowController final : public extensions::WindowController,
                                        public base::SupportsUserData::Data {
  public:
@@ -86,9 +92,10 @@ class DomicileWindowController final : public extensions::WindowController,
   // `context`'s desk, or null where none was made.
   static DomicileWindowController* Find(content::BrowserContext* context);
 
-  // Every desk there is, for ForEachTab.
+  // Every window there is, desks' and popups', for ForEachTab.
   static std::vector<DomicileWindowController*> All();
 
+  // A desk's own window.
   explicit DomicileWindowController(Profile* profile);
   DomicileWindowController(const DomicileWindowController&) = delete;
   DomicileWindowController& operator=(const DomicileWindowController&) = delete;
@@ -97,6 +104,40 @@ class DomicileWindowController final : public extensions::WindowController,
   // Make `guest` a tab: its window id, chrome.tabs.onCreated, and -- for the
   // first tab -- onActivated.
   void Add(content::WebContents& guest);
+
+  // THE DESK'S WINDOW ONLY, from here to Popup's end: what it keeps of the
+  // windows its extensions opened.
+  //
+  // A new popup window with no tab, and chrome.windows.onCreated. The shell
+  // is asked for its tab by the caller.
+  DomicileWindowController& OpenPopup();
+
+  // The popup window `window_id` while the shell has yet to give it its tab,
+  // or null: no such window, or one with its tab already.
+  DomicileWindowController* PopupAwaitingTab(int window_id) const;
+
+  // Close the popup window `window_id`, which has no tab: chrome.windows.
+  // onRemoved, and whoever waits on its tab hears that it never came.
+  void ClosePopup(int window_id);
+
+  // This window and its popups', in the order made.
+  std::vector<DomicileWindowController*> Windows() const;
+
+  // The window `window_id`, or null where it is none of Windows().
+  DomicileWindowController* WindowWithId(int window_id) const;
+
+  // The window with tab `tab_id`, or null where none has it.
+  DomicileWindowController* WindowWithTab(int tab_id) const;
+
+  // The window `contents` is a tab of, or null where it is no tab.
+  DomicileWindowController* WindowOf(content::WebContents& contents) const;
+
+  // chrome.windows.getLastFocused's answer: the window whose tab last took
+  // focus, by DeskTabs' rule for the desk's own. This one until any has.
+  DomicileWindowController& LastFocused() const;
+
+  // Whether this is a popup window rather than a desk's own.
+  bool IsPopup() const { return desk_ != nullptr; }
 
   // The tab `tab_id`, or null where this desk has none.
   content::WebContents* TabWithId(int tab_id) const;
@@ -108,9 +149,10 @@ class DomicileWindowController final : public extensions::WindowController,
   int IndexOf(content::WebContents& tab) const;
   bool IsActive(content::WebContents& tab) const;
 
-  // Hear the next tab this desk gains, once: tabs.create's answer, since the
-  // tab is the shell's to make. In the order asked.
-  void WhenNextTab(base::OnceCallback<void(content::WebContents&)> gained);
+  // Hear the next tab this window gains, once: tabs.create's and
+  // windows.create's answer, since the tab is the shell's to make. In the
+  // order asked. Null for a popup window closed before it had one.
+  void WhenNextTab(base::OnceCallback<void(content::WebContents*)> gained);
 
   void AddObserver(DeskObserver* observer);
   void RemoveObserver(DeskObserver* observer);
@@ -140,6 +182,17 @@ class DomicileWindowController final : public extensions::WindowController,
  private:
   class Tab;
 
+  // A popup window of `desk`.
+  DomicileWindowController(Profile* profile, DomicileWindowController& desk);
+
+  // What a popup window says to its desk: its tab took focus, and it is
+  // closing because its tab has gone. The second deletes the popup.
+  void PopupFocused(int window_id);
+  void PopupEmptied(int window_id);
+
+  // windows.onCreated or onRemoved, for `window`.
+  void BroadcastWindowEvent(DomicileWindowController& window, bool created);
+
   // What a tab says about itself, each from its guest.
   void Focused(int tab_id, content::WebContents& tab);
   void Updated(int tab_id, std::set<std::string> changed);
@@ -152,11 +205,19 @@ class DomicileWindowController final : public extensions::WindowController,
 
   DeskWindow window_;
   const SessionID session_id_;
+  // The desk's window, for a popup; null for the desk's own.
+  const raw_ptr<DomicileWindowController> desk_;
   DeskTabs tabs_;
   std::map<int, std::unique_ptr<Tab>> by_id_;
-  base::circular_deque<base::OnceCallback<void(content::WebContents&)>>
+  base::circular_deque<base::OnceCallback<void(content::WebContents*)>>
       waiting_for_tab_;
   base::ObserverList<DeskObserver> observers_;
+
+  // The desk's own only: its popup windows by id, which map order is the
+  // order made because a SessionID only grows, and the window that last had
+  // focus.
+  std::map<int, std::unique_ptr<DomicileWindowController>> popups_;
+  int last_focused_ = -1;
 };
 
 }  // namespace domicile
