@@ -829,10 +829,9 @@ over it to step a twentieth without opening anything.
   compositor tells every chrome. Mid-drag it holds where the pointer is, since
   the answers to its own earlier asks arrive behind it.
 - **No backlight, no sun** — a desktop on an external monitor draws nothing.
-- **It closes when you leave it** — a press outside, focus moving away, or a
-  click in a page, which the shell hears only as the `<webview>`'s
-  `domicile-guest-focus` (`src/page-focus.ts`; the site-information panel and
-  extension popups close the same way).
+- **It closes when you leave it** — a press outside, or focus moving away,
+  a click in a page's `<webview>` included: the engine sends the shell a real
+  `focusin` for it.
 
 ### Notifications
 
@@ -936,7 +935,6 @@ shell that wants its own pictures owns its own list.
 | `src/brightness/` | The sun on the bar, the slider it opens, and the host message the level is read from. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications and the desk's bookmarks as one list by name (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the icon its own page named when it was last previewed, signed in, or else the one the compositor found its site naming), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme, drawn without the frame a glyph's tile has; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |
-| `src/page-focus.ts` | What a popover here hears a click in a page as, so one closes when you click into a browser window. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |
 | `src/screens/` | Where the desktop's screens come from, and what goes on each of them. |
 | `src/screens/host-displays.ts` | The `DomicileClient` as the component library's `DisplaySource`, which is the whole of what joins the two. |

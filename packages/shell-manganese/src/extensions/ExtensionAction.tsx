@@ -6,7 +6,6 @@ import { Popover } from "@domicile/component-library/Popover";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { PAGE_FOCUS } from "../page-focus";
 
 type Props = {
   /** What every click asks, popup or not. */
@@ -67,7 +66,6 @@ export const ExtensionAction = ({
         onOpen(open ? id : undefined);
       }}
       open={opened === id}
-      outsideFocusEvents={PAGE_FOCUS}
       side="bottom"
       trigger={
         <Button label={extension.title} size="sm" variant="ghost">

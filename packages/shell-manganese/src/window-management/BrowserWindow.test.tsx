@@ -1032,6 +1032,41 @@ describe("BrowserWindow", () => {
       });
     });
 
+    // A PAGE UNDER ANOTHER TAB TAKES FOCUS WITHOUT ANYONE REACHING FOR IT: the
+    // engine hands the keyboard back to the guest that last had it. The engine
+    // says so in a real `focusin` as well as its own event, and the window
+    // answers neither.
+    it("says nothing when the page under another tab takes focus", () => {
+      const reaches: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          clickThrough={false}
+          covered
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused={false}
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onClose={nothingClosed}
+          onMotionEnded={nothingEnded}
+          onNavigate={() => undefined}
+          onOpenWindow={noWindows}
+          onReach={() => {
+            reaches.push("reach");
+          }}
+          rect={ON_SCREEN}
+          src="https://example.com"
+        />,
+      );
+
+      fireEvent.focusIn(view(container));
+      view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+
+      expect(reaches).toStrictEqual([]);
+    });
+
     it("reports a click in the page of the window it is already in", async () => {
       // Focus follows the cursor here, so the window under the pointer is the
       // one being worked in before the click lands — and a click in the page

@@ -10,14 +10,19 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/events/focus_event.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_new_window_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -235,8 +240,28 @@ void HTMLWebViewElement::SetFocused(bool received,
     if (guest_.is_bound()) {
       guest_->Focused();
     }
+    DispatchSuppressedFocus(type);
     DispatchGuestFocus();
   }
+}
+
+void HTMLWebViewElement::DispatchSuppressedFocus(
+    mojom::blink::FocusType type) {
+  Page* page = GetDocument().GetPage();
+  if (!page || page->GetFocusController().IsFocused()) {
+    return;
+  }
+  LOG(INFO) << "domicile: dispatching the focus a <webview>'s guest took";
+  // A handler may move focus on; once it has, the `focusin` would announce a
+  // focus this element no longer has. Document's own dispatch stops there too.
+  DispatchFocusEvent(nullptr, type, nullptr);
+  if (GetDocument().FocusedElement() != this) {
+    return;
+  }
+  DispatchEvent(*FocusEvent::Create(event_type_names::kFocusin,
+                                    Event::Bubbles::kYes,
+                                    GetDocument().domWindow(), 0, nullptr,
+                                    nullptr));
 }
 
 void HTMLWebViewElement::DispatchGuestFocus() {

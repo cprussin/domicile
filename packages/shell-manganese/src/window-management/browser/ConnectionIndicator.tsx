@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 
 import { css } from "../../../styled-system/css";
 import { ConnectionSafety } from "../../address/connection-safety";
-import { PAGE_FOCUS } from "../../page-focus";
 
 type Props = {
   /** The browser's verdict on the connection behind the page being shown. */
@@ -46,7 +45,6 @@ export const ConnectionIndicator = ({ security, url }: Props) => {
   return (
     <Popover
       align="start"
-      outsideFocusEvents={PAGE_FOCUS}
       side="bottom"
       title={title}
       trigger={
