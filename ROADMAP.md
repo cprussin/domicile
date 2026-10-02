@@ -276,6 +276,10 @@ these is one run, and each has a line to look for.
 - **A console switch.** `Ctrl+Alt+F<n>` away and back — same
   `configuring N display(s)` line. Before `DrmModeset::Relight` this froze and
   killed the GPU process fifteen seconds later.
+- **A dead GPU process.** `pkill -f 'chrome.*--type=gpu-process'`: expect the
+  screen back within seconds and no `failed to take DRM master` line. Before
+  patch `0074` the relaunched GPU process never got master and the desktop
+  stayed dead.
 - **A dead compositor.** `pkill domicile-compositor`: expect a new desktop within
   a second and `starting the desktop again in 1s — that is failure 1 of 5 in a
   row.` The windows will not come back, which is the item above rather than a
