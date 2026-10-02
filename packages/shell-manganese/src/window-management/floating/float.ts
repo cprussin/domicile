@@ -51,8 +51,11 @@ export type Grip = {
   vertical: Direction | undefined;
 };
 
-/** How big a window is when it first leaves the tiling. */
-const OPENS_AT = { height: 420, width: 640 };
+/**
+ * How big a window is when it first leaves the tiling, on a screen with room
+ * for it — see {@link floatFor}.
+ */
+const OPENS_AT = { height: 800, width: 1280 };
 
 /**
  * How far each float is offset from the one before it.
@@ -76,16 +79,21 @@ export const FLOAT_STEP = 10;
  * The count rather than the last box's corner: dragging a window into the
  * corner must not put the next one off the screen, and the count is what says
  * how many are already out regardless of where the user has since put them.
+ *
+ * No bigger than fits on `screen` with {@link ORIGIN} to spare on each side,
+ * so the first float on a small screen is wholly on it.
  */
 export const floatFor = (
   root: LayoutNode,
   floating: number,
+  screen: Pick<Rect, "height" | "width">,
   scratchpad = false,
 ): Float => ({
-  ...OPENS_AT,
   depth: focusChainOf(root).length,
+  height: fitted(OPENS_AT.height, screen.height, SMALLEST.height),
   root,
   scratchpad,
+  width: fitted(OPENS_AT.width, screen.width, SMALLEST.width),
   x: ORIGIN + CASCADE * floating,
   y: ORIGIN + CASCADE * floating,
 });
@@ -98,10 +106,11 @@ export const floatFor = (
 export const floatAskedFor = (
   root: LayoutNode,
   floating: number,
+  screen: Pick<Rect, "height" | "width">,
   width: number,
   height: number,
 ): Float => {
-  const float = floatFor(root, floating);
+  const float = floatFor(root, floating, screen);
   return sizedTo(
     float,
     width === 0 ? float.width : width,
@@ -276,6 +285,13 @@ export const rectOf = ({ height, width, x, y }: Float): Rect => ({
   x,
   y,
 });
+
+/**
+ * One axis of {@link floatFor}: `size`, cut down to what fits in `room` with
+ * {@link ORIGIN} to spare on each side, but never below `smallest`.
+ */
+const fitted = (size: number, room: number, smallest: number): number =>
+  Math.max(smallest, Math.min(size, room - 2 * ORIGIN));
 
 /** Where a box starts along one axis, and how far it goes. */
 type Span = { size: number; start: number };

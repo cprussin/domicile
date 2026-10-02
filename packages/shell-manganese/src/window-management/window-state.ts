@@ -245,18 +245,26 @@ export const workspaceHere = (state: WindowState): Workspace =>
   workspaceOn(state, state.focused);
 
 /** The workspace `screen` is showing. */
-export const currentOn = (state: WindowState, screen: string): string => {
-  const found = state.screens.find(({ name }) => name === screen);
-  if (found === undefined) {
-    throw new Error(`shell: no screen ${screen}`);
-  } else {
-    return found.current;
-  }
-};
+export const currentOn = (state: WindowState, screen: string): string =>
+  screenNamed(state, screen).current;
 
 /** The workspace on the screen the keyboard is on. */
 export const currentHere = (state: WindowState): string =>
   currentOn(state, state.focused);
+
+/** Where the screen the keyboard is on is, on the desk. */
+const screenHere = (state: WindowState): Rect =>
+  screenNamed(state, state.focused).box;
+
+/** The screen called `name`. Throws for one the desk does not have. */
+const screenNamed = (state: WindowState, name: string): DeskScreen => {
+  const found = state.screens.find((screen) => screen.name === name);
+  if (found === undefined) {
+    throw new Error(`shell: no screen ${name}`);
+  } else {
+    return found;
+  }
+};
 
 /** The screen showing `workspace`, or `undefined` while none is. */
 export const screenShowing = (
@@ -853,7 +861,9 @@ const reduceAction = (
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.FloatToggled: {
-      return onCurrent(state, floatToggled);
+      return onCurrent(state, (workspace) =>
+        floatToggled(workspace, screenHere(state)),
+      );
     }
     case WindowActionKind.FocusChanged: {
       const focusedId =
@@ -1105,7 +1115,13 @@ const openPopupWindow = (
   return onCurrent(
     { ...state, browsersOpened, windows: [...state.windows, window] },
     (workspace) =>
-      openedFloating(workspace, window.id, request.width, request.height),
+      openedFloating(
+        workspace,
+        window.id,
+        screenHere(state),
+        request.width,
+        request.height,
+      ),
   );
 };
 
@@ -1552,7 +1568,7 @@ const showScratchpad = (state: WindowState): WindowState => {
   } else {
     return onCurrent(
       { ...state, scratchpad: state.scratchpad.slice(0, -1) },
-      (found) => shown(found, hidden),
+      (found) => shown(found, hidden, screenHere(state)),
     );
   }
 };

@@ -27,6 +27,9 @@ import {
   windowsOn,
 } from "./workspace";
 
+/** The screen a float is sized to fit. */
+const SCREEN = { height: 1080, width: 1920, x: 0, y: 0 };
+
 /** A workspace with these windows tiled on it, the last one focused. */
 const tiling = (...ids: readonly string[]) =>
   ids.reduce((workspace, id) => opened(workspace, id), emptyWorkspace("1"));
@@ -41,14 +44,17 @@ describe("opened", () => {
 
   it("tiles a window even while a float is being worked in", () => {
     // sway opens a new window into the tiling whatever is floating over it.
-    const workspace = opened(floatToggled(tiling("a")), "b");
+    const workspace = opened(floatToggled(tiling("a"), SCREEN), "b");
 
     expect(windowsOf(workspace.tiling)).toEqual(["b"]);
     expect(focusedOn(workspace)).toBe("b");
   });
 
   it("opens into the floating group the keyboard is in", () => {
-    const workspace = opened(floatToggled(parentFocused(grouped())), "d");
+    const workspace = opened(
+      floatToggled(parentFocused(grouped()), SCREEN),
+      "d",
+    );
 
     expect(windowsOf(workspace.tiling)).toEqual(["a"]);
     expect(workspace.floats.map(({ root }) => windowsIn(root))).toEqual([
@@ -67,7 +73,7 @@ describe("closed", () => {
   });
 
   it("takes a floating window out and falls back to the tiling", () => {
-    const workspace = closed(floatToggled(tiling("a", "b")), "b");
+    const workspace = closed(floatToggled(tiling("a", "b"), SCREEN), "b");
 
     expect(windowsOn(workspace)).toEqual(["a"]);
     expect(focusedOn(workspace)).toBe("a");
@@ -82,7 +88,7 @@ describe("closed", () => {
 
 describe("floatToggled", () => {
   it("takes the window being worked in out of the tiling", () => {
-    const workspace = floatToggled(tiling("a", "b"));
+    const workspace = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(windowsOf(workspace.tiling)).toEqual(["a"]);
     expect(workspace.floats.flatMap(({ root }) => windowsIn(root))).toEqual([
@@ -92,7 +98,10 @@ describe("floatToggled", () => {
   });
 
   it("puts it back where the tiling focus is", () => {
-    const workspace = floatToggled(floatToggled(tiling("a", "b")));
+    const workspace = floatToggled(
+      floatToggled(tiling("a", "b"), SCREEN),
+      SCREEN,
+    );
 
     expect(workspace.floats).toEqual([]);
     expect(windowsOf(workspace.tiling)).toEqual(["a", "b"]);
@@ -102,7 +111,7 @@ describe("floatToggled", () => {
   it("floats the whole container `focus parent` selected", () => {
     // `mod+a` then `mod+Shift+Tab`, as in sway: the group leaves the tiling
     // as one float, laid out inside it the way it was tiled.
-    const workspace = floatToggled(parentFocused(grouped()));
+    const workspace = floatToggled(parentFocused(grouped()), SCREEN);
 
     expect(windowsOf(workspace.tiling)).toEqual(["a"]);
     expect(workspace.floats.map(({ root }) => root)).toEqual([
@@ -112,7 +121,10 @@ describe("floatToggled", () => {
   });
 
   it("puts the whole group back, still a group", () => {
-    const workspace = floatToggled(floatToggled(parentFocused(grouped())));
+    const workspace = floatToggled(
+      floatToggled(parentFocused(grouped()), SCREEN),
+      SCREEN,
+    );
 
     expect(workspace.floats).toEqual([]);
     expect(windowsOf(workspace.tiling)).toEqual(["a", "b", "c"]);
@@ -139,7 +151,7 @@ const grouped = () =>
   opened(containerSplit(tiling("a", "b"), Axis.Vertical), "c");
 
 describe("a floating group", () => {
-  const floated = () => floatToggled(parentFocused(grouped()));
+  const floated = () => floatToggled(parentFocused(grouped()), SCREEN);
 
   it("keeps floating what is left when one of its windows closes", () => {
     const workspace = closed(floated(), "c");
@@ -211,7 +223,7 @@ describe("a floating group", () => {
 
 describe("modeToggled", () => {
   it("swaps the keyboard between the floating and tiled windows", () => {
-    const workspace = floatToggled(tiling("a", "b"));
+    const workspace = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(focusedOn(modeToggled(workspace))).toBe("a");
     expect(focusedOn(modeToggled(modeToggled(workspace)))).toBe("b");
@@ -226,7 +238,10 @@ describe("modeToggled", () => {
 
 /** Two floats over a tiled window: `b` behind, `c` in front and focused. */
 const cascaded = () =>
-  floatToggled(reached(floatToggled(tiling("a", "b", "c")), "b"));
+  floatToggled(
+    reached(floatToggled(tiling("a", "b", "c"), SCREEN), "b"),
+    SCREEN,
+  );
 
 describe("reached", () => {
   it("changes nothing when the window being worked in is reached again", () => {
@@ -278,7 +293,9 @@ describe("focusLeaves", () => {
 
   it("is never from a floating window", () => {
     // sway keeps `focus <direction>` among the floats on their workspace.
-    expect(focusLeaves(floatToggled(tiling("a")), Direction.Right)).toBe(false);
+    expect(
+      focusLeaves(floatToggled(tiling("a"), SCREEN), Direction.Right),
+    ).toBe(false);
   });
 });
 
@@ -327,7 +344,7 @@ describe("the keyed commands", () => {
   });
 
   it("shifts a floating window by a step instead of retiling it", () => {
-    const floated = floatToggled(tiling("a", "b"));
+    const floated = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(windowMoved(floated, Direction.Right).floats[0]?.x).toBe(
       (floated.floats[0]?.x ?? 0) + FLOAT_STEP,
@@ -335,7 +352,7 @@ describe("the keyed commands", () => {
   });
 
   it("resizes whichever window is being worked in", () => {
-    const floated = floatToggled(tiling("a", "b"));
+    const floated = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(windowGrown(floated, Direction.Right).floats[0]?.width).toBe(
       (floated.floats[0]?.width ?? 0) + FLOAT_STEP,
@@ -356,7 +373,7 @@ describe("the keyed commands", () => {
     // other keyed command does, and a floating window has left the tree —
     // so there is no container around it to select. A tiling that selected
     // one anyway would draw a line round a group nothing is pointed at.
-    const floating = floatToggled(tiling("a", "b", "c"));
+    const floating = floatToggled(tiling("a", "b", "c"), SCREEN);
 
     expect(parentFocused(floating).tiling).toBe(floating.tiling);
   });
@@ -366,7 +383,7 @@ describe("the keyed commands", () => {
     // a float takes them out of the tree with it — so coming back lands on
     // the window the tiling was in rather than on a container chosen before
     // the user left it, which is what sway's `mode_toggle` does.
-    const floated = floatToggled(tiling("a", "b", "c"));
+    const floated = floatToggled(tiling("a", "b", "c"), SCREEN);
     const selected = parentFocused(modeToggled(floated));
 
     const away = modeToggled(selected);
@@ -378,7 +395,7 @@ describe("the keyed commands", () => {
     // Focus follows the cursor here, so this is the everyday way out of the
     // tiling rather than `mod+Tab`: the pointer reaching a floating window
     // is the keyboard leaving the tree, and the selection goes with it.
-    const floated = floatToggled(tiling("a", "b", "c"));
+    const floated = floatToggled(tiling("a", "b", "c"), SCREEN);
     const selected = parentFocused(modeToggled(floated));
 
     const crossed = reached(selected, "c");
@@ -422,7 +439,7 @@ describe("fullscreenToggled", () => {
 
 describe("holds", () => {
   it("knows its own windows, tiled or floating", () => {
-    const workspace = floatToggled(tiling("a", "b"));
+    const workspace = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(holds(workspace, "a")).toBe(true);
     expect(holds(workspace, "b")).toBe(true);

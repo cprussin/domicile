@@ -26,9 +26,12 @@ const AT: Float = {
   y: 80,
 };
 
+/** A 1920 by 1080 screen: room for a float at its own size. */
+const SCREEN = { height: 1080, width: 1920 };
+
 describe("floatFor", () => {
   it("opens the first window in from the corner", () => {
-    const first = floatFor(LayoutNode.Window("w1"), 0);
+    const first = floatFor(LayoutNode.Window("w1"), 0, SCREEN);
     expect(first.x).toBeGreaterThan(0);
     expect(first.y).toBeGreaterThan(0);
   });
@@ -36,8 +39,8 @@ describe("floatFor", () => {
   it("cascades each window past the ones already out", () => {
     // Not on top of them: a window that opened exactly over the last one looks
     // like the last one moved, and there is nothing to grab to find out.
-    const first = floatFor(LayoutNode.Window("w1"), 0);
-    const second = floatFor(LayoutNode.Window("w2"), 1);
+    const first = floatFor(LayoutNode.Window("w1"), 0, SCREEN);
+    const second = floatFor(LayoutNode.Window("w2"), 1, SCREEN);
     expect(second.x).toBeGreaterThan(first.x);
     expect(second.y).toBeGreaterThan(first.y);
   });
@@ -45,18 +48,36 @@ describe("floatFor", () => {
   it("cascades by the count rather than by where the last one ended up", () => {
     // Dragging a window into the corner must not put the next one off the
     // screen, so the count is what says how many are already out.
-    expect(floatFor(LayoutNode.Window("w3"), 2)).toStrictEqual({
-      ...floatFor(LayoutNode.Window("other"), 2),
+    expect(floatFor(LayoutNode.Window("w3"), 2, SCREEN)).toStrictEqual({
+      ...floatFor(LayoutNode.Window("other"), 2, SCREEN),
       root: LayoutNode.Window("w3"),
     });
   });
 
   it("opens every window at the same size", () => {
-    const { height, width } = floatFor(LayoutNode.Window("w1"), 0);
-    expect(floatFor(LayoutNode.Window("w2"), 5)).toMatchObject({
+    const { height, width } = floatFor(LayoutNode.Window("w1"), 0, SCREEN);
+    expect(floatFor(LayoutNode.Window("w2"), 5, SCREEN)).toMatchObject({
       height,
       width,
     });
+  });
+
+  it("opens big enough to work in on a screen with room for it", () => {
+    expect(floatFor(LayoutNode.Window("w1"), 0, SCREEN)).toMatchObject({
+      height: 800,
+      width: 1280,
+    });
+  });
+
+  it("never opens bigger than the screen it is on", () => {
+    const screen = { height: 768, width: 1024 };
+    const { height, width, x, y } = floatFor(
+      LayoutNode.Window("w1"),
+      0,
+      screen,
+    );
+    expect(x + width).toBeLessThanOrEqual(screen.width);
+    expect(y + height).toBeLessThanOrEqual(screen.height);
   });
 });
 

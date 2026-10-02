@@ -159,6 +159,7 @@ describe("the windows an extension asks for", () => {
   it("opens at a float's own size on an axis it did not ask about", () => {
     const state = reduce(
       desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left")),
       WindowAction.PopupWindowOpened({
         height: 630,
         url: POPUP,
@@ -167,7 +168,7 @@ describe("the windows an extension asks for", () => {
       }),
     );
 
-    expect(floatOf(state)).toMatchObject({ height: 630, width: 640 });
+    expect(floatOf(state)).toMatchObject({ height: 630, width: 1280 });
   });
 });
 
@@ -1196,7 +1197,8 @@ describe("a client's limits on its size", () => {
   };
 
   it("float a window no smaller than its client will draw", () => {
-    // Bitwarden's: a 680x500 minimum, over the 640x420 a float opens at.
+    // Bitwarden's: a 680x500 minimum, over what a float opens at while no
+    // screen is described.
     // Smaller, its frame is cut off at the box's edge. Its bar comes on top.
     const state = reduce(
       desktop("vault"),
@@ -1208,6 +1210,19 @@ describe("a client's limits on its size", () => {
       height: 500 + TITLE_BAR,
       width: 680,
     });
+  });
+
+  it("float a window no bigger than the screen the keyboard is on", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed([
+        { box: { height: 400, width: 600, x: 0, y: 0 }, name: "small" },
+      ]),
+      WindowAction.FloatToggled(),
+    );
+
+    expect(floatOf(state).width).toBeLessThanOrEqual(600);
+    expect(floatOf(state).height).toBeLessThanOrEqual(400);
   });
 
   it("grow a float when the limit arrives after it", () => {
