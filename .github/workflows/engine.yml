@@ -544,6 +544,9 @@ jobs:
         if: ${{ steps.series.outputs.carries != 'true' || steps.warm.outputs.warm != 'true' || steps.release.outputs.build == 'true' }}
         env:
           DOMICILE_COMPILE_SLOT_WAIT: 36000
+          # A holder whose run is over holds nothing (crux-run-finished.sh).
+          DOMICILE_COMPILE_SLOT_HOLDER_DONE: '.github/scripts/crux-run-finished.sh "$HOLDER"'
+          GH_TOKEN: ${{ github.token }}
           DOMICILE_COMPILE_SLOT_STILL_WANTED: >-
             ${{ github.event_name == 'pull_request'
                 && github.event.pull_request.head.repo.full_name == github.repository
