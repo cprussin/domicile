@@ -391,6 +391,7 @@ fn runtime(directory: &std::path::Path) -> Runtime {
         command: directory.join("command.sock"),
         control: directory.join("domicile-ipc.1.sock"),
         profile: directory.join("profile"),
+        shims: directory.join("bin"),
         session: directory.join("session.json"),
     }
 }

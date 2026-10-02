@@ -52,7 +52,8 @@ On NixOS that is `programs.domicile.settings.startup.commands`.
 
 A link an app opens opens in the desk: every app it starts has `BROWSER` set
 to `domicile-open-url`, which hands the address to the shell as a browser
-window. `domicile open-url <url>` does the same from a terminal inside it.
+window, and `xdg-open` first on its `PATH` sends web links the same way (and
+anything else to your own `xdg-open`). `domicile open-url <url>` does the same from a terminal inside it.
 
 ## Your session's keys, in a window
 

@@ -28,6 +28,7 @@ fn runtime() -> Runtime {
         command: PathBuf::from("/run/d/command.sock"),
         control: PathBuf::from("/run/d/domicile-ipc.4242.sock"),
         profile: PathBuf::from("/run/d/profile"),
+        shims: PathBuf::from("/run/d/bin"),
         session: PathBuf::from("/run/d/session.json"),
     }
 }
@@ -360,6 +361,26 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
         &|_| None,
     );
     assert_eq!(env_of(&spawned, "BROWSER").unwrap(), "/b/domicile-open-url");
+}
+
+#[test]
+fn xdg_open_is_this_desktops_for_every_app_it_starts() {
+    // In front of the machine's own, so a link an app hands `xdg-open` opens
+    // in this desktop whatever `mimeapps.list` says. Prepended: everything
+    // else on the path is still found.
+    let inherited = |name: &str| (name == "PATH").then(|| "/usr/bin:/bin".to_string());
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        &runtime(),
+        None,
+        &inherited,
+    );
+    assert_eq!(
+        env_of(&spawned, "PATH").unwrap(),
+        "/run/d/bin:/usr/bin:/bin"
+    );
 }
 
 #[test]

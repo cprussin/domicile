@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # A desktop that is up is told to serve another shell, and does — and to open
-# an address, which it hands the engine the same way.
+# an address, which it hands the engine the same way, from `domicile open-url`,
+# `BROWSER` or the `xdg-open` it puts first on its apps' PATH.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -116,6 +117,7 @@ while [ $# -gt 0 ]; do
 done
 # What every app this desktop starts would inherit, for the test to read back.
 printf '%s' "$BROWSER" >"$(dirname "$session")/browser"
+printf '%s' "$PATH" >"$(dirname "$session")/path"
 : >"$session"
 exec sleep 60
 COMPOSITOR
@@ -254,6 +256,52 @@ if [ "$HEARD" = "$WANT" ]; then
 else
   echo "FAIL: the engine heard '$HEARD'"
   echo "      and the protocol says  $WANT"
+  FAILED=1
+fi
+
+echo "== xdg-open, for the apps a desktop starts, is the desktop's =="
+APP_PATH="$(cat "$(dirname "$GIVEN")/path" 2>/dev/null)"
+SHIMS="${APP_PATH%%:*}"
+if [ "$(readlink "$SHIMS/xdg-open")" = "$TARGET/debug/domicile-xdg-open" ]; then
+  echo "PASS: $SHIMS/xdg-open"
+else
+  echo "FAIL: the first directory on the apps' PATH is '$SHIMS', and its xdg-open"
+  echo "      is not $TARGET/debug/domicile-xdg-open"
+  FAILED=1
+fi
+
+echo "== a link handed to that xdg-open reaches the engine =="
+if ! env DOMICILE_SOCK="$SOCK" PATH="$APP_PATH" xdg-open "https://example.com/" \
+       >"$WORK/xdg-opened.log" 2>&1; then
+  echo "FAIL: xdg-open failed:"
+  sed 's/^/    /' "$WORK/xdg-opened.log"
+  FAILED=1
+fi
+HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
+WANT='{"type":"open_url","version":1,"url":"https://example.com/"}'
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the engine heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
+  FAILED=1
+fi
+
+echo "== and anything else reaches the xdg-open behind it =="
+# The machine's own, standing in for the one that knows what opens a PDF.
+mkdir -p "$WORK/system"
+cat >"$WORK/system/xdg-open" <<SYSTEM
+#!/bin/sh
+printf '%s\n' "\$@" >"$WORK/system-heard"
+SYSTEM
+chmod +x "$WORK/system/xdg-open"
+env DOMICILE_SOCK="$SOCK" PATH="$SHIMS:$WORK/system:$APP_PATH" xdg-open notes.pdf \
+  >"$WORK/deferred.log" 2>&1
+if [ "$(cat "$WORK/system-heard" 2>/dev/null)" = "notes.pdf" ]; then
+  echo "PASS: notes.pdf went to $WORK/system/xdg-open"
+else
+  echo "FAIL: notes.pdf did not reach the xdg-open behind this desktop's:"
+  sed 's/^/    /' "$WORK/deferred.log"
   FAILED=1
 fi
 
