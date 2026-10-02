@@ -54,6 +54,12 @@ const client = () => {
     },
     domicile,
     locks,
+    /** `domicile open-url`. */
+    opens: (url: string) => {
+      act(() => {
+        handlers.get("open_url")?.({ url } as never);
+      });
+    },
     spawned,
   };
 };
@@ -84,6 +90,18 @@ describe("the desktop", () => {
       { box: { height: 1080, width: 1920, x: 0, y: 0 }, name: "left" },
       { box: { height: 1080, width: 1920, x: 1920, y: 0 }, name: "right" },
     ]);
+  });
+});
+
+describe("an address somebody asked the desk to open", () => {
+  it("is a browser window", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+
+    host.opens("https://example.com/");
+
+    expect(result.current.windows).toContainEqual(
+      expect.objectContaining({ src: "https://example.com/" }),
+    );
   });
 });
 

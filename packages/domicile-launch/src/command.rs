@@ -2,12 +2,15 @@
 //!
 //! The engine's socket, not this desktop's: [`crate::control`] is the wire a
 //! person's `domicile <command>` arrives on, and this is the one the supervisor
-//! turns a `load-shell` into. One JSON object per line each way, and the
+//! turns a `load-shell` or an `open-url` into. One JSON object per line each way, and the
 //! connection is over.
 //!
 //! ```text
 //! {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 //! {"type":"loaded"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"open_url","version":1,"url":"https://example.com/"}
+//! {"type":"opened"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
 //! THE OTHER END OF THIS IS C++ AND IS PUBLISHED SEPARATELY, which is the whole
@@ -43,6 +46,8 @@ const VERSION: u32 = 1;
 pub enum Reply {
     /// It is serving that shell now.
     Loaded,
+    /// It handed that address to the shell.
+    Opened,
     /// It is not, and this is the engine's own sentence about why.
     Refused { why: String },
 }
@@ -57,6 +62,19 @@ pub fn load_shell_line(root: &Path, module: &Path) -> String {
     let mut line = serde_json::to_string(&Command::LoadShell {
         module,
         root,
+        version: VERSION,
+    })
+    .expect("a command is plain data and always serializes");
+    line.push('\n');
+    line
+}
+
+/// The line that tells an engine to hand `url` to the shell to open.
+///
+/// Not parsed here: the engine parses it, and refuses one it cannot.
+pub fn open_url_line(url: &str) -> String {
+    let mut line = serde_json::to_string(&Command::OpenUrl {
+        url,
         version: VERSION,
     })
     .expect("a command is plain data and always serializes");
@@ -82,9 +100,8 @@ pub fn reply(line: &str) -> Result<Reply, serde_json::Error> {
 /// module's, and the two design docs. JSON does not care about the order of an
 /// object's keys and a reader comparing a live line against a doc does.
 ///
-/// Not public, and there is no caller that would want it: the one command
-/// there is has a function of its own above, which is the whole of what a
-/// caller has to know.
+/// Not public, and there is no caller that would want it: each command has a
+/// function of its own above, which is the whole of what a caller has to know.
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command<'a> {
@@ -92,5 +109,9 @@ enum Command<'a> {
         version: u32,
         root: &'a Path,
         module: &'a Path,
+    },
+    OpenUrl {
+        version: u32,
+        url: &'a str,
     },
 }

@@ -130,6 +130,10 @@ export const useWindows = (
       // what happens next is `reduceWindows`'s to say and not the desktop's.
       dispatch(Action.FocusRequested(app_id));
     });
+    // `domicile open-url`, which is what `BROWSER` runs inside the desktop.
+    domicile.on("open_url", ({ url }) => {
+      dispatch(Action.BrowserOpened(url));
+    });
   }, [domicile]);
 
   // The desk the host described, which is what says where a window can be.

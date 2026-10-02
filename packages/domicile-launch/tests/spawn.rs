@@ -295,6 +295,7 @@ fn the_compositor_is_a_producer_to_the_engine() {
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &|_| None,
@@ -333,6 +334,7 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &|_| None,
@@ -344,6 +346,23 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 }
 
 #[test]
+fn a_link_an_app_opens_opens_in_this_desktop() {
+    // `BROWSER` is what a program that opens a link runs, and the compositor
+    // starts every program a shell asks for. So a link opened in a terminal
+    // inside this desktop is a browser window of this desktop, rather than a
+    // browser of some other program's on top of it.
+    let spawned = compositor(
+        Path::new("/b/domicile-compositor"),
+        Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
+        &runtime(),
+        None,
+        &|_| None,
+    );
+    assert_eq!(env_of(&spawned, "BROWSER").unwrap(), "/b/domicile-open-url");
+}
+
+#[test]
 fn the_engines_libraries_go_in_front_of_whatever_was_there() {
     // Prepended rather than replacing: a machine with its own
     // `LD_LIBRARY_PATH` set is telling the compositor where to find something,
@@ -352,6 +371,7 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &inherited,
@@ -371,6 +391,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
     let quiet = compositor(
         Path::new("/b/c"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &|_| None,
@@ -384,6 +405,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
     let spawned = compositor(
         Path::new("/b/c"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &asked,
@@ -521,6 +543,7 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         Some(Path::new("/etc/domicile/desk.json")),
         &|_| None,
@@ -549,6 +572,7 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
     let args = args_of(&compositor(
         Path::new("/b/domicile-compositor"),
         Path::new("/l/engine"),
+        Path::new("/b/domicile-open-url"),
         &runtime(),
         None,
         &|_| None,

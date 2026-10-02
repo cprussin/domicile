@@ -99,6 +99,7 @@ import {
   locked,
   modifiers,
   notifications,
+  openUrl,
   popupPlaced,
   shortcut,
   theme,
@@ -329,6 +330,9 @@ export class DomicileClient {
     });
     host.addEventListener("notifications", (event) => {
       this.#deliver("notifications", notifications(event));
+    });
+    host.addEventListener("openurl", (event) => {
+      this.#deliver("open_url", openUrl(event));
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
