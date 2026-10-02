@@ -127,6 +127,7 @@ case "$action" in
     started="$(date +%s)"
     took=""
     asked=0
+    holder_asked=0
     mkdir -p "$WAITING"
     waiting="$(note "$owner")"
     trap 'rm -f "$waiting" "$waiting.tmp"' EXIT
@@ -158,6 +159,21 @@ case "$action" in
         echo "cleared the compile slot '$(holder)' left on this runner ($RUNNER_NAME), which runs one job at a time"
         rm -rf "$LOCK"
         continue
+      fi
+      # AND ON A HOLDER WHOSE RUN IS OVER, wherever it ran: a runner shut down
+      # mid-build never drops, and only it could clear what it left, so a
+      # build on the other runner waited out the whole slot wait for nothing
+      # (run 36923792412, crux-two, 2026-10-01). The workflow says how to ask;
+      # only a yes clears, so a run in progress -- maybe linking -- keeps it.
+      if [ -n "${DOMICILE_COMPILE_SLOT_HOLDER_DONE:-}" ] &&
+         [ $(($(date +%s) - holder_asked)) -ge "${DOMICILE_COMPILE_SLOT_RECHECK:-60}" ]; then
+        holder_asked="$(date +%s)"
+        gone_holder="$(holder)"
+        if why="$(HOLDER="$gone_holder" sh -c "$DOMICILE_COMPILE_SLOT_HOLDER_DONE" 2>&1)"; then
+          echo "::warning::cleared the compile slot '$gone_holder' held, because its run is over: $why"
+          rm -rf "$LOCK"
+          continue
+        fi
       fi
       [ $(($(date +%s) - started)) -lt "$wait_for" ] || break
       # Renamed over the last one rather than rewritten in place: a holder

@@ -190,6 +190,32 @@ expect "a waiter that is still wanted takes the slot when it frees" ok \
 wait
 slot drop rupert >/dev/null
 
+# A HOLDER WHOSE RUN IS OVER IS NOT HOLDING ANYTHING. A runner that was shut
+# down mid-build never runs its drop, and until today only that same runner
+# could clear what it left: run 36923792412's slot, left on crux-two at 13:55
+# PT, held crux's next build in its wait for hours while crux-two sat free.
+# The workflow says how to ask whether the holder's run is over; HOLDER names it.
+rm -rf "$WORK/slot" "$WORK/slot.waiting"
+slot take 'engine.yml run 111 attempt 1' >/dev/null
+took="$(DOMICILE_COMPILE_SLOT_WAIT=30 \
+  DOMICILE_COMPILE_SLOT_HOLDER_DONE='[ "$HOLDER" = "engine.yml run 111 attempt 1" ] && echo "run 111 is completed"' \
+  slot take 'engine.yml run 222 attempt 1')"
+expect "a waiter takes the slot from a holder whose run is over" ok "$(status "$took")"
+contains "saying whose and why" "run 111 is completed" "$took"
+slot drop 'engine.yml run 222 attempt 1' >/dev/null
+
+# Only on a yes. A run still in progress may be linking, and clearing the slot
+# under it is the OOM this exists to prevent; an answer that is not a yes is
+# not a no either, and leaves the holder alone.
+slot take 'engine.yml run 333 attempt 1' >/dev/null
+for verdict in 'exit 1' 'echo "no route"; exit 3'; do
+  out="$(DOMICILE_COMPILE_SLOT_WAIT=1 DOMICILE_COMPILE_SLOT_HOLDER_DONE="$verdict" \
+    slot take 'engine.yml run 444 attempt 1')"
+  expect "a holder not known to be over keeps the slot ($verdict)" refused "$(status "$out")"
+done
+contains "and still holds it" "run 333" "$(slot who)"
+slot drop 'engine.yml run 333 attempt 1' >/dev/null
+
 # A HOLDER CAN SEE SOMEBODY WAITING, AND STEP ASIDE FOR THEM. The production
 # build holds the slot for hours; a pull request's minute-long compile should
 # not queue behind it. So a waiter says it is waiting, and a holder that is
