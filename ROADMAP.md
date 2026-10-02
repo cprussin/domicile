@@ -187,8 +187,9 @@ The evidence for each of those is in the doc that made the claim —
 
 7. **Native density on every monitor.** On a tty the shell is one page over
    the desk's bounding box, hosted on the fastest monitor and presented on the
-   rest, rastered at the largest scale: a lower-density monitor is shown it
-   downsampled. Left: a cc tiling per display scale.
+   rest, rastered at the largest scale, and each lower-density monitor's part
+   also rastered at its own (a cc tiling per display scale). Left: the
+   hardware check, and an `<app>`'s scale from the monitor under it.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 ## In the engine fork — the agent on `crux`

@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+#include "cc/domicile/display_regions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
@@ -73,9 +74,11 @@ TEST(DeskGeometryTest, ThePageIsToldOneScreenTheSizeOfTheDesk) {
   like.depth = 30;
   like.orientation_angle = 270;
   const display::ScreenInfos told =
-      DeskScreenInfos(*DeskGeometryOf({kLaptop, kCenter, kRight}), like);
+      DeskScreenInfos(*DeskGeometryOf({kLaptop, kCenter, kRight}),
+                      {kLaptop, kCenter, kRight}, like);
 
-  ASSERT_EQ(told.screen_infos.size(), 1u);
+  ASSERT_EQ(told.screen_infos.size(), 4u);
+  EXPECT_EQ(&told.current(), &told.screen_infos.front());
   const display::ScreenInfo& desk = told.current();
   EXPECT_EQ(desk.rect, gfx::Rect(0, 0, 5520, 3200));
   EXPECT_EQ(desk.available_rect, gfx::Rect(0, 0, 5520, 3200));
@@ -85,6 +88,31 @@ TEST(DeskGeometryTest, ThePageIsToldOneScreenTheSizeOfTheDesk) {
   EXPECT_EQ(desk.orientation_angle, 0);
   // The rest is the host display's.
   EXPECT_EQ(desk.depth, 30);
+}
+
+TEST(DeskGeometryTest, ThePageIsToldEveryMonitorItIsShownOn) {
+  // Each at its own density, from the desk's corner, so that the page can
+  // raster its part of every one natively: see cc/domicile/display_regions.h.
+  const DeskPlace left{
+      .id = 1, .desk = gfx::Rect(-100, 50, 800, 600), .scale = 1.0f};
+  const DeskPlace right{
+      .id = 2, .desk = gfx::Rect(700, 80, 800, 600), .scale = 2.0f};
+  const display::ScreenInfos told =
+      DeskScreenInfos(*DeskGeometryOf({left, right}), {left, right}, {});
+
+  ASSERT_EQ(told.screen_infos.size(), 3u);
+  const display::ScreenInfo& shows_left = told.screen_infos[1];
+  EXPECT_EQ(shows_left.rect, gfx::Rect(0, 0, 800, 600));
+  EXPECT_EQ(shows_left.device_scale_factor, 1.0f);
+  EXPECT_EQ(shows_left.label, cc::kDomicileDisplayLabel);
+  const display::ScreenInfo& shows_right = told.screen_infos[2];
+  EXPECT_EQ(shows_right.rect, gfx::Rect(800, 30, 800, 600));
+  EXPECT_EQ(shows_right.device_scale_factor, 2.0f);
+  EXPECT_EQ(shows_right.label, cc::kDomicileDisplayLabel);
+  // Not the screen the page is on, which has the host's id: every id once.
+  EXPECT_NE(shows_left.display_id, told.current_display_id);
+  EXPECT_NE(shows_right.display_id, told.current_display_id);
+  EXPECT_NE(shows_left.display_id, shows_right.display_id);
 }
 
 }  // namespace
