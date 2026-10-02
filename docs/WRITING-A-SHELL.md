@@ -55,7 +55,7 @@ any ancestor are all carried, including a 3D rotation with no perspective over
 it, which CSS draws by dropping z and the SDK maps the same way.
 
 ```sh
-nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
+nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
 ```
 
 That is the entire interface between a shell and Domicile: one built
@@ -1344,7 +1344,7 @@ Ship that directory however you like — a tarball, a git checkout, a nix
 derivation — and point Domicile at it:
 
 ```sh
-nix run github:cprussin/domicile -- ./my-desktop/dist/shell.js
+nix run github:cprussin/domicile/stable -- ./my-desktop/dist/shell.js
 ```
 
 The module, not the directory holding it. Domicile serves that directory —

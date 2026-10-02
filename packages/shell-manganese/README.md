@@ -1059,7 +1059,7 @@ emits the chrome to `.vite/renderer/main_window/`, which is the whole of what a
 shell builds: a page and what it loads.
 
 ```sh
-nix run 'github:cprussin/domicile#manganese'
+nix run 'github:cprussin/domicile/stable#manganese'
 ```
 
 runs it — the engine on that page, and the compositor as a producer to it.

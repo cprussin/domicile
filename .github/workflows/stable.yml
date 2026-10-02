@@ -1,0 +1,30 @@
+name: Stable
+
+# `stable` is the newest main that runs the official engine, so
+# `nix run github:cprussin/domicile/stable#manganese` never gets the checked
+# one. Main moves on every merge; the official engine of a new series is pinned
+# only after the nightly build (engine-release.yml), whose pin lands on main as
+# a merge of its own and so runs this too. See .github/scripts/promote-stable.sh.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One at a time, so two pushes never race for the ref; the newest pending run
+# is the one kept, and it promotes the newest main.
+concurrency:
+  group: stable
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history, so stable can be checked as an ancestor of main.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: .github/scripts/promote-stable.sh
