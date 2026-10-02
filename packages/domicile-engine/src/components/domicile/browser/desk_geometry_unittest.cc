@@ -10,6 +10,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace domicile {
@@ -113,6 +114,33 @@ TEST(DeskGeometryTest, ThePageIsToldEveryMonitorItIsShownOn) {
   EXPECT_NE(shows_left.display_id, told.current_display_id);
   EXPECT_NE(shows_right.display_id, told.current_display_id);
   EXPECT_NE(shows_left.display_id, shows_right.display_id);
+}
+
+TEST(DeskGeometryTest, AWarpOnTheHostLandsOnTheHost) {
+  EXPECT_EQ(WarpLandsOn({kLaptop, kCenter, kRight}, kLaptop.id,
+                        gfx::Point(100, 100)),
+            kLaptop.id);
+}
+
+TEST(DeskGeometryTest, AWarpPastTheHostsEdgeLandsOnTheMonitorThere) {
+  // From the laptop's corner, up and to the right: on the turned monitors,
+  // whose arrow is drawn turned and at their density, not the laptop's.
+  const std::vector<DeskPlace> lit{kLaptop, kCenter, kRight};
+  EXPECT_EQ(WarpLandsOn(lit, kLaptop.id, gfx::Point(3000, -1000)), kCenter.id);
+  EXPECT_EQ(WarpLandsOn(lit, kLaptop.id, gfx::Point(4000, -1000)), kRight.id);
+}
+
+TEST(DeskGeometryTest, AWarpOntoNoMonitorStaysOnTheHost) {
+  // Above the laptop and left of the center monitor is no screen at all, and
+  // the cursor does not cross onto nothing.
+  EXPECT_EQ(WarpLandsOn({kLaptop, kCenter, kRight}, kLaptop.id,
+                        gfx::Point(100, -100)),
+            kLaptop.id);
+}
+
+TEST(DeskGeometryTest, AWarpFromOffTheDeskIsNotTheDesks) {
+  EXPECT_EQ(WarpLandsOn({kCenter, kRight}, kLaptop.id, gfx::Point(100, 100)),
+            std::nullopt);
 }
 
 }  // namespace
