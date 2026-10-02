@@ -210,9 +210,10 @@ export const reached = (workspace: Workspace, id: string): Workspace => {
 /**
  * `floating toggle`: what the commands are pointed at leaves the tiling — the
  * window being worked in, or the container `focus parent` selected — or the
- * float the keyboard is in rejoins it, whole.
+ * float the keyboard is in rejoins it, whole. A float is sized to fit
+ * `screen` — see `floatFor`.
  */
-export const floatToggled = (workspace: Workspace): Workspace => {
+export const floatToggled = (workspace: Workspace, screen: Rect): Workspace => {
   const { floatFocus, tiling } = workspace;
   if (floatFocus !== undefined) {
     const float = floatHolding(workspace, floatFocus);
@@ -229,7 +230,10 @@ export const floatToggled = (workspace: Workspace): Workspace => {
     return {
       ...workspace,
       floatFocus: focusedWindowIn(node),
-      floats: [...workspace.floats, floatFor(node, workspace.floats.length)],
+      floats: [
+        ...workspace.floats,
+        floatFor(node, workspace.floats.length, screen),
+      ],
       // Not through {@link floatFocused}: this is the node leaving the tree
       // rather than the keyboard leaving it, and taking it out is already
       // what puts the commands back on a window — `removedAt` ends on
@@ -240,11 +244,15 @@ export const floatToggled = (workspace: Workspace): Workspace => {
 };
 
 /** A window up from the scratchpad: floating over the workspace, in front. */
-export const shown = (workspace: Workspace, id: string): Workspace => ({
+export const shown = (
+  workspace: Workspace,
+  id: string,
+  screen: Rect,
+): Workspace => ({
   ...floatFocused(workspace, id),
   floats: [
     ...workspace.floats,
-    floatFor(Node.Window(id), workspace.floats.length, true),
+    floatFor(Node.Window(id), workspace.floats.length, screen, true),
   ],
 });
 
@@ -255,6 +263,7 @@ export const shown = (workspace: Workspace, id: string): Workspace => ({
 export const openedFloating = (
   workspace: Workspace,
   id: string,
+  screen: Rect,
   width: number,
   height: number,
 ): Workspace =>
@@ -263,7 +272,13 @@ export const openedFloating = (
       ...workspace,
       floats: [
         ...workspace.floats,
-        floatAskedFor(Node.Window(id), workspace.floats.length, width, height),
+        floatAskedFor(
+          Node.Window(id),
+          workspace.floats.length,
+          screen,
+          width,
+          height,
+        ),
       ],
     },
     id,

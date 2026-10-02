@@ -2116,18 +2116,18 @@ describe("Shell", () => {
     });
 
     it("floats a window no smaller than its client will draw", () => {
-      // Wider than the 640 a float opens at, and shorter than its 390: the
+      // Wider than the 1280 a float opens at, and shorter than its 770: the
       // client's frame would be cut off across and stretched down.
       const { container } = renderShell();
       clientAppears("vault");
-      domicile.emit("app_min_size", { app_id: "vault", size: [680, 300] });
-      domicile.emit("app_max_size", { app_id: "vault", size: [700, 350] });
+      domicile.emit("app_min_size", { app_id: "vault", size: [1300, 300] });
+      domicile.emit("app_max_size", { app_id: "vault", size: [1400, 350] });
 
       press("Tab", true);
 
       expect(boxOf(appElement(container, "vault"))).toMatchObject({
         height: "350px",
-        width: "680px",
+        width: "1300px",
       });
     });
 
