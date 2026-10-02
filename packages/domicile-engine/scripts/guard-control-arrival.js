@@ -126,6 +126,7 @@ const EVENT_NAMES = [
   "locked",
   "extensions",
   "tray",
+  "shellconfig",
   "notifications",
   "openurl",
 ];

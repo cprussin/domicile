@@ -15,6 +15,7 @@ import type {
   DomicileLockedEvent,
   DomicileModifiersEvent,
   DomicileNotificationsEvent,
+  DomicileShellConfigEvent,
   DomicileShortcutEvent,
   DomicileTrayEvent,
 } from "./domicile-host";
@@ -37,9 +38,11 @@ import {
   modifiers,
   notifications,
   popupPlaced,
+  shellConfig,
   shortcut,
   tray,
 } from "./host-message";
+import { KeyAction } from "./key-action";
 
 /** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
 type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
@@ -722,5 +725,118 @@ describe("whether the desk is locked", () => {
         }) as DomicileLockedEvent,
       ),
     ).toStrictEqual({ locked: false });
+  });
+});
+
+describe("the keys the config binds", () => {
+  /** A `shellconfig` event carrying `config` as the line the compositor sent. */
+  const configEvent = (config: unknown): DomicileShellConfigEvent =>
+    Object.assign(new Event("shellconfig"), {
+      arrival: 0,
+      config: JSON.stringify(config),
+    }) as DomicileShellConfigEvent;
+
+  const META_L = { alt: false, ctrl: false, key: 38, logo: true, shift: false };
+
+  it("arrives by mode, each chord under the web's names and each action built", () => {
+    expect(
+      shellConfig(
+        configEvent({
+          keybindings: {
+            default: [
+              {
+                action: { args: ["terminal"], type: "send_shell" },
+                shortcut: META_L,
+              },
+            ],
+            resize: [
+              { action: { name: "default", type: "mode" }, shortcut: META_L },
+            ],
+          },
+          shells: {
+            manganese: {
+              keybindings: {
+                default: [
+                  {
+                    action: { args: ["focus", "right"], type: "send_shell" },
+                    shortcut: META_L,
+                  },
+                ],
+              },
+              options: { gaps: 8 },
+            },
+          },
+          type: "shell_config",
+        }),
+      ),
+    ).toStrictEqual({
+      keybindings: new Map([
+        [
+          "default",
+          [
+            {
+              action: KeyAction.SendShell(["terminal"]),
+              shortcut: {
+                altKey: false,
+                ctrlKey: false,
+                keycode: 38,
+                metaKey: true,
+                shiftKey: false,
+              },
+            },
+          ],
+        ],
+        [
+          "resize",
+          [
+            {
+              action: KeyAction.Mode("default"),
+              shortcut: {
+                altKey: false,
+                ctrlKey: false,
+                keycode: 38,
+                metaKey: true,
+                shiftKey: false,
+              },
+            },
+          ],
+        ],
+      ]),
+      shells: new Map([
+        [
+          "manganese",
+          {
+            keybindings: new Map([
+              [
+                "default",
+                [
+                  {
+                    action: KeyAction.SendShell(["focus", "right"]),
+                    shortcut: {
+                      altKey: false,
+                      ctrlKey: false,
+                      keycode: 38,
+                      metaKey: true,
+                      shiftKey: false,
+                    },
+                  },
+                ],
+              ],
+            ]),
+            options: { gaps: 8 },
+          },
+        ],
+      ]),
+    });
+  });
+
+  it("refuses a line that is not the message", () => {
+    // The engine forwards the line without reading it, so this is the first
+    // thing that does.
+    expect(() =>
+      shellConfig(
+        configEvent({ keybindings: {}, shells: {}, type: "shell_config" }),
+      ),
+    ).toThrow();
   });
 });

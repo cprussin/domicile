@@ -7,8 +7,8 @@ import { Clipboard } from "./clipboard/Clipboard";
 import { useClipboard } from "./clipboard/useClipboard";
 import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
+import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
-import { useShortcuts } from "./keyboard/useShortcuts";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
 import { useOpeningApps } from "./launcher/useOpeningApps";
@@ -185,11 +185,16 @@ export const Desktop = ({ domicile }: Props) => {
     [act, spendShift],
   );
 
-  useShortcuts({
+  // The binding mode is the desk's: a key on any page enters it, and every
+  // page reads its keys in it.
+  useKeybindings({
     domicile,
     launcherOpen: windows.launcherOpen,
     mode: windows.mode,
     onAction,
+    onModeChanged: (mode) => {
+      act(WindowAction.ModeSet(mode));
+    },
   });
 
   // The pointer carries the keyboard from one monitor to the next, windows or

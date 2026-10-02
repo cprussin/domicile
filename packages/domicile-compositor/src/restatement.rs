@@ -25,16 +25,22 @@
 //! | `files.omit` | handed to the index, which walks the home again under it — `omit_from_the_index` |
 //! | `applications` | the omit rule and bookmarks the next `search_apps` is answered under — `offer_the_applications` |
 //! | `extensions.*` | told to every chrome, whose browser process installs them — `hand_over_the_extensions` |
+//! | `keybindings` | resolved on the keyboard and told to every chrome — `rebind_the_keys` |
+//! | `modes` | the same, with `keybindings` |
+//! | `shells` | the same, with `keybindings` |
 //!
-//! Nine rows for the nine fields [`Config`] has: a reload acts on each of them
-//! rather than storing it. Three limits read like gaps and are not.
+//! Twelve rows for the twelve fields [`Config`] has: a reload acts on each of
+//! them rather than storing it. The last three are restated together and also
+//! whenever `input.keyboard` moves, because a chord names a keysym and which
+//! key that is belongs to the layout. Four limits read like gaps and are not.
 //! `output.max_scale` governs only the output that follows Domicile's own
 //! window — a described display states its own scale, and a desktop the config
 //! describes refuses a density from anywhere else. A keyboard xkb cannot
 //! compile is refused rather than taken up, which is `retype_the_desktop`'s own
-//! doc comment. And an edited idle timeout lights a desk whose screens were
-//! off, which `reset_the_idle_clock` argues is the only honest answer rather
-//! than a convenience.
+//! doc comment, and a keysym it cannot type is refused the same way, which is
+//! `rebind_the_keys`'. And an edited idle timeout lights a desk whose screens
+//! were off, which `reset_the_idle_clock` argues is the only honest answer
+//! rather than a convenience.
 //!
 //! **This table is the account of record, so a field added to [`Config`] has
 //! to appear in it** — with a line in [`Restatement`] and an arm in
@@ -80,6 +86,9 @@ pub struct Restatement {
     /// The extensions the browser process installs, or `None` where the list
     /// did not move.
     pub extensions: Option<ExtensionsConfig>,
+    /// Whether the chromes are to be told the keys and the shells' settings
+    /// again.
+    pub shell_config: bool,
 }
 
 impl Restatement {
@@ -95,6 +104,10 @@ impl Restatement {
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             applications: (was.applications != now.applications).then(|| now.applications.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
+            shell_config: was.input.keyboard != now.input.keyboard
+                || was.keybindings != now.keybindings
+                || was.modes != now.modes
+                || was.shells != now.shells,
         }
     }
 }
@@ -211,6 +224,25 @@ mod tests {
     }
 
     #[test]
+    fn the_keys_are_restated_when_a_binding_or_the_keyboard_moved() {
+        // The keyboard as well as the bindings, because a chord names a keysym
+        // and the key it resolves to is the layout's: the same file on another
+        // layout is other keys.
+        let was = parsed(A_DVORAK_DESK);
+        for now in [
+            A_PLAIN_DESK,
+            A_DESK_THAT_BINDS_A_KEY,
+            A_DESK_WITH_A_MODE,
+            A_DESK_THAT_TELLS_ITS_SHELL_SOMETHING,
+        ] {
+            assert!(
+                Restatement::between(&was, &parsed(now)).shell_config,
+                "{now}"
+            );
+        }
+    }
+
+    #[test]
     fn a_cap_on_the_scale_that_moved_is_restated() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_CAPPED_DESK);
@@ -280,6 +312,48 @@ web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
 [input.keyboard]
 xkb_variant = "dvp"
 xkb_options = ["caps:swapescape"]
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, with a key bound.
+    const A_DESK_THAT_BINDS_A_KEY: &str = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[keybindings]
+"Meta+Return" = "send-shell terminal"
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, with a mode nothing enters yet.
+    const A_DESK_WITH_A_MODE: &str = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[modes.resize]
+"Meta+Escape" = "mode default"
+
+[[output.displays]]
+name = "one"
+size = [1024, 768]
+"#;
+
+    /// The same desk, with a setting for one shell.
+    const A_DESK_THAT_TELLS_ITS_SHELL_SOMETHING: &str = r#"
+[input.keyboard]
+xkb_variant = "dvp"
+xkb_options = ["caps:swapescape"]
+
+[shells.manganese.options]
+gaps = 8
 
 [[output.displays]]
 name = "one"

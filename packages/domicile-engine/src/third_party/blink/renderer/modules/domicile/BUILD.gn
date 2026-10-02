@@ -43,6 +43,8 @@ blink_modules_sources("domicile") {
     "domicile_modifiers_event.h",
     "domicile_open_url_event.cc",
     "domicile_open_url_event.h",
+    "domicile_shell_config_event.cc",
+    "domicile_shell_config_event.h",
     "domicile_shortcut_event.cc",
     "domicile_shortcut_event.h",
     "domicile_theme_event.cc",

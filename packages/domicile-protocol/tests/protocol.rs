@@ -8,7 +8,8 @@
 
 use domicile_protocol::{
     negotiate, Bookmark, ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo,
-    DisplayTransform, FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
+    DisplayTransform, FilePreview, HostMessage, KeyAction, KeyBinding, Passphrase, ShellBindings,
+    Shortcut, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -326,6 +327,46 @@ fn host_messages_round_trip() {
     });
     host_round_trip(&HostMessage::Idle { idle: true });
     host_round_trip(&HostMessage::Locked { locked: true });
+    // A shell's options are whatever it wrote, so the round trip is over
+    // every kind of value JSON has rather than over one the protocol chose.
+    let options = serde_json::json!({
+        "gaps": 8,
+        "ratio": 0.5,
+        "bar": { "position": "top", "shown": true },
+        "workspaces": ["1", "2"],
+    });
+    let resize = KeyBinding {
+        shortcut: Shortcut {
+            key: 19,
+            alt: false,
+            ctrl: false,
+            shift: true,
+            logo: true,
+        },
+        action: KeyAction::Mode {
+            name: "resize".into(),
+        },
+    };
+    host_round_trip(&HostMessage::ShellConfig {
+        keybindings: [("default".to_string(), vec![resize.clone()])].into(),
+        shells: [(
+            "manganese".to_string(),
+            ShellBindings {
+                keybindings: [(
+                    "resize".to_string(),
+                    vec![KeyBinding {
+                        action: KeyAction::SendShell {
+                            args: vec!["resize".into(), "grow".into(), "right".into()],
+                        },
+                        ..resize
+                    }],
+                )]
+                .into(),
+                options: options.as_object().expect("an object").clone(),
+            },
+        )]
+        .into(),
+    });
 }
 
 /// The answer is the query it answers, paths relative to the home directory
