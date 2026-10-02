@@ -3,10 +3,17 @@ import { THEMES } from "@domicile/component-library/theme-core";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { token } from "../../styled-system/tokens";
 import { WALLPAPER_PHOTOS } from "./photos";
 
 /** How long one photograph stays up before the next fades in over it. */
 const DWELL_MS = 60_000;
+
+/**
+ * How long the fade takes, after which the photograph it left is put away.
+ * The token the transition below is written in, so the two cannot disagree.
+ */
+const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
 /**
  * What a layer is to the rotation, which is the whole of how the fade works.
@@ -23,7 +30,10 @@ const DWELL_MS = 60_000;
 enum Layer {
   /** On screen, rising over {@link Layer.Previous}. */
   Current = "current",
-  /** Still opaque underneath it, until the one above has arrived. */
+  /**
+   * Still opaque underneath it, until the one above has arrived — and then
+   * put away, so that it is transparent again before its next turn.
+   */
   Previous = "previous",
   /** Loaded, transparent, waiting its turn. */
   Waiting = "waiting",
@@ -50,15 +60,30 @@ enum Layer {
  */
 export const Wallpaper = () => {
   const [step, setStep] = useState(0);
+  // Whether this step's fade is over, and the photograph it left put away.
+  const [settled, setSettled] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setStep((previous) => previous + 1);
+      setSettled(false);
     }, DWELL_MS);
     return () => {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (settled) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSettled(true);
+    }, CROSSFADE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [settled]);
 
   return (
     <div className={sheetStyles}>
@@ -77,7 +102,7 @@ export const Wallpaper = () => {
             <img
               alt=""
               className={layerStyles}
-              data-wallpaper={layerOf(index, step, photos.length)}
+              data-wallpaper={layerOf(index, step, photos.length, settled)}
               key={photo}
               src={photo}
             />
@@ -94,11 +119,21 @@ export const Wallpaper = () => {
  * `step` counts up for ever and a rotation's `length` photographs are a ring,
  * so the modulus is what turns one into the other. The previous step needs no
  * guard for the first tick: `-1 % n` is `-1`, which is no photograph's index.
+ *
+ * Once the fade is `settled` there is no previous: every photograph but the
+ * one on screen is transparent, which is what lets each of them rise from
+ * nothing when its turn comes — the photograph a rotation of two comes back
+ * to included.
  */
-const layerOf = (index: number, step: number, length: number): Layer => {
+const layerOf = (
+  index: number,
+  step: number,
+  length: number,
+  settled: boolean,
+): Layer => {
   if (index === step % length) {
     return Layer.Current;
-  } else if (index === (step - 1) % length) {
+  } else if (!settled && index === (step - 1) % length) {
     return Layer.Previous;
   } else {
     return Layer.Waiting;
@@ -134,7 +169,15 @@ const layerStyles = css({
   // The stacking is the role's, not the markup's: the photograph coming in has
   // to be over the one going out, and at the end of the rotation it is the
   // earlier element of the two.
-  '&[data-wallpaper="current"]': { opacity: 1, zIndex: 1 },
+  //
+  // AND THE FADE IS ITS ALONE. Every other change of role happens under an
+  // opaque photograph, so it is never seen; a transition on one would run
+  // over the top of the one coming in wherever the markup put it later.
+  '&[data-wallpaper="current"]': {
+    opacity: 1,
+    transition: "opacity {durations.crossfade} {easings.in-out}",
+    zIndex: 1,
+  },
   '&[data-wallpaper="previous"]': { opacity: 1 },
   blockSize: "100%",
   inlineSize: "100%",
@@ -144,5 +187,4 @@ const layerStyles = css({
   objectFit: "cover",
   opacity: 0,
   position: "absolute",
-  transition: "opacity {durations.crossfade} {easings.in-out}",
 });

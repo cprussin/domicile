@@ -4,11 +4,15 @@ import { THEMES } from "@domicile/component-library/theme-core";
 import { act, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
+import { token } from "../../styled-system/tokens";
 import { WALLPAPER_PHOTOS } from "./photos";
 import { Wallpaper } from "./Wallpaper";
 
 /** How long one photograph is up, which is what a tick of the rotation is. */
 const DWELL_MS = 60_000;
+
+/** How long the fade from one photograph to the next takes. */
+const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
 /**
  * The photograph at `index` in `theme`'s rotation, which is what these tests
@@ -145,5 +149,48 @@ describe("Wallpaper", () => {
       unmount();
       jest.useRealTimers();
     }
+  });
+
+  it("puts the one it left away once the fade is over", () => {
+    // So that whichever comes in next rises from transparent. Left opaque
+    // underneath, it would be the next one in a rotation of two — already
+    // drawn at full strength, so its turn would be a cut rather than a fade —
+    // and in a longer rotation it would be fading out *over* the one coming
+    // in whenever the markup put it later in the page.
+    for (const theme of THEMES) {
+      jest.useFakeTimers();
+      const { container, unmount } = render(<Wallpaper />);
+
+      // Two turns, because the fade's timer is set by the render the
+      // rotation's tick makes.
+      act(() => {
+        jest.advanceTimersByTime(DWELL_MS);
+      });
+      act(() => {
+        jest.advanceTimersByTime(CROSSFADE_MS);
+      });
+
+      expect(layer(container, theme, "current")).toEqual([photo(theme, 1)]);
+      expect(layer(container, theme, "previous")).toEqual([]);
+      expect(layer(container, theme, "waiting")).toContain(photo(theme, 0));
+      unmount();
+      jest.useRealTimers();
+    }
+  });
+
+  it("fades only the photograph coming in", () => {
+    // Every other change of role is under an opaque photograph, so it is
+    // never seen — and a transition on one would run it over the top of the
+    // one coming in, whenever the markup put it later in the page.
+    const { container } = render(<Wallpaper />);
+    const image = container.querySelector("img");
+
+    expect(image?.className).toContain(
+      css({
+        '&[data-wallpaper="current"]': {
+          transition: "opacity {durations.crossfade} {easings.in-out}",
+        },
+      }),
+    );
   });
 });
