@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-
+import { showsOneThing } from "./alone";
 import { Axis } from "./direction";
 import type { Geometry, Placement } from "./placement";
 import { placementsOf, TILED } from "./placement";
@@ -41,13 +41,16 @@ const selected = (
   state: WindowState,
   fullscreenId?: string,
   draggingId?: string,
-) =>
-  selectionOf(
-    placementsOf(state, GEOMETRY),
+) => {
+  const screenful = placementsOf(state, GEOMETRY);
+  return selectionOf(
+    screenful,
+    showsOneThing([screenful]),
     activeIdOf(state),
     fullscreenId,
     draggingId,
   );
+};
 
 describe("selectionOf", () => {
   it("rings the window being worked in, at its whole frame", () => {

@@ -1,4 +1,3 @@
-import { showsOneThing } from "./alone";
 import type { Screenful } from "./placement";
 import type { Rect } from "./rect";
 import { barOf } from "./rect";
@@ -34,14 +33,15 @@ export type Selection = {
  * says nothing the fullscreen window does not already, and a group's is drawn
  * over a window that covers it.
  *
- * Nor around the window while the screen shows one thing alone — see
- * {@link showsOneThing}: there is nothing else the commands could be pointed
+ * Nor around the window while the desk shows one thing alone — `alone`, see
+ * `showsOneThing`: there is nothing else the commands could be pointed
  * at, so it would be a line that says nothing. A group `focus parent`
  * selected is still ringed then, since nothing else says the commands left
  * the window for it.
  */
 export const selectionOf = (
   screenful: Screenful,
+  alone: boolean,
   activeId: string | undefined,
   fullscreenId: string | undefined,
   draggingId: string | undefined,
@@ -58,7 +58,7 @@ export const selectionOf = (
       group: true,
       rect: selection.rect,
     };
-  } else if (active === undefined || showsOneThing(screenful)) {
+  } else if (active === undefined || alone) {
     return undefined;
   } else {
     return {

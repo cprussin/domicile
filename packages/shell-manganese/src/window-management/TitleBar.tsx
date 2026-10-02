@@ -28,7 +28,7 @@ const MIDDLE_BUTTON = 1;
 
 type Props = {
   /**
-   * Whether the window this bar names is all the screen shows, alone or as a
+   * Whether the window this bar names is all the desk shows, alone or as a
    * tab group — see `alone.ts`. Its edge is not drawn in the accent then.
    */
   alone?: boolean;
@@ -261,7 +261,7 @@ const barStyles = cva({
     paddingInlineStart: 2,
     position: "absolute",
   }),
-  // A window alone on the screen has nothing to be picked out from, so its
+  // A window alone on the desk has nothing to be picked out from, so its
   // edge is the resting one, as the ring and its frame are — see `alone.ts`.
   // `cva` merges this over the variant into one style before it makes a
   // class, so the override is not left to the order Panda emits rules in.
