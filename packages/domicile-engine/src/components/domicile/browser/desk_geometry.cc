@@ -63,4 +63,18 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
   return infos;
 }
 
+std::optional<int64_t> WarpLandsOn(const std::vector<DeskPlace>& lit,
+                                   int64_t host,
+                                   const gfx::Point& at) {
+  const auto on = std::ranges::find(lit, host, &DeskPlace::id);
+  if (on == lit.end()) {
+    return std::nullopt;
+  }
+  const gfx::Point on_the_desk = at + on->desk.OffsetFromOrigin();
+  const auto there = std::ranges::find_if(lit, [&](const DeskPlace& place) {
+    return place.desk.Contains(on_the_desk);
+  });
+  return there == lit.end() ? host : there->id;
+}
+
 }  // namespace domicile

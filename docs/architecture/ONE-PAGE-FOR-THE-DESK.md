@@ -66,7 +66,8 @@ enters one (the crossing already follows `desk`).
   pressed button's window still come first.
 - A warp is asked for in the host's pixels and lands on the monitor holding
   that place on the desk (`DrmCursor::MoveCursorTo` through
-  `PointerCrossingFor`).
+  `PointerCrossingFor`). Its arrow is then drawn for that monitor's turn and
+  density, not the host's (`WarpLandsOn`).
 - The cursor stays per CRTC (`DrmCursor`); the host sets its shape on every
   monitor.
 
