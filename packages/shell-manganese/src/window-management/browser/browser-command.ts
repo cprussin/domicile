@@ -3,8 +3,8 @@
 // Matched on `key` — the character — rather than `code`, the physical key,
 // because that is what Chrome's own bindings follow and what a user reads off
 // the keycap: Ctrl+plus zooms in wherever the layout puts plus. The desktop's
-// bindings go the other way, by `code`, and they are all on Meta — see
-// `keyboard/bindings.ts` — so none of these can be one of them.
+// bindings are the config's, claimed from the compositor — see
+// `keyboard/useKeybindings.ts` — and a chord claimed is never delivered here.
 
 /** What a browser window can be told to do from the keyboard. */
 export enum BrowserCommand {

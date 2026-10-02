@@ -137,6 +137,7 @@ working in its area; it is context, not compliance.
 | [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | Applications' tray icons: the compositor is the StatusNotifierItem host on the session bus, and manganese draws the icons in one reorderable row with the extensions'. Menus (dbusmenu) are left. |
 | [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | Notifications on a desk: the compositor is the `org.freedesktop.Notifications` server for applications and, through Chrome's own bridge, for sites; manganese toasts them and keeps them in a drawer. Which monitor toasts is left. |
 | [/docs/architecture/ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md) | One shell page over the whole desk on a tty, shown on every monitor at its own density and refresh rate: presenters per CRTC, a cc tiling per display scale, and floats dragged across screens in `shell-manganese`. Phase 1 is the only model; native density per monitor is built and awaits a hardware check. |
+| [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A desk's keys in the config, sway-style: `[keybindings]`, `[modes.*]` and `[shells.<name>]`, resolved against the keymap by the compositor and dispatched by the SDK. The `domicile send-shell` verb is left. |
 
 [`/ROADMAP.md`](/ROADMAP.md) is the open work and the known gaps, with each
 item pointing at the doc above that carries its detail. Read it before starting

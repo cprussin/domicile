@@ -100,6 +100,7 @@ import {
   modifiers,
   notifications,
   popupPlaced,
+  shellConfig,
   shortcut,
   theme,
   tray,
@@ -332,6 +333,9 @@ export class DomicileClient {
     });
     host.addEventListener("windowstheme", (event) => {
       this.#deliver("windows_theme", theme(event));
+    });
+    host.addEventListener("shellconfig", (event) => {
+      this.#deliver("shell_config", shellConfig(event));
     });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the

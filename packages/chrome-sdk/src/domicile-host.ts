@@ -742,6 +742,29 @@ export type DomicileLockedEvent = Event & {
 };
 
 /**
+ * The keys the config binds, and what it tells each shell besides.
+ *
+ * **A string, and JSON in it.** The compositor's `shell_config` line, exactly
+ * as it was sent: each shell's `options` table is whatever that shell's config
+ * said, and WebIDL has no type for a value nobody has written down. So the
+ * engine forwards the line without reading it, and `host-message.ts` is the
+ * first thing that does.
+ *
+ * Pushed when this page connects and again whenever a reload of the config
+ * moves the bindings, the shells' tables or the keyboard they resolve against.
+ */
+export type DomicileShellConfigEvent = Event & {
+  readonly config: string;
+
+  /**
+   * When the browser process had this message, in `performance.now()`'s
+   * milliseconds. See {@link DomicileModifiersEvent.arrival}, which documents
+   * what this is and what it is not.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
+/**
  * One extension with an action, as the tray draws it.
  *
  * An interface on the engine's side rather than a plain object, for
@@ -846,6 +869,11 @@ export type DomicileHostEventMap = {
    * and on connecting.
    */
   windowstheme: DomicileThemeEvent;
+  /**
+   * The keys the config binds and each shell's options, once on connecting
+   * and whenever a reload changes them.
+   */
+  shellconfig: DomicileShellConfigEvent;
   /**
    * The extensions with an action, whole, whenever one changes and once on
    * connecting.

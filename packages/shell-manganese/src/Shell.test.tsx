@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
+import type {
+  Keybinding,
+  ShellConfigMessage,
+} from "@domicile/chrome-sdk/host-message";
+import { KeyAction } from "@domicile/chrome-sdk/key-action";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
@@ -19,7 +24,6 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
-import { codeFor } from "./keyboard/programmers-dvorak";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { TITLE_BAR } from "./window-management/rect";
@@ -224,13 +228,16 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
   // A standalone theme source rather than `hostTheme`: what the bar's toggle
   // does with the compositor is `host-theme.test.ts`'s, and a double that had
   // to answer `theme` as well would make every test here depend on it.
-  return render(
+  const rendered = render(
     <Shell
       displays={hostDisplays(client)}
       domicile={client}
       theme={standaloneThemeSource()}
     />,
   );
+  // The config's keys, which the compositor sends as the page connects.
+  domicile.emit("shell_config", MANGANESE_CONFIG);
+  return rendered;
 };
 
 /** The chrome on a desktop the host has already described. */
@@ -249,16 +256,185 @@ const clientAppears = (appId: string, title = appId): void => {
 };
 
 /**
+ * The keys these tests press: the `KeyboardEvent.code` of the key each keysym
+ * is on under Programmer's Dvorak — the layout the sample config in the README
+ * is written for — and that key's evdev code, which is what the compositor
+ * resolves a keysym to and what a binding names.
+ *
+ * Written out rather than read off the SDK's table: what this checks is that
+ * the shell answers the key the compositor resolved, so taking the number from
+ * the table the SDK reads would check nothing.
+ */
+const KEYS: Readonly<Record<string, readonly [code: string, keycode: number]>> =
+  {
+    a: ["KeyA", 30],
+    asterisk: ["Digit7", 8],
+    b: ["KeyN", 49],
+    braceleft: ["Digit3", 4],
+    braceright: ["Digit4", 5],
+    bracketleft: ["Digit2", 3],
+    bracketright: ["Digit0", 11],
+    Down: ["ArrowDown", 108],
+    d: ["KeyH", 35],
+    Escape: ["Escape", 1],
+    e: ["KeyD", 32],
+    equal: ["Digit6", 7],
+    exclam: ["Minus", 12],
+    f: ["KeyY", 21],
+    h: ["KeyJ", 36],
+    j: ["KeyC", 46],
+    k: ["KeyV", 47],
+    Left: ["ArrowLeft", 105],
+    l: ["KeyP", 25],
+    minus: ["Quote", 40],
+    parenleft: ["Digit5", 6],
+    parenright: ["Digit8", 9],
+    plus: ["Digit9", 10],
+    q: ["KeyX", 45],
+    Return: ["Enter", 28],
+    Right: ["ArrowRight", 106],
+    r: ["KeyO", 24],
+    s: ["Semicolon", 39],
+    space: ["Space", 57],
+    Tab: ["Tab", 15],
+    Up: ["ArrowUp", 103],
+    v: ["Period", 52],
+    w: ["Comma", 51],
+  };
+
+/** The key a keysym is on, or a throw for one these tests never wrote down. */
+const keyOf = (keysym: string): readonly [code: string, keycode: number] => {
+  const key = KEYS[keysym];
+  if (key === undefined) {
+    throw new Error(`test: no key written down for ${keysym}`);
+  } else {
+    return key;
+  }
+};
+
+/** One line of the config: Meta, Shift if `shift`, the keysym, and the action. */
+const line = (keysym: string, shift: boolean, action: string): Keybinding => {
+  const [verb = "", ...rest] = action.split(" ");
+  return {
+    action:
+      verb === "mode"
+        ? KeyAction.Mode(rest.join(" "))
+        : KeyAction.SendShell(rest),
+    shortcut: {
+      altKey: false,
+      ctrlKey: false,
+      keycode: keyOf(keysym)[1],
+      metaKey: true,
+      shiftKey: shift,
+    },
+  };
+};
+
+const DIRECTIONS = [
+  ["h", "left"],
+  ["j", "down"],
+  ["k", "up"],
+  ["l", "right"],
+  ["Left", "left"],
+  ["Down", "down"],
+  ["Up", "up"],
+  ["Right", "right"],
+] as const;
+
+const WORKSPACE_KEYS = [
+  "parenleft",
+  "parenright",
+  "braceright",
+  "plus",
+  "braceleft",
+  "bracketright",
+  "bracketleft",
+  "exclam",
+  "equal",
+  "asterisk",
+] as const;
+
+/**
+ * The README's sample config, as the SDK delivers it once the compositor has
+ * resolved every keysym: the bindings manganese shipped hard-coded before they
+ * moved into the config.
+ */
+const MANGANESE_CONFIG: ShellConfigMessage = {
+  keybindings: new Map([["default", []]]),
+  shells: new Map([
+    [
+      "manganese",
+      {
+        keybindings: new Map([
+          [
+            "default",
+            [
+              line("Return", false, "send-shell terminal"),
+              line("q", true, "send-shell kill"),
+              line("Return", true, "send-shell lock"),
+              line("space", false, "send-shell launcher"),
+              line("d", false, "send-shell launcher"),
+              ...DIRECTIONS.map(([keysym, way]) =>
+                line(keysym, false, `send-shell focus ${way}`),
+              ),
+              ...DIRECTIONS.map(([keysym, way]) =>
+                line(keysym, true, `send-shell move ${way}`),
+              ),
+              line("v", true, "send-shell clipboard"),
+              line("b", false, "send-shell split h"),
+              line("v", false, "send-shell split v"),
+              line("s", false, "send-shell layout stacking"),
+              line("w", false, "send-shell layout tabbed"),
+              line("e", false, "send-shell layout toggle split"),
+              line("a", false, "send-shell focus parent"),
+              line("a", true, "send-shell focus child"),
+              line("f", false, "send-shell fullscreen toggle"),
+              line("f", true, "send-shell fullscreen toggle global"),
+              line("Tab", false, "send-shell focus mode_toggle"),
+              line("Tab", true, "send-shell floating toggle"),
+              line("minus", false, "send-shell scratchpad show"),
+              line("minus", true, "send-shell move scratchpad"),
+              line("r", false, "mode resize"),
+              ...WORKSPACE_KEYS.map((keysym, at) =>
+                line(keysym, false, `send-shell workspace ${String(at + 1)}`),
+              ),
+              ...WORKSPACE_KEYS.map((keysym, at) =>
+                line(
+                  keysym,
+                  true,
+                  `send-shell move container to workspace ${String(at + 1)}`,
+                ),
+              ),
+            ],
+          ],
+          [
+            "resize",
+            [
+              ...DIRECTIONS.map(([keysym, way]) =>
+                line(keysym, false, `send-shell resize grow ${way}`),
+              ),
+              line("Return", false, "mode default"),
+              line("Escape", false, "mode default"),
+            ],
+          ],
+        ]),
+        options: {},
+      },
+    ],
+  ]),
+};
+
+/**
  * A chord pressed on this page, which is where every press the desktop's own
  * chrome or a focused Wayland window hears arrives.
  *
- * By the *key* rather than by the letter on it: the bindings are physical, so
- * a test presses `codeFor("h")` — the key Programmer's Dvorak puts `h` on —
- * exactly as the shell reads it.
+ * By the *key* rather than by the letter on it: a binding names the key the
+ * compositor resolved its keysym to, so a test presses the key Programmer's
+ * Dvorak puts `h` on, exactly as the shell reads it.
  */
 const press = (keysym: string, shift = false): void => {
   fireEvent.keyDown(document, {
-    code: codeFor(keysym),
+    code: keyOf(keysym)[0],
     metaKey: true,
     shiftKey: shift,
   });
@@ -266,31 +442,13 @@ const press = (keysym: string, shift = false): void => {
 
 /** The same chord, handed back by the host — what a focused `<webview>` does. */
 const hostPress = (keysym: string, shift = false): void => {
-  const keycode = KEYCODES[keysym];
-  if (keycode === undefined) {
-    throw new Error(`test: no evdev code written down for ${keysym}`);
-  } else {
-    domicile.emit("shortcut", {
-      altKey: false,
-      ctrlKey: false,
-      keycode,
-      metaKey: true,
-      shiftKey: shift,
-    });
-  }
-};
-
-/**
- * The evdev codes of the keys these tests hand back through the host.
- *
- * Written out rather than read off the bindings: what this checks is that the
- * shell answers the code the compositor was given, so taking the number from
- * the same table would check nothing.
- */
-const KEYCODES: Readonly<Record<string, number>> = {
-  Return: 28,
-  space: 57,
-  Tab: 15,
+  domicile.emit("shortcut", {
+    altKey: false,
+    ctrlKey: false,
+    keycode: keyOf(keysym)[1],
+    metaKey: true,
+    shiftKey: shift,
+  });
 };
 
 /** Where the page last saw the pointer, which every crossing is read against. */
@@ -1467,11 +1625,28 @@ describe("Shell", () => {
         {
           altKey: false,
           ctrlKey: false,
-          keycode: KEYCODES.Return,
+          keycode: keyOf("Return")[1],
           metaKey: true,
           shiftKey: false,
         },
       ]);
+    });
+
+    it("answers the keys the config binds rather than any of its own", () => {
+      // A reload of the config is the whole table again, and what it says
+      // the key does is what it does.
+      renderShell();
+      domicile.emit("shell_config", {
+        keybindings: new Map([
+          ["default", [line("Return", false, "send-shell clipboard")]],
+        ]),
+        shells: new Map(),
+      });
+
+      press("Return");
+
+      expect(screen.getByRole("dialog")).toBeVisible();
+      expect(domicile.calls).not.toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("spawns a terminal on the chord the config names", () => {
