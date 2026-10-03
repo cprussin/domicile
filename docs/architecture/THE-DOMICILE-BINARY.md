@@ -254,7 +254,11 @@ window of this desktop. A second `[[bin]]` that execs `domicile open-url`,
 because most of what reads `BROWSER` runs it as one word. **`xdg-open` is the
 desktop's too**: `PATH` on the compositor starts with a directory of the run's
 where `xdg-open` links to `domicile-xdg-open`, so a link opens here whatever
-`mimeapps.list` says, and anything else goes to the next `xdg-open` on `PATH`. The engine hands the
+`mimeapps.list` says, and anything else goes to the next `xdg-open` on `PATH`.
+An app whose own wrapper puts another `xdg-open` first (nixpkgs' wrappers often
+prefix `xdg-utils`) misses the shim and reads `mimeapps.list` instead, which is
+why the home-manager module writes `domicile-mimeapps.list`: read only where
+`XDG_CURRENT_DESKTOP` is `domicile`, so other sessions keep their browser. The engine hands the
 address to the newest shell page (`UrlRegistry`), so a page mid-reload does
 not open it twice, and the shell opens it.
 
