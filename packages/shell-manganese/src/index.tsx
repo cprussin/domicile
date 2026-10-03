@@ -86,13 +86,13 @@ export const runManganese =
     // `@domicile/component-library/vite-shell`.
     //
     // **A guess, and the only thing this shell keeps on the machine.** The theme
-    // belongs to the desktop — `[theme] mode` in the compositor's config, changed
+    // belongs to the desktop — `theme.mode` in the compositor's config, changed
     // by the toggle on the bar, and handed to every Wayland client on the desk
     // through the settings portal — and it arrives a few milliseconds from now
     // with the handshake. This is what to paint in until it does, and the first
     // message corrects it with the wipe. A machine that has never seen this desk
     // gets dark, which is both the attribute-less state of `<html>` and what
-    // `[theme] mode` defaults to.
+    // `theme.mode` defaults to.
     applyTheme(rememberedTheme() ?? DEFAULT_THEME);
 
     // One call, two places. Under the fork this is `window.domicile`, the

@@ -23,7 +23,7 @@ fn no_displays_configured_is_no_desktop() {
     // own window", and collapsing them would silently give the second case a
     // zero-sized desktop.
     assert!(
-        Config::parse("").unwrap().output.desktop().is_none(),
+        Config::parse("{}").unwrap().output.desktop().is_none(),
         "an unconfigured desktop is absent rather than empty"
     );
 }
@@ -32,14 +32,14 @@ fn no_displays_configured_is_no_desktop() {
 fn a_desktop_is_as_big_as_the_displays_it_holds() {
     let desktop = desktop(
         r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      { "name": "right", "position": [1920, 0], "size": [2560, 1440] }
+    ]
+  }
+}
 "#,
     );
     assert_eq!(desktop.size(), (4480, 1440));
@@ -51,14 +51,14 @@ fn a_gap_between_displays_is_part_of_the_desktop() {
     // the bounding box has to include the hole rather than closing it.
     let desktop = desktop(
         r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [3000, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      { "name": "right", "position": [3000, 0], "size": [1920, 1080] }
+    ]
+  }
+}
 "#,
     );
     assert_eq!(desktop.size(), (4920, 1080));
@@ -72,15 +72,18 @@ fn the_desktop_starts_at_the_origin_however_the_config_placed_it() {
     // perfectly good way to say "this one is to the left of that one".
     let desktop = desktop(
         r#"
-[[output.displays]]
-name = "left"
-position = [-1920, -100]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [0, 0]
-size = [2560, 1440]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "left",
+        "position": [-1920, -100],
+        "size": [1920, 1080]
+      },
+      { "name": "right", "position": [0, 0], "size": [2560, 1440] }
+    ]
+  }
+}
 "#,
     );
     let placed: Vec<_> = desktop
@@ -96,27 +99,26 @@ fn normalizing_moves_the_desktop_without_reshaping_it() {
     // The same layout written about a different origin is the same desktop.
     let here = desktop(
         r#"
-[[output.displays]]
-name = "a"
-size = [800, 600]
-
-[[output.displays]]
-name = "b"
-position = [800, 0]
-size = [800, 600]
+{
+  "output": {
+    "displays": [
+      { "name": "a", "size": [800, 600] },
+      { "name": "b", "position": [800, 0], "size": [800, 600] }
+    ]
+  }
+}
 "#,
     );
     let there = desktop(
         r#"
-[[output.displays]]
-name = "a"
-position = [5000, -7000]
-size = [800, 600]
-
-[[output.displays]]
-name = "b"
-position = [5800, -7000]
-size = [800, 600]
+{
+  "output": {
+    "displays": [
+      { "name": "a", "position": [5000, -7000], "size": [800, 600] },
+      { "name": "b", "position": [5800, -7000], "size": [800, 600] }
+    ]
+  }
+}
 "#,
     );
     assert_eq!(
@@ -132,19 +134,15 @@ fn displays_keep_the_order_the_config_wrote_them_in() {
     // display without naming them gets the order the user typed.
     let desktop = desktop(
         r#"
-[[output.displays]]
-name = "c"
-position = [4000, 0]
-size = [800, 600]
-
-[[output.displays]]
-name = "a"
-size = [800, 600]
-
-[[output.displays]]
-name = "b"
-position = [2000, 0]
-size = [800, 600]
+{
+  "output": {
+    "displays": [
+      { "name": "c", "position": [4000, 0], "size": [800, 600] },
+      { "name": "a", "size": [800, 600] },
+      { "name": "b", "position": [2000, 0], "size": [800, 600] }
+    ]
+  }
+}
 "#,
     );
     let names: Vec<_> = desktop.displays().map(|d| d.name.as_str()).collect();
@@ -159,10 +157,11 @@ fn a_display_carries_what_its_clients_and_its_screen_need() {
     // hardcoded one would look identical to a correct one.
     let desktop = desktop(
         r#"
-[[output.displays]]
-name = "retina"
-size = [2560, 1440]
-scale = 2
+{
+  "output": {
+    "displays": [{ "name": "retina", "size": [2560, 1440], "scale": 2 }]
+  }
+}
 "#,
     );
     let display = desktop.displays().next().expect("the one display");
@@ -178,17 +177,24 @@ fn an_unvalidated_layout_says_so_rather_than_wrapping() {
     // makes the subtraction fit is asserted rather than assumed. Wrapping here
     // would hand the compositor a desktop of plausible but wrong geometry, in
     // release, with nothing to say so.
-    let unvalidated: Config = toml::from_str(
+    let unvalidated: Config = serde_json::from_str(
         r#"
-[[output.displays]]
-name = "west"
-position = [-2000000000, 0]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "east"
-position = [2000000000, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "west",
+        "position": [-2000000000, 0],
+        "size": [1920, 1080]
+      },
+      {
+        "name": "east",
+        "position": [2000000000, 0],
+        "size": [1920, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .expect("the shape is valid; only the layout is impossible");
@@ -211,16 +217,20 @@ fn an_unvalidated_display_says_so_rather_than_wrapping() {
     // and both are only safe because something validated the layout — so both
     // assert it. This one is what `DisplayConfig::validate` guarantees: a
     // display no wider than a position can reach.
-    let unvalidated: Config = toml::from_str(
+    let unvalidated: Config = serde_json::from_str(
         r#"
-[[output.displays]]
-name = "origin"
-size = [10, 10]
-
-[[output.displays]]
-name = "wide"
-position = [2000000000, 0]
-size = [3000000000, 10]
+{
+  "output": {
+    "displays": [
+      { "name": "origin", "size": [10, 10] },
+      {
+        "name": "wide",
+        "position": [2000000000, 0],
+        "size": [3000000000, 10]
+      }
+    ]
+  }
+}
 "#,
     )
     .expect("the shape is valid; only the display is impossible");

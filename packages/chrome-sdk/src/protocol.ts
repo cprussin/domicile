@@ -444,7 +444,7 @@ const notificationsSchema = z.looseObject({
 // shell's toggle calls `setTheme` and the compositor answers this to every
 // chrome on the desk, the one that asked included. It also arrives with the
 // handshake -- so a page paints in the desk's theme rather than painting and
-// flipping -- and whenever a reload of the config moves `[theme]`.
+// flipping -- and whenever a reload of the config moves `theme`.
 //
 // Refused rather than defaulted, which is `battery`'s answer rather than
 // `displays`'s and for a sharper version of its reason: a theme defaulted to
@@ -505,7 +505,7 @@ const idleSchema = z.looseObject({
 // is told it — which here is the property the whole design is for rather than a
 // convenience, because the reload is exactly what must not open the desk.
 //
-// A desktop with no `[lock] passphrase` configured sends none of these, not even
+// A desktop with no `lock.passphrase` configured sends none of these, not even
 // a `false`: it cannot lock, because a desk that locked with nothing to unlock it
 // would be a desk nobody could get back into.
 const lockedSchema = z.looseObject({

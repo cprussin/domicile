@@ -612,7 +612,7 @@ impl ChromeHub {
     /// desk's windows.
     ///
     /// **One function because there is one theme.** Two things change it — a
-    /// reload whose `[theme]` moved, and a click on the shell's toggle
+    /// reload whose `theme` moved, and a click on the shell's toggle
     /// arriving as [`ChromeMessage::SetTheme`] — and both have to do all of
     /// this. The windows are not told here: they turn once every chrome told
     /// has captured the frame its wipe starts from, which is the Wayland
@@ -2043,7 +2043,7 @@ struct DomicileCompositor {
     ///
     /// `None` is one that never does, which is what a config saying nothing
     /// about idle means — and then nothing here has a timer either. Replaced
-    /// when a reload changes `[idle]`, which is
+    /// when a reload changes `idle`, which is
     /// [`reset_the_idle_clock`](DomicileCompositor::reset_the_idle_clock).
     ///
     /// What it holds its inhibitors as is the surface each was taken on, which
@@ -2058,7 +2058,7 @@ struct DomicileCompositor {
     /// How a reload reaches the thread keeping the file index, or `None` on a
     /// desktop with no home to index.
     ///
-    /// Only a new `[files] omit` goes this way — see
+    /// Only a new `files.omit` goes this way — see
     /// [`omit_from_the_index`](DomicileCompositor::omit_from_the_index).
     index: Option<mpsc::Sender<Heard>>,
     /// The timer that asks the clock, where there is a clock to ask.
@@ -2073,7 +2073,7 @@ struct DomicileCompositor {
     /// Whether this desk is locked, for a desktop that can lock.
     ///
     /// `None` is one that cannot, which is what a config stating neither
-    /// `[lock] passphrase` nor `[lock] pam_service` means — see
+    /// `lock.passphrase` nor `lock.pam_service` means — see
     /// [`crate::lock::chosen`] for why that is a desk with no lock rather than
     /// a lock nothing opens.
     ///
@@ -4247,13 +4247,13 @@ impl DomicileCompositor {
             // shell's bar changes the live theme and writes nothing back --
             // this file is generated, and a desktop editing a build product
             // would be a desk that fought its own configuration. So an edit
-            // that moves `[theme]` is a shell (or home-manager) restating what
+            // that moves `theme` is a shell (or home-manager) restating what
             // this desk is, and what it states is what the desk becomes.
             self.hub.take_up_the_theme(theme_on_the_wire(theme));
         }
     }
 
-    /// Take up a new `[files] omit`: what the file index leaves out of the
+    /// Take up a new `files.omit`: what the file index leaves out of the
     /// home.
     ///
     /// Handed to the index's own thread, which walks the home again under it
@@ -4277,7 +4277,7 @@ impl DomicileCompositor {
         }
     }
 
-    /// Take up a new `[idle]`: when a desktop nobody is at turns its screens
+    /// Take up a new `idle`: when a desktop nobody is at turns its screens
     /// off.
     ///
     /// The clock starts again from now rather than carrying the old one's
@@ -6619,10 +6619,10 @@ fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     }
 }
 
-/// Give the host the `[extensions]` a config names, for every chrome that
+/// Give the host the `extensions` a config names, for every chrome that
 /// connects after.
 ///
-/// A path goes as its text: one read out of TOML is UTF-8, so `display` loses
+/// A path goes as its text: one read out of JSON is UTF-8, so `display` loses
 /// nothing.
 fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     host.set_extensions(
@@ -6922,9 +6922,9 @@ fn cursor_shape(icon: CursorIcon) -> CursorShape {
 /// the only thing a desk that will not come up has to go on: `domicile` starts
 /// a desktop five times and says each time that the compositor "said why
 /// above". What was above, for a config with a section one release too old,
-/// was `Error: Parse("TOML parse error at line 1, column 2\n  |\n1 | ...")` —
-/// the variant name wrapped around it and the span toml had underlined escaped
-/// into one unreadable line, in the middle of Chromium's startup log.
+/// was `Error: Parse("...")` — the variant name wrapped around it and every
+/// newline the parser's message carried escaped into one unreadable line, in
+/// the middle of Chromium's startup log.
 ///
 /// `Display` is what every error this can return is written for, so printing
 /// it is the whole of the fix. `bin/domicile.rs` has done it this way all

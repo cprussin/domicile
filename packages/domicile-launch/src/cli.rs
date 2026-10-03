@@ -25,7 +25,7 @@ pub enum CliError {
         "which shell? Give one, or name it in your config:\n\n    \
          domicile ./my-desktop/dist/shell.js\n    \
          domicile @domicile/manganese\n\n\
-         A config is ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json,toml}}, or \
+         A config is ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}}, or \
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
@@ -63,7 +63,7 @@ pub enum CliError {
     ExtraToOpen { extra: String },
     #[error(
         "--config takes the path to the compositor's config file and was given \
-         nothing. Leaving the flag off reads ~/.config/domicile/domicile.toml \
+         nothing. Leaving the flag off reads ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}} \
          and runs the defaults when there is none, which is what an empty one \
          looks like it means."
     )]
@@ -131,7 +131,7 @@ pub enum Invocation {
 /// nothing" it used to be. What neither takes is `--config`: the desktop being
 /// spoken to read its config when it started, so a flag here would be a config
 /// handed to a process that is not going to read one, which is worse than
-/// refused because it looks like it worked. `load-shell --config x.toml
+/// refused because it looks like it worked. `load-shell --config x.json
 /// ./shell.js` is refused by [`CliError::ExtraToLoad`] for that reason and not
 /// by accident — a verb's argument list is closed the same way the set of
 /// verbs is.

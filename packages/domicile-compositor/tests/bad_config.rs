@@ -4,9 +4,9 @@
 //! starts a desktop five times and says each time that the compositor "said
 //! why above", so what is above had better be a sentence. It was not: `main`
 //! handed the error back to Rust's own `Termination`, which prints it with
-//! `Debug` — the variant name wrapped around it and every newline of the span
-//! toml had underlined escaped to a `\n`, one unreadable line in the middle of
-//! Chromium's startup log, not naming the file it was about.
+//! `Debug` — the variant name wrapped around it and every newline of the
+//! message escaped to a `\n`, one unreadable line in the middle of Chromium's
+//! startup log, not naming the file it was about.
 //!
 //! The binary rather than a function, because that print is what `Debug` got
 //! wrong and nothing under `main` can see it. `domicile-config` owns the
@@ -18,10 +18,14 @@ use std::process::Command;
 #[test]
 fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     let directory = tempfile::tempdir().expect("a directory");
-    let config = directory.path().join("domicile.toml");
+    let config = directory.path().join("domicile.json");
     // The shape that sent a real desk into the restart loop: a section that
     // was a setting one release ago, which `deny_unknown_fields` refuses.
-    std::fs::write(&config, "[compositor]\nnested_size = [800, 600]\n").expect("the config");
+    std::fs::write(
+        &config,
+        r#"{ "compositor": { "nested_size": [800, 600] } }"#,
+    )
+    .expect("the config");
 
     let said = refusal(&config);
 
@@ -31,11 +35,11 @@ fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     );
     assert!(
         said.contains("`compositor`"),
-        "and keep what toml said about it: {said}"
+        "and keep what the parser said about it: {said}"
     );
     assert!(
         !said.contains("\\n"),
-        "on the lines toml wrote them on, rather than escaped into one: {said}"
+        "on the lines it was written on, rather than escaped into one: {said}"
     );
     assert!(
         !said.contains("Parse("),
@@ -54,9 +58,13 @@ fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
 #[test]
 fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
     let directory = tempfile::tempdir().expect("a directory");
-    let config = directory.path().join("domicile.toml");
+    let config = directory.path().join("domicile.json");
     let service = "domicile-a-service-no-machine-declares";
-    std::fs::write(&config, format!("[lock]\npam_service = \"{service}\"\n")).expect("the config");
+    std::fs::write(
+        &config,
+        format!(r#"{{ "lock": {{ "pam_service": "{service}" }} }}"#),
+    )
+    .expect("the config");
 
     let said = refusal(&config);
 
@@ -76,10 +84,10 @@ fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
 #[test]
 fn a_table_of_keys_is_a_sentence_that_names_it() {
     let directory = tempfile::tempdir().expect("a directory");
-    let config = directory.path().join("domicile.toml");
+    let config = directory.path().join("domicile.json");
     std::fs::write(
         &config,
-        "[keybindings]\n\"Meta+Return\" = \"send-shell terminal\"\n",
+        r#"{ "keybindings": { "Meta+Return": "send-shell terminal" } }"#,
     )
     .expect("the config");
 

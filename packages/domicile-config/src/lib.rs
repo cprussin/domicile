@@ -10,7 +10,7 @@
 //! This is not a file a person edits. A Domicile desktop is started by its
 //! *shell*, the shell owns the configuration its users write, and what it
 //! hands the compositor is generated from that — so the schema here is the
-//! shell-to-compositor interface rather than a user interface, and it is TOML.
+//! shell-to-compositor interface rather than a user interface, and it is JSON.
 //!
 //! The compositor watches the file and feeds new contents into a
 //! [`ConfigStore`]; the store is the single source of truth for the live
@@ -803,41 +803,20 @@ pub struct Config {
 }
 
 impl Config {
-    /// Parse a config from TOML text, applying defaults and validating it.
+    /// Parse a config from JSON text, applying defaults and validating it.
     ///
-    /// **TOML BECAUSE IT IS READ, WHICH IS NOT WHAT THIS FILE WAS BUILT FOR.**
-    /// It was JSON on the argument that nobody writes it by hand — a shell
-    /// generates it, and a generated file wants a writer that cannot get the
-    /// escaping wrong rather than a syntax that is pleasant to type. That
-    /// reasoning was about the writer and there are two ends: a desk comes up
-    /// in the wrong arrangement and somebody opens this file to find out why,
-    /// and a desk of six monitors and five profiles is a wall of braces to
-    /// read one `transform` out of. `[[output.profiles]]` says which profile a
-    /// display belongs to on the line the display is on.
-    ///
-    /// The writer keeps what it had: every language that generates one of
-    /// these has a TOML writer too — nixpkgs has `pkgs.formats.toml` beside
-    /// the `json` this desk's own config used — so nothing gained a chance to
-    /// get the escaping wrong.
+    /// JSON is the one text a config arrives as: what a module config is
+    /// evaluated to, and what a generator writes.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
         Config::parse_at_home(text, home_directory().as_deref())
     }
 
     /// [`Config::parse`], with the home directory given rather than read.
-    /// Parse a config from JSON text: the same schema, keys and validation as
-    /// [`Config::parse`]. What a TypeScript config is evaluated to, and what
-    /// a generator writes.
-    pub fn parse_json(text: &str) -> Result<Config, ConfigError> {
-        serde_json::from_str(text)
-            .map_err(|e| ConfigError::Parse(e.to_string()))
-            .and_then(|parsed| Config::settled(parsed, home_directory().as_deref()))
-    }
-
     fn parse_at_home(text: &str, home: Option<&Path>) -> Result<Config, ConfigError> {
-        // `to_string` keeps toml's line, column and the span it underlines,
-        // which is the actionable half of the complaint — and more of it than
-        // JSON gave, because a TOML error names the key it was reading.
-        let parsed: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        // `to_string` keeps serde_json's line and column, and names the key
+        // it refused.
+        let parsed: Config =
+            serde_json::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
         Config::settled(parsed, home)
     }
 
@@ -860,14 +839,8 @@ impl Config {
             path: path.display().to_string(),
             message: e.to_string(),
         })?;
-        // JSON by its name; TOML otherwise, which is every config there was
-        // before there was a choice.
-        let parsed = match path.extension().and_then(|extension| extension.to_str()) {
-            Some("json") => Config::parse_json(&text),
-            _ => Config::parse(&text),
-        };
         // Not the read failure above, which names the path already.
-        parsed.map_err(|why| ConfigError::At {
+        Config::parse(&text).map_err(|why| ConfigError::At {
             path: path.display().to_string(),
             why: Box::new(why),
         })
@@ -921,7 +894,7 @@ impl ConfigStore {
         self.last_error.as_ref()
     }
 
-    /// Attempt to replace the live config from TOML text.
+    /// Attempt to replace the live config from JSON text.
     pub fn reload_from_str(&mut self, text: &str) -> Result<(), ConfigError> {
         self.apply(Config::parse(text))
     }
@@ -1024,8 +997,11 @@ mod tests {
     const HOME: &str = "/home/you";
 
     fn unpacked(path: &str, home: Option<&Path>) -> Result<Vec<PathBuf>, ConfigError> {
-        Config::parse_at_home(&format!("[extensions]\nunpacked = [{path:?}]\n"), home)
-            .map(|config| config.extensions.unpacked)
+        Config::parse_at_home(
+            &format!(r#"{{ "extensions": {{ "unpacked": [{path:?}] }} }}"#),
+            home,
+        )
+        .map(|config| config.extensions.unpacked)
     }
 
     #[test]

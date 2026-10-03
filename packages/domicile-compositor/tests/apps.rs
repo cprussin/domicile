@@ -15,9 +15,7 @@ use domicile_protocol::{Bookmark, ChromeMessage, DesktopEntry, HostMessage};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// A chrome's `close_app` reaches the client's toplevel, and the client goes.
@@ -250,10 +248,12 @@ fn a_startup_command_runs_on_this_compositor() {
     let directory = tempfile::tempdir().expect("a directory to report into");
     let reported = directory.path().join("started-display");
     let compositor = Compositor::started_with(&format!(
-        r#"{ONE_DISPLAY}
-[startup]
-commands = [["sh", "-c", "printf '%s' \"$WAYLAND_DISPLAY\" > {0}.new && mv {0}.new {0}"]]
-"#,
+        r#"{{
+  "output": {{ "displays": [{{ "name": "left", "size": [1920, 1080] }}] }},
+  "startup": {{
+    "commands": [["sh", "-c", "printf '%s' \"$WAYLAND_DISPLAY\" > {0}.new && mv {0}.new {0}"]]
+  }}
+}}"#,
         reported.display()
     ));
 
@@ -468,9 +468,12 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
         )
         .expect("the entry");
     }
-    let config = format!("{ONE_DISPLAY}\n[applications]\nomit = [\"*\", \"!editor.desktop\"]\n");
+    let config = r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "applications": { "omit": ["*", "!editor.desktop"] }
+}"#;
 
-    let compositor = Compositor::started_in_a_home(&config, Some(home.path()));
+    let compositor = Compositor::started_in_a_home(config, Some(home.path()));
     let mut chrome = compositor.chrome();
     chrome
         .say(&ChromeMessage::SearchApps {
@@ -493,19 +496,17 @@ fn a_search_for_applications_offers_only_what_the_desk_does_not_omit() {
 /// A search offers the desk's bookmarks beside its applications.
 #[test]
 fn a_search_for_applications_offers_the_bookmarks_it_matches() {
-    let config = format!(
-        "{ONE_DISPLAY}
-[[applications.bookmarks]]
-name = \"Mail\"
-url = \"https://mail.invalid\"
-
-[[applications.bookmarks]]
-name = \"Calendar\"
-url = \"https://calendar.invalid\"
-"
+    let compositor = Compositor::started_with(
+        r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "applications": {
+    "bookmarks": [
+      { "name": "Mail", "url": "https://mail.invalid" },
+      { "name": "Calendar", "url": "https://calendar.invalid" }
+    ]
+  }
+}"#,
     );
-
-    let compositor = Compositor::started_with(&config);
     let mut chrome = compositor.chrome();
     chrome
         .say(&ChromeMessage::SearchApps {
@@ -555,11 +556,10 @@ fn a_search_offers_a_bookmark_with_the_icon_its_page_links() {
         }
     });
     let config = format!(
-        "{ONE_DISPLAY}
-[[applications.bookmarks]]
-name = \"Site\"
-url = \"http://{address}/\"
-"
+        r#"{{
+  "output": {{ "displays": [{{ "name": "left", "size": [1920, 1080] }}] }},
+  "applications": {{ "bookmarks": [{{ "name": "Site", "url": "http://{address}/" }}] }}
+}}"#
     );
 
     let compositor = Compositor::started_with(&config);

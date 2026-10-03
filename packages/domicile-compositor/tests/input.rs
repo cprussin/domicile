@@ -48,9 +48,7 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// A display, and a keyboard laid out deliberately unlike the default.
@@ -58,13 +56,10 @@ size = [1920, 1080]
 /// `dvorak` rather than the `dvp` the config falls back to, so that the keymap
 /// this test reads off the wire can only have come from *this* file.
 const A_DVORAK_KEYBOARD: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[input.keyboard]
-xkb_layout = "us"
-xkb_variant = "dvorak"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": { "xkb_layout": "us", "xkb_variant": "dvorak" } }
+}
 "#;
 
 /// The same desk, typing US QWERTY as it comes.
@@ -73,12 +68,10 @@ xkb_variant = "dvorak"
 /// desktop as well would leave the keymap and the displays as one event, and
 /// the keyboard is supposed to move on its own.
 const A_PLAIN_KEYBOARD: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[input.keyboard]
-xkb_layout = "us"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": { "xkb_layout": "us" } }
+}
 "#;
 
 /// A keyboard that parses and that xkb will not build.
@@ -86,12 +79,10 @@ xkb_layout = "us"
 /// Rules rather than a layout, because the rules file is looked up by name and
 /// a missing one is a failure xkb reports rather than one it papers over.
 const A_KEYBOARD_XKB_HAS_NEVER_HEARD_OF: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[input.keyboard]
-xkb_rules = "no-such-rules"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": { "xkb_rules": "no-such-rules" } }
+}
 "#;
 
 /// The left mouse button, as Linux names it and the protocol carries it.

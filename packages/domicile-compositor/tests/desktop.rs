@@ -21,15 +21,19 @@ use crate::running::Compositor;
 /// have to survive the trip: the position is where a `<Screen>` goes on the
 /// page, and the scale is what clients on that display draw at.
 const SIDE_BY_SIDE: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      {
+        "name": "right",
+        "position": [1920, 0],
+        "size": [2560, 1440],
+        "scale": 2
+      }
+    ]
+  }
+}
 "#;
 
 /// A desktop nothing describes, so the window's own density decides it, with
@@ -38,14 +42,12 @@ scale = 2
 /// No `output.displays`: `max_scale` governs the single output that follows
 /// Domicile's window, and a described display states its own scale instead.
 const A_CAP_OF_TWO: &str = r#"
-[output]
-max_scale = 2
+{ "output": { "max_scale": 2 } }
 "#;
 
 /// The same desk with scaling turned off, which is what `1` means.
 const A_CAP_OF_ONE: &str = r#"
-[output]
-max_scale = 1
+{ "output": { "max_scale": 1 } }
 "#;
 
 #[test]
@@ -89,7 +91,7 @@ fn a_chrome_is_told_the_whole_desktop_at_the_handshake() {
 /// out against before anything has described one.
 #[test]
 fn a_compositor_with_no_configured_displays_still_describes_one() {
-    let compositor = Compositor::started_with("");
+    let compositor = Compositor::started_with("{}");
     let mut chrome = compositor.chrome();
 
     let described = chrome
@@ -132,7 +134,7 @@ fn a_compositor_with_no_configured_displays_still_describes_one() {
 /// desktop once at startup never updates.
 #[test]
 fn a_density_one_chrome_reports_is_described_to_the_others() {
-    let compositor = Compositor::started_with("");
+    let compositor = Compositor::started_with("{}");
     let mut watching = compositor.chrome();
     let mut reporting = compositor.chrome();
     watching
@@ -227,9 +229,7 @@ fn a_desktop_edited_on_disk_reaches_the_connected_and_the_latecomer() {
         .expect("the desktop rides with the handshake");
     compositor.reconfigure(
         r#"
-[[output.displays]]
-name = "only"
-size = [1024, 768]
+{ "output": { "displays": [{ "name": "only", "size": [1024, 768] }] } }
 "#,
     );
     let described = watching
@@ -475,7 +475,7 @@ fn a_described_desktop_refuses_a_chromes_size() {
 /// restating one must not silently reset the other.
 #[test]
 fn a_size_one_chrome_reports_becomes_the_desktop() {
-    let compositor = Compositor::started_with("");
+    let compositor = Compositor::started_with("{}");
     let mut watching = compositor.chrome();
     let mut reporting = compositor.chrome();
     watching

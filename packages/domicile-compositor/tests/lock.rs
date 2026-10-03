@@ -48,12 +48,10 @@ const THE_PASSPHRASE: &str = "open sesame";
 /// The starting point for every test here: the lock exists, so the compositor
 /// sends `locked` at all, and nothing has shut it yet.
 const A_DESK_THAT_CAN_LOCK: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[lock]
-passphrase = "open sesame"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "lock": { "passphrase": "open sesame" }
+}
 "#;
 
 /// The same desk, with the shortest clock its own config will accept.
@@ -61,15 +59,11 @@ passphrase = "open sesame"
 /// A second because a check should not wait longer than it has to, and
 /// `IdleConfig` refuses zero.
 const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[idle]
-blank_after_seconds = 1
-
-[lock]
-passphrase = "open sesame"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "idle": { "blank_after_seconds": 1 },
+  "lock": { "passphrase": "open sesame" }
+}
 "#;
 
 /// Bring a desk that can lock to a desk that is locked.

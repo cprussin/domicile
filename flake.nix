@@ -847,7 +847,7 @@
       # `scripts/test-the-home-manager-module-agrees.sh` compares its option
       # NAMES against the Rust schema without nix, which is the half a Claude
       # web session can run. This is the other half -- the types, the
-      # defaults, and that the whole thing produces the TOML somebody's desk
+      # defaults, and that the whole thing produces the JSON somebody's desk
       # is -- and it needs an evaluator.
       #
       # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
@@ -927,7 +927,7 @@
               modules = [ stub self.homeManagerModules.domicile desk ];
               specialArgs = { inherit pkgs; };
             };
-            written = evaluated.config.xdg.configFile."domicile/domicile.toml".source;
+            written = evaluated.config.xdg.configFile."domicile/domicile.json".source;
 
             # THE SAME MODULE OVER A `domicile` THAT ONLY PRINTS ITS ARGUMENTS,
             # so the command lines the wrapper builds can be read back.
@@ -946,53 +946,38 @@
               specialArgs = { inherit pkgs; };
             };
           in
-          pkgs.runCommand "home-manager-module-evaluates" { } ''
+          pkgs.runCommand "home-manager-module-evaluates" { nativeBuildInputs = [ pkgs.jq ]; } ''
             # The generated file has to be the config file domicile parses, so
-            # this asserts the keys rather than just that something was written.
-            # `grep -F` on whole lines: `pkgs.formats.toml` decides the layout
-            # and this check is not the place to pin it.
-            cp ${written} config.toml
-            for line in \
-              'xkb_variant = "dvp"' \
-              'xkb_options = ["caps:escape"]' \
-              'max_scale = 2' \
-              'name = "desk"' \
-              'display = "drm-1"' \
-              'enabled = false' \
-              'scale = 1.2' \
-              'transform = "rotate-270"'
-            do
-              grep -qxF "  $line" config.toml || grep -qxF "$line" config.toml || {
-                echo "the module did not write: $line" >&2
+            # this asserts the values at their keys rather than just that
+            # something was written -- read with `jq`, because how
+            # `pkgs.formats.json` lays the file out is its business.
+            cp ${written} config.json
+            expect() {
+              jq -e "$1" config.json >/dev/null || {
+                echo "the module did not write: $1" >&2
                 echo "--- what it wrote ---" >&2
-                cat config.toml >&2
+                cat config.json >&2
                 exit 1
               }
-            done
+            }
+            expect '.input.keyboard.xkb_variant == "dvp"'
+            expect '.input.keyboard.xkb_options == ["caps:escape"]'
+            expect '.output.max_scale == 2'
+            expect '.output.profiles[0].name == "desk"'
+            expect '.output.profiles[0].displays[0] | .display == "drm-1" and .enabled == false'
+            expect '.output.profiles[0].displays[1] | .scale == 1.2 and .transform == "rotate-270"'
 
-            # A NULL IS THE ONE THING THIS FILE MUST NOT CONTAIN, because TOML
-            # has no word for one and `domicile` would refuse the whole file
-            # over it -- every profile, the keyboard, all of it. The desk above
-            # sets a `mode` on one placement and not on the other, so an unset
-            # option really is a null sitting inside a list here, and
-            # `withoutNulls` walking into that list is what this asserts.
-            if grep -q 'null' config.toml; then
-              echo "the module wrote a null, which domicile refuses" >&2
-              echo "--- what it wrote ---" >&2
-              cat config.toml >&2
-              exit 1
-            fi
+            # NO NULLS, because `domicile` reads several keys' absence as an
+            # answer and refuses a null for most of them -- and one refused
+            # key is the whole file refused: every profile, the keyboard, all
+            # of it. The desk above sets a `mode` on one placement and not on
+            # the other, so an unset option really is a null sitting inside a
+            # list here, and `withoutNulls` walking into that list is what this
+            # asserts.
+            expect '[.. | select(. == null)] | length == 0'
 
             # And the other direction: a mode that IS set reaches the file.
-            # Matched on the number rather than the whole line, because how
-            # `pkgs.formats.toml` lays an array out is its business and no other
-            # number in this desk is 3840.
-            grep -q 3840 config.toml || {
-              echo "the module did not write the profile's mode" >&2
-              echo "--- what it wrote ---" >&2
-              cat config.toml >&2
-              exit 1
-            }
+            expect '.output.profiles[0].displays[1].mode == [3840, 2160]'
 
             # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
             # invisible in the config file: which words the installed `domicile`

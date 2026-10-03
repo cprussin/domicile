@@ -22,15 +22,21 @@ compiled in, and nothing turns it off. Three things are missing:
 
 ### Installing: the config names them
 
-```toml
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]  # uBlock Origin Lite
-unpacked = ["~/src/my-extension"]                 # absolute, or under `~`
+```json
+{
+  "extensions": {
+    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+    "unpacked": ["~/src/my-extension"]
+  }
+}
 ```
+
+`web_store` is Web Store ids (this one is uBlock Origin Lite); `unpacked` is
+directories, absolute or under `~`.
 
 | Step | Where |
 |---|---|
-| Parse `[extensions]`, expand a leading `~`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
+| Parse `extensions`, expand a leading `~`, keep-last-good on a bad edit | `domicile-config`, `ExtensionsConfig` |
 | Send the list as a fact that rides the handshake, like `Keymap`, and again on reload | `domicile-protocol`, `HostMessage::Extensions { web_store, unpacked }` |
 | Intercept it in the browser process, as `Keymap` is | `components/domicile/browser/control_channel.cc` |
 | Decide what to add and remove | `components/domicile/browser/extension_installer.{h,cc}`, `ReconcileExtensions` |
@@ -177,7 +183,7 @@ places its popup from the window it came from, and without them asks
 Slice 1: extensions run, and show in a tray.
 
 - [x] `guard-webview-content-script.sh`: an unpacked extension whose content script marks the page, loaded by hand (`--load-extension` plus the feature disabled), with the mark read from inside a `<webview>`. This proves the assumption everything else rests on, first.
-- [x] `[extensions]` in `domicile-config`
+- [x] `extensions` in `domicile-config`
 - [x] `HostMessage::Extensions` in `domicile-protocol`, sent by the compositor with the handshake and on reload
 - [x] `extension_installer` in the fork, and the control channel handing it the list. `guard-extension-installer.sh` loads the content-script fixture from the list alone.
 - [x] `SessionTabHelper` and `extensions::TabHelper` on every `WebViewGuest`: `chrome/browser/domicile/domicile_tab_helpers.h`, handed to `BindWebViewGuestHost` by patch 0056 because the guest's target cannot depend on `//chrome`

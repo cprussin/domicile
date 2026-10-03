@@ -1,6 +1,6 @@
 # Domicile as a home-manager module.
 #
-# Writes `~/.config/domicile/domicile.toml` -- which is where `domicile`
+# Writes `~/.config/domicile/domicile.json` -- which is where `domicile`
 # looks when nothing passes it a `--config` -- and puts a `domicile` on PATH
 # that already knows which shell to run.
 #
@@ -32,10 +32,10 @@
 }: let
   cfg = config.programs.domicile;
 
-  toml = pkgs.formats.toml {};
+  json = pkgs.formats.json {};
 
   # A width and a height, or an x and a y. Two-element lists because that is
-  # what the config file takes: `size = [1920, 1080]`.
+  # what the config file takes: `"size": [1920, 1080]`.
   pairOf = element: lib.types.addCheck (lib.types.listOf element) (xs: lib.length xs == 2);
 
   pair = element: description:
@@ -46,12 +46,14 @@
 
   # Every null dropped, through lists as well as attrsets.
   #
-  # TOML has no word for a null, and `domicile` reads several keys' ABSENCE as
-  # a real answer -- `idle.blank_after_seconds` absent is a desktop whose
+  # A null is not an absence to `domicile`, which reads several keys' ABSENCE
+  # as a real answer -- `idle.blank_after_seconds` absent is a desktop whose
   # screens never blank, `lock` with neither verifier is one that never locks, a
   # placement's `mode` absent is whatever the monitor comes up at -- so leaving
-  # the key out is exactly what an unset option means. Through lists because `output.profiles` is one, and the nullable
-  # option inside it is in a submodule two lists deep.
+  # the key out is exactly what an unset option means, where a `null` written
+  # through is a value the schema refuses for most of them. Through lists
+  # because `output.profiles` is one, and the nullable option inside it is in
+  # a submodule two lists deep.
   withoutNulls = value:
     if lib.isAttrs value
     then lib.mapAttrs (_: withoutNulls) (lib.filterAttrs (_: each: each != null) value)
@@ -241,7 +243,7 @@ in {
     settings = lib.mkOption {
       description = ''
         The compositor's own configuration, written to
-        `''${config.xdg.configHome}/domicile/domicile.toml` -- which is where
+        `''${config.xdg.configHome}/domicile/domicile.json` -- which is where
         `domicile` looks when nothing hands it a `--config`.
 
         Re-read while it runs, so a rebuild reaches a desk that is already
@@ -254,7 +256,7 @@ in {
       '';
       default = {};
       type = lib.types.submodule {
-        freeformType = toml.type;
+        freeformType = json.type;
         options = {
           applications.omit = lib.mkOption {
             description = ''
@@ -610,8 +612,8 @@ in {
     #
     # NULLS ARE LEFT OUT RATHER THAN WRITTEN: `withoutNulls` above says why,
     # and why it walks lists as well as attrsets.
-    xdg.configFile."domicile/domicile.toml".source =
-      toml.generate "domicile.toml" (withoutNulls cfg.settings);
+    xdg.configFile."domicile/domicile.json".source =
+      json.generate "domicile.json" (withoutNulls cfg.settings);
 
     # The desktop entry is the package's own, installed with it above.
     #

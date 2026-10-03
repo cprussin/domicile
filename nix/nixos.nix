@@ -37,7 +37,7 @@ in {
       description = ''
         The desktops a display manager offers, each a session named after
         itself: `manganese` runs `manganese`. A desktop is the shell plus
-        Domicile, so it reads the same `~/.config/domicile/domicile.toml` the
+        Domicile, so it reads the same `~/.config/domicile/domicile.json` the
         home-manager module writes.
       '';
       type = lib.types.listOf lib.types.package;

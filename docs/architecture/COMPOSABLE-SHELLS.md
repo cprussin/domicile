@@ -45,7 +45,7 @@ The same thing with the shell as shipped needs no JavaScript:
 
 - Changing anything about manganese beyond its keys means writing a shell:
   a package, a vite config, a Panda setup, and a build to rerun.
-- The config is TOML, and what it says to a shell is
+- The config was TOML, and what it said to a shell was
   `[shells.<name>.options]`: untyped JSON.
 
 ## Design
@@ -116,7 +116,7 @@ only builds.
 
 | Export (TS) / key (JSON) | Read by |
 |---|---|
-| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine: the schema TOML had, key for key |
+| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine: `domicile-config`'s schema |
 | `Shell` (TS) / `shell` (JSON) | `domicile`, when it is given no shell; a JSON `shell` is relative to the config |
 | *(gone)* `keybindings`, `modes`, `shells` | a config that has them is refused: they are props of the shell |
 
@@ -124,9 +124,8 @@ only builds.
   with `@domicile/*` and React from the install and stylesheets stubbed,
   imported, every export but `Shell` written to
   `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`, which is the path the
-  compositor is handed. The compositor parses JSON or TOML
-  (`domicile-config`, the same structs, by extension). It never runs
-  JavaScript.
+  compositor is handed. The compositor parses JSON (`domicile-config`). It
+  never runs JavaScript.
 - **Types come from the Rust schema**: `schemars` emits a JSON Schema, published
   for the JSON config's `$schema`, and the TS types in `@domicile/sdk/config`
   are generated from it.
@@ -243,7 +242,7 @@ Phase 3: the config.
 
 - [ ] `schemars` schema and generated `@domicile/sdk/config` types
 - [x] `domicile-config` parses JSON; `domicile` finds
-      `domicile.{ts,tsx,js,mjs,json,toml}` and runs the config's shell when
+      `domicile.{ts,tsx,js,mjs,json}` and runs the config's shell when
       given none
 - [x] `keybindings`, `modes` and `shells` go from the config
 - [x] the TS config evaluated to JSON by the builder
@@ -251,9 +250,9 @@ Phase 3: the config.
       (`config_watch`, `test-a-config-module-reloads.sh`)
 - [x] a failed reload as a notification, not only a line on stderr
       (`notification.rs`)
-- [ ] `nix/home-manager.nix` writes `domicile.json`, or builds a TS config
-      directory with `bun2nix`
-- [ ] TOML deleted. KEYBINDINGS.md, THE-DOMICILE-BINARY.md, WRITING-A-SHELL.md
+- [x] `nix/home-manager.nix` writes `domicile.json`
+- [ ] `nix/home-manager.nix` builds a TS config directory with `bun2nix`
+- [x] TOML deleted. KEYBINDINGS.md, THE-DOMICILE-BINARY.md, WRITING-A-SHELL.md
       and RUNNING-A-DESKTOP.md describe what replaced it
 
 Phase 4: published.

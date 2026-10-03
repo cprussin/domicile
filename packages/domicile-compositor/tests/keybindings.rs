@@ -9,18 +9,14 @@ use domicile_protocol::HostMessage;
 use crate::running::Compositor;
 
 const A_DVP_DESK: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[input.keyboard]
-xkb_variant = "dvp"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "input": { "keyboard": { "xkb_variant": "dvp" } }
+}
 "#;
 
 const THE_SAME_DESK_ON_US: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// `5` and `p`, as evdev numbers them: on `dvp` they carry `parenleft` and `l`.

@@ -22,7 +22,7 @@ fn nothing(_: &Path) -> bool {
     false
 }
 
-const DEFAULT: &str = "/home/somebody/.config/domicile/domicile.toml";
+const DEFAULT: &str = "/home/somebody/.config/domicile/domicile.json";
 
 /// Where a config lives, which is what an absent one names.
 const HOME_DIR: &str = "/home/somebody/.config/domicile";
@@ -36,11 +36,11 @@ fn the_flag_wins_and_is_not_looked_for() {
     // that names the file it could not read.
     assert_eq!(
         config_file(
-            Some(Path::new("/tmp/desk.toml")),
+            Some(Path::new("/tmp/desk.json")),
             &env(None, Some("/home/somebody")),
             &tree(&[DEFAULT])
         ),
-        ConfigFile::Named(PathBuf::from("/tmp/desk.toml"))
+        ConfigFile::Named(PathBuf::from("/tmp/desk.json"))
     );
 }
 
@@ -58,9 +58,9 @@ fn xdg_config_home_is_preferred_over_the_guess_at_it() {
         config_file(
             None,
             &env(Some("/elsewhere"), Some("/home/somebody")),
-            &tree(&["/elsewhere/domicile/domicile.toml", DEFAULT])
+            &tree(&["/elsewhere/domicile/domicile.json", DEFAULT])
         ),
-        ConfigFile::Found(PathBuf::from("/elsewhere/domicile/domicile.toml"))
+        ConfigFile::Found(PathBuf::from("/elsewhere/domicile/domicile.json"))
     );
 }
 
@@ -121,8 +121,8 @@ fn what_each_answer_is_run_with() {
     // through here would be a desk coming up unplaced with its own config file
     // sitting right there.
     assert_eq!(
-        ConfigFile::Named(PathBuf::from("/tmp/desk.toml")).path(),
-        Some(Path::new("/tmp/desk.toml"))
+        ConfigFile::Named(PathBuf::from("/tmp/desk.json")).path(),
+        Some(Path::new("/tmp/desk.json"))
     );
     assert_eq!(
         ConfigFile::Found(PathBuf::from(DEFAULT)).path(),
@@ -139,8 +139,8 @@ fn every_answer_says_which_one_it_is() {
     // person thinks -- and now that one of the four is a file nobody typed,
     // "config: <path>" alone no longer says which.
     assert_eq!(
-        ConfigFile::Named(PathBuf::from("/tmp/desk.toml")).to_string(),
-        "/tmp/desk.toml, because --config names it"
+        ConfigFile::Named(PathBuf::from("/tmp/desk.json")).to_string(),
+        "/tmp/desk.json, because --config names it"
     );
     assert_eq!(
         ConfigFile::Found(PathBuf::from(DEFAULT)).to_string(),
@@ -149,7 +149,7 @@ fn every_answer_says_which_one_it_is() {
     assert_eq!(
         ConfigFile::Absent(PathBuf::from(HOME_DIR)).to_string(),
         format!(
-            "none -- no domicile.{{ts,tsx,js,mjs,json,toml}} in {HOME_DIR} -- so \
+            "none -- no domicile.{{ts,tsx,js,mjs,json}} in {HOME_DIR} -- so \
              the compositor's defaults"
         )
     );
@@ -161,7 +161,7 @@ fn every_answer_says_which_one_it_is() {
 }
 
 #[test]
-fn a_config_is_a_module_or_json_as_much_as_toml() {
+fn a_config_is_a_module_or_json() {
     for name in [
         "domicile.ts",
         "domicile.tsx",
@@ -205,5 +205,19 @@ fn a_module_config_is_one_to_evaluate() {
     assert!(is_module(Path::new("/x/domicile.tsx")));
     assert!(is_module(Path::new("/x/domicile.js")));
     assert!(!is_module(Path::new("/x/domicile.json")));
-    assert!(!is_module(Path::new("/x/domicile.toml")));
+}
+
+#[test]
+fn a_toml_config_is_not_one() {
+    // TOML is gone, and a file left over from it is not read: the desk runs
+    // the defaults and says it found nothing, rather than a compositor
+    // refusing a file nobody can write any more.
+    assert_eq!(
+        config_file(
+            None,
+            &env(None, Some("/home/somebody")),
+            &tree(&["/home/somebody/.config/domicile/domicile.toml"])
+        ),
+        ConfigFile::Absent(PathBuf::from(HOME_DIR))
+    );
 }

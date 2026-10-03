@@ -74,7 +74,7 @@ the screen it is on.
 | **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The sway config's launcher keys, in both the places it binds one. |
 | **Mod+Shift+V** | Open the clipboard's history, or put it away. Not sway's: sway has no clipboard manager, and this is where every config that adds one puts it. |
 | **Mod+Shift+Q** | Close the window being worked in. |
-| **Mod+Shift+Return** | Lock the desk. Not sway's. Does nothing on a desk whose config states no `[lock]`. |
+| **Mod+Shift+Return** | Lock the desk. Not sway's. Does nothing on a desk whose config states no `lock`. |
 | **Mod+H / J / K / L**, **Mod+←↓↑→** | Move the focus. Wrapping at the ends of a container, which is what `focus.wrapping = "yes"` asks for. |
 | **Mod+Shift+** the same | Move the window. Past its neighbor, *into* a neighbor that is a container rather than a window, out of the container it is in, or — pushed across the grain — into a new split of the workspace. |
 | **Mod+B / Mod+V** | `splith` / `splitv`: wrap the focus in a container of one, so the next window opens beside or below it. |
@@ -1025,16 +1025,15 @@ config module whose `Shell` it is (see
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)); nothing here reads a
 file of its own.
 
-The keyboard is `[input.keyboard]`, and it is what the sample's keysyms resolve
-through. They were chosen on Programmer's Dvorak with Caps Lock and Escape
-swapped, which the compositor does not default to — it comes up on a plain
-`us` layout — so say so to get the keys where the sample meant them:
+The keyboard is the config's `input.keyboard`, and it is what the sample's
+keysyms resolve through. They were chosen on Programmer's Dvorak with Caps Lock
+and Escape swapped, which the compositor does not default to — it comes up on a
+plain `us` layout — so say so to get the keys where the sample meant them:
 
-```toml
-[input.keyboard]
-xkb_layout = "us"
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
+```ts
+export const input = {
+  keyboard: { xkb_layout: "us", xkb_variant: "dvp", xkb_options: ["caps:swapescape"] },
+};
 ```
 
 ## Build & run

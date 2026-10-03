@@ -656,7 +656,7 @@ export type DomicileNotificationsEvent = Event & {
  * trap that looks like it can.** That media query reports the engine's own
  * notion of a system preference, and under Domicile there is no system above
  * the desktop to have one — the shell *is* the desktop's chrome. The theme is
- * the compositor's: out of `[theme] mode` in its config, and out of whatever
+ * the compositor's: out of `theme.mode` in its config, and out of whatever
  * {@link DomicileHost.setTheme} has done to it since.
  *
  * Pushed, like the battery, and the one pushed event a page can cause: it
@@ -1113,7 +1113,7 @@ export type DomicileHost = {
    * the page would be a desktop whose panels went dark and whose windows
    * stayed light.
    *
-   * Not written back to the config file, which is generated — `[theme] mode`
+   * Not written back to the config file, which is generated — `theme.mode`
    * is what the desk comes up on, and a toggle lasts as long as the desktop.
    */
   setTheme(theme: Theme): void;

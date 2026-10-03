@@ -16,7 +16,7 @@ use crate::running::Compositor;
 /// `zxdg_toplevel_decoration_v1`, which Chromium, Electron and Qt ask through.
 #[test]
 fn a_window_asking_to_draw_its_own_frame_is_told_the_shell_draws_it() {
-    let compositor = Compositor::started_with("");
+    let compositor = Compositor::started_with("{}");
     let _chrome = compositor.chrome();
     let mut client = compositor.client("app");
 
@@ -31,7 +31,7 @@ fn a_window_asking_to_draw_its_own_frame_is_told_the_shell_draws_it() {
 /// `org_kde_kwin_server_decoration`, which is what GTK3 asks through.
 #[test]
 fn a_gtk3_window_asking_to_draw_its_own_frame_is_told_the_shell_draws_it() {
-    let compositor = Compositor::started_with("");
+    let compositor = Compositor::started_with("{}");
     let _chrome = compositor.chrome();
     let mut client = compositor.client("app");
 

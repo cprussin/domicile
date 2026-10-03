@@ -20,7 +20,7 @@ fn a_desk_that_configured_no_keyboard_gets_nobodys_layout() {
     // configured nothing got a layout they never asked for, and the only
     // symptom is that every key is wrong. A shell that wants a layout states
     // one; saying nothing means the layout as it comes.
-    let keyboard = Config::parse("").unwrap().input.keyboard;
+    let keyboard = Config::parse("{}").unwrap().input.keyboard;
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "");
     assert!(
@@ -38,9 +38,11 @@ fn a_desk_that_states_a_keyboard_gets_that_one() {
     // The other half, and the one the default stopped being needed for: a
     // layout reaches the compositor because somebody wrote it down.
     let text = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:escape"]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:escape"] }
+  }
+}
 "#;
     let keyboard = Config::parse(text)
         .expect("valid config should parse")
@@ -56,12 +58,17 @@ xkb_options = ["caps:escape"]
 #[test]
 fn parses_keyboard_settings() {
     let text = r#"
-[input.keyboard]
-xkb_rules = "evdev"
-xkb_model = "pc105"
-xkb_layout = "us,de"
-xkb_variant = "dvp,"
-xkb_options = ["caps:swapescape", "grp:alt_shift_toggle"]
+{
+  "input": {
+    "keyboard": {
+      "xkb_rules": "evdev",
+      "xkb_model": "pc105",
+      "xkb_layout": "us,de",
+      "xkb_variant": "dvp,",
+      "xkb_options": ["caps:swapescape", "grp:alt_shift_toggle"]
+    }
+  }
+}
 "#;
     let keyboard = Config::parse(text)
         .expect("valid keyboard config should parse")
@@ -86,8 +93,9 @@ xkb_options = ["caps:swapescape", "grp:alt_shift_toggle"]
 fn joins_xkb_options_for_xkb() {
     let keyboard = Config::parse(
         r#"
-[input.keyboard]
-xkb_options = ["caps:swapescape", "compose:ralt"]
+{
+  "input": { "keyboard": { "xkb_options": ["caps:swapescape", "compose:ralt"] } }
+}
 "#,
     )
     .unwrap()
@@ -104,8 +112,7 @@ fn empty_xkb_options_disable_every_option() {
     // An explicitly empty list means "no options", not "use xkb's defaults".
     let keyboard = Config::parse(
         r#"
-[input.keyboard]
-xkb_options = []
+{ "input": { "keyboard": { "xkb_options": [] } } }
 "#,
     )
     .unwrap()
@@ -118,8 +125,7 @@ xkb_options = []
 fn rejects_empty_keyboard_layout() {
     let err = Config::parse(
         r#"
-[input.keyboard]
-xkb_layout = ""
+{ "input": { "keyboard": { "xkb_layout": "" } } }
 "#,
     )
     .unwrap_err();
@@ -131,8 +137,7 @@ fn rejects_blank_keyboard_option() {
     // A stray comma in a hand-edited list would otherwise reach xkb as junk.
     let err = Config::parse(
         r#"
-[input.keyboard]
-xkb_options = ["caps:swapescape", ""]
+{ "input": { "keyboard": { "xkb_options": ["caps:swapescape", ""] } } }
 "#,
     )
     .unwrap_err();
@@ -148,15 +153,14 @@ fn a_desk_that_asked_for_no_timeout_never_blanks() {
     // warns a moment before, so a screen that went dark on its own would read as
     // a desktop that had died -- and on a desk that states a passphrase it is
     // the edge that locks the thing, which is a larger surprise still.
-    assert_eq!(Config::parse("").unwrap().idle.blank_after(), None);
+    assert_eq!(Config::parse("{}").unwrap().idle.blank_after(), None);
 }
 
 #[test]
 fn a_desk_that_states_a_timeout_gets_it() {
     let idle = Config::parse(
         r#"
-[idle]
-blank_after_seconds = 600
+{ "idle": { "blank_after_seconds": 600 } }
 "#,
     )
     .unwrap()
@@ -171,8 +175,7 @@ fn rejects_a_timeout_of_no_time_at_all() {
     // leave the key out. So it is refused by name rather than guessed at.
     let err = Config::parse(
         r#"
-[idle]
-blank_after_seconds = 0
+{ "idle": { "blank_after_seconds": 0 } }
 "#,
     )
     .unwrap_err();
@@ -193,15 +196,14 @@ fn a_desk_that_states_no_verifier_cannot_lock() {
     // the conservative default -- it is the only safe reading. A desk that
     // locked with nothing to open it is a desk nobody can get back into, and
     // the only way out would be another tty.
-    assert_eq!(Config::parse("").unwrap().lock.verifier(), None);
+    assert_eq!(Config::parse("{}").unwrap().lock.verifier(), None);
 }
 
 #[test]
 fn a_desk_that_states_a_passphrase_is_opened_by_it() {
     let lock = Config::parse(
         r#"
-[lock]
-passphrase = "open sesame"
+{ "lock": { "passphrase": "open sesame" } }
 "#,
     )
     .unwrap()
@@ -216,8 +218,7 @@ passphrase = "open sesame"
 fn a_desk_that_names_a_pam_service_is_opened_by_pam() {
     let lock = Config::parse(
         r#"
-[lock]
-pam_service = "domicile"
+{ "lock": { "pam_service": "domicile" } }
 "#,
     )
     .unwrap()
@@ -239,9 +240,7 @@ fn rejects_a_desk_that_states_both_verifiers() {
     // both is refused by name.
     let err = Config::parse(
         r#"
-[lock]
-passphrase = "open sesame"
-pam_service = "domicile"
+{ "lock": { "passphrase": "open sesame", "pam_service": "domicile" } }
 "#,
     )
     .unwrap_err();
@@ -258,8 +257,7 @@ pam_service = "domicile"
 fn rejects_a_pam_service_of_nothing_at_all() {
     let err = Config::parse(
         r#"
-[lock]
-pam_service = ""
+{ "lock": { "pam_service": "" } }
 "#,
     )
     .unwrap_err();
@@ -280,8 +278,7 @@ fn rejects_a_passphrase_of_nothing_at_all() {
     // out. So it is refused by name rather than guessed at.
     let err = Config::parse(
         r#"
-[lock]
-passphrase = ""
+{ "lock": { "passphrase": "" } }
 "#,
     )
     .unwrap_err();
@@ -304,8 +301,7 @@ fn a_passphrase_is_not_in_what_a_log_line_would_print() {
     let secret = "correct horse battery staple";
     let config = Config::parse(&format!(
         r#"
-[lock]
-passphrase = "{secret}"
+{{ "lock": {{ "passphrase": "{secret}" }} }}
 "#
     ))
     .unwrap();
@@ -335,15 +331,14 @@ fn a_desk_that_says_nothing_about_the_theme_is_dark() {
     // ON. Every other desktop reads a system preference here; this one *is*
     // the system, so a desk that states no theme is not deferring to anything
     // -- it is taking the one the chrome was designed against.
-    assert_eq!(Config::parse("").unwrap().theme.mode, ThemeMode::Dark);
+    assert_eq!(Config::parse("{}").unwrap().theme.mode, ThemeMode::Dark);
 }
 
 #[test]
 fn a_desk_that_states_a_theme_gets_it() {
     let theme = Config::parse(
         r#"
-[theme]
-mode = "light"
+{ "theme": { "mode": "light" } }
 "#,
     )
     .unwrap()
@@ -358,8 +353,7 @@ fn rejects_a_theme_that_is_neither() {
     // desktop takes and would be Domicile deferring to itself.
     let err = Config::parse(
         r#"
-[theme]
-mode = "system"
+{ "theme": { "mode": "system" } }
 "#,
     )
     .unwrap_err();
@@ -370,7 +364,7 @@ mode = "system"
 
 #[test]
 fn a_desk_that_says_nothing_about_applications_offers_every_one() {
-    let omit = Config::parse("").unwrap().applications.omit;
+    let omit = Config::parse("{}").unwrap().applications.omit;
     assert!(!omit.omits("firefox.desktop"));
     assert!(!omit.omits(".hidden.desktop"));
 }
@@ -381,8 +375,9 @@ fn a_desk_can_omit_every_application_but_the_ones_it_names() {
     // everything left out, then taken back by name, the last match deciding.
     let omit = Config::parse(
         r#"
-[applications]
-omit = ["*", "!launcher-*", "!org.gnome.Nautilus.desktop"]
+{
+  "applications": { "omit": ["*", "!launcher-*", "!org.gnome.Nautilus.desktop"] }
+}
 "#,
     )
     .unwrap()
@@ -397,8 +392,7 @@ omit = ["*", "!launcher-*", "!org.gnome.Nautilus.desktop"]
 fn an_application_pattern_that_is_not_a_glob_is_refused() {
     let err = Config::parse(
         r#"
-[applications]
-omit = ["[unclosed"]
+{ "applications": { "omit": ["[unclosed"] } }
 "#,
     )
     .unwrap_err();
@@ -407,16 +401,22 @@ omit = ["[unclosed"]
 
 #[test]
 fn a_desk_that_says_nothing_has_no_bookmarks() {
-    assert!(Config::parse("").unwrap().applications.bookmarks.is_empty());
+    assert!(Config::parse("{}")
+        .unwrap()
+        .applications
+        .bookmarks
+        .is_empty());
 }
 
 #[test]
 fn a_bookmark_is_a_name_and_the_url_it_opens() {
     let bookmarks = Config::parse(
         r#"
-[[applications.bookmarks]]
-name = "Calendar"
-url = "https://calendar.google.com"
+{
+  "applications": {
+    "bookmarks": [{ "name": "Calendar", "url": "https://calendar.google.com" }]
+  }
+}
 "#,
     )
     .unwrap()
@@ -437,10 +437,17 @@ fn a_bookmark_is_a_name_and_a_url_and_nothing_else() {
     // URL is what a desk says now, and a config still naming them is told so.
     let err = Config::parse(
         r#"
-[[applications.bookmarks]]
-name = "Calendar"
-url = "https://calendar.google.com"
-shortcodes = { "!work" = "https://calendar.google.com?authuser=work" }
+{
+  "applications": {
+    "bookmarks": [
+      {
+        "name": "Calendar",
+        "url": "https://calendar.google.com",
+        "shortcodes": { "!work": "https://calendar.google.com?authuser=work" }
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -452,7 +459,7 @@ fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
     // A launcher draws the site's icon from the URL, and opens it as a page:
     // `calendar.google.com` with no scheme is neither.
     let err = Config::parse(
-        "[[applications.bookmarks]]\nname = \"Calendar\"\nurl = \"calendar.google.com\"\n",
+        r#"{ "applications": { "bookmarks": [{ "name": "Calendar", "url": "calendar.google.com" }] } }"#,
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
@@ -462,8 +469,7 @@ fn a_bookmark_whose_url_is_not_a_web_address_is_refused() {
 fn a_bookmark_missing_its_url_is_refused() {
     let err = Config::parse(
         r#"
-[[applications.bookmarks]]
-name = "Calendar"
+{ "applications": { "bookmarks": [{ "name": "Calendar" }] } }
 "#,
     )
     .unwrap_err();
@@ -474,15 +480,14 @@ name = "Calendar"
 
 #[test]
 fn a_desk_that_says_nothing_about_startup_runs_nothing() {
-    assert!(Config::parse("").unwrap().startup.commands.is_empty());
+    assert!(Config::parse("{}").unwrap().startup.commands.is_empty());
 }
 
 #[test]
 fn a_startup_command_is_an_argv() {
     let commands = Config::parse(
         r#"
-[startup]
-commands = [["emacsclient", "-e", "t"], ["mako"]]
+{ "startup": { "commands": [["emacsclient", "-e", "t"], ["mako"]] } }
 "#,
     )
     .unwrap()
@@ -497,8 +502,7 @@ fn an_empty_startup_command_is_refused() {
     // did nothing.
     let err = Config::parse(
         r#"
-[startup]
-commands = [[]]
+{ "startup": { "commands": [[]] } }
 "#,
     )
     .unwrap_err();
@@ -512,7 +516,7 @@ fn a_desk_that_says_nothing_about_files_omits_what_is_hidden_at_any_depth() {
     // The rule the index kept before it was a setting: a `.git` walked to the
     // bottom is most of a home full of checkouts, and none of it is opened by
     // name.
-    let omit = Config::parse("").unwrap().files.omit;
+    let omit = Config::parse("{}").unwrap().files.omit;
     assert!(omit.omits(".config"));
     assert!(omit.omits("src/.git"));
     assert!(!omit.omits("src"));
@@ -525,8 +529,7 @@ fn a_desk_that_states_what_to_omit_replaces_the_default() {
     // default is only what saying nothing means.
     let omit = Config::parse(
         r#"
-[files]
-omit = ["Library/*/*"]
+{ "files": { "omit": ["Library/*/*"] } }
 "#,
     )
     .unwrap()
@@ -544,8 +547,7 @@ fn the_last_pattern_to_match_a_path_decides_it() {
     // omitted. A `*` stops at a `/`, so `*/*` is two deep and no deeper.
     let omit = Config::parse(
         r#"
-[files]
-omit = ["*/*", "!Scratch/*"]
+{ "files": { "omit": ["*/*", "!Scratch/*"] } }
 "#,
     )
     .unwrap()
@@ -563,8 +565,7 @@ fn rejects_a_pattern_that_is_not_a_glob() {
     // would be an index quietly built with one rule fewer than the desk said.
     let err = Config::parse(
         r#"
-[files]
-omit = ["Library/[unclosed"]
+{ "files": { "omit": ["Library/[unclosed"] } }
 "#,
     )
     .unwrap_err();
@@ -575,7 +576,7 @@ omit = ["Library/[unclosed"]
 
 #[test]
 fn a_desk_that_says_nothing_about_extensions_names_none() {
-    let extensions = Config::parse("").unwrap().extensions;
+    let extensions = Config::parse("{}").unwrap().extensions;
     assert!(extensions.web_store.is_empty());
     assert!(extensions.unpacked.is_empty());
 }
@@ -584,9 +585,12 @@ fn a_desk_that_says_nothing_about_extensions_names_none() {
 fn a_desk_that_names_extensions_gets_them() {
     let extensions = Config::parse(
         r#"
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
-unpacked = ["/home/you/src/my-extension"]
+{
+  "extensions": {
+    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+    "unpacked": ["/home/you/src/my-extension"]
+  }
+}
 "#,
     )
     .unwrap()
@@ -608,7 +612,10 @@ fn rejects_a_web_store_id_that_is_not_one() {
         "ddkjiahejlhfcafbddmgiahcphecmpfz", // a letter past `p`
         "DDKJIAHEJLHFCAFBDDMGIAHCPHECMPFH", // shouted
     ] {
-        let err = Config::parse(&format!("[extensions]\nweb_store = [{id:?}]\n")).unwrap_err();
+        let err = Config::parse(&format!(
+            r#"{{ "extensions": {{ "web_store": [{id:?}] }} }}"#
+        ))
+        .unwrap_err();
         let ConfigError::Validation(message) = &err else {
             panic!("{id}: got {err:?}");
         };
@@ -622,7 +629,8 @@ fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
     // is refused at load rather than handed to an engine that cannot find it.
     // A `~` is not relative: see the crate's own tests, which can say what the
     // home is.
-    let err = Config::parse("[extensions]\nunpacked = [\"src/my-extension\"]\n").unwrap_err();
+    let err =
+        Config::parse(r#"{ "extensions": { "unpacked": ["src/my-extension"] } }"#).unwrap_err();
     let ConfigError::Validation(message) = &err else {
         panic!("got {err:?}");
     };
@@ -633,8 +641,8 @@ fn rejects_an_unpacked_extension_that_is_not_an_absolute_path() {
 fn rejects_an_unpacked_extension_in_another_users_home() {
     // `~alice` is a lookup of another user's home, which this does not make.
     // Refused as that, rather than as a relative path nobody wrote.
-    let err =
-        Config::parse("[extensions]\nunpacked = [\"~alice/src/my-extension\"]\n").unwrap_err();
+    let err = Config::parse(r#"{ "extensions": { "unpacked": ["~alice/src/my-extension"] } }"#)
+        .unwrap_err();
     let ConfigError::Validation(message) = &err else {
         panic!("got {err:?}");
     };
@@ -644,7 +652,7 @@ fn rejects_an_unpacked_extension_in_another_users_home() {
 
 #[test]
 fn rejects_invalid_syntax() {
-    let err = Config::parse("{ this is not toml").unwrap_err();
+    let err = Config::parse("{ this is not json").unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
@@ -653,14 +661,13 @@ fn rejects_invalid_syntax() {
 /// The one property the whole shell-to-compositor interface leans on: a shell
 /// generates this file, so a key that does nothing is a bug in a program
 /// rather than a typo at a prompt. Nothing else here covers it: the test that
-/// did went with `[shell]`.
+/// did went with `shell`.
 #[test]
 fn rejects_a_key_nothing_reads() {
     // Misspelled in a section that exists, which is the shape a real one takes.
     let err = Config::parse(
         r#"
-[output]
-max_scaale = 2
+{ "output": { "max_scaale": 2 } }
 "#,
     )
     .unwrap_err();
@@ -671,12 +678,7 @@ max_scaale = 2
     );
 
     // And at the top level, where a whole section could be misspelled.
-    let err = Config::parse(
-        r#"
-[outputs]
-"#,
-    )
-    .unwrap_err();
+    let err = Config::parse(r#"{ "outputs": {} }"#).unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 
     // Every section that carries the attribute, not only the two above. The
@@ -685,21 +687,16 @@ max_scaale = 2
     // `xkb_optoins` through while reading as though it did not.
     for section in [
         r#"
-[idle]
-blank_after_secons = 600
+{ "idle": { "blank_after_secons": 600 } }
 "#,
         r#"
-[input.keyboard]
-xkb_optoins = []
+{ "input": { "keyboard": { "xkb_optoins": [] } } }
 "#,
+        r#"{ "input": { "keyboardd": {} } }"#,
         r#"
-[input.keyboardd]
-"#,
-        r#"
-[[output.displays]]
-name = "a"
-size = [1, 1]
-scaale = 2
+{
+  "output": { "displays": [{ "name": "a", "size": [1, 1], "scaale": 2 }] }
+}
 "#,
     ] {
         let err = Config::parse(section).unwrap_err();
@@ -718,15 +715,12 @@ fn the_startup_placeholder_is_not_a_setting() {
     // `SetDesktopSize` when nested -- so it is overwritten within a beat of
     // every run, and no value a user could write here survives long enough to
     // be worth writing. It is a constant in the compositor now, and the whole
-    // `[compositor]` section went with it.
+    // `compositor` section went with it.
     for stated in [
         r#"
-[compositor]
-nested_size = [800, 600]
+{ "compositor": { "nested_size": [800, 600] } }
 "#,
-        r#"
-[compositor]
-"#,
+        r#"{ "compositor": {} }"#,
     ] {
         let err = Config::parse(stated).unwrap_err();
         assert!(
@@ -744,8 +738,7 @@ fn store_reload_valid_swaps_current_and_clears_error() {
     store
         .reload_from_str(
             r#"
-[output]
-max_scale = 3
+{ "output": { "max_scale": 3 } }
 "#,
         )
         .unwrap();
@@ -759,14 +752,15 @@ fn store_reload_invalid_keeps_last_good_and_records_error() {
     store
         .reload_from_str(
             r#"
-[output]
-max_scale = 3
+{ "output": { "max_scale": 3 } }
 "#,
         )
         .unwrap();
 
     // A subsequent bad edit must NOT change the live config.
-    let err = store.reload_from_str("max_scale = = broken").unwrap_err();
+    let err = store
+        .reload_from_str(r#"{ "output": { "max_scale": } }"#)
+        .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)));
     assert_eq!(
         store.current().output.max_scale,
@@ -779,14 +773,13 @@ max_scale = 3
 #[test]
 fn store_recovers_after_fixing_a_bad_edit() {
     let mut store = ConfigStore::new(Config::default());
-    let _ = store.reload_from_str("broken = = =");
+    let _ = store.reload_from_str(r#"{ "output": "#);
     assert!(store.last_error().is_some());
 
     store
         .reload_from_str(
             r#"
-[output]
-max_scale = 4
+{ "output": { "max_scale": 4 } }
 "#,
         )
         .unwrap();
@@ -802,12 +795,11 @@ max_scale = 4
 #[test]
 fn loads_from_a_file() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("domicile.toml");
+    let path = dir.path().join("domicile.json");
     std::fs::write(
         &path,
         r#"
-[output]
-max_scale = 3
+{ "output": { "max_scale": 3 } }
 "#,
     )
     .unwrap();
@@ -818,7 +810,7 @@ max_scale = 3
 
 #[test]
 fn missing_file_is_an_io_error() {
-    let err = Config::load("/no/such/domicile.toml").unwrap_err();
+    let err = Config::load("/no/such/domicile.json").unwrap_err();
     assert!(matches!(err, ConfigError::Io { .. }), "got {err:?}");
 }
 
@@ -834,8 +826,8 @@ fn missing_file_is_an_io_error() {
 fn a_file_that_will_not_load_says_which_file() {
     let dir = tempfile::tempdir().unwrap();
 
-    let unparseable = dir.path().join("syntax.toml");
-    std::fs::write(&unparseable, "[compositor]\n").unwrap();
+    let unparseable = dir.path().join("syntax.json");
+    std::fs::write(&unparseable, r#"{ "compositor": {} }"#).unwrap();
     let err = Config::load(&unparseable).unwrap_err();
     let said = format!("{err}");
     assert!(
@@ -844,13 +836,13 @@ fn a_file_that_will_not_load_says_which_file() {
     );
     assert!(
         said.contains("`compositor`"),
-        "and keep what toml said about it: {said}"
+        "and keep what the parser said about it: {said}"
     );
 
     // The other half of the asymmetry: a config that parses and then does not
     // hold up is about the same file and used to name it just as little.
-    let invalid = dir.path().join("validation.toml");
-    std::fs::write(&invalid, "[output]\nmax_scale = 0\n").unwrap();
+    let invalid = dir.path().join("validation.json");
+    std::fs::write(&invalid, r#"{ "output": { "max_scale": 0 } }"#).unwrap();
     let err = Config::load(&invalid).unwrap_err();
     let said = format!("{err}");
     assert!(
@@ -866,12 +858,11 @@ fn a_file_that_will_not_load_says_which_file() {
 #[test]
 fn store_reload_from_path_keeps_last_good_on_bad_file() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("domicile.toml");
+    let path = dir.path().join("domicile.json");
     std::fs::write(
         &path,
         r#"
-[output]
-max_scale = 3
+{ "output": { "max_scale": 3 } }
 "#,
     )
     .unwrap();
@@ -880,7 +871,7 @@ max_scale = 3
     assert_eq!(store.current().output.max_scale, 3);
 
     // Simulate a user saving a broken file.
-    std::fs::write(&path, "max_scale = = nope").unwrap();
+    std::fs::write(&path, r#"{ "output": { "max_scale": "#).unwrap();
     assert!(store.reload_from_path(&path).is_err());
     assert_eq!(store.current().output.max_scale, 3);
 }
@@ -891,7 +882,7 @@ max_scale = 3
 fn output_scaling_is_on_by_default_up_to_a_retina_display() {
     // A 2x display is the common case the default has to cover; beyond that a
     // frame costs more than the copy path can carry, so the default stops.
-    assert_eq!(Config::parse("").unwrap().output.max_scale, 2);
+    assert_eq!(Config::parse("{}").unwrap().output.max_scale, 2);
 }
 
 #[test]
@@ -902,8 +893,7 @@ fn max_scale_one_turns_hidpi_off() {
     assert_eq!(
         Config::parse(
             r#"
-[output]
-max_scale = 1
+{ "output": { "max_scale": 1 } }
 "#
         )
         .unwrap()
@@ -917,8 +907,7 @@ max_scale = 1
 fn max_scale_must_leave_a_usable_scale() {
     let err = Config::parse(
         r#"
-[output]
-max_scale = 0
+{ "output": { "max_scale": 0 } }
 "#,
     )
     .unwrap_err();
@@ -934,22 +923,25 @@ max_scale = 0
 fn no_displays_configured_means_the_output_follows_domiciles_window() {
     // The nested backend's original behavior, and the only thing it can do
     // without being told: one output, sized by whatever window Domicile got.
-    assert_eq!(Config::parse("").unwrap().output.displays, vec![]);
+    assert_eq!(Config::parse("{}").unwrap().output.displays, vec![]);
 }
 
 #[test]
 fn parses_a_side_by_side_desktop() {
     let text = r#"
-[[output.displays]]
-name = "left"
-position = [0, 0]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
+{
+  "output": {
+    "displays": [
+      { "name": "left", "position": [0, 0], "size": [1920, 1080] },
+      {
+        "name": "right",
+        "position": [1920, 0],
+        "size": [2560, 1440],
+        "scale": 2
+      }
+    ]
+  }
+}
 "#;
     let displays = Config::parse(text)
         .expect("a described desktop should parse")
@@ -980,9 +972,7 @@ fn a_display_sits_at_the_origin_unless_placed() {
     // relative to.
     let displays = Config::parse(
         r#"
-[[output.displays]]
-name = "only"
-size = [800, 600]
+{ "output": { "displays": [{ "name": "only", "size": [800, 600] }] } }
 "#,
     )
     .unwrap()
@@ -997,14 +987,14 @@ fn a_display_needs_a_name_the_shell_can_tell_apart() {
     // two displays answering to it is not a preference the shell can resolve.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "hdmi"
-size = [800, 600]
-
-[[output.displays]]
-name = "hdmi"
-position = [800, 0]
-size = [800, 600]
+{
+  "output": {
+    "displays": [
+      { "name": "hdmi", "size": [800, 600] },
+      { "name": "hdmi", "position": [800, 0], "size": [800, 600] }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1028,9 +1018,7 @@ fn a_display_name_may_not_be_padded() {
     // trim-and-deduplicate would satisfy just as well.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "left "
-size = [800, 600]
+{ "output": { "displays": [{ "name": "left ", "size": [800, 600] }] } }
 "#,
     )
     .unwrap_err();
@@ -1050,14 +1038,14 @@ fn a_display_named_nothing_is_rejected() {
     // called, and the entry still has to be findable in a file with five.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "real"
-size = [800, 600]
-
-[[output.displays]]
-name = ""
-position = [800, 0]
-size = [800, 600]
+{
+  "output": {
+    "displays": [
+      { "name": "real", "size": [800, 600] },
+      { "name": "", "position": [800, 0], "size": [800, 600] }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1077,9 +1065,7 @@ fn a_display_with_no_pixels_is_rejected() {
     for size in ["[1920, 0]", "[0, 1080]"] {
         let err = Config::parse(&format!(
             r#"
-[[output.displays]]
-name = "dead"
-size = {size}
+{{ "output": {{ "displays": [{{ "name": "dead", "size": {size} }}] }} }}
 "#
         ))
         .unwrap_err();
@@ -1098,10 +1084,9 @@ size = {size}
 fn a_display_must_have_a_usable_scale() {
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "tiny"
-size = [800, 600]
-scale = 0
+{
+  "output": { "displays": [{ "name": "tiny", "size": [800, 600], "scale": 0 }] }
+}
 "#,
     )
     .unwrap_err();
@@ -1124,10 +1109,11 @@ fn a_display_may_not_run_off_the_edge_of_the_desktop() {
     for position in ["[2147483000, 0]", "[0, 2147483000]"] {
         let err = Config::parse(&format!(
             r#"
-[[output.displays]]
-name = "far"
-position = {position}
-size = [1920, 1080]
+{{
+  "output": {{
+    "displays": [{{ "name": "far", "position": {position}, "size": [1920, 1080] }}]
+  }}
+}}
 "#
         ))
         .unwrap_err();
@@ -1148,14 +1134,14 @@ fn displays_may_not_cover_the_same_ground() {
     // to, so it is a typo in the layout rather than a desktop.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1900, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      { "name": "right", "position": [1900, 0], "size": [1920, 1080] }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1181,27 +1167,27 @@ fn displays_that_only_touch_are_a_desktop_rather_than_a_collision() {
     // collision and fails here.
     Config::parse(
         r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      { "name": "right", "position": [1920, 0], "size": [1920, 1080] }
+    ]
+  }
+}
 "#,
     )
     .expect("side-by-side displays should parse");
     Config::parse(
         r#"
-[[output.displays]]
-name = "top"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "bottom"
-position = [0, 1080]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      { "name": "top", "size": [1920, 1080] },
+      { "name": "bottom", "position": [0, 1080], "size": [1920, 1080] }
+    ]
+  }
+}
 "#,
     )
     .expect("stacked displays should parse");
@@ -1218,14 +1204,18 @@ fn a_desktop_may_reach_exactly_as_far_as_a_position_can_and_no_further() {
     // check that reads heights from one that reads widths.
     Config::parse(
         r#"
-[[output.displays]]
-name = "here"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "far"
-position = [2147479647, 2000]
-size = [4000, 8000]
+{
+  "output": {
+    "displays": [
+      { "name": "here", "size": [1920, 1080] },
+      {
+        "name": "far",
+        "position": [2147479647, 2000],
+        "size": [4000, 8000]
+      }
+    ]
+  }
+}
 "#,
     )
     .expect("a desktop exactly as wide as a position can describe should parse");
@@ -1236,15 +1226,18 @@ size = [4000, 8000]
     // is under the limit and this desktop is accepted.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "here"
-position = [-1, 0]
-size = [10, 10]
-
-[[output.displays]]
-name = "far"
-position = [2147479647, 2000]
-size = [4000, 8000]
+{
+  "output": {
+    "displays": [
+      { "name": "here", "position": [-1, 0], "size": [10, 10] },
+      {
+        "name": "far",
+        "position": [2147479647, 2000],
+        "size": [4000, 8000]
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1254,14 +1247,18 @@ size = [4000, 8000]
     );
     Config::parse(
         r#"
-[[output.displays]]
-name = "here"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "below"
-position = [3000, 2147482567]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      { "name": "here", "size": [1920, 1080] },
+      {
+        "name": "below",
+        "position": [3000, 2147482567],
+        "size": [1920, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .expect("a desktop exactly as tall as a position can describe should parse");
@@ -1273,15 +1270,22 @@ fn the_desktop_must_fit_the_coordinate_space_on_both_axes() {
     // whether the vertical one reads the right fields — or is checked at all.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "north"
-position = [0, -2000000000]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "south"
-position = [0, 2000000000]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "north",
+        "position": [0, -2000000000],
+        "size": [1920, 1080]
+      },
+      {
+        "name": "south",
+        "position": [0, 2000000000],
+        "size": [1920, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1309,10 +1313,17 @@ fn a_display_too_big_on_its_own_is_reported_as_itself() {
     // reachable by nothing.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "huge"
-position = [2000000000, 0]
-size = [1000000000, 1080]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "huge",
+        "position": [2000000000, 0],
+        "size": [1000000000, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1329,15 +1340,22 @@ size = [1000000000, 1080]
     // about the pair and names `west`, which is not the one at fault.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "west"
-position = [-2000000000, 0]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "far"
-position = [2147483000, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "west",
+        "position": [-2000000000, 0],
+        "size": [1920, 1080]
+      },
+      {
+        "name": "far",
+        "position": [2147483000, 0],
+        "size": [1920, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1356,15 +1374,22 @@ fn the_desktop_as_a_whole_must_fit_the_coordinate_space() {
     // and positioned in.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "west"
-position = [-2000000000, 0]
-size = [1920, 1080]
-
-[[output.displays]]
-name = "east"
-position = [2000000000, 0]
-size = [1920, 1080]
+{
+  "output": {
+    "displays": [
+      {
+        "name": "west",
+        "position": [-2000000000, 0],
+        "size": [1920, 1080]
+      },
+      {
+        "name": "east",
+        "position": [2000000000, 0],
+        "size": [1920, 1080]
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1394,10 +1419,11 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
     // have reached it arrives here instead.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "dense"
-size = [1920, 1080]
-scale = 2000000
+{
+  "output": {
+    "displays": [{ "name": "dense", "size": [1920, 1080], "scale": 2000000 }]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1424,17 +1450,17 @@ scale = 2000000
     // short, which is why the earlier version of this case tested nothing.
     Config::parse(
         r#"
-[[output.displays]]
-name = "exact"
-size = [2147483647, 1080]
+{
+  "output": { "displays": [{ "name": "exact", "size": [2147483647, 1080] }] }
+}
 "#,
     )
     .expect("a mode exactly as wide as a coordinate should parse");
     Config::parse(
         r#"
-[[output.displays]]
-name = "over"
-size = [2147483648, 1080]
+{
+  "output": { "displays": [{ "name": "over", "size": [2147483648, 1080] }] }
+}
 "#,
     )
     .expect_err("one pixel more than a coordinate should not");
@@ -1444,10 +1470,11 @@ size = [2147483648, 1080]
     // either is checked.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "wide"
-size = [2147483647, 1]
-scale = 2
+{
+  "output": {
+    "displays": [{ "name": "wide", "size": [2147483647, 1], "scale": 2 }]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1457,10 +1484,11 @@ scale = 2
     );
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "tall"
-size = [1, 2147483647]
-scale = 2
+{
+  "output": {
+    "displays": [{ "name": "tall", "size": [1, 2147483647], "scale": 2 }]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1478,10 +1506,17 @@ scale = 2
     // that reason. Only naming the mode pins the mode check.
     let err = Config::parse(
         r#"
-[[output.displays]]
-name = "huge"
-size = [4294967295, 4294967295]
-scale = 4294967295
+{
+  "output": {
+    "displays": [
+      {
+        "name": "huge",
+        "size": [4294967295, 4294967295],
+        "scale": 4294967295
+      }
+    ]
+  }
+}
 "#,
     )
     .unwrap_err();
@@ -1494,68 +1529,25 @@ scale = 4294967295
     );
 }
 
-// ---- JSON ------------------------------------------------------------------
-
-#[test]
-fn a_json_config_says_what_its_toml_says() {
-    // The same schema, written by a generator or evaluated out of a module:
-    // a config is a config whichever of the two it arrived as.
-    let toml = Config::parse(
-        r#"
-[input.keyboard]
-xkb_variant = "dvp"
-
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
-"#,
-    )
-    .unwrap();
-    let json = Config::parse_json(
-        r#"{
-          "input": { "keyboard": { "xkb_variant": "dvp" } },
-          "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] }
-        }"#,
-    )
-    .unwrap();
-    assert_eq!(json.input.keyboard, toml.input.keyboard);
-    assert_eq!(json.extensions, toml.extensions);
-}
-
-#[test]
-fn a_json_config_refuses_a_key_nothing_reads() {
-    let err = Config::parse_json(r#"{ "output": { "max_scaale": 2 } }"#).unwrap_err();
-    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
-    assert!(format!("{err}").contains("max_scaale"), "{err}");
-}
+// ---- shell ------------------------------------------------------------------
 
 #[test]
 fn a_config_may_name_the_shell_domicile_runs() {
     // `domicile` reads it when it is given no shell; the compositor has no
     // use for it, and takes it without complaint.
-    let config = Config::parse_json(r#"{ "shell": "@domicile/manganese" }"#).unwrap();
+    let config = Config::parse(r#"{ "shell": "@domicile/manganese" }"#).unwrap();
     assert_eq!(config.shell.as_deref(), Some("@domicile/manganese"));
-}
-
-#[test]
-fn a_json_file_is_read_as_json() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("domicile.json");
-    std::fs::write(
-        &path,
-        r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#,
-    )
-    .unwrap();
-    assert_eq!(
-        Config::load(&path).unwrap().input.keyboard.xkb_variant,
-        "dvp"
-    );
 }
 
 #[test]
 fn keys_are_a_shell_s_now_and_the_tables_are_refused() {
     // A shell binds its keys as its props. A config that still has the tables
     // is refused by name rather than read for keys nothing answers.
-    for table in ["[keybindings]", "[modes.resize]", "[shells.manganese]"] {
+    for table in [
+        r#"{ "keybindings": {} }"#,
+        r#"{ "modes": { "resize": {} } }"#,
+        r#"{ "shells": { "manganese": {} } }"#,
+    ] {
         let err = Config::parse(table).unwrap_err();
         assert!(matches!(err, ConfigError::Parse(_)), "{table}: {err:?}");
     }

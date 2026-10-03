@@ -4,7 +4,7 @@ import type { Theme } from "@domicile/component-library/theme-core";
 // The one thing this shell keeps on the machine it is drawn on, and it is a
 // guess rather than a setting.
 //
-// THE DESK OWNS THE THEME. It comes out of `[theme] mode` in the compositor's
+// THE DESK OWNS THE THEME. It comes out of `theme.mode` in the compositor's
 // config, a toggle asks the compositor to change it, and the answer reaches
 // every page on the desk and every Wayland client on it through the settings
 // portal. None of that is this page's, and none of it is stored here.

@@ -169,16 +169,16 @@ rather than outcomes it has to handle.
 configuration beyond the one file below: your location, your schema, your
 names.
 
-The compositor takes a `--config` naming a TOML or JSON file that describes
+The compositor takes a `--config` naming a JSON file that describes
 the desktop — the displays, their layout, the keyboard — and watches it for
 changes while it runs. **`domicile` passes one on:**
 
 ```
-domicile --config ./desk.toml ./my-desktop/dist/shell.js
+domicile --config ./desk.json ./my-desktop/dist/shell.js
 ```
 
 **And finds one when you leave the flag off:**
-`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json,toml}`, or the same
+`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`, or the same
 under `~/.config` where that is unset; two of them is refused. A person who has written their monitors down should not
 have to type where — and a shell packaged as a wrapper script does not have to
 invent a location for a file that already has one.
@@ -190,9 +190,9 @@ started by a program. What is guessed here is guessed for a *person*, and the
 run says which of the four answers it got before it starts anything:
 
 ```
-config: /home/you/.config/domicile/domicile.toml, found where a config lives
-config: ./desk.toml, because --config names it
-config: none -- no domicile.{ts,tsx,js,mjs,json,toml} in /home/you/.config/domicile -- so the compositor's defaults
+config: /home/you/.config/domicile/domicile.json, found where a config lives
+config: ./desk.json, because --config names it
+config: none -- no domicile.{ts,tsx,js,mjs,json} in /home/you/.config/domicile -- so the compositor's defaults
 ```
 
 **A config can be a module.** Its `Shell` export is the shell `domicile` runs
@@ -254,16 +254,16 @@ reload, so a new `xkb_layout` retypes the desktop, a new `output.max_scale`
 re-advertises it, a new `idle.blank_after_seconds` restarts the clock its
 screens go dark on, a new `theme.mode` repaints the shell and every window that
 follows the portal, a new `files.omit` walks the home again for the launcher's
-index, a new `[applications]` changes which applications and bookmarks the next
-search offers, a new `[extensions]` list installs and uninstalls what it names (see
+index, a new `applications` changes which applications and bookmarks the next
+search offers, a new `extensions` list installs and uninstalls what it names (see
 [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
-a new `[input.keyboard]` moves the keys a shell bound (see
+a new `input.keyboard` moves the keys a shell bound (see
 [Keybindings](#keybindings)),
 and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
 edit replaced. Two sections are read at startup and not on a reload:
-`[lock]`, because whether the desk is *locked* is not something that file says
-— see [A locked desk](#a-locked-desk) — and `[startup]`, because running its
+`lock`, because whether the desk is *locked* is not something that file says
+— see [A locked desk](#a-locked-desk) — and `startup`, because running its
 commands again would be a second copy of each.
 
 Two edits are refused rather than applied, and each says so in the log: a file
@@ -287,14 +287,14 @@ and your shell hears both — see [When nobody is at the
 desk](#when-nobody-is-at-the-desk). Leaving it out is a desktop that never
 blanks, which is deliberate: nothing warns a moment *before* it, so a desk that
 went dark on a timeout its user never set is one that looks like it died. It is
-also what locks a desk that states what opens it under `[lock]`, as does your
+also what locks a desk that states what opens it under `lock`, as does your
 shell calling `lock()` — see [A locked desk](#a-locked-desk). `0` is refused rather than read as
 either answer. An app playing a film holds the screens on through the timeout —
 `zwp_idle_inhibit_manager_v1`, which is between that client and the compositor
 — so a desk that has not blanked is not necessarily one whose timeout is wrong,
 and there is nothing there for a shell to write either way.
 
-**The theme is the desktop's, and there are two of them.** `[theme] mode` is
+**The theme is the desktop's, and there are two of them.** `theme.mode` is
 `"dark"` or `"light"`, and it is where a desk states the one it comes up on.
 There is no `"system"` and there is not going to be one: every other desktop
 offers "follow the system" because it is a program running on one, and Domicile
@@ -303,9 +303,8 @@ word is refused by name rather than read as one of the two. `prefers-color-
 scheme` still answers inside the shell's page, as it answers in any browser,
 and a shell that read it would be asking the engine what the engine was told.
 
-```toml
-[theme]
-mode = "light"
+```json
+{ "theme": { "mode": "light" } }
 ```
 
 **What it changes is the whole desk, not the page.** The shell is told the
@@ -332,7 +331,7 @@ using it hands `turnWindows` on its `ThemeSource` to `themeCaptured`.
 the compositor, which answers every chrome. Nothing is written back to this
 file: it is generated, a desktop that edited a build product would
 be a desk fighting its own configuration, and a toggle lasts as long as the
-desktop does. An edit to `[theme]` therefore overrules whatever the toggle last
+desktop does. An edit to `theme` therefore overrules whatever the toggle last
 did, which is the honest reading of somebody restating what this desk is.
 
 Two of the things it can say about a desktop are different in kind, and which
@@ -355,38 +354,28 @@ one a shell generates depends on whether there is hardware under it:
   against any of them applies. All survive being unplugged; the description is
   empty for a monitor that states none of the three.
 
-```toml
-[[output.profiles]]
-name = "desk"
-
-  [[output.profiles.displays]]
-  display = "drm-1"
-  enabled = false
-
-  [[output.profiles.displays]]
-  display = "DEL DELL U3219Q 2ZLS413"
-  mode = [3840, 2160]
-  position = [0, 0]
-  scale = 1.2
-  transform = "rotate-270"
-
-[[output.profiles]]
-name = "laptop-only"
-
-  [[output.profiles.displays]]
-  display = "drm-1"
-  scale = 1.5
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "desk",
+        "displays": [
+          { "display": "drm-1", "enabled": false },
+          {
+            "display": "DEL DELL U3219Q 2ZLS413",
+            "mode": [3840, 2160],
+            "position": [0, 0],
+            "scale": 1.2,
+            "transform": "rotate-270"
+          }
+        ]
+      },
+      { "name": "laptop-only", "displays": [{ "display": "drm-1", "scale": 1.5 }] }
+    ]
+  }
+}
 ```
-
-**TOML rather than JSON, and it used to be JSON.** The argument for JSON was
-that nobody writes this by hand — a shell generates it, and a generated file
-wants a writer that cannot get the escaping wrong rather than a syntax that is
-pleasant to type. That was about the writer, and there are two ends: a desk
-comes up in the wrong arrangement and somebody opens this file to find out
-why. A desk of six monitors and five profiles is a wall of braces to read one
-`transform` out of, and `[[output.profiles]]` says which profile a display
-belongs to on the line the display is on. The writer lost nothing — every
-language that generates one of these has a TOML writer too.
 
 **A profile's `mode` asserts, it does not ask.** Domicile does not modeset —
 the engine holds DRM master and lights every connector at its native mode — so
@@ -1181,11 +1170,17 @@ profile browser windows use. Their content scripts and network rules need
 nothing from you. Their actions — Chrome's toolbar buttons — are yours to draw,
 in a tray.
 
-```toml
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]  # uBlock Origin Lite
-unpacked = ["~/src/my-extension"]                 # absolute, or under `~`
+```json
+{
+  "extensions": {
+    "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+    "unpacked": ["~/src/my-extension"]
+  }
+}
 ```
+
+`web_store` is Web Store ids (this one is uBlock Origin Lite); `unpacked` is
+directories, absolute or under `~`.
 
 **The config is the consent.** There is no install prompt and no permission
 bubble: a named extension gets the permissions its manifest declares, and one
