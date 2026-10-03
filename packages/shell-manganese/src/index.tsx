@@ -126,6 +126,7 @@ export const runManganese =
       <Chrome
         displays={displays}
         domicile={domicile}
+        keybindings={options.keybindings}
         theme={theme}
         topBar={options.topBar}
       />,
