@@ -171,6 +171,10 @@ class CORE_EXPORT HTMLWebViewElement final
   int32_t findMatches() const { return find_matches_; }
   int32_t findActiveMatch() const { return find_active_match_; }
 
+  // The size the page's content wants: ContentSizeChanged below.
+  int32_t contentWidth() const { return content_width_; }
+  int32_t contentHeight() const { return content_height_; }
+
   // A file chooser this element dispatched has been answered, so it stops
   // holding the event. See `waiting_choosers_`.
   void FileChooserAnswered(DomicileFileChooserEvent&);
@@ -343,6 +347,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // the event below is never dispatched for a change that is not one.
   void FindChanged(int32_t matches, int32_t active_match) override;
 
+  // The browser saying how big the page's content is. It arrives when it
+  // CHANGES, like FindChanged.
+  void ContentSizeChanged(int32_t width, int32_t height) override;
+
   // The page needs a file picked, and the shell is asked in a
   // `domicile-file-chooser` event it answers. One no listener takes with
   // `preventDefault()` is canceled here as soon as the dispatch returns. See
@@ -427,6 +435,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // No find, until the browser says one found something.
   int32_t find_matches_ = 0;
   int32_t find_active_match_ = 0;
+
+  // No size, until the browser says the page has laid out.
+  int32_t content_width_ = 0;
+  int32_t content_height_ = 0;
 
   // Every file chooser a shell took and has not answered yet.
   //

@@ -287,6 +287,16 @@ export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
 export const WEBVIEW_FIND_CHANGE_EVENT = "domicile-find-change";
 
 /**
+ * Fired when the page's content changes size, which is readable on the element
+ * as {@link HTMLWebViewElement.contentWidth} and
+ * {@link HTMLWebViewElement.contentHeight}. Carries nothing, like the other
+ * state events.
+ *
+ * It bubbles.
+ */
+export const WEBVIEW_CONTENT_SIZE_CHANGE_EVENT = "domicile-content-size-change";
+
+/**
  * Fired when the page inside the view needs a file picked: an
  * `<input type="file">` clicked, or a download that needs somewhere to go.
  *
@@ -414,6 +424,15 @@ declare global {
     readonly findMatches: number;
     /** Which of them is selected, counted from 1. 0 while there is none. */
     readonly findActiveMatch: number;
+    /**
+     * The size the page's content wants, in CSS pixels: its narrowest width
+     * (min-content) and its document's height at the width it is laid out at.
+     * What Chrome sizes an extension's popup from. Both 0 until the page has
+     * laid out. Changes are announced in
+     * {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
+     */
+    readonly contentWidth: number;
+    readonly contentHeight: number;
     goBack(): void;
     goForward(): void;
     stop(): void;

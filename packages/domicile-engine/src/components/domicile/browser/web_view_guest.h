@@ -399,6 +399,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // shell's document. See CloseRequested in the mojom.
   void CloseContents(content::WebContents* source) override;
 
+  // Asks the guest's current page to report its content's size.
+  void EnablePreferredSize();
+
+  // The page's content changed size. PrimaryPageChanged asks each page's
+  // renderer to report it, and content forwards only a change. See
+  // ContentSizeChanged in the mojom.
+  void UpdatePreferredSize(content::WebContents* web_contents,
+                           const gfx::Size& pref_size) override;
+
   // What a Find above found, in as many replies as the count takes to settle.
   // A reply to a find that has since been stopped, or replaced by a search for
   // other text, is dropped: it describes a search the element is no longer
@@ -438,7 +447,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A new page, which has named no icon yet: the last page's is withdrawn, so
   // it is not taken for this one's -- and a page that never names one (the
   // renderer reports nothing then) is not left wearing it. And a find ends,
-  // which is Chrome's rule: the matches it counted were the last page's.
+  // which is Chrome's rule: the matches it counted were the last page's. And
+  // its renderer is asked to report its content's size, which a renderer the
+  // navigation swapped in has not been asked yet.
   void PrimaryPageChanged(content::Page& page) override;
 
  private:

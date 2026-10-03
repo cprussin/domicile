@@ -24,14 +24,17 @@
 # fixture's id with its title, the service worker's badge and color, its popup
 # URL, a PNG icon and `enabled`; that the <webview> the shell then points at
 # that popup URL shows it; that getContexts lists the popup as a `TAB`, as
-# Chrome lists an extension page in a tab; and that the popup's
+# Chrome lists an extension page in a tab; that the <webview> reports the
+# popup's content size as the fixture lays it out, which is what a shell sizes
+# its panel from (WebViewGuest::UpdatePreferredSize); and that the popup's
 # `window.close()` reaches the shell as `domicile-close`.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the list empty, and the
 # <webview> pointed at a served page that never calls `window.close()`. The
 # shell must still hear an `extensions` event -- so the fixture's absence is an
 # answer -- with no fixture in it, and the page must show, answer nothing, and
-# NOT close, for as long as the claim took to close.
+# NOT close, for as long as the claim took to close -- nor report the
+# fixture's size.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -60,6 +63,12 @@ readonly BADGE="7"
 readonly BADGE_COLOR="#8e24aaff"
 readonly POPUP="chrome-extension://$ID/popup.html"
 readonly CONTEXT="TAB"
+readonly WIDTH="230"
+readonly HEIGHT="170"
+# What the width may read over WIDTH: Blink's min-content width for the page
+# counts the gutter a classic vertical scrollbar takes, 15px on Linux, and 0
+# where scrollbars overlay.
+readonly SCROLLBAR="15"
 
 EXTENSION="$SCRIPTS/guard-extension-tray-extension"
 
@@ -185,6 +194,15 @@ sleep 1
 saw() { # $1 fixed string
   grep -qF -- "$1" "$ENGINE_LOG" 2>/dev/null && echo 1 || echo 0
 }
+# Whether a size the fixture lays out was reported: HEIGHT, and WIDTH up to
+# SCROLLBAR over it -- for a page at $1, or any page with $1 empty.
+sized() { # $1 address prefix, or empty
+  grep -oE '"GUARD size width=[0-9]+ height=[0-9]+ url=[^"]*' "$ENGINE_LOG" 2>/dev/null |
+    awk -v w="$WIDTH" -v h="$HEIGHT" -v s="$SCROLLBAR" -v u="$1" '
+      { split($3, a, "="); split($4, b, "="); split($5, c, "=") }
+      a[2] >= w && a[2] <= w + s && b[2] == h && index(c[2], u) == 1 { found = 1 }
+      END { print found ? 1 : 0 }'
+}
 
 SENT=0
 grep -qF "sent the extensions" "$SOCKET_LOG" 2>/dev/null && SENT=1
@@ -202,28 +220,33 @@ if [ "$NEGATIVE" = "1" ]; then
   # Any answer at all: a page that asked nothing must leave none.
   CONTEXTS=$(saw "?contexts=")
   CLOSED=$(saw "\"GUARD closed url=$SHOWN\"")
+  SIZED=$(sized "")
 else
   CONTEXTS=$(saw "\"GUARD page url=$SHOWN?contexts=$CONTEXT\"")
   # After any answer, so a wrong one still tells a crash from a close.
   CLOSED=$(saw "\"GUARD closed url=$SHOWN?contexts=")
+  SIZED=$(sized "$SHOWN")
 fi
 
-MEASURED="$LEG $SENT $HEARD $TRAY $OPENED $CONTEXTS $CLOSED"
+MEASURED="$LEG $SENT $HEARD $TRAY $OPENED $CONTEXTS $CLOSED $SIZED"
 echo
 echo "measured: $MEASURED"
 echo "what the shell heard of the tray:"
 grep -F '"GUARD tray ' "$ENGINE_LOG" | tail -3 || true
+echo "the sizes the <webview> reported:"
+grep -F '"GUARD size ' "$ENGINE_LOG" | tail -3 || true
 
 # WHICH END TO BLAME. `scripts/test-extension-tray-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts>
-# <closed>".
+# <closed> <sized>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"tray 1 1 1 1 1 1")
+"tray 1 1 1 1 1 1 1")
   PASSED="the tray reported the fixture's action as its service worker left \
 it, its popup showed in a <webview>, runtime.getContexts listed the popup as a \
-TAB, and the popup's window.close() reached the shell as domicile-close"
+TAB, the <webview> reported the popup's content size, and the popup's \
+window.close() reached the shell as domicile-close"
   ;;
 "tray 0 "*)
   FAILURE="the list was never sent: the browser did not connect to the \
@@ -246,27 +269,35 @@ change not reaching the tray"
   FAILURE="the tray named the popup and the <webview> never showed it, so a \
 guest's navigation to chrome-extension:// was refused or never committed"
   ;;
-"tray 1 1 1 1 0 0")
+"tray 1 1 1 1 0 0 "*)
   FAILURE="the popup showed and never answered runtime.getContexts: the call \
 switches on each frame's view type and NOTREACHEDs on kInvalid, taking the \
 browser down -- AttachTabHelpers did not give the guest kTabContents, as \
 Chrome's tab_helpers.cc gives every tab"
   ;;
-"tray 1 1 1 1 0 1")
+"tray 1 1 1 1 0 1 "*)
   FAILURE="the popup answered runtime.getContexts without listing itself as a \
 TAB -- the address it replaced itself with, in the GUARD page lines, says \
 what it got: a guest's view type other than kTabContents, or an error"
   ;;
-"tray 1 1 1 1 1 0")
+"tray 1 1 1 1 1 0 "*)
   FAILURE="the popup showed and its window.close() never reached the shell: \
 the renderer refused it, WebViewGuest::CloseContents did not send \
 CloseRequested, or the element did not dispatch domicile-close"
   ;;
-"control 1 1 0 1 0 0")
+"tray 1 1 1 1 1 1 0")
+  FAILURE="the popup showed and the <webview> never reported its content at \
+the fixture's size: the guest's renderer was not put in preferred-size mode \
+(WebViewGuest::PrimaryPageChanged), WebViewGuest::UpdatePreferredSize did not \
+send ContentSizeChanged, or the element did not dispatch \
+domicile-content-size-change. The GUARD size lines above say what did arrive"
+  ;;
+"control 1 1 0 1 0 0 0")
   PASSED="the control is sharp: an empty list left the fixture out of a tray \
 the shell did hear, and a page that never asked runtime.getContexts or called \
-window.close() showed, answered nothing, and stayed -- so the claim's row is \
-the list's and its answer and close are the popup's"
+window.close() showed, answered nothing, stayed, and was not the fixture's \
+size -- so the claim's row is the list's and its answer, size and close are \
+the popup's"
   ;;
 "control 0 "*)
   FAILURE="the list was never sent in the control, so its empty tray answers \
@@ -289,9 +320,13 @@ close is not a reading. The guest, or the page server"
   FAILURE="a page that never asked runtime.getContexts showed an answer, so \
 the claim's answer is not the popup's"
   ;;
-"control 1 1 0 1 0 1")
+"control 1 1 0 1 0 1 "*)
   FAILURE="domicile-close fired for a page that never called window.close(), so \
 the claim's close is not the popup's"
+  ;;
+"control 1 1 0 1 0 0 1")
+  FAILURE="a page that is not the fixture reported the fixture's size, so the \
+claim's size is not the popup's"
   ;;
 *)
   FAILURE="there is no measurement here of any kind ($MEASURED) -- the run did \
