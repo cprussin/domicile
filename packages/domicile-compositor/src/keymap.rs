@@ -19,6 +19,8 @@
 //! never do is read `input.keyboard` for itself, because then there are two
 //! answers and nothing that compares them.
 
+use std::collections::BTreeMap;
+
 use domicile_config::KeyboardConfig;
 use smithay::input::keyboard::xkb;
 
@@ -94,6 +96,31 @@ impl Keyboard {
             // chrome speaks — see `Shortcut::key`.
             .map(|key| key.raw() - 8)
             .ok_or_else(|| UnknownKeysym::OnNoKey(keysym.to_string()))
+    }
+}
+
+impl Keyboard {
+    /// Every keysym this keyboard can type, by name, and the evdev key
+    /// [`Keyboard::key_for`] names for it.
+    ///
+    /// What a shell resolves its own chords against: a shell's keybindings
+    /// are its props, so the page has the chords and only the compositor has
+    /// the keymap. The same rule as `key_for` — the lowest key with the keysym
+    /// on any level of the first layout — so a chord means one key whichever
+    /// side resolved it.
+    pub fn keys(&self) -> BTreeMap<String, u32> {
+        let mut keys = BTreeMap::new();
+        let all = self.keymap.min_keycode().raw()..=self.keymap.max_keycode().raw();
+        for key in all.map(xkb::Keycode::new) {
+            for level in 0..self.keymap.num_levels_for_key(key, 0) {
+                for &keysym in self.keymap.key_get_syms_by_level(key, 0, level) {
+                    // An xkb keycode is the evdev one plus 8 — see `key_for`.
+                    keys.entry(xkb::keysym_get_name(keysym))
+                        .or_insert(key.raw() - 8);
+                }
+            }
+        }
+        keys
     }
 }
 
@@ -264,6 +291,29 @@ mod tests {
             key_for(&KeyboardConfig::default(), "Greek_alpha"),
             Err(UnknownKeysym::OnNoKey("Greek_alpha".into()))
         );
+    }
+
+    #[test]
+    fn every_keysym_on_the_keyboard_is_the_key_key_for_names() {
+        // The table a shell resolves its own chords against, which has to
+        // agree with the config's resolution chord for chord.
+        let keyboard = Keyboard::compiled(&dvorak()).expect("the layout exists");
+        let keys = keyboard.keys();
+        assert_eq!(keys.get("l"), Some(&KEY_P));
+        assert_eq!(keys.get("parenleft"), Some(&KEY_5));
+        assert_eq!(keys.get("Return"), Some(&KEY_ENTER));
+        for (keysym, key) in &keys {
+            assert_eq!(keyboard.key_for(keysym), Ok(*key), "{keysym}");
+        }
+    }
+
+    #[test]
+    fn a_keysym_on_no_key_is_not_in_the_table() {
+        let keys = Keyboard::compiled(&KeyboardConfig::default())
+            .expect("the layout exists")
+            .keys();
+        assert_eq!(keys.get("Greek_alpha"), None);
+        assert_eq!(keys.get("less"), Some(&KEY_COMMA));
     }
 
     /// The `key <NAME> { ... };` block of a compiled keymap.

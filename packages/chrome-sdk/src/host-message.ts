@@ -487,6 +487,11 @@ export type ShellSection = {
  */
 export type ShellConfigMessage = {
   keybindings: KeybindingsByMode;
+  /**
+   * Every keysym the keyboard can type, by name, and the evdev key it is on:
+   * what the chords a shell binds itself are resolved against.
+   */
+  keys: ReadonlyMap<string, number>;
   shells: ReadonlyMap<string, ShellSection>;
 };
 
@@ -842,6 +847,7 @@ export const shellConfig = (
   const config = shellConfigSchema.parse(JSON.parse(event.config));
   return {
     keybindings: byMode(config.keybindings),
+    keys: new Map(Object.entries(config.keys)),
     shells: new Map(
       Object.entries(config.shells).map(([name, section]) => [
         name,

@@ -19,6 +19,8 @@ use crate::keymap::{Keyboard, UnknownKeysym, UnknownLayout};
 pub struct Resolved {
     pub keybindings: ModeBindings,
     pub shells: BTreeMap<String, ShellBindings>,
+    /// Every keysym the keyboard can type, for a shell's own chords.
+    pub keys: BTreeMap<String, u32>,
 }
 
 /// Why a config's bindings could not be resolved against its keyboard.
@@ -66,6 +68,7 @@ pub fn resolve(config: &Config) -> Result<Resolved, Unbindable> {
     Ok(Resolved {
         keybindings: modes(&keyboard, "", &config.keybindings, &config.modes)?,
         shells,
+        keys: keyboard.keys(),
     })
 }
 
@@ -169,13 +172,21 @@ mod tests {
     fn a_desk_that_binds_nothing_still_has_a_default_mode() {
         // Always there, so a shell can read the table it starts in without
         // asking whether there is one.
+        let resolved = resolved("");
         assert_eq!(
-            resolved(""),
-            Resolved {
-                keybindings: [("default".to_string(), vec![])].into(),
-                shells: [].into(),
-            }
+            resolved.keybindings,
+            [("default".to_string(), vec![])].into()
         );
+        assert_eq!(resolved.shells, [].into());
+    }
+
+    #[test]
+    fn every_keysym_the_keyboard_types_goes_out_for_a_shell_s_own_chords() {
+        // A shell binds keys of its own, so it is told the keyboard as well as
+        // the config's chords: `l` on `dvp` is the key `us` prints a p on.
+        let resolved = resolved("[input.keyboard]\nxkb_variant = \"dvp\"\n");
+        assert_eq!(resolved.keys.get("l"), Some(&KEY_P));
+        assert_eq!(resolved.keys.get("Escape"), Some(&KEY_ESC));
     }
 
     #[test]

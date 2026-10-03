@@ -8,6 +8,7 @@ import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
 import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
 import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile/chrome-sdk/shell";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
@@ -28,6 +29,27 @@ import type { TopBarLayout } from "./top-bar/layout";
 import "./global.css";
 
 export {
+  clipboard,
+  DEFAULT_KEYBINDINGS,
+  DEFAULT_MODES,
+  floating,
+  focus,
+  fullscreen,
+  grow,
+  kill,
+  launcher,
+  layout,
+  lock,
+  mode,
+  move,
+  moveToWorkspace,
+  scratchpad,
+  split,
+  terminal,
+  type Way,
+  workspace,
+} from "./keyboard/commands";
+export {
   BarBattery as Battery,
   BarBrightness as Brightness,
   BarClock as Clock,
@@ -43,6 +65,12 @@ export { DEFAULT_TOP_BAR, type TopBarLayout } from "./top-bar/layout";
 
 /** What a desktop of manganese's can be told, all of it optional. */
 export type ManganeseOptions = {
+  /**
+   * The keys this desktop binds — `keybindings` for mode `default`, `modes`
+   * for the rest — under any the config binds: `DEFAULT_KEYBINDINGS` and
+   * `DEFAULT_MODES`, sway's on Meta, when not given.
+   */
+  readonly keybindings?: ShellKeybindings;
   /** What goes on every monitor's bar: manganese's own when not given. */
   readonly topBar?: TopBarLayout;
 };

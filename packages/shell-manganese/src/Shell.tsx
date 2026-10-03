@@ -1,10 +1,12 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { DisplayProvider } from "@domicile/component-library/DisplayProvider";
 import type { DisplaySource } from "@domicile/component-library/display-source";
 import { Provider } from "@domicile/component-library/Provider";
 import type { ThemeSource } from "@domicile/component-library/theme-source";
 
 import { Desktop } from "./Desktop";
+import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { TopBarLayout } from "./top-bar/layout";
 import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
@@ -19,6 +21,11 @@ type Props = {
    */
   displays: DisplaySource;
   domicile: DomicileClient;
+  /**
+   * The keys this desktop binds itself, under the config's: sway's, on Meta,
+   * when not given.
+   */
+  keybindings?: ShellKeybindings | undefined;
   /**
    * Where the theme comes from, and what the bar's toggle asks. The host over
    * the control channel, or the page itself where there is no host — passed in
@@ -42,12 +49,19 @@ type Props = {
 export const Shell = ({
   displays,
   domicile,
+  keybindings = DEFAULT_SHELL_KEYBINDINGS,
   theme,
   topBar = DEFAULT_TOP_BAR,
 }: Props) => (
   <Provider theme={theme}>
     <DisplayProvider source={displays}>
-      <Desktop domicile={domicile} topBar={topBar} />
+      <Desktop domicile={domicile} keybindings={keybindings} topBar={topBar} />
     </DisplayProvider>
   </Provider>
 );
+
+/** Manganese's own keys: one value, so the binding is made once. */
+const DEFAULT_SHELL_KEYBINDINGS: ShellKeybindings = {
+  keybindings: DEFAULT_KEYBINDINGS,
+  modes: DEFAULT_MODES,
+};

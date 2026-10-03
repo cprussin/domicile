@@ -24,17 +24,30 @@ import type { KeyAction } from "./key-action";
 export const keybindingsFor = (
   config: ShellConfigMessage,
   shell: string,
+): KeybindingsByMode =>
+  layered(
+    config.shells.get(shell)?.keybindings ?? new Map(),
+    config.keybindings,
+  );
+
+/**
+ * `over` on top of `under`, mode by mode: every binding of `over`, and those
+ * of `under` on a chord `over` leaves alone. A mode only one of them declares
+ * is a mode all the same.
+ */
+export const layered = (
+  over: KeybindingsByMode,
+  under: KeybindingsByMode,
 ): KeybindingsByMode => {
-  const own = config.shells.get(shell)?.keybindings ?? new Map();
-  const modes = new Set([...config.keybindings.keys(), ...own.keys()]);
+  const modes = new Set([...under.keys(), ...over.keys()]);
   return new Map(
     [...modes].map((mode) => {
-      const mine: readonly Keybinding[] = own.get(mode) ?? [];
-      const desk = (config.keybindings.get(mode) ?? []).filter(
+      const top: readonly Keybinding[] = over.get(mode) ?? [];
+      const rest = (under.get(mode) ?? []).filter(
         ({ shortcut }) =>
-          !mine.some((binding) => sameChord(binding.shortcut, shortcut)),
+          !top.some((binding) => sameChord(binding.shortcut, shortcut)),
       );
-      return [mode, [...mine, ...desk]];
+      return [mode, [...top, ...rest]];
     }),
   );
 };

@@ -1,6 +1,7 @@
 import type { KeyBinding } from "@domicile/chrome-sdk/bind-keys";
 import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import type { WindowAction } from "../window-management/window-state";
@@ -18,6 +19,11 @@ const logToConsole = (error: string): void => {
 
 type Options = {
   domicile: DomicileClient;
+  /**
+   * The keys this desktop binds itself, under the config's: a chord the
+   * config binds is the config's.
+   */
+  keybindings: ShellKeybindings;
   /** Whether the launcher is up, which silences every key but its own. */
   launcherOpen: boolean;
   /**
@@ -34,7 +40,8 @@ type Options = {
 };
 
 /**
- * The keys the compositor's config binds for this desktop, answered.
+ * The keys this desktop binds, and the ones the compositor's config binds for
+ * it, answered.
  *
  * The SDK claims every chord, hears each press by whichever path it took, and
  * reads it in the binding mode; what is left here is what manganese means by
@@ -47,13 +54,14 @@ type Options = {
  * the desktop every page shares, and the mode that desktop is in comes back as
  * `mode` and is handed to the SDK — on this page and every other.
  *
- * Bound once per client, not once per render: the config arrives once and
- * again only when it changes, so a binding torn down and made again would miss
- * it. What changes between renders is read when a key is pressed.
+ * Bound once per client and set of keys, not once per render: the config
+ * arrives once and again only when it changes, so a binding torn down and
+ * made again would miss it. `keybindings` is a shell's options, made once. What changes between renders is read when a key is pressed.
  *
  */
 export const useKeybindings = ({
   domicile,
+  keybindings,
   launcherOpen,
   mode,
   onAction,
@@ -78,7 +86,7 @@ export const useKeybindings = ({
   });
 
   useEffect(() => {
-    const bound = bindKeys(domicile, SHELL, {
+    const bound = bindKeys(domicile, SHELL, keybindings, {
       onCommand,
       onModeChanged: modeChanged,
       // Manganese reads no options yet.
@@ -86,7 +94,7 @@ export const useKeybindings = ({
     });
     binding.current = bound;
     return bound.unbind;
-  }, [domicile]);
+  }, [domicile, keybindings]);
 
   // After the binding above, which effects run in order of: the first mode
   // reaches a binding that exists.

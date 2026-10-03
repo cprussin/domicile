@@ -31,6 +31,7 @@ describe("keybindingsFor", () => {
             ],
           ],
         ]),
+        keys: new Map(),
         shells: new Map([
           [
             "manganese",
@@ -78,6 +79,7 @@ describe("keybindingsFor", () => {
         keybindings: new Map([
           ["default", [binding(meta(28), KeyAction.SendShell(["terminal"]))]],
         ]),
+        keys: new Map(),
         shells: new Map(),
       },
       "manganese",

@@ -94,6 +94,7 @@ fn the_keys_the_config_binds_reach_the_chrome_on_its_keyboard() {
     let HostMessage::ShellConfig {
         keybindings,
         shells,
+        keys,
     } = told
     else {
         unreachable!("the wait matched on the variant");
@@ -114,6 +115,9 @@ fn the_keys_the_config_binds_reach_the_chrome_on_its_keyboard() {
         }]
     );
     assert_eq!(shells["manganese"].options["gaps"], 8);
+    // And the keyboard, for the chords a shell binds itself: `parenleft` is
+    // the same key the config's chord was resolved to.
+    assert_eq!(keys.get("parenleft"), Some(&KEY_5));
 }
 
 #[test]
