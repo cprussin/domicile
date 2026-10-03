@@ -6,9 +6,13 @@
     <!-- A file rather than inline: an extension page's CSP runs no inline script. -->
     <script src="popup.js"></script>
   </head>
-  <!-- A fixed size, which the <webview> must report as the content's:
-       guard-extension-tray.sh's WIDTH and HEIGHT. -->
+  <!-- Fluid, as Bitwarden's popup is in a tab: nothing fixes the width, and
+       two halves of guard-extension-tray.sh's WIDTH sit side by side at its
+       HEIGHT. The <webview> must report WIDTH, which they lay out at given
+       the room, and not the half its narrowest layout is. No whitespace
+       between them, which would widen the line by a space; top-aligned, so
+       the text in one does not drop it below the other and deepen the line. -->
   <body style="margin: 0">
-    <div style="width: 230px; height: 170px">the tray guard's popup</div>
+    <span style="display: inline-block; width: 115px; height: 170px; vertical-align: top">the tray guard's popup</span><span style="display: inline-block; width: 115px; height: 170px; vertical-align: top"></span>
   </body>
 </html>

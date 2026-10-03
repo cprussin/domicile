@@ -65,7 +65,7 @@ readonly POPUP="chrome-extension://$ID/popup.html"
 readonly CONTEXT="TAB"
 readonly WIDTH="230"
 readonly HEIGHT="170"
-# What the width may read over WIDTH: Blink's min-content width for the page
+# What the width may read over WIDTH: Blink's max-content width for the page
 # counts the gutter a classic vertical scrollbar takes, 15px on Linux, and 0
 # where scrollbars overlay.
 readonly SCROLLBAR="15"

@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 2 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: a webview's guest is as wide as its content wants
+
+UpdatePreferredSize sent ContentsPreferredMinimumSize, whose width is the
+page's min-content width. A <webview>'s guest -- an extension's popup --
+is sized from it, and a page whose width is fluid has a min-content width
+of its longest word: Bitwarden's sizes its body only when it is not in a
+tab, every guest is a tab, and its popup drew as a strip. It now sends
+the max-content width, which is what the page lays out at given the room,
+as shrink-to-fit does; the embedder caps it at the room it has.
+LayoutView::ComputeMaximumWidth is ComputeMinimumWidth's other half.
+ContentsPreferredMinimumSize itself is left as it was for its other
+callers.
+
+Verified: not built. This repository cannot build Chromium;
+`guard-extension-tray.sh` measures it on `crux` with the rest of the
+engine job.
+---
+ .../renderer/core/exported/web_view_impl.cc   | 30 ++++++++++++++++++-
+ .../renderer/core/exported/web_view_impl.h    |  2 ++
+ .../blink/renderer/core/layout/layout_view.cc | 14 +++++++++
+ .../blink/renderer/core/layout/layout_view.h  |  3 ++
+ 4 files changed, 48 insertions(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+index a5df84d..f423d9b 100644
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -3244,6 +3244,34 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
+   return gfx::Size(width_scaled, height_scaled);
+ }
+ 
++// Domicile: ContentsPreferredMinimumSize with the max-content width rather
++// than the min-content one. A <webview>'s guest -- an extension's popup -- is
++// sized from this, and a page whose width is fluid (Bitwarden's, which sizes
++// its body only when it is not in a tab, and every guest is a tab) has a
++// min-content width of its longest word: sized to that, it is a strip. Its
++// max-content width is what it lays out at given the room, as shrink-to-fit
++// is, so the embedder caps it at the room it has.
++gfx::Size WebViewImpl::ContentsPreferredSize() {
++  DCHECK(page_->MainFrame()->IsLocalFrame());
++
++  auto* main_local_frame = DynamicTo<LocalFrame>(page_->MainFrame());
++  Document* document = main_local_frame->GetDocument();
++  if (!document || !document->GetLayoutView() || !document->documentElement() ||
++      !document->documentElement()->GetLayoutBox()) {
++    return gfx::Size();
++  }
++
++  // The preferred size requires an up-to-date layout tree.
++  DCHECK(!document->NeedsLayoutTreeUpdate() &&
++         !document->View()->NeedsLayout());
++
++  // Already accounts for zoom.
++  int width_scaled = document->GetLayoutView()->ComputeMaximumWidth().Round();
++  int height_scaled =
++      document->documentElement()->GetLayoutBox()->ScrollHeight().Round();
++  return gfx::Size(width_scaled, height_scaled);
++}
++
+ void WebViewImpl::UpdatePreferredSize() {
+   // We don't always want to send the change messages over IPC, only if we've
+   // been put in that mode by getting a |ViewMsg_EnablePreferredSizeChangedMode|
+@@ -3259,7 +3287,7 @@ void WebViewImpl::UpdatePreferredSize() {
+ 
+   gfx::Size size_in_dips =
+       MainFrameImpl()->LocalRootFrameWidget()->BlinkSpaceToFlooredDIPs(
+-          gfx::Size(ContentsPreferredMinimumSize()));
++          ContentsPreferredSize());
+ 
+   if (size_in_dips != preferred_size_in_dips_) {
+     preferred_size_in_dips_ = size_in_dips;
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
+index 6995402..999e614 100644
+--- a/third_party/blink/renderer/core/exported/web_view_impl.h
++++ b/third_party/blink/renderer/core/exported/web_view_impl.h
+@@ -182,6 +182,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+   // Domicile: UpdatePreferredSize, once a layout has finished. See
+   // MainFrameLayoutUpdated.
+   void UpdatePreferredSizeAfterLayout();
++  // Domicile: what UpdatePreferredSize sends. See the definition.
++  gfx::Size ContentsPreferredSize();
+   void EnablePreferredSizeChangedMode() override;
+   void SetZoomFactorForDeviceScaleFactor(float device_scale_factor,
+                                          float text_scale_multiplier) override;
+diff --git a/third_party/blink/renderer/core/layout/layout_view.cc b/third_party/blink/renderer/core/layout/layout_view.cc
+index eedb085..a391641 100644
+--- a/third_party/blink/renderer/core/layout/layout_view.cc
++++ b/third_party/blink/renderer/core/layout/layout_view.cc
+@@ -246,6 +246,20 @@ LayoutUnit LayoutView::ComputeMinimumWidth() {
+       .sizes.min_size;
+ }
+ 
++LayoutUnit LayoutView::ComputeMaximumWidth() {
++  NOT_DESTROYED();
++  const ComputedStyle& style = StyleRef();
++  WritingMode mode = style.GetWritingMode();
++  ConstraintSpaceBuilder builder(mode, style.GetWritingDirection(),
++                                 /* is_new_fc */ true);
++  builder.SetContainsAnnotations(contains_annotations_);
++  return BlockNode(this)
++      .ComputeMinMaxSizes(mode, SizeType::kIntrinsic,
++                          builder.ToConstraintSpace(),
++                          MinMaxSizesInput::Unconstrained())
++      .sizes.max_size;
++}
++
+ void LayoutView::AddChild(LayoutObject* new_child, LayoutObject* before_child) {
+   NOT_DESTROYED();
+   if (new_child->StyleRef().StyleType() == kPseudoIdViewTransition) {
+diff --git a/third_party/blink/renderer/core/layout/layout_view.h b/third_party/blink/renderer/core/layout/layout_view.h
+index 910aa77..8e1e9f0 100644
+--- a/third_party/blink/renderer/core/layout/layout_view.h
++++ b/third_party/blink/renderer/core/layout/layout_view.h
+@@ -120,6 +120,9 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
+   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
+ 
+   LayoutUnit ComputeMinimumWidth();
++  // Domicile: the max-content width, as ComputeMinimumWidth is the min-content
++  // one. See WebViewImpl::ContentsPreferredSize.
++  LayoutUnit ComputeMaximumWidth();
+ 
+   // Based on `LocalFrameView::GetLayoutSize()`, but:
+   // - Checks for null `LocalFrameView`.
