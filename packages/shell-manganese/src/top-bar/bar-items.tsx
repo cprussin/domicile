@@ -82,10 +82,10 @@ export const BarMode = () => {
  */
 export const BarThemeSelector = () => <ThemeSwitch />;
 
-/** The speaker, whose panel holds the default output and microphone. */
+/** The speaker, whose panel holds the whole mixer. */
 export const BarVolume = () => {
-  const { domicile, screen } = useBar();
-  return <Volume domicile={domicile} screen={screen} />;
+  const { domicile } = useBar();
+  return <Volume domicile={domicile} />;
 };
 
 /** The screen's brightness. */

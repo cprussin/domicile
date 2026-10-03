@@ -17,6 +17,8 @@ type Props = {
   label: string;
   /** Where the desk says it is, as a fraction of the server's 100%. */
   level: number;
+  /** How loud it is now, 0 through 1 of its meter; absent for no meter. */
+  meter?: number | undefined;
   muted: boolean;
   onLevel: (level: number) => void;
   onMuted: (muted: boolean) => void;
@@ -26,8 +28,8 @@ type Props = {
 type Held = { level: number; over: number };
 
 /**
- * One volume: a mute button, a slider and the figure — a device's or a
- * stream's, on the bar's panel or in the mixer.
+ * One volume: a mute button, a slider with its meter under it, and the
+ * figure — a device's or a stream's.
  *
  * **It follows the desk, not its own drag**, as the brightness does: a move
  * asks the compositor, and what comes back is the level every chrome is told.
@@ -43,6 +45,7 @@ export const Level = ({
   direction,
   label,
   level,
+  meter,
   muted,
   onLevel,
   onMuted,
@@ -69,6 +72,7 @@ export const Level = ({
       </button>
       <Slider
         label={label}
+        level={meter}
         max={100}
         min={0}
         onValueChange={(value) => {

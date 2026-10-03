@@ -401,6 +401,7 @@ fn quiet_desk() -> Audio {
         playback: Vec::new(),
         recording: Vec::new(),
         cards: Vec::new(),
+        meters: Default::default(),
     }
 }
 

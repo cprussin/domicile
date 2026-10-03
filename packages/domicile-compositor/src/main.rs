@@ -123,6 +123,7 @@ mod idle;
 mod keymap;
 mod latency;
 mod lock;
+mod meters;
 mod modifiers;
 mod notifications;
 mod outbound;
@@ -459,6 +460,13 @@ enum ClientRequest {
     Audio {
         request: domicile_host::audio::Request,
     },
+    /// A chrome's mixer wants these ids metered — a lease it renews. Through
+    /// this thread for `Audio`'s reason: metering a microphone records it,
+    /// and a locked desk records nothing for anybody.
+    WatchAudioLevels {
+        chrome: usize,
+        ids: Vec<String>,
+    },
 }
 
 /// Something a chrome asked that the connection it arrived on answers itself,
@@ -556,6 +564,10 @@ struct ChromeHub {
     /// Where the shell's mixer asks the sound server: the runner of its
     /// requests. Set once, for `tray`'s reason — see [`crate::audio`].
     audio: OnceLock<audio::AudioServer>,
+    /// The mixer's level meters, which the sound server's readings tell what
+    /// each id is metered off. Set once, for `tray`'s reason — see
+    /// [`crate::meters`].
+    meters: OnceLock<meters::Meters>,
 }
 
 impl ChromeHub {
@@ -604,6 +616,7 @@ impl ChromeHub {
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
             audio: OnceLock::new(),
+            meters: OnceLock::new(),
         });
         (hub, outbound_rx)
     }
@@ -1408,6 +1421,13 @@ fn read_chrome_messages(
             Ok(ChromeMessage::SetAudioPort { id, port }) => {
                 hub.send_request(ClientRequest::Audio {
                     request: AudioRequest::Port { id, port },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::WatchAudioLevels { ids }) => {
+                hub.send_request(ClientRequest::WatchAudioLevels {
+                    chrome: chrome_key(writer),
+                    ids,
                 });
                 Vec::new()
             }
@@ -5032,6 +5052,11 @@ impl DomicileCompositor {
                     server.ask(request);
                 }
             }
+            ClientRequest::WatchAudioLevels { chrome, ids } => {
+                if let Some(meters) = self.hub.meters.get() {
+                    meters.watch(chrome, ids);
+                }
+            }
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // A turnover already under way is replaced rather than
                 // finished: its windows are about to be told a newer theme.
@@ -7163,8 +7188,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // first, unlike the tray: a desk with no sound server has no mixer to
     // draw, where a desk with no bus has a tray with nothing in it. See
     // `audio`.
+    // And the meters, which broadcast straight to the chromes: a level is
+    // news twenty times a second, and nothing a page that connects later
+    // needs told again.
+    let publishing = Arc::clone(&hub);
+    let _ = hub.meters.set(meters::serve(move |levels| {
+        publishing.broadcast(HostMessage::AudioLevels { levels });
+    }));
     let publishing = Arc::clone(&hub);
     let _ = hub.audio.set(audio::serve(move |audio| {
+        if let Some(meters) = publishing.meters.get() {
+            meters.take_up(audio.meters.clone());
+        }
         let told = publishing.host.lock().unwrap().set_audio(audio);
         if let Some(message) = told {
             publishing.broadcast(message);
