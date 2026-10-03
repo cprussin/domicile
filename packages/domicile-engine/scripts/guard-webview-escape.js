@@ -33,40 +33,45 @@
 // The line that IS read comes from the page in the window: `guest-loaded`, out
 // of guard-webview-guest-page.py. That is what says a guest was made, attached
 // and navigated, and so that the shell's WebContents is an embedder.
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-/**
- * A query parameter this cannot run without. Missing means the guard invoked
- * this wrongly, and a default would turn that into a measurement of something
- * nobody asked for.
- */
-const required = (parameters, name) => {
-  const value = parameters.get(name);
-  if (value === null) {
-    throw new Error(`guard-webview-escape: ?${name}= is required`);
-  } else {
-    return value;
-  }
+export const Shell = () => {
+  /**
+   * A query parameter this cannot run without. Missing means the guard invoked
+   * this wrongly, and a default would turn that into a measurement of something
+   * nobody asked for.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-webview-escape: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
+
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  const parameters = new URLSearchParams(location.search);
+  const view = document.createElement("webview");
+
+  view.style.position = "absolute";
+  view.style.inset = "0";
+  view.style.inlineSize = "100%";
+  view.style.blockSize = "100%";
+  view.style.border = "0";
+
+  document.addEventListener("keydown", (event) => {
+    say(`document-keydown code=${event.code}`);
+  });
+
+  // `src` last, and this is the order that matters: it is what makes a <webview>
+  // ask for a guest, and setting it before the element is in the document would
+  // ask before there is a frame to attach one to.
+  document.body.append(view);
+  view.setAttribute("src", required(parameters, "src"));
 };
-
-const say = (what) => {
-  console.log(`GUARD ${what}`);
-};
-
-const parameters = new URLSearchParams(location.search);
-const view = document.createElement("webview");
-
-view.style.position = "absolute";
-view.style.inset = "0";
-view.style.inlineSize = "100%";
-view.style.blockSize = "100%";
-view.style.border = "0";
-
-document.addEventListener("keydown", (event) => {
-  say(`document-keydown code=${event.code}`);
-});
-
-// `src` last, and this is the order that matters: it is what makes a <webview>
-// ask for a guest, and setting it before the element is in the document would
-// ask before there is a frame to attach one to.
-document.body.append(view);
-view.setAttribute("src", required(parameters, "src"));

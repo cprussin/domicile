@@ -39,7 +39,7 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 | `@domicile/component-library/control-sizes` | The `Size` union / `SIZES` array the sized controls share. |
 | `@domicile/component-library/spacing` | The rem value of one step on the spacing scale, for runtime math. |
 | `@domicile/component-library/pandacss-preset` | The `domicilePreset` every package's `panda.config.ts` extends. |
-| `@domicile/component-library/vite-shell` | `shellBuild({ entry })` — the vite build a shell has to have for Domicile to serve it: a module entry rather than an HTML one, a fixed `shell.js` name, and the stylesheet folded into the JavaScript. Each of the three fails quietly if you get it wrong. |
+| `@domicile/component-library/vite-shell` | `shellBuild({ entry })` — the vite build a shell has to have for Domicile to serve it: a module entry rather than an HTML one, a fixed `shell.js` name, the entry's exports kept (`Shell` is what Domicile calls), and the stylesheet folded into the JavaScript. Each of the four fails quietly if you get it wrong. |
 
 Styling goes through the theme defined in the preset
 (`pandacss-preset.ts`) — `color`, `spacing`, `borderRadius`, etc. — with

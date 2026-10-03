@@ -63,136 +63,141 @@
 //
 // The guest's own `GUARD guest-mousedown`, and whether its window took focus,
 // come from the page in the window; see guard-webview-guest-page.py.
-
-/**
- * A query parameter this cannot run without. Missing means the guard invoked
- * this wrongly, and a default would turn that into a measurement of something
- * nobody asked for.
- */
-const required = (parameters, name) => {
-  const value = parameters.get(name);
-  if (value === null) {
-    throw new Error(`guard-webview-click: ?${name}= is required`);
-  } else {
-    return value;
-  }
-};
-
-const say = (what) => {
-  console.log(`GUARD ${what}`);
-};
-
-const parameters = new URLSearchParams(location.search);
-
-// The shell's own half of the window, above the element and the height the
-// guard clicks into. A plain <div>: nothing here takes focus, so a focus this
-// document reports can only have come from the element below it.
-const stripHeight = `${required(parameters, "strip")}px`;
-const strip = document.createElement("div");
-strip.style.position = "absolute";
-strip.style.insetBlockStart = "0";
-strip.style.insetInline = "0";
-strip.style.inlineSize = "100%";
-strip.style.blockSize = stripHeight;
-strip.style.background = "#204060";
-
-// Not `document.createElement(kind)` on whatever a query said: this guard has
-// one element under test, and the only other element that could stand in for
-// it is an ordinary subframe — which on a domicile:// document loads no http
-// page at all, so a control written that way would be measuring the load. The
-// control is the same page clicked somewhere else; see the guard's header.
-const view = document.createElement("webview");
-view.style.position = "absolute";
-view.style.insetBlockStart = stripHeight;
-view.style.insetInline = "0";
-// Sized rather than stretched between insets. A <webview> is a replaced
-// element, and an absolutely positioned replaced element with `auto` size
-// takes its INTRINSIC size between two insets rather than filling them — which
-// for a frame owner is 300x150, in the corner, with most of the window under
-// nothing at all and the guard clicking the page instead of the guest.
-view.style.inlineSize = "100%";
-view.style.blockSize = `calc(100% - ${stripHeight})`;
-view.style.border = "0";
-
-// THE CLAIM: the element saying its guest took focus, which is the event the
-// shell raises a browser window on. Listened for on the document rather than
-// on the element, because it bubbling is half of what makes it usable — a
-// chrome hangs one handler on the window it drew.
 //
-// NOT ONLY `focusin`, and that is the finding this guard produced rather than
-// an assumption it started with: upstream, focusing the element buys
-// document.activeElement and no event at all, because
-// Document::SetFocusedElement dispatches focus events only while the page is
-// focused and a guest taking focus is the moment the embedder's page loses it.
-// A run before that was understood read press=1 reach=0 with the element
-// focused, which is exactly that. The fork now sends both; this is the one a
-// shell raises windows on.
-document.addEventListener("domicile-guest-focus", (event) => {
-  say(`window-reached target=${event.target.localName}`);
-  if (document.activeElement === view) {
-    say("window-active");
-  }
-});
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-// AND THE ORDINARY FOCUS EVENT, which upstream suppresses here and the fork
-// sends anyway — HTMLWebViewElement::DispatchSuppressedFocus — because a
-// shell's focus-out dismissal, its focus traps and React's onFocus are all
-// written against it and can hear nothing else.
-document.addEventListener("focusin", (event) => {
-  say(`window-focusin target=${event.target.localName}`);
-});
+export const Shell = () => {
+  /**
+   * A query parameter this cannot run without. Missing means the guard invoked
+   * this wrongly, and a default would turn that into a measurement of something
+   * nobody asked for.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-webview-click: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
 
-// THE SAME EVENT, HEARD AT THE ELEMENT. Two listeners for one event because
-// their difference is a reading: the claim above is on the document, which the
-// event only reaches by bubbling, and a run where this one fires and that one
-// does not is a dispatch that happened and did not travel. A run where neither
-// fires is a dispatch that did not happen. Without the pair those are one
-// symptom, and the guard has already spent a cycle on a question of that shape.
-view.addEventListener("domicile-guest-focus", () => {
-  say("window-reached-at-element");
-});
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
 
-// And the harness's own reading: a press that landed in this document.
-document.addEventListener("mousedown", (event) => {
-  say(`chrome-mousedown target=${event.target.localName}`);
-});
+  const parameters = new URLSearchParams(location.search);
 
-// Focus leaving this document entirely, which is what a guest taking it looks
-// like from here — and the reading that says the browser told this renderer
-// anything at all. `FocusController::SetFocusedFrame` dispatches it on the old
-// frame's window, a dozen lines past where the fork's branch sits.
-addEventListener("blur", () => {
-  say("shell-window-blur");
-});
+  // The shell's own half of the window, above the element and the height the
+  // guard clicks into. A plain <div>: nothing here takes focus, so a focus this
+  // document reports can only have come from the element below it.
+  const stripHeight = `${required(parameters, "strip")}px`;
+  const strip = document.createElement("div");
+  strip.style.position = "absolute";
+  strip.style.insetBlockStart = "0";
+  strip.style.insetInline = "0";
+  strip.style.inlineSize = "100%";
+  strip.style.blockSize = stripHeight;
+  strip.style.background = "#204060";
 
-addEventListener("focus", () => {
-  say("shell-window-focus");
-});
+  // Not `document.createElement(kind)` on whatever a query said: this guard has
+  // one element under test, and the only other element that could stand in for
+  // it is an ordinary subframe — which on a domicile:// document loads no http
+  // page at all, so a control written that way would be measuring the load. The
+  // control is the same page clicked somewhere else; see the guard's header.
+  const view = document.createElement("webview");
+  view.style.position = "absolute";
+  view.style.insetBlockStart = stripHeight;
+  view.style.insetInline = "0";
+  // Sized rather than stretched between insets. A <webview> is a replaced
+  // element, and an absolutely positioned replaced element with `auto` size
+  // takes its INTRINSIC size between two insets rather than filling them — which
+  // for a frame owner is 300x150, in the corner, with most of the window under
+  // nothing at all and the guard clicking the page instead of the guest.
+  view.style.inlineSize = "100%";
+  view.style.blockSize = `calc(100% - ${stripHeight})`;
+  view.style.border = "0";
 
-// And where focus actually is, reported whenever it moves. Polled rather than
-// listened for, because the state this is about is the one no event announces:
-// a document whose focus has gone to a page in another process.
-let reported = "";
-setInterval(() => {
-  const now = `element=${document.activeElement?.localName} hasFocus=${document.hasFocus()}`;
-  if (now !== reported) {
-    reported = now;
-    say(`shell-focus-state ${now}`);
-  }
-}, 250);
+  // THE CLAIM: the element saying its guest took focus, which is the event the
+  // shell raises a browser window on. Listened for on the document rather than
+  // on the element, because it bubbling is half of what makes it usable — a
+  // chrome hangs one handler on the window it drew.
+  //
+  // NOT ONLY `focusin`, and that is the finding this guard produced rather than
+  // an assumption it started with: upstream, focusing the element buys
+  // document.activeElement and no event at all, because
+  // Document::SetFocusedElement dispatches focus events only while the page is
+  // focused and a guest taking focus is the moment the embedder's page loses it.
+  // A run before that was understood read press=1 reach=0 with the element
+  // focused, which is exactly that. The fork now sends both; this is the one a
+  // shell raises windows on.
+  document.addEventListener("domicile-guest-focus", (event) => {
+    say(`window-reached target=${event.target.localName}`);
+    if (document.activeElement === view) {
+      say("window-active");
+    }
+  });
 
-document.body.style.margin = "0";
-document.body.append(strip);
+  // AND THE ORDINARY FOCUS EVENT, which upstream suppresses here and the fork
+  // sends anyway — HTMLWebViewElement::DispatchSuppressedFocus — because a
+  // shell's focus-out dismissal, its focus traps and React's onFocus are all
+  // written against it and can hear nothing else.
+  document.addEventListener("focusin", (event) => {
+    say(`window-focusin target=${event.target.localName}`);
+  });
 
-// Last, and this is the order that matters: `src` is what makes a <webview>
-// ask for a guest, and setting it before the element is in the document would
-// ask before there is a frame to attach one to.
-document.body.append(view);
-view.setAttribute("src", required(parameters, "src"));
+  // THE SAME EVENT, HEARD AT THE ELEMENT. Two listeners for one event because
+  // their difference is a reading: the claim above is on the document, which the
+  // event only reaches by bubbling, and a run where this one fires and that one
+  // does not is a dispatch that happened and did not travel. A run where neither
+  // fires is a dispatch that did not happen. Without the pair those are one
+  // symptom, and the guard has already spent a cycle on a question of that shape.
+  view.addEventListener("domicile-guest-focus", () => {
+    say("window-reached-at-element");
+  });
 
-// NOTHING HERE FOCUSES THE ELEMENT, and that absence is the experiment. The
-// shell does focus it — that is what `view.focus()` in `BrowserWindow.tsx` is
-// — but a guard that did would be reporting its own call: the question is
-// whether a press *inside the guest* reaches this document, with the shell
-// doing nothing at all.
-say("shell-loaded");
+  // And the harness's own reading: a press that landed in this document.
+  document.addEventListener("mousedown", (event) => {
+    say(`chrome-mousedown target=${event.target.localName}`);
+  });
+
+  // Focus leaving this document entirely, which is what a guest taking it looks
+  // like from here — and the reading that says the browser told this renderer
+  // anything at all. `FocusController::SetFocusedFrame` dispatches it on the old
+  // frame's window, a dozen lines past where the fork's branch sits.
+  addEventListener("blur", () => {
+    say("shell-window-blur");
+  });
+
+  addEventListener("focus", () => {
+    say("shell-window-focus");
+  });
+
+  // And where focus actually is, reported whenever it moves. Polled rather than
+  // listened for, because the state this is about is the one no event announces:
+  // a document whose focus has gone to a page in another process.
+  let reported = "";
+  setInterval(() => {
+    const now = `element=${document.activeElement?.localName} hasFocus=${document.hasFocus()}`;
+    if (now !== reported) {
+      reported = now;
+      say(`shell-focus-state ${now}`);
+    }
+  }, 250);
+
+  document.body.style.margin = "0";
+  document.body.append(strip);
+
+  // Last, and this is the order that matters: `src` is what makes a <webview>
+  // ask for a guest, and setting it before the element is in the document would
+  // ask before there is a frame to attach one to.
+  document.body.append(view);
+  view.setAttribute("src", required(parameters, "src"));
+
+  // NOTHING HERE FOCUSES THE ELEMENT, and that absence is the experiment. The
+  // shell does focus it — that is what `view.focus()` in `BrowserWindow.tsx` is
+  // — but a guard that did would be reporting its own call: the question is
+  // whether a press *inside the guest* reaches this document, with the shell
+  // doing nothing at all.
+  say("shell-loaded");
+};
