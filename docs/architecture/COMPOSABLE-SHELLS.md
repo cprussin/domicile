@@ -98,7 +98,7 @@ only builds.
 | resolve | the nearest `package.json` above the entry owns its dependencies. With none, one is created beside the entry. A bare import not in it is added (`bun add`) |
 | install | `bun install --ignore-scripts`, writing `bun.lock` beside that `package.json`. Frozen when nothing was added |
 | alias | `@domicile/*`, and their peers `react` and `react-dom`, resolve to Domicile's install, whatever `package.json` says |
-| style | Panda over manganese's own config, so manganese and the component library are styled. One stylesheet, inlined into the bundle as `vite-shell` does |
+| style | Panda over manganese's own config plus the user's files, so manganese, the component library and the user's own `css()` are styled. One stylesheet, inlined into the bundle as `vite-shell` does |
 | bundle | vite, as `shellBuild` → `$XDG_CACHE_HOME/domicile/shells/<hash>/shell.js` |
 
 - **The cache key** is the hash of the entry's local import graph, the lockfile
@@ -231,8 +231,9 @@ Phase 2: `domicile` builds.
 
 - [x] `packages/domicile-builder`: resolve, install, alias, style, bundle,
       cache, progress lines
-- [ ] a user's own Panda `css()`: an export of manganese's `styled-system`,
-      and the user's files in the build's `include`
+- [x] a user's own Panda `css()`: `@domicile/shell-manganese/{css,jsx,patterns,tokens}`
+      export manganese's `styled-system`, and the builder adds the user's files
+      to the build's `include`
 - [x] `shell_source` resolves every specifier above. `@domicile/*` resolves in
       Rust with no subprocess
 - [x] the progress bar in `domicile`. Startup blocks on the first build

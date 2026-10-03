@@ -104,7 +104,7 @@ const build = async (
     // Imported here rather than at the top: vite and Panda take most of a
     // second to load, and a build already in the cache needs neither.
     const { bundle } = await import("./bundle");
-    await bundle(entry, root, domicile);
+    await bundle(entry, root, domicile, [...read.graph.files.keys()]);
     say(Step.Built(root, MODULE, false));
   } else {
     say(Step.Built(root, MODULE, true));

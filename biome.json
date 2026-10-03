@@ -239,7 +239,10 @@
           }
         }
       },
-      "includes": ["packages/chrome-sdk/package.json"]
+      "includes": [
+        "packages/chrome-sdk/package.json",
+        "packages/shell-manganese/package.json"
+      ]
     },
     {
       "includes": ["packages/domicile-engine/scripts/**"],
