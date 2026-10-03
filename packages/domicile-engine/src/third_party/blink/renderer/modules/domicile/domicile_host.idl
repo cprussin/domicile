@@ -198,6 +198,12 @@
   [CallWith=ScriptState, RaisesException] undefined setAudioProfile(
       DOMString card, DOMString profile);
 
+  // Meter these devices and streams, by the ids an `audio` event carried,
+  // and fire `audiolevels` with their peaks. A lease: call it again every
+  // second while the meters are on screen; an empty list lets go at once.
+  [CallWith=ScriptState, RaisesException] undefined watchAudioLevels(
+      sequence<DOMString> ids);
+
   // This page's old frame is held for `theme`: turn the desk's windows now.
   //
   // Called from inside a shell's wipe, once the frame it wipes away from is
@@ -418,6 +424,11 @@
   // whenever the sound server says something moved and once more when this
   // page connects. Never on a desk with no sound server.
   attribute EventHandler onaudio;
+
+  // How loud what watchAudioLevels() asked for is, as a
+  // DomicileAudioLevelsEvent: some twenty times a second while anything is
+  // metered.
+  attribute EventHandler onaudiolevels;
 
   // The desk's notifications, as a DomicileNotificationsEvent: every one not
   // yet cleared, whenever any of them changes and once more when this page

@@ -441,7 +441,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::InvokeNotificationAction { .. }
             // A mixer moves what the desk's applications play and record,
             // which is acting for somebody a locked desk does not have.
-            | ClientRequest::Audio { .. },
+            | ClientRequest::Audio { .. }
+            | ClientRequest::WatchAudioLevels { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -830,6 +831,13 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "a microphone metered",
+                ClientRequest::WatchAudioLevels {
+                    chrome: 1,
+                    ids: vec!["input:mic".into()],
                 },
             ),
             (
