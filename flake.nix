@@ -555,6 +555,11 @@
         # Apache-2.0. `--set-default` rather than `--set` so somebody pointing
         # the variable at their own copy still wins; a compositor that finds no
         # table names monitors the way their firmware does and says so once.
+        #
+        # `DOMICILE_PACTL` is the mixer's: the shell's volume is read and set
+        # through `pactl`, which speaks to PulseAudio and to PipeWire's
+        # `pipewire-pulse` alike, and a NixOS desk on PipeWire has none on its
+        # `PATH`. `--set-default` for the table's reason.
         postFixup = ''
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
@@ -563,7 +568,8 @@
           ])}" "$out/bin/domicile-compositor"
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
-            --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids"
+            --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids" \
+            --set-default DOMICILE_PACTL "${pkgs.pulseaudio}/bin/pactl"
         '';
       };
 

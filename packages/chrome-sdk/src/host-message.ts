@@ -28,6 +28,7 @@
 
 import { z } from "zod";
 
+import type { AudioCard, AudioChoice, AudioDevice, AudioStream } from "./audio";
 import type { CursorShape } from "./cursor-shape";
 import { cursorShapeSchema } from "./cursor-shape";
 import type {
@@ -35,6 +36,10 @@ import type {
   DomicileAppEvent,
   DomicileAppsEvent,
   DomicileAppTitledEvent,
+  DomicileAudioChoice,
+  DomicileAudioDevice,
+  DomicileAudioEvent,
+  DomicileAudioStream,
   DomicileBatteryEvent,
   DomicileClipboardEntry,
   DomicileClipboardEvent,
@@ -506,6 +511,23 @@ export type OpenUrlMessage = {
   url: string;
 };
 
+/**
+ * The desk's sound, as a mixer draws it: every output and input device,
+ * every stream playing or recording, every sound card — each list in the
+ * sound server's order.
+ *
+ * Whole every time, like the tray, and once more when the page connects. A
+ * desk with no sound server sends none, so a shell that has had no message
+ * has no mixer to draw. Monitors of the outputs are among `inputs`, flagged.
+ */
+export type AudioMessage = {
+  outputs: readonly AudioDevice[];
+  inputs: readonly AudioDevice[];
+  playback: readonly AudioStream[];
+  recording: readonly AudioStream[];
+  cards: readonly AudioCard[];
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -523,6 +545,7 @@ export type HostMessageMap = {
   displays: DisplaysMessage;
   battery: BatteryMessage;
   brightness: BrightnessMessage;
+  audio: AudioMessage;
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
   idle: IdleMessage;
@@ -827,6 +850,50 @@ export const shellConfig = (
     ),
   };
 };
+
+/**
+ * The desk's sound. The engine's empty strings — a device with no ports, a
+ * stream with no title — become `undefined`, and its `isDefault` the
+ * `default` C++ could not spell.
+ */
+export const audio = (event: DomicileAudioEvent): AudioMessage => ({
+  cards: event.cards.map((card) => ({
+    description: card.description,
+    id: card.id,
+    profile: named(card.profile),
+    profiles: card.profiles.map(choice),
+  })),
+  inputs: event.inputs.map(device),
+  outputs: event.outputs.map(device),
+  playback: event.playback.map(stream),
+  recording: event.recording.map(stream),
+});
+
+const choice = ({
+  available,
+  description,
+  name,
+}: DomicileAudioChoice): AudioChoice => ({ available, description, name });
+
+const device = (engine: DomicileAudioDevice): AudioDevice => ({
+  default: engine.isDefault,
+  description: engine.description,
+  id: engine.id,
+  monitor: engine.monitor,
+  muted: engine.muted,
+  port: named(engine.port),
+  ports: engine.ports.map(choice),
+  volume: engine.volume,
+});
+
+const stream = (engine: DomicileAudioStream): AudioStream => ({
+  application: engine.application,
+  device: named(engine.device),
+  id: engine.id,
+  muted: engine.muted,
+  title: named(engine.title),
+  volume: engine.volume,
+});
 
 type WireKeybindings = z.infer<typeof shellConfigSchema>["keybindings"];
 

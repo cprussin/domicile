@@ -1,0 +1,20 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A sound card, and the profiles that say which of its devices are on.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileAudioCard {
+  // What DomicileHost.setAudioProfile() names it by.
+  readonly attribute DOMString id;
+
+  readonly attribute DOMString description;
+
+  // Best first.
+  readonly attribute FrozenArray<DomicileAudioChoice> profiles;
+
+  // The name of the profile in use, or empty.
+  readonly attribute DOMString profile;
+};
