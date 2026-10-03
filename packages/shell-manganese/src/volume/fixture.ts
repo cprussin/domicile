@@ -1,6 +1,6 @@
-import type { AudioDevice, AudioStream } from "@domicile/chrome-sdk/audio";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { AudioMessage } from "@domicile/chrome-sdk/host-message";
+import type { AudioDevice, AudioStream } from "@domicile/sdk/audio";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { AudioMessage } from "@domicile/sdk/host-message";
 import { act } from "@testing-library/react";
 
 /** A device, with whatever a test says differently. */

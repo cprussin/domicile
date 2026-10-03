@@ -1,6 +1,6 @@
-import type { Notification } from "@domicile/chrome-sdk/notification";
 import type { ToastManager } from "@domicile/component-library/Toaster";
 import { Toaster, useToastManager } from "@domicile/component-library/Toaster";
+import type { Notification } from "@domicile/sdk/notification";
 
 import { css } from "../../styled-system/css";
 import { TOP_BAR } from "../top-bar/TopBar";

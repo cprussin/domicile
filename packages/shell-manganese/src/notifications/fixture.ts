@@ -1,4 +1,4 @@
-import type { Notification } from "@domicile/chrome-sdk/notification";
+import type { Notification } from "@domicile/sdk/notification";
 
 /**
  * A notification, for a test: an ordinary one from Firefox at `time` 0, with

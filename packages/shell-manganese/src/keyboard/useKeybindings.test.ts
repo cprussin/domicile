@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { ShortcutMessage } from "@domicile/chrome-sdk/host-message";
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { ShortcutMessage } from "@domicile/sdk/host-message";
+import { KeyAction } from "@domicile/sdk/key-action";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
 import { act, renderHook } from "@testing-library/react";
 
 import { Direction } from "../window-management/direction";

@@ -57,15 +57,26 @@
     "./vite-shell": "./src/vite-shell.ts"
   },
   "files": [
-    "src/**/**",
-    "styled-system/**/**"
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/**/*.stories.tsx"
   ],
   "license": "MIT",
   "name": "@domicile/component-library",
   "peerDependencies": {
     "react": "catalog:"
   },
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/component-library",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
   "scripts": {
     "build:storybook": "storybook build",
     "prepare": "panda codegen --silent",

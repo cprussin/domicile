@@ -1,4 +1,4 @@
-# @domicile/shell-manganese
+# @domicile/manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
 under a transparent bar carrying the tray, the
@@ -214,7 +214,7 @@ import {
   moveToWorkspace,
   runManganese,
   workspace,
-} from "@domicile/shell-manganese";
+} from "@domicile/manganese";
 
 /** Programmer's Dvorak's number row, unshifted, for workspaces 1 to 10. */
 const ROW = [
@@ -628,7 +628,7 @@ each of which reads the bar it is on and takes no props, and anything of your
 own. Without one, the bar is `DEFAULT_TOP_BAR`, which is what follows.
 
 ```tsx
-import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile/shell-manganese";
+import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile/manganese";
 
 export const Shell = runManganese({
   topBar: {
@@ -1039,7 +1039,7 @@ export const input = {
 ## Build & run
 
 ```sh
-bun run turbo build:vite --filter @domicile/shell-manganese
+bun run turbo build:vite --filter @domicile/manganese
 ```
 
 emits the chrome to `.vite/renderer/main_window/`, which is the whole of what a
@@ -1052,7 +1052,7 @@ nix run 'github:cprussin/domicile/stable#manganese'
 runs it — the engine on that page, and the compositor as a producer to it.
 `./scripts/dev-shell.sh manganese` does the same from a checkout.
 
-`bun run --filter @domicile/shell-manganese start:dev` runs this shell in a real
+`bun run --filter @domicile/manganese start:dev` runs this shell in a real
 desktop and rebuilds it as you edit: the engine the flake pins and the
 compositor built out of this checkout. Nothing reloads the page for you;
 `domicile load-shell .vite/renderer/main_window/shell.js`, typed in a terminal
@@ -1066,7 +1066,7 @@ and not checked in.
 ## Test
 
 ```sh
-bun run turbo test --filter @domicile/shell-manganese
+bun run turbo test --filter @domicile/manganese
 ```
 
 runs the type check, the unit tests, and the Vite build. The layout tree and

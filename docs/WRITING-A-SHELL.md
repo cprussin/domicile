@@ -89,8 +89,8 @@ port.
 One call, and it is the whole of the wiring:
 
 ```ts
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
+import { connectToHost } from "@domicile/sdk/connect-to-host";
 
 const domicile = new DomicileClient(connectToHost(window));
 ```
@@ -201,19 +201,19 @@ for key — the builder evaluates it to the JSON the compositor reads:
 
 ```tsx
 // ~/.config/domicile/domicile.tsx
-import { runManganese } from "@domicile/shell-manganese";
+import { runManganese } from "@domicile/manganese";
 
 export const input = { keyboard: { xkb_variant: "dvp" } };
 export const Shell = runManganese();
 ```
 
 Your own bar items style with manganese's Panda: `css` (and `jsx`,
-`patterns`, `tokens`) from `@domicile/shell-manganese/css` and its siblings,
+`patterns`, `tokens`) from `@domicile/manganese/css` and its siblings,
 the same design system manganese's items use. The builder scans your files
 beside manganese's, so every `css()` call you write has its rule:
 
 ```tsx
-import { css } from "@domicile/shell-manganese/css";
+import { css } from "@domicile/manganese/css";
 
 const Mail = () => <span className={css({ color: "muted" })}>3/12</span>;
 ```
@@ -416,7 +416,7 @@ config file, kanshi and sway do: `rotate-90` turns the content a quarter
 counterclockwise, for an output bolted a quarter turn clockwise, and
 `rotate-270` the other way.
 
-`@domicile/chrome-sdk` does not parse that file. Its schema is the
+`@domicile/sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it
 today.
 
@@ -426,11 +426,11 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/chrome-sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile/sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 It is not required. A shell may drive `window.domicile` itself — it is a
 typed surface rather than a wire, described in
-`@domicile/chrome-sdk/domicile-host` and, definitively, in the IDL under
+`@domicile/sdk/domicile-host` and, definitively, in the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 Doing so means handling the registration order above yourself, along with the
 input mapping that `registerElements` does.
@@ -448,10 +448,10 @@ One source file and a build config. The full version, with the comments, is in
 **`src/index.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
-import { registerElements } from "@domicile/chrome-sdk/register-elements";
-import type { Shell as ShellModule } from "@domicile/chrome-sdk/shell";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
+import { connectToHost } from "@domicile/sdk/connect-to-host";
+import { registerElements } from "@domicile/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile/sdk/shell";
 
 export const Shell: ShellModule = (root) => {
   const domicile = new DomicileClient(connectToHost(window));
@@ -500,7 +500,7 @@ full:
   something never announced means the page and the compositor disagree about
   what is on screen;
 - it calls `reportDevicePixelRatio(domicile, window)` from
-  `@domicile/chrome-sdk/device-pixel-ratio`. The page is the only part of
+  `@domicile/sdk/device-pixel-ratio`. The page is the only part of
   Domicile that can see the display's density — it changes when the window
   moves display or the page zooms — and a compositor never told it has every
   client drawing at the wrong resolution, blurry or oversized, with nothing
@@ -586,14 +586,14 @@ focuses the window under it, and a client that asks for focus is ignored.
 
 **A click on a window** is the first. The SDK fires a cancelable
 `domicile-focus-requested` on the `<app>` that was clicked
-(`APP_FOCUS_REQUESTED_EVENT` from `@domicile/chrome-sdk/app-element`) and, left
+(`APP_FOCUS_REQUESTED_EVENT` from `@domicile/sdk/app-element`) and, left
 alone, focuses the client — which is what you want when your shell has no
 opinion. Call `preventDefault()` on it and nothing moves until you say so:
 
 ```ts
-import type { AppFocusRequest } from "@domicile/chrome-sdk/app-element";
-import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
-import { focusApp } from "@domicile/chrome-sdk/focus-app";
+import type { AppFocusRequest } from "@domicile/sdk/app-element";
+import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/sdk/app-element";
+import { focusApp } from "@domicile/sdk/focus-app";
 
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
   const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
@@ -620,7 +620,7 @@ leaves a window when another takes it, when a click lands on the chrome, or
 when you say so:
 
 ```ts
-import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
+import { focusChrome } from "@domicile/sdk/focus-chrome";
 
 focusChrome(domicile);
 ```
@@ -652,8 +652,8 @@ belongs to. So it asks, with a cancelable `domicile-focus-release-requested` on
 the `<app>` that holds the keyboard:
 
 ```ts
-import type { AppFocusReleaseRequest } from "@domicile/chrome-sdk/app-element";
-import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile/chrome-sdk/app-element";
+import type { AppFocusReleaseRequest } from "@domicile/sdk/app-element";
+import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile/sdk/app-element";
 
 document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, (event) => {
   const { appId, pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
@@ -715,8 +715,8 @@ pressing anything — and only when the pointer is not over the window already.
 an action — a command for your shell, or a binding mode.
 
 ```ts
-import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
+import { bindKeys } from "@domicile/sdk/bind-keys";
+import { KeyAction } from "@domicile/sdk/key-action";
 
 bindKeys(
   domicile,
@@ -950,7 +950,7 @@ carries nothing, and what changed is `canGoBack` and `canGoForward` on the
 element.
 
 ```ts
-import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 
 const readHistory = () => {
   back.disabled = !view.canGoBack;
@@ -979,7 +979,7 @@ instant, so a shell that mounts in the middle of one is the ordinary case.
 `loading` is on the element and `domicile-loading-change` only says to read it.
 
 ```ts
-import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 
 const readLoading = () => {
   spinner.hidden = !view.loading;
@@ -1006,7 +1006,7 @@ focus moving to the view. The element also says so in an event of its own,
 which is the one to raise windows on:
 
 ```ts
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/sdk/webview-element";
 
 // The window this shell drew, not the view: the event bubbles.
 frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
@@ -1086,7 +1086,7 @@ open — which is the same rule as everywhere else here, since where a window go
 is a thing only your layout knows.
 
 ```ts
-import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/sdk/webview-element";
 
 // Bubbles, like the three above, so one listener on the window covers it.
 frame.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, (event) => {
@@ -1125,7 +1125,7 @@ nothing: the element fires `domicile-close` and removing the window is yours.
 Close it the way your Close button does.
 
 ```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_CLOSE_EVENT } from "@domicile/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
   closeBrowserWindow(frame);
@@ -1144,7 +1144,7 @@ picker is yours to draw: the browser opens no dialog of its own. The element ask
 the event.
 
 ```ts
-import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   event.preventDefault(); // "I'm answering" — see below
@@ -1216,7 +1216,7 @@ domicile.on("extensions", ({ extensions }) => {
 | `popup` | The popup's `chrome-extension://` URL, or `undefined` |
 | `enabled` | `false` after `action.disable()` |
 
-The row type is `Extension`, from `@domicile/chrome-sdk/extension`.
+The row type is `Extension`, from `@domicile/sdk/extension`.
 
 **Every click is `domicile.activateExtension(id)`**, popup or not. It is
 Chrome's toolbar click: the extension gets `activeTab` on the focused browser
@@ -1231,7 +1231,7 @@ says what else:
   calling `window.close()`:
 
 ```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_CLOSE_EVENT } from "@domicile/sdk/webview-element";
 
 const view = document.createElement("webview");
 view.setAttribute("src", extension.popup);
@@ -1278,7 +1278,7 @@ was; where it goes is yours). Open a browser window whose `<webview>` carries
 `popupwindow` set to that id:
 
 ```ts
-import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, (event) => {
   const view = document.createElement("webview");

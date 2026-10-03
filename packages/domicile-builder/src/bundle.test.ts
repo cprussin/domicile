@@ -16,7 +16,7 @@ describe("bundle", () => {
     const entry = path.join(desk, "domicile.tsx");
     writeFileSync(
       entry,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile/shell-manganese";
+      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile/manganese";
          const Mail = () => <span>mail 3/12</span>;
          export const Shell = runManganese({
            topBar: { ...DEFAULT_TOP_BAR, middle: [<Mail key="mail" />] },
@@ -39,14 +39,14 @@ describe("bundle", () => {
     const item = path.join(desk, "mail.tsx");
     writeFileSync(
       item,
-      `import { css } from "@domicile/shell-manganese/css";
+      `import { css } from "@domicile/manganese/css";
          export const Mail = () => (
            <span className={css({ color: "rgb(1, 2, 3)" })}>mail</span>
          );`,
     );
     writeFileSync(
       entry,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile/shell-manganese";
+      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile/manganese";
          import { Mail } from "./mail";
          export const Shell = runManganese({
            topBar: { ...DEFAULT_TOP_BAR, middle: [<Mail key="mail" />] },

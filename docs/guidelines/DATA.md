@@ -75,5 +75,5 @@ The host↔chrome protocol looks like the exception and is not one yet.
 chrome apart, so the two halves are one deploy unit and there is no skew for a
 number to catch. See the constant's own docs in `packages/domicile-protocol`
 for what would change that. `packages/domicile-protocol` and
-`@domicile/chrome-sdk/protocol` are still the two halves of one contract and
+`@domicile/sdk/protocol` are still the two halves of one contract and
 must move together — in the same PR, which is what makes the pin safe.

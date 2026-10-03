@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@domicile/chrome-sdk": "workspace:*",
+    "@domicile/sdk": "workspace:*",
     "zod": "catalog:"
   },
   "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts, and the check on those scripts' own machinery.",

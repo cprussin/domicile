@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 import { act, renderHook } from "@testing-library/react";
 
 import { useLoading } from "./useLoading";

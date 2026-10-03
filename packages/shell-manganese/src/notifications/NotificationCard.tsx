@@ -1,7 +1,7 @@
-import type { Notification } from "@domicile/chrome-sdk/notification";
-import { DEFAULT_NOTIFICATION_ACTION } from "@domicile/chrome-sdk/notification";
 import { Avatar } from "@domicile/component-library/Avatar";
 import { Button } from "@domicile/component-library/Button";
+import type { Notification } from "@domicile/sdk/notification";
+import { DEFAULT_NOTIFICATION_ACTION } from "@domicile/sdk/notification";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { MouseEvent, ReactNode } from "react";

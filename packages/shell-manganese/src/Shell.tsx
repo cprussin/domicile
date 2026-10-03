@@ -1,9 +1,9 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { DisplayProvider } from "@domicile/component-library/DisplayProvider";
 import type { DisplaySource } from "@domicile/component-library/display-source";
 import { Provider } from "@domicile/component-library/Provider";
 import type { ThemeSource } from "@domicile/component-library/theme-source";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
 
 import { Desktop } from "./Desktop";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
