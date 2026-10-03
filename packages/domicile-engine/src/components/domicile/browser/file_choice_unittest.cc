@@ -13,6 +13,7 @@
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace domicile {
 namespace {
@@ -21,6 +22,8 @@ using ::testing::Contains;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 using ::testing::UnorderedElementsAre;
+
+using FileExtensions = ui::SelectFileDialog::FileTypeInfo::FileExtensionList;
 
 // A string rather than a FilePath: a file-scope object with a destructor is an
 // exit-time destructor, which this build refuses.
@@ -106,6 +109,44 @@ TEST(FileChoiceTest, AMimeTypeBecomesItsExtensions) {
 
 TEST(FileChoiceTest, NoAcceptListIsAnything) {
   EXPECT_THAT(AcceptedExtensions({}), IsEmpty());
+}
+
+TEST(FileChoiceTest, EachDialogIsThePickerThatAnswersIt) {
+  // A dialog the browser would have drawn -- the PDF viewer's save, a page's
+  // showSaveFilePicker() -- asked of the shell as the picker a page's own
+  // `<input type="file">` is.
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_OPEN_FILE),
+            mojom::WebViewFileChooserMode::kOpen);
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE),
+            mojom::WebViewFileChooserMode::kOpenMultiple);
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_SAVEAS_FILE),
+            mojom::WebViewFileChooserMode::kSave);
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_FOLDER),
+            mojom::WebViewFileChooserMode::kOpenFolder);
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_UPLOAD_FOLDER),
+            mojom::WebViewFileChooserMode::kOpenFolder);
+  EXPECT_EQ(ModeForDialog(ui::SelectFileDialog::SELECT_EXISTING_FOLDER),
+            mojom::WebViewFileChooserMode::kOpenFolder);
+}
+
+TEST(FileChoiceTest, ADialogsFileTypesAreItsExtensions) {
+  // Spelled out, because `{{"pdf"}}` is also a list of strings.
+  ui::SelectFileDialog::FileTypeInfo types(
+      std::vector<FileExtensions>{{"PDF"}, {"htm", "html"}});
+  EXPECT_THAT(DialogExtensions(&types), ElementsAre("pdf", "htm", "html"));
+}
+
+TEST(FileChoiceTest, ADialogThatAlsoTakesAllFilesTakesAnything) {
+  // The PDF viewer's save names `pdf` and keeps "all files" -- and a picker
+  // with no filter to switch to has only the one answer that keeps it.
+  ui::SelectFileDialog::FileTypeInfo types(
+      std::vector<FileExtensions>{{"pdf"}});
+  types.include_all_files = true;
+  EXPECT_THAT(DialogExtensions(&types), IsEmpty());
+}
+
+TEST(FileChoiceTest, ADialogWithNoFileTypesTakesAnything) {
+  EXPECT_THAT(DialogExtensions(nullptr), IsEmpty());
 }
 
 }  // namespace

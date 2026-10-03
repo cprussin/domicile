@@ -28,6 +28,8 @@ source_set("domicile") {
     "domicile_extension_installer.h",
     "domicile_extension_tray.cc",
     "domicile_extension_tray.h",
+    "domicile_file_dialogs.cc",
+    "domicile_file_dialogs.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
     "domicile_shell_windows.cc",
@@ -90,6 +92,11 @@ source_set("domicile") {
     "//components/domicile:web_view_guest",
     "//components/sessions",
     "//components/sessions:session_id",
+    # And every file dialog a question to the shell: Chromium's dialog factory
+    # replaced, the guest it asks, and the dialog's types as a picker's
+    # extensions.
+    "//components/domicile:file_choice",
+    "//ui/shell_dialogs",
     # And a tab's zoom, as blink's factors and range.
     "//third_party/blink/public/common",
     "//ui/base/mojom:ui_base_types",

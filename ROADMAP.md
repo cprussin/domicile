@@ -440,12 +440,13 @@ costs nothing.
   target's name are not carried, and a form POSTed at a new target arrives as a
   GET of its action. A file input and a download's save location are answered
   too, by the shell — see *A file the page asks for* below.
-- **A file the page asks for is half of what Chrome offers.** A file input and
-  a download ask the shell (`domicile-file-chooser`). Still not routed: the
-  File System Access pickers (`showOpenFilePicker`, `showSaveFilePicker`) and
-  "save page as", which still open the portal's GTK dialog; a directory dropped
-  on a page (`EnumerateDirectory`, refused); and a download's progress, which
-  nothing reports — a large file arrives with no sign it is on its way.
+- **A file the page asks for is most of what Chrome offers.** Every file
+  dialog asks the shell (`domicile-file-chooser`): a file input, a download,
+  the File System Access pickers and the PDF viewer's save (patch 0086). A
+  dialog for a page in no `<webview>` — the shell's own — is refused. Still not
+  routed: a directory dropped on a page (`EnumerateDirectory`, refused); and a
+  download's progress, which nothing reports — a large file arrives with no
+  sign it is on its way.
 - **A desk has no settings page.** A browser window is refused every
   `chrome://` page (patch 0083), and with them went the only place to clear
   cookies and site data, or to change a site's permissions. Nothing replaces
