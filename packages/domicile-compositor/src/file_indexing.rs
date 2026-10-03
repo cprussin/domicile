@@ -93,7 +93,7 @@ pub struct Offered {
 pub enum Heard {
     /// What the watch on the home reported.
     Filesystem(notify::Result<notify::Event>),
-    /// A reload moved `[files] omit`, which is a walk under the new rule —
+    /// A reload moved `files.omit`, which is a walk under the new rule —
     /// what it now leaves out has to go, and what it now takes back was never
     /// read.
     Omitting(Omit),

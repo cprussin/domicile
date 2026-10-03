@@ -43,18 +43,16 @@ export XDG_RUNTIME_DIR="/tmp/domicile-rt-fills"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/c.sock
 SOCK="$XDG_RUNTIME_DIR/c.sock"
-LOG="$(mktemp)"; CLOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.toml"
+LOG="$(mktemp)"; CLOG="$(mktemp)"; CONF="$XDG_RUNTIME_DIR/domicile.json"
 COMP=""; CHROME=""
 
 # A desktop that is not any default, so a chrome sized by anything other than
 # this config is visibly not the desktop's size.
 WIDTH=1600
 HEIGHT=900
-cat >"$CONF" <<TOML
-[[output.displays]]
-name = "only"
-size = [$WIDTH, $HEIGHT]
-TOML
+cat >"$CONF" <<JSON
+{ "output": { "displays": [{ "name": "only", "size": [$WIDTH, $HEIGHT] }] } }
+JSON
 
 # NO_COLOR because the fields below are read back out of this log, and
 # tracing writes SGR escapes *between* the field name and its value — a
@@ -156,16 +154,16 @@ fi
 # the same picture-in-the-corner as one that never grew.
 GREW_W=2880
 GREW_H=1024
-cat >"$CONF" <<'TOML'
-[[output.displays]]
-name = "only"
-size = [1600, 900]
-
-[[output.displays]]
-name = "second"
-position = [1600, 0]
-size = [1280, 1024]
-TOML
+cat >"$CONF" <<'JSON'
+{
+  "output": {
+    "displays": [
+      { "name": "only", "size": [1600, 900] },
+      { "name": "second", "position": [1600, 0], "size": [1280, 1024] }
+    ]
+  }
+}
+JSON
 
 for _ in $(seq 1 400); do
   grep -q "width=${GREW_W}\.0 height=${GREW_H}\.0" "$LOG" && break

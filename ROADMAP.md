@@ -89,7 +89,7 @@ The evidence for each of those is in the doc that made the claim —
    it](docs/WRITING-A-SHELL.md#when-nobody-is-at-the-desk)).
 
    **And then the lock's mechanism**: a desk that states what opens it under
-   `[lock]` locks itself on that same dark edge, `crate::lock` holds whether it
+   `lock` locks itself on that same dark edge, `crate::lock` holds whether it
    is locked, and while it is, every key, click, scroll and pointer movement the
    shell forwards is dropped before it reaches the seat — so no Wayland client
    on the desk is given one
@@ -138,7 +138,7 @@ The evidence for each of those is in the doc that made the claim —
      wrong passphrase from a verifier that could not check, count tries or
      rate-limit them. A verdict of its own would need an event of its own in
      the engine.
-   - **A reload does not move the lock.** `[lock]` is read at startup and
+   - **A reload does not move the lock.** `lock` is read at startup and
      nowhere else, deliberately: rebuilding the verifier under a locked desk
      would be either an unlock by file edit or a locked desk with nothing left
      to open it. So a verifier added, changed or removed is the verifier of the
@@ -156,7 +156,7 @@ The evidence for each of those is in the doc that made the claim —
      to reach for the keyboard gets a lock screen rather than a warning they
      could have answered.
 
-4. **Chrome extensions.** Installed from `[extensions]` in the config, their
+4. **Chrome extensions.** Installed from `extensions` in the config, their
    actions in the shell's tray with popups in a `<webview>`, and every
    `<webview>` a tab to `chrome.tabs`. Slice 1 is done: the fork installs what
    the config names, and manganese draws the actions in a tray on its bar and
@@ -491,7 +491,7 @@ costs nothing.
   `packages/domicile-compositor/tests/selection.rs` is the check.
 
 - **A theme picked off the toggle lasts as long as the desktop does.**
-  `[theme] mode` is what a desk comes up on and nothing writes back to it: the
+  `theme.mode` is what a desk comes up on and nothing writes back to it: the
   file is generated — by a shell, and on NixOS by home-manager — so a desktop
   that edited it would be overwriting a build product, and a reload would
   overrule the edit on the next rebuild anyway. What a click changes is the

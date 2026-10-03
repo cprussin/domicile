@@ -97,15 +97,19 @@ use crate::running::Compositor;
 /// on the desktop, the size is what a client filling it gets, and the scale is
 /// what it draws at.
 const TWO_DISPLAYS: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[[output.displays]]
-name = "right"
-position = [1920, 0]
-size = [2560, 1440]
-scale = 2
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      {
+        "name": "right",
+        "position": [1920, 0],
+        "size": [2560, 1440],
+        "scale": 2
+      }
+    ]
+  }
+}
 "#;
 
 /// What a client should be told those two displays are.
@@ -193,9 +197,7 @@ fn a_window_enters_both_screens_rather_than_the_first() {
 
 /// The one display this reload starts from.
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// A window already open when a display appears is told it is on it.

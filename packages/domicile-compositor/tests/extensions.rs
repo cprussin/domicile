@@ -13,21 +13,17 @@ use domicile_protocol::HostMessage;
 use crate::running::Compositor;
 
 const ONE_EXTENSION: &str = r#"
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
-
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{
+  "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] },
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] }
+}
 "#;
 
 const AN_UNPACKED_EXTENSION: &str = r#"
-[extensions]
-unpacked = ["/home/you/src/my-extension"]
-
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{
+  "extensions": { "unpacked": ["/home/you/src/my-extension"] },
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] }
+}
 "#;
 
 #[test]
@@ -65,12 +61,10 @@ fn an_unpacked_extension_under_a_tilde_reaches_the_chrome_under_the_home() {
     let home = tempfile::tempdir().expect("a home");
     let compositor = Compositor::started_in_a_home(
         r#"
-[extensions]
-unpacked = ["~/src/my-extension"]
-
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{
+  "extensions": { "unpacked": ["~/src/my-extension"] },
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] }
+}
 "#,
         Some(home.path()),
     );

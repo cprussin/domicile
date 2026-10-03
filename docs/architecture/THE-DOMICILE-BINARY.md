@@ -39,7 +39,7 @@ domicile open-url <url>           # ...and one an address, which is what BROWSER
 ```
 
 `--config` may come on either side of the shell, and leaving it off is an
-answer rather than a missing one: `$XDG_CONFIG_HOME/domicile/domicile.toml`
+answer rather than a missing one: `$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json}`
 (`~/.config/...` where that is unset), and the compositor's defaults where
 there is no such file — a single output that follows the engine's own window.
 What is refused is the half-stated form — the flag with nothing behind it, or
@@ -78,7 +78,7 @@ The modules, and the split is by what each needs to be tested:
 
 **`nix/home-manager.nix` is that file's other end**, and the only part of this
 system that writes one rather than reading it: an option per field of the
-`domicile-config` schema, generated with `pkgs.formats.toml` to the path
+`domicile-config` schema, generated with `pkgs.formats.json` to the path
 `config_path` looks in. Two guards keep the two from drifting —
 `scripts/test-the-home-manager-module-agrees.sh` compares the option names to
 the Rust structs with no nix at all, and `nix flake check` evaluates the module

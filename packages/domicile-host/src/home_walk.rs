@@ -28,7 +28,7 @@
 //!
 //! The walk is handed a question — is this path omitted? — and asks it of
 //! every entry by its name relative to the home: an omitted one is neither
-//! offered nor descended into. The answer is `[files] omit` in the desk's
+//! offered nor descended into. The answer is `files.omit` in the desk's
 //! config (`domicile_config::Omit`), whose default is the rule this walk used
 //! to keep itself: **nothing hidden**, at every depth. A `.git` walked to the
 //! bottom is most of what is in a home full of checkouts, and none of it is a

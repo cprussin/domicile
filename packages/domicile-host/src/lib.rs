@@ -140,7 +140,7 @@ pub struct Host {
     /// there is no honest layout to invent for it; a page paints in one theme
     /// or the other whatever anybody said, so the question is only which — and
     /// the answer for a host nobody told is the dark the chrome was drawn
-    /// against, which is also what `[theme] mode` defaults to.
+    /// against, which is also what `theme.mode` defaults to.
     theme: Theme,
     /// Which way round the desk's windows are drawn. Apart from `theme`
     /// because the windows turn after the chromes do -- see
@@ -220,7 +220,7 @@ impl Host {
     /// connects after.
     ///
     /// [`Host::set_keymap`]'s shape: set at startup and again whenever a
-    /// reload changes `[extensions]`, replacing rather than accumulating, and
+    /// reload changes `extensions`, replacing rather than accumulating, and
     /// broadcast by the compositor to the chromes already connected.
     pub fn set_extensions(&mut self, web_store: Vec<String>, unpacked: Vec<String>) {
         self.extensions = Some((web_store, unpacked));
@@ -260,7 +260,7 @@ impl Host {
     /// where the desk is already on it.
     ///
     /// Three things set one and none of them is this crate's: the config the
-    /// compositor read at startup, a reload whose `[theme]` moved, and a click
+    /// compositor read at startup, a reload whose `theme` moved, and a click
     /// on the shell's toggle arriving as [`ChromeMessage::SetTheme`]. All
     /// three land here so there is one place the desk's theme is, which is
     /// what lets the *answer* be the broadcast: a toggle clicked on one

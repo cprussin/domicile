@@ -68,7 +68,7 @@ describe(ThemeProvider, () => {
 
   it("paints dark while the desk has said nothing", () => {
     // Not a failure and not a guess: dark is the attribute-less state of
-    // `<html>` AND what `[theme] mode` defaults to, so a page told nothing
+    // `<html>` AND what `theme.mode` defaults to, so a page told nothing
     // paints in the theme the desk most likely has.
     render(
       <ThemeProvider source={{ ...standaloneThemeSource(), theme: undefined }}>

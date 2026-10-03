@@ -44,12 +44,11 @@ everything started from that terminal lands here too:
 [the long answer](/packages/shell-simple/README.md#launch-an-app-into-it).
 
 Programs a desk should come up with — a notification daemon, an editor's
-server — go in `[startup] commands`, each an argv. They run once, when the
+server — go in `startup.commands`, each an argv. They run once, when the
 desk starts, on its display; a reload does not run them again.
 
-```toml
-[startup]
-commands = [["emacsclient", "-e", "t"], ["sh", "-c", "mako >/dev/null"]]
+```json
+{ "startup": { "commands": [["emacsclient", "-e", "t"], ["sh", "-c", "mako >/dev/null"]] } }
 ```
 
 On NixOS that is `programs.domicile.settings.startup.commands`.
@@ -101,16 +100,15 @@ desktop *is* the compositor, and the request is not made.
 ## What the launcher offers
 
 The launcher searches an index of the home, walked at startup and kept current
-by a watch. What it leaves out is `[files] omit`: globs over paths relative to
+by a watch. What it leaves out is `files.omit`: globs over paths relative to
 the home, with gitignore's rules — `*` stops at a `/`, `**` does not, `!` takes
 a path back, and the last pattern to match decides. An omitted directory is
 neither walked nor watched, so nothing under it can be taken back. A link is
-offered by name but not followed.
+offered by name but not followed. Everything two deep left out, except under
+Scratch:
 
-```toml
-[files]
-# Everything two deep is left out, except under Scratch.
-omit = ["*/*", "!Scratch/*"]
+```json
+{ "files": { "omit": ["*/*", "!Scratch/*"] } }
 ```
 
 - **Leaving it out omits what is hidden**, at any depth: `["**/.*"]`. A list
@@ -121,14 +119,13 @@ omit = ["*/*", "!Scratch/*"]
 On NixOS that is `programs.domicile.settings.files.omit`.
 
 It also offers the applications the machine's desktop entries name, and
-`[applications] omit` leaves some out by the same rules, as globs over desktop
+`applications.omit` leaves some out by the same rules, as globs over desktop
 file IDs (`firefox.desktop`). Leaving it out offers every entry; a desk that
-wants only its own says so:
+wants only its own leaves everything out, then takes the launcher's own entries
+back:
 
-```toml
-[applications]
-# Everything left out, then the launcher's own entries taken back.
-omit = ["*", "!launcher-*"]
+```json
+{ "applications": { "omit": ["*", "!launcher-*"] } }
 ```
 
 An entry's `Icon` is drawn beside its row, and its `X-Domicile-Preview` — a PNG
@@ -149,14 +146,15 @@ opens itself rather than handing it to a browser. A URL is `http` or `https`,
 and anything else is refused. One URL per bookmark: two accounts of one site
 are two bookmarks.
 
-```toml
-[[applications.bookmarks]]
-name = "Calendar - Home"
-url = "https://calendar.google.com?authuser=me@home.example"
-
-[[applications.bookmarks]]
-name = "Calendar - Work"
-url = "https://calendar.google.com?authuser=me@work.example"
+```json
+{
+  "applications": {
+    "bookmarks": [
+      { "name": "Calendar - Home", "url": "https://calendar.google.com?authuser=me@home.example" },
+      { "name": "Calendar - Work", "url": "https://calendar.google.com?authuser=me@work.example" }
+    ]
+  }
+}
 ```
 
 Each is drawn with the icon its site names for itself, which the compositor
@@ -177,9 +175,8 @@ On NixOS those are `programs.domicile.settings.applications.omit` and
 A desktop left alone turns its screens off — if you ask it to. Nothing blanks
 by default; say how long:
 
-```toml
-[idle]
-blank_after_seconds = 600
+```json
+{ "idle": { "blank_after_seconds": 600 } }
 ```
 
 On NixOS that is `programs.domicile.settings.idle.blank_after_seconds = 600;`.
@@ -204,9 +201,8 @@ what opens it.** A desk that states one locks itself on the same edge its
 screens go dark on, and from then on nothing the shell forwards reaches a client
 until somebody types it. What opens it is your own password:
 
-```toml
-[lock]
-pam_service = "domicile"
+```json
+{ "lock": { "pam_service": "domicile" } }
 ```
 
 That is PAM, as the user the desktop runs as, through a service **the machine
@@ -223,14 +219,14 @@ security.pam.services.domicile = {};
   above. It does not fall back to anything: coming up with no lock, or behind
   PAM's catch-all `other` service, would be a desk that is not what you asked
   for.
-- **`lock.passphrase = "…"` is the other way**, for a machine with no service
+- **`lock.passphrase` is the other way**, for a machine with no service
   to name. It is a string in the config, which on NixOS is generated into a
   world-readable store, so it locks a desk against somebody walking up to it and
   against nobody who can read the machine's disk.
 - **One or the other.** A desk that states both is refused at startup; a desk
   that states neither never locks — the screens go dark and anybody can walk up
   and type.
-- **Read at startup.** A rebuild that changes `[lock]` reaches the next run of
+- **Read at startup.** A rebuild that changes `lock` reaches the next run of
   the desk, not the one that is up.
 
 What is left is in [/ROADMAP.md](/ROADMAP.md).

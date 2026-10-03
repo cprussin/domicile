@@ -18,9 +18,7 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// The window with the keyboard is told it is the active one, and the one it

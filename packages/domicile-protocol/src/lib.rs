@@ -223,7 +223,7 @@ pub enum ChromeMessage {
     /// **Not written back to the config file.** The file is generated — a
     /// shell owns it, and on NixOS home-manager owns the shell — so a desktop
     /// that edited it would be overwriting a build product. A toggle lasts as
-    /// long as the desktop does, and `[theme]` is what it comes up as.
+    /// long as the desktop does, and `theme` is what it comes up as.
     SetTheme { theme: Theme },
 
     /// Set the screen's backlight to `level`, a fraction 0.0 through 1.0.
@@ -756,10 +756,10 @@ pub enum HostMessage {
     ///
     /// Sent to a chrome that has just connected, so a page's first paint is
     /// the theme the desk is actually on; on every reload of a config whose
-    /// `[theme]` moved; and to every chrome when one of them sends
+    /// `theme` moved; and to every chrome when one of them sends
     /// [`ChromeMessage::SetTheme`].
     ///
-    /// A fact rather than a preference. `[theme] mode` is where a desk states
+    /// A fact rather than a preference. `theme.mode` is where a desk states
     /// the one it comes up on, and there is no `system` for it to be resolved
     /// against — Domicile *is* the system, so there is nothing above the
     /// desktop whose preference a page could be deferring to. See
@@ -1152,7 +1152,7 @@ pub enum FilePreview {
 /// Which way round a desktop is drawn.
 ///
 /// The same two words the config file spells, and deliberately the same two:
-/// `[theme] mode = "light"` is where a desk states the one it starts on, and
+/// `"theme": { "mode": "light" }` is where a desk states the one it starts on, and
 /// this is that value on the wire. Mapped rather than shared — this crate
 /// carries serde and nothing else, which is what keeps it a portable
 /// description of the protocol — the way [`DisplayTransform`] is mapped from

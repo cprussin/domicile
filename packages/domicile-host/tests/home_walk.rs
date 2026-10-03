@@ -8,7 +8,7 @@
 //! so the depth limit and the two hand-picked roots buy nothing and cost a
 //! launcher that cannot find a file three directories down.
 //!
-//! What is left out is the desk's to say — `[files] omit` in its config — and
+//! What is left out is the desk's to say — `files.omit` in its config — and
 //! is kept whole at every depth: an omitted path is not offered and nothing
 //! under it is walked. The config's default omits whatever is hidden, since a
 //! launcher that offered `src/.git/objects/4a/…` would be a launcher with a
@@ -77,7 +77,7 @@ fn the_shallow_paths_come_first_because_a_half_built_index_is_read() {
 
 #[test]
 fn an_omitted_entry_is_neither_offered_nor_walked_at_any_depth() {
-    // Which entries is the desk's to say — `[files] omit` in its config — and
+    // Which entries is the desk's to say — `files.omit` in its config — and
     // the walk asks of every one it meets, by its name relative to the home.
     // Not walked, because what an omit is *for* is a `~/Library` or a
     // `target/` too big to be worth reading. A dot is nothing special here:

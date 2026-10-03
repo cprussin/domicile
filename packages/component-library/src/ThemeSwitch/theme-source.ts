@@ -6,7 +6,7 @@ import type { Theme } from "./theme-core";
  *
  * **The theme is not this package's to own, and that is the whole shape of
  * this type.** A Domicile shell is the desktop's chrome, so the theme it
- * paints in is the *desktop's*: it comes out of `[theme] mode` in the
+ * paints in is the *desktop's*: it comes out of `theme.mode` in the
  * compositor's config, it is the same value the compositor hands the settings
  * portal that GTK, Qt and Electron read, and a desk of three monitors is three
  * pages that have to move together. None of that is knowable from inside a

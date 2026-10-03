@@ -802,25 +802,21 @@ a function of the hardware. It is kanshi's model without kanshi's file format:
 a profile names exactly the displays it is for, and the first profile whose set
 is plugged in wins.
 
-```toml
-[[output.profiles]]
-name = "home-office-full"
-
-  [[output.profiles.displays]]
-  display = "drm-1"
-  enabled = false
-
-  [[output.profiles.displays]]
-  display = "drm-2"
-  position = [0, 0]
-  scale = 1.2
-  transform = "rotate-270"
-
-  [[output.profiles.displays]]
-  display = "drm-3"
-  position = [1800, 0]
-  scale = 1.2
-  transform = "rotate-270"
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "home-office-full",
+        "displays": [
+          { "display": "drm-1", "enabled": false },
+          { "display": "drm-2", "position": [0, 0], "scale": 1.2, "transform": "rotate-270" },
+          { "display": "drm-3", "position": [1800, 0], "scale": 1.2, "transform": "rotate-270" }
+        ]
+      }
+    ]
+  }
+}
 ```
 
 | Source | Constructor | Decided by |
@@ -1006,7 +1002,7 @@ modeset behind them ran.
 
 ### And it locks the desk, which is a refusal at the injection
 
-A desk that states what opens it under `[lock]` **locks itself on the same
+A desk that states what opens it under `lock` **locks itself on the same
 edge its screens go dark on**, and what being locked means is one thing: nothing the
 chrome forwards reaches a client, and nothing it asks done to the desktop is
 done or read. `crate::lock::refused` is the list: `handle_client_request` asks
@@ -1061,10 +1057,10 @@ Five orderings are load-bearing, and each is a line in
 What opens it is a seam — `crate::lock::Verifier` — and the config says which
 verifier is behind it:
 
-| `[lock]` states | Verifier | What it costs |
+| `lock` states | Verifier | What it costs |
 |---|---|---|
-| `pam_service = "domicile"` | `crate::pam`: `pam_authenticate` as the uid the compositor runs as, through that service | The machine declares the service — `nixosModules.default` on NixOS, or `security.pam.services.domicile = {};`. A home-manager module cannot |
-| `passphrase = "…"` | The string, compared | It is in a generated, world-readable file, so it locks a desk against somebody walking up to it and against nobody who can read the disk |
+| `"pam_service": "domicile"` | `crate::pam`: `pam_authenticate` as the uid the compositor runs as, through that service | The machine declares the service — `nixosModules.default` on NixOS, or `security.pam.services.domicile = {};`. A home-manager module cannot |
+| `"passphrase": "…"` | The string, compared | It is in a generated, world-readable file, so it locks a desk against somebody walking up to it and against nobody who can read the disk |
 | Neither | None: the desk never locks | A lock with nothing behind it would be a desk nobody could open |
 | Both | Refused at parse | Neither is a fallback for the other |
 

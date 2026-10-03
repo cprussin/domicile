@@ -72,10 +72,10 @@ pub struct Restatement {
     /// Which way round the desk is drawn, or `None` where the file did not
     /// move it.
     ///
-    /// The mode rather than the whole `[theme]` section, which is the
+    /// The mode rather than the whole `theme` section, which is the
     /// opposite of what `idle` above does, and the difference is that a theme
-    /// has no absence: saying nothing about `[theme]` is dark, the same value
-    /// as saying `mode = "dark"`, where saying nothing about `[idle]` is a
+    /// has no absence: saying nothing about `theme` is dark, the same value
+    /// as saying `"mode": "dark"`, where saying nothing about `idle` is a
     /// desk that never blanks and has no spelling of its own.
     pub theme: Option<ThemeMode>,
     /// What the file index leaves out, or `None` where that did not move.
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn a_file_that_restates_the_theme_it_already_had_restates_nothing() {
         // The edit that matters here is the one somebody made to a *different*
-        // field: `[theme]` is generated along with the rest of the file, so a
+        // field: `theme` is generated along with the rest of the file, so a
         // reload that moved a display rewrites the theme line untouched. A
         // restatement for it would run the wipe on every page on the desk over
         // a theme that did not change.
@@ -253,119 +253,99 @@ mod tests {
     }
 
     const A_DVORAK_DESK: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     /// The same desk, with nothing left out of its file index.
     const A_DESK_OFFERING_ITS_DOTFILES: &str = r#"
-[files]
-omit = []
-
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "files": { "omit": [] },
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     /// The same desk, offering only the launcher's own applications.
     const A_DESK_OFFERING_ONLY_ITS_OWN_APPLICATIONS: &str = r#"
-[applications]
-omit = ["*", "!launcher-*"]
-
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "applications": { "omit": ["*", "!launcher-*"] },
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     /// The same desk, running one extension from the Web Store.
     const A_DESK_WITH_AN_EXTENSION: &str = r#"
-[extensions]
-web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
-
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] },
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     /// The same desk typing US QWERTY as it comes.
     const A_PLAIN_DESK: &str = r#"
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{ "output": { "displays": [{ "name": "one", "size": [1024, 768] }] } }
 "#;
 
     /// The same desk, told to turn its screens off after a minute alone.
     const A_DESK_THAT_BLANKS: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[idle]
-blank_after_seconds = 60
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "idle": { "blank_after_seconds": 60 },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     /// The same keyboard, with scaling turned off.
     const A_CAPPED_DESK: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[output]
-max_scale = 1
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": {
+    "max_scale": 1,
+    "displays": [{ "name": "one", "size": [1024, 768] }]
+  }
+}
 "#;
 
     /// The same desk, stated the other way round.
     const A_DESK_DRAWN_LIGHT: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[theme]
-mode = "light"
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "theme": { "mode": "light" },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
 "#;
 
     const A_DVORAK_DESK_WITH_A_SECOND_DISPLAY: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
-
-[[output.displays]]
-name = "two"
-position = [1024, 0]
-size = [1024, 768]
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": {
+    "displays": [
+      { "name": "one", "size": [1024, 768] },
+      { "name": "two", "position": [1024, 0], "size": [1024, 768] }
+    ]
+  }
+}
 "#;
 
     fn parsed(text: &str) -> Config {

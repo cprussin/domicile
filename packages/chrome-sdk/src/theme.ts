@@ -17,7 +17,7 @@
 // `prefers-color-scheme` still answers under this engine, as it answers in any
 // browser, and it is the trap that looks like the answer — a shell that read
 // it would be asking the engine what the engine was told, with a second place
-// for the two to disagree. The theme is the compositor's: `[theme] mode` is
+// for the two to disagree. The theme is the compositor's: `theme.mode` is
 // what a desk comes up on, `setTheme` is what a toggle does to it, and a
 // `theme` message is how both arrive.
 //

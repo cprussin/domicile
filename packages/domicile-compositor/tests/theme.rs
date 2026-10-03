@@ -15,9 +15,7 @@ use domicile_protocol::{ChromeMessage, HostMessage, Theme};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// What `CAPTURE_WITHIN` is, less a margin for a loaded machine. A window
@@ -98,8 +96,12 @@ fn a_chrome_that_never_captures_holds_the_windows_only_until_the_deadline() {
 fn a_desk_that_comes_up_light_says_its_windows_are_light() {
     // The browser draws its own pages in what the handshake says, so a config
     // of light must reach it as light before anything is toggled.
-    let compositor =
-        Compositor::started_with(&format!("{ONE_DISPLAY}\n[theme]\nmode = \"light\"\n"));
+    let compositor = Compositor::started_with(
+        r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "theme": { "mode": "light" }
+}"#,
+    );
     let mut chrome = compositor.chrome();
     chrome
         .wait_for(windows_theme(Theme::Light))

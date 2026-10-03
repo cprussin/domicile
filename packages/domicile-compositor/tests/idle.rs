@@ -38,9 +38,7 @@ use crate::running::Compositor;
 
 /// A desk that never blanks, which is what saying nothing about idle means.
 const NOBODY_MENTIONED_IDLE: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// The same desk, told to turn its screens off after a second alone.
@@ -50,12 +48,10 @@ size = [1920, 1080]
 /// desk can state, and it is the number `Idle` is handed rather than one this
 /// file rounds.
 const A_DESK_THAT_BLANKS: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[idle]
-blank_after_seconds = 1
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "idle": { "blank_after_seconds": 1 }
+}
 "#;
 
 /// The same desk again, waiting longer.
@@ -64,12 +60,10 @@ blank_after_seconds = 1
 /// rather than a removed one — the case where a desktop goes on blanking and
 /// the state still has to agree with the glass.
 const A_DESK_THAT_BLANKS_LATER: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
-
-[idle]
-blank_after_seconds = 30
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "idle": { "blank_after_seconds": 30 }
+}
 "#;
 
 #[test]

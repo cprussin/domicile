@@ -36,8 +36,10 @@ mod tests {
     #[test]
     fn every_keysym_the_keyboard_types_goes_out_for_a_shell_s_chords() {
         // `l` on `dvp` is the key `us` prints a p on.
-        let keys = keys(&parsed("[input.keyboard]\nxkb_variant = \"dvp\"\n"))
-            .expect("the layout compiles");
+        let keys = keys(&parsed(
+            r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#,
+        ))
+        .expect("the layout compiles");
         assert_eq!(keys.get("l"), Some(&KEY_P));
         assert_eq!(keys.get("Escape"), Some(&KEY_ESC));
     }
@@ -46,8 +48,7 @@ mod tests {
     fn a_keyboard_xkb_cannot_compile_has_no_keys() {
         assert!(keys(&parsed(
             r#"
-[input.keyboard]
-xkb_rules = "no-such-rules"
+{ "input": { "keyboard": { "xkb_rules": "no-such-rules" } } }
 "#,
         ))
         .is_err());

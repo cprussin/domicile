@@ -102,16 +102,12 @@ while [ $# -gt 0 ]; do
 done
 [ -n "${DOMICILE_FAKE_COMPOSITOR_DIES:-}" ] && exit 4
 # A compositor that will not start, and says why on stderr -- the shape the
-# real one's config complaint has, underlined span and trailing blank line
-# included, because both are what the repeat has to survive.
+# real one's config complaint has, a line naming the file above the reason and
+# a trailing blank line, because both are what the repeat has to survive.
 if [ -n "${DOMICILE_FAKE_COMPOSITOR_COMPLAINS:-}" ]; then
   {
-    echo "fake-compositor: the config at /nowhere/domicile.toml could not be loaded:"
-    echo "invalid config syntax: TOML parse error at line 1, column 2"
-    echo "  |"
-    echo "1 | [compositor]"
-    echo "  |  ^^^^^^^^^^"
-    echo "unknown field \`compositor\`, expected \`input\` or \`output\`"
+    echo "fake-compositor: the config at /nowhere/domicile.json could not be loaded:"
+    echo "invalid config syntax: unknown field \`compositor\`, expected \`input\` or \`output\` at line 1 column 15"
     echo
   } >&2
   exit 1
@@ -296,7 +292,7 @@ SAID="$WORK/complained.log"
 run_domicile 60 "$SAID" DOMICILE_FAKE_COMPOSITOR_COMPLAINS=1
 GAVE_UP_AT="$(grep -n "desktops in a row have failed" "$SAID" | tail -1 | cut -d: -f1)"
 LAST_LINE_AT="$(grep -n "unknown field" "$SAID" | tail -1 | cut -d: -f1)"
-LAST_SPAN_AT="$(grep -n '\^\^\^\^' "$SAID" | tail -1 | cut -d: -f1)"
+LAST_FILE_AT="$(grep -n "could not be loaded" "$SAID" | tail -1 | cut -d: -f1)"
 TIMES="$(grep -c "unknown field" "$SAID")"
 
 # Said live as well as at the end: five desktops each printing it, and the one
@@ -321,10 +317,10 @@ else
   FAILED=1
 fi
 
-# All of it, not just the line a grep happened to match: toml draws the key it
-# could not read, and three of the six lines are that drawing.
-if [ -n "$LAST_SPAN_AT" ] && [ "$LAST_SPAN_AT" -gt "$GAVE_UP_AT" ]; then
-  echo "PASS: the underlined span came back with it"
+# All of it, not just the line a grep happened to match: the reason is about
+# a file, and the line above it is the one that says which.
+if [ -n "$LAST_FILE_AT" ] && [ "$LAST_FILE_AT" -gt "$GAVE_UP_AT" ]; then
+  echo "PASS: the file it was about came back with it"
 else
   echo "FAIL: the repeat did not carry the whole complaint. What it said:"
   sed 's/^/    /' "$SAID"

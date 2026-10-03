@@ -1,7 +1,7 @@
 //! The watch on a home, taken over a real directory and a real inotify.
 //!
 //! What it is watched through is the walk: a directory is watched as it is
-//! read, so what the desk's `[files] omit` leaves out is never watched at all.
+//! read, so what the desk's `files.omit` leaves out is never watched at all.
 //! It used to be one recursive watch over the whole home, which set up a watch
 //! on every directory under it — a `~/.cache` a browser writes into all day
 //! included — and whose events, all of them thrown away, were what overflowed

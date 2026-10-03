@@ -9,7 +9,7 @@
 //! # What is watched is what the walk reads, and nothing else
 //!
 //! [`HomeWatcher`] is a [`Directory`]: the walk reads the home through it, and
-//! each directory is watched as it is read. So what the desk's `[files] omit`
+//! each directory is watched as it is read. So what the desk's `files.omit`
 //! leaves out is never watched — the walk never reads it.
 //!
 //! It used to be one recursive watch over the whole home, which is one inotify

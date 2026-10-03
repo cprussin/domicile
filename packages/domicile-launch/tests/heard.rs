@@ -22,17 +22,16 @@ fn a_component_that_said_nothing_has_nothing_to_repeat() {
 
 #[test]
 fn what_it_said_comes_back_on_the_lines_it_was_said_on() {
-    // The whole point of the reprint. toml underlines the key it could not
-    // read, and that drawing is three lines of the six -- a repeat that joined
-    // them would be the `Debug` print this replaced all over again.
+    // The whole point of the reprint. A panic's backtrace is a frame a line,
+    // indented -- a repeat that joined them would be the `Debug` print this
+    // replaced all over again.
     let mut heard = Heard::new(20);
     for line in [
-        "domicile-compositor: the config at /home/me/domicile.toml could not be loaded:",
-        "invalid config syntax: TOML parse error at line 1, column 2",
-        "  |",
-        "1 | [compositor]",
-        "  |  ^^^^^^^^^^",
-        "unknown field `compositor`, expected `input` or `output`",
+        "thread 'main' panicked at src/main.rs:10:5:",
+        "the layout's extent is validated before a desktop is built",
+        "stack backtrace:",
+        "   0: rust_begin_unwind",
+        "   1: core::panicking::panic_fmt",
     ] {
         heard.line(line);
     }
@@ -40,12 +39,11 @@ fn what_it_said_comes_back_on_the_lines_it_was_said_on() {
     assert_eq!(
         heard.said().as_deref(),
         Some(
-            "domicile-compositor: the config at /home/me/domicile.toml could not be loaded:\n\
-             invalid config syntax: TOML parse error at line 1, column 2\n\
-             \x20 |\n\
-             1 | [compositor]\n\
-             \x20 |  ^^^^^^^^^^\n\
-             unknown field `compositor`, expected `input` or `output`"
+            "thread 'main' panicked at src/main.rs:10:5:\n\
+             the layout's extent is validated before a desktop is built\n\
+             stack backtrace:\n\
+             \x20  0: rust_begin_unwind\n\
+             \x20  1: core::panicking::panic_fmt"
         )
     );
 }

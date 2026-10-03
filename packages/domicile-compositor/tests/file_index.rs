@@ -19,9 +19,7 @@ use domicile_protocol::{ChromeMessage, FilePreview, HostMessage};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// What the compositor says once its index thread has published an answer.
@@ -43,7 +41,7 @@ fn a_search_finds_what_is_anywhere_in_the_home_and_nothing_else() {
     write(home.path(), "src/domicile/README.md");
     // And the rule that survived from the old walk: a dot is not offered, and
     // nothing under it is walked.
-    write(home.path(), ".config/domicile/domicile.toml");
+    write(home.path(), ".config/domicile/domicile.json");
     write(home.path(), "src/.git/HEAD");
 
     let compositor = Compositor::started_in_a_home(ONE_DISPLAY, Some(home.path()));
@@ -159,10 +157,17 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
     // it now leaves out is already in the index. A watch sees neither, since
     // nothing on the disk moved — so the index thread is told, and walks.
     let home = tempfile::tempdir().expect("a home to lay out");
-    write(home.path(), ".config/domicile.toml");
+    write(home.path(), ".config/domicile.json");
     write(home.path(), "src/main.rs");
     write(home.path(), "src/target/debug.log");
-    let omitting = |omit: &str| format!("[files]\nomit = [{omit}]\n{ONE_DISPLAY}");
+    let omitting = |omit: &str| {
+        format!(
+            r#"{{
+  "files": {{ "omit": [{omit}] }},
+  "output": {{ "displays": [{{ "name": "left", "size": [1920, 1080] }}] }}
+}}"#
+        )
+    };
 
     let compositor = Compositor::started_in_a_home(&omitting(r#""src/target""#), Some(home.path()));
     let mut chrome = compositor.chrome();
@@ -170,7 +175,7 @@ fn a_reload_that_moves_what_is_omitted_walks_the_home_again_under_it() {
         &compositor,
         &mut chrome,
         "",
-        &[".config/", ".config/domicile.toml", "src/", "src/main.rs"],
+        &[".config/", ".config/domicile.json", "src/", "src/main.rs"],
     );
 
     compositor.reconfigure(&omitting(r#""**/.*""#));

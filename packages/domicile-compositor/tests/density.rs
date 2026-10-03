@@ -75,7 +75,7 @@ use crate::running::Compositor;
 /// assertion below spells those numbers doubled rather than reading them from
 /// here. Two copies of one number that have to be edited together, which is
 /// the cost of the check naming the mode it expects.
-const FOLLOWING: &str = "";
+const FOLLOWING: &str = "{}";
 
 /// The density the chrome reports, and what the client should draw at.
 const DENSITY: f64 = 2.0;

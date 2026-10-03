@@ -52,11 +52,10 @@ libloading = "0.9"
 # The events of the watch on the home, which the file index's thread hears on
 # the same channel as a reloaded `[files]` — see `src/file_indexing.rs`.
 notify.workspace = true
-# `HostMessage::ShellConfig` carries a shell's `options`, which the config holds
-# as TOML and the chrome is handed as JSON — see `src/shell_config.rs`.
+# `HostMessage::ShellConfig` carries a shell's `options`, which the chrome is
+# handed as JSON — see `src/shell_config.rs`.
 serde_json.workspace = true
 thiserror.workspace = true
-toml.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # The session bus, for the settings portal this compositor answers -- see

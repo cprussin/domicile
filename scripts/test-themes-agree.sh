@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One closed set of two, written down in six places, compared.
 #
-# A config says `[theme] mode = "light"` and the word crosses five boundaries
+# A config says `"theme": { "mode": "light" }` and the word crosses five boundaries
 # to become a class on `<html>`: `domicile_config::ThemeMode` parses the file,
 # the compositor serializes `domicile_protocol::Theme`, the browser process
 # parses it against `components/domicile/common/theme.h` into `mojom::Theme`,

@@ -21,9 +21,7 @@ use domicile_protocol::{ChromeMessage, HostMessage};
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
-[[output.displays]]
-name = "left"
-size = [1920, 1080]
+{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
 /// What Ctrl-C copied and what the pointer brushed past are different bytes,

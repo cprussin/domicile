@@ -28,7 +28,7 @@ export type Theme = (typeof THEMES)[number];
  *
  * Dark, because dark is the attribute-less state of `<html>` — the preset
  * publishes dark as `base` and light behind `[data-theme=light]` — and because
- * it is what `[theme] mode` in the compositor's config defaults to. The two
+ * it is what `theme.mode` in the compositor's config defaults to. The two
  * agree on purpose: a page that paints before the desk has told it anything
  * paints in the theme the desk most likely has.
  */

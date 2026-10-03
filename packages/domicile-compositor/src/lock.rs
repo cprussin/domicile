@@ -22,8 +22,8 @@
 //!
 //! **THE VERIFIER IS A SEAM, AND A DESK SAYS WHICH ONE IS BEHIND IT.**
 //! [`Verifier`] is the whole of what "is this the right passphrase" means here,
-//! and [`chosen`] reads which from the config: `[lock] pam_service` is PAM, as
-//! the desk's own user — [`crate::pam`] — and `[lock] passphrase` is the string
+//! and [`chosen`] reads which from the config: `lock.pam_service` is PAM, as
+//! the desk's own user — [`crate::pam`] — and `lock.passphrase` is the string
 //! that file states, compared. That file is generated into a world-readable
 //! store, so the second locks this desk against somebody walking up to it and
 //! against nobody who can read the disk. A desk states one or neither; neither

@@ -1,7 +1,7 @@
 //! Where the compositor's config file is, when the command line did not say.
 //!
-//! `~/.config/domicile/domicile.toml`, and `$XDG_CONFIG_HOME/domicile/` when
-//! that is set. A person types `domicile <shell>` and their monitors are
+//! `~/.config/domicile/domicile.{ts,tsx,js,mjs,json}`, and
+//! `$XDG_CONFIG_HOME/domicile/` when that is set. A person types `domicile <shell>` and their monitors are
 //! already written down; nothing has to be typed twice for a desk that is
 //! configured once.
 //!
@@ -120,8 +120,8 @@ const DIRECTORY: &str = "domicile";
 const FILE: &str = "domicile";
 
 /// What a config may be written as, in the order they are listed: a module,
-/// which is evaluated, or the JSON or TOML the compositor reads.
-const EXTENSIONS: [&str; 6] = ["ts", "tsx", "js", "mjs", "json", "toml"];
+/// which is evaluated, or the JSON the compositor reads.
+const EXTENSIONS: [&str; 5] = ["ts", "tsx", "js", "mjs", "json"];
 
 /// Whether the config at `path` is a module to evaluate rather than a file
 /// the compositor reads.

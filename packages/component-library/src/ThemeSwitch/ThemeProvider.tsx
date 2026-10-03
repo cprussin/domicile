@@ -42,7 +42,7 @@ const ThemeContext = createContext<ThemeControl | undefined>(undefined);
  * reads {@link useTheme}.
  *
  * **It owns no theme of its own, which is the point of `source`.** The theme
- * belongs to the desktop: it starts as `[theme] mode` in the compositor's
+ * belongs to the desktop: it starts as `theme.mode` in the compositor's
  * config, the same value reaches the desk's Wayland clients through the
  * settings portal, and a desk of three monitors is three pages that have to
  * move together. So nothing here reads `prefers-color-scheme` and nothing here

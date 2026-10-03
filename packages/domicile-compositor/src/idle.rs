@@ -183,7 +183,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// Take over the inhibitors another clock was holding.
     ///
-    /// For a reloaded `[idle]`, which replaces the clock outright: the timeout
+    /// For a reloaded `idle`, which replaces the clock outright: the timeout
     /// is the config's to change and the moment it changed is a fresh count,
     /// but *what is holding the screens on* belongs to the clients, and no
     /// client resends an inhibitor because a file on disk was rewritten. A
