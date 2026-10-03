@@ -210,8 +210,9 @@ pam_service = "domicile"
 ```
 
 That is PAM, as the user the desktop runs as, through a service **the machine
-has to declare** — a home-manager module cannot, so on NixOS it is a line in the
-system configuration beside the home-manager one:
+has to declare** — a home-manager module cannot. On NixOS the flake's NixOS
+module ([below](#the-machines-half)) declares it; without that module it is a
+line in the system configuration:
 
 ```nix
 security.pam.services.domicile = {};
@@ -271,11 +272,35 @@ same home keeps the browser `mimeapps.list` names.
 
 It writes the config and installs no session — booting into a desk is a
 machine's decision, not a home directory's. For the same reason it declares no
-PAM service: a desk locked by `lock.pam_service` needs the system half from
-[The screen going dark](#the-screen-going-dark) as well. `settings` is freeform and the
-fields are the compositor config's, which
+PAM service: those are the [machine's half](#the-machines-half). `settings` is
+freeform and the fields are the compositor config's, which
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#the-configuration) walks
 through.
+
+### The machine's half
+
+`nixosModules.default` is the rest, in the system configuration:
+
+```nix
+{
+  imports = [domicile.nixosModules.default];
+
+  programs.domicile.enable = true;
+  # Booting into one is the machine's own line; the module offers, not picks.
+  services.displayManager.defaultSession = "manganese";
+}
+```
+
+- **Each desktop is a login session named after itself.** `manganese` is the
+  default; `programs.domicile.desktops` lists others. The package carries the
+  session file, so `services.displayManager.sessionPackages = [manganese]`
+  does the same without the module.
+- **The `domicile` PAM service** that `lock.pam_service = "domicile"` names.
+- **Portal routing.** With `xdg.portal.enable`, Domicile answers `Settings` and
+  its `domicile-portals.conf` sends everything else to `xdg-desktop-portal-gtk`,
+  which the module brings. The home-manager module offers the same to
+  home-manager's `xdg.portal`.
+- **It enables no display manager and chooses no default session.**
 
 ### Naming a monitor
 

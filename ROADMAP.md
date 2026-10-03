@@ -132,13 +132,6 @@ The evidence for each of those is in the doc that made the claim —
 
    What is left is
 
-   - **The PAM service is a line the machine carries.** A home-manager module
-     cannot declare one, and there is no NixOS module here to do it, so a desk
-     that names `lock.pam_service = "domicile"` needs
-     `security.pam.services.domicile = {};` in its system configuration too —
-     [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#the-screen-going-dark)
-     says so, and the compositor says so when it is missing. A NixOS module
-     would make that one line rather than two in two places.
    - **A wrong passphrase is only `locked: true` again.** That is enough to say
      "that was wrong" — every verdict is broadcast, and a shell waiting on a
      check reads the state said again as the refusal — but it cannot tell a
@@ -321,9 +314,14 @@ these is one run, and each has a line to look for.
   can see it: no runner has a `/dev/dri` at all, so every check this change
   brings is arithmetic over an injected instant. Plug a monitor in while it is
   dark for the second half — the new one must come up dark too.
-- **A desk that locks with PAM.** Declare
-  `security.pam.services.domicile = {};`, set `lock.pam_service = "domicile"`
-  and `idle.blank_after_seconds = 60`, and walk away. Your password should give
+- **A desktop from a display manager.** Import `nixosModules.default`, set
+  `programs.domicile.enable` and
+  `services.displayManager.defaultSession = "manganese"`. The login screen
+  should offer `manganese` and boot into it on the drm platform. Only the
+  evaluation is checked here.
+- **A desk that locks with PAM.** Set `programs.domicile.enable` from
+  `nixosModules.default`, `lock.pam_service = "domicile"` and
+  `idle.blank_after_seconds = 60`, and walk away. Your password should give
   `the passphrase opened this desktop`; a wrong one should give `a passphrase
   this desktop did not take` a couple of seconds later — `pam_unix`'s delay —
   with the desk's clients still drawing throughout. The tests reach real
@@ -507,9 +505,9 @@ costs nothing.
   and systemd activation environments at startup — which reaches a frontend
   activated after that and not one already up. A desk started from inside a
   sway session therefore keeps sway's portal routing until that frontend
-  exits. That is a nested developer run rather than a desk somebody uses, and
-  the real fix is the same one the whole session question wants: a session
-  entry that names `domicile` before anything else in the session starts.
+  exits. That is a nested developer run rather than a desk somebody uses: a
+  desktop started from a display manager has its session entry's
+  `DesktopNames=domicile` before anything in the session starts.
 - **A domicile desk has no screenshot or screencast portal.**
   `xdg-desktop-portal-gtk` implements neither interface, and the backend that
   does on a wlroots desk — `xdg-desktop-portal-wlr` — screencopies through

@@ -18,7 +18,7 @@
 #
 # NO SESSION, NO UNIT. Making domicile a login session is a NixOS-level
 # decision about how a machine boots, and a home-manager module is the wrong
-# place to make it.
+# place to make it: `nix/nixos.nix` is.
 #
 # CURRIED, because half of what this needs is fixed when the flake exposes it
 # and half arrives from the configuration importing it: `domicilePackages` is
@@ -384,7 +384,7 @@ in {
 
                 THIS MODULE CANNOT DECLARE THE SERVICE, because a PAM service
                 is the machine's and home-manager configures a home. The
-                system has to, in its NixOS configuration:
+                flake's NixOS module declares it, or the system does itself:
 
                     security.pam.services.domicile = {};
 
@@ -596,6 +596,14 @@ in {
         };
 
     home.packages = [cfg.finalPackage];
+
+    # Offered, not turned on: with `xdg.portal.enable`, Domicile answers
+    # `Settings` and its `domicile-portals.conf` routes the rest to gtk, which
+    # comes with it so that conf names a backend that is there.
+    xdg.portal = {
+      extraPortals = [cfg.finalPackage pkgs.xdg-desktop-portal-gtk];
+      configPackages = [cfg.finalPackage];
+    };
 
     # THE PATH IS THE INTERFACE: this is where `domicile` looks with no
     # `--config`, so it is not a location this module gets to pick.

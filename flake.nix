@@ -403,6 +403,11 @@
         mkdir -p "$out/share/xdg-desktop-portal/portals"
         cp ${./nix/domicile.portal} \
           "$out/share/xdg-desktop-portal/portals/domicile.portal"
+        # And where a desk's portal calls go, which since xdg-desktop-portal
+        # 1.17 is this file rather than `UseIn`: Domicile first, for the one
+        # interface it answers, and gtk for the rest.
+        cp ${./nix/domicile-portals.conf} \
+          "$out/share/xdg-desktop-portal/domicile-portals.conf"
       '';
 
       # A desktop: Domicile with the module already chosen.
@@ -433,10 +438,19 @@
       # not a choice being taken away from them. A shell of your own that
       # spawns something else is unaffected either way -- `.#domicile` takes
       # the page as an argument and wraps no `PATH` at all.
+      #
+      # AND IT IS A LOGIN SESSION, named after itself: `share/wayland-sessions`
+      # is where a display manager looks, and `providedSessions` is the
+      # top-level attribute NixOS's `services.displayManager.sessionPackages`
+      # refuses a package without. `DesktopNames` is what the display manager
+      # sets `XDG_CURRENT_DESKTOP` from, before the compositor gets the chance
+      # to. No `OZONE`: a session from a display manager is on a VT, and
+      # `XDG_VTNR` already picks the drm platform.
       desktop = { name, description }:
         pkgs.runCommand name
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
+            passthru.providedSessions = [ name ];
             meta = {
               inherit description;
               license = pkgs.lib.licenses.mit;
@@ -454,6 +468,16 @@
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
             --add-flags ${shellPage name}/shell.js \
             --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
+
+          mkdir -p "$out/share/wayland-sessions"
+          cat >"$out/share/wayland-sessions/${name}.desktop" <<DESKTOP
+          [Desktop Entry]
+          Type=Application
+          Name=${name}
+          Comment=${description}
+          Exec=$out/bin/${name}
+          DesktopNames=domicile
+          DESKTOP
         '';
 
       # ── What a user installs ────────────────────────────────────────────
@@ -715,13 +739,10 @@
       # system-bound is the default package, so the module is given this
       # flake's `packages` for one and takes an override for everything else.
       #
-      # No NixOS module beside it yet. What a NixOS one would add is the part
-      # this deliberately leaves out -- a session, a unit, a way for the
-      # machine to boot into a desk, and the PAM service a desk's
-      # `lock.pam_service` names -- and that is a decision about a machine
-      # rather than about a home directory. Until there is one, the service is
-      # a line the machine's own configuration carries; RUNNING-A-DESKTOP.md
-      # says which.
+      # What it deliberately leaves out -- a desktop as a login session, and
+      # the PAM service a desk's `lock.pam_service` names -- is a decision
+      # about a machine rather than a home directory, and is `nixosModules`
+      # below.
       homeManagerModules = rec {
         domicile = import ./nix/home-manager.nix {
           domicilePackages = self.packages.${system};
@@ -729,6 +750,14 @@
         # `default` so `imports = [domicile.homeManagerModules.default]` works,
         # and the name beside it so a configuration importing several flakes'
         # modules can say which one this is.
+        default = domicile;
+      };
+
+      # THE MACHINE'S HALF, beside it and curried the same way.
+      nixosModules = rec {
+        domicile = import ./nix/nixos.nix {
+          domicilePackages = self.packages.${system};
+        };
         default = domicile;
       };
 
@@ -763,8 +792,8 @@
       # to that is `git clone`, not seventy lines of staging that nothing
       # exercises.
 
-      # WHAT `nix flake check` IS FOR HERE: the home-manager module, which
-      # nothing else evaluates.
+      # WHAT `nix flake check` IS FOR HERE: the two modules, which nothing else
+      # evaluates.
       #
       # `scripts/test-the-home-manager-module-agrees.sh` compares its option
       # NAMES against the Rust schema without nix, which is the half a Claude
@@ -774,197 +803,310 @@
       #
       # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
       # module sets only a few things outside its own namespace --
-      # `home.packages` and `xdg.configFile` -- so declaring those is the
-      # whole of what it takes to evaluate it. `xdg.mimeApps` is left out on
-      # purpose: the module setting it is an evaluation error here. Taking
-      # home-manager as a flake input to check one module would put its whole
-      # closure behind every `nix flake check`, and
-      # a stub that has drifted fails loudly here rather than silently passing.
-      checks.${system}.home-manager-module =
-        let
-          stub = { lib, ... }: {
-            options = {
-              home.packages = lib.mkOption {
-                type = lib.types.listOf lib.types.package;
-                default = [ ];
-              };
-              xdg.configFile = lib.mkOption {
-                type = lib.types.attrsOf (lib.types.submodule {
-                  options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
-                });
-                default = { };
-              };
-            };
-          };
-          # A desk with one of everything the schema has, so the check covers
-          # the shapes rather than the happy path: a turned monitor at a
-          # fractional scale, one turned off, a described display and a
-          # keyboard.
-          desk = { ... }: {
-            programs.domicile = {
-              enable = true;
-              shell = "${desktops.simple}/shell.js";
-              settings = {
-                input.keyboard = {
-                  xkb_layout = "us";
-                  xkb_variant = "dvp";
-                  xkb_options = [ "caps:escape" ];
+      # `home.packages`, `xdg.configFile` and two lists of `xdg.portal` -- so
+      # declaring those is the whole of what it takes to evaluate it.
+      # `xdg.mimeApps` is left out on purpose: the module setting it is an
+      # evaluation error here. Taking home-manager as a flake input to check
+      # one module would put its whole closure behind every `nix flake check`,
+      # and a stub that has drifted fails loudly here rather than silently
+      # passing.
+      checks.${system} = {
+        home-manager-module =
+          let
+            stub = { lib, ... }: {
+              options = {
+                home.packages = lib.mkOption {
+                  type = lib.types.listOf lib.types.package;
+                  default = [ ];
                 };
-                output = {
-                  max_scale = 2;
-                  displays = [{
-                    name = "nested";
-                    position = [ 0 0 ];
-                    size = [ 1920 1080 ];
-                    scale = 1;
-                  }];
-                  profiles = [{
-                    name = "desk";
-                    displays = [
-                      { display = "drm-1"; enabled = false; }
-                      {
-                        display = "DEL DELL U3219Q 2ZLS413";
-                        mode = [ 3840 2160 ];
-                        position = [ 0 0 ];
-                        scale = 1.2;
-                        transform = "rotate-270";
-                      }
-                    ];
-                  }];
+                xdg.configFile = lib.mkOption {
+                  type = lib.types.attrsOf (lib.types.submodule {
+                    options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
+                  });
+                  default = { };
+                };
+                xdg.portal.extraPortals = lib.mkOption {
+                  type = lib.types.listOf lib.types.package;
+                  default = [ ];
+                };
+                xdg.portal.configPackages = lib.mkOption {
+                  type = lib.types.listOf lib.types.package;
+                  default = [ ];
                 };
               };
             };
-          };
-          evaluated = pkgs.lib.evalModules {
-            modules = [ stub self.homeManagerModules.domicile desk ];
-            specialArgs = { inherit pkgs; };
-          };
-          written = evaluated.config.xdg.configFile."domicile/domicile.toml".source;
+            # A desk with one of everything the schema has, so the check covers
+            # the shapes rather than the happy path: a turned monitor at a
+            # fractional scale, one turned off, a described display and a
+            # keyboard.
+            desk = { ... }: {
+              programs.domicile = {
+                enable = true;
+                shell = "${desktops.simple}/shell.js";
+                settings = {
+                  input.keyboard = {
+                    xkb_layout = "us";
+                    xkb_variant = "dvp";
+                    xkb_options = [ "caps:escape" ];
+                  };
+                  output = {
+                    max_scale = 2;
+                    displays = [{
+                      name = "nested";
+                      position = [ 0 0 ];
+                      size = [ 1920 1080 ];
+                      scale = 1;
+                    }];
+                    profiles = [{
+                      name = "desk";
+                      displays = [
+                        { display = "drm-1"; enabled = false; }
+                        {
+                          display = "DEL DELL U3219Q 2ZLS413";
+                          mode = [ 3840 2160 ];
+                          position = [ 0 0 ];
+                          scale = 1.2;
+                          transform = "rotate-270";
+                        }
+                      ];
+                    }];
+                  };
+                };
+              };
+            };
+            evaluated = pkgs.lib.evalModules {
+              modules = [ stub self.homeManagerModules.domicile desk ];
+              specialArgs = { inherit pkgs; };
+            };
+            written = evaluated.config.xdg.configFile."domicile/domicile.toml".source;
 
-          # THE SAME MODULE OVER A `domicile` THAT ONLY PRINTS ITS ARGUMENTS,
-          # so the command lines the wrapper builds can be read back.
-          #
-          # Running the real one here would need a desktop to answer
-          # `which-shell` and a compositor to start, neither of which a
-          # sandbox has -- and what is under test is which words reach the
-          # binary, which a stand-in shows exactly.
-          sawArgs = pkgs.lib.evalModules {
-            modules = [
-              stub
-              self.homeManagerModules.domicile
-              desk
-              { programs.domicile.package = pkgs.writeShellScriptBin "domicile" ''printf '%s\n' "$@"''; }
-            ];
-            specialArgs = { inherit pkgs; };
-          };
-        in
-        pkgs.runCommand "home-manager-module-evaluates" { } ''
-          # The generated file has to be the config file domicile parses, so
-          # this asserts the keys rather than just that something was written.
-          # `grep -F` on whole lines: `pkgs.formats.toml` decides the layout
-          # and this check is not the place to pin it.
-          cp ${written} config.toml
-          for line in \
-            'xkb_variant = "dvp"' \
-            'xkb_options = ["caps:escape"]' \
-            'max_scale = 2' \
-            'name = "desk"' \
-            'display = "drm-1"' \
-            'enabled = false' \
-            'scale = 1.2' \
-            'transform = "rotate-270"'
-          do
-            grep -qxF "  $line" config.toml || grep -qxF "$line" config.toml || {
-              echo "the module did not write: $line" >&2
+            # THE SAME MODULE OVER A `domicile` THAT ONLY PRINTS ITS ARGUMENTS,
+            # so the command lines the wrapper builds can be read back.
+            #
+            # Running the real one here would need a desktop to answer
+            # `which-shell` and a compositor to start, neither of which a
+            # sandbox has -- and what is under test is which words reach the
+            # binary, which a stand-in shows exactly.
+            sawArgs = pkgs.lib.evalModules {
+              modules = [
+                stub
+                self.homeManagerModules.domicile
+                desk
+                { programs.domicile.package = pkgs.writeShellScriptBin "domicile" ''printf '%s\n' "$@"''; }
+              ];
+              specialArgs = { inherit pkgs; };
+            };
+          in
+          pkgs.runCommand "home-manager-module-evaluates" { } ''
+            # The generated file has to be the config file domicile parses, so
+            # this asserts the keys rather than just that something was written.
+            # `grep -F` on whole lines: `pkgs.formats.toml` decides the layout
+            # and this check is not the place to pin it.
+            cp ${written} config.toml
+            for line in \
+              'xkb_variant = "dvp"' \
+              'xkb_options = ["caps:escape"]' \
+              'max_scale = 2' \
+              'name = "desk"' \
+              'display = "drm-1"' \
+              'enabled = false' \
+              'scale = 1.2' \
+              'transform = "rotate-270"'
+            do
+              grep -qxF "  $line" config.toml || grep -qxF "$line" config.toml || {
+                echo "the module did not write: $line" >&2
+                echo "--- what it wrote ---" >&2
+                cat config.toml >&2
+                exit 1
+              }
+            done
+
+            # A NULL IS THE ONE THING THIS FILE MUST NOT CONTAIN, because TOML
+            # has no word for one and `domicile` would refuse the whole file
+            # over it -- every profile, the keyboard, all of it. The desk above
+            # sets a `mode` on one placement and not on the other, so an unset
+            # option really is a null sitting inside a list here, and
+            # `withoutNulls` walking into that list is what this asserts.
+            if grep -q 'null' config.toml; then
+              echo "the module wrote a null, which domicile refuses" >&2
+              echo "--- what it wrote ---" >&2
+              cat config.toml >&2
+              exit 1
+            fi
+
+            # And the other direction: a mode that IS set reaches the file.
+            # Matched on the number rather than the whole line, because how
+            # `pkgs.formats.toml` lays an array out is its business and no other
+            # number in this desk is 3840.
+            grep -q 3840 config.toml || {
+              echo "the module did not write the profile's mode" >&2
               echo "--- what it wrote ---" >&2
               cat config.toml >&2
               exit 1
             }
-          done
 
-          # A NULL IS THE ONE THING THIS FILE MUST NOT CONTAIN, because TOML
-          # has no word for one and `domicile` would refuse the whole file
-          # over it -- every profile, the keyboard, all of it. The desk above
-          # sets a `mode` on one placement and not on the other, so an unset
-          # option really is a null sitting inside a list here, and
-          # `withoutNulls` walking into that list is what this asserts.
-          if grep -q 'null' config.toml; then
-            echo "the module wrote a null, which domicile refuses" >&2
-            echo "--- what it wrote ---" >&2
-            cat config.toml >&2
-            exit 1
-          fi
+            # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
+            # invisible in the config file: which words the installed `domicile`
+            # is actually run with.
+            #
+            # `domicile which-shell` IS THE ONE THAT USED TO BREAK. The wrapper
+            # was `wrapProgram --add-flags`, which puts the shell in FRONT --
+            # and a verb is only a verb as the first word, so installing this
+            # module turned the one command it must not break into
+            # `too many arguments: which-shell`.
+            domicile=${sawArgs.config.programs.domicile.finalPackage}/bin/domicile
 
-          # And the other direction: a mode that IS set reaches the file.
-          # Matched on the number rather than the whole line, because how
-          # `pkgs.formats.toml` lays an array out is its business and no other
-          # number in this desk is 3840.
-          grep -q 3840 config.toml || {
-            echo "the module did not write the profile's mode" >&2
-            echo "--- what it wrote ---" >&2
-            cat config.toml >&2
-            exit 1
-          }
+            saw() { # what was typed -> what reached the binary
+              want="$1"; shift
+              got="$("$domicile" "$@" | tr '\n' ' ')"
+              [ "$got" = "$want " ] || {
+                echo "domicile $* reached the binary as: $got" >&2
+                echo "and it should have been: $want" >&2
+                exit 1
+              }
+            }
 
-          # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
-          # invisible in the config file: which words the installed `domicile`
-          # is actually run with.
-          #
-          # `domicile which-shell` IS THE ONE THAT USED TO BREAK. The wrapper
-          # was `wrapProgram --add-flags`, which puts the shell in FRONT --
-          # and a verb is only a verb as the first word, so installing this
-          # module turned the one command it must not break into
-          # `too many arguments: which-shell`.
-          domicile=${sawArgs.config.programs.domicile.finalPackage}/bin/domicile
+            # Nothing typed: the configured shell, which is the point of this.
+            saw "${desktops.simple}/shell.js"
+            # A verb, handed over untouched.
+            saw "which-shell" which-shell
+            # And the verb that takes a shell: the word after it is that verb's
+            # argument, not a shell to run, so nothing is appended to it either.
+            saw "load-shell ./other.js" load-shell ./other.js
+            # A shell typed out: what was said beats what was configured.
+            saw "./other.js" ./other.js
+            # And a config flag is not a shell -- the path after it is skipped,
+            # so the configured shell still goes on the end.
+            saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
 
-          saw() { # what was typed -> what reached the binary
-            want="$1"; shift
-            got="$("$domicile" "$@" | tr '\n' ' ')"
-            [ "$got" = "$want " ] || {
-              echo "domicile $* reached the binary as: $got" >&2
-              echo "and it should have been: $want" >&2
+            # And the verb that takes an address, for the same reason.
+            saw "open-url https://example.com" open-url https://example.com
+
+            # THE DEFAULT BROWSER, which is what keeps other programs from asking
+            # to be it: every web link is `domicile-open-url`'s -- in a desk only.
+            # The file is `domicile-mimeapps.list`, which `xdg-open`, GIO and the
+            # portal read only where `XDG_CURRENT_DESKTOP` is `domicile`; outside
+            # one `domicile-open-url` has no desktop to ask, so the plain
+            # `mimeapps.list` is not this module's to write.
+            cp ${evaluated.config.xdg.configFile."domicile-mimeapps.list".source} mimeapps.list
+            for line in \
+              '[Default Applications]' \
+              'text/html=domicile-open-url.desktop' \
+              'x-scheme-handler/http=domicile-open-url.desktop' \
+              'x-scheme-handler/https=domicile-open-url.desktop'
+            do
+              grep -qxF "$line" mimeapps.list || {
+                echo "domicile-mimeapps.list is missing: $line" >&2
+                cat mimeapps.list >&2
+                exit 1
+              }
+            done
+
+            # THE PORTAL, offered to home-manager's `xdg.portal` rather than
+            # turned on: the backend that answers `Settings`, the
+            # `domicile-portals.conf` that routes the rest, and the gtk backend
+            # that conf routes it to -- all inert until the home enables
+            # portals.
+            ${pkgs.lib.concatMapStrings ({ option, package }: ''
+              [ ${pkgs.lib.boolToString (pkgs.lib.elem package evaluated.config.xdg.portal.${option})} = true ] || {
+                echo "xdg.portal.${option} does not hold ${package.name}" >&2
+                exit 1
+              }
+            '') [
+              { option = "extraPortals"; package = evaluated.config.programs.domicile.finalPackage; }
+              { option = "extraPortals"; package = pkgs.xdg-desktop-portal-gtk; }
+              { option = "configPackages"; package = evaluated.config.programs.domicile.finalPackage; }
+            ]}
+
+            touch "$out"
+          '';
+
+        # THE NIXOS MODULE, against a real NixOS evaluation rather than a stub.
+        #
+        # The home-manager check above stubs what its module touches; this one
+        # cannot, because what is under test is NixOS's own reading of what the
+        # module hands it. `sessionPackages` refuses a package without a
+        # top-level `providedSessions`, and a stub would accept one -- which
+        # is the mistake a desk's own configuration made before this module.
+        # Evaluating NixOS builds nothing, so this costs an evaluation and the
+        # desktop the session names.
+        nixos-module =
+          let
+            machine = pkgs.nixos {
+              imports = [ self.nixosModules.domicile ];
+              programs.domicile = {
+                enable = true;
+                desktops = [ desktops.simple ];
+              };
+              # The module offers sessions and enables nothing: a machine
+              # that boots to a login screen has said this itself.
+              services.displayManager.enable = true;
+              # What a NixOS configuration has to say for its options to
+              # evaluate; nothing here builds a system.
+              boot.loader.grub.enable = false;
+              fileSystems."/".device = "nodev";
+              system.stateVersion = pkgs.lib.trivial.release;
+            };
+            # What the display manager is actually handed: NixOS joins every
+            # session package's `share/wayland-sessions` here and refuses one
+            # that lacks the file its `providedSessions` names.
+            session = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions/simple.desktop";
+          in
+          pkgs.runCommand "nixos-module-evaluates" { } ''
+            # A desktop is a login session named after itself, which is what a
+            # machine's `defaultSession` says to boot into, and it runs that
+            # desktop as the desktop it is: the display manager sets
+            # `XDG_CURRENT_DESKTOP` from `DesktopNames` before the compositor
+            # gets the chance to.
+            for line in \
+              'Exec=${desktops.simple}/bin/simple' \
+              'DesktopNames=domicile'
+            do
+              grep -qxF "$line" ${session} || {
+                echo "the simple session is missing: $line" >&2
+                cat ${session} >&2
+                exit 1
+              }
+            done
+
+            # THE PAM SERVICE a desk's `lock.pam_service` names, which a
+            # home-manager module cannot declare. Without it a desk configured
+            # to lock does not come up.
+            [ ${pkgs.lib.boolToString (machine.config.security.pam.services ? domicile)} = true ] || {
+              echo "the module declared no domicile PAM service" >&2
               exit 1
             }
-          }
 
-          # Nothing typed: the configured shell, which is the point of this.
-          saw "${desktops.simple}/shell.js"
-          # A verb, handed over untouched.
-          saw "which-shell" which-shell
-          # And the verb that takes a shell: the word after it is that verb's
-          # argument, not a shell to run, so nothing is appended to it either.
-          saw "load-shell ./other.js" load-shell ./other.js
-          # A shell typed out: what was said beats what was configured.
-          saw "./other.js" ./other.js
-          # And a config flag is not a shell -- the path after it is skipped,
-          # so the configured shell still goes on the end.
-          saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
-
-          # And the verb that takes an address, for the same reason.
-          saw "open-url https://example.com" open-url https://example.com
-
-          # THE DEFAULT BROWSER, which is what keeps other programs from asking
-          # to be it: every web link is `domicile-open-url`'s -- in a desk only.
-          # The file is `domicile-mimeapps.list`, which `xdg-open`, GIO and the
-          # portal read only where `XDG_CURRENT_DESKTOP` is `domicile`; outside
-          # one `domicile-open-url` has no desktop to ask, so the plain
-          # `mimeapps.list` is not this module's to write.
-          cp ${evaluated.config.xdg.configFile."domicile-mimeapps.list".source} mimeapps.list
-          for line in \
-            '[Default Applications]' \
-            'text/html=domicile-open-url.desktop' \
-            'x-scheme-handler/http=domicile-open-url.desktop' \
-            'x-scheme-handler/https=domicile-open-url.desktop'
-          do
-            grep -qxF "$line" mimeapps.list || {
-              echo "domicile-mimeapps.list is missing: $line" >&2
-              cat mimeapps.list >&2
+            # AND WHERE THE DESK'S PORTAL CALLS GO. Since xdg-desktop-portal
+            # 1.17 a desktop states that in `<desktop>-portals.conf`; `UseIn` in the
+            # `.portal` file is only the deprecated fallback. Domicile answers
+            # `Settings` and nothing else, so everything is routed to it first
+            # and to gtk after.
+            found=
+            for package in ${toString machine.config.xdg.portal.configPackages}; do
+              conf="$package/share/xdg-desktop-portal/domicile-portals.conf"
+              if [ -e "$conf" ]; then
+                found="$conf"
+              fi
+            done
+            [ -n "$found" ] || {
+              echo "no configPackage holds a domicile-portals.conf" >&2
               exit 1
             }
-          done
+            grep -qxF 'default=domicile;gtk' "$found" || {
+              echo "domicile-portals.conf does not route to domicile, then gtk:" >&2
+              cat "$found" >&2
+              exit 1
+            }
+            # And gtk is there to be routed to.
+            [ ${pkgs.lib.boolToString (pkgs.lib.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals)} = true ] || {
+              echo "the module offers no xdg-desktop-portal-gtk for that conf to name" >&2
+              exit 1
+            }
 
-          touch "$out"
-        '';
+            touch "$out"
+          '';
+      };
 
       apps.${system} = {
         # A bare `nix run github:cprussin/domicile` is Domicile itself, taking
