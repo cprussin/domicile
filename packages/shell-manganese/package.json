@@ -25,6 +25,9 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
+  "exports": {
+    ".": "./src/index.tsx"
+  },
   "license": "MIT",
   "name": "@domicile/shell-manganese",
   "private": true,

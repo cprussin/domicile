@@ -5,6 +5,8 @@ import { Provider } from "@domicile/component-library/Provider";
 import type { ThemeSource } from "@domicile/component-library/theme-source";
 
 import { Desktop } from "./Desktop";
+import type { TopBarLayout } from "./top-bar/layout";
+import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
 type Props = {
   /**
@@ -25,6 +27,8 @@ type Props = {
    * changed.
    */
   theme: ThemeSource;
+  /** What goes on every monitor's bar: manganese's own when not given. */
+  topBar?: TopBarLayout | undefined;
 };
 
 /**
@@ -35,10 +39,15 @@ type Props = {
  * its screens from. `on` is a single slot, so there is exactly one listener for
  * the host's descriptions and every `<Screen>` below fans out from it.
  */
-export const Shell = ({ displays, domicile, theme }: Props) => (
+export const Shell = ({
+  displays,
+  domicile,
+  theme,
+  topBar = DEFAULT_TOP_BAR,
+}: Props) => (
   <Provider theme={theme}>
     <DisplayProvider source={displays}>
-      <Desktop domicile={domicile} />
+      <Desktop domicile={domicile} topBar={topBar} />
     </DisplayProvider>
   </Provider>
 );
