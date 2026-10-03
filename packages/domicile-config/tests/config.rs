@@ -1493,3 +1493,60 @@ scale = 4294967295
         "rejected for its mode rather than for its far corner: {message}"
     );
 }
+
+// ---- JSON ------------------------------------------------------------------
+
+#[test]
+fn a_json_config_says_what_its_toml_says() {
+    // The same schema, written by a generator or evaluated out of a module:
+    // a config is a config whichever of the two it arrived as.
+    let toml = Config::parse(
+        r#"
+[input.keyboard]
+xkb_variant = "dvp"
+
+[extensions]
+web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
+"#,
+    )
+    .unwrap();
+    let json = Config::parse_json(
+        r#"{
+          "input": { "keyboard": { "xkb_variant": "dvp" } },
+          "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] }
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(json.input.keyboard, toml.input.keyboard);
+    assert_eq!(json.extensions, toml.extensions);
+}
+
+#[test]
+fn a_json_config_refuses_a_key_nothing_reads() {
+    let err = Config::parse_json(r#"{ "output": { "max_scaale": 2 } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+    assert!(format!("{err}").contains("max_scaale"), "{err}");
+}
+
+#[test]
+fn a_config_may_name_the_shell_domicile_runs() {
+    // `domicile` reads it when it is given no shell; the compositor has no
+    // use for it, and takes it without complaint.
+    let config = Config::parse_json(r#"{ "shell": "@domicile/manganese" }"#).unwrap();
+    assert_eq!(config.shell.as_deref(), Some("@domicile/manganese"));
+}
+
+#[test]
+fn a_json_file_is_read_as_json() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("domicile.json");
+    std::fs::write(
+        &path,
+        r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        Config::load(&path).unwrap().input.keyboard.xkb_variant,
+        "dvp"
+    );
+}

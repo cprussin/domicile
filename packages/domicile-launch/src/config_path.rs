@@ -29,8 +29,10 @@ pub enum ConfigFile {
     Named(PathBuf),
     /// Nobody named one and there is a file where a config lives.
     Found(PathBuf),
-    /// Nobody named one and there is nothing at the path that was looked in.
+    /// Nobody named one and there is none in the directory that was looked in.
     Absent(PathBuf),
+    /// Nobody named one and there is more than one where a config lives.
+    Several(Vec<PathBuf>),
     /// Nobody named one and there is no home directory to look under.
     Nowhere,
 }
@@ -40,7 +42,7 @@ impl ConfigFile {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Named(path) | Self::Found(path) => Some(path),
-            Self::Absent(_) | Self::Nowhere => None,
+            Self::Absent(_) | Self::Several(_) | Self::Nowhere => None,
         }
     }
 }
@@ -52,10 +54,20 @@ impl std::fmt::Display for ConfigFile {
         match self {
             Self::Named(path) => write!(out, "{}, because --config names it", path.display()),
             Self::Found(path) => write!(out, "{}, found where a config lives", path.display()),
-            Self::Absent(path) => write!(
+            Self::Absent(directory) => write!(
                 out,
-                "none -- no {} -- so the compositor's defaults",
-                path.display()
+                "none -- no domicile.{{{}}} in {} -- so the compositor's defaults",
+                EXTENSIONS.join(","),
+                directory.display()
+            ),
+            Self::Several(paths) => write!(
+                out,
+                "more than one: {} -- remove all but one",
+                paths
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             Self::Nowhere => write!(
                 out,
@@ -73,8 +85,8 @@ impl std::fmt::Display for ConfigFile {
 /// could not read names that file — where a check here would only say the same
 /// thing earlier and from a process that is not the one reading it.
 ///
-/// `exists` is asked exactly once, about the default, because that is the one
-/// path nobody typed.
+/// `exists` is asked only about the defaults, one per extension, because those
+/// are the paths nobody typed.
 pub fn config_file(
     flag: Option<&Path>,
     env: &dyn Fn(&str) -> Option<String>,
@@ -85,10 +97,16 @@ pub fn config_file(
         None => match config_home(env) {
             None => ConfigFile::Nowhere,
             Some(home) => {
-                let path = home.join(DIRECTORY).join(FILE);
-                match exists(&path) {
-                    true => ConfigFile::Found(path),
-                    false => ConfigFile::Absent(path),
+                let directory = home.join(DIRECTORY);
+                let found: Vec<PathBuf> = EXTENSIONS
+                    .iter()
+                    .map(|extension| directory.join(format!("{FILE}.{extension}")))
+                    .filter(|path| exists(path))
+                    .collect();
+                match found.as_slice() {
+                    [] => ConfigFile::Absent(directory),
+                    [one] => ConfigFile::Found(one.clone()),
+                    _ => ConfigFile::Several(found),
                 }
             }
         },
@@ -98,8 +116,21 @@ pub fn config_file(
 /// The directory a config lives in, under the config home.
 const DIRECTORY: &str = "domicile";
 
-/// The file itself. TOML, which is what `domicile-config` parses.
-const FILE: &str = "domicile.toml";
+/// The file itself, without the extension that says what it is written in.
+const FILE: &str = "domicile";
+
+/// What a config may be written as, in the order they are listed: a module,
+/// which is evaluated, or the JSON or TOML the compositor reads.
+const EXTENSIONS: [&str; 6] = ["ts", "tsx", "js", "mjs", "json", "toml"];
+
+/// Whether the config at `path` is a module to evaluate rather than a file
+/// the compositor reads.
+pub fn is_module(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("ts" | "tsx" | "js" | "mjs")
+    )
+}
 
 /// Where this user's configuration is kept.
 ///

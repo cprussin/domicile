@@ -22,10 +22,10 @@ use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
-use domicile_launch::cli::{invocation, Invocation};
+use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{builder, components, our_shell, Components};
-use domicile_launch::config_path::config_file;
+use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
@@ -69,7 +69,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<ExitCode, String> {
     match invocation(std::env::args().skip(1)).map_err(|why| why.to_string())? {
-        Invocation::Run { shell, config } => desktop(&shell, config.as_deref()),
+        Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
         Invocation::Open { target } => asked(&Request::OpenUrl {
@@ -97,7 +97,7 @@ fn run() -> Result<ExitCode, String> {
 /// `DOMICILE_PAGE` has no part in it: a packaged desktop hands over the module
 /// it was built with, and this command is somebody naming another one.
 fn shell_to_load(shell: &str) -> Result<Request, String> {
-    let page = shell_named(shell, None)?;
+    let page = shell_named(shell, None, None)?;
     Ok(Request::LoadShell {
         module: page.module,
         root: page.root,
@@ -110,10 +110,15 @@ fn shell_to_load(shell: &str) -> Result<Request, String> {
 /// what a relative path and a tilde mean and neither is a question about the
 /// filesystem. Read here: this is the part of the program that reads the
 /// world.
-fn shell_named(shell: &str, handed_in: Option<&str>) -> Result<Shell, String> {
+/// `from` is where a relative path starts when it was not typed: the
+/// directory of the config that named it.
+fn shell_named(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<Shell, String> {
     let env = |name: &str| std::env::var(name).ok();
-    let here = std::env::current_dir()
-        .map_err(|why| format!("cannot tell where this was typed: {why}"))?;
+    let here = match from {
+        Some(directory) => directory.to_path_buf(),
+        None => std::env::current_dir()
+            .map_err(|why| format!("cannot tell where this was typed: {why}"))?,
+    };
     let home = env("HOME").map(PathBuf::from);
     let source = shell_source(
         shell,
@@ -134,8 +139,12 @@ fn shell_named(shell: &str, handed_in: Option<&str>) -> Result<Shell, String> {
                 module: PathBuf::from("shell.js"),
             })
             .map_err(|missing| missing.to_string()),
-        ShellSource::Entry(entry) => built(&binary, &["--entry".into(), entry.into_os_string()]),
-        ShellSource::Package(spec) => built(&binary, &["--package".into(), spec.into()]),
+        ShellSource::Entry(entry) => {
+            built(&binary, &["--entry".into(), entry.into_os_string()]).and_then(as_shell)
+        }
+        ShellSource::Package(spec) => {
+            built(&binary, &["--package".into(), spec.into()]).and_then(as_shell)
+        }
     }
 }
 
@@ -145,7 +154,7 @@ fn shell_named(shell: &str, handed_in: Option<&str>) -> Result<Shell, String> {
 /// The bar is redrawn in place on a terminal and said a line a step
 /// elsewhere, where a log is reading it. What the build says that is not a
 /// step is kept, and said only if the build fails.
-fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<Shell, String> {
+fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<BuilderHeard, String> {
     let env = |name: &str| std::env::var(name).ok();
     let builder =
         builder(binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
@@ -184,8 +193,8 @@ fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<Shell, String> {
             }
             BuilderHeard::Step(step) => eprintln!("domicile: {}", bar(&step)),
             BuilderHeard::Log(said) => log.push(said),
-            BuilderHeard::Built(page) => answer = Some(Ok(page)),
             BuilderHeard::Failed(why) => answer = Some(Err(why)),
+            done => answer = Some(Ok(done)),
         }
     }
     if terminal {
@@ -195,7 +204,7 @@ fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<Shell, String> {
         .wait()
         .map_err(|why| format!("cannot wait for the shell builder: {why}"))?;
     match answer {
-        Some(Ok(page)) if status.success() => Ok(page),
+        Some(Ok(done)) if status.success() => Ok(done),
         Some(Err(why)) => Err(format!(
             "the shell did not build: {why}\n{}",
             log.join("\n")
@@ -205,6 +214,46 @@ fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<Shell, String> {
             log.join("\n")
         )),
     }
+}
+
+/// The module a build answered with.
+fn as_shell(heard: BuilderHeard) -> Result<Shell, String> {
+    match heard {
+        BuilderHeard::Built(page) => Ok(page),
+        other => Err(format!("the shell builder answered a build with {other:?}")),
+    }
+}
+
+/// The JSON the module config at `config` evaluates to, by the builder.
+fn evaluated(binary: &Path, config: &Path) -> Result<PathBuf, String> {
+    match built(
+        binary,
+        &["--evaluate".into(), config.as_os_str().to_os_string()],
+    )? {
+        BuilderHeard::Evaluated(json) => Ok(json),
+        other => Err(format!(
+            "the shell builder answered an evaluation with {other:?}"
+        )),
+    }
+}
+
+/// The `shell` a JSON config names, if it is JSON and names one. The
+/// compositor reads the rest; this is the one key that is `domicile`'s.
+fn shell_in(config: &Path) -> Option<String> {
+    let json = config
+        .extension()
+        .is_some_and(|extension| extension == "json");
+    json.then(|| std::fs::read_to_string(config).ok())
+        .flatten()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| value.get("shell")?.as_str().map(str::to_string))
+}
+
+/// The directory `config` is in, which a shell it names is relative to.
+fn beside(config: &Path) -> PathBuf {
+    config
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
 }
 
 /// Put one command to the desktop that is already running, and say what it
@@ -239,11 +288,31 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 /// the compositor has said anything about its own file. The one question asked
 /// of the filesystem is whether the default is there at all, which is the
 /// difference between a path to hand on and none.
-fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
+///
+/// A MODULE CONFIG IS EVALUATED FIRST, by the builder, into the JSON the
+/// compositor reads -- the compositor runs no JavaScript -- and that JSON is
+/// the path handed on. And with no shell given, the config's is the shell: a
+/// module config's own `Shell`, or a JSON config's `shell`, relative to the
+/// config.
+fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String> {
     let env = |name: &str| std::env::var(name).ok();
     let config = config_file(flag, &env, &|path| path.exists());
+    if let ConfigFile::Several(_) = config {
+        return Err(format!("config: {config}"));
+    }
 
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
+    let (compositor_config, named) = match config.path() {
+        Some(path) if is_module(path) => (
+            Some(evaluated(&binary, path)?),
+            Some((path.display().to_string(), beside(path))),
+        ),
+        Some(path) => (
+            Some(path.to_path_buf()),
+            shell_in(path).map(|named| (named, beside(path))),
+        ),
+        None => (None, None),
+    };
     let components =
         components(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
     // What `BROWSER` names for every app this desktop starts: the program
@@ -256,7 +325,11 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // does not have to, and a second spelling of "which shell" would only be
     // a second thing to get wrong. Built first, if it is built at all, so a
     // shell that cannot be built starts nothing.
-    let page = shell_named(shell, env("DOMICILE_PAGE").as_deref())?;
+    let page = match (shell, named) {
+        (Some(shell), _) => shell_named(shell, env("DOMICILE_PAGE").as_deref(), None)?,
+        (None, Some((named, from))) => shell_named(&named, None, Some(&from))?,
+        (None, None) => return Err(CliError::NoShell.to_string()),
+    };
 
     // Kept between runs, unlike everything below it: a profile thrown away
     // with the run is every sign-in thrown away with it. Refused rather than
@@ -344,7 +417,7 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     let desktop = Desktop {
         browser: &browser,
         components: &components,
-        config: config.path(),
+        config: compositor_config.as_deref(),
         env: &env,
         page: &page,
         places: &places,

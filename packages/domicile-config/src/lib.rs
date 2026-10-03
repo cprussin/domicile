@@ -808,6 +808,10 @@ pub struct Config {
     pub shells: BTreeMap<String, ShellConfig>,
     pub startup: StartupConfig,
     pub theme: ThemeConfig,
+    /// The shell `domicile` runs when it is given none — a path or a
+    /// package, as `domicile load-shell` takes one. `domicile`'s alone: the
+    /// compositor takes it and reads nothing of it.
+    pub shell: Option<String>,
 }
 
 impl Config {
@@ -832,11 +836,26 @@ impl Config {
     }
 
     /// [`Config::parse`], with the home directory given rather than read.
+    /// Parse a config from JSON text: the same schema, keys and validation as
+    /// [`Config::parse`]. What a TypeScript config is evaluated to, and what
+    /// a generator writes.
+    pub fn parse_json(text: &str) -> Result<Config, ConfigError> {
+        serde_json::from_str(text)
+            .map_err(|e| ConfigError::Parse(e.to_string()))
+            .and_then(|parsed| Config::settled(parsed, home_directory().as_deref()))
+    }
+
     fn parse_at_home(text: &str, home: Option<&Path>) -> Result<Config, ConfigError> {
         // `to_string` keeps toml's line, column and the span it underlines,
         // which is the actionable half of the complaint — and more of it than
         // JSON gave, because a TOML error names the key it was reading.
         let parsed: Config = toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        Config::settled(parsed, home)
+    }
+
+    /// A config as it was written, with its paths taken from `home` and
+    /// validated.
+    fn settled(parsed: Config, home: Option<&Path>) -> Result<Config, ConfigError> {
         parsed.extensions.at_home(home).and_then(|extensions| {
             let config = Config {
                 extensions,
@@ -853,8 +872,14 @@ impl Config {
             path: path.display().to_string(),
             message: e.to_string(),
         })?;
+        // JSON by its name; TOML otherwise, which is every config there was
+        // before there was a choice.
+        let parsed = match path.extension().and_then(|extension| extension.to_str()) {
+            Some("json") => Config::parse_json(&text),
+            _ => Config::parse(&text),
+        };
         // Not the read failure above, which names the path already.
-        Config::parse(&text).map_err(|why| ConfigError::At {
+        parsed.map_err(|why| ConfigError::At {
             path: path.display().to_string(),
             why: Box::new(why),
         })

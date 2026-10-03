@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
-// `domicile-builder (--entry <file> | --package <spec>) --domicile <install>
-// --cache <dir>`: build the entry, or the package's, into a shell module,
+// `domicile-builder (--entry <file> | --package <spec> | --evaluate <config>)
+// --domicile <install> --cache <dir>`: build the entry, or the package's, into
+// a shell module — or evaluate a config module into the compositor's JSON —
 // saying each step on stdout as a JSON line.
 //
 // Only a line that is a JSON object with a `step` is a step: what the tools
@@ -56,11 +57,11 @@ const manifestOf = (project: string): Manifest | undefined => {
   return text === undefined ? undefined : parseManifest(text);
 };
 
-const build = async (
-  entry: string,
-  domicile: string,
-  cache: string,
-): Promise<void> => {
+/**
+ * The entry's files, and its project with every package it imports
+ * installed: what a build and an evaluation both start from.
+ */
+const prepared = (entry: string) => {
   say(Step.Resolving());
   const graph = importGraph(entry, readFile);
   const project = projectOf(entry, existsSync);
@@ -69,16 +70,36 @@ const build = async (
     say(Step.Installing(missing));
     runBun(project, ["add", "--ignore-scripts", ...missing]);
   }
-  const key = cacheKey(
+  return { graph, project };
+};
+
+/** The key of a build or an evaluation of what `prepared` read. */
+const keyOf = (
+  { graph, project }: ReturnType<typeof prepared>,
+  domicile: string,
+): string =>
+  cacheKey(
     graph.files,
     readFile(path.join(project, "bun.lock")) ?? "",
     domicile,
   );
-  const root = path.join(cache, key);
+
+/** Install what `project` lists, when it lists anything. */
+const installed = (project: string): void => {
+  if (manifestOf(project)?.dependencies !== undefined) {
+    runBun(project, ["install", "--ignore-scripts", "--frozen-lockfile"]);
+  }
+};
+
+const build = async (
+  entry: string,
+  domicile: string,
+  cache: string,
+): Promise<void> => {
+  const read = prepared(entry);
+  const root = path.join(cache, keyOf(read, domicile));
   if (readFile(path.join(root, MODULE)) === undefined) {
-    if (manifestOf(project)?.dependencies !== undefined) {
-      runBun(project, ["install", "--ignore-scripts", "--frozen-lockfile"]);
-    }
+    installed(read.project);
     say(Step.Bundling());
     // Imported here rather than at the top: vite and Panda take most of a
     // second to load, and a build already in the cache needs neither.
@@ -87,6 +108,25 @@ const build = async (
     say(Step.Built(root, MODULE, false));
   } else {
     say(Step.Built(root, MODULE, true));
+  }
+};
+
+/** Evaluate the config module `config` into the JSON the compositor reads. */
+const evaluateConfig = async (
+  config: string,
+  domicile: string,
+  cache: string,
+): Promise<void> => {
+  const read = prepared(config);
+  const out = path.join(cache, "configs", `${keyOf(read, domicile)}.json`);
+  if (readFile(out) === undefined) {
+    installed(read.project);
+    mkdirSync(path.dirname(out), { recursive: true });
+    const { evaluate } = await import("./evaluate");
+    await evaluate(config, out, domicile);
+    say(Step.Evaluated(out, false));
+  } else {
+    say(Step.Evaluated(out, true));
   }
 };
 
@@ -125,25 +165,33 @@ const { values } = parseArgs({
     cache: { type: "string" },
     domicile: { type: "string" },
     entry: { type: "string" },
+    evaluate: { type: "string" },
     package: { type: "string" },
   },
 });
-const { cache, domicile, entry, package: spec } = values;
+const { cache, domicile, entry, evaluate: config, package: spec } = values;
 
 /** What the arguments ask for, or `undefined` where they ask for nothing. */
 const asked = (): Promise<void> | undefined => {
-  if (domicile === undefined || cache === undefined) {
+  const asking = [entry, spec, config].filter((one) => one !== undefined);
+  if (domicile === undefined || cache === undefined || asking.length !== 1) {
     return undefined;
-  } else if (entry !== undefined && spec === undefined) {
+  } else if (config !== undefined) {
+    return evaluateConfig(
+      path.resolve(config),
+      path.resolve(domicile),
+      path.resolve(cache),
+    );
+  } else if (entry !== undefined) {
     return build(
       path.resolve(entry),
       path.resolve(domicile),
       path.resolve(cache),
     );
-  } else if (spec !== undefined && entry === undefined) {
-    return buildPackage(spec, path.resolve(domicile), path.resolve(cache));
-  } else {
+  } else if (spec === undefined) {
     return undefined;
+  } else {
+    return buildPackage(spec, path.resolve(domicile), path.resolve(cache));
   }
 };
 
@@ -151,7 +199,7 @@ const building = asked();
 if (building === undefined) {
   say(
     Step.Failed(
-      "usage: domicile-builder (--entry <file> | --package <spec>) --domicile <install> --cache <dir>",
+      "usage: domicile-builder (--entry <file> | --package <spec> | --evaluate <config>) --domicile <install> --cache <dir>",
     ),
   );
   process.exit(2);

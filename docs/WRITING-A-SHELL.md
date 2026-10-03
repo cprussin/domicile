@@ -169,8 +169,8 @@ rather than outcomes it has to handle.
 configuration beyond the one file below: your location, your schema, your
 names.
 
-The compositor takes a `--config` naming a TOML file that describes the
-desktop — the displays, their layout, the keyboard — and watches it for
+The compositor takes a `--config` naming a TOML or JSON file that describes
+the desktop — the displays, their layout, the keyboard — and watches it for
 changes while it runs. **`domicile` passes one on:**
 
 ```
@@ -178,8 +178,8 @@ domicile --config ./desk.toml ./my-desktop/dist/shell.js
 ```
 
 **And finds one when you leave the flag off:**
-`$XDG_CONFIG_HOME/domicile/domicile.toml`, or `~/.config/domicile/domicile.toml`
-where that is unset. A person who has written their monitors down should not
+`$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,mjs,json,toml}`, or the same
+under `~/.config` where that is unset; two of them is refused. A person who has written their monitors down should not
 have to type where — and a shell packaged as a wrapper script does not have to
 invent a location for a file that already has one.
 
@@ -192,8 +192,24 @@ run says which of the four answers it got before it starts anything:
 ```
 config: /home/you/.config/domicile/domicile.toml, found where a config lives
 config: ./desk.toml, because --config names it
-config: none -- no /home/you/.config/domicile/domicile.toml -- so the compositor's defaults
+config: none -- no domicile.{ts,tsx,js,mjs,json,toml} in /home/you/.config/domicile -- so the compositor's defaults
 ```
+
+**A config can be a module.** Its `Shell` export is the shell `domicile` runs
+when it is given none, and every other export is a section of the schema, key
+for key — the builder evaluates it to the JSON the compositor reads:
+
+```tsx
+// ~/.config/domicile/domicile.tsx
+import { runManganese } from "@domicile/shell-manganese";
+
+export const input = { keyboard: { xkb_variant: "dvp" } };
+export const Shell = runManganese();
+```
+
+A JSON config names its shell as `"shell"`, relative to the config:
+`{ "shell": "@domicile/manganese" }`. See
+[COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
 
 **On NixOS, the home-manager module writes it for you.** `programs.domicile`
 declares an option for every field of that schema, so a desk is described
