@@ -667,6 +667,25 @@ rather than showing an empty box.
 
 ## The top bar
 
+**Its items are yours to arrange.** `runManganese({ topBar })` takes three
+columns — `left`, `middle` (centered on the screen) and `right` — of any React
+nodes: manganese's own items (`Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`,
+`Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications`),
+each of which reads the bar it is on and takes no props, and anything of your
+own. Without one, the bar is `DEFAULT_TOP_BAR`, which is what follows.
+
+```tsx
+import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile/shell-manganese";
+
+export const Shell = runManganese({
+  topBar: {
+    left: [<Tray key="tray" />, <WorkspaceSwitcher key="workspaces" />],
+    middle: [<Clock key="clock" />],
+    right: [<MailCount key="mail" />],
+  },
+});
+```
+
 Across the top of every screen: the launcher's button, the tray and the
 workspaces, in that order, at one end, the clock in the middle, and at the other end the charge, behind the name
 of the binding mode whenever it is not the usual one, and last the bell. Each screen's bar marks the workspace that
@@ -939,11 +958,11 @@ shell that wants its own pictures owns its own list.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point: its `Shell` export applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density. |
+| `src/index.tsx` | Entry point and library: `runManganese(options)` makes a `Shell` that applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density; `Shell` is `runManganese()`; the bar's items are re-exported under their public names. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the volume, the brightness, the charge and the bell. |
+| `src/top-bar/` | The bar: its three columns (`TopBar.tsx`), its default layout (`layout.tsx`), and the items a layout names (`bar-items.tsx`), which read the bar through `bar-context.ts`. |
 | `src/tray/` | The tray: applications' and extensions' icons in one row, and the order the user dragged them into. |
 | `src/extensions/` | An extension's action on the tray, the popup panel under its icon, and the engine's list it draws. |
 | `src/notifications/` | The toasts, the bell and the drawer, and the desk's notifications they are drawn from. |

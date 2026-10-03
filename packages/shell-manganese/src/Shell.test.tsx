@@ -28,6 +28,8 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
+import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
+import type { TopBarLayout } from "./top-bar/layout";
 import { laptop } from "./volume/fixture";
 import { TITLE_BAR } from "./window-management/rect";
 import {
@@ -232,7 +234,10 @@ let domicile: FakeDomicile;
  * desktop to put it on. The tests that care about the gap pass `undefined` and
  * describe one themselves.
  */
-const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
+const renderingShell = (
+  desktop: readonly DomicileDisplay[] | undefined,
+  topBar?: TopBarLayout,
+) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
@@ -245,6 +250,7 @@ const renderingShell = (desktop: readonly DomicileDisplay[] | undefined) => {
       displays={hostDisplays(client)}
       domicile={client}
       theme={standaloneThemeSource()}
+      topBar={topBar}
     />,
   );
   // The config's keys, which the compositor sends as the page connects.
@@ -888,6 +894,36 @@ describe("Shell", () => {
   });
 
   describe("the top bar", () => {
+    it("lays out the items it is given, in the columns it is given them in", () => {
+      // The user's bar: an item of their own beside manganese's, and the rest
+      // of manganese's left off.
+      const { container } = renderingShell([LEFT], {
+        left: [<BarLauncher key="launcher" />, <BarWorkspaces key="spaces" />],
+        middle: [<span key="mail">mail 3/12</span>],
+        right: [<BarClock key="clock" />],
+      });
+
+      const bar = container.querySelector("header");
+      expect(bar).toContainElement(screen.getByText("mail 3/12"));
+      expect(bar).toContainElement(
+        screen.getByRole("navigation", { name: "Workspaces" }),
+      );
+      expect(
+        screen.queryByRole("button", { name: /notification/i }),
+      ).toBeNull();
+    });
+
+    it("lays out every item of manganese's when it is given none", () => {
+      renderShell();
+
+      expect(
+        screen.getByRole("button", { name: "Launcher" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /notification/i }),
+      ).toBeInTheDocument();
+    });
+
     it("draws its text white, with a shadow to keep it off the wallpaper", () => {
       // The bar paints no background, so nothing else separates its text from
       // whatever photograph is behind it. Declarations rather than a class

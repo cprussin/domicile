@@ -1,19 +1,10 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Extension } from "@domicile/chrome-sdk/extension";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
-import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
+import { Children } from "react";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
-import { Battery } from "../battery/Battery";
-import { Brightness } from "../brightness/Brightness";
-import { Clock } from "../clock/Clock";
-import { LauncherButton } from "../launcher/LauncherButton";
-import { NotificationBell } from "../notifications/NotificationBell";
-import { Tray } from "../tray/Tray";
-import type { TrayOrder } from "../tray/useTrayOrder";
-import { Volume } from "../volume/Volume";
-import { Workspaces } from "./Workspaces";
+import type { Bar } from "./bar-context";
+import { BarContext } from "./bar-context";
+import type { TopBarLayout } from "./layout";
 
 /**
  * How tall the bar is.
@@ -25,49 +16,17 @@ import { Workspaces } from "./Workspaces";
  */
 export const TOP_BAR = 32;
 
-type Props = {
-  /** The workspace on screen, which the bar marks. */
-  current: string;
-  /**
-   * Where the charge and the brightness come from — the bar reads nothing off
-   * the machine — and what an extension's action and a new brightness are
-   * clicked through.
-   */
-  domicile: DomicileClient;
-  /** The extensions with an action, which the tray shows. */
-  extensions: readonly Extension[];
-  /** Whether the keyboard is on this screen. */
-  focused: boolean;
-  /**
-   * The binding mode the keys are read in, which the bar names when it is not
-   * the usual `default`.
-   */
-  mode: string;
-  /** Open an extension's popup, or close the open one with `undefined`. */
-  onOpenExtension: (id: string | undefined) => void;
-  /** Open the launcher. */
-  onOpenLauncher: () => void;
-  /** Open the drawer of notifications. */
-  onOpenNotifications: () => void;
-  onSelectWorkspace: (name: string) => void;
-  /** The extension whose popup is open, or `undefined`. */
-  openedExtension: string | undefined;
-  /** The monitor this bar is across, which the mixer opens over. */
-  screen: string;
-  /** The applications' tray icons. */
-  tray: readonly TrayItem[];
-  /** The order the tray is in, and how a drag changes it. */
-  trayOrder: TrayOrder;
-  /** How many notifications arrived since the drawer was last opened. */
-  unread: number;
-  /** The workspaces this screen has, which are the ones shown. */
-  workspaces: readonly string[];
+type Props = Bar & {
+  /** What goes in each of the bar's three columns. */
+  layout: TopBarLayout;
 };
 
 /**
- * The bar across the top of the screen the chrome is on: the launcher's
- * button, the tray and the workspaces, the clock, the volume, the brightness
- * and the charge.
+ * The bar across the top of the screen the chrome is on: three columns of
+ * items, each reading this bar through {@link BarContext}. By default they are
+ * manganese's own — the launcher's button, the tray and the workspaces, the
+ * clock, the volume, the brightness and the charge — and why each is where it
+ * is follows.
  *
  * **The launcher's button is first, at the far start**, a little apart from
  * the tray so it does not read as one of the tray's icons. It is the panel
@@ -117,54 +76,14 @@ type Props = {
  * for: the one in the middle is centered in the screen whatever is in the
  * other two, so the reading does not shift along as windows open.
  */
-export const TopBar = ({
-  current,
-  domicile,
-  extensions,
-  focused,
-  mode,
-  onOpenExtension,
-  onOpenLauncher,
-  onOpenNotifications,
-  onSelectWorkspace,
-  openedExtension,
-  screen,
-  tray,
-  trayOrder,
-  unread,
-  workspaces,
-}: Props) => (
-  <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
-    <div className={startStyles}>
-      <LauncherButton onOpen={onOpenLauncher} />
-      <Tray
-        domicile={domicile}
-        extensions={extensions}
-        items={tray}
-        onMove={trayOrder.move}
-        onOpen={onOpenExtension}
-        opened={openedExtension}
-        order={trayOrder.order}
-      />
-      <Workspaces
-        current={current}
-        focused={focused}
-        onSelect={onSelectWorkspace}
-        workspaces={workspaces}
-      />
-    </div>
-    <div className={middleStyles}>
-      <Clock />
-    </div>
-    <div className={endStyles}>
-      {mode !== "default" && <span className={modeStyles}>{mode}</span>}
-      <ThemeSwitch />
-      <Volume domicile={domicile} screen={screen} />
-      <Brightness domicile={domicile} />
-      <Battery domicile={domicile} />
-      <NotificationBell onOpen={onOpenNotifications} unread={unread} />
-    </div>
-  </header>
+export const TopBar = ({ layout, ...bar }: Props) => (
+  <BarContext value={bar}>
+    <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
+      <div className={startStyles}>{Children.toArray(layout.left)}</div>
+      <div className={middleStyles}>{Children.toArray(layout.middle)}</div>
+      <div className={endStyles}>{Children.toArray(layout.right)}</div>
+    </header>
+  </BarContext>
 );
 
 const barStyles = grid({
@@ -224,11 +143,3 @@ const startStyles = hstack({ gap: 4 });
 const middleStyles = css({ justifySelf: "center" });
 
 const endStyles = hstack({ gap: 3, justify: "flex-end" });
-
-// Not a color of its own: the bar's text is white over a photograph, and
-// what marks this out is that it is a word in capitals where the rest of the
-// bar is numbers and a clock.
-const modeStyles = css({
-  fontSize: "0.625rem",
-  textTransform: "uppercase",
-});
