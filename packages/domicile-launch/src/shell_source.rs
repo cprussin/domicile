@@ -4,7 +4,7 @@
 //! ```text
 //! domicile load-shell /path/to/bundle.js      a module, served as it is
 //! domicile load-shell ./entry.ts              an entry, built
-//! domicile load-shell @domicile/manganese     Domicile's own, prebuilt
+//! domicile load-shell @domicile-desktop/manganese     Domicile's own, prebuilt
 //! domicile load-shell github:me/my-shell      a package, installed and built
 //! ```
 //!
@@ -24,14 +24,14 @@ pub enum ShellSource {
     /// A TypeScript or JavaScript entry the builder bundles. Absolute.
     Entry(PathBuf),
     /// One of Domicile's own shells, by name: `manganese` for
-    /// `@domicile/manganese`. Prebuilt in Domicile's install.
+    /// `@domicile-desktop/manganese`. Prebuilt in Domicile's install.
     Ours(String),
     /// An npm package or a `github:` repository the builder installs.
     Package(String),
 }
 
 /// The scope Domicile's own shells are named under.
-const OURS: &str = "@domicile/";
+const OURS: &str = "@domicile-desktop/";
 
 /// What `argument` names. [`shell_module`]'s rules for a path, with
 /// `handed_in` a packaged desktop's module; `read` is a file's text, for
@@ -46,7 +46,7 @@ pub fn shell_source(
 ) -> Result<ShellSource, ShellPathError> {
     if handed_in.is_none() {
         if let Some(name) = argument.strip_prefix(OURS) {
-            // `@domicile/shell-simple` is the workspace's name for the
+            // `@domicile-desktop/shell-simple` is the workspace's name for the
             // simple shell, which is not published under one of its own.
             return Ok(ShellSource::Ours(
                 name.strip_prefix("shell-").unwrap_or(name).to_string(),

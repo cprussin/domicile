@@ -1,7 +1,7 @@
 //! The wire lines both languages have to agree about.
 //!
 //! `domicile-protocol` is one half of a contract whose other half is
-//! `@domicile/sdk`'s Zod schemas, in another language with its own
+//! `@domicile-desktop/sdk`'s Zod schemas, in another language with its own
 //! definitions written by hand. Each side's own tests assert against its own
 //! literals, so both can be internally consistent and disagree with each
 //! other — and the way that surfaces at runtime is a chrome quietly dropping a

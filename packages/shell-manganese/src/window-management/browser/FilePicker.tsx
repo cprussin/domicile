@@ -1,7 +1,7 @@
-import { Button } from "@domicile/component-library/Button";
-import { Field } from "@domicile/component-library/Field";
-import { Input } from "@domicile/component-library/Input";
-import { Kbd } from "@domicile/component-library/Kbd";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Field } from "@domicile-desktop/component-library/Field";
+import { Input } from "@domicile-desktop/component-library/Input";
+import { Kbd } from "@domicile-desktop/component-library/Kbd";
 import { ArrowBendLeftUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowBendLeftUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";

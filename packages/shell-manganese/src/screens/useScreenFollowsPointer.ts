@@ -1,4 +1,4 @@
-import type { Display } from "@domicile/component-library/display-source";
+import type { Display } from "@domicile-desktop/component-library/display-source";
 import { useEffect } from "react";
 import { WINDOW_FRAME } from "../window-management/WindowFrame";
 import { WindowAction } from "../window-management/window-state";

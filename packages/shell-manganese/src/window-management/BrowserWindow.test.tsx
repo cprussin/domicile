@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import { focusApp } from "@domicile/sdk/focus-app";
-import { registerElements } from "@domicile/sdk/register-elements";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { focusApp } from "@domicile-desktop/sdk/focus-app";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
@@ -16,7 +16,7 @@ import {
   WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
-} from "@domicile/sdk/webview-element";
+} from "@domicile-desktop/sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 

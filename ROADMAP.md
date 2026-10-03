@@ -194,7 +194,7 @@ The evidence for each of those is in the doc that made the claim —
 9. **Composable shells.** The config becomes a TS, JS or JSON module whose
    `Shell` export is the shell, built by `domicile` with no build of the
    user's own; manganese becomes a library of bar items; keybindings become
-   the shell's props; the `@domicile/*` packages go to npm. Not started.
+   the shell's props; the `@domicile-desktop/*` packages go to npm. Not started.
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
 ## In the engine fork — the agent on `crux`

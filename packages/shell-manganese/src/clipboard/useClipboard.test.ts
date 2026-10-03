@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/sdk/host-message";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { useClipboard } from "./useClipboard";

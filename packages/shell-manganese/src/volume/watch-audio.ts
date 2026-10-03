@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { AudioMessage } from "@domicile/sdk/host-message";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 
 import { watchShared } from "../host/watch-shared";
 

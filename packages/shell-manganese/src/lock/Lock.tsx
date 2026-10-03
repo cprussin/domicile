@@ -1,5 +1,5 @@
-import { Button } from "@domicile/component-library/Button";
-import { Input } from "@domicile/component-library/Input";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Input } from "@domicile-desktop/component-library/Input";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { useEffect, useRef, useState } from "react";

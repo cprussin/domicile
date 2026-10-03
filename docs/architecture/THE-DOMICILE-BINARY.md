@@ -109,7 +109,7 @@ thin enough to read.
   `.js` that imports a package) or a package (`my-shell`, `github:me/shell`)
   goes to the builder beside it, `libexec/domicile/builder`, which says its
   steps as JSON lines that `domicile` draws as a bar. A bundle, or one of
-  Domicile's own (`@domicile/manganese`, prebuilt under
+  Domicile's own (`@domicile-desktop/manganese`, prebuilt under
   `libexec/domicile/shells`), starts nothing. See
   [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
 

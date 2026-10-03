@@ -7,10 +7,10 @@
 // Everything else a desktop has is CSS and event handlers on top of exactly
 // this.
 
-import { connectToHost } from "@domicile/sdk/connect-to-host";
-import { reportDevicePixelRatio } from "@domicile/sdk/device-pixel-ratio";
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import { registerElements } from "@domicile/sdk/register-elements";
+import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
+import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
 
 /** The desktop, drawn into `root`: Domicile's empty `<body>`. */
 export const Shell = (root: HTMLElement): void => {

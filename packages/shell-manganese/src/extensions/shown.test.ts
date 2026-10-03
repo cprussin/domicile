@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Extension } from "@domicile/sdk/extension";
+import type { Extension } from "@domicile-desktop/sdk/extension";
 
 import { popupShown } from "./shown";
 

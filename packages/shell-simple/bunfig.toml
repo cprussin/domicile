@@ -1,2 +1,2 @@
 [test]
-preload = ["@domicile/test-support/preload"]
+preload = ["@domicile-desktop/test-support/preload"]

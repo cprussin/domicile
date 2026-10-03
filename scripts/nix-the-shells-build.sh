@@ -3,7 +3,7 @@
 #
 # The broadest thing in the `nix` group and the one that catches the most: a
 # shell is a built web page, so this reaches every vite config, every panda
-# codegen step and the whole `^build` edge from `@domicile/sdk`.
+# codegen step and the whole `^build` edge from `@domicile-desktop/sdk`.
 #
 # AND IT IS WHAT PROVES A REPIN. `nix build .#manganese .#simple` reaches
 # `domicileEngine`, which is `fetchurl` of exactly the url and hash in

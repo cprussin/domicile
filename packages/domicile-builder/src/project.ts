@@ -25,7 +25,7 @@ export const parseManifest = (text: string): Manifest =>
  * Domicile running it, and React, so a hook in the user's code and one in
  * manganese are the same React's.
  */
-const FROM_DOMICILE = /^(@domicile\/.+|react|react-dom)$/;
+const FROM_DOMICILE = /^(@domicile-desktop\/.+|react|react-dom)$/;
 
 /**
  * The directory whose `package.json` and `bun.lock` an entry's packages go

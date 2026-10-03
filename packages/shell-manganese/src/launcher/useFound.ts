@@ -1,4 +1,4 @@
-import type { FoundFilesMessage } from "@domicile/sdk/host-message";
+import type { FoundFilesMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**

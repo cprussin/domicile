@@ -8,7 +8,7 @@
 // rather than staying as a second, unexercised copy of a wire shape that can only
 // drift from the one the browser process actually writes.
 //
-// What is left has a caller that is not a page: `@domicile/e2e-harness` is a
+// What is left has a caller that is not a page: `@domicile-desktop/e2e-harness` is a
 // headless stand-in for a chrome that connects to the compositor's own socket
 // and speaks the JSON directly, because the thing it is there to assert is
 // what the *compositor* does. It shakes hands and it reports a density, and

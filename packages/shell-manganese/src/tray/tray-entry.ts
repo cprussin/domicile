@@ -1,5 +1,5 @@
-import type { Extension } from "@domicile/sdk/extension";
-import type { TrayItem } from "@domicile/sdk/tray";
+import type { Extension } from "@domicile-desktop/sdk/extension";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 
 import { shownInTray } from "../extensions/shown";
 import { arrange } from "./tray-order";

@@ -3,7 +3,7 @@ import type {
   Bookmark,
   DesktopEntry,
   FoundAppsMessage,
-} from "@domicile/sdk/host-message";
+} from "@domicile-desktop/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { useFoundApps } from "./useFoundApps";

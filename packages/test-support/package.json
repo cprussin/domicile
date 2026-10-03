@@ -25,7 +25,7 @@
     "src/**/*"
   ],
   "license": "MIT",
-  "name": "@domicile/test-support",
+  "name": "@domicile-desktop/test-support",
   "peerDependencies": {
     "react": "catalog:"
   },

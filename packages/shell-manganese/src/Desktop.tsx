@@ -1,7 +1,7 @@
-import { useDisplays } from "@domicile/component-library/DisplayProvider";
-import { createToastManager } from "@domicile/component-library/Toaster";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
+import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
+import { createToastManager } from "@domicile-desktop/component-library/Toaster";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useCallback, useMemo, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";

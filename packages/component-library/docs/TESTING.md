@@ -51,7 +51,7 @@ jest-dom builds it with `stringify(element.cloneNode(true))`, and bun's
 inspector used to answer that by walking a happy-dom node's property graph out
 through `ownerDocument` into the whole rendered tree: 190MB and five to nine
 seconds for one failed poll on the Field error popover, growing with the size
-of the document. `@domicile/test-support`'s preload now answers the inspection
+of the document. `@domicile-desktop/test-support`'s preload now answers the inspection
 with the node's own markup instead
 ([`node-inspection.ts`](/packages/test-support/src/node-inspection.ts)), so
 that charge is gone — a failed poll there measures 1ms. The reasons above

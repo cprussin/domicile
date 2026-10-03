@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createToastManager } from "@domicile/component-library/Toaster";
+import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { notification } from "./fixture";

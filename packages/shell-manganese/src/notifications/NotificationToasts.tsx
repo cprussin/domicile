@@ -1,6 +1,9 @@
-import type { ToastManager } from "@domicile/component-library/Toaster";
-import { Toaster, useToastManager } from "@domicile/component-library/Toaster";
-import type { Notification } from "@domicile/sdk/notification";
+import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
+import {
+  Toaster,
+  useToastManager,
+} from "@domicile-desktop/component-library/Toaster";
+import type { Notification } from "@domicile-desktop/sdk/notification";
 
 import { css } from "../../styled-system/css";
 import { TOP_BAR } from "../top-bar/TopBar";

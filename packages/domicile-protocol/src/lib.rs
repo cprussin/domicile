@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// outside shell, or a released binary someone upgrades one half of. That is
 /// when to start bumping this and writing down why. The rule to loosen then is
 /// written out three times, once per peer that has to apply it: [`negotiate`]
-/// here, `DomicileClient`'s welcome check in `@domicile/sdk`, and `greet`
+/// here, `DomicileClient`'s welcome check in `@domicile-desktop/sdk`, and `greet`
 /// in `domicile-test-chrome`.
 ///
 /// Meanwhile the `#[serde(default)]` on the newer fields below stays, and is
@@ -610,7 +610,7 @@ pub enum HostMessage {
     /// Not sent for the click that focuses a window: the click is the page's
     /// own event, it never reaches the compositor as anything but pointer
     /// input, and the shell has already decided by the time the seat moves.
-    /// See `APP_FOCUS_REQUESTED_EVENT` in `@domicile/sdk`, which is the
+    /// See `APP_FOCUS_REQUESTED_EVENT` in `@domicile-desktop/sdk`, which is the
     /// same question asked where the answer is known.
     FocusRequested { app_id: String },
 
@@ -1361,7 +1361,7 @@ pub fn negotiate(chrome_version: u32) -> Result<u32, VersionMismatch> {
 mod wire_names {
     use super::*;
 
-    /// The exact JSON `@domicile/sdk` puts on the wire for a theme the
+    /// The exact JSON `@domicile-desktop/sdk` puts on the wire for a theme the
     /// user picked off the toggle, spelled out.
     ///
     /// Here for [`the_desktop_size_the_sdk_sends_parses`]'s reason and with a
@@ -1432,7 +1432,7 @@ mod wire_names {
         );
     }
 
-    /// The exact JSON `@domicile/sdk` puts on the wire for the desktop
+    /// The exact JSON `@domicile-desktop/sdk` puts on the wire for the desktop
     /// size, spelled out.
     ///
     /// A second spelling, deliberately. Nothing checks that the TypeScript

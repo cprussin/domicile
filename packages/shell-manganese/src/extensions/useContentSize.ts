@@ -1,4 +1,4 @@
-import { WEBVIEW_CONTENT_SIZE_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_CONTENT_SIZE_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 /** The size a page's content wants, in CSS pixels. */

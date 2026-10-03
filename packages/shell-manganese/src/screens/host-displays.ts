@@ -1,9 +1,9 @@
 import type {
   Display,
   DisplaySource,
-} from "@domicile/component-library/display-source";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile/sdk/domicile-host";
+} from "@domicile-desktop/component-library/display-source";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
 
 /**
  * The desktop the host describes, as the component library wants to be told
@@ -11,7 +11,7 @@ import type { DomicileDisplay } from "@domicile/sdk/domicile-host";
  *
  * The whole of the adapter between the control channel and the design system,
  * and the reason `DisplaySource` is a port rather than the `DomicileClient`
- * itself: `@domicile/component-library` has no protocol dependency, so the
+ * itself: `@domicile-desktop/component-library` has no protocol dependency, so the
  * shell — which has both — is where the two meet.
  *
  * Built once per client and not per render. `DomicileClient.on` is a single

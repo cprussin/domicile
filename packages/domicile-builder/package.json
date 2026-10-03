@@ -3,7 +3,7 @@
     "domicile-builder": "./src/main.ts"
   },
   "dependencies": {
-    "@domicile/component-library": "workspace:*",
+    "@domicile-desktop/component-library": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "vite": "catalog:",
@@ -12,12 +12,12 @@
   "description": "Builds a shell module from a user's TypeScript or JavaScript entry: installs what it imports, bundles it against Domicile's own packages, and caches the result.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/manganese": "workspace:*",
+    "@domicile-desktop/manganese": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
   "license": "MIT",
-  "name": "@domicile/builder",
+  "name": "@domicile-desktop/builder",
   "private": true,
   "scripts": {
     "test:types": "tsc --noEmit",

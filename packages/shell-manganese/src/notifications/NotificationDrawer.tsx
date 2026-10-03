@@ -1,6 +1,6 @@
-import { Button } from "@domicile/component-library/Button";
-import { SlideOver } from "@domicile/component-library/SlideOver";
-import type { Notification } from "@domicile/sdk/notification";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { SlideOver } from "@domicile-desktop/component-library/SlideOver";
+import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
 

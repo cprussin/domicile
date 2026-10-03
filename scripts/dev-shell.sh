@@ -2,7 +2,7 @@
 # A shell, running in Domicile, rebuilt as you edit it.
 #
 #   ./scripts/dev-shell.sh manganese
-#   bun run --filter @domicile/manganese start:dev
+#   bun run --filter @domicile-desktop/manganese start:dev
 #
 # WHAT THIS REPLACED, AND WHY IT HAD TO. `start:dev` used to be `vite`: a dev
 # server, opened in whatever browser you had. That page has no compositor, no
@@ -114,7 +114,7 @@ cargo build -p domicile-launch --bin domicile \
 # `DOMICILE_PAGE` names the module, because `domicile`'s argument does and the
 # two are one rule: a directory is refused outright rather than searched for a
 # name the launcher no longer knows. `shell.js` is what the shell's own vite
-# config emits — `@domicile/component-library/vite-shell` pins the entry name
+# config emits — `@domicile-desktop/component-library/vite-shell` pins the entry name
 # so that something other than the shell can say it — so this is the one place
 # in the dev loop that has to know the convention, and it says so.
 #

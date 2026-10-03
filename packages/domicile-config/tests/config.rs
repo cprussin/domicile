@@ -1535,8 +1535,8 @@ fn a_displays_mode_must_fit_the_coordinate_space() {
 fn a_config_may_name_the_shell_domicile_runs() {
     // `domicile` reads it when it is given no shell; the compositor has no
     // use for it, and takes it without complaint.
-    let config = Config::parse(r#"{ "shell": "@domicile/manganese" }"#).unwrap();
-    assert_eq!(config.shell.as_deref(), Some("@domicile/manganese"));
+    let config = Config::parse(r#"{ "shell": "@domicile-desktop/manganese" }"#).unwrap();
+    assert_eq!(config.shell.as_deref(), Some("@domicile-desktop/manganese"));
 }
 
 #[test]

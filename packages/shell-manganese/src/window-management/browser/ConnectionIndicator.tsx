@@ -1,5 +1,5 @@
-import { Button } from "@domicile/component-library/Button";
-import { Popover } from "@domicile/component-library/Popover";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Popover } from "@domicile-desktop/component-library/Popover";
 import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";

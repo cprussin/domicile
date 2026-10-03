@@ -8,7 +8,7 @@
 # `components/domicile/common/display_transform.h` into
 # `mojom::DisplayTransform`, and the SDK reads the name back off
 # `DomicileDisplay.transform` through `displayTransformSchema` in
-# `display-transform.ts` in `@domicile/sdk`. Five enumerations of one
+# `display-transform.ts` in `@domicile-desktop/sdk`. Five enumerations of one
 # set, in Rust twice, C++, mojom and TypeScript.
 #
 # The sibling of `test-cursor-shapes-agree.sh`, and what drift costs here is

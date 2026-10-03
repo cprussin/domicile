@@ -1,15 +1,15 @@
-import { Button } from "@domicile/component-library/Button";
-import { ModalDialog } from "@domicile/component-library/ModalDialog";
-import { Select } from "@domicile/component-library/Select";
-import { Tabs } from "@domicile/component-library/Tabs";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import { Select } from "@domicile-desktop/component-library/Select";
+import { Tabs } from "@domicile-desktop/component-library/Tabs";
 import type {
   AudioCard,
   AudioChoice,
   AudioDevice,
   AudioStream,
-} from "@domicile/sdk/audio";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { AudioMessage } from "@domicile/sdk/host-message";
+} from "@domicile-desktop/sdk/audio";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
 
