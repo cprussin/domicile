@@ -8,6 +8,7 @@ import { grid, hstack } from "../../styled-system/patterns";
 import { Battery } from "../battery/Battery";
 import { Brightness } from "../brightness/Brightness";
 import { Clock } from "../clock/Clock";
+import { LauncherButton } from "../launcher/LauncherButton";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { Tray } from "../tray/Tray";
 import type { TrayOrder } from "../tray/useTrayOrder";
@@ -44,6 +45,8 @@ type Props = {
   mode: string;
   /** Open an extension's popup, or close the open one with `undefined`. */
   onOpenExtension: (id: string | undefined) => void;
+  /** Open the launcher. */
+  onOpenLauncher: () => void;
   /** Open the drawer of notifications. */
   onOpenNotifications: () => void;
   onSelectWorkspace: (name: string) => void;
@@ -62,19 +65,17 @@ type Props = {
 };
 
 /**
- * The bar across the top of the screen the chrome is on: the tray and the
- * workspaces, the clock, the volume, the brightness and the charge.
+ * The bar across the top of the screen the chrome is on: the launcher's
+ * button, the tray and the workspaces, the clock, the volume, the brightness
+ * and the charge.
  *
- * **It launches nothing.** Everything this desktop does is on a key, and two
- * buttons for two of those keys were a ranking nobody made — the terminal is
- * `mod+Return` and the launcher, which is what opens a window on a URL or a
- * search, is `mod+Space`. Both are where sway's config puts them and so where
- * a user of this desktop already looks. What is on the bar is what no key can
- * be pressed to ask: which workspace this is, what time it is, how much charge
- * is left, and which way round the desk is drawn.
+ * **The launcher's button is first, at the far start**, a little apart from
+ * the tray so it does not read as one of the tray's icons. It is the panel
+ * `mod+Space` opens, for a hand already on the pointer. The terminal has no
+ * button: it is `mod+Return`, where sway's config puts it.
  *
  * **The tray is left of the workspaces**, and it launches nothing of the
- * desktop's either: each icon is an application's StatusNotifierItem or an
+ * desktop's: each icon is an application's StatusNotifierItem or an
  * extension's toolbar button, in one row in the order the user dragged them
  * into, whose clicks are theirs and have no key.
  *
@@ -86,12 +87,9 @@ type Props = {
  * already in front of you rather than putting anything on it. Its slider
  * opens off the sun; the wheel over the sun moves it without opening.
  *
- * **The theme toggle is the desktop's other control here, and it is not a
- * launcher.** It changes what is already on screen rather than putting
- * something new on it,
- * which is the line the paragraph above draws — and there is no key to press
- * instead, because a theme is not a thing a desk does often enough to spend a
- * chord on. It has two positions rather than three: this bar *is* the system,
+ * **The theme toggle changes what is already on screen** rather than putting
+ * something new on it, and there is no key to press instead, because a theme
+ * is not a thing a desk does often enough to spend a chord on. It has two positions rather than three: this bar *is* the system,
  * so there is nothing above it for a `system` to follow. What a click does is
  * ask the compositor, which answers every page on the desk and hands the same
  * value to the settings portal the desk's GTK and Qt windows read — so the
@@ -111,8 +109,8 @@ type Props = {
  *
  * **The bell is last, at the far end**, because the drawer it opens slides
  * out from that edge: the control and what it opens are on the same side of
- * the screen. It is the other control here that is not a launcher — it opens
- * what the desk has already been told, rather than starting anything.
+ * the screen. It opens what the desk has already been told, rather than
+ * starting anything.
  *
  * The clock is in the middle of the *bar* rather than in the middle of what
  * the workspaces and the charge leave, which is what the three columns are
@@ -126,6 +124,7 @@ export const TopBar = ({
   focused,
   mode,
   onOpenExtension,
+  onOpenLauncher,
   onOpenNotifications,
   onSelectWorkspace,
   openedExtension,
@@ -137,6 +136,7 @@ export const TopBar = ({
 }: Props) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
     <div className={startStyles}>
+      <LauncherButton onOpen={onOpenLauncher} />
       <Tray
         domicile={domicile}
         extensions={extensions}
