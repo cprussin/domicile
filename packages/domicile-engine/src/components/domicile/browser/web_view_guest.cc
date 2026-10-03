@@ -31,9 +31,11 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/common/stop_find_action.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
@@ -989,6 +991,7 @@ void WebViewGuest::DidUpdateFaviconURL(
 }
 
 void WebViewGuest::PrimaryPageChanged(content::Page& page) {
+  EnablePreferredSize();
   EndFind();
   if (!reported_favicon_.is_empty()) {
     reported_favicon_ = GURL();
@@ -1200,6 +1203,20 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
 void WebViewGuest::CloseContents(content::WebContents* source) {
   LOG(INFO) << "domicile: a <webview>'s page asked to close.";
   client_->CloseRequested();
+}
+
+void WebViewGuest::EnablePreferredSize() {
+  LOG(INFO) << "domicile: asked a <webview>'s page for its content size.";
+  guest_contents_->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->EnablePreferredSizeMode();
+}
+
+void WebViewGuest::UpdatePreferredSize(content::WebContents* web_contents,
+                                       const gfx::Size& pref_size) {
+  LOG(INFO) << "domicile: a <webview>'s page reported its content size, "
+            << pref_size.ToString() << ".";
+  client_->ContentSizeChanged(pref_size.width(), pref_size.height());
 }
 
 void WebViewGuest::RequestFocus() {
