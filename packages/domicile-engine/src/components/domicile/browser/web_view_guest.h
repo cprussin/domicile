@@ -149,6 +149,20 @@ class WebViewGuest : public mojom::WebViewGuest,
       const base::FilePath& suggested_path,
       base::OnceCallback<void(std::optional<base::FilePath>)> chosen);
 
+  // Ask the shell for files on behalf of a dialog the browser would have
+  // drawn for this guest's page -- the PDF viewer's save, a page's
+  // showSaveFilePicker(). See
+  // //chrome/browser/domicile/domicile_file_dialogs.h.
+  //
+  // `chosen` gets the absolute paths, as many as `mode` takes, or nothing for
+  // a question the shell canceled or never answered.
+  void ChooseFiles(
+      mojom::WebViewFileChooserMode mode,
+      const std::vector<std::string>& accept,
+      const base::FilePath& suggested_path,
+      base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
+          chosen);
+
   // WHAT chrome.tabs ASKS OF A BROWSER WINDOW, which is the shell's to carry
   // out: a window in front, a window closed, a second window opened. Each is
   // the element's event -- `domicile-focus-request`, `domicile-close`,

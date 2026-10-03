@@ -12,6 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "components/domicile/mojom/web_view_guest.mojom-forward.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace domicile {
 
@@ -57,6 +58,22 @@ bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count);
 // dialog falls back to all files when no filter survives.
 std::vector<std::string> AcceptedExtensions(
     const std::vector<std::u16string>& accept_types);
+
+// The picker that answers a dialog of `type`: the same four a page's
+// `<input type="file">` is asked as. See
+// //chrome/browser/domicile/domicile_file_dialogs.h for which dialogs.
+//
+// SELECT_NONE is no dialog, and nothing opens one.
+mojom::WebViewFileChooserMode ModeForDialog(ui::SelectFileDialog::Type type);
+
+// The file extensions a dialog's `types` name, lower case, as
+// AcceptedExtensions spells them.
+//
+// Empty -- anything -- when there are no types, and when the dialog keeps its
+// "all files" filter: a picker has no filters to switch between, so a dialog
+// that would let the user pick any file is one whose picker shows every file.
+std::vector<std::string> DialogExtensions(
+    const ui::SelectFileDialog::FileTypeInfo* types);
 
 }  // namespace domicile
 
