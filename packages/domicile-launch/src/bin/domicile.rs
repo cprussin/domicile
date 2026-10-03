@@ -33,6 +33,7 @@ use domicile_launch::control_socket::{
 };
 use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
+use domicile_launch::notification;
 use domicile_launch::platform::platform;
 use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
@@ -800,12 +801,30 @@ fn watching_the_config(
         });
         match reloaded {
             Ok(()) => eprintln!("domicile: {} reloaded", module_config.display()),
-            Err(why) => eprintln!(
-                "domicile: {} did not reload, and the desk is as it was: {why}",
-                module_config.display()
-            ),
+            Err(why) => {
+                eprintln!(
+                    "domicile: {} did not reload, and the desk is as it was: {why}",
+                    module_config.display()
+                );
+                say_on_the_desk(&module_config, &why);
+            }
         }
     })
+}
+
+/// Say a reload failed as a notification, because the user is looking at the
+/// desk and not at the terminal it was started from. Only on stderr when it
+/// cannot be said: the line above already holds what went wrong.
+fn say_on_the_desk(config: &Path, why: &str) {
+    let name = config
+        .file_name()
+        .unwrap_or(config.as_os_str())
+        .to_string_lossy();
+    let said = notification::session_bus()
+        .and_then(|bus| notification::notify(&bus, &format!("{name} did not reload"), why));
+    if let Err(unsaid) = said {
+        eprintln!("domicile: cannot say so on the desk: {unsaid}");
+    }
 }
 
 /// Evaluate `config` again and put the result at `evaluated`, whole: written

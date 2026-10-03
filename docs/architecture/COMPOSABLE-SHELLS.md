@@ -134,7 +134,9 @@ only builds.
   `node_modules` and dot directories: an edit is evaluated again into
   `<runtime>/config.json` — the stable path the compositor was handed, and
   watches as it watches any config — and, where the config is the shell, built
-  again and loaded. A failure is said, and the desk stays as it was.
+  again and loaded. A failure is said on stderr and as a critical notification
+  (`notification.rs`: a `Notify` to the compositor on the session bus, given up
+  on after two seconds), and the desk stays as it was.
 
 ### Keybindings are the shell's
 
@@ -247,7 +249,8 @@ Phase 3: the config.
 - [x] the TS config evaluated to JSON by the builder
 - [x] `domicile` watches a module config and reloads both halves
       (`config_watch`, `test-a-config-module-reloads.sh`)
-- [ ] a failed reload as a notification, not only a line on stderr
+- [x] a failed reload as a notification, not only a line on stderr
+      (`notification.rs`)
 - [ ] `nix/home-manager.nix` writes `domicile.json`, or builds a TS config
       directory with `bun2nix`
 - [ ] TOML deleted. KEYBINDINGS.md, THE-DOMICILE-BINARY.md, WRITING-A-SHELL.md
