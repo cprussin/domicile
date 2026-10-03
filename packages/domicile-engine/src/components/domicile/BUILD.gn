@@ -299,6 +299,38 @@ source_set("web_view_guest") {
   ]
 }
 
+# Whether an address is a page Chrome serves itself, which no <webview> is
+# given. Its own target beside :browser_page_throttle for the reason
+# :file_choice is one: it is the part of the refusal that needs no browser,
+# which is where its tests are.
+source_set("browser_pages") {
+  sources = [
+    "browser/browser_pages.cc",
+    "browser/browser_pages.h",
+  ]
+
+  public_deps = [ "//url" ]
+
+  deps = [ "//content/public/common" ]
+}
+
+# The refusal itself: a navigation throttle on every <webview>'s guest. //chrome
+# adds it with the rest of its throttles; it is here because a guest is.
+source_set("browser_page_throttle") {
+  sources = [
+    "browser/browser_page_throttle.cc",
+    "browser/browser_page_throttle.h",
+  ]
+
+  public_deps = [ "//content/public/browser" ]
+
+  deps = [
+    ":browser_pages",
+    ":web_view_guest",
+    "//base",
+  ]
+}
+
 # The keymap the browser process decodes a key press with.
 #
 # Its own target beside :control_channel rather than part of it, for the reason
@@ -457,6 +489,7 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "browser/browser_pages_unittest.cc",
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
     "browser/desk_geometry_unittest.cc",
@@ -494,6 +527,7 @@ source_set("unit_tests") {
 
   deps = [
     ":browser",
+    ":browser_pages",
     ":color_scheme",
     ":command_protocol",
     ":cursor_shape",
