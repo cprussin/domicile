@@ -25,51 +25,28 @@ const L = 38;
 const R = 19;
 const X = 45;
 
-/** A config of a few of manganese's bindings, as the SDK delivers it. */
-const CONFIG = {
-  keybindings: new Map([["default", []]]),
-  keys: new Map(),
-  shells: new Map([
-    [
-      "manganese",
-      {
-        keybindings: new Map([
-          [
-            "default",
-            [
-              {
-                action: KeyAction.SendShell(["launcher"]),
-                shortcut: meta(SPACE),
-              },
-              {
-                action: KeyAction.SendShell(["focus", "right"]),
-                shortcut: meta(L),
-              },
-              { action: KeyAction.Mode("resize"), shortcut: meta(R) },
-              {
-                action: KeyAction.SendShell(["exec", "firefox"]),
-                shortcut: meta(X),
-              },
-            ],
-          ],
-          [
-            "resize",
-            [
-              {
-                action: KeyAction.SendShell(["resize", "grow", "right"]),
-                shortcut: meta(L),
-              },
-            ],
-          ],
-        ]),
-        options: {},
-      },
-    ],
-  ]),
+/** A few of manganese's bindings, as a desktop binds them. */
+const KEYS: ShellKeybindings = {
+  keybindings: {
+    "Meta+l": KeyAction.SendShell(["focus", "right"]),
+    "Meta+r": KeyAction.Mode("resize"),
+    "Meta+space": KeyAction.SendShell(["launcher"]),
+    "Meta+x": KeyAction.SendShell(["exec", "firefox"]),
+  },
+  modes: {
+    resize: { "Meta+l": KeyAction.SendShell(["resize", "grow", "right"]) },
+  },
 };
 
-/** No keys of the shell's own, so the config's are every key. */
-const NONE: ShellKeybindings = {};
+/** The keyboard those keys are on, as the compositor describes it. */
+const KEYBOARD = {
+  keys: new Map([
+    ["l", L],
+    ["r", R],
+    ["space", SPACE],
+    ["x", X],
+  ]),
+};
 
 /**
  * A stand-in for the client: it takes the handlers the SDK registers and lets
@@ -96,7 +73,7 @@ const client = () => {
   };
 };
 
-/** The hook over a client that has been sent {@link CONFIG}. */
+/** The hook over a client that has been sent {@link KEYBOARD}. */
 const bound = (launcherOpen = false) => {
   const { domicile, says } = client();
   const acted: Action[] = [];
@@ -106,7 +83,7 @@ const bound = (launcherOpen = false) => {
     ({ mode }: { mode: string }) => {
       useKeybindings({
         domicile,
-        keybindings: NONE,
+        keybindings: KEYS,
         launcherOpen,
         mode,
         onAction: (action) => {
@@ -122,7 +99,7 @@ const bound = (launcherOpen = false) => {
     },
     { initialProps: { mode: "default" } },
   );
-  says("shell_config", CONFIG);
+  says("shell_config", KEYBOARD);
   return { acted, modes, reported, rerender, says };
 };
 

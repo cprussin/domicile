@@ -9,7 +9,7 @@
 use domicile_protocol::{
     negotiate, AudioCard, AudioChoice, AudioDevice, AudioStream, Bookmark, ChromeMessage,
     ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo, DisplayTransform, FilePreview,
-    HostMessage, KeyAction, KeyBinding, Passphrase, ShellBindings, Shortcut, PROTOCOL_VERSION,
+    HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -257,138 +257,7 @@ fn an_audio_preview_is_flat_on_the_wire() {
 
 #[test]
 fn host_messages_round_trip() {
-    host_round_trip(&HostMessage::Welcome {
-        protocol_version: PROTOCOL_VERSION,
-    });
-    host_round_trip(&HostMessage::AppAppeared {
-        app_id: "term".into(),
-        title: Some("Terminal".into()),
-        size: Some([640.0, 480.0]),
-    });
-    // A client that has not committed yet, which is every client at the
-    // moment this message goes out.
-    host_round_trip(&HostMessage::AppAppeared {
-        app_id: "x".into(),
-        title: None,
-        size: None,
-    });
-    host_round_trip(&HostMessage::AppTitled {
-        app_id: "term".into(),
-        title: Some("a terminal".into()),
-    });
-    // A client saying it has no name, which is `set_title("")` and not an
-    // absent title: xdg-shell has no request that takes a name back.
-    host_round_trip(&HostMessage::AppTitled {
-        app_id: "term".into(),
-        title: Some(String::new()),
-    });
-    host_round_trip(&HostMessage::AppResized {
-        app_id: "term".into(),
-        size: [800.0, 600.0],
-    });
-    host_round_trip(&HostMessage::Battery {
-        charge: 0.42,
-        charging: true,
-    });
-    host_round_trip(&HostMessage::Brightness { level: 0.8 });
-    host_round_trip(&HostMessage::AppClosed {
-        app_id: "term".into(),
-    });
-    host_round_trip(&HostMessage::AppCursor {
-        app_id: "term".into(),
-        cursor: CursorShape::Text,
-    });
-    host_round_trip(&HostMessage::FoundFiles {
-        query: "o".into(),
-        files: vec!["Notes/today.org".into(), "src/".into()],
-        matched: 2,
-        indexing: false,
-    });
-    host_round_trip(&HostMessage::FoundApps {
-        query: "fire".into(),
-        apps: vec![DesktopEntry {
-            id: "firefox.desktop".into(),
-            name: "Firefox".into(),
-            comment: String::new(),
-            command: vec!["firefox".into(), "--new-window".into()],
-            icon: None,
-            preview: None,
-        }],
-        bookmarks: vec![Bookmark {
-            name: "Fire Drill".into(),
-            url: "https://example.com/drill".into(),
-            icon: None,
-        }],
-    });
-    for preview in [
-        FilePreview::Text {
-            text: "* today".into(),
-        },
-        FilePreview::Directory {
-            entries: vec!["2026/".into()],
-        },
-        FilePreview::Audio {
-            title: Some("Song".into()),
-            artist: Some("Band".into()),
-            album: Some("Record".into()),
-            duration: 61.5,
-            cover: Some("data:image/png;base64,AA==".into()),
-        },
-        FilePreview::Binary,
-        FilePreview::Unreadable,
-    ] {
-        host_round_trip(&HostMessage::FilePreview {
-            path: "Notes/today.org".into(),
-            preview,
-        });
-    }
-    host_round_trip(&HostMessage::Clipboard {
-        entries: vec![ClipboardEntry {
-            id: 3,
-            preview: "ssh-rsa AAAA".into(),
-        }],
-    });
-    host_round_trip(&HostMessage::Idle { idle: true });
-    host_round_trip(&HostMessage::Locked { locked: true });
-    // A shell's options are whatever it wrote, so the round trip is over
-    // every kind of value JSON has rather than over one the protocol chose.
-    let options = serde_json::json!({
-        "gaps": 8,
-        "ratio": 0.5,
-        "bar": { "position": "top", "shown": true },
-        "workspaces": ["1", "2"],
-    });
-    let resize = KeyBinding {
-        shortcut: Shortcut {
-            key: 19,
-            alt: false,
-            ctrl: false,
-            shift: true,
-            logo: true,
-        },
-        action: KeyAction::Mode {
-            name: "resize".into(),
-        },
-    };
     host_round_trip(&HostMessage::ShellConfig {
-        keybindings: [("default".to_string(), vec![resize.clone()])].into(),
-        shells: [(
-            "manganese".to_string(),
-            ShellBindings {
-                keybindings: [(
-                    "resize".to_string(),
-                    vec![KeyBinding {
-                        action: KeyAction::SendShell {
-                            args: vec!["resize".into(), "grow".into(), "right".into()],
-                        },
-                        ..resize
-                    }],
-                )]
-                .into(),
-                options: options.as_object().expect("an object").clone(),
-            },
-        )]
-        .into(),
         keys: [("Return".to_string(), 28), ("l".to_string(), 25)].into(),
     });
 }

@@ -12,8 +12,7 @@ use std::thread;
 use domicile_host::audio::Audio;
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
-    ChromeMessage, HostMessage, KeyAction, KeyBinding, Notification, Shortcut, Theme, TrayItem,
-    Urgency, PROTOCOL_VERSION,
+    ChromeMessage, HostMessage, Notification, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -256,32 +255,15 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
 }
 
 #[test]
-fn the_keys_the_config_binds_ride_with_the_handshake() {
-    // A shell that reloads has a new page with no bindings in it, and the
-    // config is not going to be edited again to tell it. Right after the
-    // keymap, which is the layout every shortcut in it was resolved against.
+fn the_keyboard_rides_with_the_handshake() {
+    // A shell that reloads has a new page with no keys resolved in it, and
+    // the keyboard is not going to change again to tell it. Right after the
+    // keymap, which is what the table was read off.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
-    let keybindings = [(
-        "default".to_string(),
-        vec![KeyBinding {
-            shortcut: Shortcut {
-                key: 28,
-                alt: false,
-                ctrl: false,
-                shift: false,
-                logo: true,
-            },
-            action: KeyAction::SendShell {
-                args: vec!["terminal".into()],
-            },
-        }],
-    )];
-    session.host_mut().set_shell_config(
-        keybindings.clone().into(),
-        [].into(),
-        [("Return".to_string(), 28)].into(),
-    );
+    session
+        .host_mut()
+        .set_shell_config([("Return".to_string(), 28)].into());
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
@@ -294,8 +276,6 @@ fn the_keys_the_config_binds_ride_with_the_handshake() {
     assert_eq!(
         out.get(keymap_at + 1),
         Some(&HostMessage::ShellConfig {
-            keybindings: keybindings.into(),
-            shells: [].into(),
             keys: [("Return".to_string(), 28)].into(),
         })
     );

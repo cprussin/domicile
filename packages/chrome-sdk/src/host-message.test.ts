@@ -42,7 +42,6 @@ import {
   shortcut,
   tray,
 } from "./host-message";
-import { KeyAction } from "./key-action";
 
 /** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
 type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
@@ -736,101 +735,15 @@ describe("the keys the config binds", () => {
       config: JSON.stringify(config),
     }) as DomicileShellConfigEvent;
 
-  const META_L = { alt: false, ctrl: false, key: 38, logo: true, shift: false };
-
-  it("arrives by mode, each chord under the web's names and each action built", () => {
+  it("arrives as a table of keysyms and the keys they are on", () => {
     expect(
       shellConfig(
-        configEvent({
-          keybindings: {
-            default: [
-              {
-                action: { args: ["terminal"], type: "send_shell" },
-                shortcut: META_L,
-              },
-            ],
-            resize: [
-              { action: { name: "default", type: "mode" }, shortcut: META_L },
-            ],
-          },
-          keys: { l: 38, Return: 28 },
-          shells: {
-            manganese: {
-              keybindings: {
-                default: [
-                  {
-                    action: { args: ["focus", "right"], type: "send_shell" },
-                    shortcut: META_L,
-                  },
-                ],
-              },
-              options: { gaps: 8 },
-            },
-          },
-          type: "shell_config",
-        }),
+        configEvent({ keys: { l: 38, Return: 28 }, type: "shell_config" }),
       ),
     ).toStrictEqual({
-      keybindings: new Map([
-        [
-          "default",
-          [
-            {
-              action: KeyAction.SendShell(["terminal"]),
-              shortcut: {
-                altKey: false,
-                ctrlKey: false,
-                keycode: 38,
-                metaKey: true,
-                shiftKey: false,
-              },
-            },
-          ],
-        ],
-        [
-          "resize",
-          [
-            {
-              action: KeyAction.Mode("default"),
-              shortcut: {
-                altKey: false,
-                ctrlKey: false,
-                keycode: 38,
-                metaKey: true,
-                shiftKey: false,
-              },
-            },
-          ],
-        ],
-      ]),
       keys: new Map([
         ["Return", 28],
         ["l", 38],
-      ]),
-      shells: new Map([
-        [
-          "manganese",
-          {
-            keybindings: new Map([
-              [
-                "default",
-                [
-                  {
-                    action: KeyAction.SendShell(["focus", "right"]),
-                    shortcut: {
-                      altKey: false,
-                      ctrlKey: false,
-                      keycode: 38,
-                      metaKey: true,
-                      shiftKey: false,
-                    },
-                  },
-                ],
-              ],
-            ]),
-            options: { gaps: 8 },
-          },
-        ],
       ]),
     });
   });
@@ -840,7 +753,7 @@ describe("the keys the config binds", () => {
     // thing that does.
     expect(() =>
       shellConfig(
-        configEvent({ keybindings: {}, shells: {}, type: "shell_config" }),
+        configEvent({ keys: { Return: "28" }, type: "shell_config" }),
       ),
     ).toThrow();
   });

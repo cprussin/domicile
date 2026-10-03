@@ -742,16 +742,15 @@ export type DomicileLockedEvent = Event & {
 };
 
 /**
- * The keys the config binds, and what it tells each shell besides.
+ * The keyboard, for the keys a shell binds: every keysym it can type and the
+ * key it is on.
  *
  * **A string, and JSON in it.** The compositor's `shell_config` line, exactly
- * as it was sent: each shell's `options` table is whatever that shell's config
- * said, and WebIDL has no type for a value nobody has written down. So the
- * engine forwards the line without reading it, and `host-message.ts` is the
- * first thing that does.
+ * as it was sent: the engine forwards the line without reading it, and
+ * `host-message.ts` is the first thing that does.
  *
  * Pushed when this page connects and again whenever a reload of the config
- * moves the bindings, the shells' tables or the keyboard they resolve against.
+ * moves the keyboard.
  */
 export type DomicileShellConfigEvent = Event & {
   readonly config: string;

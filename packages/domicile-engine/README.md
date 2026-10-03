@@ -208,9 +208,10 @@ reads the message and the SDK no longer calls the method; taking the member out
 of the IDL is an engine change, and an engine change is a release.
 
 `shell_config` is the one inbound member relayed as a string: the page's
-`shellconfig` event carries the compositor's line verbatim as `config`. A
-shell's `options` are whatever its config says, which WebIDL cannot type, so
-the SDK parses it — and a keybinding added to the config costs no release.
+`shellconfig` event carries the compositor's line verbatim as `config`, and
+the SDK parses it. It carried a shell's freeform `options` once, which WebIDL
+cannot type; it carries the keyboard now, and what it says can change without
+a release.
 
 **The tray is not the control channel.** `window.domicile`'s `extensions`
 event and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,

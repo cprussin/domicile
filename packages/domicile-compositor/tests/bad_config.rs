@@ -70,30 +70,24 @@ fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
     );
 }
 
-/// A desk that binds a keysym its keyboard cannot type does not come up, the
-/// way one whose keyboard will not compile does not, and says which keysym.
-///
-/// The config parses: whether `Greek_alpha` is on a key is a question only the
-/// keymap answers, and the keymap is the compositor's.
+/// A desk that still binds keys in its config does not come up, and says
+/// which table: keys are a shell's props now, and a table read for keys
+/// nothing answers would be a desk whose keys silently do nothing.
 #[test]
-fn a_keysym_the_keyboard_cannot_type_is_a_sentence_that_names_it() {
+fn a_table_of_keys_is_a_sentence_that_names_it() {
     let directory = tempfile::tempdir().expect("a directory");
     let config = directory.path().join("domicile.toml");
     std::fs::write(
         &config,
-        "[keybindings]\n\"Meta+Greek_alpha\" = \"send-shell x\"\n",
+        "[keybindings]\n\"Meta+Return\" = \"send-shell terminal\"\n",
     )
     .expect("the config");
 
     let said = refusal(&config);
 
     assert!(
-        said.contains("Greek_alpha"),
-        "it should name the keysym: {said}"
-    );
-    assert!(
-        said.contains("[keybindings]"),
-        "and the table it is in: {said}"
+        said.contains("keybindings"),
+        "it should name the table: {said}"
     );
 }
 

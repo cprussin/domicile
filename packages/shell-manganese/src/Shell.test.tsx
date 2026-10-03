@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
-import type {
-  Keybinding,
-  ShellConfigMessage,
-} from "@domicile/chrome-sdk/host-message";
+import type { ShellConfigMessage } from "@domicile/chrome-sdk/host-message";
 import { KeyAction } from "@domicile/chrome-sdk/key-action";
 import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
@@ -239,8 +236,8 @@ let domicile: FakeDomicile;
 const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
   topBar?: TopBarLayout,
-  keybindings: ShellKeybindings = {},
-  config: ShellConfigMessage = MANGANESE_CONFIG,
+  keybindings: ShellKeybindings = MANGANESE_KEYS,
+  config: ShellConfigMessage = KEYBOARD,
 ) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
@@ -258,8 +255,8 @@ const renderingShell = (
       topBar={topBar}
     />,
   );
-  // The config's keys, which the compositor sends as the page connects. The
-  // shell's own default keys are left off above, so these are every key.
+  // The keyboard the keys are resolved on, which the compositor sends as the
+  // page connects.
   domicile.emit("shell_config", config);
   return rendered;
 };
@@ -336,22 +333,22 @@ const keyOf = (keysym: string): readonly [code: string, keycode: number] => {
   }
 };
 
-/** One line of the config: Meta, Shift if `shift`, the keysym, and the action. */
-const line = (keysym: string, shift: boolean, action: string): Keybinding => {
+/**
+ * One binding, as the README's sample writes it: Meta, Shift if `shift`, the
+ * keysym, and the action in the config's old words.
+ */
+const line = (
+  keysym: string,
+  shift: boolean,
+  action: string,
+): readonly [chord: string, action: KeyAction] => {
   const [verb = "", ...rest] = action.split(" ");
-  return {
-    action:
-      verb === "mode"
-        ? KeyAction.Mode(rest.join(" "))
-        : KeyAction.SendShell(rest),
-    shortcut: {
-      altKey: false,
-      ctrlKey: false,
-      keycode: keyOf(keysym)[1],
-      metaKey: true,
-      shiftKey: shift,
-    },
-  };
+  return [
+    `Meta+${shift ? "Shift+" : ""}${keysym}`,
+    verb === "mode"
+      ? KeyAction.Mode(rest.join(" "))
+      : KeyAction.SendShell(rest),
+  ];
 };
 
 const DIRECTIONS = [
@@ -383,70 +380,61 @@ const WORKSPACE_KEYS = [
  * resolved every keysym: the bindings manganese shipped hard-coded before they
  * moved into the config.
  */
-const MANGANESE_CONFIG: ShellConfigMessage = {
-  keybindings: new Map([["default", []]]),
-  keys: new Map(),
-  shells: new Map([
-    [
-      "manganese",
-      {
-        keybindings: new Map([
-          [
-            "default",
-            [
-              line("Return", false, "send-shell terminal"),
-              line("q", true, "send-shell kill"),
-              line("Return", true, "send-shell lock"),
-              line("space", false, "send-shell launcher"),
-              line("d", false, "send-shell launcher"),
-              ...DIRECTIONS.map(([keysym, way]) =>
-                line(keysym, false, `send-shell focus ${way}`),
-              ),
-              ...DIRECTIONS.map(([keysym, way]) =>
-                line(keysym, true, `send-shell move ${way}`),
-              ),
-              line("v", true, "send-shell clipboard"),
-              line("b", false, "send-shell split h"),
-              line("v", false, "send-shell split v"),
-              line("s", false, "send-shell layout stacking"),
-              line("w", false, "send-shell layout tabbed"),
-              line("e", false, "send-shell layout toggle split"),
-              line("a", false, "send-shell focus parent"),
-              line("a", true, "send-shell focus child"),
-              line("f", false, "send-shell fullscreen toggle"),
-              line("f", true, "send-shell fullscreen toggle global"),
-              line("Tab", false, "send-shell focus mode_toggle"),
-              line("Tab", true, "send-shell floating toggle"),
-              line("minus", false, "send-shell scratchpad show"),
-              line("minus", true, "send-shell move scratchpad"),
-              line("r", false, "mode resize"),
-              ...WORKSPACE_KEYS.map((keysym, at) =>
-                line(keysym, false, `send-shell workspace ${String(at + 1)}`),
-              ),
-              ...WORKSPACE_KEYS.map((keysym, at) =>
-                line(
-                  keysym,
-                  true,
-                  `send-shell move container to workspace ${String(at + 1)}`,
-                ),
-              ),
-            ],
-          ],
-          [
-            "resize",
-            [
-              ...DIRECTIONS.map(([keysym, way]) =>
-                line(keysym, false, `send-shell resize grow ${way}`),
-              ),
-              line("Return", false, "mode default"),
-              line("Escape", false, "mode default"),
-            ],
-          ],
-        ]),
-        options: {},
-      },
-    ],
+const MANGANESE_KEYS: ShellKeybindings = {
+  keybindings: Object.fromEntries([
+    line("Return", false, "send-shell terminal"),
+    line("q", true, "send-shell kill"),
+    line("Return", true, "send-shell lock"),
+    line("space", false, "send-shell launcher"),
+    line("d", false, "send-shell launcher"),
+    ...DIRECTIONS.map(([keysym, way]) =>
+      line(keysym, false, `send-shell focus ${way}`),
+    ),
+    ...DIRECTIONS.map(([keysym, way]) =>
+      line(keysym, true, `send-shell move ${way}`),
+    ),
+    line("v", true, "send-shell clipboard"),
+    line("b", false, "send-shell split h"),
+    line("v", false, "send-shell split v"),
+    line("s", false, "send-shell layout stacking"),
+    line("w", false, "send-shell layout tabbed"),
+    line("e", false, "send-shell layout toggle split"),
+    line("a", false, "send-shell focus parent"),
+    line("a", true, "send-shell focus child"),
+    line("f", false, "send-shell fullscreen toggle"),
+    line("f", true, "send-shell fullscreen toggle global"),
+    line("Tab", false, "send-shell focus mode_toggle"),
+    line("Tab", true, "send-shell floating toggle"),
+    line("minus", false, "send-shell scratchpad show"),
+    line("minus", true, "send-shell move scratchpad"),
+    line("r", false, "mode resize"),
+    ...WORKSPACE_KEYS.map((keysym, at) =>
+      line(keysym, false, `send-shell workspace ${String(at + 1)}`),
+    ),
+    ...WORKSPACE_KEYS.map((keysym, at) =>
+      line(
+        keysym,
+        true,
+        `send-shell move container to workspace ${String(at + 1)}`,
+      ),
+    ),
   ]),
+  modes: {
+    resize: Object.fromEntries([
+      ...DIRECTIONS.map(([keysym, way]) =>
+        line(keysym, false, `send-shell resize grow ${way}`),
+      ),
+      line("Return", false, "mode default"),
+      line("Escape", false, "mode default"),
+    ]),
+  },
+};
+
+/** The keyboard these tests type on: every keysym in {@link KEYS}. */
+const KEYBOARD: ShellConfigMessage = {
+  keys: new Map(
+    Object.entries(KEYS).map(([keysym, [, keycode]]) => [keysym, keycode]),
+  ),
 };
 
 /**
@@ -1803,26 +1791,8 @@ describe("Shell", () => {
       ]);
     });
 
-    it("answers the keys the config binds rather than any of its own", () => {
-      // A reload of the config is the whole table again, and what it says
-      // the key does is what it does.
-      renderShell();
-      domicile.emit("shell_config", {
-        keybindings: new Map([
-          ["default", [line("Return", false, "send-shell clipboard")]],
-        ]),
-        shells: new Map(),
-      });
-
-      press("Return");
-
-      expect(screen.getByRole("dialog")).toBeVisible();
-      expect(domicile.calls).not.toContainEqual(["spawn", ["kitty"]]);
-    });
-
-    it("binds sway's keys itself when the config binds none", () => {
-      // Every keysym the defaults name, on a key of its own: the keyboard the
-      // compositor describes alongside a config with no keys in it.
+    it("binds sway's keys when it is given none", () => {
+      // Every keysym the defaults name, on a key of its own.
       const keysyms = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)]
         .flatMap(Object.keys)
         .map((chord) => chord.split("+").at(-1) ?? "");
@@ -1833,11 +1803,7 @@ describe("Shell", () => {
         [LEFT],
         undefined,
         { keybindings: DEFAULT_KEYBINDINGS, modes: DEFAULT_MODES },
-        {
-          keybindings: new Map([["default", []]]),
-          keys,
-          shells: new Map(),
-        },
+        { keys },
       );
 
       domicile.emit("shortcut", {

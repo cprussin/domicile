@@ -16,7 +16,7 @@
 //! What is intentionally missing here (it needs a GPU and a display): anything
 //! about what the engine draws.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
 use std::os::fd::OwnedFd;
@@ -165,7 +165,6 @@ use crate::peer_process::peer_pid;
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
-use crate::shell_config::Resolved;
 use crate::timing_window::TimingWindow;
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
@@ -277,13 +276,14 @@ mod grepped {
     /// desk that kept its layout deliberately from one where the save never
     /// arrived.
     pub const KEYMAP_REFUSED: &str = "keeping the keymap the desktop is typing on";
-    /// `tests/keybindings.rs::a_keysym_the_reload_cannot_resolve_leaves_the_shells_their_keys`:
-    /// the refusing arm of
-    /// [`rebind_the_keys`](crate::DomicileCompositor::rebind_the_keys).
+    /// The refusing arm of
+    /// [`rebind_the_keys`](crate::DomicileCompositor::rebind_the_keys): a
+    /// keyboard that will not compile, which leaves the shells the table they
+    /// were last told.
     ///
     /// [`KEYMAP_REFUSED`]'s arrangement and its reason: a reload that refuses
     /// the keys sends no message, so this line is all that tells a desk that
-    /// kept its bindings deliberately from one where the save never arrived.
+    /// kept its keys deliberately from one where the save never arrived.
     pub const KEYS_REFUSED: &str = "keeping the keys the shells were last told";
 }
 
@@ -4514,7 +4514,7 @@ impl DomicileCompositor {
     ///
     /// [`retype_the_desktop`]: DomicileCompositor::retype_the_desktop
     fn rebind_the_keys(&mut self) {
-        match shell_config::resolve(self.config.current()) {
+        match shell_config::keys(self.config.current()) {
             Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
             Ok(resolved) => {
                 // Retained and then broadcast, in that order, for the reason
@@ -6635,10 +6635,10 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     );
 }
 
-/// Give the host the keys a config binds and what each shell is told, for
-/// every chrome that connects after.
-fn hand_over_the_keys(host: &mut Host, resolved: Resolved) {
-    host.set_shell_config(resolved.keybindings, resolved.shells, resolved.keys);
+/// Give the host the keyboard a shell's keys are resolved on, for every chrome
+/// that connects after.
+fn hand_over_the_keys(host: &mut Host, keys: BTreeMap<String, u32>) {
+    host.set_shell_config(keys);
 }
 
 /// The home directory whose files a launcher is offered.
@@ -7035,7 +7035,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // its reason: a desk that came up with a binding on no key would be a
     // shell whose key does nothing, and nothing would say why. On a reload it
     // is refused instead — see `rebind_the_keys`.
-    let keys = shell_config::resolve(&config)?;
+    let keys = shell_config::keys(&config)?;
     seat.add_pointer();
 
     // Advertise an output per described display, or the one that follows

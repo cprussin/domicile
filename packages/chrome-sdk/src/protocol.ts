@@ -527,45 +527,11 @@ const windowsThemeMessageSchema = z.looseObject({
   type: z.literal("windows_theme"),
 });
 
-// What a key the config binds does: a command for the shell, or a change of
-// the binding mode the keys are read in. The config's own grammar — `send-shell
-// focus right`, `mode resize` — already parsed by the compositor, so what
-// crosses is the words rather than the line.
-const keyActionSchema = z.discriminatedUnion("type", [
-  z.looseObject({
-    args: z.array(z.string()).min(1),
-    type: z.literal("send_shell"),
-  }),
-  z.looseObject({ name: z.string().min(1), type: z.literal("mode") }),
-]);
-
-// One binding: a chord, as the compositor resolved its keysym to a key on the
-// live keymap, and what it does.
-const keybindingSchema = z.looseObject({
-  action: keyActionSchema,
-  shortcut: shortcutSchema,
-});
-
-// The bindings by mode. `default` is always there — the config's
-// `[keybindings]` is that mode, and an empty table is still one.
-const keybindingsSchema = z
-  .object({ default: z.array(keybindingSchema) })
-  .catchall(z.array(keybindingSchema));
-
-// The keys the config binds and what each shell is told besides: once after
-// the handshake and again whenever a reload moves any of it. The desk's
-// bindings are every shell's, and `shells` is what only the shell of that name
-// adds — its own bindings, and `options`, which is whatever that shell's table
-// said and nothing this side reads.
+// The keyboard, for the keys a shell binds: every keysym it can type and the
+// evdev key it is on. Once after the handshake and again whenever a reload
+// moves the layout. The shell's chords are resolved against it by the SDK.
 export const shellConfigSchema = z.looseObject({
-  keybindings: keybindingsSchema,
-  // Every keysym the keyboard can type and the evdev key it is on, for the
-  // chords a shell binds itself.
   keys: z.record(z.string(), z.number().int().nonnegative()),
-  shells: z.record(
-    z.string(),
-    z.looseObject({ keybindings: keybindingsSchema, options: z.unknown() }),
-  ),
   type: z.literal("shell_config"),
 });
 

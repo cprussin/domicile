@@ -5,7 +5,6 @@ import type { DomicileShortcut } from "./domicile-host";
 import type {
   HostMessageOf,
   HostMessageType,
-  KeybindingsByMode,
   ShellConfigMessage,
   ShortcutMessage,
 } from "./host-message";
@@ -27,38 +26,28 @@ const ENTER = 28;
 const ESCAPE = 1;
 const R = 19;
 
-/** The desk's bindings, as the compositor would send them. */
-const DESK: KeybindingsByMode = new Map([
-  [
-    "default",
-    [
-      { action: KeyAction.SendShell(["terminal"]), shortcut: meta(ENTER) },
-      { action: KeyAction.Mode("resize"), shortcut: meta(R) },
-    ],
-  ],
-  [
-    "resize",
-    [
-      {
-        action: KeyAction.SendShell(["resize", "grow", "right"]),
-        shortcut: meta(ENTER),
-      },
-      { action: KeyAction.Mode("default"), shortcut: meta(ESCAPE) },
-    ],
-  ],
-]);
+/** The shell's keys, as a shell binds them. */
+const DESK: ShellKeybindings = {
+  keybindings: {
+    "Meta+Return": KeyAction.SendShell(["terminal"]),
+    "Meta+r": KeyAction.Mode("resize"),
+  },
+  modes: {
+    resize: {
+      "Meta+Escape": KeyAction.Mode("default"),
+      "Meta+Return": KeyAction.SendShell(["resize", "grow", "right"]),
+    },
+  },
+};
 
-/** The keyboard the compositor describes, for the keys a shell binds itself. */
-const KEYS: ShellConfigMessage["keys"] = new Map([
-  ["Escape", ESCAPE],
-  ["Return", ENTER],
-  ["r", R],
-]);
-
-const configOf = (
-  keybindings: KeybindingsByMode,
-  shells: ShellConfigMessage["shells"] = new Map(),
-): ShellConfigMessage => ({ keybindings, keys: KEYS, shells });
+/** The keyboard the compositor describes, the keys above on it. */
+const KEYBOARD: ShellConfigMessage = {
+  keys: new Map([
+    ["Escape", ESCAPE],
+    ["Return", ENTER],
+    ["r", R],
+  ]),
+};
 
 /**
  * The two things `bindKeys` uses of a client: its single-slot handlers, and
@@ -98,8 +87,7 @@ class FakeClient {
 /** Everything the handlers were told, in order. */
 type Heard =
   | readonly ["command", readonly string[]]
-  | readonly ["mode", string]
-  | readonly ["options", unknown];
+  | readonly ["mode", string];
 
 let unbind: () => void = () => undefined;
 
@@ -107,18 +95,15 @@ afterEach(() => {
   unbind();
 });
 
-const bound = (shell = "manganese", own: ShellKeybindings = {}) => {
+const bound = (own: ShellKeybindings = DESK) => {
   const client = new FakeClient();
   const heard: Heard[] = [];
-  const binding = bindKeys(client, shell, own, {
+  const binding = bindKeys(client, own, {
     onCommand: (args) => {
       heard.push(["command", args]);
     },
     onModeChanged: (mode) => {
       heard.push(["mode", mode]);
-    },
-    onOptions: (options) => {
-      heard.push(["options", options]);
     },
   });
   unbind = binding.unbind;
@@ -141,49 +126,11 @@ const pressing = (
 };
 
 describe("bindKeys", () => {
-  describe("the shell's own keys", () => {
-    it("claims them, resolved on the keyboard the config arrives with", () => {
-      const { client } = bound("manganese", {
-        keybindings: { "Meta+Return": KeyAction.SendShell(["terminal"]) },
-      });
-
-      client.emit("shell_config", configOf(new Map([["default", []]])));
-
-      expect(client.grabbed).toStrictEqual([meta(ENTER)]);
-    });
-
-    it("answers them like the config's", () => {
-      const { client, heard } = bound("manganese", {
-        keybindings: { "Meta+r": KeyAction.Mode("resize") },
-        modes: { resize: { "Meta+Return": KeyAction.SendShell(["grow"]) } },
-      });
-      client.emit("shell_config", configOf(new Map([["default", []]])));
-
-      client.emit("shortcut", meta(R));
-      client.emit("shortcut", meta(ENTER));
-
-      expect(heard).toContainEqual(["mode", "resize"]);
-      expect(heard).toContainEqual(["command", ["grow"]]);
-    });
-
-    it("lets the config's binding win a chord both bind", () => {
-      const { client, heard } = bound("manganese", {
-        keybindings: { "Meta+Return": KeyAction.SendShell(["shell's"]) },
-      });
-      client.emit("shell_config", configOf(DESK));
-
-      client.emit("shortcut", meta(ENTER));
-
-      expect(heard).toContainEqual(["command", ["terminal"]]);
-      expect(heard).not.toContainEqual(["command", ["shell's"]]);
-    });
-  });
-
-  describe("a config arriving", () => {
-    it("claims every chord of every mode, each once", () => {
+  describe("the keyboard arriving", () => {
+    it("claims every chord of every mode, each once, on its keys", () => {
       const { client } = bound();
 
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       expect(client.grabbed).toStrictEqual([
         meta(ENTER),
@@ -192,50 +139,33 @@ describe("bindKeys", () => {
       ]);
     });
 
-    it("hands the shell its own options, and an empty table when it has none", () => {
-      const { client, heard } = bound();
+    it("claims the keys again where a new layout put them", () => {
+      // A chord names a keysym: on another layout it is another key.
+      const { client } = bound();
+      client.emit("shell_config", KEYBOARD);
 
-      client.emit(
-        "shell_config",
-        configOf(
-          DESK,
-          new Map([
-            [
-              "manganese",
-              { keybindings: new Map([["default", []]]), options: { gaps: 8 } },
-            ],
-          ]),
-        ),
-      );
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", {
+        keys: new Map([...KEYBOARD.keys, ["Return", 96]]),
+      });
 
-      expect(heard).toStrictEqual([
-        ["options", { gaps: 8 }],
-        ["options", {}],
-      ]);
+      expect(client.grabbed).toContainEqual(meta(96));
     });
 
-    it("goes back to the default mode when the one the keys are in is gone", () => {
-      const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
-      pressing("KeyR");
+    it("refuses a chord whose keysym the keyboard cannot type, naming it", () => {
+      const { client } = bound({
+        keybindings: { "Meta+Greek_alpha": KeyAction.Mode("x") },
+      });
 
-      client.emit(
-        "shell_config",
-        configOf(new Map([["default", [...(DESK.get("default") ?? [])]]])),
-      );
-
-      expect(heard.filter(([kind]) => kind === "mode")).toStrictEqual([
-        ["mode", "resize"],
-        ["mode", "default"],
-      ]);
+      expect(() => {
+        client.emit("shell_config", KEYBOARD);
+      }).toThrow("Greek_alpha");
     });
   });
 
   describe("a press on the page", () => {
     it("runs the command bound to it, and takes the key from the page", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       const event = pressing("Enter");
 
@@ -245,7 +175,7 @@ describe("bindKeys", () => {
 
     it("leaves a chord nobody bound alone", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       const event = pressing("Enter", { shiftKey: true });
 
@@ -255,7 +185,7 @@ describe("bindKeys", () => {
 
     it("takes a held key's repeats without running them again", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       const event = pressing("Enter", { repeat: true });
 
@@ -265,7 +195,7 @@ describe("bindKeys", () => {
 
     it("stops listening once unbound", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       unbind();
       pressing("Enter");
@@ -277,7 +207,7 @@ describe("bindKeys", () => {
   describe("a press the host hands back", () => {
     it("runs the command bound to it", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       client.emit("shortcut", meta(ENTER));
 
@@ -288,14 +218,14 @@ describe("bindKeys", () => {
   describe("modes", () => {
     it("enters the mode a binding names, tells the shell and reads the keys in it", () => {
       const { client, heard } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       client.emit("shortcut", meta(R));
       pressing("Enter");
       pressing("Escape");
       pressing("Enter");
 
-      expect(heard.slice(1)).toStrictEqual([
+      expect(heard).toStrictEqual([
         ["mode", "resize"],
         ["command", ["resize", "grow", "right"]],
         ["mode", "default"],
@@ -306,19 +236,17 @@ describe("bindKeys", () => {
     it("reads the keys in a mode the shell sets, without telling it back", () => {
       // Another page of the desk entered it: the shell knows already.
       const { client, heard, setMode } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
 
       setMode("resize");
       pressing("Enter");
 
-      expect(heard.slice(1)).toStrictEqual([
-        ["command", ["resize", "grow", "right"]],
-      ]);
+      expect(heard).toStrictEqual([["command", ["resize", "grow", "right"]]]);
     });
 
     it("does nothing for the mode the keys are already in", () => {
       const { client, heard, setMode } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
       pressing("KeyR");
 
       setMode("resize");
@@ -328,32 +256,29 @@ describe("bindKeys", () => {
       ]);
     });
 
-    it("goes back to the default mode for one the config does not have", () => {
-      // The same answer as a config that drops the mode the keys are in.
+    it("goes back to the default mode for one the shell does not have", () => {
       const { client, heard, setMode } = bound();
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
       pressing("KeyR");
 
       setMode("move");
       pressing("Enter");
 
-      expect(heard.slice(2)).toStrictEqual([
+      expect(heard.slice(1)).toStrictEqual([
         ["mode", "default"],
         ["command", ["terminal"]],
       ]);
     });
 
-    it("keeps a mode set before any config, until the config says otherwise", () => {
-      // A page can be told the desk's mode before its own config arrives.
+    it("keeps a mode set before the keyboard arrives, and checks it then", () => {
+      // A page can be told the desk's mode before it is told the keyboard.
       const { client, heard, setMode } = bound();
 
       setMode("resize");
-      client.emit("shell_config", configOf(DESK));
+      client.emit("shell_config", KEYBOARD);
       pressing("Enter");
 
-      expect(heard.slice(1)).toStrictEqual([
-        ["command", ["resize", "grow", "right"]],
-      ]);
+      expect(heard).toStrictEqual([["command", ["resize", "grow", "right"]]]);
     });
   });
 });

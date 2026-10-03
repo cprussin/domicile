@@ -1,9 +1,8 @@
-// What a key the config binds does, as a shell's page holds it.
+// What a key a shell binds does: a command for the shell, or a change of the
+// binding mode the keys are read in.
 //
-// Its own module for `file-preview.ts`'s reason: `host-message.ts` builds one
-// out of the compositor's `shell_config`, and `bind-keys.ts` switches on it.
-// The wire's words are `send_shell` and `mode`; this is the memory form, and
-// `host-message.ts` is the one place the two meet.
+// Its own module for `file-preview.ts`'s reason: a shell builds one for each
+// of its bindings, and `bind-keys.ts` switches on it.
 
 /** Which of the two things a binding can do. */
 export enum KeyActionKind {
@@ -13,13 +12,13 @@ export enum KeyActionKind {
 
 export const KeyAction = {
   /**
-   * `mode <name>`: read the keys in another binding mode. The SDK answers this
-   * itself — a shell is told the mode changed, never asked to change it.
+   * Read the keys in another binding mode. The SDK answers this itself — a
+   * shell is told the mode changed, never asked to change it.
    */
   Mode: (name: string) => ({ kind: KeyActionKind.Mode as const, name }),
   /**
-   * `send-shell <word>...`: a command for the shell, as the words after
-   * `send-shell`. What they mean is the shell's vocabulary, not the SDK's.
+   * A command for the shell, as words — the words `domicile send-shell`
+   * would carry. What they mean is the shell's vocabulary, not the SDK's.
    */
   SendShell: (args: readonly string[]) => ({
     args,

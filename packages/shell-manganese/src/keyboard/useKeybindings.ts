@@ -8,21 +8,15 @@ import type { WindowAction } from "../window-management/window-state";
 import { WindowActionKind } from "../window-management/window-state";
 import { parseCommand } from "./command";
 
-/** The name this shell's section of the config goes under: `[shells.manganese]`. */
-const SHELL = "manganese";
-
-/** Where a command the config names and this desktop does not know is said. */
+/** Where a command a binding names and this desktop does not know is said. */
 const logToConsole = (error: string): void => {
-  // biome-ignore lint/suspicious/noConsole: the config is the user's, and the console is where a shell tells them a line of it named nothing
+  // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell tells them one named nothing
   console.error(error);
 };
 
 type Options = {
   domicile: DomicileClient;
-  /**
-   * The keys this desktop binds itself, under the config's: a chord the
-   * config binds is the config's.
-   */
+  /** The keys this desktop binds. */
   keybindings: ShellKeybindings;
   /** Whether the launcher is up, which silences every key but its own. */
   launcherOpen: boolean;
@@ -40,8 +34,7 @@ type Options = {
 };
 
 /**
- * The keys this desktop binds, and the ones the compositor's config binds for
- * it, answered.
+ * The keys this desktop binds, answered.
  *
  * The SDK claims every chord, hears each press by whichever path it took, and
  * reads it in the binding mode; what is left here is what manganese means by
@@ -54,7 +47,7 @@ type Options = {
  * the desktop every page shares, and the mode that desktop is in comes back as
  * `mode` and is handed to the SDK — on this page and every other.
  *
- * Bound once per client and set of keys, not once per render: the config
+ * Bound once per client and set of keys, not once per render: the keyboard
  * arrives once and again only when it changes, so a binding torn down and
  * made again would miss it. `keybindings` is a shell's options, made once. What changes between renders is read when a key is pressed.
  *
@@ -86,11 +79,9 @@ export const useKeybindings = ({
   });
 
   useEffect(() => {
-    const bound = bindKeys(domicile, SHELL, keybindings, {
+    const bound = bindKeys(domicile, keybindings, {
       onCommand,
       onModeChanged: modeChanged,
-      // Manganese reads no options yet.
-      onOptions: () => undefined,
     });
     binding.current = bound;
     return bound.unbind;

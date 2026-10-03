@@ -562,7 +562,7 @@ describe("DomicileClient", () => {
       expect(seen).toStrictEqual([{ locked: true }]);
     });
 
-    it("delivers the keys the config binds, held until the shell asks", () => {
+    it("delivers the keyboard, held until the shell asks", () => {
       // Sent as the page connects, which is before any shell has bound its
       // keys: a desktop that dropped it would answer no key at all.
       host.dispatch(
@@ -570,9 +570,7 @@ describe("DomicileClient", () => {
         Object.assign(new Event("shellconfig"), {
           arrival: 0,
           config: JSON.stringify({
-            keybindings: { default: [] },
             keys: {},
-            shells: {},
             type: "shell_config",
           }),
         }),
@@ -583,13 +581,7 @@ describe("DomicileClient", () => {
         seen.push(message);
       });
 
-      expect(seen).toStrictEqual([
-        {
-          keybindings: new Map([["default", []]]),
-          keys: new Map(),
-          shells: new Map(),
-        },
-      ]);
+      expect(seen).toStrictEqual([{ keys: new Map() }]);
     });
 
     it("delivers the desk's sound", () => {
