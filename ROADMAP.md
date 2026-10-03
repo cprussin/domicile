@@ -198,6 +198,12 @@ The evidence for each of those is in the doc that made the claim —
    `domicile send-shell focus right` has no route yet (supervisor → compositor
    → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
 
+9. **Composable shells.** The config becomes a TS, JS or JSON module whose
+   `Shell` export is the shell, built by `domicile` with no build of the
+   user's own; manganese becomes a library of bar items; keybindings become
+   the shell's props; the `@domicile/*` packages go to npm. Not started.
+   [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
