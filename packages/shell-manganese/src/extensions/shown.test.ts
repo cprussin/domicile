@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Extension } from "@domicile/chrome-sdk/extension";
+import type { Extension } from "@domicile/sdk/extension";
 
 import { popupShown } from "./shown";
 

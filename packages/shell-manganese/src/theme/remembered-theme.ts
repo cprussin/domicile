@@ -1,5 +1,5 @@
-import { themeSchema } from "@domicile/chrome-sdk/theme";
 import type { Theme } from "@domicile/component-library/theme-core";
+import { themeSchema } from "@domicile/sdk/theme";
 
 // The one thing this shell keeps on the machine it is drawn on, and it is a
 // guess rather than a setting.

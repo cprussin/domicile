@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
 

@@ -1,4 +1,4 @@
-import type { FoundAppsMessage } from "@domicile/chrome-sdk/host-message";
+import type { FoundAppsMessage } from "@domicile/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /** What a search for applications offers: the applications and bookmarks. */

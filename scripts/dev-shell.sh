@@ -2,7 +2,7 @@
 # A shell, running in Domicile, rebuilt as you edit it.
 #
 #   ./scripts/dev-shell.sh manganese
-#   bun run --filter @domicile/shell-manganese start:dev
+#   bun run --filter @domicile/manganese start:dev
 #
 # WHAT THIS REPLACED, AND WHY IT HAD TO. `start:dev` used to be `vite`: a dev
 # server, opened in whatever browser you had. That page has no compositor, no
@@ -52,7 +52,7 @@ PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 # joins the compositor.
 echo "building $SHELL_NAME"
 (cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
-   CI=1 bun run turbo build:vite --filter="@domicile/shell-$SHELL_NAME") || {
+   CI=1 bun run turbo build:vite --filter="./packages/shell-$SHELL_NAME") || {
   echo "the shell did not build" >&2
   exit 1
 }

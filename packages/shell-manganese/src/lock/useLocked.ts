@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import { useCallback, useEffect, useState } from "react";
 
 /** Where this desk's lock stands, as the compositor last said. */

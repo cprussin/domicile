@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { FilePreview } from "@domicile/chrome-sdk/file-preview";
-import type { Bookmark, DesktopEntry } from "@domicile/chrome-sdk/host-message";
+import { FilePreview } from "@domicile/sdk/file-preview";
+import type { Bookmark, DesktopEntry } from "@domicile/sdk/host-message";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
+} from "@domicile/sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";

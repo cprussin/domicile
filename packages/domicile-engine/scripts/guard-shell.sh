@@ -146,9 +146,9 @@ command -v bun >/dev/null || {
 # It matters because two generated things have to exist and neither is in the
 # checkout. `styled-system/` is gitignored and made by a package's own
 # `prepare` (panda codegen). And the workspace packages the shell imports are
-# published from `dist/`: `@domicile/chrome-sdk`'s exports map every entry
+# published from `dist/`: `@domicile/sdk`'s exports map every entry
 # point to `./dist/*.js`, so on a checkout where nothing has been built,
-# `@domicile/chrome-sdk/bridge` does not resolve.
+# `@domicile/sdk/bridge` does not resolve.
 #
 # `CI=1` because turbo's `//#build:install-modules` runs a NON-frozen
 # `bun install` when it is unset, one line after the frozen one above asked for
@@ -173,7 +173,7 @@ command -v bun >/dev/null || {
 # a build that had plenty to say.
 echo "building $SHELL_NAME's page"
 BUILD_LOG=$(mktemp)
-SHELL_PKG="@domicile/shell-$SHELL_NAME"
+SHELL_PKG="./packages/shell-$SHELL_NAME"
 if ! (cd "$ROOT" &&
         bun install --frozen-lockfile &&
         CI=1 bun run turbo build:vite --filter="$SHELL_PKG") >"$BUILD_LOG" 2>&1; then

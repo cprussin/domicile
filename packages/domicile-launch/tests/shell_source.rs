@@ -34,10 +34,6 @@ fn domicile_s_own_shells_are_named_and_never_built() {
         source("@domicile/manganese", &[]),
         Ok(ShellSource::Ours("manganese".into()))
     );
-    assert_eq!(
-        source("@domicile/shell-manganese", &[]),
-        Ok(ShellSource::Ours("manganese".into()))
-    );
 }
 
 #[test]

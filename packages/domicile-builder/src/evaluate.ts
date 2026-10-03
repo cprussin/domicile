@@ -56,7 +56,7 @@ const fromDomicile = (domicile: string): BunPlugin => {
     setup: (build) => {
       build.onResolve({ filter: FROM_DOMICILE }, ({ path: specifier }) => ({
         path:
-          specifier === "@domicile/shell-manganese"
+          specifier === "@domicile/manganese"
             ? path.join(manganese, "src", "index.tsx")
             : Bun.resolveSync(specifier, manganese),
       }));

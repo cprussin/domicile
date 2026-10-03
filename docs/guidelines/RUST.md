@@ -88,7 +88,7 @@ for either.
 
 ## The protocol crate is half of a contract
 
-`packages/domicile-protocol` and `@domicile/chrome-sdk/protocol` describe the
+`packages/domicile-protocol` and `@domicile/sdk/protocol` describe the
 same wire format from opposite sides. A change to either is a change to both,
 in the same PR. Do **not** bump `PROTOCOL_VERSION` for it: the constant is
 pinned at 1 while nothing ships the two halves apart, and its own docs say what

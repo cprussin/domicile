@@ -1,8 +1,8 @@
 {
   "dependencies": {
     "@cprussin/option-result": "catalog:",
-    "@domicile/chrome-sdk": "workspace:*",
     "@domicile/component-library": "workspace:*",
+    "@domicile/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "lowlight": "catalog:",
     "react": "catalog:",
@@ -44,10 +44,25 @@
       "default": "./styled-system/tokens/index.mjs"
     }
   },
+  "files": [
+    "panda.config.ts",
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
   "license": "MIT",
-  "name": "@domicile/shell-manganese",
-  "private": true,
+  "name": "@domicile/manganese",
+  "private": false,
   "productName": "domicile-shell-manganese",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/shell-manganese",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
   "scripts": {
     "build:vite": "vite build",
     "prepare": "panda codegen --silent && panda cssgen --silent",

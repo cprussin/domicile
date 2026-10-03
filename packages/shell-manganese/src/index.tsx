@@ -4,18 +4,18 @@
 // The bar's items are exported for a layout of the user's own. Importing this
 // module does nothing but install its stylesheet.
 
-import { connectToHost, hasHost } from "@domicile/chrome-sdk/connect-to-host";
-import { reportDesktopSize } from "@domicile/chrome-sdk/desktop-size";
-import { reportDevicePixelRatio } from "@domicile/chrome-sdk/device-pixel-ratio";
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
-import { registerElements } from "@domicile/chrome-sdk/register-elements";
-import type { Shell as ShellModule } from "@domicile/chrome-sdk/shell";
 import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
 import {
   applyTheme,
   DEFAULT_THEME,
 } from "@domicile/component-library/theme-core";
+import { connectToHost, hasHost } from "@domicile/sdk/connect-to-host";
+import { reportDesktopSize } from "@domicile/sdk/desktop-size";
+import { reportDevicePixelRatio } from "@domicile/sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
+import { registerElements } from "@domicile/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile/sdk/shell";
 import { createRoot } from "react-dom/client";
 
 import { mountPoint } from "./mount-point";

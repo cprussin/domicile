@@ -4,11 +4,11 @@
 // Each is the `send-shell` words `command.ts` reads, built rather than typed,
 // so a binding in a shell's props is checked where it is written.
 
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
+import { KeyAction } from "@domicile/sdk/key-action";
 import type {
   ModeKeybindings,
   ShellKeybindings,
-} from "@domicile/chrome-sdk/own-keybindings";
+} from "@domicile/sdk/own-keybindings";
 
 /** A way a window or the focus can go. */
 export type Way = "left" | "down" | "up" | "right";

@@ -29,7 +29,7 @@ describe("missingPackages", () => {
   it("never asks for Domicile's own packages or React, which come from Domicile", () => {
     expect(
       missingPackages(
-        new Set(["@domicile/shell-manganese", "react", "react-dom"]),
+        new Set(["@domicile/manganese", "react", "react-dom"]),
         undefined,
       ),
     ).toEqual([]);

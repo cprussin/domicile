@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/chrome-sdk/host-message";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile/sdk/host-message";
+import type { TrayItem } from "@domicile/sdk/tray";
 import { act, renderHook } from "@testing-library/react";
 
 import { useTray } from "./useTray";

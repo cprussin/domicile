@@ -1,4 +1,4 @@
-import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 /** Where a view's history reaches, which is what its controls are for. */
