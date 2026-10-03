@@ -17,6 +17,12 @@
 # a DCHECK in content answered by aborting the browser (patch 0069). Both legs
 # ask it, and a browser that died paints neither answer.
 #
+# Before that, the control's page asks what a site offering a passkey from an
+# extension's autofill asks: isConditionalMediationAvailable(), which must be
+# true, and a conditional get(), which the browser must hold until the page
+# aborts it (patch 0083). Bitwarden races its answer against the browser's, and
+# a refusal won. Only the control: upstream refuses a proxied origin's.
+#
 # Headless and software-composited, as `guard-webview-content-script.sh`, whose
 # shell module this reuses: one <webview> on the witness.
 #
@@ -63,6 +69,7 @@ WITNESS="${WITNESS:-1C2E3A}"
 PAGE_COLOR="${PAGE_COLOR:-B0BEC5}"
 REFUSED="${REFUSED:-EF6C00}"
 NO_API="${NO_API:-C2185B}"
+UNHELD="${UNHELD:-4E342E}"
 
 EXTENSION="$SCRIPTS/guard-webview-passkey-extension-extension"
 
@@ -109,7 +116,7 @@ mkdir -p "$PROFILE"
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-passkey-extension-server.py" \
   --port 0 --color "$PAGE_COLOR" --answered "$COLOR" --refused "$REFUSED" \
-  --no-api "$NO_API" >"$HTTP_LOG" 2>&1 &
+  --no-api "$NO_API" --unheld "$UNHELD" >"$HTTP_LOG" 2>&1 &
 STARTED+=($!)
 for _ in $(seq 1 60); do
   grep -q "serving" "$HTTP_LOG" 2>/dev/null && break
@@ -132,6 +139,7 @@ PAGE="http://localhost:$PORT/page"
 EXTENSION_FLAG=()
 if [ "$NEGATIVE" = "1" ]; then
   LEG=refused
+  PAGE="$PAGE?conditional"
   WITNESSED="$REFUSED"
   FOR_SECONDS="$(budget_for webview-passkey-extension "$FOR_SECONDS")"
 else
@@ -239,7 +247,9 @@ not the fixture's and the claim proves nothing"
 "refused 2")
   FAILURE="the page never painted a refusal: it found no PublicKeyCredential \
 (Blink's WebAuth is off, and a content-script passkey extension has nothing to \
-wrap), or its request never came back (the browser is holding it, on a dialog \
+wrap), or the browser said there is no conditional UI or answered a \
+conditional get() rather than holding it (patch 0083), or its request never \
+came back (the browser is holding it, on a dialog \
 nobody can see), or the browser died on the opaque frame's \
 isUserVerifyingPlatformAuthenticatorAvailable() (patch 0069), or the guest \
 never drew -- the GUARD lines above say which"
