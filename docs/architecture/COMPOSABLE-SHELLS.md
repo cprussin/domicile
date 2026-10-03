@@ -98,8 +98,8 @@ only builds.
 | resolve | the nearest `package.json` above the entry owns its dependencies. With none, one is created beside the entry. A bare import not in it is added (`bun add`) |
 | install | `bun install --ignore-scripts`, writing `bun.lock` beside that `package.json`. Frozen when nothing was added |
 | alias | `@domicile/*`, and their peers `react` and `react-dom`, resolve to Domicile's install, whatever `package.json` says |
-| style | Panda over the user's files with the component library's preset, merged with each `@domicile/*` package's `panda.buildinfo.json` (`panda ship`). One stylesheet, inlined into the bundle as `vite-shell` does |
-| bundle | `Bun.build` → `$XDG_CACHE_HOME/domicile/shells/<hash>/shell.js` |
+| style | Panda over manganese's own config, so manganese and the component library are styled. One stylesheet, inlined into the bundle as `vite-shell` does |
+| bundle | vite, as `shellBuild` → `$XDG_CACHE_HOME/domicile/shells/<hash>/shell.js` |
 
 - **The cache key** is the hash of the entry's local import graph, the lockfile
   and Domicile's version. A hit spawns nothing beyond the hash.
@@ -189,8 +189,10 @@ shells. A build always aliases them to the running Domicile's.
   Those decisions kept a developer's convenience out of every user's entry
   point. Here the build *is* the user's entry point. The supervisor still only
   spawns: the bundler is the builder's.
-- **Bun, over vite and npm.** One binary transpiles, bundles, installs and
-  writes the lockfile, and runs the TS config.
+- **Bun installs and runs; vite bundles.** Bun writes the lockfile, installs
+  and runs the builder and the TS config. The bundle is vite's, because
+  `shellBuild` and Panda's postcss plugin already make a shell module with its
+  CSS inside, and the build a user gets is then the one manganese ships.
 - **`@domicile/*` and React from the install, over the lockfile.** Two Reacts
   break hooks across the boundary, and an SDK older or newer than the
   compositor speaks a different protocol. A user's `package.json` cannot pick
@@ -221,9 +223,10 @@ Phase 1: the contract, by hand.
 
 Phase 2: `domicile` builds.
 
-- [ ] `packages/domicile-builder`: resolve, install, alias, style, bundle,
+- [x] `packages/domicile-builder`: resolve, install, alias, style, bundle,
       cache, progress lines
-- [ ] `panda ship` buildinfo in each `@domicile/*` package
+- [ ] a user's own Panda `css()`: an export of manganese's `styled-system`,
+      and the user's files in the build's `include`
 - [ ] `shell_path` resolves every specifier above. `@domicile/*` resolves in
       Rust with no subprocess
 - [ ] the progress bar in `domicile`. Startup blocks on the first build
