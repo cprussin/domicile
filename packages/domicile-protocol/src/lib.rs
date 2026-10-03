@@ -237,6 +237,36 @@ pub enum ChromeMessage {
     /// most panels is a screen that is off. See `domicile_host::backlight`.
     SetBrightness { level: f64 },
 
+    /// Set a device's or a stream's volume: `id` is an [`AudioDevice::id`] or
+    /// an [`AudioStream::id`] from the last [`HostMessage::Audio`], and
+    /// `volume` a fraction of the server's normal, 1.0 being 100%.
+    ///
+    /// Answered like [`ChromeMessage::SetBrightness`]: with the next
+    /// [`HostMessage::Audio`], to every chrome, once the sound server says the
+    /// volume moved. Every channel is set alike.
+    SetAudioVolume { id: String, volume: f64 },
+
+    /// Mute or unmute a device or a stream, named as for
+    /// [`ChromeMessage::SetAudioVolume`] and answered the same way.
+    SetAudioMuted { id: String, muted: bool },
+
+    /// Make a device the one new streams play to or record from: `id` is an
+    /// [`AudioDevice::id`]. Answered with the next [`HostMessage::Audio`].
+    SetDefaultAudioDevice { id: String },
+
+    /// Move a stream to another device: `id` is an [`AudioStream::id`] and
+    /// `device` an [`AudioDevice::id`] of the same direction — a playback
+    /// stream to an output, a recording to an input.
+    MoveAudioStream { id: String, device: String },
+
+    /// Switch a device to one of its [`AudioDevice::ports`] — speakers to
+    /// headphones — by the port's [`AudioChoice::name`].
+    SetAudioPort { id: String, port: String },
+
+    /// Switch a sound card to one of its [`AudioCard::profiles`], by name —
+    /// how a card turns on its HDMI output, or a headset its microphone.
+    SetAudioProfile { card: String, profile: String },
+
     /// This page is holding its old frame for the theme it was told: turn the
     /// desk's windows over now.
     ///
@@ -864,6 +894,28 @@ pub enum HostMessage {
     /// the shell's to tell, by the ones it had not been told before.
     Notifications { items: Vec<Notification> },
 
+    /// The desk's sound: every output and input device, every stream playing
+    /// or recording, and every sound card, as a mixer draws them.
+    ///
+    /// **Read off the sound server with `pactl`**, PulseAudio's or
+    /// PipeWire's — see `domicile_host::audio`. Pushed, and the whole state
+    /// every time, for [`HostMessage::Tray`]'s reasons: whenever the server
+    /// says something moved — a volume, a device plugged in, a stream started
+    /// — and to a chrome that has just connected. A desk with no sound server
+    /// sends none, so a shell that has had no message draws no mixer rather
+    /// than one at zero.
+    ///
+    /// Each list is in the server's own order. `inputs` includes the
+    /// monitors of the outputs, flagged, which a mixer hides from its devices
+    /// and offers as somewhere to record from.
+    Audio {
+        outputs: Vec<AudioDevice>,
+        inputs: Vec<AudioDevice>,
+        playback: Vec<AudioStream>,
+        recording: Vec<AudioStream>,
+        cards: Vec<AudioCard>,
+    },
+
     /// The desk's keybindings and each shell's settings, from the config.
     ///
     /// `keybindings` is `[keybindings]` and `[modes.*]`, which every shell
@@ -1181,6 +1233,75 @@ pub struct TrayItem {
     /// leaves a shell the title.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+}
+
+/// One device a [`HostMessage::Audio`] lists: an output (a sink) or an input
+/// (a source).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioDevice {
+    /// What the mixer's requests name it by. Opaque, and stable across a
+    /// restart of the server: it is built from the device's own name.
+    pub id: String,
+    /// What it is called, in words.
+    pub description: String,
+    /// The loudest of its channels, as a fraction of the server's normal:
+    /// 1.0 is 100%, and a device turned up past that reads more.
+    pub volume: f64,
+    pub muted: bool,
+    /// Whether new streams go to it.
+    pub default: bool,
+    /// Whether it is an output's monitor — what that output is playing, as
+    /// something to record. Always `false` for an output.
+    pub monitor: bool,
+    /// Where the device can send its sound, or take it from: speakers,
+    /// headphones, a line in. Often empty, and often only one.
+    pub ports: Vec<AudioChoice>,
+    /// The [`AudioChoice::name`] of the port in use, if it has any.
+    pub port: Option<String>,
+}
+
+/// One port of an [`AudioDevice`] or one profile of an [`AudioCard`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioChoice {
+    /// What [`ChromeMessage::SetAudioPort`] and
+    /// [`ChromeMessage::SetAudioProfile`] name it by.
+    pub name: String,
+    pub description: String,
+    /// `false` for a port whose jack is empty, or a profile that needs one.
+    /// Still listed, and still choosable, as every mixer lets it be.
+    pub available: bool,
+}
+
+/// One stream a [`HostMessage::Audio`] lists: something playing (a sink
+/// input) or recording (a source output).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioStream {
+    /// What the mixer's requests name it by, for as long as it plays.
+    pub id: String,
+    /// Who is playing or recording it, as the application named itself.
+    pub application: String,
+    /// What it is — a song's title, a call — where the application said.
+    pub title: Option<String>,
+    /// As [`AudioDevice::volume`].
+    pub volume: f64,
+    pub muted: bool,
+    /// The [`AudioDevice::id`] it plays to or records from; `None` for a
+    /// device the server listed after the stream, which the next message
+    /// settles.
+    pub device: Option<String>,
+}
+
+/// One sound card a [`HostMessage::Audio`] lists, with the profiles that say
+/// which of its devices are on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioCard {
+    /// What [`ChromeMessage::SetAudioProfile`] names it by.
+    pub id: String,
+    pub description: String,
+    /// Best first, the server's order of priority.
+    pub profiles: Vec<AudioChoice>,
+    /// The [`AudioChoice::name`] of the profile in use.
+    pub profile: Option<String>,
 }
 
 /// Which button clicked a tray icon, as StatusNotifierItem names the three

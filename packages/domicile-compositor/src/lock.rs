@@ -438,7 +438,10 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::CopyClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
             | ClientRequest::DismissNotifications { .. }
-            | ClientRequest::InvokeNotificationAction { .. },
+            | ClientRequest::InvokeNotificationAction { .. }
+            // A mixer moves what the desk's applications play and record,
+            // which is acting for somebody a locked desk does not have.
+            | ClientRequest::Audio { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SearchFiles { .. }
@@ -827,6 +830,15 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "a stream turned down",
+                ClientRequest::Audio {
+                    request: domicile_host::audio::Request::Volume {
+                        id: "playback:42".into(),
+                        volume: 0.5,
+                    },
                 },
             ),
         ] {

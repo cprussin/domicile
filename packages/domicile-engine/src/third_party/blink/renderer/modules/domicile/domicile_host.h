@@ -113,6 +113,28 @@ class MODULES_EXPORT DomicileHost final
   void lock(ScriptState*, ExceptionState&);
   // Set the backlight. Answered with `brightnesschanged` to every chrome.
   void setBrightness(ScriptState*, double level, ExceptionState&);
+  // The mixer's requests. Each is answered with `audio` to every chrome.
+  void setAudioVolume(ScriptState*,
+                      const String& id,
+                      double volume,
+                      ExceptionState&);
+  void setAudioMuted(ScriptState*,
+                     const String& id,
+                     bool muted,
+                     ExceptionState&);
+  void setDefaultAudioDevice(ScriptState*, const String& id, ExceptionState&);
+  void moveAudioStream(ScriptState*,
+                       const String& id,
+                       const String& device,
+                       ExceptionState&);
+  void setAudioPort(ScriptState*,
+                    const String& id,
+                    const String& port,
+                    ExceptionState&);
+  void setAudioProfile(ScriptState*,
+                       const String& card,
+                       const String& profile,
+                       ExceptionState&);
   // This page's old frame is held for `theme`: the desk's windows may turn.
   // Answered with a `windowstheme` event once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
@@ -253,6 +275,12 @@ class MODULES_EXPORT DomicileHost final
   void WindowsThemeChanged(domicile::mojom::blink::Theme theme,
                            base::TimeTicks arrival) override;
   void ShellConfig(const String& config, base::TimeTicks arrival) override;
+  void Audio(Vector<domicile::mojom::blink::AudioDevicePtr> outputs,
+             Vector<domicile::mojom::blink::AudioDevicePtr> inputs,
+             Vector<domicile::mojom::blink::AudioStreamPtr> playback,
+             Vector<domicile::mojom::blink::AudioStreamPtr> recording,
+             Vector<domicile::mojom::blink::AudioCardPtr> cards,
+             base::TimeTicks arrival) override;
   void FocusChanged(const String& app_id, base::TimeTicks arrival) override;
   void FocusRequested(const String& app_id, base::TimeTicks arrival) override;
   // The one without an `arrival`: it comes from the engine's command socket,

@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_audio_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_apps_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_bookmark.h"
@@ -212,6 +213,63 @@ void DomicileHost::setBrightness(ScriptState*,
                                  ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->SetBrightness(level);
+  }
+}
+
+// The mixer's requests, relayed like setBrightness: what this page hears is
+// the `audio` every chrome on the desk hears once the sound server has moved.
+// The ids are the compositor's to check -- one it never gave out is a line in
+// its log -- so none is read here.
+void DomicileHost::setAudioVolume(ScriptState*,
+                                  const String& id,
+                                  double volume,
+                                  ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetAudioVolume(id, volume);
+  }
+}
+
+void DomicileHost::setAudioMuted(ScriptState*,
+                                 const String& id,
+                                 bool muted,
+                                 ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetAudioMuted(id, muted);
+  }
+}
+
+void DomicileHost::setDefaultAudioDevice(ScriptState*,
+                                         const String& id,
+                                         ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetDefaultAudioDevice(id);
+  }
+}
+
+void DomicileHost::moveAudioStream(ScriptState*,
+                                   const String& id,
+                                   const String& device,
+                                   ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->MoveAudioStream(id, device);
+  }
+}
+
+void DomicileHost::setAudioPort(ScriptState*,
+                                const String& id,
+                                const String& port,
+                                ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetAudioPort(id, port);
+  }
+}
+
+void DomicileHost::setAudioProfile(ScriptState*,
+                                   const String& card,
+                                   const String& profile,
+                                   ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SetAudioProfile(card, profile);
   }
 }
 
@@ -780,6 +838,73 @@ void DomicileHost::Locked(bool locked, base::TimeTicks arrival) {
 void DomicileHost::ShellConfig(const String& config, base::TimeTicks arrival) {
   DispatchEvent(*MakeGarbageCollected<DomicileShellConfigEvent>(
       domicile_event_names::Shellconfig(), config, Arrival(arrival)));
+}
+
+namespace {
+
+HeapVector<Member<DomicileAudioChoice>> AudioChoices(
+    const Vector<domicile::mojom::blink::AudioChoicePtr>& choices) {
+  HeapVector<Member<DomicileAudioChoice>> made;
+  made.reserve(choices.size());
+  for (const auto& choice : choices) {
+    made.push_back(MakeGarbageCollected<DomicileAudioChoice>(
+        choice->name, choice->description, choice->available));
+  }
+  return made;
+}
+
+HeapVector<Member<DomicileAudioDevice>> AudioDevices(
+    const Vector<domicile::mojom::blink::AudioDevicePtr>& devices) {
+  HeapVector<Member<DomicileAudioDevice>> made;
+  made.reserve(devices.size());
+  for (const auto& device : devices) {
+    made.push_back(MakeGarbageCollected<DomicileAudioDevice>(
+        device->id, device->description, device->volume, device->muted,
+        device->is_default, device->monitor, AudioChoices(device->ports),
+        device->port));
+  }
+  return made;
+}
+
+HeapVector<Member<DomicileAudioStream>> AudioStreams(
+    const Vector<domicile::mojom::blink::AudioStreamPtr>& streams) {
+  HeapVector<Member<DomicileAudioStream>> made;
+  made.reserve(streams.size());
+  for (const auto& stream : streams) {
+    made.push_back(MakeGarbageCollected<DomicileAudioStream>(
+        stream->id, stream->application, stream->title, stream->volume,
+        stream->muted, stream->device));
+  }
+  return made;
+}
+
+HeapVector<Member<DomicileAudioCard>> AudioCards(
+    const Vector<domicile::mojom::blink::AudioCardPtr>& cards) {
+  HeapVector<Member<DomicileAudioCard>> made;
+  made.reserve(cards.size());
+  for (const auto& card : cards) {
+    made.push_back(MakeGarbageCollected<DomicileAudioCard>(
+        card->id, card->description, AudioChoices(card->profiles),
+        card->profile));
+  }
+  return made;
+}
+
+}  // namespace
+
+// Pushed, like Notifications: the compositor hears the sound server without
+// anybody asking, and the mixer's own requests come back this way.
+void DomicileHost::Audio(
+    Vector<domicile::mojom::blink::AudioDevicePtr> outputs,
+    Vector<domicile::mojom::blink::AudioDevicePtr> inputs,
+    Vector<domicile::mojom::blink::AudioStreamPtr> playback,
+    Vector<domicile::mojom::blink::AudioStreamPtr> recording,
+    Vector<domicile::mojom::blink::AudioCardPtr> cards,
+    base::TimeTicks arrival) {
+  DispatchEvent(*MakeGarbageCollected<DomicileAudioEvent>(
+      domicile_event_names::Audio(), AudioDevices(outputs),
+      AudioDevices(inputs), AudioStreams(playback), AudioStreams(recording),
+      AudioCards(cards), Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

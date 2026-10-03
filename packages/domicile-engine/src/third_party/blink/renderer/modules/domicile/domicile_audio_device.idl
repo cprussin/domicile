@@ -1,0 +1,31 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// An output (a sink) or an input (a source), as a DomicileAudioEvent lists it.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileAudioDevice {
+  // What the mixer's requests on DomicileHost name it by.
+  readonly attribute DOMString id;
+
+  readonly attribute DOMString description;
+
+  // The loudest of its channels, as a fraction of the sound server's 100%.
+  readonly attribute double volume;
+
+  readonly attribute boolean muted;
+
+  // Whether new streams go to it.
+  readonly attribute boolean isDefault;
+
+  // Whether it is an output's monitor, listed among the inputs.
+  readonly attribute boolean monitor;
+
+  // Speakers, headphones, a line in. Often empty.
+  readonly attribute FrozenArray<DomicileAudioChoice> ports;
+
+  // The name of the port in use, or empty for a device with none.
+  readonly attribute DOMString port;
+};

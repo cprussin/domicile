@@ -133,6 +133,24 @@ class FakeHost implements DomicileHost {
   setBrightness(level: number): void {
     this.calls.push(["setBrightness", level]);
   }
+  setAudioVolume(id: string, volume: number): void {
+    this.calls.push(["setAudioVolume", id, volume]);
+  }
+  setAudioMuted(id: string, muted: boolean): void {
+    this.calls.push(["setAudioMuted", id, muted]);
+  }
+  setDefaultAudioDevice(id: string): void {
+    this.calls.push(["setDefaultAudioDevice", id]);
+  }
+  moveAudioStream(id: string, device: string): void {
+    this.calls.push(["moveAudioStream", id, device]);
+  }
+  setAudioPort(id: string, port: string): void {
+    this.calls.push(["setAudioPort", id, port]);
+  }
+  setAudioProfile(card: string, profile: string): void {
+    this.calls.push(["setAudioProfile", card, profile]);
+  }
   themeCaptured(theme: Theme): void {
     this.calls.push(["themeCaptured", theme]);
   }
@@ -569,6 +587,90 @@ describe("DomicileClient", () => {
       ]);
     });
 
+    it("delivers the desk's sound", () => {
+      const seen: unknown[] = [];
+      domicile.on("audio", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "audio",
+        Object.assign(new Event("audio"), {
+          arrival: 0,
+          cards: [
+            {
+              description: "Built-in Audio",
+              id: "alsa_card.pci",
+              profile: "",
+              profiles: [{ available: true, description: "Off", name: "off" }],
+            },
+          ],
+          inputs: [],
+          outputs: [
+            {
+              description: "Speakers",
+              id: "output:speakers",
+              isDefault: true,
+              monitor: false,
+              muted: false,
+              port: "",
+              ports: [],
+              volume: 0.5,
+            },
+          ],
+          playback: [
+            {
+              application: "Firefox",
+              device: "",
+              id: "playback:42",
+              muted: true,
+              title: "",
+              volume: 1,
+            },
+          ],
+          recording: [],
+        }),
+      );
+
+      // The engine's empty strings are the SDK's `undefined`.
+      expect(seen).toStrictEqual([
+        {
+          cards: [
+            {
+              description: "Built-in Audio",
+              id: "alsa_card.pci",
+              profile: undefined,
+              profiles: [{ available: true, description: "Off", name: "off" }],
+            },
+          ],
+          inputs: [],
+          outputs: [
+            {
+              default: true,
+              description: "Speakers",
+              id: "output:speakers",
+              monitor: false,
+              muted: false,
+              port: undefined,
+              ports: [],
+              volume: 0.5,
+            },
+          ],
+          playback: [
+            {
+              application: "Firefox",
+              device: undefined,
+              id: "playback:42",
+              muted: true,
+              title: undefined,
+              volume: 1,
+            },
+          ],
+          recording: [],
+        },
+      ]);
+    });
+
     it("delivers an address to open", () => {
       // `domicile open-url`, which is what `BROWSER` runs inside a desktop.
       // Through the hold like the rest: an app can open a link while the
@@ -841,6 +943,35 @@ describe("DomicileClient", () => {
       // And the brightness, which comes back as a `brightness` message.
       domicile.setBrightness(0.3);
       expect(host.lastCall()).toStrictEqual(["setBrightness", 0.3]);
+
+      // And the mixer's, each answered with the next `audio` message.
+      domicile.setAudioVolume("output:s", 0.4);
+      expect(host.lastCall()).toStrictEqual([
+        "setAudioVolume",
+        "output:s",
+        0.4,
+      ]);
+      domicile.setAudioMuted("input:m", true);
+      expect(host.lastCall()).toStrictEqual(["setAudioMuted", "input:m", true]);
+      domicile.setDefaultAudioDevice("output:s");
+      expect(host.lastCall()).toStrictEqual([
+        "setDefaultAudioDevice",
+        "output:s",
+      ]);
+      domicile.moveAudioStream("playback:4", "output:s");
+      expect(host.lastCall()).toStrictEqual([
+        "moveAudioStream",
+        "playback:4",
+        "output:s",
+      ]);
+      domicile.setAudioPort("output:s", "headphones");
+      expect(host.lastCall()).toStrictEqual([
+        "setAudioPort",
+        "output:s",
+        "headphones",
+      ]);
+      domicile.setAudioProfile("card", "off");
+      expect(host.lastCall()).toStrictEqual(["setAudioProfile", "card", "off"]);
 
       domicile.themeCaptured("light");
       expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);

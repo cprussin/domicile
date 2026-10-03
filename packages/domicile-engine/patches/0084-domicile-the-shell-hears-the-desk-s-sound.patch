@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 3 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell hears the desk's sound
+
+Registers the mixer's member of the control protocol: an `audio` event,
+a DomicileAudioEvent carrying the desk's outputs and inputs
+(DomicileAudioDevice), its streams playing and recording
+(DomicileAudioStream) and its sound cards (DomicileAudioCard), with a
+device's ports and a card's profiles as DomicileAudioChoice.
+
+The event, its init dictionary, the four interfaces, the mojom members
+and the mixer's six requests are new files and edits under src/; what
+cannot be is a name in a generated-bindings list. Its context is the domicile block as 0077
+leaves it, for the reason 0045 gives.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`, and `guard-control-arrival.sh` fires the
+`audio` name in a real engine.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 12 ++++++++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 6 ++++++
+ 2 files changed, 18 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -335,6 +335,8 @@ generated_dictionary_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_event_init.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
+@@ -2440,6 +2442,16 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_card.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_card.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_choice.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_choice.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_device.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_device.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_event.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_event.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -309,6 +309,12 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_card.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_choice.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_device.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_event.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_event_init.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_audio_stream.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
+-- 
+2.43.0
