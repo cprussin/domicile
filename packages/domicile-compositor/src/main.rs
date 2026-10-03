@@ -6516,7 +6516,11 @@ fn chrome_display(socket_name: &OsStr) -> String {
 ///
 /// A reaper thread waits on the child so it doesn't become a zombie.
 fn spawn_client(command: &[String], wayland_display: &OsStr) {
-    let Some(mut child) = client_command(command, wayland_display) else {
+    let Some(mut child) = client_command(
+        command,
+        wayland_display,
+        std::env::var_os("LD_LIBRARY_PATH").as_deref(),
+    ) else {
         return;
     };
     match child.spawn() {
@@ -6582,12 +6586,13 @@ fn hand_over_the_keys(host: &mut Host, resolved: Resolved) {
 
 /// The home directory whose files a launcher is offered.
 ///
-/// **One of two things this compositor reads from its environment that are
-/// not instrumentation** — the other is its own `WAYLAND_DISPLAY`, which says
-/// whether it is a window inside a session (see
-/// `appearance::activation_environment`). Everything a desktop is
-/// *configured* with arrives on the command line, because a program writes
-/// it; a home directory is not a
+/// **One of the few things this compositor reads from its environment that
+/// are not instrumentation** — the others are its own `WAYLAND_DISPLAY`, which
+/// says whether it is a window inside a session (see
+/// `appearance::activation_environment`), and the `LD_LIBRARY_PATH` its
+/// clients inherit less the engine (see [`without_the_engine`]). Everything a
+/// desktop is *configured* with arrives on the command line, because a program
+/// writes it; a home directory is not a
 /// setting but a fact about the user this process is running as, and it is the
 /// same one [`spawn_client`] hands every client it starts. Taking it on a flag
 /// would be asking the supervisor to tell us which user we are.
@@ -6616,8 +6621,15 @@ fn home_directory() -> Option<std::path::PathBuf> {
 /// environment (`domicile_launch::spawn::compositor`), which is the desktop
 /// the compositor belongs to, so inheriting it is inheriting the right one. It
 /// is `WAYLAND_DISPLAY` that is the special case — the compositor's own is the
-/// host's rather than this desktop's, and nothing else it was started with is.
-fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command> {
+/// host's rather than this desktop's.
+///
+/// `LD_LIBRARY_PATH` is the other: `library_path` is the compositor's own, and
+/// a client gets it less the engine's directory; see [`without_the_engine`].
+fn client_command(
+    command: &[String],
+    wayland_display: &OsStr,
+    library_path: Option<&OsStr>,
+) -> Option<Command> {
     let (program, args) = command.split_first()?;
     let mut child = Command::new(program);
     child
@@ -6630,7 +6642,33 @@ fn client_command(command: &[String], wayland_display: &OsStr) -> Option<Command
         .env("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP)
         .envs(WAYLAND_PREFERENCE)
         .env_remove("DISPLAY");
+    match library_path.and_then(without_the_engine) {
+        Some(theirs) => child.env("LD_LIBRARY_PATH", theirs),
+        None => child.env_remove("LD_LIBRARY_PATH"),
+    };
     Some(child)
+}
+
+/// A library path with every directory that holds the engine taken out, or
+/// `None` when nothing is left.
+///
+/// The launcher puts the engine's directory on the compositor's
+/// `LD_LIBRARY_PATH` so that [`engine::LIBRARY`] is found, and that directory
+/// is Chromium's: it carries Chromium's own `libvulkan.so.1`, built without
+/// Xlib surfaces. A client that inherited it loaded that loader rather than
+/// its own, and GTK 4 died on the first symbol it lacked:
+///
+///   libgtk-4.so.1: undefined symbol: vkCreateXlibSurfaceKHR
+///
+/// Found by what is in a directory rather than by a flag naming it, so a
+/// compositor started by hand with a Chromium `out` directory on its path is
+/// covered too.
+fn without_the_engine(path: &OsStr) -> Option<OsString> {
+    let kept: Vec<_> = std::env::split_paths(path)
+        .filter(|directory| !directory.join(engine::LIBRARY).exists())
+        .collect();
+    (!kept.is_empty())
+        .then(|| std::env::join_paths(kept).expect("split on the separator it is joined with"))
 }
 
 /// What each toolkit reads to choose Wayland over X11; see [`client_command`].
@@ -8624,7 +8662,18 @@ mod tests {
     /// What a spawned client would find in its environment for `name`, where
     /// `None` is the variable being cleared rather than left alone.
     fn child_env(command: &[String], display: &str, name: &str) -> Option<OsString> {
-        client_command(command, OsStr::new(display))
+        child_env_from(command, display, None, name)
+    }
+
+    /// [`child_env`], for a compositor started with `library_path` as its
+    /// own `LD_LIBRARY_PATH`.
+    fn child_env_from(
+        command: &[String],
+        display: &str,
+        library_path: Option<&OsStr>,
+        name: &str,
+    ) -> Option<OsString> {
+        client_command(command, OsStr::new(display), library_path)
             .expect("a command with a program builds")
             .get_envs()
             .find(|(key, _)| *key == OsStr::new(name))
@@ -8689,6 +8738,45 @@ mod tests {
         );
     }
 
+    /// A directory holding a stand-in for the engine, as the launcher puts
+    /// the real one on the compositor's `LD_LIBRARY_PATH`.
+    fn engine_directory() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(directory.path().join(crate::engine::LIBRARY), b"")
+            .expect("the stand-in is written");
+        directory
+    }
+
+    #[test]
+    fn a_spawned_client_does_not_load_the_engines_libraries() {
+        // The engine's directory is Chromium's, and it carries Chromium's own
+        // `libvulkan.so.1`, built without Xlib surfaces. GTK 4 links the
+        // loader, found that one first, and died on a symbol it lacks:
+        //
+        //   libgtk-4.so.1: undefined symbol: vkCreateXlibSurfaceKHR
+        let engine = engine_directory();
+        let ours = std::env::join_paths([engine.path(), std::path::Path::new("/opt/lib")])
+            .expect("joinable");
+        assert_eq!(
+            child_env_from(&kitty(), "wayland-7", Some(&ours), "LD_LIBRARY_PATH"),
+            Some(OsString::from("/opt/lib")),
+        );
+    }
+
+    #[test]
+    fn a_spawned_client_of_a_compositor_that_only_had_the_engine_gets_no_library_path() {
+        let engine = engine_directory();
+        assert_eq!(
+            child_env_from(
+                &kitty(),
+                "wayland-7",
+                Some(engine.path().as_os_str()),
+                "LD_LIBRARY_PATH"
+            ),
+            None,
+        );
+    }
+
     #[test]
     fn a_window_can_be_the_answer_to_a_keystroke() {
         assert!(answers_keystroke(&Committer::App("term".to_string())));
@@ -8705,7 +8793,7 @@ mod tests {
 
     #[test]
     fn an_empty_command_spawns_nothing() {
-        assert!(client_command(&[], OsStr::new("wayland-7")).is_none());
+        assert!(client_command(&[], OsStr::new("wayland-7"), None).is_none());
     }
 
     #[test]

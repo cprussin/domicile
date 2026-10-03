@@ -294,7 +294,8 @@ pub fn engine(
 /// it, so that `cargo build` does not need a Chromium checkout. Prepended
 /// rather than replacing: a machine that set one is telling the compositor
 /// where to find something, and dropping it swaps one missing library for
-/// another.
+/// another. The compositor's own clients get it back without the engine's
+/// directory, whose Chromium libraries are not theirs.
 pub fn compositor(
     compositor: &Path,
     engine: &Path,
