@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Display } from "@domicile/component-library/display-source";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
 import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
-} from "@domicile/chrome-sdk/domicile-host";
-import type { Display } from "@domicile/component-library/display-source";
+} from "@domicile/sdk/domicile-host";
 
 import { hostDisplays } from "./host-displays";
 

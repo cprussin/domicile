@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { useModifiers } from "./useModifiers";

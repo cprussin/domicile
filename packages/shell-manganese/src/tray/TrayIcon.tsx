@@ -1,6 +1,6 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
 import { Button } from "@domicile/component-library/Button";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { TrayItem } from "@domicile/sdk/tray";
 
 import { css } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";

@@ -1,4 +1,4 @@
-import type { FoundAppsMessage } from "@domicile/chrome-sdk/host-message";
+import type { FoundAppsMessage } from "@domicile/sdk/host-message";
 import { useEffect, useRef, useState } from "react";
 
 import type { FoundApps } from "./useFoundApps";

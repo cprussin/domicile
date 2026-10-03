@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
-import type { ShellConfigMessage } from "@domicile/chrome-sdk/host-message";
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
-import { registerElements } from "@domicile/chrome-sdk/register-elements";
+import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
+import { APP_TAG_NAME } from "@domicile/sdk/app-element";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { DomicileDisplay } from "@domicile/sdk/domicile-host";
+import type { ShellConfigMessage } from "@domicile/sdk/host-message";
+import { KeyAction } from "@domicile/sdk/key-action";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
+import { registerElements } from "@domicile/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
   WEBVIEW_POPUP_WINDOW_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
-import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
+} from "@domicile/sdk/webview-element";
 import {
   act,
   fireEvent,

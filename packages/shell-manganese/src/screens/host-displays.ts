@@ -1,9 +1,9 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile/chrome-sdk/domicile-host";
 import type {
   Display,
   DisplaySource,
 } from "@domicile/component-library/display-source";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { DomicileDisplay } from "@domicile/sdk/domicile-host";
 
 /**
  * The desktop the host describes, as the component library wants to be told

@@ -10,8 +10,8 @@
       },
     },
     "packages/chrome-sdk": {
-      "name": "@domicile/chrome-sdk",
-      "version": "0.1.0",
+      "name": "@domicile/sdk",
+      "version": "0.0.0-alpha-ad391d126c04",
       "dependencies": {
         "zod": "catalog:",
       },
@@ -24,7 +24,7 @@
     },
     "packages/component-library": {
       "name": "@domicile/component-library",
-      "version": "0.0.0",
+      "version": "0.0.0-alpha-ad391d126c04",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@phosphor-icons/react": "catalog:",
@@ -69,7 +69,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/shell-manganese": "workspace:*",
+        "@domicile/manganese": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -78,7 +78,7 @@
       "name": "@domicile/e2e-harness",
       "version": "0.0.0",
       "dependencies": {
-        "@domicile/chrome-sdk": "workspace:*",
+        "@domicile/sdk": "workspace:*",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -88,12 +88,12 @@
       },
     },
     "packages/shell-manganese": {
-      "name": "@domicile/shell-manganese",
-      "version": "0.0.0",
+      "name": "@domicile/manganese",
+      "version": "0.0.0-alpha-ad391d126c04",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
-        "@domicile/chrome-sdk": "workspace:*",
         "@domicile/component-library": "workspace:*",
+        "@domicile/sdk": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "lowlight": "catalog:",
         "react": "catalog:",
@@ -120,7 +120,7 @@
       "name": "@domicile/shell-simple",
       "version": "0.0.0",
       "dependencies": {
-        "@domicile/chrome-sdk": "workspace:*",
+        "@domicile/sdk": "workspace:*",
         "react": "catalog:",
         "react-dom": "catalog:",
       },
@@ -263,13 +263,13 @@
 
     "@domicile/builder": ["@domicile/builder@workspace:packages/domicile-builder"],
 
-    "@domicile/chrome-sdk": ["@domicile/chrome-sdk@workspace:packages/chrome-sdk"],
-
     "@domicile/component-library": ["@domicile/component-library@workspace:packages/component-library"],
 
     "@domicile/e2e-harness": ["@domicile/e2e-harness@workspace:packages/e2e-harness"],
 
-    "@domicile/shell-manganese": ["@domicile/shell-manganese@workspace:packages/shell-manganese"],
+    "@domicile/manganese": ["@domicile/manganese@workspace:packages/shell-manganese"],
+
+    "@domicile/sdk": ["@domicile/sdk@workspace:packages/chrome-sdk"],
 
     "@domicile/shell-simple": ["@domicile/shell-simple@workspace:packages/shell-simple"],
 

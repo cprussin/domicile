@@ -1,4 +1,4 @@
-import type { Notification } from "@domicile/chrome-sdk/notification";
+import type { Notification } from "@domicile/sdk/notification";
 
 /** How long a toast stays up when its sender left it to the desk. */
 const LEFT_TO_THE_DESK_MS = { low: 4000, normal: 6000 } as const;

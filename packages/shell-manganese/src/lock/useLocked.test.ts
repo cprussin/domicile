@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/chrome-sdk/host-message";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { useLocked } from "./useLocked";

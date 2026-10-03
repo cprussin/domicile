@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/chrome-sdk/host-message";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile/sdk/host-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**

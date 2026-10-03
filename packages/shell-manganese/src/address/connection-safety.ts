@@ -14,9 +14,9 @@
 // expired cert, a name mismatch, a page running active mixed content and a
 // connection that failed all read as `https://` and all got a padlock. The
 // engine reports the real verdict now — see `WEBVIEW_PAGE_CHANGE_EVENT` in
-// `@domicile/chrome-sdk/webview-element`.
+// `@domicile/sdk/webview-element`.
 
-import { WEBVIEW_SECURITY_LEVELS } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_SECURITY_LEVELS } from "@domicile/sdk/webview-element";
 import { z } from "zod";
 
 /** What the browser says about the connection under the page being shown. */

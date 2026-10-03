@@ -46,8 +46,8 @@ pub fn shell_source(
 ) -> Result<ShellSource, ShellPathError> {
     if handed_in.is_none() {
         if let Some(name) = argument.strip_prefix(OURS) {
-            // `shell-manganese` is the workspace's name for it until the
-            // packages are published under theirs.
+            // `@domicile/shell-simple` is the workspace's name for the
+            // simple shell, which is not published under one of its own.
             return Ok(ShellSource::Ours(
                 name.strip_prefix("shell-").unwrap_or(name).to_string(),
             ));

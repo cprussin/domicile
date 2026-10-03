@@ -1,6 +1,6 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { Popover } from "@domicile/component-library/Popover";
 import { Slider } from "@domicile/component-library/Slider";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
 import type { WheelEvent } from "react";

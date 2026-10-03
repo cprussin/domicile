@@ -1,7 +1,7 @@
-import type { AudioDevice } from "@domicile/chrome-sdk/audio";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { AudioMessage } from "@domicile/chrome-sdk/host-message";
 import { Popover } from "@domicile/component-library/Popover";
+import type { AudioDevice } from "@domicile/sdk/audio";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { AudioMessage } from "@domicile/sdk/host-message";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";

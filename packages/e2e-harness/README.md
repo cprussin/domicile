@@ -93,7 +93,7 @@ were eventually deleted unused; a module whose last caller went should go with
 it.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
-from [`@domicile/chrome-sdk/newline-frames`](../chrome-sdk/README.md), the
+from [`@domicile/sdk/newline-frames`](../chrome-sdk/README.md), the
 handshake, and decoding via the SDK's protocol schemas — so the harnesses drift
 from the wire format only if the SDK does.
 

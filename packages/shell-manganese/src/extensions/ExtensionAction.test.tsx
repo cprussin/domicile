@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Extension } from "@domicile/chrome-sdk/extension";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Extension } from "@domicile/sdk/extension";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
+} from "@domicile/sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { FilePreview } from "@domicile/chrome-sdk/file-preview";
-import type { FilePreviewMessage } from "@domicile/chrome-sdk/host-message";
+import { FilePreview } from "@domicile/sdk/file-preview";
+import type { FilePreviewMessage } from "@domicile/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { usePreview } from "./usePreview";

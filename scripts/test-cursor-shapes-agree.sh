@@ -5,7 +5,7 @@
 # the compositor serializes `domicile_protocol::CursorShape`, the browser
 # process parses it against `components/domicile/common/cursor_shape.h`, the
 # engine hands the page a `DomicileCursorShape` declared in WebIDL, and the SDK
-# reads it through `cursorShapeSchema` in `@domicile/chrome-sdk`. Four
+# reads it through `cursorShapeSchema` in `@domicile/sdk`. Four
 # enumerations of the same set, in Rust, C++, WebIDL and TypeScript, and until
 # this script existed NOTHING COMPARED THEM.
 #

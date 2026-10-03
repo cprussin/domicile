@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { TrayItem } from "@domicile/sdk/tray";
 import { useEffect, useState } from "react";
 
 /**

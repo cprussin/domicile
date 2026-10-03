@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/chrome-sdk/host-message";
-import type { Notification } from "@domicile/chrome-sdk/notification";
 import type { ToastManager } from "@domicile/component-library/Toaster";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile/sdk/host-message";
+import type { Notification } from "@domicile/sdk/notification";
 import { act, renderHook } from "@testing-library/react";
 
 import { notification } from "./fixture";
