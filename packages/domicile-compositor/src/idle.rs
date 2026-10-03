@@ -328,6 +328,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::InvokeNotificationAction { .. }
         // And a slider dragged: the hand was on the shell's page.
         | ClientRequest::SetBrightness { .. }
+        // And so is a mixer's.
+        | ClientRequest::Audio { .. }
         // And so is a lock asked for: the chord that asked landed on the
         // shell, and a lock that lit the screens is still a lock.
         | ClientRequest::Lock => false,
@@ -981,6 +983,15 @@ mod tests {
                 },
             ),
             ("the shell locking the desk", ClientRequest::Lock),
+            (
+                "the shell's mixer",
+                ClientRequest::Audio {
+                    request: domicile_host::audio::Request::Muted {
+                        id: "output:speakers".into(),
+                        muted: true,
+                    },
+                },
+            ),
         ] {
             assert!(
                 !somebody_is_here(&request),

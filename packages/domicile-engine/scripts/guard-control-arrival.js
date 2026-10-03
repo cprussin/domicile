@@ -127,6 +127,7 @@ const EVENT_NAMES = [
   "extensions",
   "tray",
   "shellconfig",
+  "audio",
   "notifications",
   "openurl",
 ];

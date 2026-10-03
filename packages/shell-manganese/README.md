@@ -2,7 +2,7 @@
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
 under a transparent bar carrying the tray, the
-workspaces, a clock, the brightness and the charge. It is
+workspaces, a clock, the volume, the brightness and the charge. It is
 the app Domicile ships to prove the model end to end — every
 pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
@@ -833,6 +833,26 @@ over it to step a twentieth without opening anything.
   a click in a page's `<webview>` included: the engine sends the shell a real
   `focusin` for it.
 
+**The volume is beside the brightness: a speaker with no, one or two waves,
+or a cross when it is muted.** Click it for a pill of two sliders — the
+default output and the default microphone, each with a mute button — and a
+button to the whole mixer; turn the wheel over it to step the output a
+twentieth.
+
+- **Read off the sound server with `pactl`**, PulseAudio's or PipeWire's: the
+  compositor holds `pactl subscribe` open, re-reads `pactl -f json info` and
+  `list` when something a mixer draws moves, and pushes the whole of it to
+  every chrome. `domicile_host::audio` is the reading; `DOMICILE_PACTL` names
+  the `pactl`, which the flake's wrapper sets.
+- **The mixer is pavucontrol's**, in a dialog over this monitor: what is
+  playing and recording, each with its volume and the device it goes to;
+  every output and input with its volume, mute, port and whether it is the
+  default; and every card's profile. The outputs' monitors are not listed as
+  inputs, but a recording can be moved to one.
+- **Sliders follow the desk**, as the brightness's does, and stop at 100%. A
+  device another mixer turned up past it shows its figure.
+- **No sound server, no speaker.** A locked desk refuses the mixer's requests.
+
 ### Notifications
 
 Every application's and site's notification is a toast in the top-right
@@ -927,12 +947,13 @@ shell that wants its own pictures owns its own list.
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |
-| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the brightness, the charge and the bell. |
+| `src/top-bar/` | The bar: the tray, the workspaces, the clock, the volume, the brightness, the charge and the bell. |
 | `src/tray/` | The tray: applications' and extensions' icons in one row, and the order the user dragged them into. |
 | `src/extensions/` | An extension's action on the tray, the popup panel under its icon, and the engine's list it draws. |
 | `src/notifications/` | The toasts, the bell and the drawer, and the desk's notifications they are drawn from. |
 | `src/battery/` | The charge at the end of the bar, and the platform battery it is read off. |
 | `src/brightness/` | The sun on the bar, the slider it opens, and the host message the level is read from. |
+| `src/volume/` | The speaker on the bar, the two sliders it opens, the whole mixer, and the host message the sound is read from. |
 | `src/clipboard/` | What has been copied, as a panel over the desktop, and the host message it is read from. |
 | `src/launcher/` | The box **Mod+Space** puts up and the things a line typed into it can mean. Its rows are the compositor's answer to what is in the box — the applications the machine's desktop entries offer (those its empty box offers asked for while it is shut, so they are drawn with the panel rather than pushing its rows down as they land), and what its index of the whole home matched, only the front of it — so the panel also says when that index is not finished, and asks again until it is. Every row is something Enter can do: a URL on top, then the applications and the desk's bookmarks as one list by name (`applications.bookmarks`, opened as a page rather than handed to a browser, drawn with the icon its own page named when it was last previewed, signed in, or else the one the compositor found its site naming), then the files, then a search, always. An application's row and preview carry the icon its entry names, found by the compositor in the `hicolor` theme, drawn without the frame a glyph's tile has; its preview is the picture its entry's `X-Domicile-Preview` names, or else what the entry says it is for and the command Enter runs. A `!` tag (`!wiki`, `!yt`) puts a search on that site above all of them, drawn with its logo, and the rest are what the line gets as typed, its search on Google. `!gh` with one name — `cprussin` or `cprussin/domicile` — goes to that page on GitHub, above the search for it. Beside the rows is a preview of the highlighted one — a file's front, read by the compositor only for a path its index holds and lit by its language (`lowlight`, colored in the desktop's own tokens so it reads in either theme); a folder as a grid of what it holds under its name, pictures as themselves; a song as the tags and cover the compositor reads of it, over a player; a video as one still a tenth of the way in; an image or PDF drawn from the engine's `domicile://home/`; or the page a URL is. It follows the highlight once the typing settles, keeping the last preview until then rather than naming the next row in between. The highlight starts on the first row and the pointer moves it, and while the panel is up no desktop key but its own answers. |
 | `src/mount-point.ts` | Where the chrome mounts. Its own file because Domicile writes the document, so there is no element to look up — the shell makes one. |

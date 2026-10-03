@@ -87,6 +87,7 @@ import {
   appResized,
   appSizeLimit,
   appTitled,
+  audio,
   battery,
   clipboard,
   extensions,
@@ -341,6 +342,9 @@ export class DomicileClient {
     host.addEventListener("shellconfig", (event) => {
       this.#deliver("shell_config", shellConfig(event));
     });
+    host.addEventListener("audio", (event) => {
+      this.#deliver("audio", audio(event));
+    });
     host.addEventListener("displayschanged", () => {
       // The event is bare and the desktop is on the attribute, which the
       // engine writes before it dispatches — so reading it here is reading
@@ -524,6 +528,43 @@ export class DomicileClient {
    */
   setBrightness(level: number): void {
     this.#host.setBrightness(level);
+  }
+
+  /**
+   * Set a device's or a stream's volume, a fraction of the sound server's
+   * 100%. Nothing is applied here: a mixer follows the `audio` message that
+   * comes back. See {@link DomicileHost.setAudioVolume}.
+   */
+  setAudioVolume(id: string, volume: number): void {
+    this.#host.setAudioVolume(id, volume);
+  }
+
+  /** Mute or unmute a device or a stream; answered like a volume. */
+  setAudioMuted(id: string, muted: boolean): void {
+    this.#host.setAudioMuted(id, muted);
+  }
+
+  /** Make a device the one new streams go to; answered like a volume. */
+  setDefaultAudioDevice(id: string): void {
+    this.#host.setDefaultAudioDevice(id);
+  }
+
+  /**
+   * Move a stream to another device of its own direction; answered like a
+   * volume.
+   */
+  moveAudioStream(id: string, device: string): void {
+    this.#host.moveAudioStream(id, device);
+  }
+
+  /** Switch a device to one of its ports; answered like a volume. */
+  setAudioPort(id: string, port: string): void {
+    this.#host.setAudioPort(id, port);
+  }
+
+  /** Switch a sound card to one of its profiles; answered like a volume. */
+  setAudioProfile(card: string, profile: string): void {
+    this.#host.setAudioProfile(card, profile);
   }
 
   /**

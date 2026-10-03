@@ -11,6 +11,7 @@ import { Clock } from "../clock/Clock";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { Tray } from "../tray/Tray";
 import type { TrayOrder } from "../tray/useTrayOrder";
+import { Volume } from "../volume/Volume";
 import { Workspaces } from "./Workspaces";
 
 /**
@@ -48,6 +49,8 @@ type Props = {
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
+  /** The monitor this bar is across, which the mixer opens over. */
+  screen: string;
   /** The applications' tray icons. */
   tray: readonly TrayItem[];
   /** The order the tray is in, and how a drag changes it. */
@@ -60,7 +63,7 @@ type Props = {
 
 /**
  * The bar across the top of the screen the chrome is on: the tray and the
- * workspaces, the clock, the brightness and the charge.
+ * workspaces, the clock, the volume, the brightness and the charge.
  *
  * **It launches nothing.** Everything this desktop does is on a key, and two
  * buttons for two of those keys were a ranking nobody made — the terminal is
@@ -74,6 +77,10 @@ type Props = {
  * desktop's either: each icon is an application's StatusNotifierItem or an
  * extension's toolbar button, in one row in the order the user dragged them
  * into, whose clicks are theirs and have no key.
+ *
+ * **The volume is the brightness's case**, and sits beside it: a speaker
+ * whose panel holds the default output and microphone, and a button from
+ * there to the whole mixer — every device, stream and card.
  *
  * **The brightness is the theme toggle's case, below**: it changes the screen
  * already in front of you rather than putting anything on it. Its slider
@@ -122,6 +129,7 @@ export const TopBar = ({
   onOpenNotifications,
   onSelectWorkspace,
   openedExtension,
+  screen,
   tray,
   trayOrder,
   unread,
@@ -151,6 +159,7 @@ export const TopBar = ({
     <div className={endStyles}>
       {mode !== "default" && <span className={modeStyles}>{mode}</span>}
       <ThemeSwitch />
+      <Volume domicile={domicile} screen={screen} />
       <Brightness domicile={domicile} />
       <Battery domicile={domicile} />
       <NotificationBell onOpen={onOpenNotifications} unread={unread} />
