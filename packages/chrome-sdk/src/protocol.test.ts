@@ -385,6 +385,7 @@ describe("parseHostMessage", () => {
           ],
           resize: [{ action: { name: "default", type: "mode" }, shortcut }],
         },
+        keys: { l: 38 },
         shells: {
           manganese: {
             keybindings: { default: [] },
@@ -405,6 +406,7 @@ describe("parseHostMessage", () => {
         ],
         resize: [{ action: { name: "default", type: "mode" }, shortcut }],
       },
+      keys: { l: 38 },
       shells: {
         manganese: { keybindings: { default: [] }, options: { gaps: 8 } },
       },
@@ -430,6 +432,7 @@ describe("parseHostMessage", () => {
               },
             ],
           },
+          keys: {},
           shells: {},
           type: "shell_config",
         }),

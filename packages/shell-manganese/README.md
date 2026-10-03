@@ -55,8 +55,9 @@ a title bar, and both are moved, floated and closed by the same keys.
 compositor's config** — `domicile.toml`, see [Keys](#keys) below for the
 commands and a sample — and the table below is that sample: the sway config
 this shell was written against, `config/modules/ui/sway` in the author's
-dotfiles, with `lib.mkOptionDefault`'s sway defaults under it. **A config that
-binds nothing leaves this desktop with no keys at all.**
+dotfiles, with `lib.mkOptionDefault`'s sway defaults under it. A config that
+binds nothing leaves this desktop with manganese's own keys — sway's, on the
+digits rather than the sample's Programmer's Dvorak symbols.
 
 **The modifier in the sample is Meta** — `Mod4`, the Super key, which is what
 the sway config sets. Every `Mod+` below is Meta.
@@ -151,6 +152,14 @@ logical box, upright, and a pointer is reported in the numbers a window is
 laid out at.
 
 ### Keys
+
+**Manganese binds sway's keys itself**: `DEFAULT_KEYBINDINGS` and
+`DEFAULT_MODES`, on Meta — the workspaces on the digits, the focus on `hjkl`
+and the arrows, `Meta+r` for resize mode. `runManganese({ keybindings })`
+replaces them; spread the defaults in to keep them and change a key, with the
+commands below built by `focus`, `move`, `workspace`, `grow`, `mode` and the
+rest rather than typed as words. The config's bindings sit on top of
+whichever: a chord both bind is the config's.
 
 The config binds a chord to an action, as sway's `bindsym` does, and this
 shell is the `manganese` in `[shells.manganese.*]`. The keysyms resolve through

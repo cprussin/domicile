@@ -277,9 +277,11 @@ fn the_keys_the_config_binds_ride_with_the_handshake() {
             },
         }],
     )];
-    session
-        .host_mut()
-        .set_shell_config(keybindings.clone().into(), [].into());
+    session.host_mut().set_shell_config(
+        keybindings.clone().into(),
+        [].into(),
+        [("Return".to_string(), 28)].into(),
+    );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
@@ -294,6 +296,7 @@ fn the_keys_the_config_binds_ride_with_the_handshake() {
         Some(&HostMessage::ShellConfig {
             keybindings: keybindings.into(),
             shells: [].into(),
+            keys: [("Return".to_string(), 28)].into(),
         })
     );
 }

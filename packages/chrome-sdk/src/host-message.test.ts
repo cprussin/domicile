@@ -753,6 +753,7 @@ describe("the keys the config binds", () => {
               { action: { name: "default", type: "mode" }, shortcut: META_L },
             ],
           },
+          keys: { l: 38, Return: 28 },
           shells: {
             manganese: {
               keybindings: {
@@ -801,6 +802,10 @@ describe("the keys the config binds", () => {
             },
           ],
         ],
+      ]),
+      keys: new Map([
+        ["Return", 28],
+        ["l", 38],
       ]),
       shells: new Map([
         [

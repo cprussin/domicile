@@ -29,7 +29,9 @@ import type {
 } from "./host-message";
 import { evdevFromCode } from "./input";
 import { KeyActionKind } from "./key-action";
-import { actionFor, keybindingsFor, sameChord } from "./keybindings";
+import { actionFor, keybindingsFor, layered, sameChord } from "./keybindings";
+import type { ShellKeybindings } from "./own-keybindings";
+import { ownKeybindings } from "./own-keybindings";
 
 /** The mode a desk starts in: the config's `[keybindings]`. */
 const DEFAULT_MODE = "default";
@@ -72,8 +74,15 @@ type KeyClient = {
 };
 
 /**
- * Answer the keys the config binds for the shell named `shell`: the desk's
- * `[keybindings]` and `[modes]`, with `[shells.<shell>]`'s on top.
+ * Answer the keys the shell named `shell` binds itself, `own`, and the keys
+ * the config binds for it: the desk's `[keybindings]` and `[modes]`, with
+ * `[shells.<shell>]`'s on top, and both on top of `own` — a chord the config
+ * binds is the config's.
+ *
+ * **`own` is resolved as each config arrives**, against the keyboard it
+ * describes, so a reload that changes the layout moves the keys with it. A
+ * chord `own` writes wrong, or whose keysym the keyboard cannot type, throws
+ * there.
  *
  * **This owns `shell_config` and `shortcut`.** {@link DomicileClient.on} is a
  * single slot per message, so a shell that registers either of its own
@@ -106,6 +115,7 @@ type KeyClient = {
 export const bindKeys = (
   domicile: KeyClient,
   shell: string,
+  own: ShellKeybindings,
   { onCommand, onModeChanged, onOptions }: KeyHandlers,
 ): KeyBinding => {
   // `undefined` until the first config: no key is bound yet, and a mode set
@@ -142,7 +152,10 @@ export const bindKeys = (
   };
 
   const onConfig = (config: ShellConfigMessage) => {
-    const bound = keybindingsFor(config, shell);
+    const bound = layered(
+      keybindingsFor(config, shell),
+      ownKeybindings(own, config.keys),
+    );
     bindings = bound;
     for (const chord of chordsOf(bound)) {
       domicile.grabShortcut(chord);

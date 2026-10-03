@@ -559,6 +559,9 @@ const keybindingsSchema = z
 // said and nothing this side reads.
 export const shellConfigSchema = z.looseObject({
   keybindings: keybindingsSchema,
+  // Every keysym the keyboard can type and the evdev key it is on, for the
+  // chords a shell binds itself.
+  keys: z.record(z.string(), z.number().int().nonnegative()),
   shells: z.record(
     z.string(),
     z.looseObject({ keybindings: keybindingsSchema, options: z.unknown() }),
