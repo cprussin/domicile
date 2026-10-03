@@ -36,6 +36,5 @@
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
 {"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo="},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing"}]}
-{"type":"shell_config","keybindings":{"default":[{"shortcut":{"key":28,"alt":false,"ctrl":false,"shift":false,"logo":true},"action":{"type":"send_shell","args":["terminal"]}},{"shortcut":{"key":19,"alt":false,"ctrl":false,"shift":false,"logo":true},"action":{"type":"mode","name":"resize"}}],"resize":[{"shortcut":{"key":1,"alt":false,"ctrl":false,"shift":false,"logo":true},"action":{"type":"mode","name":"default"}}]},"shells":{"manganese":{"keybindings":{"default":[{"shortcut":{"key":38,"alt":false,"ctrl":false,"shift":false,"logo":true},"action":{"type":"send_shell","args":["focus","right"]}}]},"options":{"bar":{"position":"top"},"gaps":8}}},"keys":{"Return":28,"l":25,"parenleft":6}}
-{"type":"shell_config","keybindings":{"default":[]},"shells":{},"keys":{}}
+{"type":"shell_config","keys":{"Return":28,"l":25,"parenleft":6}}
 {"type":"notifications","items":[{"id":7,"app_name":"Firefox","summary":"New message","body":"Ada: lunch?","icon":"data:image/png;base64,iVBORw0KGgo=","urgency":"normal","actions":[{"key":"reply","label":"Reply"}],"clickable":true,"time":1790000000000},{"id":8,"app_name":"","summary":"Battery low","body":"","urgency":"critical","actions":[],"clickable":false,"timeout_ms":0,"time":1790000060000}]}

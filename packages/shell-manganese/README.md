@@ -51,13 +51,13 @@ a title bar, and both are moved, floated and closed by the same keys.
 
 ## Window management
 
-**The layout is sway's**, and so are the commands. **The keys are the
-compositor's config** — `domicile.toml`, see [Keys](#keys) below for the
-commands and a sample — and the table below is that sample: the sway config
-this shell was written against, `config/modules/ui/sway` in the author's
-dotfiles, with `lib.mkOptionDefault`'s sway defaults under it. A config that
-binds nothing leaves this desktop with manganese's own keys — sway's, on the
-digits rather than the sample's Programmer's Dvorak symbols.
+**The layout is sway's**, and so are the commands. **The keys are
+`runManganese({ keybindings })`** — see [Keys](#keys) below for the commands
+and a sample — and the table below is that sample: the sway config this shell
+was written against, `config/modules/ui/sway` in the author's dotfiles, with
+`lib.mkOptionDefault`'s sway defaults under it. Given no keys, this desktop
+binds manganese's own — sway's, on the digits rather than the sample's
+Programmer's Dvorak symbols.
 
 **The modifier in the sample is Meta** — `Mod4`, the Super key, which is what
 the sway config sets. Every `Mod+` below is Meta.
@@ -71,7 +71,7 @@ the screen it is on.
 | Keys | What |
 |---|---|
 | **Mod+Return** | Launch a terminal (`kitty`), which the compositor spawns. |
-| **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The config's launcher keys, in both the places it binds one. |
+| **Mod+Space**, **Mod+D** | Open the launcher, or put it away. The sway config's launcher keys, in both the places it binds one. |
 | **Mod+Shift+V** | Open the clipboard's history, or put it away. Not sway's: sway has no clipboard manager, and this is where every config that adds one puts it. |
 | **Mod+Shift+Q** | Close the window being worked in. |
 | **Mod+Shift+Return** | Lock the desk. Not sway's. Does nothing on a desk whose config states no `[lock]`. |
@@ -158,22 +158,21 @@ laid out at.
 and the arrows, `Meta+r` for resize mode. `runManganese({ keybindings })`
 replaces them; spread the defaults in to keep them and change a key, with the
 commands below built by `focus`, `move`, `workspace`, `grow`, `mode` and the
-rest rather than typed as words. The config's bindings sit on top of
-whichever: a chord both bind is the config's.
+rest rather than typed as words.
 
-The config binds a chord to an action, as sway's `bindsym` does, and this
-shell is the `manganese` in `[shells.manganese.*]`. The keysyms resolve through
-the keymap the compositor is running (`input.keyboard`), so `Meta+h` is the key
-your layout puts `h` on — the key a US keyboard calls J, under Programmer's
-Dvorak — and the workspace chords are the number row there, because
-`parenleft` is on it. Shift is taken literally: `Meta+Shift+parenleft` is the
-`parenleft` key with Shift held, not the key that types `parenleft` shifted.
+A chord maps to an action, as sway's `bindsym` does. The keysyms resolve
+through the keymap the compositor is running (`input.keyboard`), so `Meta+h`
+is the key your layout puts `h` on — the key a US keyboard calls J, under
+Programmer's Dvorak — and the sample's workspace chords are the number row
+there, because `parenleft` is on it. Shift is taken literally:
+`Meta+Shift+parenleft` is the `parenleft` key with Shift held, not the key that
+types `parenleft` shifted.
 
-`mode <name>` is the SDK's (`bindKeys`), and the bar names a mode that is not
+`mode(name)` is the SDK's (`bindKeys`), and the bar names a mode that is not
 `default`. **The mode is this monitor's page's**, not the desk's: a desk of
-several monitors is several pages, each keeping its own. Everything else is
-`send-shell <command>`, and these are the commands — **sway's, spelled as sway
-spells them**, so a sway config's lines carry over:
+several monitors is several pages, each keeping its own. Everything else is a
+command, and these are the commands — **sway's, spelled as sway spells them**,
+so a sway config's lines carry over:
 
 | Command | What |
 |---|---|
@@ -205,93 +204,38 @@ A command this shell does not know is said on the console and does nothing.
 and a workspace switched behind it is the desktop reacting to keys somebody
 pressed at the panel. (`mode` is the SDK's, so it is not held back.)
 
-This is the sample: the keys manganese shipped with when they were hard-coded,
-exactly.
+This is the sample: the defaults, with the workspaces on Programmer's
+Dvorak's number row, which is what the author's desk binds.
 
-```toml
-# manganese's keys, as it shipped them hard-coded: sway's, on Meta (Mod4).
-# Keysyms resolve through the live keymap (`input.keyboard`), so these are the
-# keys Programmer's Dvorak puts them on there, and wherever your layout does.
+```tsx
+import {
+  DEFAULT_KEYBINDINGS,
+  DEFAULT_MODES,
+  moveToWorkspace,
+  runManganese,
+  workspace,
+} from "@domicile/shell-manganese";
 
-[shells.manganese.keybindings]
-"Meta+Return" = "send-shell terminal"
-"Meta+Shift+q" = "send-shell kill"
-"Meta+Shift+Return" = "send-shell lock"
-"Meta+space" = "send-shell launcher"
-"Meta+d" = "send-shell launcher"
+/** Programmer's Dvorak's number row, unshifted, for workspaces 1 to 10. */
+const ROW = [
+  "parenleft", "parenright", "braceright", "plus", "braceleft",
+  "bracketright", "bracketleft", "exclam", "equal", "asterisk",
+];
 
-"Meta+h" = "send-shell focus left"
-"Meta+j" = "send-shell focus down"
-"Meta+k" = "send-shell focus up"
-"Meta+l" = "send-shell focus right"
-"Meta+Left" = "send-shell focus left"
-"Meta+Down" = "send-shell focus down"
-"Meta+Up" = "send-shell focus up"
-"Meta+Right" = "send-shell focus right"
-
-"Meta+Shift+h" = "send-shell move left"
-"Meta+Shift+j" = "send-shell move down"
-"Meta+Shift+k" = "send-shell move up"
-"Meta+Shift+l" = "send-shell move right"
-"Meta+Shift+Left" = "send-shell move left"
-"Meta+Shift+Down" = "send-shell move down"
-"Meta+Shift+Up" = "send-shell move up"
-"Meta+Shift+Right" = "send-shell move right"
-
-"Meta+Shift+v" = "send-shell clipboard"
-
-"Meta+b" = "send-shell split h"
-"Meta+v" = "send-shell split v"
-"Meta+s" = "send-shell layout stacking"
-"Meta+w" = "send-shell layout tabbed"
-"Meta+e" = "send-shell layout toggle split"
-"Meta+a" = "send-shell focus parent"
-"Meta+Shift+a" = "send-shell focus child"
-
-"Meta+f" = "send-shell fullscreen toggle"
-"Meta+Shift+f" = "send-shell fullscreen toggle global"
-
-"Meta+Tab" = "send-shell focus mode_toggle"
-"Meta+Shift+Tab" = "send-shell floating toggle"
-
-"Meta+minus" = "send-shell scratchpad show"
-"Meta+Shift+minus" = "send-shell move scratchpad"
-
-"Meta+r" = "mode resize"
-
-"Meta+parenleft" = "send-shell workspace 1"
-"Meta+parenright" = "send-shell workspace 2"
-"Meta+braceright" = "send-shell workspace 3"
-"Meta+plus" = "send-shell workspace 4"
-"Meta+braceleft" = "send-shell workspace 5"
-"Meta+bracketright" = "send-shell workspace 6"
-"Meta+bracketleft" = "send-shell workspace 7"
-"Meta+exclam" = "send-shell workspace 8"
-"Meta+equal" = "send-shell workspace 9"
-"Meta+asterisk" = "send-shell workspace 10"
-
-"Meta+Shift+parenleft" = "send-shell move container to workspace 1"
-"Meta+Shift+parenright" = "send-shell move container to workspace 2"
-"Meta+Shift+braceright" = "send-shell move container to workspace 3"
-"Meta+Shift+plus" = "send-shell move container to workspace 4"
-"Meta+Shift+braceleft" = "send-shell move container to workspace 5"
-"Meta+Shift+bracketright" = "send-shell move container to workspace 6"
-"Meta+Shift+bracketleft" = "send-shell move container to workspace 7"
-"Meta+Shift+exclam" = "send-shell move container to workspace 8"
-"Meta+Shift+equal" = "send-shell move container to workspace 9"
-"Meta+Shift+asterisk" = "send-shell move container to workspace 10"
-
-[shells.manganese.modes.resize]
-"Meta+h" = "send-shell resize grow left"
-"Meta+j" = "send-shell resize grow down"
-"Meta+k" = "send-shell resize grow up"
-"Meta+l" = "send-shell resize grow right"
-"Meta+Left" = "send-shell resize grow left"
-"Meta+Down" = "send-shell resize grow down"
-"Meta+Up" = "send-shell resize grow up"
-"Meta+Right" = "send-shell resize grow right"
-"Meta+Return" = "mode default"
-"Meta+Escape" = "mode default"
+export const Shell = runManganese({
+  keybindings: {
+    keybindings: {
+      ...DEFAULT_KEYBINDINGS,
+      ...Object.fromEntries(
+        ROW.flatMap((key, at) => [
+          [`Meta+${key}`, workspace(String(at + 1))],
+          [`Meta+Shift+${key}`, moveToWorkspace(String(at + 1))],
+        ]),
+      ),
+    },
+    modes: DEFAULT_MODES,
+  },
+});
 ```
 
 ### Resize mode needs the modifier, where sway's does not
@@ -988,8 +932,9 @@ shell that wants its own pictures owns its own list.
 | `src/screens/stage-screens.ts` | What the `Stage` draws on each screen: its rectangles, the workspace it shows, and where that workspace's windows go. |
 | `src/screens/screen-toward.ts` | Which screen lies beside another, which is where `focus <direction>` goes off the edge of a workspace. |
 | `src/screens/NoScreens.tsx` | What the page says for a desktop with no screens at all, which is a different thing from not having been told yet. |
-| `src/keyboard/command.ts` | The `send-shell` commands, sway's words read into the desktop's actions. |
-| `src/keyboard/useKeybindings.ts` | The config's keys, answered through the SDK's `bindKeys`: each command run, the launcher's modality, and the binding mode for the bar. |
+| `src/keyboard/command.ts` | The commands, sway's words read into the desktop's actions. |
+| `src/keyboard/commands.ts` | What a binding names: the typed commands (`focus`, `workspace`, …) and sway's keys as `DEFAULT_KEYBINDINGS` / `DEFAULT_MODES`. |
+| `src/keyboard/useKeybindings.ts` | The desktop's keys, answered through the SDK's `bindKeys`: each command run, the launcher's modality, and the binding mode for the bar. |
 | `src/keyboard/useModifiers.ts` | Which modifiers are held, from both of the places that can know. |
 | `src/address/` | What a line of typed text means as a web address. The launcher's box and a browser window's address bar both ask, and a desktop where the two disagree about `localhost:5173` is one where the user has to remember which box they are in. |
 | `src/address/typed-address.ts` | Which of the two a typed line is: a site, or words to search for. |
@@ -1074,11 +1019,11 @@ The parts of the config this shell cannot answer, and why:
 
 ## Configure
 
-The desk is the compositor's config, `domicile.toml` (see
+Manganese is configured by `runManganese(options)` — its bar and its keys,
+which [The top bar](#the-top-bar) and [Keys](#keys) above describe — in a
+config module whose `Shell` it is (see
 [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md)); nothing here reads a
-file of its own. What is manganese's in it is `[shells.manganese]` — its keys,
-under `keybindings` and `modes`, which [Keys](#keys) above lists with a sample.
-A reload that changes them reaches the running desk.
+file of its own.
 
 The keyboard is `[input.keyboard]`, and it is what the sample's keysyms resolve
 through. They were chosen on Programmer's Dvorak with Caps Lock and Escape

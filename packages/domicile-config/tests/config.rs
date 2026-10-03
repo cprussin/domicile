@@ -1550,3 +1550,13 @@ fn a_json_file_is_read_as_json() {
         "dvp"
     );
 }
+
+#[test]
+fn keys_are_a_shell_s_now_and_the_tables_are_refused() {
+    // A shell binds its keys as its props. A config that still has the tables
+    // is refused by name rather than read for keys nothing answers.
+    for table in ["[keybindings]", "[modes.resize]", "[shells.manganese]"] {
+        let err = Config::parse(table).unwrap_err();
+        assert!(matches!(err, ConfigError::Parse(_)), "{table}: {err:?}");
+    }
+}

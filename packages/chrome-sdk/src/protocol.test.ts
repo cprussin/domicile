@@ -366,76 +366,18 @@ describe("parseHostMessage", () => {
     });
   });
 
-  it("decodes the keys the config binds, the desk's and each shell's", () => {
-    const shortcut = {
-      alt: false,
-      ctrl: false,
-      key: 38,
-      logo: true,
-      shift: false,
-    };
-    const message = parseHostMessage(
-      JSON.stringify({
-        keybindings: {
-          default: [
-            {
-              action: { args: ["focus", "right"], type: "send_shell" },
-              shortcut,
-            },
-          ],
-          resize: [{ action: { name: "default", type: "mode" }, shortcut }],
-        },
-        keys: { l: 38 },
-        shells: {
-          manganese: {
-            keybindings: { default: [] },
-            options: { gaps: 8 },
-          },
-        },
-        type: "shell_config",
-      }),
-    );
-
-    expect(message).toStrictEqual({
-      keybindings: {
-        default: [
-          {
-            action: { args: ["focus", "right"], type: "send_shell" },
-            shortcut,
-          },
-        ],
-        resize: [{ action: { name: "default", type: "mode" }, shortcut }],
-      },
-      keys: { l: 38 },
-      shells: {
-        manganese: { keybindings: { default: [] }, options: { gaps: 8 } },
-      },
-      type: "shell_config",
-    });
+  it("decodes the keyboard: every keysym and the key it is on", () => {
+    expect(
+      parseHostMessage(
+        JSON.stringify({ keys: { l: 38, Return: 28 }, type: "shell_config" }),
+      ),
+    ).toStrictEqual({ keys: { l: 38, Return: 28 }, type: "shell_config" });
   });
 
-  it("throws on a binding whose action it cannot name", () => {
+  it("throws on a key that is not a key number", () => {
     expect(() =>
       parseHostMessage(
-        JSON.stringify({
-          keybindings: {
-            default: [
-              {
-                action: { type: "exec" },
-                shortcut: {
-                  alt: false,
-                  ctrl: false,
-                  key: 38,
-                  logo: true,
-                  shift: false,
-                },
-              },
-            ],
-          },
-          keys: {},
-          shells: {},
-          type: "shell_config",
-        }),
+        JSON.stringify({ keys: { Return: -1 }, type: "shell_config" }),
       ),
     ).toThrow();
   });

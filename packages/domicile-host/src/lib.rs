@@ -14,10 +14,7 @@ use std::collections::HashMap;
 
 use std::collections::BTreeMap;
 
-use domicile_protocol::{
-    ChromeMessage, DisplayInfo, HostMessage, ModeBindings, Notification, ShellBindings, Theme,
-    TrayItem,
-};
+use domicile_protocol::{ChromeMessage, DisplayInfo, HostMessage, Notification, Theme, TrayItem};
 
 pub mod app_icons;
 pub mod audio;
@@ -92,14 +89,6 @@ pub struct Popup {
     pub grab: bool,
 }
 
-/// What [`Host::set_shell_config`] was last given: the bindings by mode, what
-/// each shell is told, and every keysym the keyboard types with its key.
-type ShellConfig = (
-    ModeBindings,
-    BTreeMap<String, ShellBindings>,
-    BTreeMap<String, u32>,
-);
-
 /// The compositor's orchestration state.
 #[derive(Debug, Default)]
 pub struct Host {
@@ -142,7 +131,7 @@ pub struct Host {
     ///
     /// `None` until something sets them, for the keymap's reason: a host with
     /// no keyboard behind it has no key a keysym could resolve to.
-    shell_config: Option<ShellConfig>,
+    shell_config: Option<BTreeMap<String, u32>>,
     /// Which way round the desktop is drawn, as every chrome is told — on
     /// connecting, and again whenever it changes under them.
     ///
@@ -248,32 +237,23 @@ impl Host {
             })
     }
 
-    /// Hand over the keys the config binds and what each shell is told, for
-    /// every chrome that connects after.
+    /// Hand over the keyboard -- every keysym it types and the key it is on --
+    /// for every chrome that connects after.
     ///
     /// [`Host::set_keymap`]'s shape: set at startup and again whenever a
     /// reload moves the bindings or the keyboard they were resolved on,
     /// replacing rather than accumulating, and broadcast by the compositor to
     /// the chromes already connected.
-    pub fn set_shell_config(
-        &mut self,
-        keybindings: ModeBindings,
-        shells: BTreeMap<String, ShellBindings>,
-        keys: BTreeMap<String, u32>,
-    ) {
-        self.shell_config = Some((keybindings, shells, keys));
+    pub fn set_shell_config(&mut self, keys: BTreeMap<String, u32>) {
+        self.shell_config = Some(keys);
     }
 
-    /// The keys and the shells' settings, in the message a chrome is told
-    /// them as, or `None` from a host that has never been given any.
+    /// The keyboard, in the message a chrome is told it as, or `None` from a
+    /// host that has never been given one.
     pub fn describe_shell_config(&self) -> Option<HostMessage> {
         self.shell_config
             .clone()
-            .map(|(keybindings, shells, keys)| HostMessage::ShellConfig {
-                keybindings,
-                shells,
-                keys,
-            })
+            .map(|keys| HostMessage::ShellConfig { keys })
     }
 
     /// Take up a theme, and hand back what to tell the chromes — or `None`

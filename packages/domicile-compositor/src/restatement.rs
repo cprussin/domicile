@@ -86,8 +86,8 @@ pub struct Restatement {
     /// The extensions the browser process installs, or `None` where the list
     /// did not move.
     pub extensions: Option<ExtensionsConfig>,
-    /// Whether the chromes are to be told the keys and the shells' settings
-    /// again.
+    /// Whether the chromes are to be told the keyboard again: a keysym moves
+    /// with the layout.
     pub shell_config: bool,
 }
 
@@ -104,10 +104,7 @@ impl Restatement {
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             applications: (was.applications != now.applications).then(|| now.applications.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
-            shell_config: was.input.keyboard != now.input.keyboard
-                || was.keybindings != now.keybindings
-                || was.modes != now.modes
-                || was.shells != now.shells,
+            shell_config: was.input.keyboard != now.input.keyboard,
         }
     }
 }
@@ -224,22 +221,11 @@ mod tests {
     }
 
     #[test]
-    fn the_keys_are_restated_when_a_binding_or_the_keyboard_moved() {
-        // The keyboard as well as the bindings, because a chord names a keysym
-        // and the key it resolves to is the layout's: the same file on another
-        // layout is other keys.
+    fn the_keys_are_restated_when_the_keyboard_moved() {
+        // A shell's chord names a keysym and the key it resolves to is the
+        // layout's: the same chord on another layout is another key.
         let was = parsed(A_DVORAK_DESK);
-        for now in [
-            A_PLAIN_DESK,
-            A_DESK_THAT_BINDS_A_KEY,
-            A_DESK_WITH_A_MODE,
-            A_DESK_THAT_TELLS_ITS_SHELL_SOMETHING,
-        ] {
-            assert!(
-                Restatement::between(&was, &parsed(now)).shell_config,
-                "{now}"
-            );
-        }
+        assert!(Restatement::between(&was, &parsed(A_PLAIN_DESK)).shell_config);
     }
 
     #[test]
@@ -312,48 +298,6 @@ web_store = ["ddkjiahejlhfcafbddmgiahcphecmpfh"]
 [input.keyboard]
 xkb_variant = "dvp"
 xkb_options = ["caps:swapescape"]
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
-"#;
-
-    /// The same desk, with a key bound.
-    const A_DESK_THAT_BINDS_A_KEY: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[keybindings]
-"Meta+Return" = "send-shell terminal"
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
-"#;
-
-    /// The same desk, with a mode nothing enters yet.
-    const A_DESK_WITH_A_MODE: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[modes.resize]
-"Meta+Escape" = "mode default"
-
-[[output.displays]]
-name = "one"
-size = [1024, 768]
-"#;
-
-    /// The same desk, with a setting for one shell.
-    const A_DESK_THAT_TELLS_ITS_SHELL_SOMETHING: &str = r#"
-[input.keyboard]
-xkb_variant = "dvp"
-xkb_options = ["caps:swapescape"]
-
-[shells.manganese.options]
-gaps = 8
 
 [[output.displays]]
 name = "one"

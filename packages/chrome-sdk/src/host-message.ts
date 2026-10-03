@@ -64,7 +64,7 @@ import {
   FilePreviewKind,
   filePreviewKindSchema,
 } from "./file-preview";
-import { KeyAction } from "./key-action";
+import type { KeyAction } from "./key-action";
 import type { Notification } from "./notification";
 import { notificationUrgencySchema } from "./notification";
 import { shellConfigSchema } from "./protocol";
@@ -448,7 +448,7 @@ export type TrayMessage = {
   items: readonly TrayItem[];
 };
 
-/** One key the config binds: the chord, and what pressing it does. */
+/** One key a shell binds: the chord, and what pressing it does. */
 export type Keybinding = {
   /** In `grabShortcut`'s terms, so it can be claimed as it stands. */
   shortcut: ShortcutMessage;
@@ -457,42 +457,21 @@ export type Keybinding = {
 
 /**
  * The bindings of each binding mode, by the mode's name. `default` is always
- * there — it is the config's `[keybindings]` — though it can be empty.
+ * there, though it can be empty.
  *
  * A map rather than a record because the names are the user's: a mode called
  * `constructor` is a mode, not a property every object already has.
  */
 export type KeybindingsByMode = ReadonlyMap<string, readonly Keybinding[]>;
 
-/** What the config tells one shell, by name, on top of the desk's bindings. */
-export type ShellSection = {
-  keybindings: KeybindingsByMode;
-  /**
-   * The shell's `[shells.<name>.options]` table, as JSON and unread: what it
-   * means is the shell's to say, so the shell parses it. `{}` when the config
-   * has none.
-   */
-  options: unknown;
-};
-
 /**
- * The keys the config binds, and what it tells each shell besides.
- *
- * `keybindings` is every shell's; `shells` is what only the shell of that name
- * adds. `bind-keys.ts` is what merges the two for one shell and answers the
- * presses — most shells want that rather than this.
- *
- * Once when the page connects and again whenever a reload changes it, whole
- * each time.
+ * The keyboard, for the keys a shell binds: every keysym it can type, by
+ * name, and the evdev key it is on — what a shell's chords are resolved
+ * against. Once when the page connects and again when a reload moves the
+ * layout.
  */
 export type ShellConfigMessage = {
-  keybindings: KeybindingsByMode;
-  /**
-   * Every keysym the keyboard can type, by name, and the evdev key it is on:
-   * what the chords a shell binds itself are resolved against.
-   */
   keys: ReadonlyMap<string, number>;
-  shells: ReadonlyMap<string, ShellSection>;
 };
 
 /**
@@ -833,28 +812,17 @@ export const tray = (event: DomicileTrayEvent): TrayMessage => ({
 });
 
 /**
- * The config's keys, parsed out of the line the engine forwarded.
+ * The keyboard, parsed out of the line the engine forwarded.
  *
- * The one translator that reads JSON: the engine cannot type a shell's
- * `options`, so it hands over the compositor's line unread — see
- * {@link DomicileShellConfigEvent} — and this is the boundary it is parsed at.
- * The wire's `send_shell` and `mode` become {@link KeyAction}s, and its
- * `shortcut` becomes `grabShortcut`'s dictionary.
+ * The one translator that reads JSON: the engine carries the compositor's
+ * line unread — see {@link DomicileShellConfigEvent} — and this is the
+ * boundary it is parsed at.
  */
 export const shellConfig = (
   event: DomicileShellConfigEvent,
 ): ShellConfigMessage => {
   const config = shellConfigSchema.parse(JSON.parse(event.config));
-  return {
-    keybindings: byMode(config.keybindings),
-    keys: new Map(Object.entries(config.keys)),
-    shells: new Map(
-      Object.entries(config.shells).map(([name, section]) => [
-        name,
-        { keybindings: byMode(section.keybindings), options: section.options },
-      ]),
-    ),
-  };
+  return { keys: new Map(Object.entries(config.keys)) };
 };
 
 /**
@@ -900,29 +868,6 @@ const stream = (engine: DomicileAudioStream): AudioStream => ({
   title: named(engine.title),
   volume: engine.volume,
 });
-
-type WireKeybindings = z.infer<typeof shellConfigSchema>["keybindings"];
-
-/** The wire's table of modes, as the map a shell reads. */
-const byMode = (table: WireKeybindings): KeybindingsByMode =>
-  new Map(
-    Object.entries(table).map(([mode, bindings]) => [
-      mode,
-      bindings.map(({ action, shortcut: chord }) => ({
-        action:
-          action.type === "send_shell"
-            ? KeyAction.SendShell(action.args)
-            : KeyAction.Mode(action.name),
-        shortcut: {
-          altKey: chord.alt,
-          ctrlKey: chord.ctrl,
-          keycode: chord.key,
-          metaKey: chord.logo,
-          shiftKey: chord.shift,
-        },
-      })),
-    ]),
-  );
 
 /**
  * The notifications, with the SDK's own `arrival` left behind, an empty

@@ -19,20 +19,15 @@
 mod applications;
 mod desktop;
 mod files;
-mod keybindings;
 mod profile;
-mod shells;
 mod startup;
 
 pub use applications::{ApplicationsConfig, Bookmark};
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
-pub use keybindings::{Action, Binding, Bindings, Chord};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
-pub use shells::ShellConfig;
 pub use startup::StartupConfig;
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -797,15 +792,8 @@ pub struct Config {
     pub files: FilesConfig,
     pub idle: IdleConfig,
     pub input: InputConfig,
-    /// The bindings every shell has in mode `default`.
-    pub keybindings: Bindings,
     pub lock: LockConfig,
-    /// Every shell's other modes, by name. `default` is not one of them: it
-    /// is [`Config::keybindings`].
-    pub modes: BTreeMap<String, Bindings>,
     pub output: OutputConfig,
-    /// What the config says to one shell, by the name it loads as.
-    pub shells: BTreeMap<String, ShellConfig>,
     pub startup: StartupConfig,
     pub theme: ThemeConfig,
     /// The shell `domicile` runs when it is given none — a path or a
@@ -891,12 +879,6 @@ impl Config {
         self.idle.validate()?;
         self.input.keyboard.validate()?;
         self.lock.validate()?;
-        keybindings::validate("", &self.keybindings, &self.modes, |mode| {
-            self.modes.contains_key(mode)
-        })?;
-        for (name, shell) in &self.shells {
-            shell.validate(name, &self.modes)?;
-        }
         self.startup.validate()?;
         self.output.validate()
     }

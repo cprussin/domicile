@@ -1,9 +1,9 @@
-// A shell's keys, as the config binds them, answered.
+// A shell's keys, as it binds them, answered.
 //
-// The compositor's config says what every key does — `"Meta+Return" =
-// "send-shell terminal"` — and resolves each chord to a key on the live keymap
-// before it sends them. What is left for a page is to claim them and answer
-// them, and that is the same work for every shell, so it is here once.
+// A shell says what every key does — `"Meta+Return": KeyAction.SendShell(
+// ["terminal"])` — and the compositor says which key each keysym is on, on the
+// live keymap. What is left for a page is to resolve the chords, claim them and
+// answer them, and that is the same work for every shell, so it is here once.
 //
 // **Two paths, because two different things can be holding the keyboard.** A
 // `<webview>` is a browsing context of its own, so a key pressed on a site the
@@ -29,11 +29,11 @@ import type {
 } from "./host-message";
 import { evdevFromCode } from "./input";
 import { KeyActionKind } from "./key-action";
-import { actionFor, keybindingsFor, layered, sameChord } from "./keybindings";
+import { actionFor, sameChord } from "./keybindings";
 import type { ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
 
-/** The mode a desk starts in: the config's `[keybindings]`. */
+/** The mode a desk starts in: a shell's `keybindings`. */
 const DEFAULT_MODE = "default";
 
 /** What a shell is told as its keys are answered. */
@@ -42,11 +42,6 @@ export type KeyHandlers = {
   onCommand: (args: readonly string[]) => void;
   /** The keys are read in another binding mode now. */
   onModeChanged: (mode: string) => void;
-  /**
-   * The shell's `[shells.<name>.options]` table, as unparsed JSON — `{}` when
-   * the config has none — once per config the compositor sends.
-   */
-  onOptions: (options: unknown) => void;
 };
 
 /** What {@link bindKeys} hands back. */
@@ -74,23 +69,20 @@ type KeyClient = {
 };
 
 /**
- * Answer the keys the shell named `shell` binds itself, `own`, and the keys
- * the config binds for it: the desk's `[keybindings]` and `[modes]`, with
- * `[shells.<shell>]`'s on top, and both on top of `own` — a chord the config
- * binds is the config's.
+ * Answer the keys a shell binds, `own`.
  *
- * **`own` is resolved as each config arrives**, against the keyboard it
- * describes, so a reload that changes the layout moves the keys with it. A
- * chord `own` writes wrong, or whose keysym the keyboard cannot type, throws
- * there.
+ * **`own` is resolved as each keyboard arrives** — `shell_config`, every
+ * keysym the layout types and the key it is on — so a reload that changes the
+ * layout moves the keys with it. A chord written wrong, or whose keysym the
+ * keyboard cannot type, throws there.
  *
  * **This owns `shell_config` and `shortcut`.** {@link DomicileClient.on} is a
  * single slot per message, so a shell that registers either of its own
  * displaces this.
  *
  * **A claim is never given back.** Every chord of every mode is claimed as
- * each config arrives, because the channel has no way to release one — so a
- * reload that unbinds a chord leaves it the desktop's, answering nothing,
+ * each keyboard arrives, because the channel has no way to release one — so a
+ * layout change leaves the keys it moved off the desktop's, answering nothing,
  * until the shell's page reloads. And for that reason, a bare key bound in a
  * mode is taken from every client for the whole session, not only while the
  * mode is on.
@@ -100,26 +92,24 @@ type KeyClient = {
  * another page — so `setMode` is how a page is told: the keys are read in that
  * mode from then on, and `onModeChanged` is not called for it, the shell
  * having said so itself. The mode the keys are already in does nothing; one
- * the config does not have goes back to `default`, as a config that drops the
- * mode does, and that is reported. Before any config, the mode is kept until
- * the config arrives and is checked then.
+ * the shell does not have goes back to `default`, and that is reported. Before
+ * any keyboard, the mode is kept until one arrives and is checked then.
  *
- * **Bind once per client.** The config arrives once and again only when it
+ * **Bind once per client.** The keyboard arrives once and again only when it
  * changes, so keys bound anew after an unbind answer nothing until the next
- * reload of it. A React shell binds in an effect that depends on the client
- * alone, and reads anything else it needs when a key is pressed.
+ * change of it. A React shell binds in an effect that depends on the client
+ * and its keys, and reads anything else it needs when a key is pressed.
  *
  * @returns `unbind`, which stops the answering — the claims stay, as above —
  *   and `setMode`.
  */
 export const bindKeys = (
   domicile: KeyClient,
-  shell: string,
   own: ShellKeybindings,
-  { onCommand, onModeChanged, onOptions }: KeyHandlers,
+  { onCommand, onModeChanged }: KeyHandlers,
 ): KeyBinding => {
-  // `undefined` until the first config: no key is bound yet, and a mode set
-  // in the meantime cannot be checked against anything.
+  // `undefined` until the first keyboard: no key is bound yet, and a mode
+  // set in the meantime cannot be checked against anything.
   let bindings: KeybindingsByMode | undefined;
   let mode = DEFAULT_MODE;
 
@@ -152,10 +142,7 @@ export const bindKeys = (
   };
 
   const onConfig = (config: ShellConfigMessage) => {
-    const bound = layered(
-      keybindingsFor(config, shell),
-      ownKeybindings(own, config.keys),
-    );
+    const bound = ownKeybindings(own, config.keys);
     bindings = bound;
     for (const chord of chordsOf(bound)) {
       domicile.grabShortcut(chord);
@@ -163,7 +150,6 @@ export const bindKeys = (
     if (!bound.has(mode)) {
       enter(DEFAULT_MODE);
     }
-    onOptions(config.shells.get(shell)?.options ?? {});
   };
 
   const onShortcut = (press: ShortcutMessage) => {

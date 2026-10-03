@@ -2,10 +2,10 @@
 // describes.
 //
 // A shell's keybindings are its props, so the page holds the chords — written
-// as the config writes them, sway-style — and only the compositor holds the
-// keymap. The compositor sends every keysym the keyboard can type and the key
-// it is on (`shell_config`'s `keys`), and this is the rest: the chord grammar
-// `domicile-config` reads, and the lookup `keymap.rs` does.
+// sway-style, `Meta+Shift+l` — and only the compositor holds the keymap. The
+// compositor sends every keysym the keyboard can type and the key it is on
+// (`shell_config`'s `keys`), and this is the rest: the chord grammar, and the
+// lookup.
 
 import type {
   Keybinding,
@@ -14,7 +14,7 @@ import type {
 } from "./host-message";
 import type { KeyAction } from "./key-action";
 
-/** One mode's bindings: a chord, as the config writes one, and what it does. */
+/** One mode's bindings: a chord, `Meta+Shift+l`, and what it does. */
 export type ModeKeybindings = Readonly<Record<string, KeyAction>>;
 
 /** The keys a shell binds: mode `default`, and its other modes by name. */
@@ -26,7 +26,7 @@ export type ShellKeybindings = {
 };
 
 /**
- * The modifiers a chord can hold, by every spelling the config accepts. A map
+ * The modifiers a chord can hold, by every spelling sway's accept. A map
  * rather than a record, so `constructor` is not a modifier.
  */
 const MODIFIERS: ReadonlyMap<string, keyof Omit<ShortcutMessage, "keycode">> =
@@ -45,7 +45,7 @@ const MODIFIERS: ReadonlyMap<string, keyof Omit<ShortcutMessage, "keycode">> =
 /**
  * `own`, every chord resolved to the key `keys` has its keysym on.
  *
- * Throws on a chord the config would refuse and on a keysym the keyboard
+ * Throws on a chord that is not one and on a keysym the keyboard
  * cannot type, naming it: both are the shell's bindings being wrong, and a
  * desktop that quietly dropped a key would leave its user pressing one that
  * does nothing.

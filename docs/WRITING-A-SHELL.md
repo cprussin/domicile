@@ -257,7 +257,7 @@ follows the portal, a new `files.omit` walks the home again for the launcher's
 index, a new `[applications]` changes which applications and bookmarks the next
 search offers, a new `[extensions]` list installs and uninstalls what it names (see
 [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)),
-new `[keybindings]`, `[modes]` or `[shells]` rebind the keys (see
+a new `[input.keyboard]` moves the keys a shell bound (see
 [Keybindings](#keybindings)),
 and the display list and the profiles rearrange it. The windows stay open through all of it — and a desk edited while its screens were
 off gets them back, because the clock that knew they were off is the one the
@@ -711,31 +711,8 @@ pressing anything — and only when the pointer is not over the window already.
 
 ## Keybindings
 
-**A shell's keys are the config's, not the shell's.** Sway-style: a chord maps
-to an action, and `send-shell` hands the rest of the line to your shell.
-
-```toml
-[keybindings]                        # every shell
-"Meta+Return" = "send-shell terminal"
-
-[shells.my-shell.keybindings]        # only the shell that binds as "my-shell"
-"Meta+l" = "send-shell focus right"
-"Meta+r" = "mode resize"
-
-[shells.my-shell.modes.resize]
-"Meta+l" = "send-shell grow right"
-"Meta+Escape" = "mode default"
-
-[shells.my-shell.options]            # anything; handed to your shell as JSON
-```
-
-A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) and an xkb keysym name,
-joined by `+`; the compositor finds the key that keysym is on in the configured
-layout, so `Meta+parenleft` is right on Programmer's Dvorak and on QWERTY
-alike. An action is `send-shell <word>…` or `mode <name>`. A config that names
-a keysym on no key is refused like one xkb cannot compile.
-
-**Bind once, by name, with your shell's own keys:**
+**A shell's keys are its own**, given as its props. Sway-style: a chord maps to
+an action — a command for your shell, or a binding mode.
 
 ```ts
 import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
@@ -743,34 +720,40 @@ import { KeyAction } from "@domicile/chrome-sdk/key-action";
 
 bindKeys(
   domicile,
-  "my-shell",
   {
-    keybindings: { "Meta+l": KeyAction.SendShell(["focus", "right"]) },
-    modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } },
+    keybindings: {
+      "Meta+l": KeyAction.SendShell(["focus", "right"]),
+      "Meta+r": KeyAction.Mode("resize"),
+    },
+    modes: {
+      resize: {
+        "Meta+l": KeyAction.SendShell(["grow", "right"]),
+        "Meta+Escape": KeyAction.Mode("default"),
+      },
+    },
   },
   {
     onCommand: (args) => run(args),        // ["focus", "right"]
     onModeChanged: (mode) => show(mode),   // "resize", "default"
-    onOptions: (options) => apply(options),
   },
 );
 ```
 
-**A shell's own keys are its props**, written in the config's grammar and
-resolved against the keyboard the compositor describes as each config arrives
-(`shell_config`'s `keys`). The config's bindings sit on top: a chord both bind
-is the config's. A chord written wrong, or whose keysym the keyboard cannot
-type, throws.
+A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) and an xkb keysym name,
+joined by `+`. The compositor says which key each keysym is on in the
+configured layout (`shell_config`), so `Meta+parenleft` is right on
+Programmer's Dvorak and on QWERTY alike, and moves when the layout does. A
+chord written wrong, or whose keysym the keyboard cannot type, throws.
 
-It claims every chord the config and the shell name, matches a press whether it landed on
-the page or in a `<webview>`, runs `mode` itself, and hands you every
-`send-shell`. What a command *means* is yours: parse it, and report one you do
-not know rather than throwing — it came from a file somebody typed. Your
-README is where your vocabulary lives; manganese's is
+It claims every chord, matches a press whether it landed on the page or in a
+`<webview>`, runs `Mode` itself, and hands you every `SendShell`. What a
+command *means* is yours. Take the keys from whoever configures your shell —
+manganese's are `runManganese({ keybindings })`, with sway's as the default —
+and your README is where your vocabulary lives; manganese's is
 [here](/packages/shell-manganese/README.md).
 
-**A claim is never given back**, so a chord a reload removes stays the desk's
-until restart. Why it is built this way:
+**A claim is never given back**, so a key a layout change moves off stays the
+desk's until restart. Why it is built this way:
 [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
 
 ## When nobody is at the desk

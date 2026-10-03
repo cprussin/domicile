@@ -1,11 +1,12 @@
 // The whole of this shell: an `<app>` per client the host announces, moved and
-// resized on the Alt key, and a terminal on whichever key the config binds to
-// `send-shell terminal`.
+// resized on the Alt key, and a terminal on Alt+Enter.
 
 import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
 import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { focusApp } from "@domicile/chrome-sdk/focus-app";
+import { KeyAction } from "@domicile/chrome-sdk/key-action";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import type { CSSProperties, PointerEvent } from "react";
 import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -42,27 +43,25 @@ const SECONDARY_BUTTON = 2;
 
 const TERMINAL_COMMAND = ["kitty"] as const;
 
-/**
- * The name this shell's section of the config goes under:
- * `[shells.simple.keybindings]`.
- */
+/** What a command this shell does not know is said as coming from. */
 const SHELL = "simple";
 
-/**
- * What the desktop answers to. The gestures are this shell's own; the
- * terminal is on whichever key the config binds to the command, which a page
- * is told as a key on the keyboard rather than as a name it could write here.
- */
+/** The keys this shell binds: one, for a terminal. */
+const SIMPLE_KEYS: ShellKeybindings = {
+  keybindings: { "Alt+Return": KeyAction.SendShell(["terminal"]) },
+};
+
+/** What the desktop answers to, drawn in the background. */
 const KEYBINDINGS = [
   ["Alt + press", "raise"],
   ["Alt + drag", "move (and raise)"],
   ["Alt + right-drag", "resize (and raise)"],
-  ["send-shell terminal", "open a terminal"],
+  ["Alt + Enter", "open a terminal"],
 ] as const;
 
-/** Where a command the config names and this shell does not know is said. */
+/** Where a command a binding names and this shell does not know is said. */
 const logToConsole = (error: string): void => {
-  // biome-ignore lint/suspicious/noConsole: the config is the user's, and the console is where a shell tells them a line of it named nothing
+  // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell tells them one named nothing
   console.error(error);
 };
 
@@ -109,9 +108,12 @@ type Drag = {
  */
 export const Shell = ({
   domicile,
+  keybindings = SIMPLE_KEYS,
   report = logToConsole,
 }: {
   domicile: DomicileClient;
+  /** The keys it binds: Alt+Enter for a terminal when not given. */
+  keybindings?: ShellKeybindings | undefined;
   /** Where an unknown command is reported. Injected so a test can read it. */
   report?: typeof logToConsole;
 }) => {
@@ -126,7 +128,7 @@ export const Shell = ({
   const drag = useRef<Drag | undefined>(undefined);
 
   // The one command this shell has. Read when a key is pressed rather than
-  // bound with the keys, which are bound once: the config arrives once.
+  // bound with the keys, which are bound once: the keyboard arrives once.
   const onCommand = useEffectEvent((args: readonly string[]) => {
     if (args.join(" ") === "terminal") {
       domicile.spawn(TERMINAL_COMMAND);
@@ -172,21 +174,14 @@ export const Shell = ({
       caughtUp.current = true;
     });
 
-    // The SDK claims the chord the config binds to `send-shell terminal`, and
-    // hears it by whichever path the press took. This shell binds no keys of
-    // its own.
-    return bindKeys(
-      domicile,
-      SHELL,
-      {},
-      {
-        onCommand,
-        // A desktop with one command has no modes to draw, and no options.
-        onModeChanged: () => undefined,
-        onOptions: () => undefined,
-      },
-    ).unbind;
-  }, [domicile]);
+    // The SDK claims the chord, resolved on the keyboard the compositor
+    // describes, and hears it by whichever path the press took.
+    return bindKeys(domicile, keybindings, {
+      onCommand,
+      // A desktop with one command has no modes to draw.
+      onModeChanged: () => undefined,
+    }).unbind;
+  }, [domicile, keybindings]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     const window = event.altKey ? windowAt(windows, event.target) : undefined;

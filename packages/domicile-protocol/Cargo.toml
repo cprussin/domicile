@@ -8,10 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
-# One value only, and the reason this crate is not serde alone:
-# `HostMessage::ShellConfig` carries `[shells.<name>.options]`, which is
-# whatever a shell chose to write and has no schema here to derive. A JSON value
-# is the honest type for a freeform object on a JSON wire, and it is the format
-# this protocol already speaks rather than a second one.
-serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

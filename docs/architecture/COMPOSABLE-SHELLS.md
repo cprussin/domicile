@@ -118,7 +118,7 @@ only builds.
 |---|---|
 | `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine: the schema TOML had, key for key |
 | `Shell` (TS) / `shell` (JSON) | `domicile`, when it is given no shell; a JSON `shell` is relative to the config |
-| `keybindings`, `modes`, `shells` | compositor, until they go: props of the shell |
+| *(gone)* `keybindings`, `modes`, `shells` | a config that has them is refused: they are props of the shell |
 
 - **TS is evaluated to JSON by the builder** (`--evaluate`): bundled for Bun
   with `@domicile/*` and React from the install and stylesheets stubbed,
@@ -152,7 +152,6 @@ runManganese({
   resolves the shell's chords against it as each config arrives, so a layout
   change moves them. No new message, and no engine change: `shell_config`
   crosses the engine as a string.
-- The config's bindings sit on top until phase 3 deletes them.
 - Manganese ships sway's keys on Meta (`DEFAULT_KEYBINDINGS`, `DEFAULT_MODES`),
   so the JSON config has keys.
 
@@ -242,7 +241,7 @@ Phase 3: the config.
 - [x] `domicile-config` parses JSON; `domicile` finds
       `domicile.{ts,tsx,js,mjs,json,toml}` and runs the config's shell when
       given none
-- [ ] `keybindings`, `modes` and `shells` go from the config
+- [x] `keybindings`, `modes` and `shells` go from the config
 - [x] the TS config evaluated to JSON by the builder
 - [ ] the supervisor watches and reloads both halves. The compositor stops
       watching. A failure becomes a notification

@@ -3,8 +3,7 @@
 A desktop with nothing in it but windows. Every Wayland client the
 host announces gets an `<app>` element on the page; hold **Alt** and
 drag one to move it, hold Alt and drag with the **right button** to resize it,
-and either way it comes to the front. One key opens a terminal — **Alt+Enter**
-in the sample config below. That is the whole user interface — no tabs, no panel, no title bars — and an empty
+and either way it comes to the front. One key opens a terminal — **Alt+Enter**. That is the whole user interface — no tabs, no panel, no title bars — and an empty
 desktop writes it on its own background, because a shell with nothing to click
 has nowhere else to say what it answers to. It is there whenever the desktop
 is empty: gone while a window is open, back when the last one leaves.
@@ -69,32 +68,20 @@ you run — `#manganese` is the reference chrome
 your own to point at.
 
 The desktop comes up empty but for the keys it answers to. **Alt+Enter** opens
-a terminal, once the config binds it (see [Keys](#keys)); the next section
-covers that and the ways in from outside.
+a terminal (see [Keys](#keys)); the next section covers that and the ways in
+from outside.
 
 ## Keys
 
-The chord is the compositor's config (`domicile.toml`), and this shell is the
-`simple` in `[shells.simple.*]`. It has one command, bound with `send-shell`:
-
-| Command | What |
-|---|---|
-| `terminal` | Open a terminal (`kitty`). |
-
-Any other command is said on the console and does nothing. This is the key it
-shipped with when it was hard-coded:
-
-```toml
-[shells.simple.keybindings]
-"Alt+Return" = "send-shell terminal"
-```
-
-**A config that binds nothing leaves it with no keys**: the Alt gestures still
-work, and a terminal is only reachable from outside.
+One, bound by the shell itself: **Alt+Enter** runs the `terminal` command,
+which opens a terminal (`kitty`). The keysym resolves through the keymap the
+compositor is running, so it is the Enter key whatever the layout. The `Shell`
+component takes another set as `keybindings`; a command it does not know is
+said on the console and does nothing.
 
 ## Launch an app into it
 
-**Alt+Enter** — the sample's key — opens a terminal (`kitty`), and everything
+**Alt+Enter** opens a terminal (`kitty`), and everything
 you start from that terminal lands here too, inheriting its environment. That is the short answer.
 
 The long one, for launching from outside: Domicile is a Wayland compositor, so
