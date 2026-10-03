@@ -6,6 +6,10 @@ origin -- ask isUserVerifyingPlatformAuthenticatorAvailable(), which took the
 browser down until patch 0069; then calls navigator.credentials.create() and
 paints what came back, each in one flat color the guard reads:
 
+  --unheld     asked as `/page?conditional`, before anything else: the browser
+               said there is no conditional UI, or answered a conditional
+               get() rather than holding it until it was aborted (patch 0084)
+
   --answered   the fixture extension's answer, by its message
   --refused    any other refusal; it asks again a second later, because the
                extension attaches after startup and may lose the race
@@ -47,6 +51,8 @@ PAGE = """<!doctype html>
   </head>
   <body>
     <script>
+      const HELD_FOR_MS = 2000;
+
       const paint = (color) => {{
         document.documentElement.style.background = `#${{color}}`;
         document.body.style.background = `#${{color}}`;
@@ -103,11 +109,55 @@ PAGE = """<!doctype html>
         document.body.append(frame);
       }};
 
-      if (typeof PublicKeyCredential === "function") {{
-        askFromAnOpaqueOrigin();
-      }} else {{
+      // A site starts a conditional get() for a passkey extension's autofill
+      // to answer. With nothing to answer it, the browser must hold it until
+      // the site aborts it: a refusal is what a racing extension loses to.
+      const askConditionally = async () => {{
+        if (await PublicKeyCredential.isConditionalMediationAvailable()) {{
+          await askHeld();
+        }} else {{
+          console.log("GUARD unheld: no conditional mediation");
+          paint("{unheld}");
+        }}
+      }};
+
+      const askHeld = async () => {{
+        const abort = new AbortController();
+        const settled = navigator.credentials
+          .get({{
+            mediation: "conditional",
+            publicKey: {{ challenge: new Uint8Array(32), rpId: "localhost" }},
+            signal: abort.signal,
+          }})
+          .then(
+            () => "answered",
+            (error) => error.name,
+          );
+        const held = new Promise((resolve) => {{
+          setTimeout(() => resolve("held"), HELD_FOR_MS);
+        }});
+        const first = await Promise.race([settled, held]);
+        abort.abort();
+        const outcome = first === "held" ? await settled : `settled ${{first}}`;
+        if (outcome === "AbortError") {{
+          console.log("GUARD conditional held until aborted");
+          askFromAnOpaqueOrigin();
+        }} else {{
+          console.log(`GUARD unheld: ${{outcome}}`);
+          paint("{unheld}");
+        }}
+      }};
+
+      if (typeof PublicKeyCredential !== "function") {{
         console.log("GUARD no PublicKeyCredential");
         paint("{no_api}");
+      }} else if (location.search === "?conditional") {{
+        askConditionally().catch((error) => {{
+          console.log(`GUARD unheld: ${{error}}`);
+          paint("{unheld}");
+        }});
+      }} else {{
+        askFromAnOpaqueOrigin();
       }}
     </script>
   </body>
@@ -147,7 +197,7 @@ def main():
         required=True,
         help="0 for any free one; the serving line names the one taken",
     )
-    for name in ("color", "answered", "refused", "no-api"):
+    for name in ("color", "answered", "refused", "no-api", "unheld"):
         parser.add_argument("--" + name, required=True, help="RRGGBB, no leading #")
     arguments = parser.parse_args()
 
@@ -157,6 +207,7 @@ def main():
         color=arguments.color,
         no_api=arguments.no_api,
         refused=arguments.refused,
+        unheld=arguments.unheld,
     ).encode("utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), OnePage)
     # Before serve_forever, so a guard waiting on this line is not waiting on a

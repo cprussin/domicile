@@ -106,6 +106,8 @@ expect "and a request the browser holds" "yes" \
   "$(says "refused 2" "dialog")"
 expect "and the opaque frame's question the browser died on" "yes" \
   "$(says "refused 2" "opaque")"
+expect "and a conditional get() answered at once" "yes" \
+  "$(says "refused 2" "conditional")"
 expect "an unusable probe fails" "fail" "$(verdict "refused 3")"
 expect "a probe stuck on a dead browser fails" "fail" \
   "$(verdict "refused 124")"
@@ -131,6 +133,13 @@ PAGE="$(sed -n 's/^ANSWER = "\(.*\)"$/\1/p' \
 expect "the fixture names its answer" "yes" \
   "$([ -n "$FIXTURE" ] && echo yes || echo no)"
 expect "and the page knows it by the same message" "$FIXTURE" "$PAGE"
+# A proxied origin's conditional get() is refused upstream, so only the
+# control, with no extension, can ask one and see it held.
+expect "the control's page asks a conditional get() first" "yes" \
+  "$(grep -qF 'PAGE="$PAGE?conditional"' "$GUARD" && echo yes || echo no)"
+expect "and the page knows what that is" "yes" \
+  "$(grep -qF 'mediation: "conditional"' \
+    "$SCRIPTS/guard-webview-passkey-extension-server.py" && echo yes || echo no)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

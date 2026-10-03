@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 3 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a site can offer a passkey an extension holds
+
+Google asked to create a passkey the user's Bitwarden already held, and
+Bitwarden's passkey in its autofill menu did nothing when clicked. Patch
+0048 answered isConditionalMediationAvailable() false, so a site never
+started the conditional get() a passkey extension's autofill answers;
+and a site that started one anyway was refused at once, because the
+browser has no WebAuthn delegate. Bitwarden races its own answer against
+the browser's, so the refusal won and the page had stopped listening by
+the time the user picked a passkey.
+
+- The override answers what content does: no platform authenticator on
+  Linux, and conditional UI wherever no extension proxies the origin.
+- A conditional request with no delegate is held until the site aborts
+  it, as Chrome holds one its autofill has nothing for. A modal request
+  is still refused.
+---
+ .../chrome_web_authentication_delegate.cc      | 18 +++++++-----------
+ .../webauth/authenticator_common_impl.cc       |  8 ++++++++
+ 2 files changed, 15 insertions(+), 11 deletions(-)
+
+diff --git a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+index 1bc33b1..5136965 100644
+--- a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
++++ b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+@@ -257,19 +257,15 @@ void ChromeWebAuthenticationDelegate::
+     IsUserVerifyingPlatformAuthenticatorAvailableOverride(
+         content::RenderFrameHost* render_frame_host,
+         base::OnceCallback<void(std::optional<bool>)> callback) {
+-  // Domicile's engine fork: no platform authenticator and no conditional UI,
+-  // because the browser draws neither. A site that asks is told no, so it
+-  // offers what a passkey extension lends it rather than a sign-in the
+-  // browser would refuse. The testing API's answer still wins, as upstream.
++  // Domicile's engine fork: content's own answers, which upstream's override
++  // here only ever adds the browser's passkeys to -- and the browser offers
++  // none. On Linux that is no platform authenticator, and conditional UI
++  // wherever no extension proxies the origin: a passkey extension draws the
++  // autofill a site's conditional get() waits on, and content holds that
++  // request until the site aborts it. The testing API's answer still wins.
+   content::WebAuthenticationDelegate::
+       IsUserVerifyingPlatformAuthenticatorAvailableOverride(
+-          render_frame_host,
+-          base::BindOnce(
+-              [](base::OnceCallback<void(std::optional<bool>)> callback,
+-                 std::optional<bool> testing_api_override) {
+-                std::move(callback).Run(testing_api_override.value_or(false));
+-              },
+-              std::move(callback)));
++          render_frame_host, std::move(callback));
+ }
+ 
+ content::WebAuthenticationRequestProxy*
+diff --git a/content/browser/webauth/authenticator_common_impl.cc b/content/browser/webauth/authenticator_common_impl.cc
+index 14c66c7..bcab1d2 100644
+--- a/content/browser/webauth/authenticator_common_impl.cc
++++ b/content/browser/webauth/authenticator_common_impl.cc
+@@ -1877,6 +1877,14 @@ void AuthenticatorCommonImpl::ContinueGetAssertionAfterRpIdCheck(
+ 
+   req_state_->request_delegate = MaybeCreateRequestDelegate();
+   if (!req_state_->request_delegate) {
++    // Domicile's engine fork: the browser draws no WebAuthn UI, so it has no
++    // delegate, and a conditional request is held rather than refused -- as
++    // Chrome holds one nothing in its autofill answers -- until the site
++    // aborts it. A passkey extension wrapping navigator.credentials races
++    // its own answer against this one, and a refusal won the race.
++    if (req_state_->mode == AuthenticationRequestMode::kConditional) {
++      return;
++    }
+     req_state_->request_outcome = GetAssertionOutcome::kOtherFailure;
+     CompleteGetAssertionRequest(
+         blink::mojom::AuthenticatorStatus::PENDING_REQUEST);
