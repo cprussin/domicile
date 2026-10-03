@@ -764,6 +764,69 @@ export type DomicileShellConfigEvent = Event & {
   readonly arrival: DOMHighResTimeStamp;
 };
 
+/** A port of a device, or a profile of a card. */
+export type DomicileAudioChoice = {
+  readonly name: string;
+  readonly description: string;
+  readonly available: boolean;
+};
+
+/** An output or an input, as the engine hands it over. */
+export type DomicileAudioDevice = {
+  readonly id: string;
+  readonly description: string;
+  readonly volume: number;
+  readonly muted: boolean;
+  /** Whether new streams go to it. `default` is a word C++ keeps. */
+  readonly isDefault: boolean;
+  readonly monitor: boolean;
+  readonly ports: readonly DomicileAudioChoice[];
+  /** The port in use, or empty for a device with none. */
+  readonly port: string;
+};
+
+/** Something playing or recording, as the engine hands it over. */
+export type DomicileAudioStream = {
+  readonly id: string;
+  readonly application: string;
+  /** Empty where the application said nothing. */
+  readonly title: string;
+  readonly volume: number;
+  readonly muted: boolean;
+  /** Empty for a device the next event will settle. */
+  readonly device: string;
+};
+
+/** A sound card, as the engine hands it over. */
+export type DomicileAudioCard = {
+  readonly id: string;
+  readonly description: string;
+  readonly profiles: readonly DomicileAudioChoice[];
+  /** The profile in use, or empty. */
+  readonly profile: string;
+};
+
+/**
+ * The desk's sound: every output and input, every stream, every sound card,
+ * each list in the sound server's order.
+ *
+ * Pushed whenever the sound server says something moved, and once more when
+ * this page connects. Never on a desk with no sound server.
+ */
+export type DomicileAudioEvent = Event & {
+  readonly outputs: readonly DomicileAudioDevice[];
+  readonly inputs: readonly DomicileAudioDevice[];
+  readonly playback: readonly DomicileAudioStream[];
+  readonly recording: readonly DomicileAudioStream[];
+  readonly cards: readonly DomicileAudioCard[];
+
+  /**
+   * When the browser process had this message. See
+   * {@link DomicileModifiersEvent.arrival}.
+   */
+  readonly arrival: DOMHighResTimeStamp;
+};
+
 /**
  * An address somebody asked this desktop to open: `domicile open-url`, which is
  * what `BROWSER` runs for every app the desktop starts.
@@ -886,6 +949,7 @@ export type DomicileHostEventMap = {
    * and whenever a reload changes them.
    */
   shellconfig: DomicileShellConfigEvent;
+  audio: DomicileAudioEvent;
   /**
    * The extensions with an action, whole, whenever one changes and once on
    * connecting.
@@ -1094,6 +1158,23 @@ export type DomicileHost = {
    * screen all the way off, and a level that is not a number throws.
    */
   setBrightness(level: number): void;
+
+  /**
+   * The mixer: set a device's or a stream's volume, a fraction of the sound
+   * server's 100%; mute it; make a device the default; move a stream to
+   * another device of its direction; switch a device's port or a card's
+   * profile. Each names what it acts on by an id from the last `audio` event.
+   *
+   * Requests, like {@link setBrightness}: answered with the next `audio` to
+   * every chrome once the sound server has moved. An id the compositor never
+   * gave out does nothing but say so in its log.
+   */
+  setAudioVolume(id: string, volume: number): void;
+  setAudioMuted(id: string, muted: boolean): void;
+  setDefaultAudioDevice(id: string): void;
+  moveAudioStream(id: string, device: string): void;
+  setAudioPort(id: string, port: string): void;
+  setAudioProfile(card: string, profile: string): void;
 
   /**
    * This page's old frame is held for `theme`: turn the desk's windows now.

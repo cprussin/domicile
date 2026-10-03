@@ -189,6 +189,51 @@ enum TrayAction {
   kContext,
 };
 
+// A port of an AudioDevice or a profile of an AudioCard: something to switch
+// it to. `available` is false for a port whose jack is empty, or a profile
+// that needs one; either is still choosable.
+struct AudioChoice {
+  string name;
+  string description;
+  bool available;
+};
+
+// An output (a sink) or an input (a source). `id` is what the mixer's
+// requests name it by. `volume` is the loudest channel as a fraction of the
+// server's 100%. `is_default` because `default` is C++'s. `monitor` marks an
+// output's monitor among the inputs. `port` is the one in use, or empty for a
+// device with none.
+struct AudioDevice {
+  string id;
+  string description;
+  double volume;
+  bool muted;
+  bool is_default;
+  bool monitor;
+  array<AudioChoice> ports;
+  string port;
+};
+
+// Something playing (a sink input) or recording (a source output). `title`
+// is empty where the application said nothing; `device` is the AudioDevice id
+// it goes to, or empty for one the next Audio settles.
+struct AudioStream {
+  string id;
+  string application;
+  string title;
+  double volume;
+  bool muted;
+  string device;
+};
+
+// A sound card. `profiles` is best first; `profile` the one in use, or empty.
+struct AudioCard {
+  string id;
+  string description;
+  array<AudioChoice> profiles;
+  string profile;
+};
+
 // One button of a Notification.
 //
 // `key` is what InvokeNotificationAction names it by; `label` is what the
@@ -404,6 +449,22 @@ interface ControlChannel {
   // chrome, once the kernel says the backlight moved. The compositor asks
   // logind to write it and never turns the screen all the way off.
   SetBrightness(double level);
+
+  // The shell's mixer. Each names a device or a stream by an id a
+  // ControlChannelClient::Audio carried -- opaque here, and checked by the
+  // compositor, which refuses one it never gave out -- and each is answered
+  // like SetBrightness: with the next Audio to every chrome, once the sound
+  // server says it moved. A volume is a fraction of the server's 100%.
+  SetAudioVolume(string id, double volume);
+  SetAudioMuted(string id, bool muted);
+  // Make a device the one new streams go to.
+  SetDefaultAudioDevice(string id);
+  // Move a stream to another device of its own direction.
+  MoveAudioStream(string id, string device);
+  // Switch a device's port -- speakers to headphones -- by the port's name.
+  SetAudioPort(string id, string port);
+  // Switch a sound card's profile, by the card's id and the profile's name.
+  SetAudioProfile(string card, string profile);
 
   // This page's old frame is held for `theme`: the desk's windows may turn.
   //
@@ -718,6 +779,19 @@ interface ControlChannelClient {
   // Pushed like ThemeChanged: once to a chrome that has just connected, and
   // again whenever a reload of the compositor's config moved what it carries.
   ShellConfig(string config, mojo_base.mojom.TimeTicks arrival);
+
+  // The desk's sound: every output and input, every stream playing or
+  // recording, every sound card, each list in the sound server's order.
+  //
+  // Pushed like Tray, and the whole of it every time: whenever the sound
+  // server says something moved, and once more to a chrome that has just
+  // connected. A desk with no sound server sends none.
+  Audio(array<AudioDevice> outputs,
+        array<AudioDevice> inputs,
+        array<AudioStream> playback,
+        array<AudioStream> recording,
+        array<AudioCard> cards,
+        mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
