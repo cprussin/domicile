@@ -24,7 +24,7 @@ pub enum CliError {
     #[error(
         "which shell? Give one, or name it in your config:\n\n    \
          domicile ./my-desktop/dist/shell.js\n    \
-         domicile @domicile/manganese\n\n\
+         domicile @domicile-desktop/manganese\n\n\
          A config is ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}}, or \
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\

@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";

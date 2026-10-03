@@ -1,4 +1,4 @@
-import type { Display } from "@domicile/component-library/display-source";
+import type { Display } from "@domicile-desktop/component-library/display-source";
 
 import type { Spot } from "../window-management/pointer-warp";
 

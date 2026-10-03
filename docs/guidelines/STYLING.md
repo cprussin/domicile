@@ -9,12 +9,12 @@ in this repo.
   No StyleX, CSS modules, scoped-CSS files, Tailwind, or any other styling
   system. Styles live in `.tsx` / `.ts` next to the component that uses
   them.
-- **All packages MUST extend the `@domicile/component-library` Panda preset.**
+- **All packages MUST extend the `@domicile-desktop/component-library` Panda preset.**
   It defines the design tokens (semantic colors, spacing scale, typography,
   durations, easings, shadows, z-indices, opacities, keyframes) and the
   shared `control` recipe used by sized form controls. Theming flows from
   this preset; no package defines its own competing tokens.
-- **All packages MUST use components from `@domicile/component-library` where
+- **All packages MUST use components from `@domicile-desktop/component-library` where
   possible** — `Button`, `Input`, `Textarea`, `Field`, `Avatar`, `Kbd`,
   `ModalDialog`, etc. Build app-specific UI on top of those primitives
   instead of rolling new buttons / inputs / dialogs from raw HTML. If a
@@ -22,7 +22,7 @@ in this repo.
   it — don't fork.
 
 **One package is exempt, deliberately:
-[`@domicile/shell-simple`](/packages/shell-simple/README.md).** It exists to be
+[`@domicile-desktop/shell-simple`](/packages/shell-simple/README.md).** It exists to be
 the smallest usable React shell — the thing somebody writing a desktop outside
 this repo reads to see what a shell is made of — and a design system is exactly
 what that has to be legible without. It uses plain CSS in one stylesheet and
@@ -33,11 +33,11 @@ exemption: a package with a product UI is not a worked example.
 
 1. Add the catalog dependencies to the package's `devDependencies`
    (`@pandacss/dev`, `postcss`) and to its `dependencies`
-   (`@domicile/component-library` as `workspace:*`).
+   (`@domicile-desktop/component-library` as `workspace:*`).
 2. Create `panda.config.ts`:
    ```ts
    import { defineConfig } from "@pandacss/dev";
-   import { domicilePreset } from "@domicile/component-library/pandacss-preset";
+   import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
 
    export default defineConfig({
      exclude: [],
@@ -207,7 +207,7 @@ inside string values at build time. This is the pattern for all derived
 hover, active, and tinted states.
 
 Only promote a derived value to a new semantic token in the
-`@domicile/component-library` preset (`pandacss-preset.ts`) when it is
+`@domicile-desktop/component-library` preset (`pandacss-preset.ts`) when it is
 **genuinely reusable across multiple components/apps** and represents a
 distinct semantic role. Updating one site is not a reason to add a token.
 

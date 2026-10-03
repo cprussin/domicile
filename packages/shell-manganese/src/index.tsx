@@ -4,18 +4,18 @@
 // The bar's items are exported for a layout of the user's own. Importing this
 // module does nothing but install its stylesheet.
 
-import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
+import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
 import {
   applyTheme,
   DEFAULT_THEME,
-} from "@domicile/component-library/theme-core";
-import { connectToHost, hasHost } from "@domicile/sdk/connect-to-host";
-import { reportDesktopSize } from "@domicile/sdk/desktop-size";
-import { reportDevicePixelRatio } from "@domicile/sdk/device-pixel-ratio";
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
-import { registerElements } from "@domicile/sdk/register-elements";
-import type { Shell as ShellModule } from "@domicile/sdk/shell";
+} from "@domicile-desktop/component-library/theme-core";
+import { connectToHost, hasHost } from "@domicile-desktop/sdk/connect-to-host";
+import { reportDesktopSize } from "@domicile-desktop/sdk/desktop-size";
+import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
 
 import { mountPoint } from "./mount-point";
@@ -83,7 +83,7 @@ export const runManganese =
     // paint uses the right semantic-token values. There is no paint before this:
     // the stylesheet travels inside this module rather than in a render-blocking
     // `<link>`, which is what ends this shell's theme flash — see
-    // `@domicile/component-library/vite-shell`.
+    // `@domicile-desktop/component-library/vite-shell`.
     //
     // **A guess, and the only thing this shell keeps on the machine.** The theme
     // belongs to the desktop — `theme.mode` in the compositor's config, changed
@@ -141,5 +141,5 @@ export const runManganese =
     reportDesktopSize(domicile, window);
   };
 
-/** Manganese as shipped: what `"shell": "@domicile/manganese"` loads. */
+/** Manganese as shipped: what `"shell": "@domicile-desktop/manganese"` loads. */
 export const Shell: ShellModule = runManganese();

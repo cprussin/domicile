@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_ZOOM_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_ZOOM_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { act, renderHook } from "@testing-library/react";
 
 import { useZoom } from "./useZoom";

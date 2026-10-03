@@ -1,4 +1,4 @@
-import { Slider } from "@domicile/component-library/Slider";
+import { Slider } from "@domicile-desktop/component-library/Slider";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";

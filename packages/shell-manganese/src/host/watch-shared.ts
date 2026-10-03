@@ -1,8 +1,8 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type {
   HostMessageOf,
   HostMessageType,
-} from "@domicile/sdk/host-message";
+} from "@domicile-desktop/sdk/host-message";
 
 /** One host message type, as every watcher on the page shares it. */
 type Shared = {

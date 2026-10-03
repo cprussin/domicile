@@ -1,4 +1,4 @@
-# `@domicile/component-library`
+# `@domicile-desktop/component-library`
 
 See [`../README.md`](../README.md) for the package overview and scripts. This
 doc indexes the package-specific guidelines and is an addendum to the

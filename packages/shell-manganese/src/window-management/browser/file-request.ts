@@ -7,7 +7,7 @@
 // answers a question nobody asked: a folder where the page wanted one file, or
 // a path to read where it wanted one to write.
 
-import { WEBVIEW_FILE_CHOOSER_MODES } from "@domicile/sdk/webview-element";
+import { WEBVIEW_FILE_CHOOSER_MODES } from "@domicile-desktop/sdk/webview-element";
 import { z } from "zod";
 
 /** What the page asks for — see `WEBVIEW_FILE_CHOOSER_MODES`. */

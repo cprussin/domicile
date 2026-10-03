@@ -1,4 +1,4 @@
-import { Button } from "@domicile/component-library/Button";
+import { Button } from "@domicile-desktop/component-library/Button";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";

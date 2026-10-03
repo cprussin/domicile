@@ -89,8 +89,8 @@ port.
 One call, and it is the whole of the wiring:
 
 ```ts
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import { connectToHost } from "@domicile/sdk/connect-to-host";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 
 const domicile = new DomicileClient(connectToHost(window));
 ```
@@ -201,25 +201,25 @@ for key — the builder evaluates it to the JSON the compositor reads:
 
 ```tsx
 // ~/.config/domicile/domicile.tsx
-import { runManganese } from "@domicile/manganese";
+import { runManganese } from "@domicile-desktop/manganese";
 
 export const input = { keyboard: { xkb_variant: "dvp" } };
 export const Shell = runManganese();
 ```
 
 Your own bar items style with manganese's Panda: `css` (and `jsx`,
-`patterns`, `tokens`) from `@domicile/manganese/css` and its siblings,
+`patterns`, `tokens`) from `@domicile-desktop/manganese/css` and its siblings,
 the same design system manganese's items use. The builder scans your files
 beside manganese's, so every `css()` call you write has its rule:
 
 ```tsx
-import { css } from "@domicile/manganese/css";
+import { css } from "@domicile-desktop/manganese/css";
 
 const Mail = () => <span className={css({ color: "muted" })}>3/12</span>;
 ```
 
 A JSON config names its shell as `"shell"`, relative to the config:
-`{ "shell": "@domicile/manganese" }`. See
+`{ "shell": "@domicile-desktop/manganese" }`. See
 [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
 
 **On NixOS, the home-manager module writes it for you.** `programs.domicile`
@@ -335,7 +335,7 @@ inside the transition's update and return a promise that settles on that
 message: the old frame stays up until then, and the transition reveals windows
 already turned. A shell with no animation calls it as soon as it is told.
 One that never calls it gets its windows turned anyway, a second late.
-`ThemeProvider` in `@domicile/component-library` does all of this; a shell
+`ThemeProvider` in `@domicile-desktop/component-library` does all of this; a shell
 using it hands `turnWindows` on its `ThemeSource` to `themeCaptured`.
 
 **And it goes the other way.** `domicile.setTheme("light")` from a shell asks
@@ -416,7 +416,7 @@ config file, kanshi and sway do: `rotate-90` turns the content a quarter
 counterclockwise, for an output bolted a quarter turn clockwise, and
 `rotate-270` the other way.
 
-`@domicile/sdk` does not parse that file. Its schema is the
+`@domicile-desktop/sdk` does not parse that file. Its schema is the
 `domicile-config` crate's, and there is no published TypeScript parser for it
 today.
 
@@ -426,16 +426,16 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile/sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile-desktop/sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
 It is not required. A shell may drive `window.domicile` itself — it is a
 typed surface rather than a wire, described in
-`@domicile/sdk/domicile-host` and, definitively, in the IDL under
+`@domicile-desktop/sdk/domicile-host` and, definitively, in the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
 Doing so means handling the registration order above yourself, along with the
 input mapping that `registerElements` does.
 
-`@domicile/component-library` is **not** part of the contract. It is the React
+`@domicile-desktop/component-library` is **not** part of the contract. It is the React
 and Panda CSS design system this repo's own shells are built from, and it exists
 to serve them. A shell outside this repo needs none of it — the example uses no
 React at all.
@@ -448,10 +448,10 @@ One source file and a build config. The full version, with the comments, is in
 **`src/index.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import { connectToHost } from "@domicile/sdk/connect-to-host";
-import { registerElements } from "@domicile/sdk/register-elements";
-import type { Shell as ShellModule } from "@domicile/sdk/shell";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root) => {
   const domicile = new DomicileClient(connectToHost(window));
@@ -500,7 +500,7 @@ full:
   something never announced means the page and the compositor disagree about
   what is on screen;
 - it calls `reportDevicePixelRatio(domicile, window)` from
-  `@domicile/sdk/device-pixel-ratio`. The page is the only part of
+  `@domicile-desktop/sdk/device-pixel-ratio`. The page is the only part of
   Domicile that can see the display's density — it changes when the window
   moves display or the page zooms — and a compositor never told it has every
   client drawing at the wrong resolution, blurry or oversized, with nothing
@@ -586,14 +586,14 @@ focuses the window under it, and a client that asks for focus is ignored.
 
 **A click on a window** is the first. The SDK fires a cancelable
 `domicile-focus-requested` on the `<app>` that was clicked
-(`APP_FOCUS_REQUESTED_EVENT` from `@domicile/sdk/app-element`) and, left
+(`APP_FOCUS_REQUESTED_EVENT` from `@domicile-desktop/sdk/app-element`) and, left
 alone, focuses the client — which is what you want when your shell has no
 opinion. Call `preventDefault()` on it and nothing moves until you say so:
 
 ```ts
-import type { AppFocusRequest } from "@domicile/sdk/app-element";
-import { APP_FOCUS_REQUESTED_EVENT } from "@domicile/sdk/app-element";
-import { focusApp } from "@domicile/sdk/focus-app";
+import type { AppFocusRequest } from "@domicile-desktop/sdk/app-element";
+import { APP_FOCUS_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
+import { focusApp } from "@domicile-desktop/sdk/focus-app";
 
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
   const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
@@ -620,7 +620,7 @@ leaves a window when another takes it, when a click lands on the chrome, or
 when you say so:
 
 ```ts
-import { focusChrome } from "@domicile/sdk/focus-chrome";
+import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 
 focusChrome(domicile);
 ```
@@ -652,8 +652,8 @@ belongs to. So it asks, with a cancelable `domicile-focus-release-requested` on
 the `<app>` that holds the keyboard:
 
 ```ts
-import type { AppFocusReleaseRequest } from "@domicile/sdk/app-element";
-import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile/sdk/app-element";
+import type { AppFocusReleaseRequest } from "@domicile-desktop/sdk/app-element";
+import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
 
 document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, (event) => {
   const { appId, pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
@@ -715,8 +715,8 @@ pressing anything — and only when the pointer is not over the window already.
 an action — a command for your shell, or a binding mode.
 
 ```ts
-import { bindKeys } from "@domicile/sdk/bind-keys";
-import { KeyAction } from "@domicile/sdk/key-action";
+import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
+import { KeyAction } from "@domicile-desktop/sdk/key-action";
 
 bindKeys(
   domicile,
@@ -950,7 +950,7 @@ carries nothing, and what changed is `canGoBack` and `canGoForward` on the
 element.
 
 ```ts
-import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const readHistory = () => {
   back.disabled = !view.canGoBack;
@@ -979,7 +979,7 @@ instant, so a shell that mounts in the middle of one is the ordinary case.
 `loading` is on the element and `domicile-loading-change` only says to read it.
 
 ```ts
-import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const readLoading = () => {
   spinner.hidden = !view.loading;
@@ -1006,7 +1006,7 @@ focus moving to the view. The element also says so in an event of its own,
 which is the one to raise windows on:
 
 ```ts
-import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 // The window this shell drew, not the view: the event bubbles.
 frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
@@ -1086,7 +1086,7 @@ open — which is the same rule as everywhere else here, since where a window go
 is a thing only your layout knows.
 
 ```ts
-import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_NEW_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 // Bubbles, like the three above, so one listener on the window covers it.
 frame.addEventListener(WEBVIEW_NEW_WINDOW_EVENT, (event) => {
@@ -1125,7 +1125,7 @@ nothing: the element fires `domicile-close` and removing the window is yours.
 Close it the way your Close button does.
 
 ```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
   closeBrowserWindow(frame);
@@ -1144,7 +1144,7 @@ picker is yours to draw: the browser opens no dialog of its own. The element ask
 the event.
 
 ```ts
-import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   event.preventDefault(); // "I'm answering" — see below
@@ -1216,7 +1216,7 @@ domicile.on("extensions", ({ extensions }) => {
 | `popup` | The popup's `chrome-extension://` URL, or `undefined` |
 | `enabled` | `false` after `action.disable()` |
 
-The row type is `Extension`, from `@domicile/sdk/extension`.
+The row type is `Extension`, from `@domicile-desktop/sdk/extension`.
 
 **Every click is `domicile.activateExtension(id)`**, popup or not. It is
 Chrome's toolbar click: the extension gets `activeTab` on the focused browser
@@ -1231,7 +1231,7 @@ says what else:
   calling `window.close()`:
 
 ```ts
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const view = document.createElement("webview");
 view.setAttribute("src", extension.popup);
@@ -1278,7 +1278,7 @@ was; where it goes is yours). Open a browser window whose `<webview>` carries
 `popupwindow` set to that id:
 
 ```ts
-import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_POPUP_WINDOW_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_POPUP_WINDOW_EVENT, (event) => {
   const view = document.createElement("webview");
@@ -1380,7 +1380,7 @@ out into a separate asset and expects a document to `<link>` it; Domicile's
 document has no link, so an extracted stylesheet is a file nobody fetches and
 your desktop comes up unstyled. Fold it back in with a plugin at
 `generateBundle` — this repo's own is
-[`@domicile/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts),
+[`@domicile-desktop/component-library/vite-shell`](/packages/component-library/src/vite-shell.ts),
 which is about thirty lines and worth reading rather than depending on.
 
 That constraint pays for itself. A `<link>` is render-blocking and a
@@ -1432,11 +1432,11 @@ nothing outside your build gets to guess.
 domicile ./my-desktop/src/index.ts       # an entry: its packages installed, bundled
 domicile my-cool-shell                   # an npm package
 domicile github:me/my-cool-shell         # a repository
-domicile @domicile/manganese             # Domicile's own, prebuilt
+domicile @domicile-desktop/manganese             # Domicile's own, prebuilt
 ```
 
 An entry's packages go in the `package.json` and `bun.lock` nearest above it,
-made beside it when there are none. `@domicile/*` and React always come from
+made beside it when there are none. `@domicile-desktop/*` and React always come from
 the Domicile running it, whatever those say. A package that ships a built
 module names it in its `package.json` as `"domicile": { "shell":
 "dist/shell.js" }` and is served as it is; one that does not is built from its

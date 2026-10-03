@@ -1,9 +1,9 @@
-import { DisplayProvider } from "@domicile/component-library/DisplayProvider";
-import type { DisplaySource } from "@domicile/component-library/display-source";
-import { Provider } from "@domicile/component-library/Provider";
-import type { ThemeSource } from "@domicile/component-library/theme-source";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
+import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
+import type { DisplaySource } from "@domicile-desktop/component-library/display-source";
+import { Provider } from "@domicile-desktop/component-library/Provider";
+import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 
 import { Desktop } from "./Desktop";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";

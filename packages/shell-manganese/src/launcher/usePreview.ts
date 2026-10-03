@@ -1,5 +1,5 @@
-import type { FilePreview } from "@domicile/sdk/file-preview";
-import type { FilePreviewMessage } from "@domicile/sdk/host-message";
+import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
+import type { FilePreviewMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**

@@ -1,4 +1,4 @@
-import { WEBVIEW_FIND_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_FIND_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 /**

@@ -1,6 +1,6 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { Extension } from "@domicile/sdk/extension";
-import type { TrayItem } from "@domicile/sdk/tray";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { Extension } from "@domicile-desktop/sdk/extension";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { useEffect, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";

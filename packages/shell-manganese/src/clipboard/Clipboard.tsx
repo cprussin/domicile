@@ -1,5 +1,5 @@
-import { ModalDialog } from "@domicile/component-library/ModalDialog";
-import type { ClipboardMessage } from "@domicile/sdk/host-message";
+import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import type { ClipboardMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";

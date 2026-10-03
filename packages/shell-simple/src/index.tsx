@@ -2,12 +2,12 @@
 // page was opened under and mounts the React desktop on top of it. Importing
 // this module does nothing but install its stylesheet.
 
-import { connectToHost } from "@domicile/sdk/connect-to-host";
-import { reportDesktopSize } from "@domicile/sdk/desktop-size";
-import { reportDevicePixelRatio } from "@domicile/sdk/device-pixel-ratio";
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import { registerElements } from "@domicile/sdk/register-elements";
-import type { Shell as ShellModule } from "@domicile/sdk/shell";
+import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
+import { reportDesktopSize } from "@domicile-desktop/sdk/desktop-size";
+import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
 
 import { Shell as Desktop } from "./Shell";

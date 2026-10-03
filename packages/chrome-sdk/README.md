@@ -1,4 +1,4 @@
-# @domicile/sdk
+# @domicile-desktop/sdk
 
 > Published to npm, and usable outside this repo. If you are writing a shell,
 > start with [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) — this is the
@@ -131,7 +131,7 @@ It provides these:
   a test of one does.
 - **The compositor's own JSON wire**, which **a page no longer speaks** —
   `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
-  there for `@domicile/e2e-harness`, a headless stand-in for a chrome that
+  there for `@domicile-desktop/e2e-harness`, a headless stand-in for a chrome that
   talks to the compositor's socket directly. The one exception is
   `shell_config`, which the engine forwards as the compositor's line:
   `./host-message` parses it with `./protocol`'s schema.
@@ -139,9 +139,9 @@ It provides these:
 ## Usage
 
 ```ts
-import { DomicileClient } from "@domicile/sdk/domicile-client";
-import { connectToHost } from "@domicile/sdk/connect-to-host";
-import { registerElements } from "@domicile/sdk/register-elements";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
 
 const domicile = new DomicileClient(connectToHost(window));
 registerElements(domicile);
@@ -219,11 +219,11 @@ ordinary absence.
 ## Test
 
 ```sh
-bun run turbo test --filter @domicile/sdk
+bun run turbo test --filter @domicile-desktop/sdk
 ```
 
 DOM-dependent suites run against happy-dom via
-[`@domicile/test-support`](../test-support/README.md). That DOM performs no
+[`@domicile-desktop/test-support`](../test-support/README.md). That DOM performs no
 layout, so the routing tests inject a `measure` stub through
 `registerElements(domicile, { measure })` rather than relying on
 `getBoundingClientRect`.

@@ -1,7 +1,7 @@
-import { Screen } from "@domicile/component-library/Screen";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { Extension } from "@domicile/sdk/extension";
-import type { TrayItem } from "@domicile/sdk/tray";
+import { Screen } from "@domicile-desktop/component-library/Screen";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { Extension } from "@domicile-desktop/sdk/extension";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 
 import type { TopBarLayout } from "../top-bar/layout";
 import { TopBar } from "../top-bar/TopBar";

@@ -1,4 +1,4 @@
-import { shellBuild } from "@domicile/component-library/vite-shell";
+import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
 import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 // Domicile writes the document and serves this directory, so there is no
 // `index.html` here and the stylesheet travels inside the bundle. All three of
 // those decisions are `shellBuild`'s — see
-// `@domicile/component-library/vite-shell` for why each one.
+// `@domicile-desktop/component-library/vite-shell` for why each one.
 //
 // The CSS moving into the module is what ends this shell's theme flash: a
 // `<link>` is render-blocking and a module script is deferred, so with one the

@@ -1,4 +1,4 @@
-# @domicile/component-library
+# @domicile-desktop/component-library
 
 The shared React UI primitives every Domicile app builds on. Components wrap
 [`@base-ui/react`](https://base-ui.com) where a primitive exists — so focus
@@ -15,31 +15,31 @@ consume it — don't fork. See [/docs/guidelines/STYLING.md](../../docs/guidelin
 
 | Export | What it is |
 |---|---|
-| `@domicile/component-library/Button` | Polymorphic button (`<button>` / `<a>`), variants + sizes. |
-| `@domicile/component-library/Input` | Text input with prefix-icon / clearable / invalid states. |
-| `@domicile/component-library/Textarea` | Auto-sizing textarea with a resize handle. |
-| `@domicile/component-library/Field` | Label + control + validation-message wrapper (base-ui Field). |
-| `@domicile/component-library/Select` | Select / listbox (base-ui Select). |
-| `@domicile/component-library/Autocomplete` | Text field with a caller-supplied list of suggestions under it (base-ui Autocomplete). The caller does the matching, so the list can rank and can offer a line that matches nothing typed. |
-| `@domicile/component-library/Tabs` | Tabbed container (base-ui Tabs): config-driven `tabs` array, a sliding active underline, `size` variants, inset focus ring. |
-| `@domicile/component-library/TabRail` | Vertical rail of tabs with a brand slot, footer, and collapse. |
-| `@domicile/component-library/Card` | Elevated surface with optional title / footer. |
-| `@domicile/component-library/ModalDialog` | Modal dialog with flattened `title` / `footer` / `trigger` API. |
-| `@domicile/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
-| `@domicile/component-library/Toaster` | Toasts as a deck in a box's top trailing corner — fans out on hover, swipes away, a countdown along each (base-ui Toast). The caller draws each card. |
-| `@domicile/component-library/Popover` | Non-modal panel anchored to the control that opened it (base-ui Popover), for detail a control has no room for. |
-| `@domicile/component-library/Avatar` | Avatar with initials / gradient fallback. |
-| `@domicile/component-library/Kbd` | Keyboard-shortcut key cap. |
-| `@domicile/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |
-| `@domicile/component-library/DisplayProvider` | The desktop the host described, for the `<Screen>`s below it. |
-| `@domicile/component-library/display-source` | The `Display` / `DisplaySource` types a `DisplayProvider` is fed. |
-| `@domicile/component-library/Provider` | base-ui `DirectionProvider` wrapper every app roots its tree in. |
-| `@domicile/component-library/ThemeProvider` | Theme state (`light` / `dark` / `system`) and the `<html data-theme>` side effect. |
-| `@domicile/component-library/ThemeSwitch` | The toggle that cycles the theme preference. |
-| `@domicile/component-library/control-sizes` | The `Size` union / `SIZES` array the sized controls share. |
-| `@domicile/component-library/spacing` | The rem value of one step on the spacing scale, for runtime math. |
-| `@domicile/component-library/pandacss-preset` | The `domicilePreset` every package's `panda.config.ts` extends. |
-| `@domicile/component-library/vite-shell` | `shellBuild({ entry })` — the vite build a shell has to have for Domicile to serve it: a module entry rather than an HTML one, a fixed `shell.js` name, the entry's exports kept (`Shell` is what Domicile calls), and the stylesheet folded into the JavaScript. Each of the four fails quietly if you get it wrong. |
+| `@domicile-desktop/component-library/Button` | Polymorphic button (`<button>` / `<a>`), variants + sizes. |
+| `@domicile-desktop/component-library/Input` | Text input with prefix-icon / clearable / invalid states. |
+| `@domicile-desktop/component-library/Textarea` | Auto-sizing textarea with a resize handle. |
+| `@domicile-desktop/component-library/Field` | Label + control + validation-message wrapper (base-ui Field). |
+| `@domicile-desktop/component-library/Select` | Select / listbox (base-ui Select). |
+| `@domicile-desktop/component-library/Autocomplete` | Text field with a caller-supplied list of suggestions under it (base-ui Autocomplete). The caller does the matching, so the list can rank and can offer a line that matches nothing typed. |
+| `@domicile-desktop/component-library/Tabs` | Tabbed container (base-ui Tabs): config-driven `tabs` array, a sliding active underline, `size` variants, inset focus ring. |
+| `@domicile-desktop/component-library/TabRail` | Vertical rail of tabs with a brand slot, footer, and collapse. |
+| `@domicile-desktop/component-library/Card` | Elevated surface with optional title / footer. |
+| `@domicile-desktop/component-library/ModalDialog` | Modal dialog with flattened `title` / `footer` / `trigger` API. |
+| `@domicile-desktop/component-library/SlideOver` | Edge-anchored drawer (base-ui Dialog). |
+| `@domicile-desktop/component-library/Toaster` | Toasts as a deck in a box's top trailing corner — fans out on hover, swipes away, a countdown along each (base-ui Toast). The caller draws each card. |
+| `@domicile-desktop/component-library/Popover` | Non-modal panel anchored to the control that opened it (base-ui Popover), for detail a control has no room for. |
+| `@domicile-desktop/component-library/Avatar` | Avatar with initials / gradient fallback. |
+| `@domicile-desktop/component-library/Kbd` | Keyboard-shortcut key cap. |
+| `@domicile-desktop/component-library/Screen` | Lays its children over one of the desktop's displays, once per display it selects. |
+| `@domicile-desktop/component-library/DisplayProvider` | The desktop the host described, for the `<Screen>`s below it. |
+| `@domicile-desktop/component-library/display-source` | The `Display` / `DisplaySource` types a `DisplayProvider` is fed. |
+| `@domicile-desktop/component-library/Provider` | base-ui `DirectionProvider` wrapper every app roots its tree in. |
+| `@domicile-desktop/component-library/ThemeProvider` | Theme state (`light` / `dark` / `system`) and the `<html data-theme>` side effect. |
+| `@domicile-desktop/component-library/ThemeSwitch` | The toggle that cycles the theme preference. |
+| `@domicile-desktop/component-library/control-sizes` | The `Size` union / `SIZES` array the sized controls share. |
+| `@domicile-desktop/component-library/spacing` | The rem value of one step on the spacing scale, for runtime math. |
+| `@domicile-desktop/component-library/pandacss-preset` | The `domicilePreset` every package's `panda.config.ts` extends. |
+| `@domicile-desktop/component-library/vite-shell` | `shellBuild({ entry })` — the vite build a shell has to have for Domicile to serve it: a module entry rather than an HTML one, a fixed `shell.js` name, the entry's exports kept (`Shell` is what Domicile calls), and the stylesheet folded into the JavaScript. Each of the four fails quietly if you get it wrong. |
 
 Styling goes through the theme defined in the preset
 (`pandacss-preset.ts`) — `color`, `spacing`, `borderRadius`, etc. — with
@@ -72,5 +72,5 @@ bun run test:unit        # bun:test + happy-dom
 bun run test:types       # tsc --noEmit
 ```
 
-From the repo root, `bun run turbo test --filter @domicile/component-library`
+From the repo root, `bun run turbo test --filter @domicile-desktop/component-library`
 runs the type check and the unit tests together.

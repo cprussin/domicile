@@ -1,5 +1,5 @@
-import type { Theme } from "@domicile/component-library/theme-core";
-import { THEMES } from "@domicile/component-library/theme-core";
+import type { Theme } from "@domicile-desktop/component-library/theme-core";
+import { THEMES } from "@domicile-desktop/component-library/theme-core";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";

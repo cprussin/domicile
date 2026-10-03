@@ -1,6 +1,6 @@
-import type { ThemeSource } from "@domicile/component-library/theme-source";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { ThemeMessage } from "@domicile/sdk/host-message";
+import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { ThemeMessage } from "@domicile-desktop/sdk/host-message";
 
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 

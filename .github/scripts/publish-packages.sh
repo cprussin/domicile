@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish every public `@domicile/*` package to npm, as an alpha of this commit:
+# Publish every public `@domicile-desktop/*` package to npm, as an alpha of this commit:
 # `0.0.0-alpha-<sha>` under the `alpha` dist-tag. No semver yet; a version
 # names the commit it was built from.
 #
@@ -52,7 +52,7 @@ bun install --ignore-scripts
 # What the tarballs hold that git does not: the SDK's `dist/` and the Panda
 # `styled-system/` the other two import.
 bun run turbo run prepare build \
-  --filter @domicile/sdk --filter @domicile/component-library --filter @domicile/manganese
+  --filter @domicile-desktop/sdk --filter @domicile-desktop/component-library --filter @domicile-desktop/manganese
 
 for package in "${PACKAGES[@]}"; do
   (cd "packages/$package" && bun pm pack --quiet --ignore-scripts --destination "$OUT")
@@ -66,5 +66,5 @@ fi
 for package in "${PACKAGES[@]}"; do
   name="$(jq -r .name "packages/$package/package.json")"
   tarball="$OUT/$(tr -d @ <<<"$name" | tr / -)-$VERSION.tgz"
-  npm publish "$tarball" --tag alpha --access public
+  npm publish "$tarball" --tag alpha --access public --provenance
 done

@@ -1,6 +1,6 @@
-import type { ToastManager } from "@domicile/component-library/Toaster";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { Notification } from "@domicile/sdk/notification";
+import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { Notification } from "@domicile-desktop/sdk/notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { arrivals } from "./arrivals";

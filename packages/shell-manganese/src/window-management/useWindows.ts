@@ -1,5 +1,5 @@
-import type { Display } from "@domicile/component-library/display-source";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Display } from "@domicile-desktop/component-library/display-source";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
 import { openCommand } from "../launcher/open-command";

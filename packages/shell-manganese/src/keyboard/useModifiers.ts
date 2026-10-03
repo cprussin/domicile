@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile/sdk/host-message";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**

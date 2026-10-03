@@ -1,4 +1,4 @@
-# @domicile/manganese
+# @domicile-desktop/manganese
 
 The bundled reference chrome: a tiling desktop keyed like [sway](https://swaywm.org),
 under a transparent bar carrying the tray, the
@@ -8,7 +8,7 @@ pixel of it is ordinary web content, and each Wayland client on it is a real
 `<app>` element that takes ordinary CSS.
 
 The chrome is a React tree built from
-[`@domicile/component-library`](../component-library/README.md): a browser
+[`@domicile-desktop/component-library`](../component-library/README.md): a browser
 window's controls are its `Button`, the address bar its `Input`, the
 empty-desktop card its `Card`. The one control that is the shell's own is a
 workspace number on the bar, and it is one for the reason the library's own
@@ -214,7 +214,7 @@ import {
   moveToWorkspace,
   runManganese,
   workspace,
-} from "@domicile/manganese";
+} from "@domicile-desktop/manganese";
 
 /** Programmer's Dvorak's number row, unshifted, for workspaces 1 to 10. */
 const ROW = [
@@ -628,7 +628,7 @@ each of which reads the bar it is on and takes no props, and anything of your
 own. Without one, the bar is `DEFAULT_TOP_BAR`, which is what follows.
 
 ```tsx
-import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile/manganese";
+import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile-desktop/manganese";
 
 export const Shell = runManganese({
   topBar: {
@@ -1039,7 +1039,7 @@ export const input = {
 ## Build & run
 
 ```sh
-bun run turbo build:vite --filter @domicile/manganese
+bun run turbo build:vite --filter @domicile-desktop/manganese
 ```
 
 emits the chrome to `.vite/renderer/main_window/`, which is the whole of what a
@@ -1052,7 +1052,7 @@ nix run 'github:cprussin/domicile/stable#manganese'
 runs it — the engine on that page, and the compositor as a producer to it.
 `./scripts/dev-shell.sh manganese` does the same from a checkout.
 
-`bun run --filter @domicile/manganese start:dev` runs this shell in a real
+`bun run --filter @domicile-desktop/manganese start:dev` runs this shell in a real
 desktop and rebuilds it as you edit: the engine the flake pins and the
 compositor built out of this checkout. Nothing reloads the page for you;
 `domicile load-shell .vite/renderer/main_window/shell.js`, typed in a terminal
@@ -1066,10 +1066,10 @@ and not checked in.
 ## Test
 
 ```sh
-bun run turbo test --filter @domicile/manganese
+bun run turbo test --filter @domicile-desktop/manganese
 ```
 
 runs the type check, the unit tests, and the Vite build. The layout tree and
 the reduction are tested on their own — they are pure functions over a tree and
 a state — and the components render against happy-dom via
-[`@domicile/test-support`](../test-support/README.md).
+[`@domicile-desktop/test-support`](../test-support/README.md).

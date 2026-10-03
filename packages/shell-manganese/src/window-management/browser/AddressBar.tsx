@@ -1,6 +1,6 @@
-import type { Suggestion } from "@domicile/component-library/Autocomplete";
-import { Autocomplete } from "@domicile/component-library/Autocomplete";
-import { Button } from "@domicile/component-library/Button";
+import type { Suggestion } from "@domicile-desktop/component-library/Autocomplete";
+import { Autocomplete } from "@domicile-desktop/component-library/Autocomplete";
+import { Button } from "@domicile-desktop/component-library/Button";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";

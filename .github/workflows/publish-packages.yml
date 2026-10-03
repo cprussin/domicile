@@ -1,6 +1,6 @@
 name: Publish packages
 
-# Every public `@domicile/*` package to npm, as an alpha of the commit:
+# Every public `@domicile-desktop/*` package to npm, as an alpha of the commit:
 # `0.0.0-alpha-<sha>` under the `alpha` dist-tag. See
 # .github/scripts/publish-packages.sh.
 #
@@ -35,4 +35,9 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
+      # NPM_TOKEN is only for a package's first publish, before npm has a
+      # package to hang a trusted publisher on. Unset, npm uses this run's
+      # OIDC token alone. Either way the publish carries provenance.
       - run: .github/scripts/publish-packages.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

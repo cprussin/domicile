@@ -1,4 +1,4 @@
-import type { Notification } from "@domicile/sdk/notification";
+import type { Notification } from "@domicile-desktop/sdk/notification";
 
 /**
  * Which of `next` just happened, given the list the page had been told before

@@ -12,13 +12,13 @@ import path from "node:path";
 import type { BunPlugin } from "bun";
 
 /** What resolves from Domicile's install rather than the user's project. */
-const FROM_DOMICILE = /^(@domicile\/[^/]+|react|react-dom)(\/.*)?$/;
+const FROM_DOMICILE = /^(@domicile-desktop\/[^/]+|react|react-dom)(\/.*)?$/;
 
 /**
  * Evaluate the config module `config` and write every export but `Shell` to
  * `out` as JSON.
  *
- * **Bundled before it is imported**, so `@domicile/*` and React resolve from
+ * **Bundled before it is imported**, so `@domicile-desktop/*` and React resolve from
  * `domicile` as a shell build resolves them, and a stylesheet a shell imports
  * — which only a page can use — is nothing here. Importing the module runs no
  * desktop: a shell does nothing until `Shell` is called, and nothing calls it.
@@ -48,7 +48,7 @@ export const evaluate = async (
   writeFileSync(out, `${JSON.stringify(sections)}\n`);
 };
 
-/** `@domicile/*` and React from Domicile's install, as manganese has them. */
+/** `@domicile-desktop/*` and React from Domicile's install, as manganese has them. */
 const fromDomicile = (domicile: string): BunPlugin => {
   const manganese = path.join(domicile, "packages", "shell-manganese");
   return {
@@ -56,7 +56,7 @@ const fromDomicile = (domicile: string): BunPlugin => {
     setup: (build) => {
       build.onResolve({ filter: FROM_DOMICILE }, ({ path: specifier }) => ({
         path:
-          specifier === "@domicile/manganese"
+          specifier === "@domicile-desktop/manganese"
             ? path.join(manganese, "src", "index.tsx")
             : Bun.resolveSync(specifier, manganese),
       }));

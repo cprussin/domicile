@@ -25,7 +25,7 @@
 // megabytes of JPEG that nothing but the reference chrome would ever read. A
 // shell that wants its own pictures owns its own list.
 
-import type { Theme } from "@domicile/component-library/theme-core";
+import type { Theme } from "@domicile-desktop/component-library/theme-core";
 
 const PHOTO_TITLES: Record<Theme, readonly string[]> = {
   dark: [

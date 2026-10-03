@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { APP_TAG_NAME } from "@domicile/sdk/app-element";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { Measure } from "@domicile/sdk/measure";
-import { registerElements } from "@domicile/sdk/register-elements";
+import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { Measure } from "@domicile-desktop/sdk/measure";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import { fireEvent, render } from "@testing-library/react";
 
 import { AppWindow } from "./AppWindow";

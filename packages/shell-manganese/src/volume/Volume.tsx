@@ -1,7 +1,7 @@
-import { Popover } from "@domicile/component-library/Popover";
-import type { AudioDevice } from "@domicile/sdk/audio";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { AudioMessage } from "@domicile/sdk/host-message";
+import { Popover } from "@domicile-desktop/component-library/Popover";
+import type { AudioDevice } from "@domicile-desktop/sdk/audio";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";

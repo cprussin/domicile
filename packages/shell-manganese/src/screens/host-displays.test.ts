@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import type { Display } from "@domicile/component-library/display-source";
-import { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Display } from "@domicile-desktop/component-library/display-source";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
-} from "@domicile/sdk/domicile-host";
+} from "@domicile-desktop/sdk/domicile-host";
 
 import { hostDisplays } from "./host-displays";
 

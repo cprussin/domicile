@@ -1,4 +1,4 @@
-# @domicile/e2e-harness
+# @domicile-desktop/e2e-harness
 
 A headless chrome stand-in for the `e2e-*.sh` scripts in `/scripts`, plus the
 check on those scripts' own machinery. The real chrome is the engine loading a
@@ -93,7 +93,7 @@ were eventually deleted unused; a module whose last caller went should go with
 it.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
-from [`@domicile/sdk/newline-frames`](../chrome-sdk/README.md), the
+from [`@domicile-desktop/sdk/newline-frames`](../chrome-sdk/README.md), the
 handshake, and decoding via the SDK's protocol schemas — so the harnesses drift
 from the wire format only if the SDK does.
 
@@ -111,7 +111,7 @@ DOMICILE_CHROME_SOCK=/tmp/domicile-rt/domicile-chrome.sock \
 ## Test
 
 ```sh
-bun run turbo test --filter @domicile/e2e-harness
+bun run turbo test --filter @domicile-desktop/e2e-harness
 ```
 
 The socket behavior is covered by the e2e scripts themselves against a live

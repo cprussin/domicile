@@ -1,5 +1,5 @@
-import { Button } from "@domicile/component-library/Button";
-import { Input } from "@domicile/component-library/Input";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Input } from "@domicile-desktop/component-library/Input";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/ssr/CaretUp";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";

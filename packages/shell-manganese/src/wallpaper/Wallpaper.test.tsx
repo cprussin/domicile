@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "bun:test";
-import type { Theme } from "@domicile/component-library/theme-core";
-import { THEMES } from "@domicile/component-library/theme-core";
+import type { Theme } from "@domicile-desktop/component-library/theme-core";
+import { THEMES } from "@domicile-desktop/component-library/theme-core";
 import { act, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
