@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The pages guard-webview-upload.sh and guard-webview-download.sh click.
+"""The pages guard-webview-upload.sh, guard-webview-download.sh and
+guard-webview-save-picker.sh click.
 
   /upload    an `<input type="file">` filling the whole page, so a press
              anywhere in the window lands on it. When the page is given a file
@@ -13,6 +14,13 @@
 
   /file      a few bytes served as an attachment named `guard-download.txt`,
              which is the name the shell must be offered as the suggestion.
+
+  /save      one button filling the whole page, which asks
+             `showSaveFilePicker()` for `guard-save.txt` and writes a few bytes
+             to what it is handed. It says `GUARD saved name=<name>` once they
+             are written, and `GUARD save-refused <error>` when the picker is
+             not answered with a file. A dialog the browser would have drawn,
+             which is what that guard is about.
 
 Each page says `GUARD <name>-loaded` when it runs and `GUARD guest-mousedown`
 for a press, which is how a run says the click reached the guest at all rather
@@ -30,6 +38,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 UPLOAD = "/upload"
 DOWNLOAD = "/download"
 FILE = "/file"
+SAVE = "/save"
 
 # What /file holds and what it is called. The download guard reads both back
 # off the disk, so they are the guard's to know too.
@@ -81,9 +90,31 @@ UPLOAD_SCRIPT = """
 
 DOWNLOAD_TARGET = '<a id="target" href="%s" download>download</a>' % FILE
 
+# What /save calls its file and writes into it. The save-picker guard reads
+# both back, so they are the guard's to know too.
+SAVE_NAME = "guard-save.txt"
+SAVE_TEXT = "a file a page saved where the shell said"
+
+SAVE_TARGET = '<button id="target">save</button>'
+SAVE_SCRIPT = """
+      document.getElementById("target").addEventListener("click", () => {
+        showSaveFilePicker({ suggestedName: "%s" }).then(
+          async (handle) => {
+            const writable = await handle.createWritable();
+            await writable.write("%s");
+            await writable.close();
+            say(`saved name=${handle.name}`);
+          },
+          (error) => {
+            say(`save-refused ${error.name}`);
+          },
+        );
+      });
+""" % (SAVE_NAME, SAVE_TEXT)
+
 
 class PagesToPickFor(BaseHTTPRequestHandler):
-    """Answers the three paths above, and everything else with a 404."""
+    """Answers the four paths above, and everything else with a 404."""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
         if self.path == UPLOAD:
@@ -96,6 +127,11 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
                 PAGE % {"which": "download", "target": DOWNLOAD_TARGET, "script": ""},
             )
+        elif self.path == SAVE:
+            self.answer(
+                "text/html; charset=utf-8",
+                PAGE % {"which": "save", "target": SAVE_TARGET, "script": SAVE_SCRIPT},
+            )
         elif self.path == FILE:
             self.answer(
                 "text/plain; charset=utf-8",
@@ -103,7 +139,7 @@ class PagesToPickFor(BaseHTTPRequestHandler):
                 disposition='attachment; filename="%s"' % FILE_NAME,
             )
         else:
-            self.send_error(404, "this server has three pages and that is none of them")
+            self.send_error(404, "this server has four pages and that is none of them")
 
     def answer(self, content_type, body, disposition=None):
         encoded = body.encode("utf-8")

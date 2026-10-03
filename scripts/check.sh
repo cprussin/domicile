@@ -373,6 +373,7 @@ if wanted engine; then
       scripts/engine-guard-webview-routed-link.sh \
       scripts/engine-guard-webview-upload.sh \
       scripts/engine-guard-webview-download.sh \
+      scripts/engine-guard-webview-save-picker.sh \
       scripts/engine-guard-webview-tabs.sh \
       scripts/engine-guard-webview-active-tab.sh \
       scripts/engine-guard-webview-popup-window.sh \
