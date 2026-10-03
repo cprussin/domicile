@@ -48,90 +48,95 @@
 // The page in the window says `GUARD opener-loaded` and `GUARD guest-mousedown`
 // for itself, and the page the new window lands on says `GUARD opened-loaded`;
 // see guard-webview-new-window-server.py.
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-/**
- * A query parameter this cannot run without. Missing means the guard invoked
- * this wrongly, and a default would turn that into a measurement of something
- * nobody asked for.
- */
-const required = (parameters, name) => {
-  const value = parameters.get(name);
-  if (value === null) {
-    throw new Error(`guard-webview-new-window: ?${name}= is required`);
-  } else {
-    return value;
-  }
+export const Shell = () => {
+  /**
+   * A query parameter this cannot run without. Missing means the guard invoked
+   * this wrongly, and a default would turn that into a measurement of something
+   * nobody asked for.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-webview-new-window: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
+
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  const parameters = new URLSearchParams(location.search);
+
+  // The shell's own half of the window, above the element. A plain <div>:
+  // nothing here takes focus or navigates, so anything this document reports
+  // about a window came from the element below it.
+  const stripHeight = `${required(parameters, "strip")}px`;
+  const strip = document.createElement("div");
+  strip.style.position = "absolute";
+  strip.style.insetBlockStart = "0";
+  strip.style.insetInline = "0";
+  strip.style.inlineSize = "100%";
+  strip.style.blockSize = stripHeight;
+  strip.style.background = "#204060";
+
+  /**
+   * A browser window's view: the element, sized to the window below the strip.
+   *
+   * Sized rather than stretched between insets, which is the mistake the click
+   * guard already paid for: a <webview> is a replaced element, and an absolutely
+   * positioned replaced element with `auto` size takes its INTRINSIC size between
+   * two insets — 300x150, in the corner — leaving most of the window under
+   * nothing at all and the guard clicking the page instead of the guest.
+   */
+  const viewFilling = () => {
+    const view = document.createElement("webview");
+    view.style.position = "absolute";
+    view.style.insetBlockStart = stripHeight;
+    view.style.insetInline = "0";
+    view.style.inlineSize = "100%";
+    view.style.blockSize = `calc(100% - ${stripHeight})`;
+    view.style.border = "0";
+    return view;
+  };
+
+  // THE CLAIM: the element saying its page asked for a window of its own.
+  // Listened for on the document rather than on the element, because bubbling is
+  // half of what makes it usable — a chrome hangs one handler on the window it
+  // drew, which is what `BrowserWindow.tsx` does with it.
+  document.addEventListener("domicile-new-window", (event) => {
+    say(`new-window url=${event.url}`);
+
+    // AND THE WINDOW ITSELF, which is the half an event cannot be. A second
+    // element, stacked over the first because this guard has no layout and does
+    // not need one: what is being measured is that a guest was made for it and
+    // the page arrived, and where the box is has nothing to do with either.
+    const opened = viewFilling();
+    document.body.append(opened);
+    opened.setAttribute("src", event.url);
+    say("second-view");
+  });
+
+  // The harness's own reading: a press that landed in this document, which is
+  // what makes every absence below a measurement.
+  document.addEventListener("mousedown", (event) => {
+    say(`chrome-mousedown target=${event.target.localName}`);
+  });
+
+  document.body.style.margin = "0";
+  document.body.append(strip);
+
+  // Last, and this is the order that matters: `src` is what makes a <webview>
+  // ask for a guest, and setting it before the element is in the document would
+  // ask before there is a frame to attach one to.
+  const view = viewFilling();
+  document.body.append(view);
+  view.setAttribute("src", required(parameters, "src"));
+
+  say("shell-loaded");
 };
-
-const say = (what) => {
-  console.log(`GUARD ${what}`);
-};
-
-const parameters = new URLSearchParams(location.search);
-
-// The shell's own half of the window, above the element. A plain <div>:
-// nothing here takes focus or navigates, so anything this document reports
-// about a window came from the element below it.
-const stripHeight = `${required(parameters, "strip")}px`;
-const strip = document.createElement("div");
-strip.style.position = "absolute";
-strip.style.insetBlockStart = "0";
-strip.style.insetInline = "0";
-strip.style.inlineSize = "100%";
-strip.style.blockSize = stripHeight;
-strip.style.background = "#204060";
-
-/**
- * A browser window's view: the element, sized to the window below the strip.
- *
- * Sized rather than stretched between insets, which is the mistake the click
- * guard already paid for: a <webview> is a replaced element, and an absolutely
- * positioned replaced element with `auto` size takes its INTRINSIC size between
- * two insets — 300x150, in the corner — leaving most of the window under
- * nothing at all and the guard clicking the page instead of the guest.
- */
-const viewFilling = () => {
-  const view = document.createElement("webview");
-  view.style.position = "absolute";
-  view.style.insetBlockStart = stripHeight;
-  view.style.insetInline = "0";
-  view.style.inlineSize = "100%";
-  view.style.blockSize = `calc(100% - ${stripHeight})`;
-  view.style.border = "0";
-  return view;
-};
-
-// THE CLAIM: the element saying its page asked for a window of its own.
-// Listened for on the document rather than on the element, because bubbling is
-// half of what makes it usable — a chrome hangs one handler on the window it
-// drew, which is what `BrowserWindow.tsx` does with it.
-document.addEventListener("domicile-new-window", (event) => {
-  say(`new-window url=${event.url}`);
-
-  // AND THE WINDOW ITSELF, which is the half an event cannot be. A second
-  // element, stacked over the first because this guard has no layout and does
-  // not need one: what is being measured is that a guest was made for it and
-  // the page arrived, and where the box is has nothing to do with either.
-  const opened = viewFilling();
-  document.body.append(opened);
-  opened.setAttribute("src", event.url);
-  say("second-view");
-});
-
-// The harness's own reading: a press that landed in this document, which is
-// what makes every absence below a measurement.
-document.addEventListener("mousedown", (event) => {
-  say(`chrome-mousedown target=${event.target.localName}`);
-});
-
-document.body.style.margin = "0";
-document.body.append(strip);
-
-// Last, and this is the order that matters: `src` is what makes a <webview>
-// ask for a guest, and setting it before the element is in the document would
-// ask before there is a frame to attach one to.
-const view = viewFilling();
-document.body.append(view);
-view.setAttribute("src", required(parameters, "src"));
-
-say("shell-loaded");

@@ -8,16 +8,16 @@ import { mountPoint } from "./mount-point";
 // into the source of whatever writes it to find out what it was mounting
 // into would be asserting a coupling that is not supposed to exist.
 //
-// What matters about it is the absence: a `<body>` with a script in it and
-// nothing else. `shell-document.ts` says so in prose ("what is in it is only
-// what a desktop cannot do without") and the shape below is that list.
+// What matters about it is the absence: an empty `<body>`, which is the root
+// `Shell` is handed. The script that loads this module takes itself back out
+// before it calls `Shell`, so the shape below is what a shell sees.
 //
 // Parsed, because a parsed document never runs its scripts. Built node by node
 // with `createHTMLDocument`, happy-dom tries to load the script the moment it
 // is appended, and logs that it cannot on every run.
 const domicilesDocument = () =>
   new DOMParser().parseFromString(
-    `<!doctype html><title>Domicile</title><body><script src="shell.js" type="module"></script></body>`,
+    `<!doctype html><title>Domicile</title><body></body>`,
     "text/html",
   );
 
@@ -34,12 +34,12 @@ describe("mountPoint", () => {
   it("does not need an element the document does not have", () => {
     const document = domicilesDocument();
     expect(document.getElementById("root")).toBeNull();
-    expect(() => mountPoint(document)).not.toThrow();
+    expect(() => mountPoint(document.body)).not.toThrow();
   });
 
-  it("puts what it returns in the document", () => {
+  it("puts what it returns in the root", () => {
     const document = domicilesDocument();
-    const mounted = mountPoint(document);
+    const mounted = mountPoint(document.body);
     expect(mounted.isConnected).toBe(true);
     expect(mounted.parentElement).toBe(document.body);
   });
@@ -51,7 +51,7 @@ describe("mountPoint", () => {
   // that wrapper, which looks like a desktop where every screen has slid.
   // A wrapper is exactly what this is, so it is the one that must not.
   it("is not a positioned ancestor", () => {
-    const mounted = mountPoint(domicilesDocument());
+    const mounted = mountPoint(domicilesDocument().body);
     expect(mounted.style.position).toBe("");
   });
 
@@ -60,7 +60,7 @@ describe("mountPoint", () => {
   // desktop, silently. Cheap to say it cannot.
   it("is the same element every time", () => {
     const document = domicilesDocument();
-    expect(mountPoint(document)).toBe(mountPoint(document));
+    expect(mountPoint(document.body)).toBe(mountPoint(document.body));
     expect(document.body.querySelectorAll("div")).toHaveLength(1);
   });
 });

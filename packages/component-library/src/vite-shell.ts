@@ -1,19 +1,21 @@
 // What a shell's vite build has to be for Domicile to serve it as a module.
 //
 // Domicile writes the document, so a shell is built from its entry module
-// rather than from an HTML file. Three things follow, none of them vite's
-// default and all three of which fail quietly if you get them wrong:
+// rather than from an HTML file. Four things follow, none of them vite's
+// default and all four of which fail quietly if you get them wrong:
 //
 //   the entry     a `.ts` file rather than an HTML file, so nothing emits a
 //                 document for Domicile to have to ignore
 //   its name      fixed, not hashed. The module Domicile is given is a path
 //                 somebody types or a package computes, and neither can know
 //                 `index-D6oz2ygI.js`
+//   its exports   kept, which an app build does not do, because `Shell` is
+//                 what Domicile calls
 //   the CSS       *inside* the JavaScript, because the document Domicile
 //                 writes carries no `<link>` — see below
 //
 // Shared rather than copied into both shells, and exported for shells outside
-// this repository, because getting any of the three wrong produces a desktop
+// this repository, because getting any of the four wrong produces a desktop
 // that comes up blank or unstyled with nothing in any log to say why.
 //
 // WHY THE CSS GOES IN THE JAVASCRIPT, which is the part that pays for itself.
@@ -100,7 +102,16 @@ export const shellBuild = ({ entry }: ShellBuild) => ({
     // name it: not a person typing it, not the flake computing it, not a
     // shell's own README. The directory is served, so one predictable name in
     // it is all Domicile needs.
-    rollupOptions: { input: entry, output: { entryFileNames: "shell.js" } },
+    //
+    // Its exports kept. Vite builds an app with `preserveEntrySignatures:
+    // false`, which drops the entry's exports and then every line only they
+    // reached: a shell built that way is a module with no `Shell` and nothing
+    // in it.
+    rollupOptions: {
+      input: entry,
+      output: { entryFileNames: "shell.js" },
+      preserveEntrySignatures: "exports-only" as const,
+    },
     sourcemap: true,
   },
   plugins: [cssInTheModule()],

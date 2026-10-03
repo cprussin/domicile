@@ -226,37 +226,48 @@ TEST(ShellDocumentTest, HasNoBodyMargin) {
             std::string::npos);
 }
 
-TEST(ShellDocumentTest, LoadsTheModuleAsAModule) {
+TEST(ShellDocumentTest, ImportsTheModuleAndCallsItsShell) {
+  // A shell is a module whose `Shell` export Domicile calls with the element to
+  // draw in. Every other export is ignored, so the module is imported rather
+  // than run as a script.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
-  EXPECT_NE(document.find("src=\"shell.js\""), std::string::npos);
-  EXPECT_NE(document.find("type=\"module\""), std::string::npos);
+  EXPECT_NE(document.find("<script type=\"module\">"), std::string::npos);
+  EXPECT_NE(document.find("new URL(\"./shell.js\""), std::string::npos);
+  EXPECT_NE(document.find("await import(module)"), std::string::npos);
+  EXPECT_NE(document.find("shell.Shell(document.body)"), std::string::npos);
+}
+
+TEST(ShellDocumentTest, HandsTheShellAnEmptyBody) {
+  // The script empties the body before it calls `Shell`, so the root a shell
+  // is handed holds nothing of Domicile's -- `mount-point.test.ts` builds
+  // exactly that body as a fixture, and a shell that counted the body's
+  // children would otherwise count this script.
+  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
+  EXPECT_LT(document.find("document.body.replaceChildren()"),
+            document.find("shell.Shell(document.body)"));
 }
 
 TEST(ShellDocumentTest, EncodesTheModuleName) {
-  // The name came off somebody's disk and lands in the most privileged page in
-  // this system. Nothing in it may be parsed as markup.
+  // The name came off somebody's disk and lands in a JavaScript string in the
+  // most privileged page in this system. Nothing in it may end the string or
+  // the element.
   const std::string document =
-      ShellURLLoaderFactory::ShellDocument("a\"><script>b.js");
+      ShellURLLoaderFactory::ShellDocument("a\"</script><script>b.js");
   EXPECT_EQ(document.find("<script>b.js"), std::string::npos);
-  EXPECT_EQ(document.find("a\">"), std::string::npos);
+  EXPECT_EQ(document.find("a\""), std::string::npos);
+  EXPECT_EQ(document.find("</script><script>"), std::string::npos);
 }
 
-TEST(ShellDocumentTest, WatchesItsOwnModuleForFailure) {
-  // A module that 404s, will not parse, or throws on its first line leaves a
-  // page that is blank and completely silent: the engine has served what it was
-  // asked for, the compositor is waiting for a page that will never say hello,
-  // and the only thing that knows what happened is the document itself. So the
-  // document watches. The three listeners are three different failures -- the
-  // module not loading, it throwing while it runs, and it rejecting -- and none
-  // of the others reports the other two.
+TEST(ShellDocumentTest, ReportsItsOwnShellFailing) {
+  // A module that 404s, will not parse, throws while it loads, has no `Shell`,
+  // or whose `Shell` throws, leaves a page that is blank and completely silent:
+  // the engine has served what it was asked for, the compositor is waiting for
+  // a page that will never say hello, and the only thing that knows what
+  // happened is the document itself. So the document reports each.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
-  EXPECT_NE(document.find("document.currentScript"), std::string::npos);
-  EXPECT_NE(document.find("shell.addEventListener(\"error\""),
-            std::string::npos);
-  EXPECT_NE(document.find("addEventListener(\"error\", (failure)"),
-            std::string::npos);
-  EXPECT_NE(document.find("addEventListener(\"unhandledrejection\""),
-            std::string::npos);
+  EXPECT_NE(document.find("import(module).catch("), std::string::npos);
+  EXPECT_NE(document.find("has no Shell export"), std::string::npos);
+  EXPECT_NE(document.find("the shell's Shell threw"), std::string::npos);
 }
 
 TEST(ShellDocumentTest, NamesNothingAShellCouldCollideWith) {
@@ -271,23 +282,9 @@ TEST(ShellDocumentTest, NamesNothingAShellCouldCollideWith) {
   // guard read was "the client's window is not on manganese's page".
   //
   // An id in this document is a name in the shell's namespace, and this
-  // document is the one thing every shell is written against. So it has none,
-  // and the reporter reaches its module through `document.currentScript`, which
-  // names nothing and cannot be collided with.
+  // document is the one thing every shell is written against. So it has none.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
   EXPECT_EQ(document.find("id="), std::string::npos);
-}
-
-TEST(ShellDocumentTest, LeavesTheBodyAsItFoundIt) {
-  // The other half of the same rule. The reporter's own <script> element takes
-  // itself back out once it has run, so what a shell finds is the body
-  // `WRITING-A-SHELL.md` describes: one script tag and nothing else. A shell
-  // that takes the body's first element, or counts its children, is written
-  // against that document -- `mount-point.test.ts` builds exactly it as a
-  // fixture -- and a diagnostic that changed it would be buying a report of
-  // rare failures with a new everyday one.
-  const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
-  EXPECT_NE(document.find("here.remove()"), std::string::npos);
 }
 
 TEST(ShellDocumentTest, SaysItOnTheScreenAndNotOnlyTheConsole) {
@@ -303,11 +300,12 @@ TEST(ShellDocumentTest, SaysNothingAboutAShellThatIsAlreadyRunning) {
   // The gate that keeps this from covering a working desktop: a shell that
   // loaded and then threw an hour later is the shell's own error to handle, and
   // painting a full-screen report over it would make this change the worst
-  // thing on the page.
+  // thing on the page. So the report is reachable only from the import and the
+  // one call to `Shell`, and nothing listens on the window.
   const std::string document = ShellURLLoaderFactory::ShellDocument("shell.js");
-  EXPECT_NE(document.find("shell.addEventListener(\"load\""),
+  EXPECT_EQ(document.find("addEventListener"), std::string::npos);
+  EXPECT_NE(document.find("try {\n            shell.Shell(document.body);"),
             std::string::npos);
-  EXPECT_NE(document.find("if (!ran)"), std::string::npos);
 }
 
 TEST(ShellDocumentTest, LeavesAHashInAFilenameAlone) {

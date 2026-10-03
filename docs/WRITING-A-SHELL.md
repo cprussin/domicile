@@ -17,8 +17,9 @@ disagree, the example is right — it is the one that is checked.
 
 ## What a shell is
 
-A built web page. Domicile serves it, loads it in the engine, and runs the
-compositor underneath; a Wayland client that maps a window becomes an `<app>`
+A built JavaScript module whose `Shell` export is a function. Domicile serves
+it, imports it into a page it writes, calls `Shell` with the element to draw in,
+and runs the compositor underneath; a Wayland client that maps a window becomes an `<app>`
 element in your page, and where you put that element is where the window is.
 Deciding that — and nothing else — is a shell's whole job. The compositor keeps
 the clients, the input, the outputs and the pixels.
@@ -434,24 +435,32 @@ One source file and a build config. The full version, with the comments, is in
 import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile/chrome-sdk/shell";
 
-const domicile = new DomicileClient(connectToHost(window));
-registerElements(domicile);
+export const Shell: ShellModule = (root) => {
+  const domicile = new DomicileClient(connectToHost(window));
+  registerElements(domicile);
 
-const mounted = new Map<string, HTMLElement>();
+  const mounted = new Map<string, HTMLElement>();
 
-domicile.on("app_appeared", ({ app_id }) => {
-  const element = document.createElement("app");
-  element.setAttribute("app-id", app_id);
-  document.body.append(element);
-  mounted.set(app_id, element);
-});
+  domicile.on("app_appeared", ({ app_id }) => {
+    const element = document.createElement("app");
+    element.setAttribute("app-id", app_id);
+    root.append(element);
+    mounted.set(app_id, element);
+  });
 
-domicile.on("app_closed", ({ app_id }) => {
-  mounted.get(app_id)?.remove();
-  mounted.delete(app_id);
-});
+  domicile.on("app_closed", ({ app_id }) => {
+    mounted.get(app_id)?.remove();
+    mounted.delete(app_id);
+  });
+};
 ```
+
+**`Shell` is the whole contract.** Domicile imports the module and calls it
+once; every other export is ignored. Importing the module does nothing but
+install its stylesheet, so put everything else inside `Shell`. A module with no
+`Shell` export, or whose `Shell` throws, is reported on the screen.
 
 That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
@@ -487,10 +496,11 @@ not a nicety — eight pixels of default body margin is eight pixels the
 compositor believes it has and does not, and a client's window drawn eight
 pixels out looks like the seam rather than like a stylesheet.
 
-**Nothing else, and in particular no element to mount into.** The body and the
-script tag that loads you are the whole of it, so a shell that renders into a
-container makes its own — `document.body.append` on the first line, as the
-example above does. Stated this bluntly because the failure is silent: a shell
+**Nothing else, and in particular no element to mount into.** `Shell` is
+handed the body, empty, so a shell that renders into a container makes its own
+— `root.append` on the first line. Render into a child rather than `root`
+itself: a failure is reported by appending to `root`, and a framework that
+owns it wipes the report. Stated this bluntly because the failure is silent: a shell
 that looks up a mount point gets `null` and throws before it renders anything,
 and under `--app` there is no console to read, so the whole failure is a white
 window. It has cost a desktop here once already.
@@ -1323,13 +1333,14 @@ export default defineConfig({
     rollupOptions: {
       input: "src/index.ts",
       output: { entryFileNames: "shell.js" },
+      preserveEntrySignatures: "exports-only",
     },
   },
 });
 ```
 
 `outDir` is yours — Domicile is handed a module, not a directory it expects a
-name in, and the example uses a different one. Three things there are *not*
+name in, and the example uses a different one. Four things there are *not*
 vite's defaults, and each fails quietly:
 
 - **The entry is a `.ts` file**, so nothing emits a document for Domicile to
@@ -1338,6 +1349,9 @@ vite's defaults, and each fails quietly:
   module you hand `domicile` is a path — a hash in it changes every time your
   shell does, so nothing could name the file: not you, not a package manager,
   not a script.
+- **`preserveEntrySignatures` keeps the entry's exports.** An app build drops
+  them, and every line only they reached, so the module comes out with no
+  `Shell` and nothing in it.
 - **`base: "./"`** keeps the emitted URLs relative to the document Domicile
   writes rather than to a server root.
 

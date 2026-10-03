@@ -59,19 +59,12 @@ export type Shell = (root: HTMLElement) => void;
 | Rule | Why |
 |---|---|
 | Only `Shell` is read; every other export is ignored | One file is both the config and a shell, and `load-shell` of it must not reconfigure the compositor |
-| Importing the module does nothing; `Shell(root)` does everything | The supervisor evaluates the config's other exports under Bun, with no DOM |
+| Importing the module does nothing but install its stylesheet; `Shell(root)` does everything | The supervisor evaluates the config's other exports under Bun, with no DOM |
 | Framework-agnostic | `runManganese` is React's adapter, not the contract |
 
-The document the engine writes changes from `<script src=shell.js>` to:
-
-```html
-<script type="module">
-  import { Shell } from "./shell.js";
-  Shell(document.body);
-</script>
-```
-
-A module with no `Shell` export is refused by the reporter, by name.
+The document the engine writes imports the module (`await import("./shell.js")`)
+and calls `Shell(document.body)`, reporting on the screen a module that does not
+load, has no `Shell`, or whose `Shell` throws.
 
 ### What `domicile load-shell` takes
 
@@ -207,10 +200,10 @@ shells. A build always aliases them to the running Domicile's.
 
 Phase 1: the contract, by hand.
 
-- [ ] `Shell` in `@domicile/sdk/shell`. The engine's document imports it and
+- [x] `Shell` in `@domicile/sdk/shell`. The engine's document imports it and
       calls it, and the reporter refuses a module without one
-- [ ] manganese, `shell-simple` and `examples/minimal-shell` export `Shell`
-      with no import-time effects
+- [x] manganese, `shell-simple`, `examples/minimal-shell` and the guards'
+      fixtures export `Shell` with no import-time effects
 - [ ] `@domicile/manganese`: `runManganese`, `Manganese`, the bar items and
       the commands exported, the bar's layout a prop
 - [ ] keybindings as props: `ChromeMessage::Keybindings`, the compositor
