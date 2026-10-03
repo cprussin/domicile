@@ -3,6 +3,7 @@ import type { Extension } from "@domicile/chrome-sdk/extension";
 import type { TrayItem } from "@domicile/chrome-sdk/tray";
 import { Screen } from "@domicile/component-library/Screen";
 
+import type { TopBarLayout } from "../top-bar/layout";
 import { TopBar } from "../top-bar/TopBar";
 import type { TrayOrder } from "../tray/useTrayOrder";
 import type { Windows } from "../window-management/useWindows";
@@ -39,6 +40,8 @@ type Props = {
   tray: readonly TrayItem[];
   /** The order of this monitor's tray, which is every monitor's. */
   trayOrder: TrayOrder;
+  /** What goes on this monitor's bar, which is every monitor's. */
+  topBar: TopBarLayout;
   windows: Windows;
 };
 
@@ -56,6 +59,7 @@ export const Monitor = ({
   notifications,
   onOpenExtension,
   opened,
+  topBar,
   tray,
   trayOrder,
   windows,
@@ -66,6 +70,7 @@ export const Monitor = ({
       domicile={domicile}
       extensions={extensions}
       focused={windows.focused === name}
+      layout={topBar}
       mode={windows.mode}
       onOpenExtension={onOpenExtension}
       onOpenLauncher={() => {

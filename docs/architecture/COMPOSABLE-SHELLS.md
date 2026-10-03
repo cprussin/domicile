@@ -150,9 +150,9 @@ runManganese({
 
 | Export | Is |
 |---|---|
-| `runManganese(props): Shell` | mounts `<Manganese {...props} />` into `root` |
-| `Manganese` | the component, for a React shell that wraps it |
-| `Tray`, `WorkspaceSwitcher`, `Clock`, `ThemeSelector`, `Brightness`, `Battery`, `Notifications` | the bar's items |
+| `runManganese(options): Shell` | mounts manganese into `root` |
+| `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications` | the bar's items, each reading the bar it is on from context |
+| `DEFAULT_TOP_BAR`, `TopBarLayout` | manganese's own bar, and its shape |
 | `focus`, `move`, `resize`, `mode`, `spawn`, … | the commands a binding names |
 | `Shell` | `runManganese({})`: what `"shell": "@domicile/manganese"` loads |
 
@@ -204,8 +204,8 @@ Phase 1: the contract, by hand.
       calls it, and the reporter refuses a module without one
 - [x] manganese, `shell-simple`, `examples/minimal-shell` and the guards'
       fixtures export `Shell` with no import-time effects
-- [ ] `@domicile/manganese`: `runManganese`, `Manganese`, the bar items and
-      the commands exported, the bar's layout a prop
+- [x] `@domicile/manganese`: `runManganese` and the bar items exported, the
+      bar's layout a prop. The commands land with keybindings
 - [ ] keybindings as props: `ChromeMessage::Keybindings`, the compositor
       resolving them, `bindKeys` sending them, manganese's default bindings
 - [ ] check, in a guard: the shell page shows a Web Notification and fetches
