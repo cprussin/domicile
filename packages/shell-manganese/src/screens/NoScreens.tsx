@@ -1,5 +1,5 @@
-import { Card } from "@domicile/component-library/Card";
-import { useDisplays } from "@domicile/component-library/DisplayProvider";
+import { Card } from "@domicile-desktop/component-library/Card";
+import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";

@@ -14,7 +14,7 @@ export type ReadFile = (file: string) => string | undefined;
 export type Graph = {
   /** Every file of the user's the entry reaches, by absolute path. */
   readonly files: ReadonlyMap<string, string>;
-  /** Every package imported, by name: `zod`, `@domicile/sdk`. */
+  /** Every package imported, by name: `zod`, `@domicile-desktop/sdk`. */
   readonly packages: ReadonlySet<string>;
 };
 

@@ -10,7 +10,7 @@
 # runs the config's, hands the compositor the evaluation at a path that stays
 # put, and on an edit evaluates and builds again and tells the engine.
 #
-# THE BUILDER HERE IS A FEW LINES OF SHELL, standing in for `@domicile/builder`
+# THE BUILDER HERE IS A FEW LINES OF SHELL, standing in for `@domicile-desktop/builder`
 # — whose own tests build and evaluate for real — as the engine and the
 # compositor stand in for theirs: what is under test is the supervisor.
 set -u

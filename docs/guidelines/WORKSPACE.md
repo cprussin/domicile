@@ -45,7 +45,7 @@ tarball somewhere outside the repo — the only check that can catch an
 `exports` entry pointing at a file `files` does not ship, or a `catalog:` that
 survived into a published manifest.
 
-`@domicile/sdk` is published to npm and is the only package here that is
+`@domicile-desktop/sdk` is published to npm and is the only package here that is
 not `private`. It is the one place `useSortedKeys` is turned off — for
 the whole manifest, in `biome.json`'s `overrides`, since the rule cannot be
 scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
@@ -93,7 +93,7 @@ is the single source of truth for third-party versions across the monorepo.
 // in a package
 "dependencies": {
   "zod": "catalog:",
-  "@domicile/sdk": "workspace:*"
+  "@domicile-desktop/sdk": "workspace:*"
 }
 ```
 
@@ -149,7 +149,7 @@ import ordering, and lint rules across the entire monorepo — always verify it
 passes before considering tests complete.
 
 A package's own tasks are reached the same way:
-`bun run turbo test --filter @domicile/sdk`. Note that
+`bun run turbo test --filter @domicile-desktop/sdk`. Note that
 `bun run --filter <pkg> test` is *not* the same thing and does not work — no
 package here declares a `test` script, only `test:types` and `test:unit`, and
 bun answers "No packages matched the filter".

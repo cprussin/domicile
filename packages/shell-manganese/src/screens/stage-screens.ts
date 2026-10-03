@@ -1,7 +1,7 @@
 // What the stage draws on each screen of the desk: the screen's rectangles, the
 // workspace it shows, and where that workspace's windows go.
 
-import type { Display } from "@domicile/component-library/display-source";
+import type { Display } from "@domicile-desktop/component-library/display-source";
 
 import { TOP_BAR } from "../top-bar/TopBar";
 import type { Float } from "../window-management/floating/float";

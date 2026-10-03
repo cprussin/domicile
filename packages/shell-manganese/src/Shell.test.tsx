@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { standaloneThemeSource } from "@domicile/component-library/standalone-theme-source";
-import { APP_TAG_NAME } from "@domicile/sdk/app-element";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile/sdk/domicile-host";
-import type { ShellConfigMessage } from "@domicile/sdk/host-message";
-import { KeyAction } from "@domicile/sdk/key-action";
-import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
-import { registerElements } from "@domicile/sdk/register-elements";
+import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
+import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
+import type { ShellConfigMessage } from "@domicile-desktop/sdk/host-message";
+import { KeyAction } from "@domicile-desktop/sdk/key-action";
+import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_NEW_WINDOW_EVENT,
   WEBVIEW_POPUP_WINDOW_EVENT,
-} from "@domicile/sdk/webview-element";
+} from "@domicile-desktop/sdk/webview-element";
 import {
   act,
   fireEvent,

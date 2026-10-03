@@ -1,17 +1,17 @@
-import { Input } from "@domicile/component-library/Input";
-import { Kbd } from "@domicile/component-library/Kbd";
-import { ModalDialog } from "@domicile/component-library/ModalDialog";
-import { FilePreviewKind } from "@domicile/sdk/file-preview";
+import { Input } from "@domicile-desktop/component-library/Input";
+import { Kbd } from "@domicile-desktop/component-library/Kbd";
+import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
 import type {
   DesktopEntry,
   FilePreviewMessage,
   FoundAppsMessage,
   FoundFilesMessage,
-} from "@domicile/sdk/host-message";
+} from "@domicile-desktop/sdk/host-message";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
-} from "@domicile/sdk/webview-element";
+} from "@domicile-desktop/sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";

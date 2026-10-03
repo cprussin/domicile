@@ -15,7 +15,7 @@
 // the tree's to say, and almost every arm of the reduction is one call into
 // `workspace.ts`.
 
-import type { CursorShape } from "@domicile/sdk/cursor-shape";
+import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 
 import type { PlacedScreen } from "../screens/screen-toward";
 import { screenToward } from "../screens/screen-toward";

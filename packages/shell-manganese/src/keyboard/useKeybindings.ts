@@ -1,7 +1,7 @@
-import type { KeyBinding } from "@domicile/sdk/bind-keys";
-import { bindKeys } from "@domicile/sdk/bind-keys";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
+import type { KeyBinding } from "@domicile-desktop/sdk/bind-keys";
+import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import type { WindowAction } from "../window-management/window-state";

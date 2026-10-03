@@ -8,15 +8,15 @@ still be one — a real shell differs from it only in where it puts the elements
 and what it draws around them.
 
 It is the floor, and the two shells shipped in `packages/` are what gets built
-on it: [`@domicile/shell-simple`](/packages/shell-simple/README.md) adds drag,
+on it: [`@domicile-desktop/shell-simple`](/packages/shell-simple/README.md) adds drag,
 resize and a terminal shortcut without adding any widgets, and
-[`@domicile/manganese`](/packages/shell-manganese/README.md) is the
+[`@domicile-desktop/manganese`](/packages/shell-manganese/README.md) is the
 bundled reference chrome. Neither can stand in for this one, for the reason
 below.
 
 ## Why it is here and not in `packages/`
 
-`packages/` is the bun workspace. Inside it `@domicile/sdk` resolves to a
+`packages/` is the bun workspace. Inside it `@domicile-desktop/sdk` resolves to a
 symlinked directory of TypeScript source, `catalog:` and `workspace:*` mean
 something, and every package shares one `node_modules` — so a shell in there
 builds whether or not the SDK is consumable anywhere else. This one is outside

@@ -1,12 +1,12 @@
-import type { AppFocusReleaseRequest } from "@domicile/sdk/app-element";
+import type { AppFocusReleaseRequest } from "@domicile-desktop/sdk/app-element";
 import {
   APP_FOCUS_RELEASE_REQUESTED_EVENT,
   APP_FOCUS_REQUESTED_EVENT,
-} from "@domicile/sdk/app-element";
-import type { CursorShape } from "@domicile/sdk/cursor-shape";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import { focusApp } from "@domicile/sdk/focus-app";
-import { focusChrome } from "@domicile/sdk/focus-chrome";
+} from "@domicile-desktop/sdk/app-element";
+import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { focusApp } from "@domicile-desktop/sdk/focus-app";
+import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import { useEffect, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";

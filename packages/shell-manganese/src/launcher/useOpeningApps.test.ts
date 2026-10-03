@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type {
   DesktopEntry,
   FoundAppsMessage,
-} from "@domicile/sdk/host-message";
+} from "@domicile-desktop/sdk/host-message";
 import { act, renderHook } from "@testing-library/react";
 
 import { useOpeningApps } from "./useOpeningApps";

@@ -10,20 +10,20 @@
       },
     },
     "packages/chrome-sdk": {
-      "name": "@domicile/sdk",
+      "name": "@domicile-desktop/sdk",
       "version": "0.1.0",
       "dependencies": {
         "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/test-support": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
     },
     "packages/component-library": {
-      "name": "@domicile/component-library",
+      "name": "@domicile-desktop/component-library",
       "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
@@ -31,7 +31,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/test-support": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
         "@storybook/addon-docs": "catalog:",
@@ -55,13 +55,13 @@
       },
     },
     "packages/domicile-builder": {
-      "name": "@domicile/builder",
+      "name": "@domicile-desktop/builder",
       "version": "0.0.0",
       "bin": {
         "domicile-builder": "./src/main.ts",
       },
       "dependencies": {
-        "@domicile/component-library": "workspace:*",
+        "@domicile-desktop/component-library": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@vitejs/plugin-react": "catalog:",
         "vite": "catalog:",
@@ -69,16 +69,16 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/manganese": "workspace:*",
+        "@domicile-desktop/manganese": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
     },
     "packages/e2e-harness": {
-      "name": "@domicile/e2e-harness",
+      "name": "@domicile-desktop/e2e-harness",
       "version": "0.0.0",
       "dependencies": {
-        "@domicile/sdk": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -88,12 +88,12 @@
       },
     },
     "packages/shell-manganese": {
-      "name": "@domicile/manganese",
+      "name": "@domicile-desktop/manganese",
       "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
-        "@domicile/component-library": "workspace:*",
-        "@domicile/sdk": "workspace:*",
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "lowlight": "catalog:",
         "react": "catalog:",
@@ -102,7 +102,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/test-support": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
@@ -117,16 +117,16 @@
       },
     },
     "packages/shell-simple": {
-      "name": "@domicile/shell-simple",
+      "name": "@domicile-desktop/shell-simple",
       "version": "0.0.0",
       "dependencies": {
-        "@domicile/sdk": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
         "react": "catalog:",
         "react-dom": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
-        "@domicile/test-support": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
         "@testing-library/react": "catalog:",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -137,7 +137,7 @@
       },
     },
     "packages/test-support": {
-      "name": "@domicile/test-support",
+      "name": "@domicile-desktop/test-support",
       "version": "0.0.0",
       "dependencies": {
         "@happy-dom/global-registrator": "catalog:",
@@ -261,19 +261,19 @@
 
     "@csstools/selector-specificity": ["@csstools/selector-specificity@5.0.0", "", { "peerDependencies": { "postcss-selector-parser": "^7.0.0" } }, "sha512-PCqQV3c4CoVm3kdPhyeZ07VmBRdH2EpMFA/pd9OASpOEC3aXNGoqPDAZ80D0cLpMBxnmk0+yNhGsEx31hq7Gtw=="],
 
-    "@domicile/builder": ["@domicile/builder@workspace:packages/domicile-builder"],
+    "@domicile-desktop/builder": ["@domicile-desktop/builder@workspace:packages/domicile-builder"],
 
-    "@domicile/component-library": ["@domicile/component-library@workspace:packages/component-library"],
+    "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
 
-    "@domicile/e2e-harness": ["@domicile/e2e-harness@workspace:packages/e2e-harness"],
+    "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
 
-    "@domicile/manganese": ["@domicile/manganese@workspace:packages/shell-manganese"],
+    "@domicile-desktop/manganese": ["@domicile-desktop/manganese@workspace:packages/shell-manganese"],
 
-    "@domicile/sdk": ["@domicile/sdk@workspace:packages/chrome-sdk"],
+    "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
-    "@domicile/shell-simple": ["@domicile/shell-simple@workspace:packages/shell-simple"],
+    "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
 
-    "@domicile/test-support": ["@domicile/test-support@workspace:packages/test-support"],
+    "@domicile-desktop/test-support": ["@domicile-desktop/test-support@workspace:packages/test-support"],
 
     "@emnapi/core": ["@emnapi/core@1.9.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" } }, "sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA=="],
 

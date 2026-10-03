@@ -14,7 +14,7 @@ describe("evaluate", () => {
     const config = path.join(desk, "domicile.tsx");
     writeFileSync(
       config,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile/manganese";
+      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile-desktop/manganese";
          export const input = { keyboard: { xkb_variant: "dvp" } };
          export const extensions = { web_store: ["abc"] };
          export const Shell = runManganese({

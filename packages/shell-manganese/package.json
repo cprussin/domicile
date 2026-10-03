@@ -1,18 +1,18 @@
 {
   "dependencies": {
     "@cprussin/option-result": "catalog:",
-    "@domicile/component-library": "workspace:*",
-    "@domicile/sdk": "workspace:*",
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "lowlight": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
   },
-  "description": "The bundled reference Domicile chrome: a tab rail and a stage that mounts app portals.",
+  "description": "Domicile's default desktop shell, as a library: runManganese(), its bar items and its keybindings, so you can compose your own.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/test-support": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",
@@ -52,7 +52,7 @@
     "!src/**/*.test.tsx"
   ],
   "license": "MIT",
-  "name": "@domicile/manganese",
+  "name": "@domicile-desktop/manganese",
   "private": false,
   "productName": "domicile-shell-manganese",
   "publishConfig": {

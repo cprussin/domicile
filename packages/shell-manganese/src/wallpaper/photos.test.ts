@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { THEMES } from "@domicile/component-library/theme-core";
+import { THEMES } from "@domicile-desktop/component-library/theme-core";
 
 import { WALLPAPER_PHOTOS } from "./photos";
 

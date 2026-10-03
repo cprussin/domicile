@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { Extension } from "@domicile/sdk/extension";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { Extension } from "@domicile-desktop/sdk/extension";
 import { useEffect, useState } from "react";
 
 /**

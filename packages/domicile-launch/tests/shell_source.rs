@@ -31,7 +31,7 @@ fn source(argument: &str, files: &[(&str, &str)]) -> Result<ShellSource, ShellPa
 #[test]
 fn domicile_s_own_shells_are_named_and_never_built() {
     assert_eq!(
-        source("@domicile/manganese", &[]),
+        source("@domicile-desktop/manganese", &[]),
         Ok(ShellSource::Ours("manganese".into()))
     );
 }
@@ -68,7 +68,7 @@ fn javascript_that_imports_a_package_is_built() {
             "./entry.js",
             &[(
                 "/home/me/desk/entry.js",
-                r#"import { runManganese } from "@domicile/manganese";"#
+                r#"import { runManganese } from "@domicile-desktop/manganese";"#
             )]
         ),
         Ok(ShellSource::Entry("/home/me/desk/entry.js".into()))

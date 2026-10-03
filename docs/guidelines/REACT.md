@@ -21,7 +21,7 @@ own markup — not a class or style passthrough. Style them with attribute
 selectors / Panda conditions; see
 [data attributes as styling hooks](/docs/guidelines/STYLING.md#data--attributes-as-styling-hooks).
 
-`@domicile/component-library` must enforce this mechanically: an
+`@domicile-desktop/component-library` must enforce this mechanically: an
 `ExtendProps<T, U>` helper that strips `className` and `style` from the wrapped
 element's props so they can't be re-exposed by accident.
 
@@ -57,7 +57,7 @@ wrap it; the wrapper's job is styling and an ergonomic API, and it should
 accept and spread every prop the underlying component takes. Build from
 scratch only for components base-ui does not cover.
 
-The detailed wrapping rules for `@domicile/component-library` — props via
+The detailed wrapping rules for `@domicile-desktop/component-library` — props via
 `ExtendProps`, re-exporting `createHandle`, composing compound parts — are in
 that package's own
 [`docs/COMPONENTS.md`](/packages/component-library/docs/COMPONENTS.md).

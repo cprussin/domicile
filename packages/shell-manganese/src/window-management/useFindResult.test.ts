@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_FIND_CHANGE_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_FIND_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { act, renderHook } from "@testing-library/react";
 
 import { useFindResult } from "./useFindResult";

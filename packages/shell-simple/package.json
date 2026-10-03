@@ -1,13 +1,13 @@
 {
   "dependencies": {
-    "@domicile/sdk": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
   "description": "A Domicile desktop with nothing in it but windows: floating windows moved and resized with the Alt key, and a key the config binds for a terminal.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/test-support": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
     "@testing-library/react": "catalog:",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
@@ -17,7 +17,7 @@
     "vite": "catalog:"
   },
   "license": "MIT",
-  "name": "@domicile/shell-simple",
+  "name": "@domicile-desktop/shell-simple",
   "private": true,
   "productName": "domicile-shell-simple",
   "scripts": {

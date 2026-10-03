@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/sdk/webview-element";
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 import { ChooserMode, fileRequestOf } from "./file-request";
 

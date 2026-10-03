@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { Theme } from "@domicile/component-library/theme-core";
-import { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Theme } from "@domicile-desktop/component-library/theme-core";
+import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
-} from "@domicile/sdk/domicile-host";
+} from "@domicile-desktop/sdk/domicile-host";
 
 import { hostTheme } from "./host-theme";
 

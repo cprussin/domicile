@@ -1,4 +1,4 @@
-import { domicilePreset } from "@domicile/component-library/pandacss-preset";
+import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
 import { defineConfig } from "@pandacss/dev";
 
 // A float trading places with one it overlaps: it parts from the other,

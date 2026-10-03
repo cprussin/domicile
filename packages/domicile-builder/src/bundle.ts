@@ -3,21 +3,21 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { shellBuild } from "@domicile/component-library/vite-shell";
+import { shellBuild } from "@domicile-desktop/component-library/vite-shell";
 import panda from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { build } from "vite";
 
 /** What resolves from Domicile's install rather than the user's project. */
-const FROM_DOMICILE = /^(@domicile\/[^/]+|react|react-dom)(\/.*)?$/;
+const FROM_DOMICILE = /^(@domicile-desktop\/[^/]+|react|react-dom)(\/.*)?$/;
 
 /** Manganese, whose dependencies are Domicile's and whose styles are built. */
 const manganeseIn = (domicile: string): string =>
   path.join(domicile, "packages", "shell-manganese");
 
 /**
- * Bundle `entry` into `out/shell.js`, as `@domicile/component-library`'s
+ * Bundle `entry` into `out/shell.js`, as `@domicile-desktop/component-library`'s
  * `shellBuild` builds one: its `Shell` export kept and its stylesheet inside.
  *
  * **Domicile's packages and React come from `domicile`**, whatever the
@@ -28,7 +28,7 @@ const manganeseIn = (domicile: string): string =>
  * **Manganese's styles are built here**, by Panda over manganese's own config:
  * Panda's `css()` only names classes, and the build that scans a call is what
  * writes its rule. `files`, the user's own, are scanned beside manganese's, so
- * a `css()` from `@domicile/manganese/css` in them has its rule too.
+ * a `css()` from `@domicile-desktop/manganese/css` in them has its rule too.
  */
 export const bundle = async (
   entry: string,
@@ -98,7 +98,7 @@ const fromDomicile = (domicile: string): Plugin => {
     resolveId(source, importer) {
       if (!FROM_DOMICILE.test(source) || importer?.startsWith(ours)) {
         return null;
-      } else if (source === "@domicile/manganese") {
+      } else if (source === "@domicile-desktop/manganese") {
         return anchor;
       } else {
         return this.resolve(source, anchor, { skipSelf: true });

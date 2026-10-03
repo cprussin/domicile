@@ -2,10 +2,10 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "Domicile chrome SDK: the input and size routing behind the engine's <app> tag, and the client for window.domicile",
+  "description": "The SDK for writing a Domicile shell: the window.domicile client, the <app> and <webview> elements, keybindings, and the Shell type.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/test-support": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
@@ -147,7 +147,7 @@
     "dist/**"
   ],
   "license": "MIT",
-  "name": "@domicile/sdk",
+  "name": "@domicile-desktop/sdk",
   "private": false,
   "publishConfig": {
     "access": "public"

@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@domicile/sdk": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
   "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts, and the check on those scripts' own machinery.",
@@ -17,7 +17,7 @@
     "src/**/*"
   ],
   "license": "MIT",
-  "name": "@domicile/e2e-harness",
+  "name": "@domicile-desktop/e2e-harness",
   "private": true,
   "scripts": {
     "test:types": "tsc --noEmit",

@@ -322,7 +322,7 @@
         #
         # `shell.js` now rather than `index.html`: a shell in this workspace is
         # a *module*, Domicile writes the document, and the name is fixed by
-        # `@domicile/component-library/vite-shell` precisely so that something
+        # `@domicile-desktop/component-library/vite-shell` precisely so that something
         # other than the shell can name it. A build that emitted a hashed entry
         # would satisfy no check anybody could write.
         #
@@ -360,7 +360,7 @@
         buildPhase = ''
           runHook preBuild
           node_modules/.bin/turbo run prepare build \
-            --filter "@domicile/manganese..." --no-daemon
+            --filter "@domicile-desktop/manganese..." --no-daemon
           runHook postBuild
         '';
         installPhase = ''
@@ -375,7 +375,7 @@
       };
 
       # The program `domicile` builds a shell with, out of an entry or a
-      # package: bun running `@domicile/builder` against the workspace above.
+      # package: bun running `@domicile-desktop/builder` against the workspace above.
       # A script rather than a wrapper around a binary, because there is no
       # binary: the builder is TypeScript that bun runs as it is.
       domicileBuilder = pkgs.writeShellScript "domicile-builder" ''
@@ -392,7 +392,7 @@
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    what builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's own shells, prebuilt: what
-      #                               `@domicile/manganese` names
+      #                               `@domicile-desktop/manganese` names
       #
       # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
       # `domicile` finds its siblings from `current_exe`, which on Linux reads
@@ -719,7 +719,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-PNjxmHVl8DfyiFuXGhJwVdOP2AyhNk15MA8DMPxvsls=";
+        outputHash = "sha256-rYICqxiXovbShHvcmV0tLLW09ogt+qZdj/edovaAuEE=";
       };
 
 

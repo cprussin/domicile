@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { KeyActionKind } from "@domicile/sdk/key-action";
+import { KeyActionKind } from "@domicile-desktop/sdk/key-action";
 
 import { parseCommand } from "./command";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./commands";

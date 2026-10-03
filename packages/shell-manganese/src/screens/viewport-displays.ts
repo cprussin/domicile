@@ -1,7 +1,7 @@
 import type {
   Display,
   DisplaySource,
-} from "@domicile/component-library/display-source";
+} from "@domicile-desktop/component-library/display-source";
 
 /** What the one display is called where the page is the only screen there is. */
 const PAGE = "page";

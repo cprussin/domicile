@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Display } from "@domicile/component-library/display-source";
+import type { Display } from "@domicile-desktop/component-library/display-source";
 
 import { screenUnder } from "./screen-under";
 

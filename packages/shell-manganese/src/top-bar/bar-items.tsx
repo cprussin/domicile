@@ -1,7 +1,7 @@
 // The items manganese's bar is made of, each reading the bar it is on rather
 // than taking props, so a user's layout names them and nothing else.
 
-import { ThemeSwitch } from "@domicile/component-library/ThemeSwitch";
+import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";

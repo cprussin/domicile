@@ -22,7 +22,7 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 | What an item's properties show as (title, picture, hidden), the `Registry`, pixmap → PNG | `packages/domicile-host/src/tray.rs`, `png.rs` |
 | The bus: watcher, host name, signals, clicks | `packages/domicile-compositor/src/tray.rs` |
 | `tray` event, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
-| `TrayItem`, `TrayAction`, `activateTrayItem` | `@domicile/sdk/tray`, `domicile-client` |
+| `TrayItem`, `TrayAction`, `activateTrayItem` | `@domicile-desktop/sdk/tray`, `domicile-client` |
 | Manganese's tray, one row with the extensions' actions, reorderable | `packages/shell-manganese/src/tray/` |
 
 ## Key decisions

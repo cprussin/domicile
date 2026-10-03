@@ -3,10 +3,10 @@
     "@base-ui/react": "catalog:",
     "@phosphor-icons/react": "catalog:"
   },
-  "description": "The React UI primitives and Panda CSS design system every Domicile package builds on.",
+  "description": "React components and the Panda CSS design system that Domicile's shells are built from.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/test-support": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
     "@storybook/addon-docs": "catalog:",
@@ -64,7 +64,7 @@
     "!src/**/*.stories.tsx"
   ],
   "license": "MIT",
-  "name": "@domicile/component-library",
+  "name": "@domicile-desktop/component-library",
   "peerDependencies": {
     "react": "catalog:"
   },

@@ -146,9 +146,9 @@ command -v bun >/dev/null || {
 # It matters because two generated things have to exist and neither is in the
 # checkout. `styled-system/` is gitignored and made by a package's own
 # `prepare` (panda codegen). And the workspace packages the shell imports are
-# published from `dist/`: `@domicile/sdk`'s exports map every entry
+# published from `dist/`: `@domicile-desktop/sdk`'s exports map every entry
 # point to `./dist/*.js`, so on a checkout where nothing has been built,
-# `@domicile/sdk/bridge` does not resolve.
+# `@domicile-desktop/sdk/bridge` does not resolve.
 #
 # `CI=1` because turbo's `//#build:install-modules` runs a NON-frozen
 # `bun install` when it is unset, one line after the frozen one above asked for
@@ -163,7 +163,7 @@ command -v bun >/dev/null || {
 #
 # `build:vite` has both edges — `^prepare` and `^build` — which is why it is
 # the whole answer and `turbo build` plus a `prepare` here was not: it built
-# the packages that publish a `dist/`, and missed `@domicile/component-library`
+# the packages that publish a `dist/`, and missed `@domicile-desktop/component-library`
 # entirely. That one is consumed as source and imports the `styled-system/`
 # only its own `prepare` generates, so `shell-manganese` would still have
 # failed, one package over, on eleven unresolved imports.

@@ -1,4 +1,4 @@
-import type { AudioTags } from "@domicile/sdk/file-preview";
+import type { AudioTags } from "@domicile-desktop/sdk/file-preview";
 import { MusicNotesIcon } from "@phosphor-icons/react/dist/ssr/MusicNotes";
 import { useState } from "react";
 

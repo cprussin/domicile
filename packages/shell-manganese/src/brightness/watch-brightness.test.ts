@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { BrightnessMessage } from "@domicile/sdk/host-message";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { BrightnessMessage } from "@domicile-desktop/sdk/host-message";
 
 import { watchBrightness } from "./watch-brightness";
 

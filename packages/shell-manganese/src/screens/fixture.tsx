@@ -1,4 +1,4 @@
-import { DisplayProvider } from "@domicile/component-library/DisplayProvider";
+import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import type { PropsWithChildren } from "react";
 
 /** The one screen of {@link OnOneScreen}'s desk. */

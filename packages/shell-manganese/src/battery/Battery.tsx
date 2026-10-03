@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile/sdk/host-message";
+import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useEffect, useState } from "react";
 

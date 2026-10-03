@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { FoundFilesMessage } from "@domicile/sdk/host-message";
+import type { FoundFilesMessage } from "@domicile-desktop/sdk/host-message";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { useFound } from "./useFound";
