@@ -343,6 +343,46 @@
         '';
       };
 
+      # What a shell is built against: the workspace's own packages, built as a
+      # checkout builds them, with every `node_modules` beside them -- the
+      # `--domicile` the builder resolves manganese and React from, laid out
+      # exactly as this repository is because that is the layout it reads.
+      #
+      # Every package with a `package.json`, not only the three a build
+      # touches: each one's `node_modules` links its workspace siblings, and a
+      # sibling left out is a dangling link the fixup refuses.
+      shellWorkspace = pkgs.stdenv.mkDerivation {
+        pname = "domicile-shell-workspace";
+        version = "0.0.0";
+        src = self;
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        configurePhase = sharedShellConfigure;
+        buildPhase = ''
+          runHook preBuild
+          node_modules/.bin/turbo run prepare build \
+            --filter "@domicile/shell-manganese..." --no-daemon
+          runHook postBuild
+        '';
+        installPhase = ''
+          runHook preInstall
+          mkdir -p "$out/packages"
+          cp -a package.json node_modules "$out/"
+          for manifest in packages/*/package.json; do
+            cp -a "$(dirname "$manifest")" "$out/packages/"
+          done
+          runHook postInstall
+        '';
+      };
+
+      # The program `domicile` builds a shell with, out of an entry or a
+      # package: bun running `@domicile/builder` against the workspace above.
+      # A script rather than a wrapper around a binary, because there is no
+      # binary: the builder is TypeScript that bun runs as it is.
+      domicileBuilder = pkgs.writeShellScript "domicile-builder" ''
+        exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/domicile-builder/src/main.ts \
+          --domicile ${shellWorkspace} "$@"
+      '';
+
       # Domicile, laid out so that `domicile` can find the rest of itself.
       #
       #   bin/domicile
@@ -350,6 +390,9 @@
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/builder    what builds a shell from an entry or a package
+      #   libexec/domicile/shells/    Domicile's own shells, prebuilt: what
+      #                               `@domicile/manganese` names
       #
       # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
       # `domicile` finds its siblings from `current_exe`, which on Linux reads
@@ -393,6 +436,10 @@
         NoDisplay=true
         DESKTOP
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
+        cp ${domicileBuilder} "$out/libexec/domicile/builder"
+        mkdir -p "$out/libexec/domicile/shells"
+        ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
+        ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
         # How `xdg-desktop-portal` learns that this desktop answers `Settings`
         # itself, which is how a theme reaches the desk's GTK, Qt and Electron
         # windows. The compositor takes the name in that file while it runs and
@@ -771,6 +818,8 @@
         # The engine on its own, for `nix build .#engine` and for anyone who
         # wants a path to put in `DOMICILE_ENGINE` themselves.
         engine = domicileEngine;
+        # The shell builder on its own, for `DOMICILE_BUILDER`.
+        builder = domicileBuilder;
       };
 
       # WHAT `nix run` OFFERS, AND WHY IT IS THIS SHORT.

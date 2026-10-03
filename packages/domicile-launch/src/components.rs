@@ -74,6 +74,59 @@ pub fn components(
 }
 
 /// The environment's answer, or the sibling, or what to do about neither.
+/// The program that builds a shell out of an entry or a package —
+/// `libexec/domicile/builder` beside `domicile`, or `DOMICILE_BUILDER`.
+///
+/// Apart from [`components`] because a desktop on a prebuilt shell never runs
+/// it, and a run that refused to start for want of a builder it was never
+/// going to use would be refusing over nothing.
+pub fn builder(
+    binary: &Path,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Result<PathBuf, Missing> {
+    one(
+        "shell builder",
+        "DOMICILE_BUILDER",
+        libexec(binary).join("builder"),
+        env,
+        exists,
+    )
+}
+
+/// Domicile's own prebuilt shell `name`: `libexec/domicile/shells/<name>`
+/// beside `domicile`, or under `DOMICILE_SHELLS`, holding its `shell.js`.
+pub fn our_shell(
+    binary: &Path,
+    name: &str,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Result<PathBuf, Missing> {
+    let shells = env("DOMICILE_SHELLS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| libexec(binary).join("shells"));
+    let root = shells.join(name);
+    if exists(&root.join("shell.js")) {
+        Ok(root)
+    } else {
+        Err(Missing {
+            looked: root,
+            variable: "DOMICILE_SHELLS",
+            what: "shell of Domicile's by that name",
+        })
+    }
+}
+
+/// `libexec/domicile`, beside the `bin` `binary` is in.
+fn libexec(binary: &Path) -> PathBuf {
+    binary
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."))
+        .join("libexec")
+        .join("domicile")
+}
+
 fn one(
     what: &'static str,
     variable: &'static str,

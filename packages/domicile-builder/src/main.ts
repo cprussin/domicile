@@ -1,16 +1,24 @@
 #!/usr/bin/env bun
-// `domicile-builder --entry <file> --domicile <install> --cache <dir>`: build
-// the entry into a shell module, saying each step on stdout as a JSON line.
+// `domicile-builder (--entry <file> | --package <spec>) --domicile <install>
+// --cache <dir>`: build the entry, or the package's, into a shell module,
+// saying each step on stdout as a JSON line.
 //
 // Only a line that is a JSON object with a `step` is a step: what the tools
 // underneath print goes to stdout too — Panda says how long it took — and is
 // the build's log, which `domicile` shows as it is.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { importGraph } from "./graph";
+import { installedName, packageProject, prebuiltOf } from "./package";
 import { line, Step } from "./progress";
 import type { Manifest } from "./project";
 import { cacheKey, missingPackages, parseManifest, projectOf } from "./project";
@@ -82,27 +90,73 @@ const build = async (
   }
 };
 
+/**
+ * Install `spec` into a project of its own, and serve the module it ships or
+ * build its entry.
+ */
+const buildPackage = async (
+  spec: string,
+  domicile: string,
+  cache: string,
+): Promise<void> => {
+  say(Step.Resolving());
+  const project = packageProject(cache, spec);
+  if (manifestOf(project)?.dependencies === undefined) {
+    say(Step.Installing([spec]));
+    mkdirSync(project, { recursive: true });
+    writeFileSync(path.join(project, "package.json"), "{}\n");
+    runBun(project, ["add", "--ignore-scripts", spec]);
+  }
+  const name = installedName(manifestOf(project) ?? {});
+  const installed = path.join(project, "node_modules", name);
+  const prebuilt = prebuiltOf(
+    readFile(path.join(installed, "package.json")) ?? "{}",
+  );
+  if (prebuilt === undefined) {
+    await build(Bun.resolveSync(name, project), domicile, cache);
+  } else {
+    const module = path.join(installed, prebuilt);
+    say(Step.Built(path.dirname(module), path.basename(module), true));
+  }
+};
+
 const { values } = parseArgs({
   options: {
     cache: { type: "string" },
     domicile: { type: "string" },
     entry: { type: "string" },
+    package: { type: "string" },
   },
 });
-const { cache, domicile, entry } = values;
-if (entry === undefined || domicile === undefined || cache === undefined) {
+const { cache, domicile, entry, package: spec } = values;
+
+/** What the arguments ask for, or `undefined` where they ask for nothing. */
+const asked = (): Promise<void> | undefined => {
+  if (domicile === undefined || cache === undefined) {
+    return undefined;
+  } else if (entry !== undefined && spec === undefined) {
+    return build(
+      path.resolve(entry),
+      path.resolve(domicile),
+      path.resolve(cache),
+    );
+  } else if (spec !== undefined && entry === undefined) {
+    return buildPackage(spec, path.resolve(domicile), path.resolve(cache));
+  } else {
+    return undefined;
+  }
+};
+
+const building = asked();
+if (building === undefined) {
   say(
     Step.Failed(
-      "usage: domicile-builder --entry <file> --domicile <install> --cache <dir>",
+      "usage: domicile-builder (--entry <file> | --package <spec>) --domicile <install> --cache <dir>",
     ),
   );
   process.exit(2);
 }
-await build(
-  path.resolve(entry),
-  path.resolve(domicile),
-  path.resolve(cache),
-).catch((failure: unknown) => {
+await building.catch((failure: unknown) => {
   say(
     Step.Failed(failure instanceof Error ? failure.message : String(failure)),
   );

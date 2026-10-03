@@ -94,8 +94,10 @@ to be told where the session is and nothing binds a port.
 
 `domicile` is what starts the two, in the one order they can start in: the
 engine first, because it serves the shell and creates the broker socket; then
-the compositor, which connects to it as a producer. It builds nothing — both
-ship beside it and it finds them from its own path.
+the compositor, which connects to it as a producer. It builds neither — both
+ship beside it and it finds them from its own path. A shell handed to it as
+source goes to the builder beside them; see
+[COMPOSABLE-SHELLS.md](COMPOSABLE-SHELLS.md).
 
 ## Crate layout
 

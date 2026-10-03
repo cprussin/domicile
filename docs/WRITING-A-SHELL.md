@@ -1421,6 +1421,22 @@ which file it loads is the one you named, and a directory is refused rather
 than searched. Nothing outside your build knows what your entry is called, so
 nothing outside your build gets to guess.
 
+**Or skip the build.** `domicile` builds a shell it is handed as source:
+
+```sh
+domicile ./my-desktop/src/index.ts       # an entry: its packages installed, bundled
+domicile my-cool-shell                   # an npm package
+domicile github:me/my-cool-shell         # a repository
+domicile @domicile/manganese             # Domicile's own, prebuilt
+```
+
+An entry's packages go in the `package.json` and `bun.lock` nearest above it,
+made beside it when there are none. `@domicile/*` and React always come from
+the Domicile running it, whatever those say. A package that ships a built
+module names it in its `package.json` as `"domicile": { "shell":
+"dist/shell.js" }` and is served as it is; one that does not is built from its
+entry. Builds are cached under `$XDG_CACHE_HOME/domicile/shells`.
+
 That is the whole interface. A user of your shell never runs
 `domicile-compositor`, never writes a Domicile config file, and does not need
 to know either exists.

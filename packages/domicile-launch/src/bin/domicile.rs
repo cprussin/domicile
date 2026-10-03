@@ -14,15 +14,17 @@
 //! `scripts/test-a-running-desktop-takes-a-new-shell.sh` is where a
 //! `load-shell` goes all the way from a command line to an engine's socket.
 
+use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
+use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard};
 use domicile_launch::cli::{invocation, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
-use domicile_launch::components::{components, Components};
+use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::config_path::config_file;
 use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
@@ -37,7 +39,8 @@ use domicile_launch::restart::{
     clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
     Ending, Policy,
 };
-use domicile_launch::shell_path::{shell_module, Shell};
+use domicile_launch::shell_path::Shell;
+use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 
@@ -88,22 +91,120 @@ fn run() -> Result<ExitCode, String> {
 /// working directory. So the same [`shell_module`] a run resolves its own
 /// shell with resolves this one, against the same filesystem, and a typo is
 /// answered here rather than by an engine reporting a module that would not
-/// load.
+/// load. And an entry or a package is built here, in front of the person who
+/// asked, with the bar drawn in their terminal.
 ///
 /// `DOMICILE_PAGE` has no part in it: a packaged desktop hands over the module
 /// it was built with, and this command is somebody naming another one.
 fn shell_to_load(shell: &str) -> Result<Request, String> {
-    let here = std::env::current_dir()
-        .map_err(|why| format!("cannot tell where this was typed: {why}"))?;
-    let home = std::env::var("HOME").ok().map(PathBuf::from);
-    let page = shell_module(shell, None, &here, home.as_deref(), &|path| {
-        path.metadata().ok().map(|found| found.is_dir())
-    })
-    .map_err(|why| why.to_string())?;
+    let page = shell_named(shell, None)?;
     Ok(Request::LoadShell {
         module: page.module,
         root: page.root,
     })
+}
+
+/// The module `shell` names, built first where it is an entry or a package.
+///
+/// WHERE THIS WAS TYPED AND WHOSE HOME `~` IS, because `shell_source` decides
+/// what a relative path and a tilde mean and neither is a question about the
+/// filesystem. Read here: this is the part of the program that reads the
+/// world.
+fn shell_named(shell: &str, handed_in: Option<&str>) -> Result<Shell, String> {
+    let env = |name: &str| std::env::var(name).ok();
+    let here = std::env::current_dir()
+        .map_err(|why| format!("cannot tell where this was typed: {why}"))?;
+    let home = env("HOME").map(PathBuf::from);
+    let source = shell_source(
+        shell,
+        handed_in,
+        &here,
+        home.as_deref(),
+        &|path| path.metadata().ok().map(|found| found.is_dir()),
+        &|path| std::fs::read_to_string(path).ok(),
+    )
+    .map_err(|why| why.to_string())?;
+    let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
+    match source {
+        ShellSource::Module(page) => Ok(page),
+        // Prebuilt in the install: nothing is started for it.
+        ShellSource::Ours(name) => our_shell(&binary, &name, &env, &|path| path.exists())
+            .map(|root| Shell {
+                root,
+                module: PathBuf::from("shell.js"),
+            })
+            .map_err(|missing| missing.to_string()),
+        ShellSource::Entry(entry) => built(&binary, &["--entry".into(), entry.into_os_string()]),
+        ShellSource::Package(spec) => built(&binary, &["--package".into(), spec.into()]),
+    }
+}
+
+/// Build a shell with the builder beside this binary, drawing its steps as a
+/// bar, and answer with the module it built.
+///
+/// The bar is redrawn in place on a terminal and said a line a step
+/// elsewhere, where a log is reading it. What the build says that is not a
+/// step is kept, and said only if the build fails.
+fn built(binary: &Path, asked: &[std::ffi::OsString]) -> Result<Shell, String> {
+    let env = |name: &str| std::env::var(name).ok();
+    let builder =
+        builder(binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
+    let cache = env("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .ok_or("nowhere to keep built shells -- neither XDG_CACHE_HOME nor HOME is set")?
+        .join("domicile")
+        .join("shells");
+    let mut child = Command::new(&builder)
+        .args(asked)
+        .arg("--cache")
+        .arg(&cache)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|why| {
+            format!(
+                "cannot start the shell builder {}: {why}",
+                builder.display()
+            )
+        })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("the shell builder has no stdout")?;
+    let terminal = std::io::stderr().is_terminal();
+    let mut log = Vec::new();
+    let mut answer = None;
+    for line in BufReader::new(stdout).lines() {
+        let line = line.map_err(|why| format!("cannot read the shell builder: {why}"))?;
+        match heard(&line) {
+            BuilderHeard::Step(step) if terminal => {
+                eprint!("\r\x1b[K{}", bar(&step));
+                let _ = std::io::stderr().flush();
+            }
+            BuilderHeard::Step(step) => eprintln!("domicile: {}", bar(&step)),
+            BuilderHeard::Log(said) => log.push(said),
+            BuilderHeard::Built(page) => answer = Some(Ok(page)),
+            BuilderHeard::Failed(why) => answer = Some(Err(why)),
+        }
+    }
+    if terminal {
+        eprint!("\r\x1b[K");
+    }
+    let status = child
+        .wait()
+        .map_err(|why| format!("cannot wait for the shell builder: {why}"))?;
+    match answer {
+        Some(Ok(page)) if status.success() => Ok(page),
+        Some(Err(why)) => Err(format!(
+            "the shell did not build: {why}\n{}",
+            log.join("\n")
+        )),
+        _ => Err(format!(
+            "the shell builder stopped ({status}) without saying it built anything\n{}",
+            log.join("\n")
+        )),
+    }
 }
 
 /// Put one command to the desktop that is already running, and say what it
@@ -150,26 +251,12 @@ fn desktop(shell: &str, flag: Option<&Path>) -> Result<ExitCode, String> {
     // are — see `domicile_launch::components`.
     let browser = binary.with_file_name("domicile-open-url");
 
-    // WHERE THIS WAS TYPED AND WHOSE HOME `~` IS, because `shell_path` decides
-    // what a relative path and a tilde mean and neither is a question about
-    // the filesystem. Read here for the same reason the config's default is:
-    // this is the part of the program that reads the world.
-    let here = std::env::current_dir()
-        .map_err(|why| format!("cannot tell where this was started from: {why}"))?;
-    let home = env("HOME").map(PathBuf::from);
-
     // `DOMICILE_PAGE` names the module, exactly as the argument does — a
     // packaged desktop is a wrapper that types the command line so its user
     // does not have to, and a second spelling of "which shell" would only be
-    // a second thing to get wrong.
-    let page = shell_module(
-        shell,
-        env("DOMICILE_PAGE").as_deref(),
-        &here,
-        home.as_deref(),
-        &|path| path.metadata().ok().map(|found| found.is_dir()),
-    )
-    .map_err(|why| why.to_string())?;
+    // a second thing to get wrong. Built first, if it is built at all, so a
+    // shell that cannot be built starts nothing.
+    let page = shell_named(shell, env("DOMICILE_PAGE").as_deref())?;
 
     // Kept between runs, unlike everything below it: a profile thrown away
     // with the run is every sign-in thrown away with it. Refused rather than
