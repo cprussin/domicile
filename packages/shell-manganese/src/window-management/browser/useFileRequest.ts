@@ -1,4 +1,4 @@
-import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile/sdk/webview-element";
 import { useEffect, useRef, useState } from "react";
 
 import type { FileRequest } from "./file-request";

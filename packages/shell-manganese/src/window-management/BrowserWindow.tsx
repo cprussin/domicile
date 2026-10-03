@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { focusChrome } from "@domicile/chrome-sdk/focus-chrome";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import { focusChrome } from "@domicile/sdk/focus-chrome";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -9,7 +9,7 @@ import {
   WEBVIEW_POPUP_WINDOW_EVENT,
   WEBVIEW_ZOOM_IN_REQUEST_EVENT,
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
+} from "@domicile/sdk/webview-element";
 import type { FocusEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 

@@ -1,4 +1,4 @@
-# @domicile/chrome-sdk
+# @domicile/sdk
 
 > Published to npm, and usable outside this repo. If you are writing a shell,
 > start with [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) — this is the
@@ -139,9 +139,9 @@ It provides these:
 ## Usage
 
 ```ts
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { connectToHost } from "@domicile/chrome-sdk/connect-to-host";
-import { registerElements } from "@domicile/chrome-sdk/register-elements";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
+import { connectToHost } from "@domicile/sdk/connect-to-host";
+import { registerElements } from "@domicile/sdk/register-elements";
 
 const domicile = new DomicileClient(connectToHost(window));
 registerElements(domicile);
@@ -219,7 +219,7 @@ ordinary absence.
 ## Test
 
 ```sh
-bun run turbo test --filter @domicile/chrome-sdk
+bun run turbo test --filter @domicile/sdk
 ```
 
 DOM-dependent suites run against happy-dom via

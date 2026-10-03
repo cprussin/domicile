@@ -2,7 +2,7 @@
 // browser window the shell opened itself. Both are tiled, floated and closed
 // the same way, so they share one id space and one title.
 
-import type { CursorShape } from "@domicile/chrome-sdk/cursor-shape";
+import type { CursorShape } from "@domicile/sdk/cursor-shape";
 
 /** The prefix {@link appWindowId} namespaces a client's window with. */
 const APP_PREFIX = "app:";

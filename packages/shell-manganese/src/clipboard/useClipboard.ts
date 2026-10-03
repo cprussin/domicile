@@ -1,5 +1,5 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { ClipboardMessage } from "@domicile/chrome-sdk/host-message";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { ClipboardMessage } from "@domicile/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**

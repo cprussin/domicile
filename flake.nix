@@ -306,7 +306,7 @@
         buildPhase = ''
           runHook preBuild
           node_modules/.bin/turbo build:vite \
-            --filter "@domicile/shell-${name}" --no-daemon
+            --filter "./packages/shell-${name}" --no-daemon
           runHook postBuild
         '';
         # `main_window` is what the shell's own `vite.config.ts` calls
@@ -360,7 +360,7 @@
         buildPhase = ''
           runHook preBuild
           node_modules/.bin/turbo run prepare build \
-            --filter "@domicile/shell-manganese..." --no-daemon
+            --filter "@domicile/manganese..." --no-daemon
           runHook postBuild
         '';
         installPhase = ''
@@ -719,7 +719,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-FMg0FIzWAtahgf+UxsNlmOTFrsZYeyKxDxXHn6JBp+M=";
+        outputHash = "sha256-PNjxmHVl8DfyiFuXGhJwVdOP2AyhNk15MA8DMPxvsls=";
       };
 
 

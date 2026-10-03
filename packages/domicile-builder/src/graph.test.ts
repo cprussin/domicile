@@ -14,7 +14,7 @@ describe("importGraph", () => {
       "/home/me/desk/domicile.tsx",
       disk({
         "/home/me/desk/domicile.tsx": `
-          import { runManganese } from "@domicile/shell-manganese";
+          import { runManganese } from "@domicile/manganese";
           import { MailCount } from "./mail";
           export const Shell = runManganese({});
         `,
@@ -32,10 +32,7 @@ describe("importGraph", () => {
       "/home/me/desk/mail/index.tsx",
       "/home/me/desk/mail/mail.css",
     ]);
-    expect([...graph.packages].sort()).toEqual([
-      "@domicile/shell-manganese",
-      "zod",
-    ]);
+    expect([...graph.packages].sort()).toEqual(["@domicile/manganese", "zod"]);
   });
 
   it("refuses a relative import that names no file", () => {
@@ -52,8 +49,6 @@ describe("packageOf", () => {
   it("is the package a bare specifier is in, scoped or not", () => {
     expect(packageOf("zod")).toBe("zod");
     expect(packageOf("zod/v4")).toBe("zod");
-    expect(packageOf("@domicile/chrome-sdk/key-action")).toBe(
-      "@domicile/chrome-sdk",
-    );
+    expect(packageOf("@domicile/sdk/key-action")).toBe("@domicile/sdk");
   });
 });

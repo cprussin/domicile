@@ -20,7 +20,7 @@ ends it sits between:
   only shell here built against the *published* SDK from outside the workspace,
   which is what makes it the worked example in
   [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
-- [`@domicile/shell-manganese`](../shell-manganese/README.md) is the reference
+- [`@domicile/manganese`](../shell-manganese/README.md) is the reference
   chrome, and shows what the model is *for*.
 
 ## Layout
@@ -63,7 +63,7 @@ nix run github:cprussin/domicile/stable#simple
 That starts the engine on this shell's page with the compositor underneath, and
 puts the desktop in a window on your display. Which desktop you get is which app
 you run — `#manganese` is the reference chrome
-([`@domicile/shell-manganese`](../shell-manganese/README.md)) — and a bare
+([`@domicile/manganese`](../shell-manganese/README.md)) — and a bare
 `nix run github:cprussin/domicile/stable` is Domicile itself, which wants a shell of
 your own to point at.
 

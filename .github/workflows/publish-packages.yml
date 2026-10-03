@@ -1,0 +1,38 @@
+name: Publish packages
+
+# Every public `@domicile/*` package to npm, as an alpha of the commit:
+# `0.0.0-alpha-<sha>` under the `alpha` dist-tag. See
+# .github/scripts/publish-packages.sh.
+#
+# TRUSTED PUBLISHING, NO TOKEN. npm takes this workflow's OIDC token
+# (`id-token: write`) for each package whose trusted publisher on npmjs.com
+# names this repository and this file, and attaches provenance itself. A
+# package with no trusted publisher refuses the publish.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One at a time and none thrown away: each run publishes its own commit.
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      # npm 11.5.1 is the first that publishes with an OIDC token.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+      - run: bun install --frozen-lockfile
+      - run: .github/scripts/publish-packages.sh

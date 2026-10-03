@@ -147,7 +147,7 @@
     "dist/**"
   ],
   "license": "MIT",
-  "name": "@domicile/chrome-sdk",
+  "name": "@domicile/sdk",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -158,5 +158,10 @@
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git",
+    "directory": "packages/chrome-sdk"
+  }
 }

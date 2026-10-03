@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Extension } from "@domicile/chrome-sdk/extension";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Extension } from "@domicile/sdk/extension";
+import type { TrayItem } from "@domicile/sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Tray } from "./Tray";

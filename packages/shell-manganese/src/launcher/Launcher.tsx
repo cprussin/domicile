@@ -1,17 +1,17 @@
-import { FilePreviewKind } from "@domicile/chrome-sdk/file-preview";
+import { Input } from "@domicile/component-library/Input";
+import { Kbd } from "@domicile/component-library/Kbd";
+import { ModalDialog } from "@domicile/component-library/ModalDialog";
+import { FilePreviewKind } from "@domicile/sdk/file-preview";
 import type {
   DesktopEntry,
   FilePreviewMessage,
   FoundAppsMessage,
   FoundFilesMessage,
-} from "@domicile/chrome-sdk/host-message";
+} from "@domicile/sdk/host-message";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
-} from "@domicile/chrome-sdk/webview-element";
-import { Input } from "@domicile/component-library/Input";
-import { Kbd } from "@domicile/component-library/Kbd";
-import { ModalDialog } from "@domicile/component-library/ModalDialog";
+} from "@domicile/sdk/webview-element";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BinaryIcon } from "@phosphor-icons/react/dist/ssr/Binary";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";

@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@domicile/chrome-sdk": "^0.1.0"
+    "@domicile/sdk": "^0.1.0"
   },
   "description": "The worked example from docs/WRITING-A-SHELL.md: a Domicile shell built against the published SDK, with no dependency on this repo.",
   "devDependencies": {

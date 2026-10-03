@@ -1,8 +1,8 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Extension } from "@domicile/chrome-sdk/extension";
-import { WEBVIEW_CLOSE_EVENT } from "@domicile/chrome-sdk/webview-element";
 import { Button } from "@domicile/component-library/Button";
 import { Popover } from "@domicile/component-library/Popover";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Extension } from "@domicile/sdk/extension";
+import { WEBVIEW_CLOSE_EVENT } from "@domicile/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";

@@ -1,4 +1,4 @@
-import type { Notification } from "@domicile/chrome-sdk/notification";
+import type { Notification } from "@domicile/sdk/notification";
 
 /**
  * Which of `next` just happened, given the list the page had been told before

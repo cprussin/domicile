@@ -1,6 +1,6 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { ThemeMessage } from "@domicile/chrome-sdk/host-message";
 import type { ThemeSource } from "@domicile/component-library/theme-source";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { ThemeMessage } from "@domicile/sdk/host-message";
 
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 

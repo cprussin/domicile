@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
