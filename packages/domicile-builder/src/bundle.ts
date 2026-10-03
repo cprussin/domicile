@@ -1,5 +1,6 @@
 // One shell module out of a user's entry, built against Domicile's install.
 
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { shellBuild } from "@domicile/component-library/vite-shell";
@@ -26,12 +27,14 @@ const manganeseIn = (domicile: string): string =>
  *
  * **Manganese's styles are built here**, by Panda over manganese's own config:
  * Panda's `css()` only names classes, and the build that scans a call is what
- * writes its rule.
+ * writes its rule. `files`, the user's own, are scanned beside manganese's, so
+ * a `css()` from `@domicile/shell-manganese/css` in them has its rule too.
  */
 export const bundle = async (
   entry: string,
   out: string,
   domicile: string,
+  files: readonly string[],
 ): Promise<void> => {
   const manganese = manganeseIn(domicile);
   const shell = shellBuild({ entry });
@@ -46,7 +49,7 @@ export const bundle = async (
         // manganese's `vite.config.ts` does and says why.
         plugins: [
           panda({
-            configPath: path.join(manganese, "panda.config.ts"),
+            configPath: scanning(`${out}.panda.config.mjs`, manganese, files),
             cwd: manganese,
           }) as never,
         ],
@@ -56,6 +59,29 @@ export const bundle = async (
     plugins: [fromDomicile(domicile), react(), ...shell.plugins],
     root: path.dirname(entry),
   });
+};
+
+/**
+ * Write `config`: manganese's Panda config, scanning `files` as well.
+ *
+ * Written rather than passed, because Panda's PostCSS plugin takes a config's
+ * path and nothing else; beside the build rather than in a temporary
+ * directory, because the plugin keeps the config it loaded for the life of
+ * the process and reads it again on the next build.
+ */
+const scanning = (
+  config: string,
+  manganese: string,
+  files: readonly string[],
+): string => {
+  const theirs = JSON.stringify(path.join(manganese, "panda.config.ts"));
+  writeFileSync(
+    config,
+    `import config from ${theirs};
+export default { ...config, include: [...config.include, ...${JSON.stringify(files)}] };
+`,
+  );
+  return config;
 };
 
 /**

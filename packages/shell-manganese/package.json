@@ -26,7 +26,23 @@
     "vite": "catalog:"
   },
   "exports": {
-    ".": "./src/index.tsx"
+    ".": "./src/index.tsx",
+    "./css": {
+      "types": "./styled-system/css/index.d.ts",
+      "default": "./styled-system/css/index.mjs"
+    },
+    "./jsx": {
+      "types": "./styled-system/jsx/index.d.ts",
+      "default": "./styled-system/jsx/index.mjs"
+    },
+    "./patterns": {
+      "types": "./styled-system/patterns/index.d.ts",
+      "default": "./styled-system/patterns/index.mjs"
+    },
+    "./tokens": {
+      "types": "./styled-system/tokens/index.d.ts",
+      "default": "./styled-system/tokens/index.mjs"
+    }
   },
   "license": "MIT",
   "name": "@domicile/shell-manganese",

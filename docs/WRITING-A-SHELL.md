@@ -207,6 +207,17 @@ export const input = { keyboard: { xkb_variant: "dvp" } };
 export const Shell = runManganese();
 ```
 
+Your own bar items style with manganese's Panda: `css` (and `jsx`,
+`patterns`, `tokens`) from `@domicile/shell-manganese/css` and its siblings,
+the same design system manganese's items use. The builder scans your files
+beside manganese's, so every `css()` call you write has its rule:
+
+```tsx
+import { css } from "@domicile/shell-manganese/css";
+
+const Mail = () => <span className={css({ color: "muted" })}>3/12</span>;
+```
+
 A JSON config names its shell as `"shell"`, relative to the config:
 `{ "shell": "@domicile/manganese" }`. See
 [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
