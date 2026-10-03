@@ -216,8 +216,8 @@ Phase 1: the contract, by hand.
       bar's layout a prop. The commands land with keybindings
 - [x] keybindings as props: `keys` in `shell_config`, `bindKeys` resolving the
       shell's own chords, manganese's commands and default bindings
-- [ ] check, in a guard: the shell page shows a Web Notification and fetches
-      the Gmail API cross-origin from `domicile://`
+- [x] check, in a guard: the shell page may show a Web Notification and reads
+      a cross-origin answer from `domicile://` (`guard-shell-web-apis.sh`)
 
 Phase 2: `domicile` builds.
 
