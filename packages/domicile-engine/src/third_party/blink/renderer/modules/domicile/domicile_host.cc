@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_modifiers_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_titled_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_audio_event.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_audio_levels_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_apps_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_battery_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_bookmark.h"
@@ -270,6 +271,15 @@ void DomicileHost::setAudioProfile(ScriptState*,
                                    ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     channel_->SetAudioProfile(card, profile);
+  }
+}
+
+// An empty list is a page letting go, which is an ask like any other.
+void DomicileHost::watchAudioLevels(ScriptState*,
+                                    const Vector<String>& ids,
+                                    ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->WatchAudioLevels(ids);
   }
 }
 
@@ -905,6 +915,20 @@ void DomicileHost::Audio(
       domicile_event_names::Audio(), AudioDevices(outputs),
       AudioDevices(inputs), AudioStreams(playback), AudioStreams(recording),
       AudioCards(cards), Arrival(arrival)));
+}
+
+// Pushed while anything is metered, as rows like every list here.
+void DomicileHost::AudioLevels(
+    Vector<domicile::mojom::blink::AudioLevelPtr> levels,
+    base::TimeTicks arrival) {
+  HeapVector<Member<DomicileAudioLevel>> made;
+  made.reserve(levels.size());
+  for (const auto& level : levels) {
+    made.push_back(
+        MakeGarbageCollected<DomicileAudioLevel>(level->id, level->peak));
+  }
+  DispatchEvent(*MakeGarbageCollected<DomicileAudioLevelsEvent>(
+      domicile_event_names::Audiolevels(), std::move(made), Arrival(arrival)));
 }
 
 void DomicileHost::FocusChanged(const String& app_id,

@@ -17,7 +17,8 @@
 //! `playback:` or `recording:` and the stream's index, which lasts as long as
 //! the stream does.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::time::{Duration, Instant};
 
 use domicile_protocol::{AudioCard, AudioChoice, AudioDevice, AudioStream, HostMessage};
 use serde::Deserialize;
@@ -41,9 +42,18 @@ const NEWS: &[&str] = &[
     "server",
 ];
 
+/// What this desk's own meters call themselves, so that they are hidden with
+/// every other mixer's.
+const METER: &str = "org.domicile.meter";
+
+/// How many samples a second a meter records: enough to catch a transient a
+/// meter would show, few enough that one per device is nothing.
+const METER_RATE: u32 = 1000;
+
 /// Applications whose streams are a mixer's own level meters, which every
 /// mixer hides — pavucontrol's list.
 const MIXERS: &[&str] = &[
+    METER,
     "org.PulseAudio.pavucontrol",
     "org.gnome.VolumeControl",
     "org.kde.kmixd",
@@ -57,6 +67,83 @@ pub struct Audio {
     pub playback: Vec<AudioStream>,
     pub recording: Vec<AudioStream>,
     pub cards: Vec<AudioCard>,
+    /// What each id is metered off, for those that can be — kept here rather
+    /// than on the wire: a chrome asks for a meter by id, and only the
+    /// compositor records.
+    pub meters: BTreeMap<String, Meter>,
+}
+
+/// Where a meter records from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Meter {
+    /// A source by name: an input, or an output's monitor.
+    Source(String),
+    /// A playback stream by index, as pavucontrol meters one.
+    Stream(u32),
+}
+
+impl Meter {
+    /// The arguments to give `parec` to record this meter's samples: mono
+    /// floats, tagged so the mixer does not list them as a recording.
+    pub fn argv(&self) -> Vec<String> {
+        let what = match self {
+            Meter::Source(name) => format!("--device={name}"),
+            Meter::Stream(index) => format!("--monitor-stream={index}"),
+        };
+        vec![
+            what,
+            "--raw".into(),
+            "--format=float32le".into(),
+            "--channels=1".into(),
+            format!("--rate={METER_RATE}"),
+            "--latency-msec=30".into(),
+            format!("--property=application.id={METER}"),
+        ]
+    }
+}
+
+/// The loudest of `samples`, little-endian floats as a meter records them,
+/// clipped to full scale. A trailing partial sample is not a sample.
+pub fn peak(samples: &[u8]) -> f64 {
+    samples
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|bytes| f64::from(f32::from_le_bytes(*bytes).abs()))
+        .fold(0.0, f64::max)
+        .min(1.0)
+}
+
+/// What every chrome asked to be metered, each a lease — see
+/// [`domicile_protocol::ChromeMessage::WatchAudioLevels`].
+#[derive(Debug, Default)]
+pub struct LevelWatches {
+    by_chrome: HashMap<usize, (Instant, BTreeSet<String>)>,
+}
+
+impl LevelWatches {
+    /// How long a watch lasts unrenewed. A mixer renews every second.
+    pub const LEASE: Duration = Duration::from_secs(3);
+
+    /// `chrome` wants `ids` metered, and nothing else it asked for before.
+    pub fn watch(&mut self, chrome: usize, ids: Vec<String>, now: Instant) {
+        if ids.is_empty() {
+            self.by_chrome.remove(&chrome);
+        } else {
+            self.by_chrome
+                .insert(chrome, (now, ids.into_iter().collect()));
+        }
+    }
+
+    /// Everything to meter at `now`, the lapsed leases let go of.
+    pub fn watched(&mut self, now: Instant) -> BTreeSet<String> {
+        self.by_chrome
+            .retain(|_, (since, _)| now.duration_since(*since) <= Self::LEASE);
+        self.by_chrome
+            .values()
+            .flat_map(|(_, ids)| ids.iter().cloned())
+            .collect()
+    }
 }
 
 impl Audio {
@@ -234,7 +321,31 @@ pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
             .map(|stream| stream.stream(Target::Recording, stream.source, &inputs_by_index))
             .collect(),
         cards: list.cards.iter().map(Card::card).collect(),
+        meters: meters(&list),
     })
+}
+
+/// What each device and playback stream is metered off: an output off its
+/// monitor, where the server named one, an input off itself, a stream off the
+/// stream.
+fn meters(list: &List) -> BTreeMap<String, Meter> {
+    let outputs = list.sinks.iter().filter_map(|sink| {
+        let monitor = sink.monitor_source.clone()?;
+        Some((Target::Output.id(&sink.name), Meter::Source(monitor)))
+    });
+    let inputs = list.sources.iter().map(|source| {
+        (
+            Target::Input.id(&source.name),
+            Meter::Source(source.name.clone()),
+        )
+    });
+    let playback = list.sink_inputs.iter().map(|stream| {
+        (
+            Target::Playback.id(&stream.index.to_string()),
+            Meter::Stream(stream.index),
+        )
+    });
+    outputs.chain(inputs).chain(playback).collect()
 }
 
 /// The four kinds of thing a volume belongs to, as an id names them.
@@ -354,7 +465,7 @@ struct Device {
     description: Option<String>,
     mute: bool,
     volume: BTreeMap<String, Value>,
-    /// On a source, the sink it is the monitor of.
+    /// On a source, the sink it is the monitor of; on a sink, its monitor.
     #[serde(default)]
     monitor_source: Option<String>,
     #[serde(default)]

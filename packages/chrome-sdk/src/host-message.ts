@@ -39,6 +39,7 @@ import type {
   DomicileAudioChoice,
   DomicileAudioDevice,
   DomicileAudioEvent,
+  DomicileAudioLevelsEvent,
   DomicileAudioStream,
   DomicileBatteryEvent,
   DomicileClipboardEntry,
@@ -528,6 +529,15 @@ export type AudioMessage = {
   cards: readonly AudioCard[];
 };
 
+/**
+ * How loud each metered device or stream is: its loudest sample since the
+ * last message, 0 through 1 of full scale, by id. Only what
+ * `watchAudioLevels` asked for, and only while it renews the ask.
+ */
+export type AudioLevelsMessage = {
+  levels: ReadonlyMap<string, number>;
+};
+
 /** Every message the client delivers, and what each one carries. */
 export type HostMessageMap = {
   app_appeared: AppAppearedMessage;
@@ -546,6 +556,7 @@ export type HostMessageMap = {
   battery: BatteryMessage;
   brightness: BrightnessMessage;
   audio: AudioMessage;
+  audio_levels: AudioLevelsMessage;
   clipboard: ClipboardMessage;
   theme: ThemeMessage;
   idle: IdleMessage;
@@ -867,6 +878,12 @@ export const audio = (event: DomicileAudioEvent): AudioMessage => ({
   outputs: event.outputs.map(device),
   playback: event.playback.map(stream),
   recording: event.recording.map(stream),
+});
+
+export const audioLevels = (
+  event: DomicileAudioLevelsEvent,
+): AudioLevelsMessage => ({
+  levels: new Map(event.levels.map(({ id, peak }) => [id, peak])),
 });
 
 const choice = ({

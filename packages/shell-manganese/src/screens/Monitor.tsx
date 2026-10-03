@@ -76,7 +76,6 @@ export const Monitor = ({
         act(WindowAction.WorkspaceSelected(workspace));
       }}
       openedExtension={opened}
-      screen={name}
       tray={tray}
       trayOrder={trayOrder}
       unread={notifications.unread}

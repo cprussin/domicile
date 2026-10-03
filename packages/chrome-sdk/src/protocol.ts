@@ -611,6 +611,12 @@ const audioSchema = z.looseObject({
   type: z.literal("audio"),
 });
 
+// The meters' peaks, some twenty times a second while any are watched.
+const audioLevelsSchema = z.looseObject({
+  levels: z.array(z.looseObject({ id: z.string(), peak: z.number() })),
+  type: z.literal("audio_levels"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -639,6 +645,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   batterySchema,
   brightnessSchema,
   audioSchema,
+  audioLevelsSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,

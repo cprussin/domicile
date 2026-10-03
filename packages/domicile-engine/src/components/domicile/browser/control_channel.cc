@@ -330,6 +330,15 @@ std::optional<mojom::AudioCardPtr> ReadAudioCard(const base::DictValue& row) {
       OrEmpty(row, "profile"));
 }
 
+std::optional<mojom::AudioLevelPtr> ReadAudioLevel(const base::DictValue& row) {
+  const std::string* id = row.FindString("id");
+  std::optional<double> peak = row.FindDouble("peak");
+  if (!id || !peak) {
+    return std::nullopt;
+  }
+  return mojom::AudioLevel::New(*id, *peak);
+}
+
 }  // namespace
 
 void ControlChannel::FocusApp(const std::string& app_id) {
@@ -537,6 +546,17 @@ void ControlChannel::SetAudioProfile(const std::string& card,
   base::DictValue message = Typed("set_audio_profile");
   message.Set("card", card);
   message.Set("profile", profile);
+  SendMessage(std::move(message));
+}
+
+// A lease the page renews, relayed as it is: the compositor keeps the time.
+void ControlChannel::WatchAudioLevels(const std::vector<std::string>& ids) {
+  base::ListValue listed;
+  for (const std::string& id : ids) {
+    listed.Append(id);
+  }
+  base::DictValue message = Typed("watch_audio_levels");
+  message.Set("ids", std::move(listed));
   SendMessage(std::move(message));
 }
 
@@ -1349,6 +1369,12 @@ void ControlChannel::DispatchLine(const std::string& line,
     // a second reader of a shape the page already owns. The parse above has
     // already refused a line that is not a JSON object.
     client_->ShellConfig(line, arrival);
+    return;
+  }
+
+  if (*type == "audio_levels") {
+    client_->AudioLevels(
+        Rows<mojom::AudioLevelPtr>(message, "levels", ReadAudioLevel), arrival);
     return;
   }
 

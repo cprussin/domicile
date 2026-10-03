@@ -8,6 +8,7 @@ const meta = {
     defaultValue: 60,
     disabled: false,
     label: "Brightness",
+    level: undefined,
     max: 100,
     min: 0,
     step: 1,
@@ -24,6 +25,10 @@ const meta = {
     label: {
       control: "text",
       table: { category: "Contents" },
+    },
+    level: {
+      control: { max: 1, min: 0, step: 0.01, type: "range" },
+      table: { category: "State" },
     },
     max: {
       control: "number",
@@ -75,6 +80,15 @@ export const Slider: StoryObj<typeof SliderComponent> = {
   args: {
     defaultValue: 60,
     disabled: false,
+  },
+};
+
+export const WithLevel: StoryObj<typeof SliderComponent> = {
+  args: {
+    defaultValue: 60,
+    disabled: false,
+    label: "Volume",
+    level: 0.4,
   },
 };
 

@@ -52,8 +52,6 @@ type Props = {
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
-  /** The monitor this bar is across, which the mixer opens over. */
-  screen: string;
   /** The applications' tray icons. */
   tray: readonly TrayItem[];
   /** The order the tray is in, and how a drag changes it. */
@@ -80,8 +78,8 @@ type Props = {
  * into, whose clicks are theirs and have no key.
  *
  * **The volume is the brightness's case**, and sits beside it: a speaker
- * whose panel holds the default output and microphone, and a button from
- * there to the whole mixer — every device, stream and card.
+ * whose panel holds the whole mixer — the default output and microphone
+ * first, and every device, stream and card a section below.
  *
  * **The brightness is the theme toggle's case, below**: it changes the screen
  * already in front of you rather than putting anything on it. Its slider
@@ -128,7 +126,6 @@ export const TopBar = ({
   onOpenNotifications,
   onSelectWorkspace,
   openedExtension,
-  screen,
   tray,
   trayOrder,
   unread,
@@ -159,7 +156,7 @@ export const TopBar = ({
     <div className={endStyles}>
       {mode !== "default" && <span className={modeStyles}>{mode}</span>}
       <ThemeSwitch />
-      <Volume domicile={domicile} screen={screen} />
+      <Volume domicile={domicile} />
       <Brightness domicile={domicile} />
       <Battery domicile={domicile} />
       <NotificationBell onOpen={onOpenNotifications} unread={unread} />
