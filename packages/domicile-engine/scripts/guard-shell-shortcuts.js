@@ -15,22 +15,27 @@
 //                          unhandled to the delegate behind it
 //   GUARD popstate         the shell's history moved: Alt+Left went back
 //   GUARD resized          the viewport changed: F11 or a zoom
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-const say = (what) => {
-  console.log(`GUARD ${what}`);
+export const Shell = () => {
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  document.addEventListener("keydown", (event) => {
+    say(`keydown code=${event.code}`);
+  });
+  addEventListener("popstate", () => {
+    say("popstate");
+  });
+  addEventListener("resize", () => {
+    say("resized");
+  });
+
+  // Something for Alt+Left to go back to. Same-document, so a browser that
+  // took the key would fire `popstate` rather than unload the page.
+  history.pushState({}, "", "#pushed");
+  say("loaded");
 };
-
-document.addEventListener("keydown", (event) => {
-  say(`keydown code=${event.code}`);
-});
-addEventListener("popstate", () => {
-  say("popstate");
-});
-addEventListener("resize", () => {
-  say("resized");
-});
-
-// Something for Alt+Left to go back to. Same-document, so a browser that
-// took the key would fire `popstate` rather than unload the page.
-history.pushState({}, "", "#pushed");
-say("loaded");

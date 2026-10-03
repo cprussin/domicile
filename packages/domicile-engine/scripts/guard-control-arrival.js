@@ -47,51 +47,9 @@
 //                                right size computed from a `NaN` and an
 //                                `undefined` is not a measurement, and the
 //                                three readings are what say which
-
-const say = (what) => {
-  console.log(`GUARD ${what}`);
-};
-
-const host = navigator.domicile;
-if (host === null || host === undefined) {
-  // Loud rather than a page that quietly measures nothing: without the control
-  // channel there is nothing to hear and every assertion below would be absent
-  // for a reason that is not the one the guard is asking about.
-  throw new Error(
-    "guard-control-arrival: navigator.domicile is absent, so this document" +
-      " was not served by the forked engine",
-  );
-}
-
-host.addEventListener("appcursor", (event) => {
-  // The names check below fires an untrusted `appcursor` of its own, which is
-  // not a cursor the compositor sent and must not read as one.
-  if (!event.isTrusted) {
-    return;
-  }
-  say(`app-cursor app=${event.appId} cursor=${event.cursor}`);
-
-  // THE SUBTRACTION THIS FILE EXISTS FOR. Both are DOMHighResTimeStamps on this
-  // document's time origin: `arrival` is when the browser process had the line,
-  // `timeStamp` is when this event was constructed for dispatch.
-  const hop = event.timeStamp - event.arrival;
-  say(
-    `hop arrival=${event.arrival.toFixed(3)}` +
-      ` stamp=${event.timeStamp.toFixed(3)} ms=${hop.toFixed(3)}`,
-  );
-
-  // And whether those two numbers are numbers. An attribute that does not exist
-  // reads `undefined`, `undefined - n` is `NaN`, and `NaN.toFixed(3)` is the
-  // string "NaN" -- which prints in the line above and looks like a reading.
-  // `positive` is the other half: a zero `arrival` is what a stamp that was
-  // never filled in looks like, and a hop measured against it is the whole age
-  // of the document.
-  say(
-    `hop-shape finite=${Number.isFinite(event.arrival)}` +
-      ` positive=${event.arrival > 0}` +
-      ` ordered=${event.arrival <= event.timeStamp}`,
-  );
-});
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
 // THE NAMES. navigator.domicile's event names are the fork's own, in
 // modules/domicile/domicile_event_names.h, rather than entries in Blink's
@@ -99,7 +57,8 @@ host.addEventListener("appcursor", (event) => {
 // added. This fires each at a listener and at its on<name> handler: the
 // handler is keyed on the fork's name, so a name the list and the IDL
 // disagree on is a handler that never runs. scripts/test-engine-event-names.sh
-// keeps this list and the fork's the same set.
+// keeps this list and the fork's the same set, reading it at the top level of
+// this file.
 const EVENT_NAMES = [
   "apptitled",
   "appappeared",
@@ -131,28 +90,76 @@ const EVENT_NAMES = [
   "notifications",
   "openurl",
 ];
-const missing = EVENT_NAMES.flatMap((name) => {
-  const heard = { handler: false, listener: false };
-  const listener = () => {
-    heard.listener = true;
-  };
-  host.addEventListener(name, listener);
-  host[`on${name}`] = () => {
-    heard.handler = true;
-  };
-  host.dispatchEvent(new Event(name));
-  host.removeEventListener(name, listener);
-  host[`on${name}`] = null;
-  return [
-    ...(heard.listener ? [] : [name]),
-    ...(heard.handler ? [] : [`on${name}`]),
-  ];
-});
-say(`names missing=${missing.length === 0 ? "none" : missing.join(",")}`);
 
-// AFTER the listener, not before: registering one is what binds the channel --
-// see DomicileHost::AddedEventListener -- so the browser does not reach for the
-// compositor's socket until the line above has run, and nothing can arrive
-// before this page is ready for it.
-say(`clock now=${performance.now().toFixed(3)}`);
-say("listening");
+export const Shell = () => {
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  const host = navigator.domicile;
+  if (host === null || host === undefined) {
+    // Loud rather than a page that quietly measures nothing: without the control
+    // channel there is nothing to hear and every assertion below would be absent
+    // for a reason that is not the one the guard is asking about.
+    throw new Error(
+      "guard-control-arrival: navigator.domicile is absent, so this document" +
+        " was not served by the forked engine",
+    );
+  }
+
+  host.addEventListener("appcursor", (event) => {
+    // The names check below fires an untrusted `appcursor` of its own, which is
+    // not a cursor the compositor sent and must not read as one.
+    if (!event.isTrusted) {
+      return;
+    }
+    say(`app-cursor app=${event.appId} cursor=${event.cursor}`);
+
+    // THE SUBTRACTION THIS FILE EXISTS FOR. Both are DOMHighResTimeStamps on this
+    // document's time origin: `arrival` is when the browser process had the line,
+    // `timeStamp` is when this event was constructed for dispatch.
+    const hop = event.timeStamp - event.arrival;
+    say(
+      `hop arrival=${event.arrival.toFixed(3)}` +
+        ` stamp=${event.timeStamp.toFixed(3)} ms=${hop.toFixed(3)}`,
+    );
+
+    // And whether those two numbers are numbers. An attribute that does not exist
+    // reads `undefined`, `undefined - n` is `NaN`, and `NaN.toFixed(3)` is the
+    // string "NaN" -- which prints in the line above and looks like a reading.
+    // `positive` is the other half: a zero `arrival` is what a stamp that was
+    // never filled in looks like, and a hop measured against it is the whole age
+    // of the document.
+    say(
+      `hop-shape finite=${Number.isFinite(event.arrival)}` +
+        ` positive=${event.arrival > 0}` +
+        ` ordered=${event.arrival <= event.timeStamp}`,
+    );
+  });
+
+  const missing = EVENT_NAMES.flatMap((name) => {
+    const heard = { handler: false, listener: false };
+    const listener = () => {
+      heard.listener = true;
+    };
+    host.addEventListener(name, listener);
+    host[`on${name}`] = () => {
+      heard.handler = true;
+    };
+    host.dispatchEvent(new Event(name));
+    host.removeEventListener(name, listener);
+    host[`on${name}`] = null;
+    return [
+      ...(heard.listener ? [] : [name]),
+      ...(heard.handler ? [] : [`on${name}`]),
+    ];
+  });
+  say(`names missing=${missing.length === 0 ? "none" : missing.join(",")}`);
+
+  // AFTER the listener, not before: registering one is what binds the channel --
+  // see DomicileHost::AddedEventListener -- so the browser does not reach for the
+  // compositor's socket until the line above has run, and nothing can arrive
+  // before this page is ready for it.
+  say(`clock now=${performance.now().toFixed(3)}`);
+  say("listening");
+};

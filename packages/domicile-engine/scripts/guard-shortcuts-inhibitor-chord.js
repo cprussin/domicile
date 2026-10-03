@@ -27,29 +27,34 @@
 //                            its own with its keys at codes it chose, so the
 //                            code names whatever key sits there on a real
 //                            keyboard and the key is what was asked for
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-const say = (what) => {
-  console.log(`GUARD ${what}`);
+export const Shell = () => {
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  // Capture, on the window, so that nothing in the document can stop a key before
+  // it is reported. There is nothing else in the document, but a reading that
+  // depended on that would be a reading about the document.
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      say(`keydown key=${event.key} meta=${event.metaKey}`);
+    },
+    { capture: true },
+  );
+  say("listening");
+
+  // Asked on an interval rather than on `focus`, because the window can be
+  // activated before this module runs, and a `focus` event that fired first is
+  // one this would wait on for ever.
+  const watchingFocus = setInterval(() => {
+    if (document.hasFocus()) {
+      say("focused");
+      clearInterval(watchingFocus);
+    }
+  }, 100);
 };
-
-// Capture, on the window, so that nothing in the document can stop a key before
-// it is reported. There is nothing else in the document, but a reading that
-// depended on that would be a reading about the document.
-window.addEventListener(
-  "keydown",
-  (event) => {
-    say(`keydown key=${event.key} meta=${event.metaKey}`);
-  },
-  { capture: true },
-);
-say("listening");
-
-// Asked on an interval rather than on `focus`, because the window can be
-// activated before this module runs, and a `focus` event that fired first is
-// one this would wait on for ever.
-const watchingFocus = setInterval(() => {
-  if (document.hasFocus()) {
-    say("focused");
-    clearInterval(watchingFocus);
-  }
-}, 100);

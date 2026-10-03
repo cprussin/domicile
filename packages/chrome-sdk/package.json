@@ -118,6 +118,10 @@
       "types": "./dist/register-elements.d.ts",
       "default": "./dist/register-elements.js"
     },
+    "./shell": {
+      "types": "./dist/shell.d.ts",
+      "default": "./dist/shell.js"
+    },
     "./surface-coordinates": {
       "types": "./dist/surface-coordinates.d.ts",
       "default": "./dist/surface-coordinates.js"

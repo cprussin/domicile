@@ -939,7 +939,7 @@ shell that wants its own pictures owns its own list.
 
 | Path | What |
 |---|---|
-| `src/index.tsx` | Entry point: applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density. |
+| `src/index.tsx` | Entry point: its `Shell` export applies the theme, builds the `DomicileClient`, binds the SDK to it, mounts `<Shell>`, and states the desktop's size and density. |
 | `src/Shell.tsx` | The composition root: the providers, and the one `DisplayProvider` every screen below fans out from. |
 | `src/Desktop.tsx` | The desk: the window state, the keys, the panels over every screen, and one `Monitor` per screen of it. |
 | `src/clock/` | The live clock, and what it says: in the middle of the bar on every screen. |

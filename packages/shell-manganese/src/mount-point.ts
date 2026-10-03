@@ -1,20 +1,15 @@
 // Where this shell's chrome mounts.
 //
-// Domicile writes the document, and what it writes is a charset, a viewport, a
-// body with no margin and the script tag that loads this module. There is no
-// element to look up, so the shell makes one — which is the shape every shell
-// in this position needs: `docs/WRITING-A-SHELL.md` says Domicile writes the
-// document and the shell brings everything else.
-//
-// A container of our own rather than `document.body` itself, for one reason:
-// the body holds Domicile's script tag, and a React root that owns the body
-// owns that too.
+// Domicile writes the document and hands `Shell` its body, empty. The shell
+// makes its own element inside it rather than rendering into the root itself:
+// the document reports a failure by appending to that root, and a React root
+// that owned it would wipe the report.
 
 /** The element the chrome is rendered into, made if it is not there yet. */
 const MOUNT_ID = "domicile-shell";
 
 /**
- * The chrome's mount point in `document`, created on the first call.
+ * The chrome's mount point in `root`, created on the first call.
  *
  * **Deliberately unstyled, and `position` is the part that matters.**
  * `<Screen>` is `position: absolute` and carries the desktop's own
@@ -25,13 +20,13 @@ const MOUNT_ID = "domicile-shell";
  * this is the one that has to stay out of the way. It needs no size for the
  * same reason: nothing inside it is in normal flow.
  */
-export const mountPoint = (document: Document): HTMLElement => {
-  const existing = document.getElementById(MOUNT_ID);
+export const mountPoint = (root: HTMLElement): HTMLElement => {
+  const existing = root.ownerDocument.getElementById(MOUNT_ID);
   if (existing !== null) {
     return existing;
   }
-  const made = document.createElement("div");
+  const made = root.ownerDocument.createElement("div");
   made.id = MOUNT_ID;
-  document.body.append(made);
+  root.append(made);
   return made;
 };
