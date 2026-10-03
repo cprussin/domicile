@@ -167,4 +167,5 @@ const absentHost = (): DomicileHost => ({
   themeCaptured: () => undefined,
   unlock: () => undefined,
   warpPointer: () => undefined,
+  watchAudioLevels: () => undefined,
 });
