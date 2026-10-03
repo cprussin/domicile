@@ -2,14 +2,16 @@ import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { OnOneScreen, SCREEN } from "../screens/fixture";
 import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
 
 const shown = (sound: ReturnType<typeof heldSound>) => {
   render(
-    <Volume domicile={sound.domicile} screen={SCREEN} watch={sound.watch} />,
-    { wrapper: OnOneScreen },
+    <Volume
+      domicile={sound.domicile}
+      watch={sound.watch}
+      watchLevels={sound.watchLevels}
+    />,
   );
   sound.report(laptop);
 };
@@ -27,8 +29,8 @@ describe("Volume", () => {
       render(
         <Volume
           domicile={sound.domicile}
-          screen={SCREEN}
           watch={sound.watch}
+          watchLevels={sound.watchLevels}
         />,
       );
 
@@ -125,15 +127,14 @@ describe("Volume", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("opens the whole mixer", async () => {
+    it("meters while it is open, and stops when it shuts", async () => {
       const sound = heldSound();
       await opened(sound);
+      expect(sound.metered.at(-1)).toEqual(["output:speakers", "input:mic"]);
 
-      await userEvent.click(
-        screen.getByRole("button", { name: "All devices" }),
-      );
+      await userEvent.keyboard("{Escape}");
 
-      expect(screen.getByRole("dialog", { name: "Sound" })).toBeInTheDocument();
+      expect(sound.metered.at(-1)).toEqual([]);
     });
   });
 });

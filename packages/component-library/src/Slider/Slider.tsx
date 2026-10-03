@@ -8,6 +8,11 @@ type Props = Omit<
 > & {
   /** What the slider sets, for a screen reader: the thumb's name. */
   label: string;
+  /**
+   * How loud, or how full, what the slider sets is right now, 0 through 1 —
+   * a meter drawn under the track, named for the slider. Absent for no meter.
+   */
+  level?: number | undefined;
 };
 
 /**
@@ -21,16 +26,37 @@ type Props = Omit<
  * asks for one. Every interaction — pointer, keyboard, the hidden range input a
  * screen reader drives — is base-ui's.
  */
-export const Slider = ({ label, ...rootProps }: Props) => (
+export const Slider = ({ label, level, ...rootProps }: Props) => (
   <BaseSlider.Root className={rootStyles} {...rootProps}>
     <BaseSlider.Control className={controlStyles}>
       <BaseSlider.Track className={trackStyles}>
         <BaseSlider.Indicator className={indicatorStyles} />
         <BaseSlider.Thumb aria-label={label} className={thumbStyles} />
       </BaseSlider.Track>
+      {level !== undefined && <Meter label={label} level={level} />}
     </BaseSlider.Control>
   </BaseSlider.Root>
 );
+
+/**
+ * The level, as a hairline under the track: thin enough not to read as a
+ * second slider, and in the slider's own color.
+ */
+const Meter = ({ label, level }: { label: string; level: number }) => {
+  const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
+  return (
+    <span
+      aria-label={`${label} level`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={percent}
+      className={meterStyles}
+      role="meter"
+    >
+      <span className={meterFillStyles} style={{ inlineSize: `${percent}%` }} />
+    </span>
+  );
+};
 
 // As wide as whatever holds it, and a flex item that takes what is left of a
 // row rather than shrinking to its own empty content.
@@ -45,8 +71,30 @@ const controlStyles = css({
   blockSize: 5,
   cursor: "pointer",
   display: "flex",
+  position: "relative",
   touchAction: "none",
   userSelect: "none",
+});
+
+// Pinned to the foot of the control, under the track and out of its way.
+const meterStyles = css({
+  backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
+  blockSize: "2px",
+  borderRadius: "full",
+  insetBlockEnd: 0,
+  insetInline: 0,
+  overflow: "hidden",
+  pointerEvents: "none",
+  position: "absolute",
+});
+
+// Quick to rise and quick to fall: the levels arrive twenty times a second,
+// and a slower ease would draw a level that had already gone.
+const meterFillStyles = css({
+  backgroundColor: "color-mix(in oklab, currentcolor 70%, transparent)",
+  blockSize: "100%",
+  display: "block",
+  transition: "inline-size {durations.fastest} {easings.linear}",
 });
 
 const trackStyles = css({
