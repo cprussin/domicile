@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 3 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: no webview is given a page Chrome serves itself
+
+chrome:// and chrome-untrusted:// are Chrome's UI for Chrome's window, and
+a desk has none. Worse, they assume one: HistoryUI looks its tab up
+unconditionally, so chrome://history opened in a <webview>, whose guest
+is in no tab strip, took the browser process down in
+TabInterface::GetFromContents.
+
+CreateAndAddChromeThrottlesForNavigation adds
+domicile::BrowserPageThrottle, which cancels a guest's navigation to
+every such page. Canceled rather than blocked: an error page committed
+for a WebUI address in a guest is a fatal check of its own. A throttle
+rather than a check where
+`src` is set, because a link, a redirect and an extension's tabs.update
+reach a guest without passing through `src`. Subresources are not
+navigations, so the PDF viewer's chrome://resources still loads.
+
+The throttle is //components/domicile:browser_page_throttle, a new
+target under src/, added to //chrome/browser:core's deps.
+
+WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT: the file
+each hunk applies to was rebuilt from the pin and the patches before it,
+and both blobs are that file's.
+---
+ chrome/browser/BUILD.gn                                   | 5 +++++
+ .../chrome_content_browser_client_navigation_throttles.cc | 8 ++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 000a974260..d7b2ee4b13 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1138,6 +1138,11 @@ source_set("core") {
+     "//components/device_event_log",
+     "//components/dom_distiller/content/browser",
+     "//components/dom_distiller/content/common/mojom",
++
++    # Domicile's engine fork: no <webview> is given a page Chrome serves
++    # itself. See chrome_content_browser_client_navigation_throttles.cc.
++    "//components/domicile:browser_page_throttle",
++
+     "//components/embedder_support",
+     "//components/embedder_support:content_settings",
+     "//components/embedder_support:user_agent",
+diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+index dfa341dccc..5b31cddec7 100644
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -55,6 +55,7 @@
+ #include "components/dom_distiller/content/browser/distiller_referrer_throttle.h"
+ #include "components/dom_distiller/core/url_constants.h"
+ #include "components/dom_distiller/core/url_utils.h"
++#include "components/domicile/browser/browser_page_throttle.h"
+ #include "components/error_page/content/browser/net_error_auto_reloader.h"
+ #include "components/guest_view/buildflags/buildflags.h"
+ #include "components/history/content/browser/visited_link_navigation_throttle.h"
+@@ -309,6 +310,13 @@ void CreateAndAddChromeThrottlesForNavigation(
+ #endif  // BUILDFLAG(IS_ANDROID)
+   }
+ 
++  // Domicile's engine fork. No <webview> is given a page Chrome serves itself:
++  // they are Chrome's UI for Chrome's window, a desk has none, and HistoryUI
++  // took the browser down looking up a tab its guest was not in. After the
++  // main frame's MetricsNavigationThrottle, which has to run before anything
++  // that may cancel.
++  domicile::BrowserPageThrottle::MaybeCreateAndAdd(registry);
++
+   DSEPrewarmNavigationThrottle::MaybeCreateAndAdd(registry);
+   if (!features::IsDsePreload2Enabled()) {
+     SearchPrefetchNavigationThrottle::MaybeCreateAndAdd(registry);

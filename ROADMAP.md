@@ -446,6 +446,10 @@ costs nothing.
   "save page as", which still open the portal's GTK dialog; a directory dropped
   on a page (`EnumerateDirectory`, refused); and a download's progress, which
   nothing reports — a large file arrives with no sign it is on its way.
+- **A desk has no settings page.** A browser window is refused every
+  `chrome://` page (patch 0083), and with them went the only place to clear
+  cookies and site data, or to change a site's permissions. Nothing replaces
+  them yet. Printing went too: `window.print()` opens `chrome://print`.
 - **What a browser window's resize costs is unmeasured.** Patch 0054 stops the
   shell's frame waiting for a `<webview>` to draw at each new size, as it never
   waited for an `<app>`; no guard times a resize of either, so "it is as fluid
