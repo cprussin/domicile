@@ -905,6 +905,10 @@ the *attribute* when you navigate: on a browser without the fork the property
 is a value hung off an unknown element, and the DOM goes on reporting the
 address the window opened at.
 
+**It never shows `domicile://`.** A guest there would hold the shell's origin,
+and with it the compositor. Such an address — or a `blob:` the shell minted —
+shows `about:blank#blocked` instead.
+
 **Give it a size.** It is a replaced element with an intrinsic size, so a view
 left to itself is 300×150 inside however large a window you put it in.
 

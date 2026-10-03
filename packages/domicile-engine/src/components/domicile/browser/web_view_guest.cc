@@ -24,6 +24,7 @@
 #include "base/task/thread_pool.h"
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/web_view_url.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/document_service.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/stop_find_action.h"
+#include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -561,12 +563,19 @@ void WebViewGuest::Navigate(const GURL& url) {
   // the attach whether or not it has been anywhere.
   CHECK(guest_contents_);
 
-  // NOT VALIDATED HERE, and that is deliberate rather than missed. The only
-  // document that can reach this is the shell's, and the shell can already ask
-  // the compositor to run a command on the machine; a scheme allowlist in
-  // front of a page that holds `Spawn` would protect nothing. What keeps this
-  // safe is the binder, and it is the same one ControlChannel has.
-  content::NavigationController::LoadURLParams params(url);
+  // ONE REFUSAL, AND IT IS NOT FOR THE SHELL'S SAKE. Only the shell's
+  // document reaches this, and it already holds `Spawn` -- but the addresses it
+  // hands over are often a page's (`target="_blank"`) or an extension's
+  // (`tabs.update`), and a guest on domicile:// would be a second shell for
+  // them. Refused the way content refuses a page an address it may not ask
+  // for: the guest shows about:blank#blocked, so an address bar names it.
+  const bool may_show = MayShowInWebView(url);
+  if (!may_show) {
+    LOG(WARNING) << "domicile: a <webview> may not show "
+                 << url.possibly_invalid_spec() << "; it is blocked.";
+  }
+  content::NavigationController::LoadURLParams params(
+      may_show ? url : GURL(content::kBlockedURL));
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   guest_contents_->GetController().LoadURLWithParams(params);
 }
