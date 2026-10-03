@@ -365,6 +365,7 @@ if wanted engine; then
       scripts/engine-guard-extension-tray.sh \
       scripts/engine-guard-webview-keyboard.sh \
       scripts/engine-guard-webview-escape.sh \
+      scripts/engine-guard-webview-browser-page.sh \
       scripts/engine-guard-webview-history.sh \
       scripts/engine-guard-webview-find.sh \
       scripts/engine-guard-webview-click.sh \
