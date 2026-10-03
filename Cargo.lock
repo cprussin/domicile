@@ -443,6 +443,7 @@ name = "domicile-launch"
 version = "0.0.0"
 dependencies = [
  "libc",
+ "notify",
  "serde",
  "serde_json",
  "tempfile",

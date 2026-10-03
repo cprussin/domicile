@@ -26,6 +26,7 @@ use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
+use domicile_launch::config_watch;
 use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
@@ -225,7 +226,7 @@ fn as_shell(heard: BuilderHeard) -> Result<Shell, String> {
 }
 
 /// The JSON the module config at `config` evaluates to, by the builder.
-fn evaluated(binary: &Path, config: &Path) -> Result<PathBuf, String> {
+fn evaluated_json(binary: &Path, config: &Path) -> Result<PathBuf, String> {
     match built(
         binary,
         &["--evaluate".into(), config.as_os_str().to_os_string()],
@@ -304,7 +305,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let binary = std::env::current_exe().map_err(|why| format!("cannot find myself: {why}"))?;
     let (compositor_config, named) = match config.path() {
         Some(path) if is_module(path) => (
-            Some(evaluated(&binary, path)?),
+            Some(evaluated_json(&binary, path)?),
             Some((path.display().to_string(), beside(path))),
         ),
         Some(path) => (
@@ -388,8 +389,36 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // display the compositor will bind does not exist yet, and a desktop
     // cannot be named after something that has not happened.
     let control = take(&places.control).map_err(|why| why.to_string())?;
-    answering(&control, module, places.command.clone())?;
+    let serving = Arc::new(Mutex::new(module));
+    answering(&control, Arc::clone(&serving), places.command.clone())?;
     println!("{VARIABLE}={}", places.control.display());
+
+    // A MODULE CONFIG IS WATCHED, and so is everything beside it: an edit is
+    // evaluated again into the file the compositor reads — which it watches —
+    // and, where the config is the shell, built again and loaded. A failure is
+    // said and leaves the desk as it was.
+    let compositor_config = match (config.path(), compositor_config) {
+        (Some(module_config), Some(evaluated)) if is_module(module_config) => {
+            let stable = runtime.join("config.json");
+            std::fs::copy(&evaluated, &stable)
+                .map_err(|why| format!("cannot place the evaluated config: {why}"))?;
+            Some(stable)
+        }
+        (_, other) => other,
+    };
+    let _watching = match config.path() {
+        Some(module_config) if is_module(module_config) => Some(watching_the_config(
+            &binary,
+            module_config,
+            compositor_config
+                .clone()
+                .expect("a module config was evaluated"),
+            shell
+                .is_none()
+                .then(|| (Arc::clone(&serving), places.command.clone())),
+        )?),
+        _ => None,
+    };
 
     let platform = platform(
         env("OZONE").as_deref(),
@@ -714,12 +743,15 @@ const CLEANLY: &str = "exit status: 0";
 /// answering for a desktop that no longer exists. Read out before the line is
 /// answered and written after the engine has taken it, so the dial never
 /// happens with the lock held.
-fn answering(control: &Control, module: PathBuf, engine: PathBuf) -> Result<(), String> {
+fn answering(
+    control: &Control,
+    serving: Arc<Mutex<PathBuf>>,
+    engine: PathBuf,
+) -> Result<(), String> {
     let listener = control
         .listener()
         .map_err(|why| format!("cannot answer the control socket: {why}"))?;
     std::thread::spawn(move || {
-        let serving = Mutex::new(module);
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
@@ -741,6 +773,49 @@ fn answering(control: &Control, module: PathBuf, engine: PathBuf) -> Result<(), 
         }
     });
     Ok(())
+}
+
+/// Watch the module config at `config` and everything beside it: evaluate an
+/// edit again into `evaluated`, which the compositor reads and watches, and —
+/// with `shell`, the module being served and the engine's socket — build the
+/// config again as the shell and load it.
+fn watching_the_config(
+    binary: &Path,
+    config: &Path,
+    evaluated: PathBuf,
+    shell: Option<(Arc<Mutex<PathBuf>>, PathBuf)>,
+) -> Result<config_watch::Watching, String> {
+    let binary = binary.to_path_buf();
+    let module_config = config.to_path_buf();
+    config_watch::watch(&beside(config), Duration::from_millis(250), move || {
+        let reloaded = reevaluated(&binary, &module_config, &evaluated).and_then(|()| {
+            shell.as_ref().map_or(Ok(()), |(serving, engine)| {
+                built(
+                    &binary,
+                    &["--entry".into(), module_config.clone().into_os_string()],
+                )
+                .and_then(as_shell)
+                .and_then(|page| load_the_shell(engine, &page.root, &page.module, serving))
+            })
+        });
+        match reloaded {
+            Ok(()) => eprintln!("domicile: {} reloaded", module_config.display()),
+            Err(why) => eprintln!(
+                "domicile: {} did not reload, and the desk is as it was: {why}",
+                module_config.display()
+            ),
+        }
+    })
+}
+
+/// Evaluate `config` again and put the result at `evaluated`, whole: written
+/// beside it and renamed over, so the compositor never reads half of one.
+fn reevaluated(binary: &Path, config: &Path, evaluated: &Path) -> Result<(), String> {
+    let fresh = evaluated_json(binary, config)?;
+    let staged = evaluated.with_extension("json.next");
+    std::fs::copy(&fresh, &staged)
+        .and_then(|_| std::fs::rename(&staged, evaluated))
+        .map_err(|why| format!("cannot place the evaluated config: {why}"))
 }
 
 /// The module this desktop is serving as of this command.

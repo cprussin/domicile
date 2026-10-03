@@ -130,9 +130,11 @@ only builds.
 - **Types come from the Rust schema**: `schemars` emits a JSON Schema, published
   for the JSON config's `$schema`, and the TS types in `@domicile/sdk/config`
   are generated from it.
-- **The supervisor watches** the config and its local imports, rebuilds both
-  halves, then reloads the compositor's config and runs `load-shell`. The
-  compositor stops watching files.
+- **`domicile` watches a module config** and everything in its directory but
+  `node_modules` and dot directories: an edit is evaluated again into
+  `<runtime>/config.json` — the stable path the compositor was handed, and
+  watches as it watches any config — and, where the config is the shell, built
+  again and loaded. A failure is said, and the desk stays as it was.
 
 ### Keybindings are the shell's
 
@@ -243,8 +245,9 @@ Phase 3: the config.
       given none
 - [x] `keybindings`, `modes` and `shells` go from the config
 - [x] the TS config evaluated to JSON by the builder
-- [ ] the supervisor watches and reloads both halves. The compositor stops
-      watching. A failure becomes a notification
+- [x] `domicile` watches a module config and reloads both halves
+      (`config_watch`, `test-a-config-module-reloads.sh`)
+- [ ] a failed reload as a notification, not only a line on stderr
 - [ ] `nix/home-manager.nix` writes `domicile.json`, or builds a TS config
       directory with `bun2nix`
 - [ ] TOML deleted. KEYBINDINGS.md, THE-DOMICILE-BINARY.md, WRITING-A-SHELL.md
