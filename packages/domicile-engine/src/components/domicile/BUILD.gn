@@ -243,11 +243,13 @@ source_set("shortcut_registry") {
 
 # What a shell's answer to a <webview>'s file chooser means to the browser: a
 # home-relative path resolved, a count checked against what was asked, and an
-# `accept` list turned into the extensions a picker can match a name against.
+# `accept` list -- or a dialog's file types -- turned into the extensions a
+# picker can match a name against.
 #
 # Its own target beside :web_view_guest because it is the part of choosing a
 # file that needs no browser, which is where its tests are. //net for the MIME
-# table and nothing of //content.
+# table, //ui/shell_dialogs for the dialogs a desk answers with a picker, and
+# nothing of //content.
 source_set("file_choice") {
   sources = [
     "browser/file_choice.cc",
@@ -257,6 +259,7 @@ source_set("file_choice") {
   public_deps = [
     "//base",
     "//components/domicile/mojom",
+    "//ui/shell_dialogs",
   ]
 
   deps = [ "//net" ]

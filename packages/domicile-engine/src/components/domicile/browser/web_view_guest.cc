@@ -377,6 +377,24 @@ void DownloadPathChosen(
   std::move(chosen).Run(resolved->front());
 }
 
+// The shell's answer to a dialog the browser would have drawn, handed back to
+// the dialog. See WebViewGuest::ChooseFiles.
+void DialogFilesChosen(
+    mojom::WebViewFileChooserMode mode,
+    base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)> chosen,
+    const std::optional<std::vector<std::string>>& paths) {
+  if (!paths.has_value()) {
+    std::move(chosen).Run(std::nullopt);
+    return;
+  }
+  std::optional<std::vector<base::FilePath>> resolved =
+      ChosenPaths(mode, *paths);
+  if (!resolved.has_value()) {
+    mojo::ReportBadMessage(kNotAnAnswer);
+  }
+  std::move(chosen).Run(std::move(resolved));
+}
+
 }  // namespace
 
 // static
@@ -513,6 +531,22 @@ void WebViewGuest::ChooseDownloadPath(
       base::GetHomeDir().AsUTF8Unsafe(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           HeldOpen(base::BindOnce(&DownloadPathChosen, std::move(chosen))),
+          std::nullopt));
+}
+
+void WebViewGuest::ChooseFiles(
+    mojom::WebViewFileChooserMode mode,
+    const std::vector<std::string>& accept,
+    const base::FilePath& suggested_path,
+    base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
+        chosen) {
+  // WRAPPED, for the reason ChooseDownloadPath's ask is: the dialog's caller
+  // holds its question open until it hears something.
+  client_->FileChooserRequested(
+      mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          HeldOpen(base::BindOnce(&DialogFilesChosen, mode, std::move(chosen))),
           std::nullopt));
 }
 

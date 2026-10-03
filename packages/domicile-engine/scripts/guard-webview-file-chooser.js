@@ -1,5 +1,6 @@
-// The shell guard-webview-upload.sh and guard-webview-download.sh drive: one
-// browser window, and an answer to whatever file its page asks for.
+// The shell guard-webview-upload.sh, guard-webview-download.sh and
+// guard-webview-save-picker.sh drive: one browser window, and an answer to
+// whatever file its page asks for.
 //
 // A module rather than a page for the reason every guard's shell is one: the
 // engine writes the document and loads exactly one module into it, and the

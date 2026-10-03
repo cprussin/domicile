@@ -1109,9 +1109,9 @@ script-closable page: one whose history is a single entry.
 
 ### A file the page asks for
 
-An `<input type="file">` clicked, or a download that needs somewhere to go —
-both a file picker, and a picker is yours to draw: the browser opens no dialog
-of its own. The element asks with `domicile-file-chooser`, and you answer on
+An `<input type="file">` clicked, a download that needs somewhere to go, a
+`showSaveFilePicker()`, the PDF viewer's save — each a file picker, and a
+picker is yours to draw: the browser opens no dialog of its own. The element asks with `domicile-file-chooser`, and you answer on
 the event.
 
 ```ts

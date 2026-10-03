@@ -5,6 +5,7 @@
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
@@ -73,6 +74,38 @@ std::vector<std::string> AcceptedExtensions(
       std::vector<base::FilePath::StringType> named;
       net::GetExtensionsForMimeType(lowered, &named);
       extensions.insert(extensions.end(), named.begin(), named.end());
+    }
+  }
+  return extensions;
+}
+
+mojom::WebViewFileChooserMode ModeForDialog(ui::SelectFileDialog::Type type) {
+  switch (type) {
+    case ui::SelectFileDialog::SELECT_OPEN_FILE:
+      return mojom::WebViewFileChooserMode::kOpen;
+    case ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE:
+      return mojom::WebViewFileChooserMode::kOpenMultiple;
+    case ui::SelectFileDialog::SELECT_FOLDER:
+    case ui::SelectFileDialog::SELECT_UPLOAD_FOLDER:
+    case ui::SelectFileDialog::SELECT_EXISTING_FOLDER:
+      return mojom::WebViewFileChooserMode::kOpenFolder;
+    case ui::SelectFileDialog::SELECT_SAVEAS_FILE:
+      return mojom::WebViewFileChooserMode::kSave;
+    case ui::SelectFileDialog::SELECT_NONE:
+      NOTREACHED() << "a file dialog was asked to select nothing";
+  }
+}
+
+std::vector<std::string> DialogExtensions(
+    const ui::SelectFileDialog::FileTypeInfo* types) {
+  if (types == nullptr || types->include_all_files) {
+    return {};
+  }
+  std::vector<std::string> extensions;
+  for (const std::vector<base::FilePath::StringType>& equivalent :
+       types->extensions) {
+    for (const base::FilePath::StringType& extension : equivalent) {
+      extensions.push_back(base::ToLowerASCII(extension));
     }
   }
   return extensions;
