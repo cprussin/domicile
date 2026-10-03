@@ -662,6 +662,7 @@ impl Host {
             | ChromeMessage::MoveAudioStream { .. }
             | ChromeMessage::SetAudioPort { .. }
             | ChromeMessage::SetAudioProfile { .. }
+            | ChromeMessage::WatchAudioLevels { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

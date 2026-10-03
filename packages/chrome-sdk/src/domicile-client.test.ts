@@ -151,6 +151,9 @@ class FakeHost implements DomicileHost {
   setAudioProfile(card: string, profile: string): void {
     this.calls.push(["setAudioProfile", card, profile]);
   }
+  watchAudioLevels(ids: readonly string[]): void {
+    this.calls.push(["watchAudioLevels", [...ids]]);
+  }
   themeCaptured(theme: Theme): void {
     this.calls.push(["themeCaptured", theme]);
   }
@@ -671,6 +674,23 @@ describe("DomicileClient", () => {
       ]);
     });
 
+    it("delivers the meters' levels", () => {
+      const seen: unknown[] = [];
+      domicile.on("audio_levels", (message) => {
+        seen.push(message);
+      });
+
+      host.dispatch(
+        "audiolevels",
+        Object.assign(new Event("audiolevels"), {
+          arrival: 0,
+          levels: [{ id: "input:mic", peak: 0.25 }],
+        }),
+      );
+
+      expect(seen).toStrictEqual([{ levels: new Map([["input:mic", 0.25]]) }]);
+    });
+
     it("delivers an address to open", () => {
       // `domicile open-url`, which is what `BROWSER` runs inside a desktop.
       // Through the hold like the rest: an app can open a link while the
@@ -972,6 +992,11 @@ describe("DomicileClient", () => {
       ]);
       domicile.setAudioProfile("card", "off");
       expect(host.lastCall()).toStrictEqual(["setAudioProfile", "card", "off"]);
+      domicile.watchAudioLevels(["input:mic"]);
+      expect(host.lastCall()).toStrictEqual([
+        "watchAudioLevels",
+        ["input:mic"],
+      ]);
 
       domicile.themeCaptured("light");
       expect(host.lastCall()).toStrictEqual(["themeCaptured", "light"]);

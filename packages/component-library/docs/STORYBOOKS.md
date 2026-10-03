@@ -52,8 +52,8 @@ The `title` MUST start with one of these prefixes (or live under
 
 | Category | Use for | Filed under it today |
 |---|---|---|
-| `Layout/` | Page structure and container components | Card, Provider, Screen |
-| `Navigation/` | Components for navigating between views | TabRail, Tabs |
+| `Layout/` | Page structure and container components | Accordion, Card, Provider, Screen |
+| `Navigation/` | Components for navigating between views | Drilldown, TabRail, Tabs |
 | `Forms & Inputs/` | Interactive input and control components | Button, Field, Input, Select, Slider, Textarea |
 | `Data Display/` | Components for presenting data | Avatar, Kbd |
 | `Overlays/` | Components that render over other content | ModalDialog, SlideOver |

@@ -2,7 +2,6 @@ import type { AudioDevice } from "@domicile/chrome-sdk/audio";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { AudioMessage } from "@domicile/chrome-sdk/host-message";
 import { Popover } from "@domicile/component-library/Popover";
-import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
 import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
 import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
@@ -12,10 +11,9 @@ import type { WheelEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
-import { grid } from "../../styled-system/patterns";
-import { Level } from "./Level";
 import { Mixer } from "./Mixer";
 import { watchAudio } from "./watch-audio";
+import type { watchAudioLevels } from "./watch-audio-levels";
 
 /** How far one notch of the wheel over the icon moves the volume. */
 const WHEEL_STEP = 0.05;
@@ -23,29 +21,31 @@ const WHEEL_STEP = 0.05;
 type Props = {
   /** Where the sound comes from and where a change is asked for. */
   domicile: DomicileClient;
-  /** The monitor this bar is on, which the whole mixer opens over. */
-  screen: string;
   /** How it is watched; injected so tests can drive a sound server. */
   watch?: typeof watchAudio | undefined;
+  /** How the meters are watched, likewise. */
+  watchLevels?: typeof watchAudioLevels | undefined;
 };
 
 /**
  * The desk's sound, on the bar: a speaker drawn as loud as the default output
- * is, which opens a panel of two sliders — that output and the default
- * microphone — and which the wheel turns without opening anything.
+ * is, which opens the whole mixer in a panel hung off the bar — and which the
+ * wheel turns without opening anything.
  *
- * **Everything else is one press further**: the panel's mixer button opens
- * the whole of it — every output and input, every stream playing and
- * recording, every card's profile — which is what pavucontrol was for. See
- * {@link Mixer}.
+ * The panel is {@link Mixer}: the default output and microphone first, with
+ * their meters, and everything else a section below them. It is metered only
+ * while it is open — the meters stop when it shuts, because metering a
+ * microphone records it.
  *
  * Nothing is drawn until the host has said the sound, which on a desk with no
  * sound server is never.
  */
-export const Volume = ({ domicile, screen, watch = watchAudio }: Props) => {
+export const Volume = ({
+  domicile,
+  watch = watchAudio,
+  watchLevels,
+}: Props) => {
   const [audio, setAudio] = useState<AudioMessage | undefined>(undefined);
-  const [mixing, setMixing] = useState(false);
-  const [panel, setPanel] = useState(false);
 
   useEffect(() => watch(domicile, setAudio), [domicile, watch]);
 
@@ -53,82 +53,28 @@ export const Volume = ({ domicile, screen, watch = watchAudio }: Props) => {
     return undefined;
   } else {
     const output = audio.outputs.find((device) => device.default);
-    const input = audio.inputs.find(
-      (device) => device.default && !device.monitor,
-    );
     return (
-      <>
-        <Popover
-          align="center"
-          onOpenChange={setPanel}
-          open={panel}
-          side="bottom"
-          tone="overPhoto"
-          trigger={
-            <button
-              aria-label={triggerLabel(output)}
-              className={triggerStyles}
-              onWheel={(event) => {
-                if (output !== undefined) {
-                  domicile.setAudioVolume(output.id, stepped(output, event));
-                }
-              }}
-              type="button"
-            >
-              <Speaker output={output} />
-            </button>
-          }
-        >
-          <span className={panelStyles}>
-            {output !== undefined && (
-              <Level
-                direction="output"
-                label="Volume"
-                level={output.volume}
-                muted={output.muted}
-                onLevel={(level) => {
-                  domicile.setAudioVolume(output.id, level);
-                }}
-                onMuted={(muted) => {
-                  domicile.setAudioMuted(output.id, muted);
-                }}
-              />
-            )}
-            {input !== undefined && (
-              <Level
-                direction="input"
-                label="Microphone"
-                level={input.volume}
-                muted={input.muted}
-                onLevel={(level) => {
-                  domicile.setAudioVolume(input.id, level);
-                }}
-                onMuted={(muted) => {
-                  domicile.setAudioMuted(input.id, muted);
-                }}
-              />
-            )}
-            <button
-              aria-label="All devices"
-              className={mixerStyles}
-              onClick={() => {
-                setPanel(false);
-                setMixing(true);
-              }}
-              type="button"
-            >
-              <SlidersHorizontalIcon size={15} />
-            </button>
-          </span>
-        </Popover>
-        <Mixer
-          audio={audio}
-          domicile={domicile}
-          onOpenChange={setMixing}
-          open={mixing}
-          screen={screen}
-        />
-      </>
+      <Popover
+        align="center"
+        side="bottom"
+        tone="overPhoto"
+        trigger={
+          <button
+            aria-label={triggerLabel(output)}
+            className={triggerStyles}
+            onWheel={(event) => {
+              if (output !== undefined) {
+                domicile.setAudioVolume(output.id, stepped(output, event));
+              }
+            }}
+            type="button"
+          >
+            <Speaker output={output} />
+          </button>
+        }
+      >
+        <Mixer audio={audio} domicile={domicile} watchLevels={watchLevels} />
+      </Popover>
     );
   }
 };
@@ -191,34 +137,4 @@ const triggerStyles = css({
   justifyContent: "center",
   padding: 0,
   transition: "background-color {durations.fast} {easings.default}",
-});
-
-// The sliders stacked, and the mixer's button beside them both.
-const panelStyles = grid({
-  "& > button:last-child": {
-    gridColumn: 2,
-    gridRow: "1 / span 2",
-  },
-  alignItems: "center",
-  columnGap: 2,
-  gridTemplateColumns: "1fr auto",
-  inlineSize: 64,
-  rowGap: 1,
-});
-
-const mixerStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
 });

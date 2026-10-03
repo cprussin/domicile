@@ -267,6 +267,18 @@ pub enum ChromeMessage {
     /// how a card turns on its HDMI output, or a headset its microphone.
     SetAudioProfile { card: String, profile: String },
 
+    /// Meter these devices and streams — [`AudioDevice::id`]s and
+    /// [`AudioStream::id`]s — and send their peaks as
+    /// [`HostMessage::AudioLevels`] until told otherwise.
+    ///
+    /// **A lease, not a switch.** A mixer sends this again every second while
+    /// it is on screen, and the compositor stops metering what nobody has
+    /// renewed for a few: metering a microphone records it, and a page that
+    /// went away without saying so must not leave one recording. An empty list
+    /// lets go at once. What every chrome on the desk asked for is metered,
+    /// and every chrome is told.
+    WatchAudioLevels { ids: Vec<String> },
+
     /// This page is holding its old frame for the theme it was told: turn the
     /// desk's windows over now.
     ///
@@ -916,6 +928,12 @@ pub enum HostMessage {
         cards: Vec<AudioCard>,
     },
 
+    /// How loud what a mixer asked to meter is now — see
+    /// [`ChromeMessage::WatchAudioLevels`]. Sent some twenty times a second
+    /// while anything is metered, and never otherwise. An id the sound server
+    /// has not been heard on yet is left out rather than sent as silence.
+    AudioLevels { levels: Vec<AudioLevel> },
+
     /// The desk's keybindings and each shell's settings, from the config.
     ///
     /// `keybindings` is `[keybindings]` and `[modes.*]`, which every shell
@@ -1258,6 +1276,16 @@ pub struct AudioDevice {
     pub ports: Vec<AudioChoice>,
     /// The [`AudioChoice::name`] of the port in use, if it has any.
     pub port: Option<String>,
+}
+
+/// One meter of a [`HostMessage::AudioLevels`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioLevel {
+    /// The [`AudioDevice::id`] or [`AudioStream::id`] it meters.
+    pub id: String,
+    /// The loudest sample since the last message, 0.0 through 1.0 of full
+    /// scale: linear, so a meter draws it in decibels if it likes.
+    pub peak: f64,
 }
 
 /// One port of an [`AudioDevice`] or one profile of an [`AudioCard`].
