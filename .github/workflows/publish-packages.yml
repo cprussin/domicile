@@ -1,7 +1,7 @@
 name: Publish packages
 
 # Every public `@domicile-desktop/*` package to npm, as an alpha of the commit:
-# `0.0.0-alpha-<sha>` under the `alpha` dist-tag. See
+# `0.0.0-alpha-<sha>` under the `latest` dist-tag. See
 # .github/scripts/publish-packages.sh.
 #
 # TRUSTED PUBLISHING, NO TOKEN. npm takes this workflow's OIDC token

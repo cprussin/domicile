@@ -176,9 +176,10 @@ compositor's notification server, which manganese shows as toasts.
 ### Published packages
 
 `@domicile-desktop/sdk`, `@domicile-desktop/component-library` and `@domicile-desktop/manganese`, on
-npm. Every merge to main publishes `0.0.0-alpha-<sha>` under the `alpha`
-dist-tag (`publish-packages.yml`), through npm's trusted publishing: no token,
-provenance attached. No semver until there is a release to version. The
+npm. Every merge to main publishes `0.0.0-alpha-<sha>` as `latest`
+(`publish-packages.yml`), through npm's trusted publishing: no token,
+provenance attached. `latest` rather than a tag of its own, because setting a
+tag as a version is published needs no permission beyond publishing. No semver until there is a release to version. The
 published copies are for editors and third-party shells. A build always aliases
 them to the running Domicile's.
 

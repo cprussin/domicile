@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Publish every public `@domicile-desktop/*` package to npm, as an alpha of this commit:
-# `0.0.0-alpha-<sha>` under the `alpha` dist-tag. No semver yet; a version
+# `0.0.0-alpha-<sha>` under the `latest` dist-tag. No semver yet; a version
 # names the commit it was built from.
 #
 # `bun pm pack` rather than `npm pack`, because bun is what rewrites
@@ -66,5 +66,5 @@ fi
 for package in "${PACKAGES[@]}"; do
   name="$(jq -r .name "packages/$package/package.json")"
   tarball="$OUT/$(tr -d @ <<<"$name" | tr / -)-$VERSION.tgz"
-  npm publish "$tarball" --tag alpha --access public --provenance
+  npm publish "$tarball" --tag latest --access public --provenance
 done
