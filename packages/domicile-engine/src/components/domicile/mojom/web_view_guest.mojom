@@ -393,7 +393,9 @@ interface WebViewGuestClient {
 interface WebViewGuest {
   // Load `url` in the guest, as a top-level navigation of the guest's own
   // page. This is what `src` does, and what it does instead of navigating the
-  // frame the element owns.
+  // frame the element owns. A domicile:// address is refused -- see
+  // components/domicile/browser/web_view_url.h -- and shows
+  // about:blank#blocked instead.
   Navigate(url.mojom.Url url);
 
   // The four controls a chrome's address bar has, on the guest's own
