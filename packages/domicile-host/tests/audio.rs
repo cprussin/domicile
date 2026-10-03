@@ -1,7 +1,12 @@
 //! The desk's sound, read off `pactl -f json` and asked of it in `pactl`'s own
 //! words.
 
-use domicile_host::audio::{announces_a_change, coalesce, reading, AudioError, Request};
+use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
+
+use domicile_host::audio::{
+    announces_a_change, coalesce, peak, reading, AudioError, LevelWatches, Meter, Request,
+};
 use domicile_protocol::{AudioCard, AudioChoice, AudioDevice, AudioStream};
 
 /// `pactl -f json info`, cut down to what is read.
@@ -12,7 +17,7 @@ const LIST: &str = r#"{
   "modules": [],
   "sinks": [
     {"index": 51, "name": "alsa_output.analog-stereo", "description": "Built-in Audio Analog Stereo",
-     "mute": false,
+     "mute": false, "monitor_source": "alsa_output.analog-stereo.monitor",
      "volume": {"front-left": {"value": 32768, "value_percent": "50%", "db": "-18.06 dB"},
                 "front-right": {"value": 39322, "value_percent": "60%", "db": "-13.31 dB"}},
      "properties": {},
@@ -439,4 +444,144 @@ fn only_the_mixers_own_things_are_news() {
         )));
     }
     assert!(!announces_a_change("not json"));
+}
+
+mod metering {
+    use super::*;
+
+    #[test]
+    fn an_output_is_metered_off_its_monitor_and_an_input_off_itself() {
+        let audio = reading(INFO, LIST).unwrap();
+
+        assert_eq!(
+            audio.meters.get("output:alsa_output.analog-stereo"),
+            Some(&Meter::Source("alsa_output.analog-stereo.monitor".into()))
+        );
+        assert_eq!(
+            audio.meters.get("input:alsa_input.analog-stereo"),
+            Some(&Meter::Source("alsa_input.analog-stereo".into()))
+        );
+        // An output whose monitor the server did not name has no meter.
+        assert_eq!(audio.meters.get("output:hdmi"), None);
+    }
+
+    #[test]
+    fn a_playback_stream_is_metered_off_the_stream_itself() {
+        let audio = reading(INFO, LIST).unwrap();
+
+        assert_eq!(audio.meters.get("playback:42"), Some(&Meter::Stream(42)));
+    }
+
+    /// Mono floats, a few hundred a second, tagged so the mixer does not list
+    /// its own meters as recordings.
+    #[test]
+    fn a_meter_records_mono_floats_and_names_itself() {
+        let common = [
+            "--raw",
+            "--format=float32le",
+            "--channels=1",
+            "--rate=1000",
+            "--latency-msec=30",
+            "--property=application.id=org.domicile.meter",
+        ];
+        assert_eq!(
+            Meter::Source("mic".into()).argv(),
+            [&["--device=mic"][..], &common[..]].concat()
+        );
+        assert_eq!(
+            Meter::Stream(42).argv(),
+            [&["--monitor-stream=42"][..], &common[..]].concat()
+        );
+    }
+
+    #[test]
+    fn the_meters_own_recordings_are_not_listed() {
+        let list = LIST.replace(
+            r#""source_outputs": ["#,
+            r#""source_outputs": [
+    {"index": 9, "source": 52, "mute": false, "volume": {"mono": {"value": 65536}},
+     "properties": {"application.id": "org.domicile.meter"}},"#,
+        );
+
+        let audio = reading(INFO, &list).unwrap();
+
+        assert_eq!(audio.recording.len(), 1);
+    }
+
+    #[test]
+    fn the_peak_is_the_loudest_sample_either_way() {
+        let samples: Vec<u8> = [0.1f32, -0.75, 0.5]
+            .iter()
+            .flat_map(|sample| sample.to_le_bytes())
+            .collect();
+
+        assert_eq!(peak(&samples), 0.75);
+        assert_eq!(peak(&[]), 0.0);
+    }
+
+    /// Clipped, because a float stream can carry more than full scale.
+    #[test]
+    fn the_peak_never_reads_past_full_scale() {
+        assert_eq!(peak(&1.5f32.to_le_bytes()), 1.0);
+    }
+}
+
+mod watching {
+    use super::*;
+
+    fn ids(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|id| (*id).to_string()).collect()
+    }
+
+    fn set(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|id| (*id).to_string()).collect()
+    }
+
+    #[test]
+    fn what_every_chrome_asked_for_is_metered() {
+        let now = Instant::now();
+        let mut watches = LevelWatches::default();
+
+        watches.watch(1, ids(&["output:a"]), now);
+        watches.watch(2, ids(&["input:b", "output:a"]), now);
+
+        assert_eq!(watches.watched(now), set(&["input:b", "output:a"]));
+    }
+
+    #[test]
+    fn a_chrome_asking_again_replaces_what_it_asked_for() {
+        let now = Instant::now();
+        let mut watches = LevelWatches::default();
+
+        watches.watch(1, ids(&["output:a"]), now);
+        watches.watch(1, ids(&["input:b"]), now);
+
+        assert_eq!(watches.watched(now), set(&["input:b"]));
+    }
+
+    #[test]
+    fn nothing_is_an_answer() {
+        let now = Instant::now();
+        let mut watches = LevelWatches::default();
+
+        watches.watch(1, ids(&["output:a"]), now);
+        watches.watch(1, Vec::new(), now);
+
+        assert_eq!(watches.watched(now), BTreeSet::new());
+    }
+
+    /// The lease: a page that went away without saying so stops being
+    /// metered, rather than leaving a microphone recording.
+    #[test]
+    fn a_watch_nobody_renewed_lapses() {
+        let then = Instant::now();
+        let mut watches = LevelWatches::default();
+        watches.watch(1, ids(&["input:mic"]), then);
+        watches.watch(2, ids(&["output:a"]), then + Duration::from_secs(2));
+
+        assert_eq!(
+            watches.watched(then + LevelWatches::LEASE + Duration::from_millis(1)),
+            set(&["output:a"])
+        );
+    }
 }

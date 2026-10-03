@@ -126,6 +126,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SetAudioPort(const std::string& id, const std::string& port) override;
   void SetAudioProfile(const std::string& card,
                        const std::string& profile) override;
+  void WatchAudioLevels(const std::vector<std::string>& ids) override;
   void ThemeCaptured(mojom::Theme theme) override;
   void GrabShortcut(mojom::ShortcutPtr shortcut) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;

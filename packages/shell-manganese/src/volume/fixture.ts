@@ -1,6 +1,9 @@
 import type { AudioDevice, AudioStream } from "@domicile/chrome-sdk/audio";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { AudioMessage } from "@domicile/chrome-sdk/host-message";
+import type {
+  AudioLevelsMessage,
+  AudioMessage,
+} from "@domicile/chrome-sdk/host-message";
 import { act } from "@testing-library/react";
 
 /** A device, with whatever a test says differently. */
@@ -98,7 +101,10 @@ export type Asked = readonly [method: string, ...args: unknown[]];
  */
 export const heldSound = () => {
   const listeners: ((audio: AudioMessage) => void)[] = [];
+  const meters: ((levels: AudioLevelsMessage) => void)[] = [];
   const asked: Asked[] = [];
+  /** Every set of ids the shell asked to meter, in order. */
+  const metered: (readonly string[])[] = [];
   const record =
     (method: string) =>
     (...args: unknown[]) => {
@@ -113,7 +119,19 @@ export const heldSound = () => {
       setAudioProfile: record("setAudioProfile"),
       setAudioVolume: record("setAudioVolume"),
       setDefaultAudioDevice: record("setDefaultAudioDevice"),
+      watchAudioLevels: (ids: readonly string[]) => {
+        metered.push(ids);
+      },
     } as unknown as DomicileClient,
+    /** The compositor saying how loud each metered id is. */
+    levels: (levels: ReadonlyMap<string, number>) => {
+      act(() => {
+        for (const onLevels of meters) {
+          onLevels({ levels });
+        }
+      });
+    },
+    metered,
     report: (audio: AudioMessage) => {
       act(() => {
         for (const onAudio of listeners) {
@@ -126,6 +144,13 @@ export const heldSound = () => {
       onAudio: (audio: AudioMessage) => void,
     ) => {
       listeners.push(onAudio);
+      return () => undefined;
+    },
+    watchLevels: (
+      _domicile: DomicileClient,
+      onLevels: (levels: AudioLevelsMessage) => void,
+    ) => {
+      meters.push(onLevels);
       return () => undefined;
     },
   };
