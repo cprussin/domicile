@@ -28,7 +28,7 @@ const manganeseIn = (domicile: string): string =>
  * **Manganese's styles are built here**, by Panda over manganese's own config:
  * Panda's `css()` only names classes, and the build that scans a call is what
  * writes its rule. `files`, the user's own, are scanned beside manganese's, so
- * a `css()` from `@domicile/shell-manganese/css` in them has its rule too.
+ * a `css()` from `@domicile/manganese/css` in them has its rule too.
  */
 export const bundle = async (
   entry: string,
@@ -98,7 +98,7 @@ const fromDomicile = (domicile: string): Plugin => {
     resolveId(source, importer) {
       if (!FROM_DOMICILE.test(source) || importer?.startsWith(ours)) {
         return null;
-      } else if (source === "@domicile/shell-manganese") {
+      } else if (source === "@domicile/manganese") {
         return anchor;
       } else {
         return this.resolve(source, anchor, { skipSelf: true });

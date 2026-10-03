@@ -1,7 +1,7 @@
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import type { Extension } from "@domicile/chrome-sdk/extension";
-import type { TrayItem } from "@domicile/chrome-sdk/tray";
 import { Screen } from "@domicile/component-library/Screen";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import type { Extension } from "@domicile/sdk/extension";
+import type { TrayItem } from "@domicile/sdk/tray";
 
 import type { TopBarLayout } from "../top-bar/layout";
 import { TopBar } from "../top-bar/TopBar";

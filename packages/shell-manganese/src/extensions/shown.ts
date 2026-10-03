@@ -1,4 +1,4 @@
-import type { Extension } from "@domicile/chrome-sdk/extension";
+import type { Extension } from "@domicile/sdk/extension";
 
 /** The actions the tray draws: every one but those `action.disable()` turned off. */
 export const shownInTray = (

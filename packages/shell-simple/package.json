@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@domicile/chrome-sdk": "workspace:*",
+    "@domicile/sdk": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

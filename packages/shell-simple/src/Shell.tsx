@@ -1,12 +1,12 @@
 // The whole of this shell: an `<app>` per client the host announces, moved and
 // resized on the Alt key, and a terminal on Alt+Enter.
 
-import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
-import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
-import { focusApp } from "@domicile/chrome-sdk/focus-app";
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
+import { APP_TAG_NAME } from "@domicile/sdk/app-element";
+import { bindKeys } from "@domicile/sdk/bind-keys";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
+import { focusApp } from "@domicile/sdk/focus-app";
+import { KeyAction } from "@domicile/sdk/key-action";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
 import type { CSSProperties, PointerEvent } from "react";
 import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
 

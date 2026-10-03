@@ -3,7 +3,7 @@
 #
 #   nix develop .#full -c ./scripts/test-out-of-tree-shell.sh
 #
-# Nothing inside the workspace can check this. In here `@domicile/chrome-sdk`
+# Nothing inside the workspace can check this. In here `@domicile/sdk`
 # resolves to a symlinked directory of TypeScript source, `catalog:` and
 # `workspace:*` mean something, and every package shares one `node_modules` —
 # so a shell in `packages/` builds whether or not the SDK is consumable
@@ -41,11 +41,11 @@ echo "== packing the SDK =="
 # Under the fork a shell is a built web page and the SDK is the whole of its
 # dependency on Domicile.
 ( cd "$ROOT/packages/chrome-sdk" && bun run build >/dev/null 2>&1 ) || {
-  echo "FAIL: @domicile/chrome-sdk would not build"; exit 1; }
+  echo "FAIL: @domicile/sdk would not build"; exit 1; }
 ( cd "$ROOT/packages/chrome-sdk" && bun pm pack --destination "$WORK" >/dev/null 2>&1 ) || {
-  echo "FAIL: @domicile/chrome-sdk would not pack"; exit 1; }
+  echo "FAIL: @domicile/sdk would not pack"; exit 1; }
 
-SDK="$(ls "$WORK"/domicile-chrome-sdk-*.tgz 2>/dev/null | head -1)"
+SDK="$(ls "$WORK"/domicile-sdk-*.tgz 2>/dev/null | head -1)"
 [ -n "$SDK" ] || { echo "FAIL: the SDK did not pack into a tarball"; exit 1; }
 
 # A published manifest that still says `catalog:` installs nowhere. Checked on
@@ -98,7 +98,7 @@ rm -rf "$SHELL_DIR/node_modules" "$SHELL_DIR/.vite"
 
 # Point the copy at the tarball, in place of the published range it carries.
 # Rewritten rather than `bun add`ed: adding resolves every *existing* dependency
-# first, and the example names `@domicile/chrome-sdk` by a version that is only
+# first, and the example names `@domicile/sdk` by a version that is only
 # on npm once it is released — so the add fails on a 404 before it ever looks at
 # the file it was given. The example keeps the real range because it is what a
 # shell author writes.
@@ -108,7 +108,7 @@ import json, sys
 path, sdk = sys.argv[1], sys.argv[2]
 with open(path) as f:
     package = json.load(f)
-package["dependencies"]["@domicile/chrome-sdk"] = f"file:{sdk}"
+package["dependencies"]["@domicile/sdk"] = f"file:{sdk}"
 with open(path, "w") as f:
     json.dump(package, f, indent=2)
 PYTHON

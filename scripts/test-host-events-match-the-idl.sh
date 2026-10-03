@@ -3,7 +3,7 @@
 #
 # `navigator.domicile` fires five typed event interfaces. What they carry is
 # declared twice: once in WebIDL, where Blink generates the bindings from it,
-# and once in `@domicile/chrome-sdk`'s `domicile-host.ts`, where a shell reads
+# and once in `@domicile/sdk`'s `domicile-host.ts`, where a shell reads
 # it. Nothing makes the two agree, and neither half can notice on its own:
 #
 #   an attribute added to the IDL and not to the SDK is a value a shell cannot

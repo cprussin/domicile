@@ -34,10 +34,10 @@ compositor ─▶ keymap.rs: every keysym → evdev key ─▶ shell_config { ke
 | Piece | Where | Does |
 |---|---|---|
 | the table | `domicile-compositor` (`keymap.rs`, `shell_config.rs`) | each keysym the configured layout types, and the lowest key it is on |
-| wire | `HostMessage::ShellConfig { keys }` / `@domicile/chrome-sdk/protocol` | the table, on connecting and when a reload moves the keyboard |
+| wire | `HostMessage::ShellConfig { keys }` / `@domicile/sdk/protocol` | the table, on connecting and when a reload moves the keyboard |
 | transport | engine `control_channel.cc` → `DomicileShellConfigEvent` | the line verbatim as `config: string` |
-| chords | `@domicile/chrome-sdk/own-keybindings` | the grammar, resolved against the table; a bad chord or an untypeable keysym throws |
-| dispatch | `@domicile/chrome-sdk/bind-keys` | claims every chord, matches presses in the current mode, runs `Mode`, hands `SendShell` on |
+| chords | `@domicile/sdk/own-keybindings` | the grammar, resolved against the table; a bad chord or an untypeable keysym throws |
+| dispatch | `@domicile/sdk/bind-keys` | claims every chord, matches presses in the current mode, runs `Mode`, hands `SendShell` on |
 
 **Chord**: `+`-separated modifiers (`Meta`/`Super`/`Logo`/`Mod4`, `Shift`,
 `Ctrl`/`Control`, `Alt`/`Mod1`, any case), then one xkb keysym name. Modifiers

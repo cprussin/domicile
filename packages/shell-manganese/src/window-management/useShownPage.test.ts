@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WEBVIEW_PAGE_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_PAGE_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 import { act, renderHook } from "@testing-library/react";
 
 import { ConnectionSafety } from "../address/connection-safety";

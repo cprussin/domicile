@@ -1,4 +1,4 @@
-import type { FoundFilesMessage } from "@domicile/chrome-sdk/host-message";
+import type { FoundFilesMessage } from "@domicile/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**

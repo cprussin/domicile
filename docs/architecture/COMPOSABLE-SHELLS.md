@@ -175,10 +175,12 @@ compositor's notification server, which manganese shows as toasts.
 
 ### Published packages
 
-`@domicile/sdk` (today `@domicile/chrome-sdk`), `@domicile/component-library`,
-`@domicile/manganese` (today `@domicile/shell-manganese`), on npm, versioned
-with Domicile's releases. The published copies are for editors and third-party
-shells. A build always aliases them to the running Domicile's.
+`@domicile/sdk`, `@domicile/component-library` and `@domicile/manganese`, on
+npm. Every merge to main publishes `0.0.0-alpha-<sha>` under the `alpha`
+dist-tag (`publish-packages.yml`), through npm's trusted publishing: no token,
+provenance attached. No semver until there is a release to version. The
+published copies are for editors and third-party shells. A build always aliases
+them to the running Domicile's.
 
 ## Key decisions
 
@@ -230,7 +232,7 @@ Phase 2: `domicile` builds.
 
 - [x] `packages/domicile-builder`: resolve, install, alias, style, bundle,
       cache, progress lines
-- [x] a user's own Panda `css()`: `@domicile/shell-manganese/{css,jsx,patterns,tokens}`
+- [x] a user's own Panda `css()`: `@domicile/manganese/{css,jsx,patterns,tokens}`
       export manganese's `styled-system`, and the builder adds the user's files
       to the build's `include`
 - [x] `shell_source` resolves every specifier above. `@domicile/*` resolves in
@@ -258,5 +260,6 @@ Phase 3: the config.
 
 Phase 4: published.
 
-- [ ] the renames, `publishConfig`, and a release job publishing every
-      `@domicile/*` package on a Domicile release
+- [x] the renames (`@domicile/sdk`, `@domicile/manganese`), `publishConfig`,
+      and `publish-packages.yml`: an alpha of every merge, trusted publishing
+      (`test-publish-packages.sh`)

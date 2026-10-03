@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { APP_TAG_NAME } from "@domicile/chrome-sdk/app-element";
-import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import { APP_TAG_NAME } from "@domicile/sdk/app-element";
+import type { DomicileClient } from "@domicile/sdk/domicile-client";
 import type {
   HostMessageOf,
   HostMessageType,
   ShellConfigMessage,
-} from "@domicile/chrome-sdk/host-message";
-import { KeyAction } from "@domicile/chrome-sdk/key-action";
-import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
+} from "@domicile/sdk/host-message";
+import { KeyAction } from "@domicile/sdk/key-action";
+import type { ShellKeybindings } from "@domicile/sdk/own-keybindings";
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { Shell } from "./Shell";

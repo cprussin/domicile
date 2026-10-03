@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { Theme } from "@domicile/component-library/theme-core";
+import { DomicileClient } from "@domicile/sdk/domicile-client";
 import type {
   DomicileDisplay,
   DomicileHost,
   DomicileHostEventMap,
-} from "@domicile/chrome-sdk/domicile-host";
-import type { Theme } from "@domicile/component-library/theme-core";
+} from "@domicile/sdk/domicile-host";
 
 import { hostTheme } from "./host-theme";
 

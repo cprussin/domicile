@@ -44,7 +44,7 @@ pub enum ChromeError {
 /// socket — so the window is narrower than it was — but it is not closed: the
 /// join happens inside the `hello` arm and the `welcome` is written after that
 /// arm returns, so a broadcast the handshake itself set off can still reach
-/// the socket ahead of the reply. `@domicile/chrome-sdk` dispatches on type
+/// the socket ahead of the reply. `@domicile/sdk` dispatches on type
 /// and holds what arrives early for the page; this does the same, and a
 /// stand-in that insisted on position would fail a test about the desktop with
 /// a complaint about a greeting.

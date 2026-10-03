@@ -12,7 +12,7 @@
   "description": "Builds a shell module from a user's TypeScript or JavaScript entry: installs what it imports, bundles it against Domicile's own packages, and caches the result.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
-    "@domicile/shell-manganese": "workspace:*",
+    "@domicile/manganese": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },

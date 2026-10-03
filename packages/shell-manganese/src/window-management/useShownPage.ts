@@ -1,4 +1,4 @@
-import { WEBVIEW_PAGE_CHANGE_EVENT } from "@domicile/chrome-sdk/webview-element";
+import { WEBVIEW_PAGE_CHANGE_EVENT } from "@domicile/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 import {
