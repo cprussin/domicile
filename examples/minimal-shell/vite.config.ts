@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 
 // The page, and the whole of this shell's build.
 //
-// Three things here are not vite's defaults, and Domicile needs all three —
+// Four things here are not vite's defaults, and Domicile needs all four —
 // /docs/WRITING-A-SHELL.md#bundling says why each one, and what fails quietly
 // without it:
 //
@@ -11,10 +11,12 @@ import { defineConfig } from "vite";
 //                 file nothing loads
 //   its name      fixed rather than hashed, because `shell.js` is a path
 //                 somebody types and a hash changes every build
+//   its exports   kept: an app build drops them, and `Shell` is what Domicile
+//                 calls
 //   base "./"     so the emitted URLs are relative to the document Domicile
 //                 writes rather than to a server root
 //
-// There is no CSS in this shell, so there is no fourth thing. A shell with a
+// There is no CSS in this shell, so there is no fifth thing. A shell with a
 // stylesheet has to fold it back into the bundle — vite extracts it and
 // expects a document to `<link>` it, and there is no link.
 export default defineConfig({
@@ -24,6 +26,7 @@ export default defineConfig({
     rollupOptions: {
       input: "src/index.ts",
       output: { entryFileNames: "shell.js" },
+      preserveEntrySignatures: "exports-only",
     },
   },
 });

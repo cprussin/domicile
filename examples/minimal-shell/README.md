@@ -35,10 +35,11 @@ emit to `.d.ts`, or a `catalog:` that survived into a published manifest.
 
 | File | What |
 |---|---|
-| `src/index.ts` | The page: mount an `<app>` per announced app. The whole of this shell's behavior — and the whole shell. |
+| `src/index.ts` | `Shell`: mount an `<app>` per announced app. The whole of this shell's behavior — and the whole shell. |
 
 One file, and that is the point. The engine is the display compositor,
-Domicile starts it and writes the document, so a shell is a module.
+Domicile starts it and writes the document, so a shell is a module whose
+`Shell` export Domicile calls.
 
 ## Building and running it
 

@@ -35,11 +35,12 @@ const cssInTheModule = (): Plugin => ({
 });
 
 // Domicile writes the document and serves this directory, so the shell is built
-// from its entry module rather than from an `index.html`. Three things here are
+// from its entry module rather than from an `index.html`. Four things here are
 // not vite's defaults and each fails quietly: the `.tsx` entry, the fixed
 // `shell.js` name (the module Domicile is given is a path somebody types, and a
-// content hash in it changes every build), and `base: "./"` so the emitted URLs
-// are relative to the document rather than to a server root.
+// content hash in it changes every build), the entry's exports kept (an app
+// build drops them, and `Shell` with them), and `base: "./"` so the emitted
+// URLs are relative to the document rather than to a server root.
 export default defineConfig({
   base: "./",
   build: {
@@ -47,6 +48,7 @@ export default defineConfig({
     rollupOptions: {
       input: "src/index.tsx",
       output: { entryFileNames: "shell.js" },
+      preserveEntrySignatures: "exports-only",
     },
     sourcemap: true,
   },

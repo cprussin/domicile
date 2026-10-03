@@ -25,6 +25,9 @@ It provides these:
   `window.domicile` itself. One message is not the compositor's: `open_url` is
   an address `domicile open-url` asked the desktop to open — what `BROWSER`
   runs inside it. Opening it is the shell's.
+- **`Shell`** (`./shell`) — the type of a shell module's `Shell` export: what
+  Domicile calls, once, with the element to draw in. A module without one is
+  refused on the screen.
 - **`registerElements`** (`./register-elements`) — the input routing behind the
   engine's `<app>` tag. It forwards the pointer over a window to the client
   underneath in that client's own surface coordinates, and routes the page's

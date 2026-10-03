@@ -35,105 +35,110 @@
 //
 // The page in the window says what it got for itself; see
 // guard-webview-file-chooser-server.py.
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-/**
- * A query parameter this cannot run without. Missing means the guard invoked
- * this wrongly, and a default would turn that into a measurement of something
- * nobody asked for.
- */
-const required = (parameters, name) => {
-  const value = parameters.get(name);
-  if (value === null) {
-    throw new Error(`guard-webview-file-chooser: ?${name}= is required`);
-  } else {
-    return value;
-  }
-};
+export const Shell = () => {
+  /**
+   * A query parameter this cannot run without. Missing means the guard invoked
+   * this wrongly, and a default would turn that into a measurement of something
+   * nobody asked for.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-webview-file-chooser: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
 
-const say = (what) => {
-  console.log(`GUARD ${what}`);
-};
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
 
-const parameters = new URLSearchParams(location.search);
-const answer = required(parameters, "answer");
+  const parameters = new URLSearchParams(location.search);
+  const answer = required(parameters, "answer");
 
-// The shell's own half of the window, above the element. See
-// guard-webview-new-window.js for why a guard has one.
-const stripHeight = `${required(parameters, "strip")}px`;
-const strip = document.createElement("div");
-strip.style.position = "absolute";
-strip.style.insetBlockStart = "0";
-strip.style.insetInline = "0";
-strip.style.inlineSize = "100%";
-strip.style.blockSize = stripHeight;
-strip.style.background = "#204060";
+  // The shell's own half of the window, above the element. See
+  // guard-webview-new-window.js for why a guard has one.
+  const stripHeight = `${required(parameters, "strip")}px`;
+  const strip = document.createElement("div");
+  strip.style.position = "absolute";
+  strip.style.insetBlockStart = "0";
+  strip.style.insetInline = "0";
+  strip.style.inlineSize = "100%";
+  strip.style.blockSize = stripHeight;
+  strip.style.background = "#204060";
 
-// THE QUESTION, and the answer. Taken with `preventDefault()` in both runs, so
-// that the control differs from the claim in the answer and in nothing else:
-// a control that left the event alone would be measuring the element's own
-// cancel for an untaken event, which is a different claim.
-document.addEventListener("domicile-file-chooser", (event) => {
-  say(
-    `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")}`,
-  );
-  event.preventDefault();
-  const listing = parameters.get("list");
-  if (listing === null) {
-    answerIt(event);
-  } else {
-    event.list(`${event.home}/${listing}`).then(
-      (entries) => {
-        say(`listed ${entries.toSorted().join(",")}`);
-        answerIt(event);
-      },
-      (error) => {
-        say(`list-refused ${error.name}`);
-      },
+  // THE QUESTION, and the answer. Taken with `preventDefault()` in both runs, so
+  // that the control differs from the claim in the answer and in nothing else:
+  // a control that left the event alone would be measuring the element's own
+  // cancel for an untaken event, which is a different claim.
+  document.addEventListener("domicile-file-chooser", (event) => {
+    say(
+      `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")}`,
     );
-  }
-});
-
-/** Answer `event` as `?answer=` says, and say so. */
-const answerIt = (event) => {
-  switch (answer) {
-    case "choose": {
-      event.choose([required(parameters, "pick")]);
-      break;
-    }
-    case "cancel": {
-      event.cancel();
-      break;
-    }
-    default: {
-      throw new Error(
-        `guard-webview-file-chooser: ?answer=${answer} is not one`,
+    event.preventDefault();
+    const listing = parameters.get("list");
+    if (listing === null) {
+      answerIt(event);
+    } else {
+      event.list(`${event.home}/${listing}`).then(
+        (entries) => {
+          say(`listed ${entries.toSorted().join(",")}`);
+          answerIt(event);
+        },
+        (error) => {
+          say(`list-refused ${error.name}`);
+        },
       );
     }
-  }
-  say("answered");
+  });
+
+  /** Answer `event` as `?answer=` says, and say so. */
+  const answerIt = (event) => {
+    switch (answer) {
+      case "choose": {
+        event.choose([required(parameters, "pick")]);
+        break;
+      }
+      case "cancel": {
+        event.cancel();
+        break;
+      }
+      default: {
+        throw new Error(
+          `guard-webview-file-chooser: ?answer=${answer} is not one`,
+        );
+      }
+    }
+    say("answered");
+  };
+
+  // The harness's own reading: a press that landed in this document, which is
+  // what makes every absence below a measurement.
+  document.addEventListener("mousedown", (event) => {
+    say(`chrome-mousedown target=${event.target.localName}`);
+  });
+
+  document.body.style.margin = "0";
+  document.body.append(strip);
+
+  // Sized rather than stretched between insets -- see guard-webview-new-window.js
+  // for the 300x150 that taught every guard here to.
+  const view = document.createElement("webview");
+  view.style.position = "absolute";
+  view.style.insetBlockStart = stripHeight;
+  view.style.insetInline = "0";
+  view.style.inlineSize = "100%";
+  view.style.blockSize = `calc(100% - ${stripHeight})`;
+  view.style.border = "0";
+  document.body.append(view);
+  // Last: `src` is what makes a <webview> ask for a guest, and there has to be a
+  // frame in the document to attach one to.
+  view.setAttribute("src", required(parameters, "src"));
+
+  say("shell-loaded");
 };
-
-// The harness's own reading: a press that landed in this document, which is
-// what makes every absence below a measurement.
-document.addEventListener("mousedown", (event) => {
-  say(`chrome-mousedown target=${event.target.localName}`);
-});
-
-document.body.style.margin = "0";
-document.body.append(strip);
-
-// Sized rather than stretched between insets -- see guard-webview-new-window.js
-// for the 300x150 that taught every guard here to.
-const view = document.createElement("webview");
-view.style.position = "absolute";
-view.style.insetBlockStart = stripHeight;
-view.style.insetInline = "0";
-view.style.inlineSize = "100%";
-view.style.blockSize = `calc(100% - ${stripHeight})`;
-view.style.border = "0";
-document.body.append(view);
-// Last: `src` is what makes a <webview> ask for a guest, and there has to be a
-// frame in the document to attach one to.
-view.setAttribute("src", required(parameters, "src"));
-
-say("shell-loaded");

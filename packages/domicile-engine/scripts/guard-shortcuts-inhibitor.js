@@ -22,5 +22,10 @@
 //                        and not a reading: every claim this guard makes is
 //                        measured on the wire between the browser and the host,
 //                        which a page can neither see nor reach
+//
+// Everything is inside `Shell`, which the document Domicile writes calls once
+// the module has loaded.
 
-console.log("GUARD shell-loaded");
+export const Shell = () => {
+  console.log("GUARD shell-loaded");
+};
