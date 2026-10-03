@@ -61,9 +61,15 @@ class Host implements DomicileHost {
   readonly pointerLeave = ignored;
   readonly pointerMotion = ignored;
   readonly previewFile = ignored;
+  readonly moveAudioStream = ignored;
   readonly searchFiles = ignored;
   readonly searchApps = ignored;
+  readonly setAudioMuted = ignored;
+  readonly setAudioPort = ignored;
+  readonly setAudioProfile = ignored;
+  readonly setAudioVolume = ignored;
   readonly setBrightness = ignored;
+  readonly setDefaultAudioDevice = ignored;
   readonly setDesktopSize = ignored;
   readonly setDevicePixelRatio = ignored;
   readonly setTheme = ignored;

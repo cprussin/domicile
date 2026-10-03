@@ -28,6 +28,7 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
+import { laptop } from "./volume/fixture";
 import { TITLE_BAR } from "./window-management/rect";
 import {
   movingStyles,
@@ -1000,6 +1001,14 @@ describe("Shell", () => {
       expect(
         screen.getByRole("button", { name: "Brightness 60%" }),
       ).toBeVisible();
+    });
+
+    it("shows the volume the host says", () => {
+      renderShell();
+
+      domicile.emit("audio", laptop);
+
+      expect(screen.getByRole("button", { name: "Volume 50%" })).toBeVisible();
     });
 
     it("draws no meter for a machine the host says nothing about", () => {
