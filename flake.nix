@@ -774,9 +774,11 @@
       #
       # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
       # module sets only a few things outside its own namespace --
-      # `home.packages`, `xdg.configFile` and `xdg.mimeApps` -- so declaring
-      # those is the whole of what it takes to evaluate it. Taking home-manager as a flake input to check one
-      # module would put its whole closure behind every `nix flake check`, and
+      # `home.packages` and `xdg.configFile` -- so declaring those is the
+      # whole of what it takes to evaluate it. `xdg.mimeApps` is left out on
+      # purpose: the module setting it is an evaluation error here. Taking
+      # home-manager as a flake input to check one module would put its whole
+      # closure behind every `nix flake check`, and
       # a stub that has drifted fails loudly here rather than silently passing.
       checks.${system}.home-manager-module =
         let
@@ -790,14 +792,6 @@
                 type = lib.types.attrsOf (lib.types.submodule {
                   options.source = pkgs.lib.mkOption { type = pkgs.lib.types.path; };
                 });
-                default = { };
-              };
-              xdg.mimeApps.enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-              };
-              xdg.mimeApps.defaultApplications = lib.mkOption {
-                type = lib.types.attrsOf (lib.types.listOf lib.types.str);
                 default = { };
               };
             };
@@ -950,18 +944,24 @@
           saw "open-url https://example.com" open-url https://example.com
 
           # THE DEFAULT BROWSER, which is what keeps other programs from asking
-          # to be it: every web link is `domicile-open-url`'s.
-          [ '${builtins.toJSON evaluated.config.xdg.mimeApps}' = \
-            '${builtins.toJSON {
-              enable = true;
-              defaultApplications = pkgs.lib.genAttrs
-                [ "text/html" "x-scheme-handler/http" "x-scheme-handler/https" ]
-                (_: [ "domicile-open-url.desktop" ]);
-            }}' ] || {
-            echo "the module did not make domicile-open-url the default browser:" >&2
-            echo '${builtins.toJSON evaluated.config.xdg.mimeApps}' >&2
-            exit 1
-          }
+          # to be it: every web link is `domicile-open-url`'s -- in a desk only.
+          # The file is `domicile-mimeapps.list`, which `xdg-open`, GIO and the
+          # portal read only where `XDG_CURRENT_DESKTOP` is `domicile`; outside
+          # one `domicile-open-url` has no desktop to ask, so the plain
+          # `mimeapps.list` is not this module's to write.
+          cp ${evaluated.config.xdg.configFile."domicile-mimeapps.list".source} mimeapps.list
+          for line in \
+            '[Default Applications]' \
+            'text/html=domicile-open-url.desktop' \
+            'x-scheme-handler/http=domicile-open-url.desktop' \
+            'x-scheme-handler/https=domicile-open-url.desktop'
+          do
+            grep -qxF "$line" mimeapps.list || {
+              echo "domicile-mimeapps.list is missing: $line" >&2
+              cat mimeapps.list >&2
+              exit 1
+            }
+          done
 
           touch "$out"
         '';

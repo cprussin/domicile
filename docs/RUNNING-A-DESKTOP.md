@@ -262,10 +262,12 @@ baked into `domicile` so it is not typed twice:
 }
 ```
 
-It also makes `domicile-open-url` the default browser — the handler for web
-links in `mimeapps.list` — so `xdg-open` opens links in the desk and programs
-stop asking to be the default. `programs.domicile.defaultBrowser = false`
-leaves `mimeapps.list` alone.
+It also makes `domicile-open-url` the default browser inside a desk — the
+handler for web links in `~/.config/domicile-mimeapps.list`, which is read only
+where `XDG_CURRENT_DESKTOP` is `domicile` — so `xdg-open` opens links in the
+desk and programs stop asking to be the default, while another session on the
+same home keeps the browser `mimeapps.list` names.
+`programs.domicile.defaultBrowser = false` writes no such file.
 
 It writes the config and installs no session — booting into a desk is a
 machine's decision, not a home directory's. For the same reason it declares no

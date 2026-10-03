@@ -210,11 +210,12 @@ in {
 
     defaultBrowser = lib.mkOption {
       description = ''
-        Make `domicile-open-url` the default browser: the handler for web
-        links in `mimeapps.list`, which `xdg-open` reads and which programs
-        check before asking to be the default themselves. Inside a desktop a
-        link then opens in a browser window of that desktop; `BROWSER` is set
-        to the same program there whatever this says.
+        Make `domicile-open-url` the default browser inside a desktop: the
+        handler for web links in `domicile-mimeapps.list`, which `xdg-open`
+        reads and which programs check before asking to be the default
+        themselves. A link then opens in a browser window of that desktop;
+        `BROWSER` is set to the same program there whatever this says. Other
+        sessions keep the browser `mimeapps.list` names.
       '';
       type = lib.types.bool;
       default = true;
@@ -605,12 +606,19 @@ in {
       toml.generate "domicile.toml" (withoutNulls cfg.settings);
 
     # The desktop entry is the package's own, installed with it above.
-    xdg.mimeApps = lib.mkIf cfg.defaultBrowser {
-      enable = true;
-      defaultApplications =
-        lib.genAttrs
-        ["text/html" "x-scheme-handler/http" "x-scheme-handler/https"]
-        (_: ["domicile-open-url.desktop"]);
+    #
+    # `domicile-mimeapps.list`, NOT `mimeapps.list`: `xdg-open`, GIO and the
+    # portal read it ahead of the plain one only where `XDG_CURRENT_DESKTOP`
+    # is `domicile`, which the compositor sets for everything it starts.
+    # `domicile-open-url` has no desktop to ask outside one, so the same home
+    # booted into another session keeps that session's browser.
+    xdg.configFile."domicile-mimeapps.list" = lib.mkIf cfg.defaultBrowser {
+      source = (pkgs.formats.ini {}).generate "domicile-mimeapps.list" {
+        "Default Applications" =
+          lib.genAttrs
+          ["text/html" "x-scheme-handler/http" "x-scheme-handler/https"]
+          (_: "domicile-open-url.desktop");
+      };
     };
   };
 }
