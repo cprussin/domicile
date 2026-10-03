@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::components::{components, Components};
+use domicile_launch::components::{builder, components, our_shell, Components};
 
 fn nothing(_: &str) -> Option<String> {
     None
@@ -102,4 +102,43 @@ fn a_missing_sibling_names_what_is_missing_and_how_to_say_where_it_is() {
         refused.to_string().contains("/usr/bin/domicile-compositor"),
         "{refused}"
     );
+}
+
+#[test]
+fn the_builder_is_beside_the_engine_or_where_the_environment_says() {
+    let beside = |path: &Path| path == Path::new("/usr/libexec/domicile/builder");
+    assert_eq!(
+        builder(Path::new("/usr/bin/domicile"), &nothing, &beside),
+        Ok(PathBuf::from("/usr/libexec/domicile/builder"))
+    );
+    let named = |name: &str| (name == "DOMICILE_BUILDER").then(|| "/src/builder.sh".to_string());
+    assert_eq!(
+        builder(Path::new("/usr/bin/domicile"), &named, &|_| false),
+        Ok(PathBuf::from("/src/builder.sh"))
+    );
+}
+
+#[test]
+fn a_missing_builder_names_where_it_looked() {
+    let missing = builder(Path::new("/usr/bin/domicile"), &nothing, &|_| false).unwrap_err();
+    assert_eq!(
+        missing.looked,
+        PathBuf::from("/usr/libexec/domicile/builder")
+    );
+    assert_eq!(missing.variable, "DOMICILE_BUILDER");
+}
+
+#[test]
+fn domicile_s_own_shell_is_its_prebuilt_directory() {
+    let built = |path: &Path| path == Path::new("/usr/libexec/domicile/shells/manganese/shell.js");
+    assert_eq!(
+        our_shell(
+            Path::new("/usr/bin/domicile"),
+            "manganese",
+            &nothing,
+            &built
+        ),
+        Ok(PathBuf::from("/usr/libexec/domicile/shells/manganese"))
+    );
+    assert!(our_shell(Path::new("/usr/bin/domicile"), "nickel", &nothing, &built).is_err());
 }

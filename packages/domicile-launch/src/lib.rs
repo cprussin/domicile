@@ -41,6 +41,7 @@
 
 pub mod address;
 pub mod arguments;
+pub mod build_progress;
 pub mod cli;
 pub mod command;
 pub mod command_socket;
@@ -57,6 +58,7 @@ pub mod profile_path;
 pub mod restart;
 pub mod session;
 pub mod shell_path;
+pub mod shell_source;
 pub mod spawn;
 pub mod supervise;
 pub mod xdg_open;

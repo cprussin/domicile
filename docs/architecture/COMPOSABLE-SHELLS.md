@@ -227,10 +227,11 @@ Phase 2: `domicile` builds.
       cache, progress lines
 - [ ] a user's own Panda `css()`: an export of manganese's `styled-system`,
       and the user's files in the build's `include`
-- [ ] `shell_path` resolves every specifier above. `@domicile/*` resolves in
+- [x] `shell_source` resolves every specifier above. `@domicile/*` resolves in
       Rust with no subprocess
-- [ ] the progress bar in `domicile`. Startup blocks on the first build
-- [ ] Bun and the prebuilt `@domicile/*` packages in the flake's install
+- [x] the progress bar in `domicile`. Startup blocks on the first build
+- [x] the builder and Domicile's prebuilt shells in the flake's install
+      (`libexec/domicile/{builder,shells}`, `.#builder`)
 
 Phase 3: the config.
 

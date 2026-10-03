@@ -64,8 +64,10 @@ The modules, and the split is by what each needs to be tested:
 | Module | Pure? | What |
 |---|---|---|
 | `cli` | yes | the arguments, and every refusal a bad one earns |
-| `components` | yes | the engine and the compositor, from the binary's own path or the environment |
+| `components` | yes | the engine and the compositor, from the binary's own path or the environment; the builder and Domicile's own shells, when a shell needs them |
 | `shell_path` | yes | a name or a path to a module → the module to load, and the directory it is served out of |
+| `shell_source` | yes | what a shell argument is: a module, an entry to build, one of Domicile's own, or a package |
+| `build_progress` | yes | the builder's lines, read, and the bar a terminal shows |
 | `platform` | yes | `OZONE` / `WAYLAND_DISPLAY` / `DISPLAY` / `XDG_VTNR` → the ozone platform (a console login takes `drm` on its own), or the refusal that names what to do instead |
 | `control` | yes | what a running desktop can be asked, and what it answers — with the one command it routes rather than answers taking the dial as an argument |
 | `command` | yes | what the engine can be told about the shell it serves: the line, its version, and the reply |
@@ -100,12 +102,16 @@ thin enough to read.
 
 ## Key decisions
 
-- **`domicile` builds nothing.** It requires both its components and names the
-  missing one; whatever built them ran first. The rejected alternative was a
-  developer's convenience — an unset `DOMICILE_COMPOSITOR` meaning "build it
-  with cargo", an unset page meaning "build a workspace shell with turbo" —
-  which puts a build in the entry point every user runs and leaves it needing
-  a checkout to make sense of itself.
+- **`domicile` builds nothing of its own; a shell it is handed, it has
+  built.** Its components are required and the missing one is named — no
+  cargo, no turbo, no checkout. A shell is the exception, because a user's
+  shell is a file of theirs rather than a project: an entry (`./desk.tsx`, a
+  `.js` that imports a package) or a package (`my-shell`, `github:me/shell`)
+  goes to the builder beside it, `libexec/domicile/builder`, which says its
+  steps as JSON lines that `domicile` draws as a bar. A bundle, or one of
+  Domicile's own (`@domicile/manganese`, prebuilt under
+  `libexec/domicile/shells`), starts nothing. See
+  [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
 
 - **There is no watch mode.** A bundler in the supervisor is the same mistake
   one level up. Instead the desktop takes commands, the way `swaymsg` sends
@@ -203,6 +209,8 @@ thin enough to read.
   <prefix>/bin/domicile
   <prefix>/bin/domicile-compositor
   <prefix>/libexec/domicile/engine/     the Chromium tree, `chrome` inside it
+  <prefix>/libexec/domicile/builder     builds a shell from an entry or a package
+  <prefix>/libexec/domicile/shells/     Domicile's own shells, prebuilt
   ```
 
   `current_exe()` on Linux reads `/proc/self/exe`, which resolves symlinks —
