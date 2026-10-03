@@ -51,6 +51,32 @@ describe("removed", () => {
     expect(focusedIdOf(removed(ROW, "a"))).toBe("b");
   });
 
+  describe("in a tab stack", () => {
+    const tabs = (layout: Layout) => ({
+      depth: 1,
+      root: LayoutNode.Container(
+        layout,
+        [
+          LayoutNode.Window("a"),
+          LayoutNode.Window("b"),
+          LayoutNode.Window("c"),
+        ],
+        1,
+      ),
+    });
+
+    it("hands the focus to the tab before", () => {
+      expect(focusedIdOf(removed(tabs(Layout.Tabbed), "b"))).toBe("a");
+      expect(focusedIdOf(removed(tabs(Layout.Stacking), "b"))).toBe("a");
+    });
+
+    it("falls back to the one after when the first tab closed", () => {
+      expect(
+        focusedIdOf(removed(withFocusOn(tabs(Layout.Tabbed), "a"), "a")),
+      ).toBe("b");
+    });
+  });
+
   it("flattens a container left holding one window", () => {
     // Which is i3's own rule: a container of one is not a layout, it is a
     // window with a box drawn round it.

@@ -1,7 +1,12 @@
 // A window leaving the tree, and what the layout around it collapses into.
 
 import type { Container, LayoutNode } from "./node";
-import { LayoutNode as Node, NodeKind, renormalized } from "./node";
+import {
+  LayoutNode as Node,
+  NodeKind,
+  renormalized,
+  showsOneChild,
+} from "./node";
 import type { Path } from "./path";
 import { pathTo } from "./path";
 import type { Tiling } from "./tiling";
@@ -82,7 +87,7 @@ const collapsed = (
     return Node.Container(
       container.layout,
       children,
-      focusAfter(container.focused, index, children.length),
+      focusAfter(container, index, children.length),
       renormalized(container.fractions.filter((_, at) => at !== index)),
     );
   }
@@ -91,15 +96,27 @@ const collapsed = (
 /**
  * Which child the focus lands on once the one at `removed` is gone.
  *
- * The next window along, which is the same index once the list has closed up,
- * and the one before it where there is no next. A focus that was somewhere
- * else entirely follows its own child.
+ * In a split, the next window along, which is the same index once the list
+ * has closed up, and the one before it where there is no next. In a tab
+ * stack it is the other way round: the tab before, and the next only when the
+ * first tab closed. A focus that was somewhere else entirely follows its own
+ * child.
  */
 const focusAfter = (
-  focused: number,
+  { focused, layout }: Container,
   removed: number,
   length: number,
-): number => (removed < focused ? focused - 1 : Math.min(focused, length - 1));
+): number => {
+  if (removed < focused) {
+    return focused - 1;
+  } else if (removed > focused) {
+    return focused;
+  } else {
+    return showsOneChild(layout)
+      ? Math.max(focused - 1, 0)
+      : Math.min(focused, length - 1);
+  }
+};
 
 const childAt = (container: Container, index: number): LayoutNode => {
   const child = container.children[index];
