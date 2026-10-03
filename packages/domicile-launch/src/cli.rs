@@ -22,12 +22,14 @@ use crate::control::Request;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CliError {
     #[error(
-        "which shell? Give the JavaScript module your shell built:\n\n    \
-         domicile ./my-desktop/dist/shell.js\n\n\
-         Your monitors come from ~/.config/domicile/domicile.toml, or from \
-         --config <path>.\n\
+        "which shell? Give one, or name it in your config:\n\n    \
+         domicile ./my-desktop/dist/shell.js\n    \
+         domicile @domicile/manganese\n\n\
+         A config is ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json,toml}}, or \
+         --config <path>: a module's `Shell` export, or a JSON config's \
+         \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <path>, or open-url <url>.\n"
+         load-shell <shell>, or open-url <url>.\n"
     )]
     NoShell,
     #[error(
@@ -85,7 +87,8 @@ pub enum Invocation {
     /// else to look is a question about the machine rather than about the
     /// words somebody typed.
     Run {
-        shell: String,
+        /// The shell, or `None` for the one the config names.
+        shell: Option<String>,
         config: Option<PathBuf>,
     },
     /// Ask the desktop that is already running.
@@ -138,7 +141,12 @@ pub enum Invocation {
 /// in is not a thing to be right about.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
-    let first = args.next().ok_or(CliError::NoShell)?;
+    let Some(first) = args.next() else {
+        return Ok(Invocation::Run {
+            shell: None,
+            config: None,
+        });
+    };
     if let Some(verb) = verb(&first) {
         return match verb {
             Verb::Asking(request) => match args.next() {
@@ -182,10 +190,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
         }
         word = args.next();
     }
-    Ok(Invocation::Run {
-        shell: shell.ok_or(CliError::NoShell)?,
-        config,
-    })
+    Ok(Invocation::Run { shell, config })
 }
 
 /// The flag that names the compositor's config file. The same spelling the

@@ -12,6 +12,9 @@ describe("line", () => {
     expect(line(Step.Built("/c/k", "shell.js", true))).toBe(
       '{"cached":true,"module":"shell.js","root":"/c/k","step":"built"}',
     );
+    expect(line(Step.Evaluated("/c/k.json", false))).toBe(
+      '{"cached":false,"config":"/c/k.json","step":"evaluated"}',
+    );
     expect(line(Step.Failed("no"))).toBe('{"step":"failed","why":"no"}');
   });
 });

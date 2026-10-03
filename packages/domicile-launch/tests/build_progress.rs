@@ -28,6 +28,10 @@ fn a_build_ends_with_the_module_or_why_not() {
         })
     );
     assert_eq!(
+        heard(r#"{"cached":false,"config":"/c/configs/k.json","step":"evaluated"}"#),
+        Heard::Evaluated(PathBuf::from("/c/configs/k.json"))
+    );
+    assert_eq!(
         heard(r#"{"step":"failed","why":"no file at /x"}"#),
         Heard::Failed("no file at /x".into())
     );

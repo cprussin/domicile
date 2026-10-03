@@ -12,8 +12,8 @@ import {
 } from "@domicile/manganese";
 import { GmailCount } from "./gmail-count";
 
-export const displays = [{ name: "eDP-1", scale: 2 }];
-export const extensions = { webStore: ["ddkjiahejlhfcafbddmgiahcphecmpfh"] };
+export const output = { displays: [{ name: "eDP-1", scale: 2 }] };
+export const extensions = { web_store: ["ddkjiahejlhfcafbddmgiahcphecmpfh"] };
 
 export const Shell = runManganese({
   keybindings: {
@@ -35,8 +35,8 @@ The same thing with the shell as shipped needs no JavaScript:
 
 ```json
 {
-  "displays": [{ "name": "eDP-1", "scale": 2 }],
-  "extensions": { "webStore": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] },
+  "output": { "displays": [{ "name": "eDP-1", "scale": 2 }] },
+  "extensions": { "web_store": ["ddkjiahejlhfcafbddmgiahcphecmpfh"] },
   "shell": "@domicile/manganese"
 }
 ```
@@ -114,16 +114,19 @@ only builds.
 
 `$XDG_CONFIG_HOME/domicile/domicile.{ts,tsx,js,json}`. Two of them are refused.
 
-| Export (TS) / key (JSON) | Read by | Today |
-|---|---|---|
-| `displays` | compositor | `[output]` |
-| `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine | the same TOML tables |
-| `Shell` (TS) / `shell` (JSON) | engine | the `domicile <shell>` argument |
-| *(gone)* | — | `[keybindings]`, `[modes]`, `[shells.*]`: props of the shell |
+| Export (TS) / key (JSON) | Read by |
+|---|---|
+| `output`, `extensions`, `input`, `idle`, `lock`, `theme`, `applications`, `files`, `startup` | compositor, engine: the schema TOML had, key for key |
+| `Shell` (TS) / `shell` (JSON) | `domicile`, when it is given no shell; a JSON `shell` is relative to the config |
+| `keybindings`, `modes`, `shells` | compositor, until they go: props of the shell |
 
-- **TS is evaluated to JSON by the builder**: import the module, take every
-  named export but `Shell`, `JSON.stringify`. The compositor only ever parses
-  JSON (`domicile-config`, the same structs, serde). It never runs JavaScript.
+- **TS is evaluated to JSON by the builder** (`--evaluate`): bundled for Bun
+  with `@domicile/*` and React from the install and stylesheets stubbed,
+  imported, every export but `Shell` written to
+  `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`, which is the path the
+  compositor is handed. The compositor parses JSON or TOML
+  (`domicile-config`, the same structs, by extension). It never runs
+  JavaScript.
 - **Types come from the Rust schema**: `schemars` emits a JSON Schema, published
   for the JSON config's `$schema`, and the TS types in `@domicile/sdk/config`
   are generated from it.
@@ -236,9 +239,11 @@ Phase 2: `domicile` builds.
 Phase 3: the config.
 
 - [ ] `schemars` schema and generated `@domicile/sdk/config` types
-- [ ] `domicile-config` parses JSON. `output` becomes `displays`;
-      `keybindings`, `modes` and `shells` go
-- [ ] the TS config evaluated to JSON by the builder
+- [x] `domicile-config` parses JSON; `domicile` finds
+      `domicile.{ts,tsx,js,mjs,json,toml}` and runs the config's shell when
+      given none
+- [ ] `keybindings`, `modes` and `shells` go from the config
+- [x] the TS config evaluated to JSON by the builder
 - [ ] the supervisor watches and reloads both halves. The compositor stops
       watching. A failure becomes a notification
 - [ ] `nix/home-manager.nix` writes `domicile.json`, or builds a TS config

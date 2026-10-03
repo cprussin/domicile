@@ -7,6 +7,7 @@ export enum StepKind {
   Installing,
   Bundling,
   Built,
+  Evaluated,
   Failed,
 }
 
@@ -20,6 +21,12 @@ export const Step = {
   }),
   /** Bundling the entry against Domicile's packages. */
   Bundling: () => ({ kind: StepKind.Bundling as const }),
+  /** The config evaluated: the compositor's sections, as JSON at `config`. */
+  Evaluated: (config: string, cached: boolean) => ({
+    cached,
+    config,
+    kind: StepKind.Evaluated as const,
+  }),
   /** The build failed, and why. */
   Failed: (why: string) => ({ kind: StepKind.Failed as const, why }),
   /** Installing the packages the entry imports that the project lacks. */
@@ -54,6 +61,13 @@ export const line = (step: Step): string => {
         module: step.module,
         root: step.root,
         step: "built",
+      });
+    }
+    case StepKind.Evaluated: {
+      return JSON.stringify({
+        cached: step.cached,
+        config: step.config,
+        step: "evaluated",
       });
     }
     case StepKind.Failed: {

@@ -15,16 +15,23 @@ fn a_shell_is_the_whole_command_line() {
         run(&["./my-desktop/dist/shell.js"]).unwrap(),
         Invocation::Run {
             config: None,
-            shell: "./my-desktop/dist/shell.js".to_string()
+            shell: Some("./my-desktop/dist/shell.js".to_string())
         }
     );
 }
 
 #[test]
-fn nothing_at_all_asks_which_shell() {
-    // Refused rather than defaulted. There is no shell this could mean, and a
-    // default would start somebody else's desktop.
-    assert_eq!(run(&[]), Err(CliError::NoShell));
+fn nothing_at_all_is_the_shell_the_config_names() {
+    // A config is a module, and its `Shell` -- or a JSON config's `shell` --
+    // is the desktop. Whether there is one is the run's to find out, from the
+    // config; a run that finds none refuses then.
+    assert_eq!(
+        run(&[]),
+        Ok(Invocation::Run {
+            config: None,
+            shell: None
+        })
+    );
 }
 
 #[test]
@@ -159,7 +166,7 @@ fn a_shell_whose_name_is_a_verb_is_still_reachable_as_a_path() {
         run(&["./which-shell"]).unwrap(),
         Invocation::Run {
             config: None,
-            shell: "./which-shell".to_string()
+            shell: Some("./which-shell".to_string())
         }
     );
 }
@@ -173,7 +180,7 @@ fn a_config_is_the_other_half_of_a_run() {
         run(&["./dist/shell.js", "--config", "/etc/domicile/desk.json"]).unwrap(),
         Invocation::Run {
             config: Some(PathBuf::from("/etc/domicile/desk.json")),
-            shell: "./dist/shell.js".to_string()
+            shell: Some("./dist/shell.js".to_string())
         }
     );
 }
@@ -188,7 +195,7 @@ fn the_config_may_come_before_the_shell() {
         run(&["--config", "/etc/domicile/desk.json", "./dist/shell.js"]).unwrap(),
         Invocation::Run {
             config: Some(PathBuf::from("/etc/domicile/desk.json")),
-            shell: "./dist/shell.js".to_string()
+            shell: Some("./dist/shell.js".to_string())
         }
     );
 }
@@ -225,7 +232,12 @@ fn two_configs_are_refused_and_the_second_is_named() {
 }
 
 #[test]
-fn a_shell_is_still_refused_when_only_a_config_was_given() {
-    // The flag is the other half of a run, not a run on its own.
-    assert_eq!(run(&["--config", "/a.json"]), Err(CliError::NoShell));
+fn a_config_alone_is_a_run_on_the_shell_it_names() {
+    assert_eq!(
+        run(&["--config", "/a.json"]),
+        Ok(Invocation::Run {
+            config: Some(PathBuf::from("/a.json")),
+            shell: None
+        })
+    );
 }

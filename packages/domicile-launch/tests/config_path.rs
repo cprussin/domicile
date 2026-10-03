@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::config_path::{config_file, ConfigFile};
+use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 
 /// The environment as a pair of variables, which is all this reads.
 fn env(xdg: Option<&'static str>, home: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
@@ -23,6 +23,9 @@ fn nothing(_: &Path) -> bool {
 }
 
 const DEFAULT: &str = "/home/somebody/.config/domicile/domicile.toml";
+
+/// Where a config lives, which is what an absent one names.
+const HOME_DIR: &str = "/home/somebody/.config/domicile";
 
 #[test]
 fn the_flag_wins_and_is_not_looked_for() {
@@ -91,7 +94,7 @@ fn no_file_there_is_the_defaults_and_says_where_it_looked() {
     // directory, so it names the one place that was looked.
     assert_eq!(
         config_file(None, &env(None, Some("/home/somebody")), &nothing),
-        ConfigFile::Absent(PathBuf::from(DEFAULT))
+        ConfigFile::Absent(PathBuf::from(HOME_DIR))
     );
 }
 
@@ -125,7 +128,7 @@ fn what_each_answer_is_run_with() {
         ConfigFile::Found(PathBuf::from(DEFAULT)).path(),
         Some(Path::new(DEFAULT))
     );
-    assert_eq!(ConfigFile::Absent(PathBuf::from(DEFAULT)).path(), None);
+    assert_eq!(ConfigFile::Absent(PathBuf::from(HOME_DIR)).path(), None);
     assert_eq!(ConfigFile::Nowhere.path(), None);
 }
 
@@ -144,12 +147,63 @@ fn every_answer_says_which_one_it_is() {
         format!("{DEFAULT}, found where a config lives")
     );
     assert_eq!(
-        ConfigFile::Absent(PathBuf::from(DEFAULT)).to_string(),
-        format!("none -- no {DEFAULT} -- so the compositor's defaults")
+        ConfigFile::Absent(PathBuf::from(HOME_DIR)).to_string(),
+        format!(
+            "none -- no domicile.{{ts,tsx,js,mjs,json,toml}} in {HOME_DIR} -- so \
+             the compositor's defaults"
+        )
     );
     assert_eq!(
         ConfigFile::Nowhere.to_string(),
         "none -- neither XDG_CONFIG_HOME nor HOME is set, so there is nowhere \
          to look -- so the compositor's defaults"
     );
+}
+
+#[test]
+fn a_config_is_a_module_or_json_as_much_as_toml() {
+    for name in [
+        "domicile.ts",
+        "domicile.tsx",
+        "domicile.js",
+        "domicile.mjs",
+        "domicile.json",
+    ] {
+        let path = format!("{HOME_DIR}/{name}");
+        assert_eq!(
+            config_file(
+                None,
+                &env(None, Some("/home/somebody")),
+                &|there: &Path| there == Path::new(&path)
+            ),
+            ConfigFile::Found(PathBuf::from(&path)),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn two_configs_where_one_lives_are_refused_by_name() {
+    // Which of the two is the desk is not a question this gets to answer.
+    let found = config_file(
+        None,
+        &env(None, Some("/home/somebody")),
+        &tree(&["/home/somebody/.config/domicile/domicile.tsx", DEFAULT]),
+    );
+    assert_eq!(
+        found,
+        ConfigFile::Several(vec![
+            PathBuf::from("/home/somebody/.config/domicile/domicile.tsx"),
+            PathBuf::from(DEFAULT),
+        ])
+    );
+    assert_eq!(found.path(), None);
+}
+
+#[test]
+fn a_module_config_is_one_to_evaluate() {
+    assert!(is_module(Path::new("/x/domicile.tsx")));
+    assert!(is_module(Path::new("/x/domicile.js")));
+    assert!(!is_module(Path::new("/x/domicile.json")));
+    assert!(!is_module(Path::new("/x/domicile.toml")));
 }

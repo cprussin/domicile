@@ -24,6 +24,8 @@ pub enum Heard {
     Step(Step),
     /// The module, and the directory it is served out of.
     Built(Shell),
+    /// A config module evaluated: the compositor's config, as JSON there.
+    Evaluated(PathBuf),
     /// The build failed, in the builder's words.
     Failed(String),
     /// Not a step: the build's own log.
@@ -37,6 +39,7 @@ enum Line {
     Installing { packages: Vec<String> },
     Bundling,
     Built { root: PathBuf, module: PathBuf },
+    Evaluated { config: PathBuf },
     Failed { why: String },
 }
 
@@ -47,6 +50,7 @@ pub fn heard(line: &str) -> Heard {
         Ok(Line::Installing { packages }) => Heard::Step(Step::Installing(packages)),
         Ok(Line::Bundling) => Heard::Step(Step::Bundling),
         Ok(Line::Built { root, module }) => Heard::Built(Shell { root, module }),
+        Ok(Line::Evaluated { config }) => Heard::Evaluated(config),
         Ok(Line::Failed { why }) => Heard::Failed(why),
         Err(_) => Heard::Log(line.to_string()),
     }
