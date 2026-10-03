@@ -243,10 +243,15 @@ describe("TitleBar", () => {
       }
     });
 
+    // But it takes the same room there, so opening a tab does not move its
+    // name and buttons down by the line it lost.
     it("is not drawn under a bar that is not such a tab", () => {
-      expect(
-        globalThis.getComputedStyle(under({})).borderBlockEndWidth,
-      ).not.toBe("1px");
+      const open = under({});
+
+      expect(globalThis.getComputedStyle(open).borderBlockEndWidth).toBe("1px");
+      expect(open.className).toContain(
+        css({ borderBlockEndColor: "transparent" }),
+      );
     });
   });
 

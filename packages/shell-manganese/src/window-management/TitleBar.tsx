@@ -328,13 +328,17 @@ const barStyles = cva({
     // and the line is that edge, in the open tab's color — the accent while
     // that window is being worked in, the resting edge otherwise. Every other
     // bar has none: the frame's line is one line, the bar carrying the top and
-    // the sides down to where the window picks them up.
+    // the sides down to where the window picks them up. It still takes the
+    // line's room, though, or opening a tab would move its contents down by it.
     openTab: {
       focused: {
         borderBlockEndColor: "accent",
         borderBlockEndWidth: "1px",
       },
-      none: { borderBlockEndWidth: 0 },
+      none: {
+        borderBlockEndColor: "transparent",
+        borderBlockEndWidth: "1px",
+      },
       resting: {
         borderBlockEndColor: "borderStrong",
         borderBlockEndWidth: "1px",
