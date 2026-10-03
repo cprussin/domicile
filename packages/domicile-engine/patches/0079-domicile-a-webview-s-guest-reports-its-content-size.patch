@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 2 Oct 2026 12:00:00 +0000
+Subject: [PATCH] domicile: a webview's guest reports its content size
+
+RenderFrameHostImpl::ContentsPreferredSizeChanged drops the report from
+any frame with an outer document, so a guest's main frame -- the primary
+main frame of an inner WebContents -- never reached
+WebContentsDelegate::UpdatePreferredSize, and WebViewGuest never heard
+the size the tray sizes an extension's popup from. Let that one frame
+through; a subframe, a fenced frame and a guest page holder's page are
+still ignored, as WebContentsImpl::UpdateWindowPreferredSize expects.
+
+Verified: not built. This repository cannot build Chromium;
+`guard-extension-tray.sh` measures it on `crux` with the rest of the
+engine job.
+---
+ content/browser/renderer_host/render_frame_host_impl.cc | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+index a23cfab..8f49a6e 100644
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -7625,8 +7625,11 @@ void RenderFrameHostImpl::ContentsPreferredSizeChanged(
+     return;
+   }
+ 
+-  // Ignore the request if we are aren't the outermost main frame.
+-  if (GetParentOrOuterDocument()) {
++  // Ignore the request if we are aren't the outermost main frame -- unless
++  // this is the primary main frame of an inner WebContents, which is what a
++  // Domicile <webview>'s guest is: its delegate is the guest's own, and an
++  // extension's popup in the tray is sized from this.
++  if (GetParentOrOuterDocument() && (GetParent() || !IsInPrimaryMainFrame())) {
+     return;
+   }
+ 

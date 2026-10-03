@@ -6,5 +6,9 @@
     <!-- A file rather than inline: an extension page's CSP runs no inline script. -->
     <script src="popup.js"></script>
   </head>
-  <body>the tray guard's popup</body>
+  <!-- A fixed size, which the <webview> must report as the content's:
+       guard-extension-tray.sh's WIDTH and HEIGHT. -->
+  <body style="margin: 0">
+    <div style="width: 230px; height: 170px">the tray guard's popup</div>
+  </body>
 </html>

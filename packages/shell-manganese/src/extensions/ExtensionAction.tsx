@@ -6,6 +6,7 @@ import { Popover } from "@domicile/component-library/Popover";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { useContentSize } from "./useContentSize";
 
 type Props = {
   /** What every click asks, popup or not. */
@@ -117,11 +118,16 @@ type PopupViewProps = {
  *
  * The view says `window.close()` as `domicile-close` and closes nothing
  * itself: it is this page's element, so taking it down is this page's answer.
+ *
+ * **Sized to its content**, as Chrome's popup bubble is, once the page says
+ * what that is: never bigger than `viewStyles`' box, which is also its size
+ * until then.
  */
 const PopupView = ({ onClose, popup }: PopupViewProps) => {
   // `null` rather than `undefined` because that is what React's ref API hands
   // a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
+  const size = useContentSize(view);
 
   useEffect(() => {
     if (view === null) {
@@ -134,7 +140,20 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
     }
   }, [onClose, view]);
 
-  return <webview className={viewStyles} ref={setView} src={popup} />;
+  return (
+    <webview
+      className={viewStyles}
+      ref={setView}
+      src={popup}
+      // Inline because it is the page's runtime size, which Panda cannot read.
+      // `viewStyles` caps it.
+      style={
+        size === undefined
+          ? undefined
+          : { blockSize: size.height, inlineSize: size.width }
+      }
+    />
+  );
 };
 
 // What the badge is placed against.
@@ -160,15 +179,16 @@ const badgeStyles = css({
   whiteSpace: "nowrap",
 });
 
-// A `<webview>` is a replaced element that is 300x150 left to itself, and an
-// extension's popup has no size to give this page — Chrome sizes its bubble to
-// the popup's document, which a guest does not report. So a fixed box, at the
-// size popups are laid out for — Bitwarden's is 380px wide — and short of
-// Chrome's 600px cap on a screen too short for it. Block, so no line box
+// A `<webview>` is a replaced element that is 300x150 left to itself, so a
+// box until the popup's page reports its size, and the most it may then grow
+// to: the size popups are laid out for — Bitwarden's is 380px wide — and short
+// of Chrome's 600px cap on a screen too short for it. Block, so no line box
 // leaves a gap under it in the flush panel.
 const viewStyles = css({
   blockSize: "min({spacing.150}, 80vh)",
   borderStyle: "none",
   display: "block",
   inlineSize: 100,
+  maxBlockSize: "min({spacing.150}, 80vh)",
+  maxInlineSize: 100,
 });
