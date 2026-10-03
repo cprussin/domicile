@@ -68,6 +68,9 @@ export const Monitor = ({
       focused={windows.focused === name}
       mode={windows.mode}
       onOpenExtension={onOpenExtension}
+      onOpenLauncher={() => {
+        act(WindowAction.LauncherToggled());
+      }}
       onOpenNotifications={notifications.onOpen}
       onSelectWorkspace={(workspace) => {
         act(WindowAction.WorkspaceSelected(workspace));

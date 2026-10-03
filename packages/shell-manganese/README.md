@@ -667,20 +667,16 @@ rather than showing an empty box.
 
 ## The top bar
 
-Across the top of every screen: the tray and the
+Across the top of every screen: the launcher's button, the tray and the
 workspaces, in that order, at one end, the clock in the middle, and at the other end the charge, behind the name
 of the binding mode whenever it is not the usual one, and last the bell. Each screen's bar marks the workspace that
 screen is showing, and they all show the ones with windows on them, because
 that is a fact about the desk.
 
-**It launches nothing.** Everything this desktop does is on a key, and the two
-buttons that were here — a terminal and a window of the shell's own — were a
-ranking of two of them that nobody made. `mod+Return` is still the terminal and
-`mod+Space` is the launcher, which is what starts an application or opens a
-window on a URL or a search;
-both are where sway's config puts them and so where a user of this desktop
-already looks. What the bar carries is what no key can be pressed to ask: which
-workspace this is, what time it is, and how much charge is left.
+**The launcher's button is first**, set a little apart from the tray so it
+does not read as one of its icons: the panel `mod+Space` opens, for a hand
+already on the pointer. The terminal has no button; it is `mod+Return`, where
+sway's config puts it.
 
 What is behind it is the wallpaper: the windows are laid out in what is *left*
 of the screen under it, so nothing else is. A window that covers it is one the

@@ -1020,22 +1020,31 @@ describe("Shell", () => {
       expect(screen.queryByRole("meter")).toBeNull();
     });
 
-    it("launches nothing: the keys are what does things to the desktop", () => {
-      // The two launchers were here and are not. `mod+Return` is still the
-      // terminal and `mod+Space` is the launcher, which is what opens a window
-      // on a URL or a search — and a bar with a button for two of the
-      // desktop's keys was a ranking of them that nobody made.
+    it("opens the launcher from the button left of the tray", () => {
+      // `mod+Space` is still the launcher's key; the button is the same
+      // panel for a hand already on the pointer.
+      renderShell();
+
+      fireEvent.click(screen.getByRole("button", { name: "Launcher" }));
+
+      expect(
+        screen.getByRole("combobox", {
+          name: "Open an app, a file, a URL, or search",
+        }),
+      ).toBeVisible();
+    });
+
+    it("has no button for the terminal: that is a key", () => {
       renderShell();
 
       expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
       expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
     });
 
-    it("carries the theme toggle, which launches nothing either", () => {
-      // The one control on the bar, and it is on the right side of the line
-      // above: it changes what is already on screen rather than opening
-      // something, and there is no key to press instead. Two positions and no
-      // `system` — this bar is the system.
+    it("carries the theme toggle", () => {
+      // It changes what is already on screen rather than opening something,
+      // and there is no key to press instead. Two positions and no `system` —
+      // this bar is the system.
       renderShell();
 
       expect(

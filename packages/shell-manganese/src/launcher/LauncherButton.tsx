@@ -1,0 +1,45 @@
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+
+import { css } from "../../styled-system/css";
+
+type Props = {
+  /** Open the launcher. */
+  onOpen: () => void;
+};
+
+/**
+ * The button at the bar's far start: the launcher, for a hand already on the
+ * pointer. `mod+Space` is the same panel.
+ */
+export const LauncherButton = ({ onOpen }: Props) => (
+  <button
+    aria-label="Launcher"
+    className={buttonStyles}
+    onClick={onOpen}
+    title="Launcher"
+    type="button"
+  >
+    <MagnifyingGlassIcon aria-hidden size={15} weight="bold" />
+  </button>
+);
+
+// The bell's shape: a round, borderless control in the bar's own white, lit on
+// hover. The margin is the gap from the tray beside it, on top of the bar's own.
+const buttonStyles = css({
+  _hover: {
+    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+  },
+  alignItems: "center",
+  backgroundColor: "transparent",
+  blockSize: 7,
+  borderRadius: "full",
+  borderStyle: "none",
+  cursor: "pointer",
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 7,
+  justifyContent: "center",
+  marginInlineEnd: 2,
+  padding: 0,
+  transition: "background-color {durations.fast} {easings.default}",
+});
