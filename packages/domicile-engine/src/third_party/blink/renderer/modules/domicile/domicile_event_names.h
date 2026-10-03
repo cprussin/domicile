@@ -49,6 +49,7 @@
   X(tray, Tray)                           \
   X(notifications, Notifications)         \
   X(shellconfig, Shellconfig)             \
+  X(audio, Audio)                         \
   X(openurl, Openurl)
 
 namespace blink::domicile_event_names {

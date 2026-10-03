@@ -179,6 +179,25 @@
   [CallWith=ScriptState, RaisesException] undefined setBrightness(
       double level);
 
+  // The mixer: set a device's or a stream's volume, a fraction of the sound
+  // server's 100%; mute it; make a device the default; move a stream to
+  // another device; switch a device's port or a card's profile. Each names
+  // what it acts on by an id an `audio` event carried, and each is a request
+  // like setBrightness(): answered with the next `audio` to every chrome. An
+  // id the compositor never gave out does nothing but say so in its log.
+  [CallWith=ScriptState, RaisesException] undefined setAudioVolume(
+      DOMString id, double volume);
+  [CallWith=ScriptState, RaisesException] undefined setAudioMuted(
+      DOMString id, boolean muted);
+  [CallWith=ScriptState, RaisesException] undefined setDefaultAudioDevice(
+      DOMString id);
+  [CallWith=ScriptState, RaisesException] undefined moveAudioStream(
+      DOMString id, DOMString device);
+  [CallWith=ScriptState, RaisesException] undefined setAudioPort(
+      DOMString id, DOMString port);
+  [CallWith=ScriptState, RaisesException] undefined setAudioProfile(
+      DOMString card, DOMString profile);
+
   // This page's old frame is held for `theme`: turn the desk's windows now.
   //
   // Called from inside a shell's wipe, once the frame it wipes away from is
@@ -394,6 +413,11 @@
   // like ontheme -- once more to a page that has only just connected, and again
   // whenever a reload of the compositor's config moved what it carries.
   attribute EventHandler onshellconfig;
+
+  // The desk's sound, as a DomicileAudioEvent: every device, stream and card,
+  // whenever the sound server says something moved and once more when this
+  // page connects. Never on a desk with no sound server.
+  attribute EventHandler onaudio;
 
   // The desk's notifications, as a DomicileNotificationsEvent: every one not
   // yet cleared, whenever any of them changes and once more when this page

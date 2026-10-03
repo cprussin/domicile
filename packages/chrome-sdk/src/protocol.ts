@@ -566,6 +566,51 @@ export const shellConfigSchema = z.looseObject({
   type: z.literal("shell_config"),
 });
 
+// The desk's sound, whole every time: every device, stream and card the
+// sound server has. Pushed like the tray. A desk with no sound server sends
+// none.
+const audioChoiceSchema = z.looseObject({
+  available: z.boolean(),
+  description: z.string(),
+  name: z.string(),
+});
+
+const audioDeviceSchema = z.looseObject({
+  default: z.boolean(),
+  description: z.string(),
+  id: z.string(),
+  monitor: z.boolean(),
+  muted: z.boolean(),
+  port: z.string().nullable(),
+  ports: z.array(audioChoiceSchema),
+  volume: z.number(),
+});
+
+const audioStreamSchema = z.looseObject({
+  application: z.string(),
+  device: z.string().nullable(),
+  id: z.string(),
+  muted: z.boolean(),
+  title: z.string().nullable(),
+  volume: z.number(),
+});
+
+const audioSchema = z.looseObject({
+  cards: z.array(
+    z.looseObject({
+      description: z.string(),
+      id: z.string(),
+      profile: z.string().nullable(),
+      profiles: z.array(audioChoiceSchema),
+    }),
+  ),
+  inputs: z.array(audioDeviceSchema),
+  outputs: z.array(audioDeviceSchema),
+  playback: z.array(audioStreamSchema),
+  recording: z.array(audioStreamSchema),
+  type: z.literal("audio"),
+});
+
 /**
  * A host message the chrome understands. Unknown `type` values are not an
  * error — {@link parseHostMessage} reports them separately so a newer host can
@@ -593,6 +638,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   filePreviewSchema,
   batterySchema,
   brightnessSchema,
+  audioSchema,
   clipboardSchema,
   traySchema,
   notificationsSchema,
