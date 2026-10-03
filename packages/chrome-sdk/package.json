@@ -110,6 +110,10 @@
       "types": "./dist/notification.d.ts",
       "default": "./dist/notification.js"
     },
+    "./own-keybindings": {
+      "types": "./dist/own-keybindings.d.ts",
+      "default": "./dist/own-keybindings.js"
+    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"

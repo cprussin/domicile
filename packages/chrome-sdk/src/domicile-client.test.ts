@@ -571,6 +571,7 @@ describe("DomicileClient", () => {
           arrival: 0,
           config: JSON.stringify({
             keybindings: { default: [] },
+            keys: {},
             shells: {},
             type: "shell_config",
           }),
@@ -583,7 +584,11 @@ describe("DomicileClient", () => {
       });
 
       expect(seen).toStrictEqual([
-        { keybindings: new Map([["default", []]]), shells: new Map() },
+        {
+          keybindings: new Map([["default", []]]),
+          keys: new Map(),
+          shells: new Map(),
+        },
       ]);
     });
 

@@ -10,6 +10,7 @@ import type {
   ShortcutMessage,
 } from "./host-message";
 import { KeyAction } from "./key-action";
+import type { ShellKeybindings } from "./own-keybindings";
 
 /** Meta and the key `keycode`, and nothing else held. */
 const meta = (keycode: number, shiftKey = false): ShortcutMessage => ({
@@ -47,10 +48,17 @@ const DESK: KeybindingsByMode = new Map([
   ],
 ]);
 
+/** The keyboard the compositor describes, for the keys a shell binds itself. */
+const KEYS: ShellConfigMessage["keys"] = new Map([
+  ["Escape", ESCAPE],
+  ["Return", ENTER],
+  ["r", R],
+]);
+
 const configOf = (
   keybindings: KeybindingsByMode,
   shells: ShellConfigMessage["shells"] = new Map(),
-): ShellConfigMessage => ({ keybindings, shells });
+): ShellConfigMessage => ({ keybindings, keys: KEYS, shells });
 
 /**
  * The two things `bindKeys` uses of a client: its single-slot handlers, and
@@ -99,10 +107,10 @@ afterEach(() => {
   unbind();
 });
 
-const bound = (shell = "manganese") => {
+const bound = (shell = "manganese", own: ShellKeybindings = {}) => {
   const client = new FakeClient();
   const heard: Heard[] = [];
-  const binding = bindKeys(client, shell, {
+  const binding = bindKeys(client, shell, own, {
     onCommand: (args) => {
       heard.push(["command", args]);
     },
@@ -133,6 +141,44 @@ const pressing = (
 };
 
 describe("bindKeys", () => {
+  describe("the shell's own keys", () => {
+    it("claims them, resolved on the keyboard the config arrives with", () => {
+      const { client } = bound("manganese", {
+        keybindings: { "Meta+Return": KeyAction.SendShell(["terminal"]) },
+      });
+
+      client.emit("shell_config", configOf(new Map([["default", []]])));
+
+      expect(client.grabbed).toStrictEqual([meta(ENTER)]);
+    });
+
+    it("answers them like the config's", () => {
+      const { client, heard } = bound("manganese", {
+        keybindings: { "Meta+r": KeyAction.Mode("resize") },
+        modes: { resize: { "Meta+Return": KeyAction.SendShell(["grow"]) } },
+      });
+      client.emit("shell_config", configOf(new Map([["default", []]])));
+
+      client.emit("shortcut", meta(R));
+      client.emit("shortcut", meta(ENTER));
+
+      expect(heard).toContainEqual(["mode", "resize"]);
+      expect(heard).toContainEqual(["command", ["grow"]]);
+    });
+
+    it("lets the config's binding win a chord both bind", () => {
+      const { client, heard } = bound("manganese", {
+        keybindings: { "Meta+Return": KeyAction.SendShell(["shell's"]) },
+      });
+      client.emit("shell_config", configOf(DESK));
+
+      client.emit("shortcut", meta(ENTER));
+
+      expect(heard).toContainEqual(["command", ["terminal"]]);
+      expect(heard).not.toContainEqual(["command", ["shell's"]]);
+    });
+  });
+
   describe("a config arriving", () => {
     it("claims every chord of every mode, each once", () => {
       const { client } = bound();

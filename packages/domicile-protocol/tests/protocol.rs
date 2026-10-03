@@ -389,6 +389,7 @@ fn host_messages_round_trip() {
             },
         )]
         .into(),
+        keys: [("Return".to_string(), 28), ("l".to_string(), 25)].into(),
     });
 }
 

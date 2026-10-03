@@ -7,8 +7,8 @@ by `domicile` with no build step of the user's own.
 ```tsx
 // ~/.config/domicile/domicile.tsx
 import {
-  Battery, Brightness, Clock, Notifications, ThemeSelector, Tray,
-  WorkspaceSwitcher, focus, runManganese, spawn,
+  Battery, Brightness, Clock, DEFAULT_KEYBINDINGS, Notifications,
+  ThemeSelector, Tray, WorkspaceSwitcher, focus, runManganese,
 } from "@domicile/manganese";
 import { GmailCount } from "./gmail-count";
 
@@ -16,13 +16,16 @@ export const displays = [{ name: "eDP-1", scale: 2 }];
 export const extensions = { webStore: ["ddkjiahejlhfcafbddmgiahcphecmpfh"] };
 
 export const Shell = runManganese({
-  keybindings: { "Meta+Return": spawn("foot"), "Meta+l": focus("right") },
+  keybindings: {
+    keybindings: { ...DEFAULT_KEYBINDINGS, "Meta+n": focus("right") },
+  },
   topBar: {
-    left: [<Tray />, <WorkspaceSwitcher />],
-    middle: [<Clock />],
+    left: [<Tray key="tray" />, <WorkspaceSwitcher key="workspaces" />],
+    middle: [<Clock key="clock" />],
     right: [
-      <GmailCount account="me@gmail.com" />,
-      <ThemeSelector />, <Brightness />, <Battery />, <Notifications />,
+      <GmailCount account="me@gmail.com" key="mail" />,
+      <ThemeSelector key="theme" />, <Brightness key="brightness" />,
+      <Battery key="battery" />, <Notifications key="notifications" />,
     ],
   },
 });
@@ -132,19 +135,23 @@ only builds.
 
 ```ts
 runManganese({
-  keybindings: { "Meta+r": mode("resize") },
-  modes: { resize: { "Meta+l": resize("grow", "right"), "Meta+Escape": mode("default") } },
+  keybindings: {
+    keybindings: { ...DEFAULT_KEYBINDINGS, "Meta+r": mode("resize") },
+    modes: { resize: { "Meta+l": grow("right"), "Meta+Escape": mode("default") } },
+  },
 });
 ```
 
-- A binding maps a chord to a typed command from the shell's own package, not
-  a `send-shell` string.
-- `bindKeys` sends the chords up as a new `ChromeMessage::Keybindings`. The
-  compositor resolves them against the live keymap, as `keymap.rs` does today,
-  and answers with the resolved set and any refusal. It resolves them again when
-  the keymap changes.
-- Manganese ships the sway defaults from its README, so the JSON config has
-  keys. Today a config that binds nothing leaves no keys at all.
+- A binding maps a chord to a typed command from the shell's own package
+  (`focus("right")`, `workspace("3")`), not a `send-shell` string.
+- `shell_config` carries `keys`: every keysym the keyboard can type and the
+  evdev key it is on (`Keyboard::keys`, the same rule as `key_for`). `bindKeys`
+  resolves the shell's chords against it as each config arrives, so a layout
+  change moves them. No new message, and no engine change: `shell_config`
+  crosses the engine as a string.
+- The config's bindings sit on top until phase 3 deletes them.
+- Manganese ships sway's keys on Meta (`DEFAULT_KEYBINDINGS`, `DEFAULT_MODES`),
+  so the JSON config has keys.
 
 ### `@domicile/manganese` is a library
 
@@ -153,7 +160,8 @@ runManganese({
 | `runManganese(options): Shell` | mounts manganese into `root` |
 | `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications` | the bar's items, each reading the bar it is on from context |
 | `DEFAULT_TOP_BAR`, `TopBarLayout` | manganese's own bar, and its shape |
-| `focus`, `move`, `resize`, `mode`, `spawn`, … | the commands a binding names |
+| `focus`, `move`, `workspace`, `grow`, `mode`, `terminal`, … | the commands a binding names |
+| `DEFAULT_KEYBINDINGS`, `DEFAULT_MODES` | sway's keys on Meta, what a desktop gets unasked |
 | `Shell` | `runManganese({})`: what `"shell": "@domicile/manganese"` loads |
 
 A widget of the user's own styles itself with `@domicile/component-library`
@@ -206,8 +214,8 @@ Phase 1: the contract, by hand.
       fixtures export `Shell` with no import-time effects
 - [x] `@domicile/manganese`: `runManganese` and the bar items exported, the
       bar's layout a prop. The commands land with keybindings
-- [ ] keybindings as props: `ChromeMessage::Keybindings`, the compositor
-      resolving them, `bindKeys` sending them, manganese's default bindings
+- [x] keybindings as props: `keys` in `shell_config`, `bindKeys` resolving the
+      shell's own chords, manganese's commands and default bindings
 - [ ] check, in a guard: the shell page shows a Web Notification and fetches
       the Gmail API cross-origin from `domicile://`
 

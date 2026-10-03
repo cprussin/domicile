@@ -173,13 +173,19 @@ export const Shell = ({
     });
 
     // The SDK claims the chord the config binds to `send-shell terminal`, and
-    // hears it by whichever path the press took.
-    return bindKeys(domicile, SHELL, {
-      onCommand,
-      // A desktop with one command has no modes to draw, and no options.
-      onModeChanged: () => undefined,
-      onOptions: () => undefined,
-    }).unbind;
+    // hears it by whichever path the press took. This shell binds no keys of
+    // its own.
+    return bindKeys(
+      domicile,
+      SHELL,
+      {},
+      {
+        onCommand,
+        // A desktop with one command has no modes to draw, and no options.
+        onModeChanged: () => undefined,
+        onOptions: () => undefined,
+      },
+    ).unbind;
   }, [domicile]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
