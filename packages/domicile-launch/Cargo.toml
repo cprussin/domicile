@@ -12,7 +12,21 @@ notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# The session bus, to say a reload failed where the user is looking: the
+# compositor is the desk's `org.freedesktop.Notifications`. The same features
+# as the compositor's, so the workspace builds zbus once.
+zbus = { version = "5.0", default-features = false, features = [
+    "async-io",
+    "blocking-api",
+] }
 
 [dev-dependencies]
 libc.workspace = true
 tempfile.workspace = true
+# `p2p`, for a notification server the tests stand up on a socket pair rather
+# than a bus.
+zbus = { version = "5.0", default-features = false, features = [
+    "async-io",
+    "blocking-api",
+    "p2p",
+] }

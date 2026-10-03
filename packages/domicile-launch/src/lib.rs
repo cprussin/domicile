@@ -53,6 +53,7 @@ pub mod control_socket;
 pub mod handshake;
 pub mod heard;
 pub mod milestones;
+pub mod notification;
 pub mod platform;
 pub mod profile_claim;
 pub mod profile_path;
