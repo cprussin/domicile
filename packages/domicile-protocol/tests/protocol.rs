@@ -7,9 +7,9 @@
 //!     so we pin the tag/field names explicitly.
 
 use domicile_protocol::{
-    negotiate, AudioCard, AudioChoice, AudioDevice, AudioStream, Bookmark, ChromeMessage,
-    ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo, DisplayTransform, FilePreview,
-    HostMessage, Passphrase, PROTOCOL_VERSION,
+    negotiate, AudioCard, AudioChoice, AudioDevice, AudioLevel, AudioStream, Bookmark,
+    ChromeMessage, ClipboardEntry, CursorShape, DesktopEntry, DisplayInfo, DisplayTransform,
+    FilePreview, HostMessage, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -798,6 +798,27 @@ fn the_mixers_requests_parse_as_the_sdk_sends_them() {
         ChromeMessage::SetAudioProfile {
             card: "c".into(),
             profile: "off".into()
+        }
+    );
+}
+
+/// The meters a mixer draws: asked for by id, answered with each one's peak.
+#[test]
+fn the_meters_round_trip() {
+    chrome_round_trip(&ChromeMessage::WatchAudioLevels {
+        ids: vec!["output:speakers".into(), "input:mic".into()],
+    });
+    host_round_trip(&HostMessage::AudioLevels {
+        levels: vec![AudioLevel {
+            id: "output:speakers".into(),
+            peak: 0.5,
+        }],
+    });
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(r#"{"type":"watch_audio_levels","ids":["input:m"]}"#)
+            .unwrap(),
+        ChromeMessage::WatchAudioLevels {
+            ids: vec!["input:m".into()]
         }
     );
 }

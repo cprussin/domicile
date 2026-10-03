@@ -226,6 +226,13 @@ struct AudioStream {
   string device;
 };
 
+// One meter of an AudioLevels: the AudioDevice or AudioStream id it meters,
+// and the loudest sample since the last, 0.0 through 1.0 of full scale.
+struct AudioLevel {
+  string id;
+  double peak;
+};
+
 // A sound card. `profiles` is best first; `profile` the one in use, or empty.
 struct AudioCard {
   string id;
@@ -465,6 +472,13 @@ interface ControlChannel {
   SetAudioPort(string id, string port);
   // Switch a sound card's profile, by the card's id and the profile's name.
   SetAudioProfile(string card, string profile);
+
+  // Meter these devices and streams, by the ids an Audio carried, and send
+  // their peaks as AudioLevels. A lease: the page asks again every second
+  // while its meters are on screen, and the compositor stops metering what
+  // nobody renewed -- metering a microphone records it. An empty array lets
+  // go at once.
+  WatchAudioLevels(array<string> ids);
 
   // This page's old frame is held for `theme`: the desk's windows may turn.
   //
@@ -792,6 +806,11 @@ interface ControlChannelClient {
         array<AudioStream> recording,
         array<AudioCard> cards,
         mojo_base.mojom.TimeTicks arrival);
+
+  // How loud what WatchAudioLevels asked for is: some twenty times a second
+  // while anything is metered, and never otherwise. An id not heard on yet is
+  // left out rather than sent as silence.
+  AudioLevels(array<AudioLevel> levels, mojo_base.mojom.TimeTicks arrival);
 
   // Focus moved, including to the chrome itself, in which case app_id is empty.
   FocusChanged(string app_id, mojo_base.mojom.TimeTicks arrival);
