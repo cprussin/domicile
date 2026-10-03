@@ -1,4 +1,5 @@
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { useDisplays } from "@domicile/component-library/DisplayProvider";
 import { createToastManager } from "@domicile/component-library/Toaster";
 import { useCallback, useMemo, useState } from "react";
@@ -37,6 +38,8 @@ import { WindowAction } from "./window-management/window-state";
 
 type Props = {
   domicile: DomicileClient;
+  /** The keys this desktop binds itself, under the config's. */
+  keybindings: ShellKeybindings;
   /** What goes on every monitor's bar. */
   topBar: TopBarLayout;
 };
@@ -55,7 +58,7 @@ type Props = {
  * screen at a time, and asking for one that is already in view moves the
  * keyboard to the screen showing it rather than taking the work off it.
  */
-export const Desktop = ({ domicile, topBar }: Props) => {
+export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   const displays = useDisplays();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
@@ -202,6 +205,7 @@ export const Desktop = ({ domicile, topBar }: Props) => {
   // page reads its keys in it.
   useKeybindings({
     domicile,
+    keybindings,
     launcherOpen: windows.launcherOpen,
     mode: windows.mode,
     onAction,

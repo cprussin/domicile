@@ -66,6 +66,7 @@ const configBinding = (
   args: readonly string[],
 ): ShellConfigMessage => ({
   keybindings: new Map([["default", []]]),
+  keys: new Map(),
   shells: new Map([
     [
       "simple",

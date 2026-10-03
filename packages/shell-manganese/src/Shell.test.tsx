@@ -7,6 +7,7 @@ import type {
   ShellConfigMessage,
 } from "@domicile/chrome-sdk/host-message";
 import { KeyAction } from "@domicile/chrome-sdk/key-action";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { registerElements } from "@domicile/chrome-sdk/register-elements";
 import {
   WEBVIEW_CLOSE_EVENT,
@@ -26,6 +27,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
+import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
@@ -237,6 +239,8 @@ let domicile: FakeDomicile;
 const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
   topBar?: TopBarLayout,
+  keybindings: ShellKeybindings = {},
+  config: ShellConfigMessage = MANGANESE_CONFIG,
 ) => {
   domicile = new FakeDomicile();
   domicile.displays = desktop;
@@ -249,12 +253,14 @@ const renderingShell = (
     <Shell
       displays={hostDisplays(client)}
       domicile={client}
+      keybindings={keybindings}
       theme={standaloneThemeSource()}
       topBar={topBar}
     />,
   );
-  // The config's keys, which the compositor sends as the page connects.
-  domicile.emit("shell_config", MANGANESE_CONFIG);
+  // The config's keys, which the compositor sends as the page connects. The
+  // shell's own default keys are left off above, so these are every key.
+  domicile.emit("shell_config", config);
   return rendered;
 };
 
@@ -379,6 +385,7 @@ const WORKSPACE_KEYS = [
  */
 const MANGANESE_CONFIG: ShellConfigMessage = {
   keybindings: new Map([["default", []]]),
+  keys: new Map(),
   shells: new Map([
     [
       "manganese",
@@ -1811,6 +1818,37 @@ describe("Shell", () => {
 
       expect(screen.getByRole("dialog")).toBeVisible();
       expect(domicile.calls).not.toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("binds sway's keys itself when the config binds none", () => {
+      // Every keysym the defaults name, on a key of its own: the keyboard the
+      // compositor describes alongside a config with no keys in it.
+      const keysyms = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)]
+        .flatMap(Object.keys)
+        .map((chord) => chord.split("+").at(-1) ?? "");
+      const keys = new Map(
+        [...new Set(keysyms)].map((keysym, at) => [keysym, 100 + at] as const),
+      );
+      renderingShell(
+        [LEFT],
+        undefined,
+        { keybindings: DEFAULT_KEYBINDINGS, modes: DEFAULT_MODES },
+        {
+          keybindings: new Map([["default", []]]),
+          keys,
+          shells: new Map(),
+        },
+      );
+
+      domicile.emit("shortcut", {
+        altKey: false,
+        ctrlKey: false,
+        keycode: keys.get("Return") ?? 0,
+        metaKey: true,
+        shiftKey: false,
+      });
+
+      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
 
     it("spawns a terminal on the chord the config names", () => {

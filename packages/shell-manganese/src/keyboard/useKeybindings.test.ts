@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { DomicileClient } from "@domicile/chrome-sdk/domicile-client";
 import type { ShortcutMessage } from "@domicile/chrome-sdk/host-message";
 import { KeyAction } from "@domicile/chrome-sdk/key-action";
+import type { ShellKeybindings } from "@domicile/chrome-sdk/own-keybindings";
 import { act, renderHook } from "@testing-library/react";
 
 import { Direction } from "../window-management/direction";
@@ -27,6 +28,7 @@ const X = 45;
 /** A config of a few of manganese's bindings, as the SDK delivers it. */
 const CONFIG = {
   keybindings: new Map([["default", []]]),
+  keys: new Map(),
   shells: new Map([
     [
       "manganese",
@@ -66,6 +68,9 @@ const CONFIG = {
   ]),
 };
 
+/** No keys of the shell's own, so the config's are every key. */
+const NONE: ShellKeybindings = {};
+
 /**
  * A stand-in for the client: it takes the handlers the SDK registers and lets
  * a test say what the host said.
@@ -101,6 +106,7 @@ const bound = (launcherOpen = false) => {
     ({ mode }: { mode: string }) => {
       useKeybindings({
         domicile,
+        keybindings: NONE,
         launcherOpen,
         mode,
         onAction: (action) => {

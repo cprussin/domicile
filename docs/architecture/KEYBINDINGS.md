@@ -64,6 +64,12 @@ its README.
 - **Claims are never given back** (the engine's `ShortcutRegistry` has no
   release), so a chord a reload removes stays swallowed until restart.
 
+**A shell binds keys of its own, too**, as props: chords in this grammar,
+resolved by the SDK against `shell_config`'s `keys` — every keysym the
+keyboard types and its key — with the config's bindings on top. The config's
+tables go once the config is a module; see
+[COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+
 ## Plan
 
 - [x] schema, resolution, wire, engine event, SDK dispatch

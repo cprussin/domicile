@@ -719,19 +719,34 @@ layout, so `Meta+parenleft` is right on Programmer's Dvorak and on QWERTY
 alike. An action is `send-shell <word>…` or `mode <name>`. A config that names
 a keysym on no key is refused like one xkb cannot compile.
 
-**Bind once, by name:**
+**Bind once, by name, with your shell's own keys:**
 
 ```ts
 import { bindKeys } from "@domicile/chrome-sdk/bind-keys";
+import { KeyAction } from "@domicile/chrome-sdk/key-action";
 
-bindKeys(domicile, "my-shell", {
-  onCommand: (args) => run(args),        // ["focus", "right"]
-  onModeChanged: (mode) => show(mode),   // "resize", "default"
-  onOptions: (options) => apply(options),
-});
+bindKeys(
+  domicile,
+  "my-shell",
+  {
+    keybindings: { "Meta+l": KeyAction.SendShell(["focus", "right"]) },
+    modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } },
+  },
+  {
+    onCommand: (args) => run(args),        // ["focus", "right"]
+    onModeChanged: (mode) => show(mode),   // "resize", "default"
+    onOptions: (options) => apply(options),
+  },
+);
 ```
 
-It claims every chord the config names, matches a press whether it landed on
+**A shell's own keys are its props**, written in the config's grammar and
+resolved against the keyboard the compositor describes as each config arrives
+(`shell_config`'s `keys`). The config's bindings sit on top: a chord both bind
+is the config's. A chord written wrong, or whose keysym the keyboard cannot
+type, throws.
+
+It claims every chord the config and the shell name, matches a press whether it landed on
 the page or in a `<webview>`, runs `mode` itself, and hands you every
 `send-shell`. What a command *means* is yours: parse it, and report one you do
 not know rather than throwing — it came from a file somebody typed. Your

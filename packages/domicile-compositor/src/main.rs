@@ -6638,7 +6638,7 @@ fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
 /// Give the host the keys a config binds and what each shell is told, for
 /// every chrome that connects after.
 fn hand_over_the_keys(host: &mut Host, resolved: Resolved) {
-    host.set_shell_config(resolved.keybindings, resolved.shells);
+    host.set_shell_config(resolved.keybindings, resolved.shells, resolved.keys);
 }
 
 /// The home directory whose files a launcher is offered.

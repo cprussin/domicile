@@ -92,6 +92,14 @@ pub struct Popup {
     pub grab: bool,
 }
 
+/// What [`Host::set_shell_config`] was last given: the bindings by mode, what
+/// each shell is told, and every keysym the keyboard types with its key.
+type ShellConfig = (
+    ModeBindings,
+    BTreeMap<String, ShellBindings>,
+    BTreeMap<String, u32>,
+);
+
 /// The compositor's orchestration state.
 #[derive(Debug, Default)]
 pub struct Host {
@@ -134,7 +142,7 @@ pub struct Host {
     ///
     /// `None` until something sets them, for the keymap's reason: a host with
     /// no keyboard behind it has no key a keysym could resolve to.
-    shell_config: Option<(ModeBindings, BTreeMap<String, ShellBindings>)>,
+    shell_config: Option<ShellConfig>,
     /// Which way round the desktop is drawn, as every chrome is told — on
     /// connecting, and again whenever it changes under them.
     ///
@@ -251,8 +259,9 @@ impl Host {
         &mut self,
         keybindings: ModeBindings,
         shells: BTreeMap<String, ShellBindings>,
+        keys: BTreeMap<String, u32>,
     ) {
-        self.shell_config = Some((keybindings, shells));
+        self.shell_config = Some((keybindings, shells, keys));
     }
 
     /// The keys and the shells' settings, in the message a chrome is told
@@ -260,9 +269,10 @@ impl Host {
     pub fn describe_shell_config(&self) -> Option<HostMessage> {
         self.shell_config
             .clone()
-            .map(|(keybindings, shells)| HostMessage::ShellConfig {
+            .map(|(keybindings, shells, keys)| HostMessage::ShellConfig {
                 keybindings,
                 shells,
+                keys,
             })
     }
 

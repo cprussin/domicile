@@ -936,6 +936,12 @@ pub enum HostMessage {
         /// Bindings by mode. Always has `default`, which may be empty.
         keybindings: ModeBindings,
         shells: BTreeMap<String, ShellBindings>,
+        /// Every keysym the keyboard can type, by name, and the evdev key it
+        /// is on — the same key a binding here names for it. What a shell
+        /// resolves the chords it binds itself against: the page has those
+        /// chords and only the compositor has the keymap.
+        #[serde(default)]
+        keys: BTreeMap<String, u32>,
     },
 }
 
