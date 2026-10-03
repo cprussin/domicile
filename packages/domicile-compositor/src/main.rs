@@ -105,6 +105,7 @@ use smithay::{
 use tracing::{debug, error, info, warn};
 
 mod appearance;
+mod audio;
 mod backlight;
 mod clipboard;
 mod coalesce;
@@ -173,6 +174,7 @@ use domicile_config::{
     KeyboardConfig, Omit, ThemeMode,
 };
 use domicile_host::app_icons::AppIcons;
+use domicile_host::audio::Request as AudioRequest;
 use domicile_host::backlight::{
     announces_a_backlight, reading as backlight_reading, Brightness, RealBacklights,
 };
@@ -451,6 +453,12 @@ enum ClientRequest {
     SetBrightness {
         level: f64,
     },
+    /// The shell's mixer asked the sound server for something: a volume, a
+    /// mute, a default, a port. Through this thread for `ActivateTrayItem`'s
+    /// reason — a locked desk refuses it.
+    Audio {
+        request: domicile_host::audio::Request,
+    },
 }
 
 /// Something a chrome asked that the connection it arrived on answers itself,
@@ -545,6 +553,9 @@ struct ChromeHub {
     /// server's worker, which tells the application. Set once, for `tray`'s
     /// reason — see [`crate::notifications`].
     notifications: OnceLock<notifications::NotificationServer>,
+    /// Where the shell's mixer asks the sound server: the runner of its
+    /// requests. Set once, for `tray`'s reason — see [`crate::audio`].
+    audio: OnceLock<audio::AudioServer>,
 }
 
 impl ChromeHub {
@@ -592,6 +603,7 @@ impl ChromeHub {
             appearance,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
+            audio: OnceLock::new(),
         });
         (hub, outbound_rx)
     }
@@ -1364,6 +1376,45 @@ fn read_chrome_messages(
             // the answer is the `brightness` broadcast its uevent produces.
             Ok(ChromeMessage::SetBrightness { level }) => {
                 hub.send_request(ClientRequest::SetBrightness { level });
+                Vec::new()
+            }
+            // To the Wayland thread, where the lock is, like a tray click;
+            // the answer is the next `audio`, once the sound server says the
+            // thing moved.
+            Ok(ChromeMessage::SetAudioVolume { id, volume }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Volume { id, volume },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::SetAudioMuted { id, muted }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Muted { id, muted },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::SetDefaultAudioDevice { id }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Default { id },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::MoveAudioStream { id, device }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Move { id, device },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::SetAudioPort { id, port }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Port { id, port },
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::SetAudioProfile { card, profile }) => {
+                hub.send_request(ClientRequest::Audio {
+                    request: AudioRequest::Profile { card, profile },
+                });
                 Vec::new()
             }
             // Compositor-level: the chrome's pixel density is the output's
@@ -4975,6 +5026,12 @@ impl DomicileCompositor {
                 }
             }
             ClientRequest::SetBrightness { level } => self.set_the_brightness(level),
+            // On to the mixer's runner, for the tray's reason.
+            ClientRequest::Audio { request } => {
+                if let Some(server) = self.hub.audio.get() {
+                    server.ask(request);
+                }
+            }
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // A turnover already under way is replaced rather than
                 // finished: its windows are about to be told a newer theme.
@@ -7064,6 +7121,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     ));
+    // The sound, published through the hub for the tray's reasons. Nothing
+    // first, unlike the tray: a desk with no sound server has no mixer to
+    // draw, where a desk with no bus has a tray with nothing in it. See
+    // `audio`.
+    let publishing = Arc::clone(&hub);
+    let _ = hub.audio.set(audio::serve(move |audio| {
+        let told = publishing.host.lock().unwrap().set_audio(audio);
+        if let Some(message) = told {
+            publishing.broadcast(message);
+        }
+    }));
     // Bound here rather than in the serving thread, so that a socket that
     // cannot be bound ends the run rather than a thread. The shell is waiting
     // on the session document, which is published long after this — so nothing

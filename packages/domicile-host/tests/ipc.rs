@@ -9,6 +9,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::thread;
 
+use domicile_host::audio::Audio;
 use domicile_host::ipc::{parse_chrome, to_line, Session};
 use domicile_protocol::{
     ChromeMessage, HostMessage, KeyAction, KeyBinding, Notification, Shortcut, Theme, TrayItem,
@@ -408,6 +409,53 @@ fn a_host_nobody_gave_notifications_says_nothing_about_them() {
     assert!(!out
         .iter()
         .any(|message| matches!(message, HostMessage::Notifications { .. })));
+}
+
+fn quiet_desk() -> Audio {
+    Audio {
+        outputs: Vec::new(),
+        inputs: Vec::new(),
+        playback: Vec::new(),
+        recording: Vec::new(),
+        cards: Vec::new(),
+    }
+}
+
+#[test]
+fn the_audio_rides_with_the_handshake() {
+    // Last, after the notifications: a mixer that has not moved is never
+    // told again, so a page that reloads would draw none until it did.
+    let mut session = Session::new();
+    let told = session.host_mut().set_audio(quiet_desk());
+    assert_eq!(told, Some(quiet_desk().message()));
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert_eq!(out.last(), Some(&quiet_desk().message()));
+}
+
+#[test]
+fn audio_that_did_not_change_says_nothing() {
+    // A drag sets one volume many times, and `pactl subscribe` reports each.
+    let mut session = Session::new();
+    session.host_mut().set_audio(quiet_desk());
+
+    assert_eq!(session.host_mut().set_audio(quiet_desk()), None);
+}
+
+#[test]
+fn a_host_with_no_sound_server_says_nothing_about_one() {
+    let mut session = Session::new();
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(!out
+        .iter()
+        .any(|message| matches!(message, HostMessage::Audio { .. })));
 }
 
 /// Standing in for the real thing, which is some 40 kilobytes of

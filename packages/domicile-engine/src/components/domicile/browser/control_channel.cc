@@ -244,6 +244,92 @@ std::optional<std::vector<std::string>> Strings(
   return strings;
 }
 
+// The rows of `key` in `message` that `read` makes something of. A row that
+// is not an object, or is missing what it needs, is dropped, as a tray icon
+// missing its id is: one bad device is not a reason to draw no mixer. An
+// absent list is an empty one, for the same reason.
+template <typename Row, typename Read>
+std::vector<Row> Rows(const base::DictValue& message,
+                      std::string_view key,
+                      Read read) {
+  std::vector<Row> rows;
+  const base::ListValue* list = message.FindList(key);
+  if (!list) {
+    return rows;
+  }
+  rows.reserve(list->size());
+  for (const base::Value& entry : *list) {
+    const base::DictValue* row = entry.GetIfDict();
+    if (!row) {
+      continue;
+    }
+    if (std::optional<Row> made = read(*row)) {
+      rows.push_back(std::move(*made));
+    }
+  }
+  return rows;
+}
+
+// `key` in `row` if it is a string, and empty if it is null or absent: the
+// compositor's `None`, spelled the way every other member here spells it.
+std::string OrEmpty(const base::DictValue& row, std::string_view key) {
+  const std::string* text = row.FindString(key);
+  return text ? *text : std::string();
+}
+
+std::optional<mojom::AudioChoicePtr> ReadAudioChoice(
+    const base::DictValue& row) {
+  const std::string* name = row.FindString("name");
+  const std::string* description = row.FindString("description");
+  std::optional<bool> available = row.FindBool("available");
+  if (!name || !description || !available) {
+    return std::nullopt;
+  }
+  return mojom::AudioChoice::New(*name, *description, *available);
+}
+
+std::optional<mojom::AudioDevicePtr> ReadAudioDevice(
+    const base::DictValue& row) {
+  const std::string* id = row.FindString("id");
+  const std::string* description = row.FindString("description");
+  std::optional<double> volume = row.FindDouble("volume");
+  std::optional<bool> muted = row.FindBool("muted");
+  std::optional<bool> is_default = row.FindBool("default");
+  std::optional<bool> monitor = row.FindBool("monitor");
+  if (!id || !description || !volume || !muted || !is_default || !monitor) {
+    return std::nullopt;
+  }
+  return mojom::AudioDevice::New(
+      *id, *description, *volume, *muted, *is_default, *monitor,
+      Rows<mojom::AudioChoicePtr>(row, "ports", ReadAudioChoice),
+      OrEmpty(row, "port"));
+}
+
+std::optional<mojom::AudioStreamPtr> ReadAudioStream(
+    const base::DictValue& row) {
+  const std::string* id = row.FindString("id");
+  const std::string* application = row.FindString("application");
+  std::optional<double> volume = row.FindDouble("volume");
+  std::optional<bool> muted = row.FindBool("muted");
+  if (!id || !application || !volume || !muted) {
+    return std::nullopt;
+  }
+  return mojom::AudioStream::New(*id, *application, OrEmpty(row, "title"),
+                                 *volume, *muted, OrEmpty(row, "device"));
+}
+
+std::optional<mojom::AudioCardPtr> ReadAudioCard(const base::DictValue& row) {
+  const std::string* id = row.FindString("id");
+  const std::string* description = row.FindString("description");
+  if (!id || !description) {
+    return std::nullopt;
+  }
+  return mojom::AudioCard::New(
+      *id, *description,
+      Rows<mojom::AudioChoicePtr>(row, "profiles", ReadAudioChoice),
+      OrEmpty(row, "profile"));
+}
+
 }  // namespace
 
 void ControlChannel::FocusApp(const std::string& app_id) {
@@ -405,6 +491,52 @@ void ControlChannel::Lock() {
 void ControlChannel::SetBrightness(double level) {
   base::DictValue message = Typed("set_brightness");
   message.Set("level", level);
+  SendMessage(std::move(message));
+}
+
+// The mixer's, relayed like SetBrightness: the ids are the compositor's to
+// check, and what comes back up is `audio` to every chrome.
+void ControlChannel::SetAudioVolume(const std::string& id, double volume) {
+  base::DictValue message = Typed("set_audio_volume");
+  message.Set("id", id);
+  message.Set("volume", volume);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetAudioMuted(const std::string& id, bool muted) {
+  base::DictValue message = Typed("set_audio_muted");
+  message.Set("id", id);
+  message.Set("muted", muted);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetDefaultAudioDevice(const std::string& id) {
+  base::DictValue message = Typed("set_default_audio_device");
+  message.Set("id", id);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::MoveAudioStream(const std::string& id,
+                                     const std::string& device) {
+  base::DictValue message = Typed("move_audio_stream");
+  message.Set("id", id);
+  message.Set("device", device);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetAudioPort(const std::string& id,
+                                  const std::string& port) {
+  base::DictValue message = Typed("set_audio_port");
+  message.Set("id", id);
+  message.Set("port", port);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::SetAudioProfile(const std::string& card,
+                                     const std::string& profile) {
+  base::DictValue message = Typed("set_audio_profile");
+  message.Set("card", card);
+  message.Set("profile", profile);
   SendMessage(std::move(message));
 }
 
@@ -1217,6 +1349,18 @@ void ControlChannel::DispatchLine(const std::string& line,
     // a second reader of a shape the page already owns. The parse above has
     // already refused a line that is not a JSON object.
     client_->ShellConfig(line, arrival);
+    return;
+  }
+
+  if (*type == "audio") {
+    // Sent even when every list is empty, for `clipboard`'s reason: a desk
+    // whose sound server has nothing on it is an answer.
+    client_->Audio(
+        Rows<mojom::AudioDevicePtr>(message, "outputs", ReadAudioDevice),
+        Rows<mojom::AudioDevicePtr>(message, "inputs", ReadAudioDevice),
+        Rows<mojom::AudioStreamPtr>(message, "playback", ReadAudioStream),
+        Rows<mojom::AudioStreamPtr>(message, "recording", ReadAudioStream),
+        Rows<mojom::AudioCardPtr>(message, "cards", ReadAudioCard), arrival);
     return;
   }
 
