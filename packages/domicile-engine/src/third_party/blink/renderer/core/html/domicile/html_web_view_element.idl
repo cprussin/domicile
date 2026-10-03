@@ -126,8 +126,8 @@
   readonly attribute long findMatches;
   readonly attribute long findActiveMatch;
 
-  // The size the page's content wants, in CSS pixels: its narrowest width
-  // (min-content) and its document's height at the width it is laid out at --
+  // The size the page's content wants, in CSS pixels: its natural width
+  // (max-content) and its document's height at the width it is laid out at --
   // what Chrome sizes an extension's popup from. Both 0 until the page has
   // laid out. The browser's answer, announced in
   // `domicile-content-size-change` -- readonly properties for the reason the

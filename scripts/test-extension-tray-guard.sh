@@ -164,9 +164,14 @@ expect "and asks runtime.getContexts first" "yes" \
   "$(grep -qF 'runtime.getContexts({})' "$FIXTURE/popup.js" && echo yes || echo no)"
 WIDTH="$(sed -n 's/^readonly WIDTH="\([0-9]*\)"$/\1/p' "$GUARD")"
 HEIGHT="$(sed -n 's/^readonly HEIGHT="\([0-9]*\)"$/\1/p' "$GUARD")"
-expect "and lays its popup out at the size the guard reads" "yes" \
-  "$(grep -qF "width: ${WIDTH}px; height: ${HEIGHT}px" "$FIXTURE/popup.html" &&
-    echo yes || echo no)"
+# Fluid, as Bitwarden's popup is in a tab: two halves of WIDTH side by side
+# and nothing fixing the width, so its min-content width is half its natural
+# one and a size read off the narrower is a strip.
+HALF=$((WIDTH / 2))
+expect "and lays its popup out fluid, at the size the guard reads" "2 1 0" \
+  "$(grep -oF "display: inline-block; width: ${HALF}px; height: ${HEIGHT}px" "$FIXTURE/popup.html" | wc -l) \
+$(grep -cF "<body style=\"margin: 0\">" "$FIXTURE/popup.html") \
+$(grep -cF "width: ${WIDTH}px" "$FIXTURE/popup.html")"
 CONTEXT="$(sed -n 's/^readonly CONTEXT="\(.*\)"$/\1/p' "$GUARD")"
 expect "the guard expects the popup to be a TAB, as Chrome's tab is" "TAB" \
   "$CONTEXT"

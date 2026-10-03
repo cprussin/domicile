@@ -425,8 +425,9 @@ declare global {
     /** Which of them is selected, counted from 1. 0 while there is none. */
     readonly findActiveMatch: number;
     /**
-     * The size the page's content wants, in CSS pixels: its narrowest width
-     * (min-content) and its document's height at the width it is laid out at.
+     * The size the page's content wants, in CSS pixels: its natural width
+     * (max-content) and its document's height at the width it is laid out at.
+     * A page that fills its box reads as wide as its longest line, so cap it.
      * What Chrome sizes an extension's popup from. Both 0 until the page has
      * laid out. Changes are announced in
      * {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
