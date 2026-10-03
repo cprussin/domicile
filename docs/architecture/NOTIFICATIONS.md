@@ -23,7 +23,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
 | The history; what a `Notify` is shown as (pictures, actions, urgency, a page's origin) | `packages/domicile-host/src/notifications.rs` |
 | The bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
 | `notifications` event, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
-| Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh` |
+| Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; the shell's own page, `guard-shell-web-apis.sh` |
 | `Notification`, `DomicileClient.dismissNotifications`, `invokeNotificationAction` | `@domicile/chrome-sdk/notification`, `domicile-client` |
 | `Toaster`: the deck of toasts | `@domicile/component-library/Toaster` |
 | Toasts, the bell, the drawer | `packages/shell-manganese/src/notifications/` |
