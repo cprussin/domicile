@@ -1063,7 +1063,7 @@ verifier is behind it:
 
 | `[lock]` states | Verifier | What it costs |
 |---|---|---|
-| `pam_service = "domicile"` | `crate::pam`: `pam_authenticate` as the uid the compositor runs as, through that service | The machine declares the service — `security.pam.services.domicile = {};` on NixOS. A home-manager module cannot |
+| `pam_service = "domicile"` | `crate::pam`: `pam_authenticate` as the uid the compositor runs as, through that service | The machine declares the service — `nixosModules.default` on NixOS, or `security.pam.services.domicile = {};`. A home-manager module cannot |
 | `passphrase = "…"` | The string, compared | It is in a generated, world-readable file, so it locks a desk against somebody walking up to it and against nobody who can read the disk |
 | Neither | None: the desk never locks | A lock with nothing behind it would be a desk nobody could open |
 | Both | Refused at parse | Neither is a fallback for the other |

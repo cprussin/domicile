@@ -218,9 +218,10 @@ where the rest of your environment is rather than in a file you keep by hand:
 It writes the same file to the same path, puts `domicile` on `PATH` with your
 shell already baked in, and installs no session or unit — making domicile a
 machine's login session is a decision about how it boots rather than about
-where the monitors are, so it is not one a home-manager module makes on the
-way past. `settings` is freeform, so a key newer than the module is written
-through rather than refused.
+where the monitors are, so it is the NixOS module's
+([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#the-machines-half)).
+`settings` is freeform, so a key newer than the module is written through
+rather than refused.
 
 The flag may come on either side of the shell, and no file at all is a real
 answer rather than a missing one — a desktop with no monitors written down
