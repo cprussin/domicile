@@ -1,4 +1,4 @@
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 
 import { css } from "../../styled-system/css";
 
@@ -19,7 +19,7 @@ export const LauncherButton = ({ onOpen }: Props) => (
     title="Launcher"
     type="button"
   >
-    <MagnifyingGlassIcon aria-hidden size={15} weight="bold" />
+    <SquaresFourIcon aria-hidden size={15} />
   </button>
 );
 
