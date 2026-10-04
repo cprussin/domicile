@@ -10,6 +10,7 @@
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
@@ -180,6 +181,9 @@ class MODULES_EXPORT DomicileHost final
   void grabShortcut(ScriptState*,
                     const DomicileShortcut* shortcut,
                     ExceptionState&);
+  // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
+  // says the keyboard has, and again whenever it says so anew.
+  void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
   void key(ScriptState*,
            const String& app_id,
@@ -425,6 +429,16 @@ class MODULES_EXPORT DomicileHost final
   // Re-arms `density_query_` at the new ratio: a `(resolution: Ndppx)` query
   // matches one ratio, so hearing the next change means asking a new one.
   void ReportDevicePixelRatio();
+
+  // The chords grabbed by name: resolve each against `keys_`, and grab every
+  // one whose key moved. See grabShortcut(const String&).
+  void ResolveChords();
+  // The chord grabbed by name that `press` is, or empty.
+  String ChordFor(const DomicilePress& press) const;
+  // A key went down on the page. One that is a chord grabbed by name is the
+  // desktop's: taken from the page and dispatched as `shortcut`, the same as
+  // the browser process does for one pressed in a `<webview>`.
+  void PageKeyDown(Event* event);
   bool Ready(ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
@@ -486,6 +500,19 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::BrowserWindows> windows_;
   HeapMojoReceiver<domicile::mojom::blink::BrowserWindowsClient, DomicileHost>
       windows_receiver_;
+
+  // A chord grabbed by name, and the press it is on the last keyboard heard.
+  struct GrabbedChord {
+    String written;
+    DomicileWrittenChord chord;
+    std::optional<DomicilePress> press;
+  };
+  Vector<GrabbedChord> chords_;
+  // Every keysym the keyboard types and the evdev key it is on, from the last
+  // `shell_config`; nullopt until the first.
+  std::optional<HashMap<String, uint32_t>> keys_;
+  // `keydown` on the window, once a chord is grabbed by name.
+  Member<NativeEventListener> key_listener_;
 };
 
 }  // namespace blink
