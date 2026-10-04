@@ -19,7 +19,7 @@ export const Shell: Shell = (root) => {
     );
   };
   show();
-  domicile.addEventListener("windowschange", show);
+  domicile.addEventListener("windowschanged", show);
 };
 ```
 
@@ -47,14 +47,15 @@ stays at the compositor's placeholder size.
 ### State is properties; changes are events
 
 Everything with a current value is a readonly attribute on `DomicileHost`, and
-a change dispatches `<name>change` with no payload. A shell reads, then
-subscribes. A late listener misses nothing, so nothing needs buffering.
+a change dispatches `<name>changed` with no payload, as `displayschanged` and
+`brightnesschanged` already do. A shell reads, then subscribes. A late listener
+misses nothing, so nothing needs buffering.
 
 | Attribute | Replaces |
 |---|---|
 | `windows: DomicileWindow[]` | `appappeared`, `appclosed`, `appresized`, `apptitled`, `appminsize`, `appmaxsize`, `appcursor`, `popupplaced` |
 | `focusedWindow: string \| null` | `focuschanged` |
-| `displays`, `brightness` | already attributes; gain `displayschange`, `brightnesschange` |
+| `displays`, `brightness` | already attributes, with `displayschanged` and `brightnesschanged` |
 | `theme`, `windowsTheme` | `theme`, `windowstheme` |
 | `locked`, `idle` | `locked`, `idle` |
 | `battery`, `audio` | `battery`, `audio` |
@@ -129,21 +130,24 @@ and `host-stream` move to `@domicile-desktop/e2e-harness`, their only user.
 - **The engine holds moment events, over a client-side buffer.** The browser
   process is the only place that knows whether a listener exists before it
   dispatches.
-- **No compatibility layer.** One user, three shells in this repo. Each step
-  changes the IDL, the SDK and every shell together.
+- **The new surface lands beside the old, then one step moves every shell.**
+  Each engine step adds attributes and events and keeps the ones they replace,
+  so `DomicileClient` and the shells keep working untouched; the last step
+  rewrites the three shells onto `window.domicile` and deletes the old events
+  and the client together. No compatibility layer outlives that step.
 - **The do-nothing stand-in goes.** `window.domicile` is optional in the
   types, and a shell opened in a plain browser checks for it. Styling a shell
   without a desktop is the dev server's concern.
 
 ## Plan
 
-Each step ships alone, engine and shells together.
+Each step ships alone.
 
 - [x] the engine reports size and density; `setDesktopSize`,
       `setDevicePixelRatio`, `desktop-size` and `device-pixel-ratio` go
       (`guard-desktop-geometry.sh`)
-- [ ] `windows` and `focusedWindow` with their change events; the eight `app*`
-      events and `focuschanged` go
+- [x] `windows` and `focusedWindow` with `windowschanged` and
+      `focusedwindowchanged` (`guard-windows-state.sh`)
 - [ ] the rest of the state as attributes: `displays`, `brightness`, theme,
       lock, idle, battery, audio, extensions, tray, notifications, clipboard,
       modifiers
@@ -152,9 +156,11 @@ Each step ships alone, engine and shells together.
 - [ ] chords resolved by the engine; `shell_config` leaves the page; `bindKeys`
       becomes a pure helper over `grabShortcut` and `shortcut`
 - [ ] `<app>` routes its own input; `registerElements` and the routing modules go
-- [ ] `DomicileClient` and `connect-to-host` go; the wire modules move to
-      `e2e-harness`; the shells, `examples/minimal-shell`, WRITING-A-SHELL.md
-      and the SDK README describe `window.domicile`
+- [ ] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
+      README move to `window.domicile`; the events the attributes replace
+      (`appappeared` and the other seven `app*`, `focuschanged`, …),
+      `DomicileClient` and `connect-to-host` go; the wire modules move to
+      `e2e-harness`
 
 ## Open questions
 

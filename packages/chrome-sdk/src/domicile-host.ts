@@ -129,6 +129,33 @@ export type DomicileDisplay = {
 };
 
 /**
+ * One client window, as {@link DomicileHost.windows} lists it: what the
+ * compositor has said about it so far. Replaced, never edited — any change is
+ * a new `windows` array and a `windowschanged`.
+ */
+export type DomicileWindow = {
+  readonly appId: string;
+  /** Empty until the client names itself. */
+  readonly title: string;
+  /** The size the client last committed, in CSS pixels; `null` until it has. */
+  readonly width: number | null;
+  readonly height: number | null;
+  /** The limits the client asked for; `null` where it asked for none. */
+  readonly minWidth: number | null;
+  readonly minHeight: number | null;
+  readonly maxWidth: number | null;
+  readonly maxHeight: number | null;
+  readonly cursor: CursorShape;
+  /** A popup's parent window; `null` for a toplevel. */
+  readonly parent: string | null;
+  /** A popup's place relative to its parent; `null` for a toplevel. */
+  readonly x: number | null;
+  readonly y: number | null;
+  /** Whether a popup grabbed the pointer; `false` for a toplevel. */
+  readonly grab: boolean;
+};
+
+/**
  * Something happened to a window: it appeared, resized or closed — and, with
  * only `appId` filled in, focus moved to it or was asked for by it.
  *
@@ -995,6 +1022,19 @@ export type DomicileHostEventMap = {
    * where it is now.
    */
   brightnesschanged: Event;
+  /**
+   * A window appeared, closed, or changed. Bare — read
+   * {@link DomicileHost.windows} for what they are now.
+   */
+  windowschanged: Event;
+  /**
+   * The compositor said where the keyboard is. Bare — read
+   * {@link DomicileHost.focusedWindow}. Every time, not only when it moves, and
+   * once after the windows already running are replayed to a page that has
+   * just connected: a window listed after the first of these is one opened
+   * now.
+   */
+  focusedwindowchanged: Event;
 };
 
 /**
@@ -1284,6 +1324,17 @@ export type DomicileHost = {
    * ever on a machine with no backlight.
    */
   readonly brightness: number | null;
+
+  /**
+   * Every client window, in the order they appeared. Reading it binds the
+   * channel, and the compositor announces the windows already running as it
+   * does, so a shell that reads late misses nothing: read, then listen for
+   * `windowschanged`. A different frozen array after every change.
+   */
+  readonly windows: readonly DomicileWindow[];
+
+  /** The window holding the keyboard, or `null` when the shell's page holds it. */
+  readonly focusedWindow: string | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
     type: T,
