@@ -38,6 +38,9 @@ The fork writes the shell's HTML document
 - a charset, so the page is not decoded by guesswork
 - a viewport, so the engine does not lay out for a phone
 - a root with no margin, so the page fills the area the compositor assigned it
+- a `domicile-shell-module` meta naming the shell module. The document runs no
+  script: Blink's `DomicileShell` imports the module once the document is
+  parsed and calls `Shell(document.body, domicile)`
 
 ## `domicile://home/`
 

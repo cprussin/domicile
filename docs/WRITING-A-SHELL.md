@@ -79,10 +79,10 @@ export const Shell: ShellModule = (root, domicile) => {
 - `domicile`, the second argument to `Shell`, is the control channel to the
   compositor. Its type is `DomicileHost`, from
   `@domicile-desktop/sdk/domicile-host`. There is nothing to configure.
-- It is the only copy. The engine hands it out once per document, to the
-  document Domicile writes, which passes it to `Shell`. There is no global:
-  keep it however you like (a React context, a variable) and pass it to what
-  needs it.
+- It is the only copy. The engine runs your module and calls `Shell` with
+  the desktop; there is no `navigator.domicile` or `window.domicile`. Keep it
+  however you like (a React context, a variable) and pass it to what needs
+  it.
 - There is nothing to await and no version handshake. The browser process
   checks the protocol version and logs a mismatch. The first call binds the
   channel.

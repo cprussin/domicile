@@ -6,7 +6,7 @@
 
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
-// The events navigator.domicile dispatches, one line each: the name a page
+// The events the desktop dispatches, one line each: the name a page
 // listens for, and the function that names it here.
 //
 // NOT IN core/events/event_type_names.json5, which is where Blink keeps its

@@ -1,7 +1,7 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// The event behind navigator.domicile.onapptitled.
+// The event behind DomicileHost.onapptitled.
 //
 // A real event type rather than a CustomEvent carrying a detail bag, because
 // the whole point of the typed surface is that a shell does not parse anything.
