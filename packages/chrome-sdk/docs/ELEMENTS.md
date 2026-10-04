@@ -42,6 +42,9 @@ Event names and full types are in `src/app-element.ts` and
     nothing.
   - `domicile-close`: the page called `window.close()`. The shell removes the
     view.
+  - `domicile-focus-request`: the page called `window.focus()` or
+    `client.focus()` (how a site answers a click on its notification), or an
+    extension asked for the tab. The shell raises the view.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
   - `domicile-popup-window`: an extension called `chrome.windows.create` for a
