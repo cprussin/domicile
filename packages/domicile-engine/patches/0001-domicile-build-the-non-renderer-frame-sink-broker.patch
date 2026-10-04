@@ -16,7 +16,7 @@ edit in files Chromium already owns.
  2 files changed, 4 insertions(+)
 
 diff --git a/components/BUILD.gn b/components/BUILD.gn
-index ec3fce4185..b0234c1ee0 100644
+index 0b241043d4..06ca95d48c 100644
 --- a/components/BUILD.gn
 +++ b/components/BUILD.gn
 @@ -233,6 +233,7 @@ test("components_unittests") {
@@ -28,7 +28,7 @@ index ec3fce4185..b0234c1ee0 100644
      "//components/encrypted_messages:unit_tests",
      "//components/enterprise/device_trust/core/attestation:unit_tests",
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index db736f75c3..e0f9cc6164 100644
+index a4e335cacb..3c230d6f97 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -151,6 +151,7 @@ source_set("browser") {
@@ -39,12 +39,12 @@ index db736f75c3..e0f9cc6164 100644
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -935,6 +936,8 @@ source_set("browser") {
+@@ -939,6 +940,8 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",
 +    "domicile/domicile_frame_sink_broker.cc",
 +    "domicile/domicile_frame_sink_broker.h",
-     "download/data_url_blob_reader.cc",
-     "download/data_url_blob_reader.h",
      "download/download_item_utils.cc",
+     "download/download_manager_impl.cc",
+     "download/download_manager_impl.h",

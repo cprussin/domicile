@@ -41,10 +41,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
  2 files changed, 40 insertions(+), 6 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 0d0dbb2a6a..a2bfba2008 100644
+index ca868c5818..b66d13c7b6 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -2132,8 +2132,8 @@ bool HTMLCanvasElement::CreateLayer() {
+@@ -2113,8 +2113,8 @@ bool HTMLCanvasElement::CreateLayer() {
  }
  
  ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
@@ -54,7 +54,7 @@ index 0d0dbb2a6a..a2bfba2008 100644
      ExceptionState& exception_state) {
    LocalFrame* frame = GetDocument().GetFrame();
    if (!frame || !frame->GetPage()) {
-@@ -2147,14 +2147,15 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2128,14 +2128,15 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
    // transferControlToOffscreen() and a desynchronized context both build one.
    // Embedding then would point that layer somewhere else and strand whatever
    // was submitting to it, which is a mistake worth refusing rather than
@@ -73,7 +73,7 @@ index 0d0dbb2a6a..a2bfba2008 100644
      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                        "Could not create a layer.");
      return EmptyPromise();
-@@ -2164,15 +2165,39 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2145,15 +2146,39 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
        MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
    auto promise = resolver->Promise();
  
@@ -116,10 +116,10 @@ index 0d0dbb2a6a..a2bfba2008 100644
      ScriptPromiseResolver<IDLUndefined>* resolver,
      const std::optional<viz::SurfaceId>& surface_id) {
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
-index 2bc229ed3a..55c760eb00 100644
+index b9794229d3..519d81ffc2 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
-@@ -337,6 +337,11 @@ class CORE_EXPORT HTMLCanvasElement final
+@@ -333,6 +333,11 @@ class CORE_EXPORT HTMLCanvasElement final
    // SurfaceId comes from: the browser's namespace by way of
    // ExternalSurfaceEmbedder, instead of this renderer's own.
    //
@@ -131,7 +131,7 @@ index 2bc229ed3a..55c760eb00 100644
    // Behind RuntimeEnabledFeatures::DomicileExternalSurfaceEnabled(). Resolves
    // when the surface is embedded, which waits for a producer to connect.
    ScriptPromise<IDLUndefined> embedExternalSurface(
-@@ -457,6 +462,10 @@ class CORE_EXPORT HTMLCanvasElement final
+@@ -453,6 +458,10 @@ class CORE_EXPORT HTMLCanvasElement final
        ScriptPromiseResolver<IDLUndefined>* resolver,
        const std::optional<viz::SurfaceId>& surface_id);
  

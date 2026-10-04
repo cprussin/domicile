@@ -648,9 +648,7 @@ void WebViewGuest::Find(const std::string& text, bool forward) {
   // Chrome's find bar's rule: the text it is already searching for is a step
   // to the next match, and anything else starts over.
   const bool new_session = search != find_text_;
-  ++find_request_id_;
   if (new_session) {
-    find_session_id_ = find_request_id_;
     find_text_ = search;
   }
 
@@ -659,8 +657,12 @@ void WebViewGuest::Find(const std::string& text, bool forward) {
   options->new_session = new_session;
   // Not skipped: the delay is content's own mitigation for a search typed a
   // letter at a time, which is exactly how a find bar sends one.
-  guest_contents_->Find(find_request_id_, find_text_, std::move(options),
-                        /*skip_delay=*/false);
+  guest_contents_->Find(find_text_, std::move(options), /*skip_delay=*/false,
+                        [this, new_session](int request_id) {
+                          if (new_session) {
+                            find_session_id_ = request_id;
+                          }
+                        });
 }
 
 void WebViewGuest::StopFinding(bool keep_selection) {
@@ -1059,12 +1061,11 @@ void WebViewGuest::ReportZoom() {
   }
 }
 
-void WebViewGuest::FindReply(content::WebContents* web_contents,
-                             int request_id,
-                             int number_of_matches,
-                             const gfx::Rect& selection_rect,
-                             int active_match_ordinal,
-                             bool final_update) {
+void WebViewGuest::DidReceiveFindReply(int request_id,
+                                       int number_of_matches,
+                                       const gfx::Rect& selection_rect,
+                                       int active_match_ordinal,
+                                       bool final_update) {
   // A find stopped, or one replaced by a search for other text: what this
   // counts is not what the element is showing.
   if (find_text_.empty() || request_id < find_session_id_) {

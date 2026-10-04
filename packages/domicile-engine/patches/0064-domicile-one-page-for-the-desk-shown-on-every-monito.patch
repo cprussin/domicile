@@ -33,7 +33,7 @@ one CRTC's window and shown on the rest
  10 files changed, 101 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
-index a6efac4..9eb0014 100644
+index a6efac48fe..9eb0014950 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 @@ -18,6 +18,7 @@
@@ -59,10 +59,10 @@ index a6efac4..9eb0014 100644
  
    // If certain views were not laid out, make sure they're hidden to avoid
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 0329c8d..365b3e0 100644
+index 1ecba1a148..b9dac8f589 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -937,6 +937,8 @@ source_set("browser") {
+@@ -941,6 +941,8 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",
@@ -72,10 +72,10 @@ index 0329c8d..365b3e0 100644
      "domicile/domicile_frame_sink_broker.h",
      "domicile/domicile_spike_probe.cc",
 diff --git a/content/browser/renderer_host/render_widget_host_view_base.cc b/content/browser/renderer_host/render_widget_host_view_base.cc
-index 3c8f08f..da1861c 100644
+index 79329c857f..2b06b2b4d0 100644
 --- a/content/browser/renderer_host/render_widget_host_view_base.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_base.cc
-@@ -24,6 +24,7 @@
+@@ -25,6 +25,7 @@
  #include "components/viz/host/host_frame_sink_manager.h"
  #include "content/browser/compositor/surface_utils.h"
  #include "content/browser/device_posture/device_posture_provider_impl.h"
@@ -83,7 +83,7 @@ index 3c8f08f..da1861c 100644
  #include "content/browser/gpu/gpu_data_manager_impl.h"
  #include "content/browser/renderer_host/delegated_frame_host.h"
  #include "content/browser/renderer_host/frame_tree.h"
-@@ -959,6 +960,14 @@ display::ScreenInfos RenderWidgetHostViewBase::GetNewScreenInfosForUpdate() {
+@@ -988,6 +989,14 @@ display::ScreenInfos RenderWidgetHostViewBase::GetNewScreenInfosForUpdate() {
  
    display::ScreenInfos screen_infos;
  
@@ -99,10 +99,10 @@ index 3c8f08f..da1861c 100644
      gfx::NativeView native_view = GetNativeView();
      const auto& display = native_view
 diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
-index 790d665..d63c848 100644
+index c937bf7c5e..0c3d8a8922 100644
 --- a/content/public/browser/BUILD.gn
 +++ b/content/public/browser/BUILD.gn
-@@ -167,6 +167,7 @@ source_set("browser_sources") {
+@@ -168,6 +168,7 @@ source_set("browser_sources") {
      "document_user_data.cc",
      "document_user_data.h",
      "dom_storage_context.h",
@@ -111,7 +111,7 @@ index 790d665..d63c848 100644
      "download_manager.cc",
      "download_manager.h",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index fc56bbf..4c0829f 100644
+index fc56bbff53..4c0829feee 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -90,8 +90,12 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
@@ -164,7 +164,7 @@ index fc56bbf..4c0829f 100644
  
    if (window != old_window) {
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index 742a6c4..b3f0485 100644
+index 742a6c4b5f..b3f0485932 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
 @@ -88,6 +88,17 @@ class DrmCursor : public CursorDelegateEvdev {
@@ -195,7 +195,7 @@ index 742a6c4..b3f0485 100644
    const raw_ptr<DrmWindowHostManager> window_manager_
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 1d1808c..1609a51 100644
+index 1d1808cb40..1609a51512 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -377,6 +377,15 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -235,7 +235,7 @@ index 1d1808c..1609a51 100644
      located_event->set_root_location_f(location);
    }
 diff --git a/ui/ozone/platform/drm/host/drm_window_host_manager.h b/ui/ozone/platform/drm/host/drm_window_host_manager.h
-index 32c035b..b04e2bf 100644
+index 32c035ba3e..b04e2bfeb4 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host_manager.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host_manager.h
 @@ -75,6 +75,11 @@ class DrmWindowHostManager {
@@ -259,7 +259,7 @@ index 32c035b..b04e2bf 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 4af83ef..65bd24f 100644
+index 4af83ef648..65bd24f2b8 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -168,6 +168,15 @@ class OzonePlatformDrm : public OzonePlatform {
@@ -279,7 +279,7 @@ index 4af83ef..65bd24f 100644
    // not have -- `Clipboard::Create` falls back to `ClipboardNonBacked`, an
    // in-process store nothing outside the browser can reach, so a copy made in
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index a99f31a..ed71b99 100644
+index a99f31aeaa..ed71b99294 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -369,6 +369,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
@@ -294,6 +294,3 @@ index a99f31a..ed71b99 100644
    // DOMICILE: what the compositor says is on one of the desktop's clipboards.
    //
    // THE BROWSER IS TOLD RATHER THAN ASKED. The compositor reads every
--- 
-2.43.0
-

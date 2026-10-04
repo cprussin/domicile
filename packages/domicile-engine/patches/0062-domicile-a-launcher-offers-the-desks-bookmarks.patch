@@ -15,7 +15,7 @@ in a generated-bindings list.
  2 files changed, 3 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 5b1785da9f..7c8cbde185 100644
+index 662d335997..d403424050 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -2422,6 +2422,8 @@ generated_interface_sources_in_modules = [
@@ -39,6 +39,3 @@ index 19acb2e596..3fff523b79 100644
    "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_modifiers_event_init.idl",
--- 
-2.43.0
-

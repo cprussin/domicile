@@ -38,7 +38,7 @@ See cc/domicile/display_regions.h.
  15 files changed, 283 insertions(+), 35 deletions(-)
 
 diff --git a/cc/BUILD.gn b/cc/BUILD.gn
-index 7ef7576..30c269d 100644
+index b9226dd27a..96511e9cac 100644
 --- a/cc/BUILD.gn
 +++ b/cc/BUILD.gn
 @@ -510,6 +510,9 @@ cc_component("cc") {
@@ -52,7 +52,7 @@ index 7ef7576..30c269d 100644
      "//cc/mojom:mojom_layer_trees",
      "//cc/paint",
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index 0d868a4..a4466e4 100644
+index 0d868a4c9d..a4466e4ff7 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
 @@ -24,6 +24,7 @@
@@ -178,7 +178,7 @@ index 0d868a4..a4466e4 100644
      const {
    DCHECK(AffectedByWillChangeTransformHint());
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index c25d647..ac2a487 100644
+index c25d647967..ac2a487d67 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -12,6 +12,7 @@
@@ -211,7 +211,7 @@ index c25d647..ac2a487 100644
   private:
    TilingResolution GetTilingResolutionForDebugBorders(
 diff --git a/cc/layers/tile_based_layer_impl.h b/cc/layers/tile_based_layer_impl.h
-index 7890c8d..46217f0 100644
+index 7890c8d469..46217f040d 100644
 --- a/cc/layers/tile_based_layer_impl.h
 +++ b/cc/layers/tile_based_layer_impl.h
 @@ -215,6 +215,14 @@ class CC_EXPORT TileBasedLayerImpl : public LayerImpl {
@@ -305,7 +305,7 @@ index 7890c8d..46217f0 100644
    if (missing_tile_count) {
      append_quads_data->num_missing_tiles += missing_tile_count;
 diff --git a/cc/tiles/picture_layer_tiling.cc b/cc/tiles/picture_layer_tiling.cc
-index 27ce3ce..dbd0d30 100644
+index 27ce3ced5e..dbd0d307bd 100644
 --- a/cc/tiles/picture_layer_tiling.cc
 +++ b/cc/tiles/picture_layer_tiling.cc
 @@ -475,10 +475,17 @@ void PictureLayerTiling::ComputeTilePriorityRects(
@@ -341,7 +341,7 @@ index 27ce3ce..dbd0d30 100644
      VerifyTiles();
      return;
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index 9239595..a487d76 100644
+index 9239595392..a487d76016 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
 @@ -11,6 +11,7 @@
@@ -380,7 +380,7 @@ index 9239595..a487d76 100644
    // Internal data.
    TilingData tiling_data_{gfx::Size(), gfx::Rect(), kBorderTexels};
 diff --git a/cc/tiles/tiling_set_raster_queue_all.cc b/cc/tiles/tiling_set_raster_queue_all.cc
-index ddc1d41..fa61354 100644
+index ddc1d41e50..fa6135434d 100644
 --- a/cc/tiles/tiling_set_raster_queue_all.cc
 +++ b/cc/tiles/tiling_set_raster_queue_all.cc
 @@ -36,7 +36,7 @@ std::unique_ptr<TilingSetRasterQueueAll> TilingSetRasterQueueAll::Create(
@@ -493,7 +493,7 @@ index ddc1d41..fa61354 100644
    DCHECK(!stages_.empty());
  
 diff --git a/cc/tiles/tiling_set_raster_queue_all.h b/cc/tiles/tiling_set_raster_queue_all.h
-index 88b116e..34461b1 100644
+index 88b116eb26..34461b163f 100644
 --- a/cc/tiles/tiling_set_raster_queue_all.h
 +++ b/cc/tiles/tiling_set_raster_queue_all.h
 @@ -10,6 +10,7 @@
@@ -537,7 +537,7 @@ index 88b116e..34461b1 100644
    bool is_drawing_layer_ = false;
  };
 diff --git a/cc/trees/commit_state.h b/cc/trees/commit_state.h
-index 9d88521..b41d27a 100644
+index 9d885219f1..b41d27a76d 100644
 --- a/cc/trees/commit_state.h
 +++ b/cc/trees/commit_state.h
 @@ -20,6 +20,7 @@
@@ -558,7 +558,7 @@ index 9d88521..b41d27a 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 5192a70..c893379 100644
+index 5192a70f7c..c893379f8f 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
 @@ -1646,6 +1646,14 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
@@ -577,7 +577,7 @@ index 5192a70..c893379 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 478cd5e..3cd88fb 100644
+index 478cd5e174..3cd88fb7d9 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -33,6 +33,7 @@
@@ -600,10 +600,10 @@ index 478cd5e..3cd88fb 100644
      DCHECK(IsMainThread());
      return scroll_animation_.in_progress;
 diff --git a/cc/trees/layer_tree_impl.cc b/cc/trees/layer_tree_impl.cc
-index 18886a9..17e3c6f 100644
+index 85f129e4f3..59bb0a2d07 100644
 --- a/cc/trees/layer_tree_impl.cc
 +++ b/cc/trees/layer_tree_impl.cc
-@@ -897,6 +897,7 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
+@@ -911,6 +911,7 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
                                      commit_state.bottom_controls_shown_ratio);
  
    SetDisplayColorSpaces(commit_state.display_color_spaces);
@@ -611,7 +611,7 @@ index 18886a9..17e3c6f 100644
    SetExternalPageScaleFactor(commit_state.external_page_scale_factor);
  
    set_painted_device_scale_factor(commit_state.painted_device_scale_factor);
-@@ -1023,6 +1024,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
+@@ -1037,6 +1038,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
    target_tree->set_overscroll_behavior(overscroll_behavior_);
  
    target_tree->SetDisplayColorSpaces(display_color_spaces_);
@@ -619,7 +619,7 @@ index 18886a9..17e3c6f 100644
  
    target_tree->set_painted_device_scale_factor(painted_device_scale_factor());
    target_tree->SetDeviceScaleFactor(device_scale_factor());
-@@ -1716,6 +1718,15 @@ void LayerTreeImpl::SetDisplayColorSpaces(
+@@ -1730,6 +1732,15 @@ void LayerTreeImpl::SetDisplayColorSpaces(
    display_color_spaces_ = display_color_spaces;
  }
  
@@ -636,10 +636,10 @@ index 18886a9..17e3c6f 100644
      float external_page_scale_factor) {
    if (external_page_scale_factor_ == external_page_scale_factor)
 diff --git a/cc/trees/layer_tree_impl.h b/cc/trees/layer_tree_impl.h
-index 7ae7de0..447a0a5 100644
+index 79adcfbc9f..ac5f778f8d 100644
 --- a/cc/trees/layer_tree_impl.h
 +++ b/cc/trees/layer_tree_impl.h
-@@ -19,6 +19,7 @@
+@@ -20,6 +20,7 @@
  #include "base/memory/raw_ptr_exclusion.h"
  #include "base/time/time.h"
  #include "cc/base/synced_property.h"
@@ -647,7 +647,7 @@ index 7ae7de0..447a0a5 100644
  #include "cc/input/event_listener_properties.h"
  #include "cc/input/layer_selection_bound.h"
  #include "cc/input/overscroll_behavior.h"
-@@ -470,6 +471,12 @@ class CC_EXPORT LayerTreeImpl {
+@@ -477,6 +478,12 @@ class CC_EXPORT LayerTreeImpl {
      return display_color_spaces_;
    }
  
@@ -660,7 +660,7 @@ index 7ae7de0..447a0a5 100644
    const ViewportPropertyIds& viewport_property_ids() const {
      return viewport_property_ids_;
    }
-@@ -931,6 +938,7 @@ class CC_EXPORT LayerTreeImpl {
+@@ -938,6 +945,7 @@ class CC_EXPORT LayerTreeImpl {
    float device_scale_factor_;
    float painted_device_scale_factor_;
    gfx::DisplayColorSpaces display_color_spaces_;
@@ -669,7 +669,7 @@ index 7ae7de0..447a0a5 100644
    viz::LocalSurfaceId local_surface_id_from_parent_;
  
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index 0a1ef67..f6c271a 100644
+index 0a1ef6721b..f6c271afb1 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
 @@ -19,6 +19,7 @@
@@ -719,7 +719,7 @@ index 0a1ef67..f6c271a 100644
  
  void WidgetBase::SetPendingWindowRect(const gfx::Rect& rect) {
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.h b/third_party/blink/renderer/platform/widget/widget_base.h
-index a26fb60..5fdc98d 100644
+index a26fb60d60..5fdc98dfb1 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.h
 +++ b/third_party/blink/renderer/platform/widget/widget_base.h
 @@ -358,6 +358,11 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
@@ -734,6 +734,3 @@ index a26fb60..5fdc98d 100644
    // Returns the visible viewport size.
    const gfx::Size& VisibleViewportSize() const {
      return visible_viewport_size_device_px_;
--- 
-2.43.0
-

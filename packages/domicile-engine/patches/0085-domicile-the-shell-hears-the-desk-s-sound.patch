@@ -18,11 +18,12 @@ Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`, and `guard-control-arrival.sh` fires the
 `audio` name in a real engine.
 ---
- third_party/blink/renderer/bindings/generated_in_modules.gni | 12 ++++++++++++
- third_party/blink/renderer/bindings/idl_in_modules.gni       | 6 ++++++
+ .../blink/renderer/bindings/generated_in_modules.gni | 12 ++++++++++++
+ .../blink/renderer/bindings/idl_in_modules.gni       |  6 ++++++
  2 files changed, 18 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index a756588f15..50ce784ac4 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -335,6 +335,8 @@ generated_dictionary_sources_in_modules = [
@@ -52,6 +53,7 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 566ec65db9..1dfca7a9a9 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -309,6 +309,12 @@ static_idl_files_in_modules = [
@@ -67,5 +69,3 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
--- 
-2.43.0

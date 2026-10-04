@@ -16,11 +16,12 @@ Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`, and `guard-control-arrival.sh` fires the
 `audiolevels` name in a real engine.
 ---
- third_party/blink/renderer/bindings/generated_in_modules.gni | 6 ++++++
- third_party/blink/renderer/bindings/idl_in_modules.gni       | 3 +++
+ .../blink/renderer/bindings/generated_in_modules.gni        | 6 ++++++
+ third_party/blink/renderer/bindings/idl_in_modules.gni      | 3 +++
  2 files changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 50ce784ac4..5819a71e32 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -337,6 +337,8 @@ generated_dictionary_sources_in_modules = [
@@ -32,7 +33,7 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
-@@ -2450,6 +2452,10 @@ generated_interface_sources_in_modules = [
+@@ -2452,6 +2454,10 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_audio_stream.h",
@@ -44,9 +45,10 @@ diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/thir
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index 1dfca7a9a9..ac9dd8d224 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -314,6 +314,9 @@ static_idl_files_in_modules = [
+@@ -315,6 +315,9 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_audio_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_audio_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_audio_stream.idl",
@@ -56,5 +58,3 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",
--- 
-2.43.0

@@ -27,13 +27,13 @@ WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT: the file
 each hunk applies to was rebuilt from the pin and the patches before it,
 and both blobs are that file's.
 ---
- chrome/browser/chrome_browser_interface_binders.cc           | 29 ++++++++++++++++++++++++++++-
- third_party/blink/renderer/bindings/generated_in_modules.gni | 6 ++++++
- third_party/blink/renderer/bindings/idl_in_modules.gni       | 3 +++
+ .../chrome_browser_interface_binders.cc       | 29 ++++++++++++++++++-
+ .../bindings/generated_in_modules.gni         |  6 ++++
+ .../renderer/bindings/idl_in_modules.gni      |  3 ++
  3 files changed, 37 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index b465203b7e..81758bb1f6 100644
+index fb71a7d67c..3d9daaaeb6 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,7 +6,9 @@
@@ -46,7 +46,7 @@ index b465203b7e..81758bb1f6 100644
  #include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -563,7 +565,32 @@ void PopulateChromeFrameBinders(
+@@ -571,7 +573,32 @@ void PopulateChromeFrameBinders(
                "domicile: only a domicile:// document may ask for a guest.");
            return;
          }
@@ -81,10 +81,10 @@ index b465203b7e..81758bb1f6 100644
  
    map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 8e08d34d86..05e31ef43c 100644
+index 7a33da2a6a..78d10209ae 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -323,6 +323,8 @@
+@@ -323,6 +323,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.h",
@@ -93,7 +93,7 @@ index 8e08d34d86..05e31ef43c 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.cc",
-@@ -2406,6 +2408,10 @@
+@@ -2406,6 +2408,10 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_entry.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.h",
@@ -108,7 +108,7 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
 index 264723ca2a..5429129b60 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -292,6 +292,9 @@
+@@ -292,6 +292,9 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event_init.idl",

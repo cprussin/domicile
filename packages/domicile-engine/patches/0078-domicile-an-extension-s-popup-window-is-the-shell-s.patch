@@ -28,10 +28,10 @@ the engine job.
  3 files changed, 5 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 9b1be4d..0000000 100644
+index c47c2dcddd..5a36abafaf 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1198,6 +1198,8 @@ generated_interface_sources_in_core = [
+@@ -1200,6 +1200,8 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_file_chooser_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.h",
@@ -41,10 +41,10 @@ index 9b1be4d..0000000 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index 2623a3b..0000000 100644
+index 9d7e5225a3..502d1c3fa2 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -461,6 +461,7 @@ static_idl_files_in_core = [
+@@ -462,6 +462,7 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
    "//third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.idl",
    "//third_party/blink/renderer/core/html/domicile/domicile_new_window_event.idl",
@@ -53,7 +53,7 @@ index 2623a3b..0000000 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index b347f08..0000000 100644
+index b347f082f7..3748787aac 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
 @@ -98,6 +98,8 @@ blink_core_sources_html = [
@@ -65,5 +65,3 @@ index b347f08..0000000 100644
    "domicile/html_app_element.cc",
    "domicile/html_app_element.h",
    "domicile/html_web_view_element.cc",
--- 
-2.43.0

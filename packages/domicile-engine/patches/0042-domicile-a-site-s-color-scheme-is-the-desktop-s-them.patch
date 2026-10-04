@@ -12,15 +12,15 @@ shell's page.
 from it. Bound here for the keymap's reason: NativeTheme belongs to the UI
 thread and the control channel is read on the IO thread.
 ---
- chrome/browser/BUILD.gn                            | 6 ++++--
- chrome/browser/chrome_browser_interface_binders.cc | 8 ++++++++
- 2 files changed, 12 insertions(+), 2 deletions(-)
+ chrome/browser/BUILD.gn                            |  6 ++++--
+ chrome/browser/chrome_browser_interface_binders.cc | 10 +++++++++-
+ 2 files changed, 13 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b6704b087d..7fa3deed6c 100644
+index 6597a518ad..693fc8376f 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2393,9 +2393,11 @@ source_set("browser") {
+@@ -2411,9 +2411,11 @@ source_set("browser") {
      "//components/domain_reliability",
  
      # Domicile's engine fork: serving the shell over domicile://, the
@@ -35,7 +35,7 @@ index b6704b087d..7fa3deed6c 100644
      "//components/domicile:keyboard_layout",
      "//components/domicile:shell_scheme",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 260b967dfc..52afd43cca 100644
+index 9050cf36fa..6a1ca6a186 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,6 +6,7 @@
@@ -46,7 +46,7 @@ index 260b967dfc..52afd43cca 100644
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -518,7 +519,14 @@ void PopulateChromeFrameBinders(
+@@ -526,7 +527,14 @@ void PopulateChromeFrameBinders(
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::WarpPointerIn,
