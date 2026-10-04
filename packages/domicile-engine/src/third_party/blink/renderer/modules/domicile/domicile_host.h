@@ -380,6 +380,15 @@ class MODULES_EXPORT DomicileHost final
   // `windowschanged`.
   void WindowsChanged();
 
+  // A moment rather than a state -- `openurl`, `focusrequested`, `shortcut` --
+  // has no attribute to read late, so one that arrives before anything
+  // listens for it is held, and handed to the first listener of its type.
+  // Without this an address `domicile open-url` sent while the shell was still
+  // loading would be gone. At most `kMostHeld`: a page that never listens
+  // must not grow without bound.
+  void DispatchOrHold(Event& event);
+  void DeliverHeld(const AtomicString& event_type);
+
   // The desktop's size and density, told to the compositor by the engine
   // rather than by the page: the shell's window IS the desktop, the compositor
   // never sees it, and a shell that forgot to say would leave every client laid
@@ -409,6 +418,8 @@ class MODULES_EXPORT DomicileHost final
   Vector<DomicileWindowState> window_states_;
   Member<FrozenArray<DomicileWindow>> windows_;
   String focused_window_;
+  // Moments that arrived before anything listened -- see DispatchOrHold.
+  HeapVector<Member<Event>> held_;
   // The last of each stateful event, which its attributes read from.
   Member<DomicileClipboardEvent> last_clipboard_;
   Member<DomicileTrayEvent> last_tray_items_;
