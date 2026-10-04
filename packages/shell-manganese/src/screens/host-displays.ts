@@ -13,7 +13,7 @@ import { watchHost } from "../host/watch-host";
  * The desktop the host describes, as the component library wants to be told
  * about it.
  *
- * The whole of the adapter between `window.domicile` and the design system,
+ * The whole of the adapter between the desktop and the design system,
  * and the reason `DisplaySource` is a port rather than the host itself:
  * `@domicile-desktop/component-library` has no protocol dependency, so the
  * shell — which has both — is where the two meet.

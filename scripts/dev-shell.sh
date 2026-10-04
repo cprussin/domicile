@@ -6,8 +6,8 @@
 #
 # WHAT THIS REPLACED, AND WHY IT HAD TO. `start:dev` used to be `vite`: a dev
 # server, opened in whatever browser you had. That page has no compositor, no
-# clients and no windows — `window.domicile` is absent and the shell had a stand-in
-# transport that does nothing — so what you were looking at was the chrome with
+# clients and no windows — no desktop to hand the shell, so it had a stand-in
+# transport that did nothing — so what you were looking at was the chrome with
 # every window in it missing. Useful for a stylesheet and misleading for
 # anything else, and it is not what "run the shell" should mean.
 #

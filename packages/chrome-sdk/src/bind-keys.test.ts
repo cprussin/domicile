@@ -20,7 +20,7 @@ const DESK: ShellKeybindings = {
 };
 
 /**
- * What `bindKeys` uses of `window.domicile`: the grab, and `shortcut` events
+ * What `bindKeys` uses of the desktop: the grab, and `shortcut` events
  * carrying the chord as it was grabbed. A press is the engine's to resolve,
  * so the fake hands back any chord it is told was pressed.
  */

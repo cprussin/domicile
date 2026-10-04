@@ -296,7 +296,7 @@ pub enum ChromeMessage {
     /// [`HostMessage::FoundFiles`].
     ///
     /// A shell's launcher is a page, and a page has no filesystem: there is no
-    /// `readdir` on `window.domicile` and this is deliberately not one. **It
+    /// `readdir` on `DomicileHost` and this is deliberately not one. **It
     /// carries no path**, so nothing a page can say decides which directory is
     /// read — the compositor holds that policy, and the document served over
     /// `domicile://` gains no reach into the filesystem by asking.

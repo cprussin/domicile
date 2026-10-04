@@ -7,7 +7,7 @@ describe("the chrome->host messages the harness still writes", () => {
   it("match the domicile-protocol wire shape", () => {
     // The whole of what a headless chrome says: it shakes hands, and it
     // reports whatever density the calling script wants to test with. Nothing
-    // else here has a writer since the page moved to `navigator.domicile`.
+    // else here has a writer since the page moved to the `DomicileHost` it is handed.
     expect(helloMessage(2)).toEqual({ protocol_version: 2, type: "hello" });
     expect(setDevicePixelRatioMessage(2)).toEqual({
       ratio: 2,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# navigator.domicile's event names are the fork's own, not Blink's.
+# DomicileHost's event names are the fork's own, not Blink's.
 #
 # Blink's core/events/event_type_names.json5 generates a header nearly all of
 # Blink includes, so a name added there recompiles most of Blink: engine run

@@ -4,7 +4,7 @@
 // WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
 // own log:
 //
-//   GUARD listening            navigator.domicile exists and a listener is
+//   GUARD listening            the desktop was handed to Shell and a listener is
 //                              registered -- the harness working
 //   GUARD page name=… url=…    window `a` or `b` is showing a page
 //   GUARD tray popup=…         the fixture's row arrived, naming its popup
@@ -24,7 +24,7 @@
 // Everything is inside `Shell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = () => {
+export const Shell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
@@ -42,10 +42,10 @@ export const Shell = () => {
     }
   };
 
-  const host = navigator.domicile;
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-webview-tabs: navigator.domicile is absent, so this document" +
+      "guard-webview-tabs: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

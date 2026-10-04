@@ -28,11 +28,11 @@ const press = (code, init) => {
   return event.defaultPrevented ? "taken" : "free";
 };
 
-export const Shell = () => {
-  const host = window.domicile;
+export const Shell = (_root, desktop) => {
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-shortcut-chords: window.domicile is absent, so this document" +
+      "guard-shortcut-chords: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

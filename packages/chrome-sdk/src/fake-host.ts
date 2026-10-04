@@ -1,4 +1,4 @@
-// A `window.domicile` for a shell's tests: the desk's state, set by the test
+// A desktop for a shell's tests: the desk's state, set by the test
 // and announced with the event the engine would dispatch, and a record of
 // every call the shell makes.
 //
@@ -16,7 +16,7 @@ import type {
   DomicileWindow,
 } from "./domicile-host";
 
-/** The attributes of `window.domicile` a test sets. */
+/** The attributes of the desktop a test sets. */
 export type DomicileState = {
   -readonly [K in keyof DomicileHost as DomicileHost[K] extends (
     ...args: never[]
@@ -109,7 +109,7 @@ export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */
   readonly calls: (readonly [method: string, ...args: unknown[]])[] = [];
 
-  /** What the shell is handed as `window.domicile`. */
+  /** What the shell is handed as its desktop. */
   readonly host: DomicileHost;
 
   readonly #target = new EventTarget();

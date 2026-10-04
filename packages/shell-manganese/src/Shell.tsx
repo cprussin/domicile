@@ -26,7 +26,7 @@ type Props = {
   keybindings?: ShellKeybindings | undefined;
   /**
    * Where the theme comes from, and what the bar's toggle asks. The host over
-   * the control channel, or the page itself where there is no host — passed in
+   * the control channel — passed in
    * for {@link displays}'s reason, and for one more: the theme is the
    * desktop's, so a shell that built its own would be the one place that
    * changed.

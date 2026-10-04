@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The engine's event interfaces and the SDK's types for them, compared.
 #
-# `navigator.domicile` fires five typed event interfaces. What they carry is
+# `DomicileHost` fires five typed event interfaces. What they carry is
 # declared twice: once in WebIDL, where Blink generates the bindings from it,
 # and once in `@domicile-desktop/sdk`'s `domicile-host.ts`, where a shell reads
 # it. Nothing makes the two agree, and neither half can notice on its own:

@@ -8,11 +8,11 @@
 //                                     many arrived inside its own
 //                                     `addEventListener` call: none should
 
-export const Shell = () => {
-  const host = window.domicile;
+export const Shell = (_root, desktop) => {
+  const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
-      "guard-held-moments: window.domicile is absent, so this document" +
+      "guard-held-moments: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
     );
   }

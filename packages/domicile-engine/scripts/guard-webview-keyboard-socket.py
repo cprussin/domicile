@@ -4,7 +4,7 @@ compositor.
 
 `ControlChannel` connects to `--domicile-control-socket` and, if nothing is
 listening there after thirty seconds, logs, closes the page's end and deletes
-itself. A shell is then holding a `navigator.domicile` that throws. Every
+itself. A shell is then holding a desktop that throws. Every
 outbound leg of this guard runs through that channel -- the claim goes down it
 and the press comes back up it -- so the guard needs something on the other end
 for the length of the run, and a real compositor is not available here: this

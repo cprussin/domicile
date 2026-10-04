@@ -166,10 +166,13 @@ release.
 
 ## The control channel's protocol, and what of it is here
 
-`window.domicile` is the shell's control channel, and `navigator.domicile` is
-the same object under the name it was born with: `WindowDomicile::domicile`
-forwards to `NavigatorDomicile`, which is the supplement that owns the one
-`DomicileHost` a window gets, so the alias cannot become a second channel. The
+`navigator.domicile` is the shell's control channel, and the engine answers it
+once per document: the document Domicile writes reads it and hands it to the
+shell as `Shell(root, domicile)`, and every read after the first is null, so
+the shell's copy is the only one. `window.domicile` is the same handover by
+another spelling — `WindowDomicile::domicile` forwards to `NavigatorDomicile`,
+the supplement that owns the one `DomicileHost` a window gets, so the alias
+cannot become a second channel. The
 wire protocol lives in the browser process rather than in the page, which is
 what makes a malformed message unconstructable — and what makes adding one cost
 an engine release rather than a TypeScript edit. That trade was made
@@ -213,7 +216,7 @@ the SDK parses it. It carried a shell's freeform `options` once, which WebIDL
 cannot type; it carries the keyboard now, and what it says can change without
 a release.
 
-**The tray is not the control channel.** `window.domicile`'s `extensions`
+**The tray is not the control channel.** `DomicileHost`'s `extensions`
 event and `activateExtension()` ride `components/domicile/mojom/extension_tray.mojom`,
 a pipe of the browser's own bound beside the channel and gated the same way:
 an action's state is this browser's, and the compositor has never heard of it.
@@ -264,7 +267,7 @@ clamped into it — are in `src/components/domicile/browser/pointer_warp.h`,
 which is where the tests are; the window it is carried out in is
 `src/chrome/browser/domicile/domicile_pointer_warp.cc`.
 
-`displays` reaches the page as an attribute — `window.domicile.displays` —
+`displays` reaches the page as an attribute — `domicile.displays` —
 with a bare `displayschanged` event beside it, rather than as an event carrying
 the desktop. The desktop is a fact and not a stream: a component that mounts
 after the description has to be able to read it, and an event carrying the only

@@ -63,10 +63,10 @@ Two things Chromium does to an extension installed this way, at the pin:
 The action's state lives in the browser process, so a new mojo interface
 carries it. `components/domicile/mojom/extension_tray.mojom` is bound on the
 shell's origin only, exactly as the control channel is, and is surfaced on
-`window.domicile`:
+the `DomicileHost` handed to `Shell`:
 
 ```ts
-// window.domicile
+// DomicileHost
 onextensions: (event: DomicileExtensionsEvent) => void;
 activateExtension(id: string): void;
 
@@ -90,7 +90,7 @@ interface DomicileExtension {
 - **The popup is a popup, not a tab**, as Chrome's toolbar bubble is an `ExtensionHost` in no tab strip. `extensionpopup` reaches the browser in `CreateGuest`, and `AttachTabHelpers` gives that guest view type `kExtensionPopup` and nothing else: no tab id, no desk window. So `runtime.getContexts` lists it as `POPUP`, `tabs.getCurrent()` answers nothing, and `tabs.query({active: true, currentWindow: true})` names the desk's active tab. Extensions that lay themselves out by where they are see Chrome's answer: Bitwarden sizes its body (380px) only when `tabs.getCurrent()` finds no tab, and otherwise fills whatever it is given.
 - **The panel fits the popup**, as Chrome's bubble does. The guest is put in preferred-size mode on each page (`WebViewGuest::PrimaryPageChanged`), and its content size — max-content width, document height — reaches the element as `contentWidth` / `contentHeight` and `domicile-content-size-change` (`WebViewGuestClient.ContentSizeChanged`). Content drops the report from any frame with an outer document, a guest's main frame included, until patch 0080; and Blink sends it only when a frame commits, which a popup's page may never do after it first lays out, until patch 0081. The width is max-content (patch 0082): a fluid page's min-content width is its longest word. The shell sizes the view to it, capped at its default box.
 
-The SDK side is the `window.domicile` client in `packages/chrome-sdk`, plus
+The SDK side is the `DomicileHost` types in `packages/chrome-sdk`, plus
 `packages/shell-manganese/src/extensions/` for the tray and the popup panel.
 
 ### Tabs: every `<webview>`, in one window

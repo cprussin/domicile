@@ -2,7 +2,7 @@
   "dependencies": {
     "zod": "catalog:"
   },
-  "description": "The SDK for writing a Domicile shell: the window.domicile client, the <app> and <webview> elements, keybindings, and the Shell type.",
+  "description": "The SDK for writing a Domicile shell: the types of the desktop a shell is handed, the <app> and <webview> elements, keybindings, and the Shell type.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",

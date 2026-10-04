@@ -17,7 +17,7 @@ import type { SurfaceSize } from "./windows";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for `window.domicile`, capturing the input calls the delegation
+// A double for the desktop, capturing the input calls the delegation
 // makes and listing what each client has drawn. Only the surface the
 // delegation uses is implemented.
 class FakeDomicile extends EventTarget {

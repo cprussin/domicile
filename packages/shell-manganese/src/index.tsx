@@ -72,14 +72,7 @@ export type ManganeseOptions = {
 /** Manganese with `options`, as a `Shell` that mounts it into `root`. */
 export const runManganese =
   (options: ManganeseOptions = {}): ShellModule =>
-  (root) => {
-    // The desktop, as the engine puts it on a document it served. A plain
-    // browser has none, and there is nothing to draw.
-    const domicile = window.domicile;
-    if (domicile === null || domicile === undefined) {
-      return;
-    }
-
+  (root, domicile) => {
     // The theme this desk was last seen in, before React mounts, so the first
     // paint uses the right semantic-token values. There is no paint before this:
     // the stylesheet travels inside this module rather than in a render-blocking

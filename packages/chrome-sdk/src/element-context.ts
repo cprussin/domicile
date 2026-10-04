@@ -1,7 +1,7 @@
 // What the chrome bound the SDK with, and which app has the keyboard.
 //
 // The input routing is installed on `document` once, at startup, and it
-// outlives any particular client: `registerElements` binds `window.domicile`
+// outlives any particular client: `registerElements` binds the desktop
 // (and optionally a measurement strategy) into the one cell below, and
 // everything it installs reads that cell at dispatch rather than closing over
 // what it was handed. So a rebind reaches listeners that are already
@@ -29,7 +29,7 @@ import { defaultMeasure } from "./measure";
  * Mutable, and the same object across binds, because those are installed once
  * and a rebind has to reach them.
  */
-/** What input routing uses of `window.domicile`. */
+/** What input routing uses of the desktop. */
 export type InputHost = Pick<
   DomicileHost,
   | "addEventListener"
