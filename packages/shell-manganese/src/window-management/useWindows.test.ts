@@ -117,14 +117,14 @@ describe("a command", () => {
   });
 
   it("takes what only the compositor can do with it", () => {
-    // A terminal is a process the compositor starts.
+    // An `exec` is a process the compositor starts.
     const { host, result } = desktop([LEFT, RIGHT]);
 
     act(() => {
-      result.current.act(WindowAction.TerminalLaunched());
+      result.current.act(WindowAction.CommandExecuted(["foot", "-e", "htop"]));
     });
 
-    expect(host.spawned).toEqual([["kitty"]]);
+    expect(host.spawned).toEqual([["foot", "-e", "htop"]]);
   });
 
   it("asks the compositor to lock the desk", () => {

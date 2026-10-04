@@ -31,7 +31,7 @@ const KEYS: ShellKeybindings = {
     "Meta+l": KeyAction.SendShell(["focus", "right"]),
     "Meta+r": KeyAction.Mode("resize"),
     "Meta+space": KeyAction.SendShell(["launcher"]),
-    "Meta+x": KeyAction.SendShell(["exec", "firefox"]),
+    "Meta+x": KeyAction.SendShell(["terminal"]),
   },
   modes: {
     resize: { "Meta+l": KeyAction.SendShell(["resize", "grow", "right"]) },
@@ -129,7 +129,7 @@ describe("useKeybindings", () => {
     says("shortcut", meta(X));
 
     expect(acted).toStrictEqual([]);
-    expect(reported).toStrictEqual(["manganese: no command `exec firefox`"]);
+    expect(reported).toStrictEqual(["manganese: no command `terminal`"]);
   });
 
   it("says when a key enters a mode", () => {

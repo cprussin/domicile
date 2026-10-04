@@ -12,7 +12,6 @@ const parsing = (command: string) => parseCommand(command.split(" "));
 
 describe("parseCommand", () => {
   it.each<readonly [string, Action]>([
-    ["terminal", WindowAction.TerminalLaunched()],
     ["kill", WindowAction.WindowKilled()],
     ["lock", WindowAction.DeskLocked()],
     ["launcher", WindowAction.LauncherToggled()],
@@ -45,13 +44,20 @@ describe("parseCommand", () => {
     ["workspace 1", WindowAction.WorkspaceSelected("1")],
     ["resize grow up", WindowAction.WindowGrown(Direction.Up)],
     ["resize grow right", WindowAction.WindowGrown(Direction.Right)],
+    ["exec kitty --hold", WindowAction.CommandExecuted(["kitty", "--hold"])],
   ])("reads `%s` as sway does", (command, action) => {
     expect(parsing(command)).toStrictEqual(Ok(action));
   });
 
+  it("refuses `exec` with nothing to run", () => {
+    expect(parseCommand(["exec"])).toStrictEqual(
+      Err("manganese: `exec` names nothing to run"),
+    );
+  });
+
   it.each([
     // A verb this desktop does not have.
-    "exec firefox",
+    "terminal",
     // A word the verb does not take.
     "focus sideways",
     // A workspace that is not one of the ten.

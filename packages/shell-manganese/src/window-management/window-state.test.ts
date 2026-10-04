@@ -674,10 +674,12 @@ describe("the keyed commands", () => {
     expect(state.mode).toBe("resize");
   });
 
-  it("leaves the state alone for a terminal, which is the compositor's to spawn", () => {
+  it("leaves the state alone for an `exec`, which is the compositor's to spawn", () => {
     const state = desktop("kitty");
 
-    expect(reduceWindows(state, WindowAction.TerminalLaunched())).toBe(state);
+    expect(reduceWindows(state, WindowAction.CommandExecuted(["kitty"]))).toBe(
+      state,
+    );
   });
 });
 
@@ -1172,7 +1174,7 @@ describe("the launcher", () => {
   it("shuts behind the file it opened, and opens no window itself", () => {
     // What opens the file is a Wayland client the compositor spawns, so its
     // window arrives as an `app_appeared` like any other client's. Nothing
-    // here has a window to add, which is the same shape `TerminalLaunched`
+    // here has a window to add, which is the same shape `CommandExecuted`
     // has.
     const launched = reduce(
       NO_WINDOWS,

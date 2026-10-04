@@ -382,7 +382,7 @@ const WORKSPACE_KEYS = [
  */
 const MANGANESE_KEYS: ShellKeybindings = {
   keybindings: Object.fromEntries([
-    line("Return", false, "send-shell terminal"),
+    line("Return", false, "send-shell exec kitty"),
     line("q", true, "send-shell kill"),
     line("Return", true, "send-shell lock"),
     line("space", false, "send-shell launcher"),
@@ -1813,19 +1813,20 @@ describe("Shell", () => {
         { keybindings: DEFAULT_KEYBINDINGS, modes: DEFAULT_MODES },
         { keys },
       );
+      clientAppears("term");
 
       domicile.emit("shortcut", {
         altKey: false,
         ctrlKey: false,
-        keycode: keys.get("Return") ?? 0,
+        keycode: keys.get("q") ?? 0,
         metaKey: true,
-        shiftKey: false,
+        shiftKey: true,
       });
 
-      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
+      expect(domicile.calls).toContainEqual(["closeApp", "term"]);
     });
 
-    it("spawns a terminal on the chord the config names", () => {
+    it("runs what `exec` names on the chord the config names", () => {
       renderShell();
 
       press("Return");

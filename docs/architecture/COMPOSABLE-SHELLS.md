@@ -165,7 +165,7 @@ runManganese({
 | `runManganese(options): Shell` | mounts manganese into `root` |
 | `Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`, `Volume`, `Brightness`, `Battery`, `Notifications` | the bar's items, each reading the bar it is on from context |
 | `DEFAULT_TOP_BAR`, `TopBarLayout` | manganese's own bar, and its shape |
-| `focus`, `move`, `workspace`, `grow`, `mode`, `terminal`, … | the commands a binding names |
+| `focus`, `move`, `workspace`, `grow`, `mode`, `exec`, … | the commands a binding names |
 | `DEFAULT_KEYBINDINGS`, `DEFAULT_MODES` | sway's keys on Meta, what a desktop gets unasked |
 | `Shell` | `runManganese({})`: what `"shell": "@domicile-desktop/manganese"` loads |
 

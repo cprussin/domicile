@@ -32,6 +32,7 @@ export {
   clipboard,
   DEFAULT_KEYBINDINGS,
   DEFAULT_MODES,
+  exec,
   floating,
   focus,
   fullscreen,
@@ -45,7 +46,6 @@ export {
   moveToWorkspace,
   scratchpad,
   split,
-  terminal,
   type Way,
   workspace,
 } from "./keyboard/commands";
