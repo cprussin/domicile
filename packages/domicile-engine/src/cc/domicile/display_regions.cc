@@ -4,13 +4,24 @@
 #include "cc/domicile/display_regions.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <optional>
 
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 
 namespace cc {
 namespace {
+
+// RGBA8888.
+constexpr size_t kTileBytesPerPixel = 4;
+
+// Full-desk layers the budget holds at once, each with a pending twin: the
+// page's own, two wallpapers while they crossfade, and an overlay such as the
+// launcher.
+constexpr size_t kDomicileTileHeadroom = 4 * 2;
 
 std::optional<gfx::Rect> InLayer(const gfx::Rect& in_target,
                                  const gfx::Transform& to_target) {
@@ -66,6 +77,27 @@ DomicileDisplayRegions DomicileDisplayRegionsOf(
                        display.scale / page_scale});
   }
   return regions;
+}
+
+size_t DomicileTileBytesFor(const std::vector<DomicileDisplay>& displays,
+                            const gfx::Rect& widget_rect,
+                            float page_scale,
+                            size_t ceiling_bytes) {
+  if (displays.empty()) {
+    return 0;
+  }
+  const gfx::Rect page(gfx::ScaleToCeiledSize(widget_rect.size(), page_scale));
+  int64_t pixels = page.size().Area64();
+  for (const DomicileDisplayRegion& region :
+       DomicileDisplayRegionsOf(displays, widget_rect.origin(), page_scale)) {
+    // A monitor's tiling holds its part of the page at its own scale.
+    const double area = static_cast<double>(
+        gfx::IntersectRects(region.rect, page).size().Area64());
+    pixels += std::llround(area * region.ratio * region.ratio);
+  }
+  return std::min(
+      static_cast<size_t>(pixels) * kTileBytesPerPixel * kDomicileTileHeadroom,
+      ceiling_bytes);
 }
 
 std::vector<float> DomicileRatiosMeeting(const DomicileDisplayRegions& regions,

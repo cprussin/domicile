@@ -58,6 +58,17 @@ DomicileDisplayRegions DomicileDisplayRegionsOf(
     const gfx::Point& widget_origin,
     float page_scale);
 
+// The tile memory a widget at `widget_rect` on that screen, rastered at
+// `page_scale`, needs, at most `ceiling_bytes`; 0 when it is shown on no
+// monitor. Upstream sizes the budget from the screen the widget starts on, a
+// fraction of the desk, and a page over budget draws its tiles as solid color.
+// So this is every pixel of the page and of each monitor's tiling, with room
+// for several layers that big and their pending twins.
+size_t DomicileTileBytesFor(const std::vector<DomicileDisplay>& displays,
+                            const gfx::Rect& widget_rect,
+                            float page_scale,
+                            size_t ceiling_bytes);
+
 // How many monitors' tilings a layer keeps at most: the raster queue has an
 // iterator for each (TilingSetRasterQueueAll's DOMICILE_DISPLAY_*), and a
 // tiling activation waits on but that is never rastered would hold the page
