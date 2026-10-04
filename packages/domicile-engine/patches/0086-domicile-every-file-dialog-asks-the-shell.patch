@@ -31,7 +31,7 @@ save from a page in a <webview>.
  5 files changed, 26 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 85cc7ef..9759229 100644
+index 85cc7ef78a..97592295b7 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -6,6 +6,7 @@
@@ -56,7 +56,7 @@ index 85cc7ef..9759229 100644
      chrome_extra_part->PreBrowserStart();
    }
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
-index be4b916..b142553 100644
+index be4b9162d1..b142553551 100644
 --- a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 +++ b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 @@ -69,6 +69,10 @@ void ChromeSelectFilePolicy::SelectFileDenied() {
@@ -71,7 +71,7 @@ index be4b916..b142553 100644
    DCHECK(g_browser_process);
  
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
-index 993b89d..0e1ed51 100644
+index 993b89dca3..0e1ed519ee 100644
 --- a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
 +++ b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
 @@ -26,6 +26,7 @@ class ChromeSelectFilePolicy : public ui::SelectFilePolicy {
@@ -83,7 +83,7 @@ index 993b89d..0e1ed51 100644
    // Returns true if local state allows showing file pickers.
    static bool FileSelectDialogsAllowed();
 diff --git a/ui/shell_dialogs/select_file_policy.cc b/ui/shell_dialogs/select_file_policy.cc
-index 14bc334..eb39dfb 100644
+index 14bc3349d9..eb39dfbdaf 100644
 --- a/ui/shell_dialogs/select_file_policy.cc
 +++ b/ui/shell_dialogs/select_file_policy.cc
 @@ -8,4 +8,8 @@ namespace ui {
@@ -96,7 +96,7 @@ index 14bc334..eb39dfb 100644
 +
  }  // namespace ui
 diff --git a/ui/shell_dialogs/select_file_policy.h b/ui/shell_dialogs/select_file_policy.h
-index 2d0f1f6..226f766 100644
+index 2d0f1f6d4b..226f766d89 100644
 --- a/ui/shell_dialogs/select_file_policy.h
 +++ b/ui/shell_dialogs/select_file_policy.h
 @@ -7,6 +7,10 @@
@@ -123,6 +123,3 @@ index 2d0f1f6..226f766 100644
  };
  
  }  // namespace ui
--- 
-2.43.0
-

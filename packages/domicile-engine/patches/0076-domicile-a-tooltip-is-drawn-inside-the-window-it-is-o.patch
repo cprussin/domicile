@@ -3,7 +3,6 @@ From: Claude <noreply@anthropic.com>
 Date: Fri, 2 Oct 2026 06:40:01 +0000
 Subject: [PATCH] domicile: a tooltip is drawn inside the window it is over
 
-
 A desktop on a tty lost its GPU process about two minutes in, on a page in a
 browser window:
 
@@ -34,7 +33,7 @@ Claude-Session: https://claude.ai/code/session_01KHQC9zsRk48yEYB7qPSwwY
  1 file changed, 9 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/ui/views/chrome_views_delegate_linux.cc b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
-index c7a7a46..ead9a9f 100644
+index c7a7a46e0f..ead9a9f3e7 100644
 --- a/chrome/browser/ui/views/chrome_views_delegate_linux.cc
 +++ b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
 @@ -90,9 +90,15 @@ NativeWidgetType GetNativeWidgetTypeForInitParams(
@@ -56,6 +55,3 @@ index c7a7a46..ead9a9f 100644
      return NativeWidgetType::kNativeWidgetAura;
    }
  
--- 
-2.43.0
-

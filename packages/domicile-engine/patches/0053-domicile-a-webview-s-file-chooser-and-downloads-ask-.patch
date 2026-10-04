@@ -35,7 +35,7 @@ on `crux` with the rest of the engine job.
  6 files changed, 40 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index e152b6e..bdd890c 100644
+index e152b6e86d..bdd890cc79 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -1615,6 +1615,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
@@ -50,7 +50,7 @@ index e152b6e..bdd890c 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/download/BUILD.gn b/chrome/browser/download/BUILD.gn
-index e157fca..c60229d 100644
+index fb1b41b07c..b2d7210a6b 100644
 --- a/chrome/browser/download/BUILD.gn
 +++ b/chrome/browser/download/BUILD.gn
 @@ -215,6 +215,7 @@ source_set("impl") {
@@ -62,7 +62,7 @@ index e157fca..c60229d 100644
      "//components/enterprise/common/proto:connectors_proto_gen",
      "//components/enterprise/connectors/core",
 diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
-index 0cfc34d..d74b0b7 100644
+index 17bdc414f8..abc7e1df03 100644
 --- a/chrome/browser/download/chrome_download_manager_delegate.cc
 +++ b/chrome/browser/download/chrome_download_manager_delegate.cc
 @@ -4,6 +4,8 @@
@@ -110,10 +110,10 @@ index 0cfc34d..d74b0b7 100644
        download, suggested_path,
        base::BindOnce(
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 83cdd44..9b1be4d 100644
+index 5179710087..c47c2dcddd 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1194,6 +1194,8 @@ generated_interface_sources_in_core = [
+@@ -1196,6 +1196,8 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_app_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.h",
@@ -123,10 +123,10 @@ index 83cdd44..9b1be4d 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index db1821e..2623a3b 100644
+index d83ea2a7cc..9d7e5225a3 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -459,6 +459,7 @@ static_idl_files_in_core = [
+@@ -460,6 +460,7 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/html_frame_set_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_app_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
@@ -135,7 +135,7 @@ index db1821e..2623a3b 100644
    "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
    "//third_party/blink/renderer/core/html/html_head_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index e5d0f60..b347f08 100644
+index e5d0f606e3..b347f082f7 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
 @@ -94,6 +94,8 @@ blink_core_sources_html = [

@@ -25,7 +25,7 @@ engine job.
  4 files changed, 48 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
-index a5df84d..f423d9b 100644
+index b6f1383a17..a00d439cb6 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.cc
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
 @@ -3244,6 +3244,34 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
@@ -73,7 +73,7 @@ index a5df84d..f423d9b 100644
    if (size_in_dips != preferred_size_in_dips_) {
      preferred_size_in_dips_ = size_in_dips;
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
-index 6995402..999e614 100644
+index 6995402493..999e614061 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.h
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.h
 @@ -182,6 +182,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
@@ -86,7 +86,7 @@ index 6995402..999e614 100644
    void SetZoomFactorForDeviceScaleFactor(float device_scale_factor,
                                           float text_scale_multiplier) override;
 diff --git a/third_party/blink/renderer/core/layout/layout_view.cc b/third_party/blink/renderer/core/layout/layout_view.cc
-index eedb085..a391641 100644
+index eedb085667..a39164121e 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.cc
 +++ b/third_party/blink/renderer/core/layout/layout_view.cc
 @@ -246,6 +246,20 @@ LayoutUnit LayoutView::ComputeMinimumWidth() {
@@ -111,7 +111,7 @@ index eedb085..a391641 100644
    NOT_DESTROYED();
    if (new_child->StyleRef().StyleType() == kPseudoIdViewTransition) {
 diff --git a/third_party/blink/renderer/core/layout/layout_view.h b/third_party/blink/renderer/core/layout/layout_view.h
-index 910aa77..8e1e9f0 100644
+index 910aa77665..8e1e9f02a1 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.h
 +++ b/third_party/blink/renderer/core/layout/layout_view.h
 @@ -120,6 +120,9 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {

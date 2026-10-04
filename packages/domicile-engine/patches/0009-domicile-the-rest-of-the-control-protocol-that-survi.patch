@@ -82,7 +82,7 @@ added together for that reason.
  2 files changed, 61 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 0e992091ba..eca3ad717c 100644
+index 6615e3633d..1c962f5a69 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -312,7 +312,25 @@ generated_dictionary_sources_in_modules = [

@@ -16,7 +16,7 @@ The observer now skips a domicile::WebViewGuest the same way.
  2 files changed, 10 insertions(+)
 
 diff --git a/chrome/browser/performance_manager/BUILD.gn b/chrome/browser/performance_manager/BUILD.gn
-index 1b1c214..2381f2c 100644
+index fd3ab7849e..5893908524 100644
 --- a/chrome/browser/performance_manager/BUILD.gn
 +++ b/chrome/browser/performance_manager/BUILD.gn
 @@ -179,6 +179,7 @@ source_set("impl") {
@@ -28,7 +28,7 @@ index 1b1c214..2381f2c 100644
      "//components/guest_view/browser",
      "//components/guest_view/buildflags",
 diff --git a/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc b/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
-index 861a63c..8c350a8 100644
+index 861a63c3f5..8c350a85dd 100644
 --- a/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
 +++ b/chrome/browser/performance_manager/observers/page_load_metrics_observer.cc
 @@ -7,6 +7,7 @@
@@ -54,6 +54,3 @@ index 861a63c..8c350a8 100644
    DCHECK(is_loading_);
  
    if (navigation_handle->IsInPrimaryMainFrame() &&
--- 
-2.43.0
-
