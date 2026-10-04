@@ -22,8 +22,6 @@ import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
-import { SelectionRing } from "./SelectionRing";
-import { selectionOf } from "./selection";
 import { TitleBar } from "./TitleBar";
 import type { Aim, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -172,8 +170,18 @@ export const Stage = ({
   // Whether the whole desk shows one thing, which leaves it unringed and its
   // frame the resting color — see `showsOneThing`.
   const alone = showsOneThing(screens.map(({ screenful }) => screenful));
-  // The window being worked in as it is drawn, which is what the ring rings.
-  const active = motions.drawn.find(({ window }) => window.id === activeId);
+  // The groups `focus parent` has the commands pointed at, at most one a
+  // screen: every window and tab inside one is lit along with the focused one.
+  const groups = screens.flatMap(({ fullscreenId, screenful }) =>
+    fullscreenId === undefined && screenful.selection !== undefined
+      ? [screenful.selection]
+      : [],
+  );
+  const inGroup = (rect: Rect | undefined, depth: number): boolean =>
+    rect !== undefined &&
+    groups.some(
+      (group) => group.depth === depth && containsRect(group.rect, rect),
+    );
   // Where a tiled window being moved would land, which is drawn over every
   // window rather than by the one being dragged — see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
@@ -238,10 +246,19 @@ export const Stage = ({
           // A window's own bar has two states rather than three: the keyboard is
           // in the window or it is not. The third belongs to a container's tab,
           // below.
+          const grouped = inGroup(placement?.frame, placement?.depth ?? 0);
           const focus = titleFocus({
             hasKeyboard: focused,
+            // A window hidden behind its tab is lit but keeps a resting tab, so
+            // the open one still reads as open.
+            inSelectedGroup:
+              grouped && (focused || placement?.surface !== undefined),
             shownByContainer: false,
           });
+          // Everything outside what the commands are pointed at is dimmed —
+          // unless the desk shows one thing, which has nothing to stand out
+          // from.
+          const dimmed = !(on !== undefined && alone) && !focused && !grouped;
           return (
             <WindowFrame
               key={window.id}
@@ -261,6 +278,7 @@ export const Stage = ({
                   clickThrough={clickThrough}
                   cursor={window.cursor}
                   depth={depth}
+                  dimmed={dimmed}
                   domicile={domicile}
                   dragging={window.id === draggingId}
                   focused={focused}
@@ -278,6 +296,7 @@ export const Stage = ({
                   clickThrough={clickThrough}
                   covered={placement?.behind !== undefined}
                   depth={depth}
+                  dimmed={dimmed}
                   domicile={domicile}
                   dragging={window.id === draggingId}
                   focused={focused}
@@ -313,6 +332,7 @@ export const Stage = ({
                 <WindowTitleBar
                   alone={on !== undefined && alone}
                   depth={placement.depth}
+                  dimmed={dimmed}
                   dragging={window.id === draggingId}
                   float={floating}
                   focus={focus}
@@ -492,12 +512,14 @@ export const Stage = ({
       */}
       {motions.tabs.map(({ focused, motion, screen, tab }) => {
         const on = screenNamed(screens, screen);
+        const grouped = inGroup(tab.rect, tab.depth);
         return (
           <Sliding key={tab.id} on={on}>
             <TitleBar
               alone={on !== undefined && alone}
               // With the float it is in, if it is in one.
               depth={tab.depth}
+              dimmed={!(on !== undefined && alone) && !focused && !grouped}
               // Nothing drags a tab: it belongs to a container, which moves with
               // its float or not at all.
               dragging={false}
@@ -506,6 +528,9 @@ export const Stage = ({
               // claiming the keystrokes.
               focus={titleFocus({
                 hasKeyboard: focused,
+                // A hidden tab of the group is lit but stays a resting tab, so
+                // the open one still reads as open.
+                inSelectedGroup: grouped && (focused || tab.active),
                 shownByContainer: tab.active,
               })}
               // A tab is the whole of what the window behind it has on screen, so
@@ -536,33 +561,6 @@ export const Stage = ({
               window={tab.id}
             />
           </Sliding>
-        );
-      })}
-      {/*
-        And over all of it, what the commands are pointed at — after the
-        windows and their bars, because it rings them: two elements at one
-        `z-index` are decided by the order they come in the document.
-      */}
-      {screens.map((on) => {
-        const selection = selectionOf(
-          on.screenful,
-          alone,
-          activeId,
-          on.fullscreenId,
-          draggingId,
-        );
-        return (
-          selection !== undefined && (
-            <Sliding key={on.geometry.name} on={on}>
-              <SelectionRing
-                // Around the window being worked in, which is the one a raise
-                // shuffles over the others — so the ring shuffles with it.
-                motion={active?.motion}
-                restack={active?.restack}
-                selection={selection}
-              />
-            </Sliding>
-          )
         );
       })}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
@@ -623,6 +621,18 @@ const slidingStyles = css({ display: "contents" });
  */
 const fillsScreen = (screens: readonly StageScreen[], id: string): boolean =>
   screens.some(({ fullscreenId }) => fullscreenId === id);
+
+/**
+ * Whether `inner` lies wholly inside `outer`, to within the half pixel a
+ * layout's shares round to.
+ */
+const containsRect = (outer: Rect, inner: Rect): boolean =>
+  inner.x >= outer.x - SLACK &&
+  inner.y >= outer.y - SLACK &&
+  inner.x + inner.width <= outer.x + outer.width + SLACK &&
+  inner.y + inner.height <= outer.y + outer.height + SLACK;
+
+const SLACK = 0.5;
 
 /** The screen named `name`, or `undefined` for a part drawn on none. */
 const screenNamed = (

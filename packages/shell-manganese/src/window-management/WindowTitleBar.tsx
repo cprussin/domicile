@@ -22,6 +22,8 @@ type Props = {
   alone: boolean;
   /** How it stacks, which is the depth of the window it names. */
   depth: number;
+  /** Whether that window is dimmed — see {@link TitleBar}. */
+  dimmed: boolean;
   /** Whether the user has hold of this window — see {@link TitleBar}. */
   dragging: boolean;
   /** The window's floating box, or `undefined` while it is tiled. */
@@ -88,6 +90,7 @@ type Props = {
 export const WindowTitleBar = ({
   alone,
   depth,
+  dimmed,
   dragging,
   float,
   focus,
@@ -136,6 +139,7 @@ export const WindowTitleBar = ({
     <TitleBar
       alone={alone}
       depth={depth}
+      dimmed={dimmed}
       dragging={dragging}
       focus={focus}
       frame={frame}

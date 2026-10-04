@@ -13,11 +13,16 @@
 // A string union rather than an enum because these are the keys of a Panda
 // `cva` variant, which is where they are read.
 
-export type TitleFocus = "focused" | "resting" | "selected";
+export type TitleFocus = "focused" | "leaf" | "resting" | "selected";
 
 type Marks = {
   /** Whether this is the window the user is working in. */
   hasKeyboard: boolean;
+  /**
+   * Whether `focus parent` has the commands pointed at a group, and this bar
+   * is inside it.
+   */
+  inSelectedGroup?: boolean;
   /**
    * Whether the container this bar belongs to is showing it — a tabbed or
    * stacking container's open tab. A window's own bar has no such question:
@@ -28,11 +33,14 @@ type Marks = {
 
 export const titleFocus = ({
   hasKeyboard,
+  inSelectedGroup = false,
   shownByContainer,
 }: Marks): TitleFocus => {
-  if (hasKeyboard) {
+  if (hasKeyboard && inSelectedGroup) {
+    return "leaf";
+  } else if (hasKeyboard) {
     return "focused";
-  } else if (shownByContainer) {
+  } else if (shownByContainer || inSelectedGroup) {
     return "selected";
   } else {
     return "resting";

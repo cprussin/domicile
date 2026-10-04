@@ -35,9 +35,9 @@ import { isLeaving } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
+  dimmedStyles,
   draggingStyles,
   edgeStyles,
-  focusedEdgeStyles,
   movingStyles,
   placedAt,
   restingEdgeStyles,
@@ -78,6 +78,11 @@ type Props = {
   covered: boolean;
   /** How it stacks: the window's own `z-index`, which the SDK reports. */
   depth: number;
+  /**
+   * Whether it is outside what the commands are pointed at, which dims it —
+   * see `dimmedStyles`.
+   */
+  dimmed: boolean;
   /** Whether the user has hold of this window, which makes it see-through. */
   dragging: boolean;
   /** Whether the user is working in this window, so it takes the keyboard. */
@@ -211,6 +216,7 @@ export const BrowserWindow = ({
   covered,
   depth,
   domicile,
+  dimmed,
   dragging,
   focused,
   frame,
@@ -634,7 +640,8 @@ export const BrowserWindow = ({
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         // And the same color the bar is drawn in, for the same reason.
-        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
+        restingEdgeStyles,
+        dimmed && dimmedStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,

@@ -15,6 +15,7 @@ import { isLeaving } from "./window-motion";
 import {
   clickThroughStyles,
   collapsedAlong,
+  dimmedStyles,
   edgeStyles,
   movingStyles,
   placedAt,
@@ -34,6 +35,11 @@ type Props = {
   alone?: boolean;
   /** How it stacks: the depth of the window it names. */
   depth: number;
+  /**
+   * Whether the window this bar names is outside what the commands are
+   * pointed at, which dims the bar with it — see `dimmedStyles`.
+   */
+  dimmed?: boolean;
   /**
    * Whether the user has hold of the window this bar names.
    *
@@ -133,6 +139,7 @@ type Props = {
 export const TitleBar = ({
   alone = false,
   depth,
+  dimmed = false,
   dragging,
   focus,
   frame,
@@ -164,6 +171,7 @@ export const TitleBar = ({
       // Neither a line nor rounded corners around the screen's own edge.
       !fullscreen && edgeStyles,
       !fullscreen && topCornerStyles,
+      dimmed && dimmedStyles,
       movingStyles({ motion }),
       // The window this names has gone, and what is drawn is where it was.
       isLeaving(motion) && clickThroughStyles,
@@ -299,10 +307,19 @@ const barStyles = cva({
     focus: {
       focused: {
         backgroundColor: "card",
-        borderColor: "accent",
+        borderColor: "borderStrong",
         color: "foreground",
         // Set in a heavier face as well, which is the half of standing out
         // that survives a user who cannot tell the accent from the card.
+        fontWeight: "medium",
+      },
+      // The window the keyboard is in, while `focus parent` has the commands
+      // pointed at a group around it: every bar of the group is raised to the
+      // card, so this one is washed with the accent to stay apart from them.
+      leaf: {
+        backgroundColor: "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
+        borderColor: "borderStrong",
+        color: "foreground",
         fontWeight: "medium",
       },
       // And every other bar recedes rather than competing: the window under it
@@ -332,7 +349,11 @@ const barStyles = cva({
     // line's room, though, or opening a tab would move its contents down by it.
     openTab: {
       focused: {
-        borderBlockEndColor: "accent",
+        borderBlockEndColor: "borderStrong",
+        borderBlockEndWidth: "1px",
+      },
+      leaf: {
+        borderBlockEndColor: "borderStrong",
         borderBlockEndWidth: "1px",
       },
       none: {

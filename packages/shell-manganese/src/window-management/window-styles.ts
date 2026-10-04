@@ -108,9 +108,17 @@ export const bottomCornerStyles = css({
  * `border-color` on one element are decided by the order Panda happens to
  * emit them in — so exactly one of these is ever applied.
  */
-export const focusedEdgeStyles = css({ borderColor: "accent" });
-
 export const restingEdgeStyles = css({ borderColor: "borderStrong" });
+
+/**
+ * A window outside what the commands are pointed at: darker and grayer, so
+ * the focused window — or every window of the group `focus parent` selected —
+ * is what stands out, with no line drawn around it.
+ */
+export const dimmedStyles = css({
+  filter: "brightness(0.65) saturate(0.5)",
+  opacity: 0.8,
+});
 
 /**
  * A window the pointer goes straight through.
@@ -373,11 +381,11 @@ export const settlingStyles = cva({
     dragging: {
       false: {
         transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
+          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, filter {durations.fast} {easings.out}",
       },
       true: {
         transition:
-          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
+          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, filter {durations.fast} {easings.out}",
       },
     },
   },

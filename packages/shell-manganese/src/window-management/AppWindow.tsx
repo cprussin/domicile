@@ -20,7 +20,7 @@ import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
-  focusedEdgeStyles,
+  dimmedStyles,
   movingStyles,
   placedAt,
   restingEdgeStyles,
@@ -53,6 +53,11 @@ type Props = {
    * before it can be told where the window is being dragged to.
    */
   clickThrough: boolean;
+  /**
+   * Whether it is outside what the commands are pointed at, which dims it —
+   * see `dimmedStyles`.
+   */
+  dimmed: boolean;
   /** Whether the user has hold of this window, which makes it see-through. */
   dragging: boolean;
   /** The host's name for the client this window shows. */
@@ -145,6 +150,7 @@ export const AppWindow = ({
   cursor,
   depth,
   domicile,
+  dimmed,
   dragging,
   focused,
   frame,
@@ -270,7 +276,8 @@ export const AppWindow = ({
         movingStyles({ motion }),
         // The frame says what the bar above it says: this is the window the
         // keyboard is in.
-        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
+        restingEdgeStyles,
+        dimmed && dimmedStyles,
         (clickThrough || leaving) && clickThroughStyles,
         // A dragged window is written at a new box on every pointer move, so
         // it takes the box it is given rather than easing towards it. Its
