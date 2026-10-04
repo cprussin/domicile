@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_theme_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_item.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -180,6 +181,38 @@ void DomicileHost::ReportDevicePixelRatio() {
   query.Append("dppx)");
   density_query_ = window_->matchMedia(query.ToString());
   density_query_->AddListener(density_listener_.Get());
+}
+
+const FrozenArray<DomicileWindow>& DomicileHost::windows() {
+  EnsureBound();
+  if (!windows_) {
+    windows_ = MakeGarbageCollected<FrozenArray<DomicileWindow>>(
+        HeapVector<Member<DomicileWindow>>());
+  }
+  return *windows_;
+}
+
+DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
+  for (DomicileWindowState& state : window_states_) {
+    if (state.app_id == app_id) {
+      return state;
+    }
+  }
+  DomicileWindowState state;
+  state.app_id = app_id;
+  window_states_.push_back(std::move(state));
+  return window_states_.back();
+}
+
+void DomicileHost::WindowsChanged() {
+  HeapVector<Member<DomicileWindow>> windows;
+  windows.reserve(window_states_.size());
+  for (const DomicileWindowState& state : window_states_) {
+    windows.push_back(MakeGarbageCollected<DomicileWindow>(state));
+  }
+  windows_ =
+      MakeGarbageCollected<FrozenArray<DomicileWindow>>(std::move(windows));
+  DispatchEvent(*Event::Create(domicile_event_names::Windowschanged()));
 }
 
 void DomicileHost::spawn(ScriptState* script_state,
@@ -600,6 +633,13 @@ void DomicileHost::pointerAxis(ScriptState*, const String& app_id, double dx,
 void DomicileHost::AppAppeared(const String& app_id, const String& title,
                                bool has_size, double width, double height,
                                base::TimeTicks arrival) {
+  DomicileWindowState& state = WindowNamed(app_id);
+  state.title = title;
+  if (has_size) {
+    state.width = width;
+    state.height = height;
+  }
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appappeared(), app_id, title,
       has_size ? std::make_optional(width) : std::nullopt,
@@ -608,6 +648,10 @@ void DomicileHost::AppAppeared(const String& app_id, const String& title,
 
 void DomicileHost::AppResized(const String& app_id, double width, double height,
                               base::TimeTicks arrival) {
+  DomicileWindowState& state = WindowNamed(app_id);
+  state.width = width;
+  state.height = height;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appresized(), app_id, String(), width, height,
       Arrival(arrival)));
@@ -615,6 +659,10 @@ void DomicileHost::AppResized(const String& app_id, double width, double height,
 
 void DomicileHost::AppMinSize(const String& app_id, double width, double height,
                               base::TimeTicks arrival) {
+  DomicileWindowState& state = WindowNamed(app_id);
+  state.min_width = width;
+  state.min_height = height;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appminsize(), app_id, String(), width, height,
       Arrival(arrival)));
@@ -622,6 +670,10 @@ void DomicileHost::AppMinSize(const String& app_id, double width, double height,
 
 void DomicileHost::AppMaxSize(const String& app_id, double width, double height,
                               base::TimeTicks arrival) {
+  DomicileWindowState& state = WindowNamed(app_id);
+  state.max_width = width;
+  state.max_height = height;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appmaxsize(), app_id, String(), width, height,
       Arrival(arrival)));
@@ -635,12 +687,24 @@ void DomicileHost::PopupPlaced(const String& app_id,
                                double height,
                                bool grab,
                                base::TimeTicks arrival) {
+  DomicileWindowState& state = WindowNamed(app_id);
+  state.parent = parent_app_id;
+  state.x = x;
+  state.y = y;
+  state.width = width;
+  state.height = height;
+  state.grab = grab;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Popupplaced(), app_id, parent_app_id, x, y, width,
       height, grab, Arrival(arrival)));
 }
 
 void DomicileHost::AppClosed(const String& app_id, base::TimeTicks arrival) {
+  EraseIf(window_states_, [&](const DomicileWindowState& state) {
+    return state.app_id == app_id;
+  });
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Appclosed(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
@@ -669,6 +733,8 @@ void DomicileHost::AppCursor(const String& app_id,
   CHECK(shape.has_value())
       << "no DomicileCursorShape named '" << name
       << "', so domicile_cursor_shape.idl and cursor_shape.h disagree";
+  WindowNamed(app_id).cursor = *shape;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppCursorEvent>(
       domicile_event_names::Appcursor(), app_id, *shape, Arrival(arrival)));
 }
@@ -996,6 +1062,15 @@ void DomicileHost::AudioLevels(
 
 void DomicileHost::FocusChanged(const String& app_id,
                                 base::TimeTicks arrival) {
+  // Empty is the shell's page holding the keyboard, which `focusedWindow`
+  // says as null.
+  //
+  // Dispatched for every word the compositor says about the keyboard, not
+  // only when it moves: the first is also the end of the windows replayed to
+  // a channel that has just bound, and a shell that waits for it is how it
+  // tells a window opened now from one that was already running.
+  focused_window_ = app_id.empty() ? String() : app_id;
+  DispatchEvent(*Event::Create(domicile_event_names::Focusedwindowchanged()));
   DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Focuschanged(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
@@ -1018,6 +1093,8 @@ void DomicileHost::OpenUrl(const String& url) {
 
 void DomicileHost::AppTitled(const String& app_id, const String& title,
                              base::TimeTicks arrival) {
+  WindowNamed(app_id).title = title;
+  WindowsChanged();
   DispatchEvent(*MakeGarbageCollected<DomicileAppTitledEvent>(
       domicile_event_names::Apptitled(), app_id, title, Arrival(arrival)));
 }
@@ -1057,6 +1134,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
+  visitor->Trace(windows_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);
