@@ -17,6 +17,7 @@
 
 namespace blink {
 
+class DomicileContextMenuEvent;
 class DomicileFileChooserEvent;
 class ExceptionState;
 
@@ -174,6 +175,16 @@ class CORE_EXPORT HTMLWebViewElement final
   // The size the page's content wants: ContentSizeChanged below.
   int32_t contentWidth() const { return content_width_; }
   int32_t contentHeight() const { return content_height_; }
+
+  // DevTools on the guest's page. See WebViewGuest.Inspect.
+  void inspect();
+
+  // Do `action` for `menu`. Throws InvalidStateError if a newer menu has
+  // replaced it. See domicile_context_menu_event.h.
+  void RunContextMenuAction(
+      const DomicileContextMenuEvent& menu,
+      domicile::mojom::blink::WebViewContextMenuAction action,
+      ExceptionState&);
 
   // A file chooser this element dispatched has been answered, so it stops
   // holding the event. See `waiting_choosers_`.
@@ -362,6 +373,11 @@ class CORE_EXPORT HTMLWebViewElement final
       const String& home,
       FileChooserRequestedCallback callback) override;
 
+  // The page asked for a context menu. Dispatched as `domicile-context-menu`.
+  // See domicile_context_menu_event.h.
+  void ContextMenuRequested(
+      domicile::mojom::blink::WebViewContextMenuPtr menu) override;
+
   // And the browser saying the page inside called window.close(), which its
   // renderer allowed. Dispatched as `domicile-close`: the browser closes
   // nothing, and removing this element is the shell's answer. An event, like
@@ -439,6 +455,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // No size, until the browser says the page has laid out.
   int32_t content_width_ = 0;
   int32_t content_height_ = 0;
+
+  // The newest context menu dispatched, the only one the browser acts on. 0
+  // before the first.
+  int32_t context_menu_id_ = 0;
 
   // Every file chooser a shell took and has not answered yet.
   //
