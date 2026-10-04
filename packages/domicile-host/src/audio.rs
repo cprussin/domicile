@@ -46,6 +46,9 @@ const NEWS: &[&str] = &[
 /// every other mixer's.
 const METER: &str = "org.domicile.meter";
 
+/// The property PipeWire ties a filter's device and its stream together by.
+const LINK_GROUP: &str = "node.link-group";
+
 /// How many samples a second a meter records: enough to catch a transient a
 /// meter would show, few enough that one per device is nothing.
 const METER_RATE: u32 = 1000;
@@ -297,32 +300,88 @@ pub fn reading(info: &str, list: &str) -> Result<Audio, serde_json::Error> {
         .iter()
         .map(|source| (source.index, Target::Input.id(&source.name)))
         .collect();
+    let plumbing = plumbing(&list);
+    let default_sink = info
+        .default_sink_name
+        .map(|name| in_front(name, &list.sinks, &list.sink_inputs, |stream| stream.sink));
+    let default_source = info.default_source_name.map(|name| {
+        in_front(name, &list.sources, &list.source_outputs, |stream| {
+            stream.source
+        })
+    });
     Ok(Audio {
         outputs: list
             .sinks
             .iter()
-            .map(|sink| sink.device(Target::Output, info.default_sink_name.as_deref()))
+            .map(|sink| sink.device(Target::Output, default_sink.as_deref()))
             .collect(),
         inputs: list
             .sources
             .iter()
-            .map(|source| source.device(Target::Input, info.default_source_name.as_deref()))
+            .map(|source| source.device(Target::Input, default_source.as_deref()))
             .collect(),
         playback: list
             .sink_inputs
             .iter()
-            .filter(|stream| !stream.is_a_mixers())
+            .filter(|stream| !stream.is_a_mixers() && !stream.is_plumbing(&plumbing))
             .map(|stream| stream.stream(Target::Playback, stream.sink, &outputs_by_index))
             .collect(),
         recording: list
             .source_outputs
             .iter()
-            .filter(|stream| !stream.is_a_mixers())
+            .filter(|stream| !stream.is_a_mixers() && !stream.is_plumbing(&plumbing))
             .map(|stream| stream.stream(Target::Recording, stream.source, &inputs_by_index))
             .collect(),
         cards: list.cards.iter().map(Card::card).collect(),
         meters: meters(&list),
     })
+}
+
+/// The device to call the default: the server's, or the filter in front of
+/// it. A laptop's speaker correction is a sink whose stream plays into the
+/// speakers, and the session manager sends what plays on the default through
+/// it while the speakers stay the server's default — so the filter is what is
+/// heard, and what its volume turns. Filters in front of filters are followed
+/// to the front; a loop of them stops where it started.
+fn in_front(
+    default: String,
+    devices: &[Device],
+    streams: &[Stream],
+    on: impl Fn(&Stream) -> u32,
+) -> String {
+    let mut name = default;
+    for _ in 0..devices.len() {
+        let Some(device) = devices.iter().find(|device| device.name == name) else {
+            break;
+        };
+        let filter = streams
+            .iter()
+            .filter(|stream| on(stream) == device.index)
+            .filter_map(|stream| stream.properties.get(LINK_GROUP))
+            .find_map(|group| {
+                devices.iter().find(|other| {
+                    other.name != device.name && other.properties.get(LINK_GROUP) == Some(group)
+                })
+            });
+        match filter {
+            Some(filter) => name.clone_from(&filter.name),
+            None => break,
+        }
+    }
+    name
+}
+
+/// The link groups of the devices that are a filter's — PipeWire's
+/// filter-chains, a laptop's speaker correction or a noise canceller: a
+/// device to play to or record from on one side, and a stream on the other
+/// that carries it to the hardware. The stream shares the device's link group,
+/// and is the filter's plumbing rather than something playing.
+fn plumbing(list: &List) -> BTreeSet<String> {
+    list.sinks
+        .iter()
+        .chain(&list.sources)
+        .filter_map(|device| device.properties.get(LINK_GROUP).cloned())
+        .collect()
 }
 
 /// What each device and playback stream is metered off: an output off its
@@ -471,9 +530,25 @@ struct Device {
     #[serde(default)]
     ports: Vec<Port>,
     active_port: Option<String>,
+    #[serde(default)]
+    properties: BTreeMap<String, String>,
 }
 
 impl Device {
+    /// A monitor names the sink it is the monitor of. Not every `pactl` says
+    /// "none" as `null`: some say it as `""` or as `"n/a"`, as its text does.
+    /// The device's class says so too, where the server gives one.
+    fn is_a_monitor(&self) -> bool {
+        let names_a_sink = self
+            .monitor_source
+            .as_deref()
+            .is_some_and(|sink| !sink.is_empty() && sink != "n/a");
+        match self.properties.get("device.class").map(String::as_str) {
+            Some(class) => class == "monitor",
+            None => names_a_sink,
+        }
+    }
+
     fn device(&self, target: Target, default: Option<&str>) -> AudioDevice {
         AudioDevice {
             id: target.id(&self.name),
@@ -481,7 +556,7 @@ impl Device {
             volume: loudest(&self.volume),
             muted: self.mute,
             default: default == Some(self.name.as_str()),
-            monitor: target == Target::Input && self.monitor_source.is_some(),
+            monitor: target == Target::Input && self.is_a_monitor(),
             ports: self
                 .ports
                 .iter()
@@ -522,6 +597,13 @@ impl Stream {
         self.properties
             .get("application.id")
             .is_some_and(|id| MIXERS.contains(&id.as_str()))
+    }
+
+    /// Whether it is the far side of a filter's device: see [`plumbing`].
+    fn is_plumbing(&self, plumbing: &BTreeSet<String>) -> bool {
+        self.properties
+            .get(LINK_GROUP)
+            .is_some_and(|group| plumbing.contains(group))
     }
 
     /// The application's name, and the media's as its title — or the media's

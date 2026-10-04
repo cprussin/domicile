@@ -72,6 +72,7 @@ export const Volume = ({
             <Speaker output={output} />
           </button>
         }
+        wide
       >
         <Mixer audio={audio} domicile={domicile} watchLevels={watchLevels} />
       </Popover>

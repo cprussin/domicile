@@ -51,6 +51,15 @@ describe(Popover, () => {
       expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
     });
 
+    it("says when it is wide, so the stylesheet can widen its cap", () => {
+      render(
+        <Popover open wide>
+          Body
+        </Popover>,
+      );
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-wide");
+    });
+
     it("says when it is drawn over a photograph, so the stylesheet can glass it", () => {
       render(
         <Popover open tone="overPhoto">

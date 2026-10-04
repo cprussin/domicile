@@ -104,6 +104,23 @@ describe(Select, () => {
       ).toContain("Monospace");
     });
 
+    it("chooses the same way when it is quiet", async () => {
+      const user = userEvent.setup();
+      render(
+        <Select
+          aria-label="Font"
+          defaultValue="sans"
+          options={OPTIONS}
+          quiet
+        />,
+      );
+      await user.click(screen.getByRole("combobox", { name: "Font" }));
+      await user.click(screen.getByRole("option", { name: "Serif" }));
+      expect(
+        screen.getByRole("combobox", { name: "Font" }).textContent,
+      ).toContain("Serif");
+    });
+
     it("marks options as disabled so they cannot be selected", async () => {
       const user = userEvent.setup();
       render(<Select aria-label="Font" options={OPTIONS} />);

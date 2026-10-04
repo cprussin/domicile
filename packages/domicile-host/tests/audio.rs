@@ -495,6 +495,95 @@ mod metering {
     }
 
     #[test]
+    fn a_filters_own_stream_is_not_something_playing() {
+        // A laptop's speaker correction: a sink to play to, and a stream from
+        // it into the hardware, tied by their link group.
+        let list = LIST
+            .replace(
+                r#""sinks": ["#,
+                r#""sinks": [
+    {"index": 76, "name": "audio_effect.laptop-convolver", "description": "Framework Speakers",
+     "mute": false, "volume": {"front-left": {"value": 45875}}, "monitor_source": "audio_effect.laptop-convolver.monitor",
+     "properties": {"node.link-group": "filter-chain-3901-18"}, "ports": [], "active_port": null},"#,
+            )
+            .replace(
+                r#""sink_inputs": ["#,
+                r#""sink_inputs": [
+    {"index": 77, "sink": 51, "mute": false, "volume": {"mono": {"value": 65536}},
+     "properties": {"media.name": "Framework Speakers", "node.link-group": "filter-chain-3901-18"}},"#,
+            );
+
+        let audio = reading(INFO, &list).unwrap();
+
+        assert!(audio
+            .playback
+            .iter()
+            .all(|stream| stream.id != "playback:77"));
+        assert_eq!(audio.playback.len(), 3);
+    }
+
+    #[test]
+    fn an_input_that_names_no_sink_is_not_a_monitor() {
+        for none in [r#""""#, r#""n/a""#] {
+            let list = LIST.replace(
+                r#""monitor_source": null,"#,
+                &format!(r#""monitor_source": {none},"#),
+            );
+
+            let audio = reading(INFO, &list).unwrap();
+
+            assert!(
+                !audio.inputs[1].monitor,
+                "{none} is no sink, so the microphone is no monitor"
+            );
+        }
+    }
+
+    #[test]
+    fn the_device_class_says_what_is_a_monitor() {
+        let list = LIST.replace(
+            r#""monitor_source": "alsa_output.analog-stereo",
+     "properties": {}"#,
+            r#""monitor_source": "",
+     "properties": {"device.class": "monitor"}"#,
+        );
+
+        let audio = reading(INFO, &list).unwrap();
+
+        assert!(audio.inputs[0].monitor);
+    }
+
+    #[test]
+    fn the_filter_in_front_of_the_default_is_the_default() {
+        // The speakers stay the server's default; their correction plays
+        // into them, and is what is heard.
+        let list = LIST
+            .replace(
+                r#""sinks": ["#,
+                r#""sinks": [
+    {"index": 76, "name": "audio_effect.laptop-convolver", "description": "Framework Speakers",
+     "mute": false, "volume": {"front-left": {"value": 45875}}, "monitor_source": "audio_effect.laptop-convolver.monitor",
+     "properties": {"node.link-group": "filter-chain-3901-18"}, "ports": [], "active_port": null},"#,
+            )
+            .replace(
+                r#""sink_inputs": ["#,
+                r#""sink_inputs": [
+    {"index": 77, "sink": 51, "mute": false, "volume": {"mono": {"value": 65536}},
+     "properties": {"media.name": "Framework Speakers", "node.link-group": "filter-chain-3901-18"}},"#,
+            );
+
+        let audio = reading(INFO, &list).unwrap();
+
+        let defaults: Vec<_> = audio
+            .outputs
+            .iter()
+            .filter(|output| output.default)
+            .map(|output| output.id.as_str())
+            .collect();
+        assert_eq!(defaults, ["output:audio_effect.laptop-convolver"]);
+    }
+
+    #[test]
     fn the_meters_own_recordings_are_not_listed() {
         let list = LIST.replace(
             r#""source_outputs": ["#,

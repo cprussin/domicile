@@ -48,6 +48,21 @@ describe("Mixer", () => {
       ).toHaveAttribute("aria-valuenow", "0");
     });
 
+    it("has the first microphone when the server's default input is a monitor", () => {
+      const sound = heldSound();
+      mixer(sound, {
+        ...laptop,
+        inputs: laptop.inputs.map((input) => ({
+          ...input,
+          default: input.monitor,
+        })),
+      });
+
+      expect(
+        screen.getByRole("slider", { name: "Microphone" }),
+      ).toHaveAttribute("aria-valuenow", "30");
+    });
+
     it("switches the default output's port without leaving", async () => {
       const sound = heldSound();
       mixer(sound);
