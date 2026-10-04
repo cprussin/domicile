@@ -1,4 +1,4 @@
-// Wiring the SDK to a domicile client: bind the element context and install the
+// Wiring the SDK to `window.domicile`: bind the element context and install the
 // document-level input routing the `<app>` tag needs.
 //
 // Nothing is registered any more, and the name is kept anyway: it is the one
@@ -8,9 +8,8 @@
 // `connectedCallback`, `attributeChangedCallback` and five listeners per window
 // is two document-level installations here.
 
-import type { DomicileClient } from "./domicile-client";
-import type { ElementContext } from "./element-context";
-import { bindElementContext } from "./element-context";
+import type { ElementContext, InputHost } from "./element-context";
+import { bindElementContext, setFocusedApp } from "./element-context";
 import { installKeyboardInput } from "./keyboard-input";
 import type { Measure } from "./measure";
 import { installPointerInput } from "./pointer-input";
@@ -23,18 +22,29 @@ export type RegisterOptions = {
 let inputInstalled = false;
 
 /**
- * Wire the SDK to a domicile client.
+ * Wire the SDK to `window.domicile`.
  *
  * Idempotent: safe to call once at chrome startup, and safe to call again with a
- * different client (which is how tests rebind between cases). The input
+ * different host (which is how tests rebind between cases). The input
  * listeners are installed once — they are on `document`, and they read the
  * context at dispatch, which is one cell a rebind writes through.
  */
 export const registerElements = (
-  domicile: DomicileClient,
+  domicile: InputHost,
   { measure }: RegisterOptions = {},
 ): void => {
   const context = bindElementContext(domicile, measure);
+  // The keys this page forwards go where the compositor says the keyboard is,
+  // and not only where the page last asked for it: the compositor moves it on
+  // its own too, and a page that heard only its own requests went on
+  // forwarding every key to a client that no longer had it -- which is a
+  // launcher's box, focused and empty under every letter. Only while this host
+  // is the bound one: a rebind leaves the old listener behind.
+  domicile.addEventListener("focusedwindowchanged", () => {
+    if (context.domicile === domicile) {
+      setFocusedApp(domicile.focusedWindow ?? undefined);
+    }
+  });
   // `document` is absent when the SDK is loaded outside a browsing context (a
   // unit test of the message layer, say); binding the client is still useful
   // there, and listening for input that cannot arrive is not.

@@ -1,9 +1,7 @@
-// The shell's entry point: `Shell`, which wires the SDK to whatever host this
-// page was opened under and mounts the React desktop on top of it. Importing
+// The shell's entry point: `Shell`, which wires the SDK to the desktop this
+// page was opened in and mounts the React desktop on top of it. Importing
 // this module does nothing but install its stylesheet.
 
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { createRoot } from "react-dom/client";
@@ -14,11 +12,12 @@ import "./shell.css";
 
 /** The simple desktop, mounted into `root`. */
 export const Shell: ShellModule = (root) => {
-  // Under the fork this is `window.domicile`, the control channel the engine
-  // puts on a document it served. In a plain browser there is none, and
-  // `connectToHost` says so on the console and hands back a stand-in, so the
-  // desktop still opens against windows that will never arrive.
-  const domicile = new DomicileClient(connectToHost(window));
+  // The desktop, as the engine puts it on a document it served. A plain
+  // browser has none, and there is nothing to draw.
+  const domicile = window.domicile;
+  if (domicile === null || domicile === undefined) {
+    return;
+  }
   registerElements(domicile);
 
   // A container of our own: the document reports a failure by appending to

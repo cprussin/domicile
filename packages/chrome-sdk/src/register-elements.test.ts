@@ -6,34 +6,39 @@ import {
   APP_FOCUS_REQUESTED_EVENT,
   APP_TAG_NAME,
 } from "./app-element";
-import type { DomicileClient, SurfaceSize } from "./domicile-client";
+import type { DomicileWindow } from "./domicile-host";
+import type { InputHost } from "./element-context";
+import { focusedApp } from "./element-context";
 import { focusApp } from "./focus-app";
 import { BTN_LEFT } from "./input";
 import type { Measure } from "./measure";
 import { registerElements } from "./register-elements";
-import { claimShortcut } from "./shortcut-claims";
+import type { SurfaceSize } from "./windows";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for the domicile client, capturing the input calls the delegation
-// makes and answering for what each client has drawn. Only the surface the
+// A double for `window.domicile`, capturing the input calls the delegation
+// makes and listing what each client has drawn. Only the surface the
 // delegation uses is implemented.
-class FakeDomicile {
+class FakeDomicile extends EventTarget {
   readonly calls: Call[] = [];
-  readonly #drawn = new Map<string, SurfaceSize>();
+  /** Every client here is a window, but `menu`, which is over `term`. */
+  windows: DomicileWindow[] = [described("term"), described("menu", "term")];
+  focusedWindow: string | null = null;
 
   /** As `app_resized` would: the client says what it drew by drawing. */
-  drew(appId: string, size: SurfaceSize): void {
-    this.#drawn.set(appId, size);
+  drew(appId: string, [width, height]: SurfaceSize): void {
+    this.windows = this.windows.map((window) =>
+      window.appId === appId ? { ...window, height, width } : window,
+    );
   }
 
-  surfaceSizeOf(appId: string): SurfaceSize | undefined {
-    return this.#drawn.get(appId);
+  /** As `focus_changed` would. */
+  focused(appId: string | null): void {
+    this.focusedWindow = appId;
+    this.dispatchEvent(new Event("focusedwindowchanged"));
   }
-  /** Every client here is a window, but `menu`, which is over `term`. */
-  windowOf(appId: string): string {
-    return appId === "menu" ? "term" : appId;
-  }
+
   focusApp(appId: string): void {
     this.calls.push(["focusApp", appId]);
   }
@@ -51,14 +56,36 @@ class FakeDomicile {
   }
   pointerAxis(
     appId: string,
-    delta: { dx: number; dy: number; v120X: number; v120Y: number },
+    dx: number,
+    dy: number,
+    v120X: number,
+    v120Y: number,
   ): void {
-    this.calls.push(["axis", appId, delta]);
+    this.calls.push(["axis", appId, { dx, dy, v120X, v120Y }]);
   }
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
   }
 }
+
+/** A window as the engine lists it, before it has drawn. */
+const described = (appId: string, parent: string | null = null) => ({
+  appId,
+  cursor: "default" as const,
+  grab: false,
+  height: null,
+  maxHeight: null,
+  maxWidth: null,
+  minHeight: null,
+  minWidth: null,
+  parent,
+  title: "",
+  width: null,
+  x: null,
+  y: null,
+});
+
+const asHost = (fake: FakeDomicile): InputHost => fake as unknown as InputHost;
 
 // The test DOM performs no layout, so measurement is injected.
 const stubMeasure: Measure = () => ({
@@ -90,7 +117,7 @@ describe("registerElements", () => {
     document.body.innerHTML = "";
     domicile = new FakeDomicile();
     shell = new AbortController();
-    registerElements(domicile as unknown as DomicileClient, {
+    registerElements(asHost(domicile), {
       measure: stubMeasure,
     });
   });
@@ -296,12 +323,47 @@ describe("registerElements", () => {
       expect(domicile.calls).toContainEqual(["key", "term", 30, false]);
     });
 
+    // THE PAGE FORWARDS KEYS TO WHERE THE COMPOSITOR SAYS THE KEYBOARD IS, and
+    // not only to where the page last asked for it. The compositor moves the
+    // keyboard on its own — a focused client going away, a press on another
+    // monitor's page — and a page that heard only its own requests went on
+    // forwarding every key to the client it last named: a launcher's box
+    // focused over that window and taking none of the letters typed into it.
+    it("routes the page's keys to whoever the compositor says has them", () => {
+      focusApp(asHost(domicile), "term");
+
+      domicile.focused(null);
+      expect(focusedApp()).toBeUndefined();
+
+      domicile.focused("editor");
+      expect(focusedApp()).toBe("editor");
+    });
+
+    it("leaves a key the engine took as a chord, and its release", () => {
+      mountApp("term");
+      focusApp(asHost(domicile), "term");
+      domicile.calls.length = 0;
+      const taken = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        code: "KeyL",
+      });
+      taken.preventDefault();
+
+      document.dispatchEvent(taken);
+      document.dispatchEvent(
+        new KeyboardEvent("keyup", { bubbles: true, code: "KeyL" }),
+      );
+
+      expect(domicile.calls).toEqual([]);
+    });
+
     it("gives a client the keyboard without a click", () => {
       // What a shell calls when it puts a window on screen that nobody clicked
       // — opening it, or switching to its tab.
       mountApp("term");
 
-      focusApp(domicile as unknown as DomicileClient, "term");
+      focusApp(asHost(domicile), "term");
       expect(domicile.calls).toContainEqual(["focusApp", "term"]);
 
       document.dispatchEvent(
@@ -312,34 +374,6 @@ describe("registerElements", () => {
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
       );
-    });
-
-    it("keeps a chord the desktop claimed out of the focused window", () => {
-      // A Wayland window is an element in this page, so DOM focus never leaves
-      // the document and the shell's own `keydown` handler sees the press as
-      // well as the forwarding here. Without the claim both act: Alt+Enter
-      // spawns a terminal *and* types a newline into the one already open.
-      claimShortcut({ altKey: true, keycode: 28 });
-      const element = mountApp("term");
-      element.dispatchEvent(pointer("pointerdown", { button: 0 }));
-      domicile.calls.length = 0;
-
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          altKey: true,
-          bubbles: true,
-          code: "Enter",
-        }),
-      );
-      document.dispatchEvent(
-        new KeyboardEvent("keyup", {
-          altKey: true,
-          bubbles: true,
-          code: "Enter",
-        }),
-      );
-
-      expect(domicile.calls.filter(([kind]) => kind === "key")).toEqual([]);
     });
 
     it("ignores the browser's auto-repeat while a key is held", () => {
@@ -457,7 +491,7 @@ describe("registerElements", () => {
         new KeyboardEvent("keydown", { bubbles: true, code: "Escape" }),
       );
       const rebound = new FakeDomicile();
-      registerElements(rebound as unknown as DomicileClient, {
+      registerElements(asHost(rebound), {
         measure: stubMeasure,
       });
       domicile.calls.length = 0;

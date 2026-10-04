@@ -13,8 +13,6 @@ import type { ElementContext } from "./element-context";
 import { focusedApp } from "./element-context";
 import { focusChrome } from "./focus-chrome";
 import { evdevFromCode } from "./input";
-import type { KeyPress } from "./shortcut-claims";
-import { isClaimed } from "./shortcut-claims";
 
 // The app each forwarded press was sent for, until the key comes up.
 //
@@ -35,6 +33,9 @@ import { isClaimed } from "./shortcut-claims";
 // `wl_keyboard.leave`, which tells it every key is up — so naming the app the
 // press was sent for is simply the truthful value for the field.
 const heldKeys = new Map<number, string>();
+
+// The keys whose press the engine took as a grabbed chord, until they come up.
+const takenKeys = new Set<number>();
 
 /** Route the page's keystrokes to whichever window the user reached for. */
 export const installKeyboardInput = (context: ElementContext): void => {
@@ -71,15 +72,13 @@ const forwardPress =
   (event: KeyboardEvent): void => {
     const appId = keyboardTarget(context);
     const keycode = evdevFromCode(event.code);
-    // A combination the desktop claimed is not the window's, wherever the
-    // keyboard is pointed: the page is where it is answered, and forwarding it
-    // as well is the window acting on a key the shell already spent. The
-    // release is not forwarded either, because it was never taken down as held.
-    if (
-      appId !== undefined &&
-      keycode !== undefined &&
-      !isClaimed(press(event, keycode))
-    ) {
+    // A chord grabbed by name arrives taken: the engine hears it first and
+    // answers it as `shortcut`. Its release is the desktop's too.
+    if (event.defaultPrevented && keycode !== undefined) {
+      takenKeys.add(keycode);
+      return;
+    }
+    if (appId !== undefined && keycode !== undefined) {
       event.preventDefault();
       // The browser repeats a held key; Wayland does not. A client synthesizes
       // repeat itself from `wl_keyboard.repeat_info`, so forwarding these as
@@ -99,13 +98,16 @@ const forwardPress =
 // its seat does not hold, which is what makes sending them all safe: a key
 // typed into the page's own launcher comes up as a release nobody pressed.
 //
-// Except a chord the desktop claimed, the mirror of the press: its release is
-// the desktop's too.
+// Except a chord the engine took (`takenKeys`), the mirror of the press: its
+// release is the desktop's too.
 const forwardRelease =
   (context: ElementContext) =>
   (event: KeyboardEvent): void => {
     const keycode = evdevFromCode(event.code);
-    if (keycode !== undefined && !isClaimed(press(event, keycode))) {
+    if (keycode !== undefined && takenKeys.delete(keycode)) {
+      return;
+    }
+    if (keycode !== undefined) {
       const held = heldKeys.get(keycode);
       if (held !== undefined) {
         event.preventDefault();
@@ -188,8 +190,7 @@ const releaseAllowed = (
  * a desktop that works right up until you close a window.
  *
  * Asked here rather than pushed from the host's `app_closed`, because this is the
- * one place the answer is used and `DomicileClient.on` is a single slot the
- * shell's own handler wants. It costs one walk of the windows per keystroke,
+ * one place the answer is used. It costs one walk of the windows per keystroke,
  * against a socket write on the same path.
  *
  * The repair is not only local: the compositor's seat still points at the client
@@ -221,12 +222,3 @@ const appElement = (appId: string): Element | undefined =>
   [...document.querySelectorAll(APP_TAG_NAME)].find(
     (element) => element.getAttribute("app-id") === appId,
   );
-
-/** The press, in the terms a claim is written in. */
-const press = (event: KeyboardEvent, keycode: number): KeyPress => ({
-  altKey: event.altKey,
-  ctrlKey: event.ctrlKey,
-  keycode,
-  metaKey: event.metaKey,
-  shiftKey: event.shiftKey,
-});

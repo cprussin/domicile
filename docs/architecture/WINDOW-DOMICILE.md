@@ -160,14 +160,14 @@ Each step ships alone.
 - [x] search and preview return promises (`guard-asks-promise.sh`)
 - [x] chords resolved by the engine: `grabShortcut(chord)` and
       `shortcut.chord` (`guard-shortcut-chords.sh`)
-- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
-- [ ] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
+- [x] the shells, `examples/minimal-shell`, WRITING-A-SHELL.md and the SDK
       README move to `window.domicile`; `bindKeys` becomes a pure helper over
-      `grabShortcut` and `shortcut`, and `shell_config` leaves the page; the
-      events the attributes replace
-      (`appappeared` and the other seven `app*`, `focuschanged`, …),
-      `DomicileClient` and `connect-to-host` go; the wire modules move to
-      `e2e-harness`
+      `grabShortcut` and `shortcut`; `DomicileClient` and `connect-to-host`
+      go; the wire modules move to `e2e-harness`
+- [ ] the engine drops what nothing reads now: the events the attributes and
+      promises replace (`appappeared` and the other seven `app*`,
+      `focuschanged`, `files`, …) and `shellconfig`
+- [ ] `<app>` routes its own input; `registerElements` and the routing modules go
 
 ## Open questions
 

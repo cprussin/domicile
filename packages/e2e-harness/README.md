@@ -93,9 +93,10 @@ were eventually deleted unused; a module whose last caller went should go with
 it.
 
 `src/chrome-socket.ts` is the shared connection: newline-delimited JSON framing
-from [`@domicile-desktop/sdk/newline-frames`](../chrome-sdk/README.md), the
-handshake, and decoding via the SDK's protocol schemas — so the harnesses drift
-from the wire format only if the SDK does.
+from `src/newline-frames.ts`, the handshake, and decoding via `src/protocol.ts`'s
+schemas — the TypeScript half of the wire, which moves with
+`packages/domicile-protocol` — so the harnesses drift from the wire format only
+if those schemas do.
 
 It reads the socket path from `DOMICILE_CHROME_SOCK`, and ends on its own —
 on a timer, or when its sequence is done — since the script that spawns it runs

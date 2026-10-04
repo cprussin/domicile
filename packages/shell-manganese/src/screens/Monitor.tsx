@@ -1,7 +1,9 @@
 import { Screen } from "@domicile-desktop/component-library/Screen";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
 
 import type { TopBarLayout } from "../top-bar/layout";
 import { TopBar } from "../top-bar/TopBar";
@@ -22,7 +24,7 @@ export type MonitorNotifications = {
 type Props = {
   /** Run a command: a press on this monitor's chrome. */
   act: (action: WindowAction) => void;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The extensions with an action, for the tray on this monitor's bar. */
   extensions: readonly Extension[];
   /** Which monitor this is. */
@@ -37,7 +39,7 @@ type Props = {
   /** An extension's popup opened under this bar's tray, or closed. */
   onOpenExtension: (id: string | undefined) => void;
   /** The system tray's icons, for this monitor's bar. */
-  tray: readonly TrayItem[];
+  tray: readonly DomicileTrayItem[];
   /** The order of this monitor's tray, which is every monitor's. */
   trayOrder: TrayOrder;
   /** What goes on this monitor's bar, which is every monitor's. */

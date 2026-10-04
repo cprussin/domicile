@@ -1,13 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Tray } from "./Tray";
 
 /** An application's icon. */
-const sync: TrayItem = {
+const sync: DomicileTrayItem = {
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: "syncthing",
   title: "Syncthing",
@@ -37,7 +39,7 @@ const SYNC = `status-notifier:${sync.id}`;
 const COUNTER = `extension:${counter.id}`;
 
 /** A client that keeps every click the tray hands on, in order. */
-const recordingDomicile = (clicked: string[]): DomicileClient =>
+const recordingDomicile = (clicked: string[]): DomicileHost =>
   ({
     activateExtension: (id: string) => {
       clicked.push(id);
@@ -45,14 +47,14 @@ const recordingDomicile = (clicked: string[]): DomicileClient =>
     activateTrayItem: (id: string) => {
       clicked.push(id);
     },
-  }) as unknown as DomicileClient;
+  }) as unknown as DomicileHost;
 
 type Move = [readonly string[], string, string];
 
 type TrayProps = {
-  domicile?: DomicileClient;
+  domicile?: DomicileHost;
   extensions?: readonly Extension[];
-  items?: readonly TrayItem[];
+  items?: readonly DomicileTrayItem[];
   onMove?: (shown: readonly string[], dragged: string, target: string) => void;
   order?: readonly string[];
 };

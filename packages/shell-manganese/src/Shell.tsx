@@ -2,7 +2,7 @@ import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProv
 import type { DisplaySource } from "@domicile-desktop/component-library/display-source";
 import { Provider } from "@domicile-desktop/component-library/Provider";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 
 import { Desktop } from "./Desktop";
@@ -12,15 +12,13 @@ import { DEFAULT_TOP_BAR } from "./top-bar/layout";
 
 type Props = {
   /**
-   * Where the desktop comes from — the host over the control channel, or the
-   * window itself where there is no host. Passed in rather than built here
-   * because the entry point is what knows which of those this is, and because a
-   * source is the connection: the provider re-registers whenever its identity
-   * changes and `DomicileClient.on` is a single slot, so one built per render
-   * would re-register per render.
+   * Where the desktop comes from: the host. Passed in rather than built here
+   * because a source is the connection: the provider re-registers whenever
+   * its identity changes, so one built per render would re-register per
+   * render.
    */
   displays: DisplaySource;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /**
    * The keys this desktop binds itself, under the config's: sway's, on Meta,
    * when not given.
@@ -43,8 +41,8 @@ type Props = {
  *
  * The page spans every display, so this is the composition root in the literal
  * sense as well: it holds the one {@link DisplayProvider} the whole tree reads
- * its screens from. `on` is a single slot, so there is exactly one listener for
- * the host's descriptions and every `<Screen>` below fans out from it.
+ * its screens from: one listener for the host's descriptions, and every
+ * `<Screen>` below fans out from it.
  */
 export const Shell = ({
   displays,

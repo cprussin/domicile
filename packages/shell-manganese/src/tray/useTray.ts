@@ -1,22 +1,30 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useState } from "react";
+
+import { watchHost } from "../host/watch-host";
 
 /**
  * The system tray's icons, as the compositor last described them.
  *
- * `useExtensions`' shape and for its reasons: pushed, whole, on every change
- * and once more to a page that has just connected, and registered once for the
- * whole desk because `on` is a single slot.
+ * `useExtensions`' shape and for its reasons: the whole tray, read off the
+ * host and again on every change, once for the whole desk.
  */
-export const useTray = (domicile: DomicileClient): readonly TrayItem[] => {
-  const [items, setItems] = useState<readonly TrayItem[]>([]);
+export const useTray = (
+  domicile: DomicileHost,
+): readonly DomicileTrayItem[] => {
+  const [items, setItems] = useState<readonly DomicileTrayItem[]>([]);
 
-  useEffect(() => {
-    domicile.on("tray", (message) => {
-      setItems(message.items);
-    });
-  }, [domicile]);
+  useEffect(
+    () => watchHost(domicile, "traychanged", itemsOf, setItems),
+    [domicile],
+  );
 
   return items;
 };
+
+const itemsOf = ({
+  tray,
+}: DomicileHost): readonly DomicileTrayItem[] | undefined => tray ?? undefined;

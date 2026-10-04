@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { act, renderHook } from "@testing-library/react";
 
@@ -9,34 +8,23 @@ import { notification } from "./fixture";
 import { useNotifications } from "./useNotifications";
 
 /**
- * A stand-in for the client that takes the one handler this hook registers,
- * lets a test say what the compositor said, and keeps what the hook asked of
- * it. Narrow for `useTray`'s reason.
+ * A host whose notifications the test says, in the engine's spellings, and
+ * that keeps what the hook asked of it.
  */
 const client = () => {
-  let handler: ((message: HostMessageOf<"notifications">) => void) | undefined;
-  const asked: unknown[][] = [];
-  const domicile = {
-    dismissNotifications: (ids: readonly number[]) => {
-      asked.push(["dismiss", ids]);
-    },
-    invokeNotificationAction: (id: number, action: string) => {
-      asked.push(["invoke", id, action]);
-    },
-    on: (
-      _type: "notifications",
-      registered: (message: HostMessageOf<"notifications">) => void,
-    ) => {
-      handler = registered;
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    asked,
-    domicile,
+    asked: fake.calls,
+    domicile: fake.host,
     says: (items: readonly Notification[]) => {
       act(() => {
-        handler?.({ items });
+        fake.set({
+          notifications: items.map((item) => ({
+            ...item,
+            icon: item.icon ?? "",
+            timeoutMs: item.timeoutMs ?? -1,
+          })),
+        });
       });
     },
   };
@@ -161,15 +149,15 @@ describe("useNotifications", () => {
   });
 
   describe("asking the compositor", () => {
-    it("clears and presses through the client", () => {
+    it("clears and presses through the host", () => {
       const { host, result } = mounted();
 
       result.current.dismiss([7, 8]);
       result.current.invoke(7, "reply");
 
       expect(host.asked).toEqual([
-        ["dismiss", [7, 8]],
-        ["invoke", 7, "reply"],
+        ["dismissNotifications", [7, 8]],
+        ["invokeNotificationAction", 7, "reply"],
       ]);
     });
   });

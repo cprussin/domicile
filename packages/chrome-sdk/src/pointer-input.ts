@@ -26,6 +26,7 @@ import { focusApp } from "./focus-app";
 import { buttonCodeFromJs } from "./input";
 import { surfaceLocal } from "./surface-coordinates";
 import { axisFromWheel } from "./wheel-axis";
+import { surfaceSizeOf, windowOf } from "./windows";
 
 /**
  * The scale a client that has not committed a buffer is mapped through: its
@@ -109,7 +110,8 @@ export const installPointerInput = (context: ElementContext): void => {
     "wheel",
     (event) => {
       forApp(event, (_element, appId) => {
-        context.domicile.pointerAxis(appId, axisFromWheel(event));
+        const { dx, dy, v120X, v120Y } = axisFromWheel(event);
+        context.domicile.pointerAxis(appId, dx, dy, v120X, v120Y);
       });
     },
     { passive: true },
@@ -159,8 +161,8 @@ const requestFocus = (
   element: HTMLAppElement,
   pressed: string,
 ): void => {
-  // A popup's window rather than the popup: see `DomicileClient.windowOf`.
-  const appId = context.domicile.windowOf(pressed);
+  // A popup's window rather than the popup: see `windowOf`.
+  const appId = windowOf(context.domicile.windows, pressed);
   const unanswered = element.dispatchEvent(
     new CustomEvent<AppFocusRequest>(APP_FOCUS_REQUESTED_EVENT, {
       bubbles: true,
@@ -192,7 +194,7 @@ const forwardMotion = (
   const local = surfaceLocal(
     transform,
     size,
-    context.domicile.surfaceSizeOf(appId) ?? NOT_DRAWN_YET,
+    surfaceSizeOf(context.domicile.windows, appId) ?? NOT_DRAWN_YET,
     [event.clientX, event.clientY],
   );
   if (local !== undefined) {

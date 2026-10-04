@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { FoundFilesMessage } from "@domicile-desktop/sdk/host-message";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
+import type { Found } from "./useFound";
 import { useFound } from "./useFound";
 
 /**
@@ -9,10 +9,9 @@ import { useFound } from "./useFound";
  * answer them in whatever order it likes, which is the order that matters.
  */
 const host = () => {
-  const asked: { query: string; settle: (found: FoundFilesMessage) => void }[] =
-    [];
+  const asked: { query: string; settle: (found: Found) => void }[] = [];
   const search = (query: string) =>
-    new Promise<FoundFilesMessage>((settle) => {
+    new Promise<Found>((settle) => {
       asked.push({ query, settle });
     });
   return {
@@ -30,7 +29,6 @@ const host = () => {
             files,
             indexing,
             matched: files.length,
-            query: asking.query,
           });
           await Promise.resolve();
         });

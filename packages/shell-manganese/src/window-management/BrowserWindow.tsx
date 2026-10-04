@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import {
   WEBVIEW_CLOSE_EVENT,
@@ -53,7 +53,7 @@ type Props = {
    * one — so taking focus here is a client somewhere losing it, and there is
    * nothing else in the tree that knows.
    */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /**
    * Whether the pointer goes through this window to the page behind it.
    *

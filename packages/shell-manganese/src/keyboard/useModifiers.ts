@@ -1,5 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -68,7 +67,7 @@ type HeldModifiers = {
  * page did not tell it about, so there is nothing to ask it for. When input
  * comes off DRM rather than out of the browser — see
  * `/docs/architecture/A-DESKTOP-ON-A-TTY.md` — the compositor is the one that
- * knows and the `modifiers` message is how it will say so; it does not know
+ * knows and `modifierschanged` is how it will say so; it does not know
  * today.
  *
  * **Except while a browser window's page has the keyboard**, when this page
@@ -76,8 +75,8 @@ type HeldModifiers = {
  * its keys never reach this one. So Meta held over a focused browser window
  * was never held as far as the desktop knew, and the window would not drag.
  * The engine reads the guest's keys itself and sends what they hold as that
- * same `modifiers` message — and the compositor's copy says nothing then,
- * because this page forwards no keys to it to be short of. So the message is
+ * same modifiers, with `modifierschanged` — and the compositor's copy says nothing then,
+ * because this page forwards no keys to it to be short of. So they are
  * taken exactly while a `<webview>` is where this document's focus is.
  *
  * **Held is not the same question as meant, and only for Shift.**
@@ -87,7 +86,7 @@ type HeldModifiers = {
  * window with the keys for resizing it already held.
  * {@link HeldModifiers.spendShift} is what the chord says so with.
  */
-export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
+export const useModifiers = (domicile: DomicileHost): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
   // The same object when nothing moved, so a page that holds Meta through a
@@ -146,14 +145,17 @@ export const useModifiers = (domicile: DomicileClient): HeldModifiers => {
   }, [settle]);
 
   useEffect(() => {
-    const reported = (held: HostMessageOf<"modifiers">) => {
+    const reported = () => {
       if (guestHasKeyboard()) {
-        settle({ meta: held.metaKey, shift: held.shiftKey });
+        settle({
+          meta: domicile.metaKey === true,
+          shift: domicile.shiftKey === true,
+        });
       }
     };
-    domicile.on("modifiers", reported);
+    domicile.addEventListener("modifierschanged", reported);
     return () => {
-      domicile.off("modifiers", reported);
+      domicile.removeEventListener("modifierschanged", reported);
     };
   }, [domicile, settle]);
 

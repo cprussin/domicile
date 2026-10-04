@@ -1,16 +1,13 @@
 // The shell's entry point, and manganese as a library: `runManganese` makes a
-// `Shell` that wires the SDK to whatever host this page was opened under and
-// mounts the React chrome on top of it, and `Shell` is manganese as shipped.
+// `Shell` that wires the SDK to the desktop this page was opened in and mounts
+// the React chrome on top of it, and `Shell` is manganese as shipped.
 // The bar's items are exported for a layout of the user's own. Importing this
 // module does nothing but install its stylesheet.
 
-import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
 import {
   applyTheme,
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
-import { connectToHost, hasHost } from "@domicile-desktop/sdk/connect-to-host";
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
@@ -19,7 +16,6 @@ import { createRoot } from "react-dom/client";
 import { mountPoint } from "./mount-point";
 import { Shell as Chrome } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
-import { viewportDisplays } from "./screens/viewport-displays";
 import { hostTheme } from "./theme/host-theme";
 import { rememberedTheme } from "./theme/remembered-theme";
 import type { TopBarLayout } from "./top-bar/layout";
@@ -77,6 +73,13 @@ export type ManganeseOptions = {
 export const runManganese =
   (options: ManganeseOptions = {}): ShellModule =>
   (root) => {
+    // The desktop, as the engine puts it on a document it served. A plain
+    // browser has none, and there is nothing to draw.
+    const domicile = window.domicile;
+    if (domicile === null || domicile === undefined) {
+      return;
+    }
+
     // The theme this desk was last seen in, before React mounts, so the first
     // paint uses the right semantic-token values. There is no paint before this:
     // the stylesheet travels inside this module rather than in a render-blocking
@@ -93,31 +96,10 @@ export const runManganese =
     // `theme.mode` defaults to.
     applyTheme(rememberedTheme() ?? DEFAULT_THEME);
 
-    // One call, two places. Under the fork this is `window.domicile`, the
-    // control channel the engine puts on a document it served; in a plain browser
-    // there is none, and `connectToHost` says so on the console and hands back a
-    // stand-in that does nothing — so the shell still opens for styling work
-    // against a desktop that will never arrive.
-    const domicile = new DomicileClient(connectToHost(window));
-
-    // And where the desktop comes from, which is the same question one answer
-    // later: a host describes one, and with no host nothing ever will, so the
-    // window is the only geometry there is. Built here rather than in the chrome
-    // because this is where the host's absence is already known, and once rather
-    // than per render because a source is the connection.
-    const displays = hasHost(window)
-      ? hostDisplays(domicile)
-      : viewportDisplays(window);
-
-    // And the theme, which is the same question asked again. With a host the desk
-    // owns it: the toggle asks, the compositor answers, and
-    // the desk's GTK and Qt windows are told through the settings portal. With no
-    // host there is nobody to ask and nobody else to tell, so the toggle answers
-    // itself — which is what makes the shell styleable in an ordinary browser.
-    // Built once, outside the component, because a source is the connection.
-    const theme = hasHost(window)
-      ? hostTheme(domicile)
-      : standaloneThemeSource(rememberedTheme());
+    // Where the desktop comes from, and the theme it is drawn in: built here,
+    // once, rather than per render, because a source is the connection.
+    const displays = hostDisplays(domicile);
+    const theme = hostTheme(domicile);
     registerElements(domicile);
 
     createRoot(mountPoint(root)).render(

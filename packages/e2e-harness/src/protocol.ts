@@ -25,12 +25,11 @@
 // fields without breaking an older reader; it is strict about the fields the
 // harness actually reads.
 
+import { cursorShapeSchema } from "@domicile-desktop/sdk/cursor-shape";
+import { displayTransformSchema } from "@domicile-desktop/sdk/display-transform";
+import { notificationUrgencySchema } from "@domicile-desktop/sdk/notification";
+import { themeSchema } from "@domicile-desktop/sdk/theme";
 import { z } from "zod";
-
-import { cursorShapeSchema } from "./cursor-shape";
-import { displayTransformSchema } from "./display-transform";
-import { notificationUrgencySchema } from "./notification";
-import { themeSchema } from "./theme";
 
 /** The protocol version this build speaks. Must match the Rust constant. */
 export const PROTOCOL_VERSION = 1;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import {
@@ -27,16 +28,16 @@ import { BrowserWindow } from "./BrowserWindow";
 const silentDomicile = {
   focusApp: () => undefined,
   focusChrome: () => undefined,
-} as unknown as DomicileClient;
+} as unknown as DomicileHost;
 
 /** A domicile client that keeps what the window told the host, in order. */
-const recordingDomicile = (calls: string[]): DomicileClient =>
+const recordingDomicile = (calls: string[]): DomicileHost =>
   ({
     ...silentDomicile,
     focusChrome: () => {
       calls.push("focusChrome");
     },
-  }) as unknown as DomicileClient;
+  }) as unknown as DomicileHost;
 
 const noWindows = () => {
   // Nothing in the case asks for a window of its own.
@@ -921,13 +922,8 @@ describe("BrowserWindow", () => {
     // while the guest had the focus, because the document hears none of its
     // keys; the launcher's box was where it showed, empty under every letter.
     it("stops the page forwarding its keys to the client it took the keyboard from", () => {
-      const forwarded: string[] = [];
-      const domicile = {
-        ...silentDomicile,
-        key: (appId: string) => {
-          forwarded.push(appId);
-        },
-      } as unknown as DomicileClient;
+      const fake = new FakeDomicileHost();
+      const domicile = fake.host;
       registerElements(domicile);
       render(<app app-id="term" />);
       focusApp(domicile, "term");
@@ -955,7 +951,9 @@ describe("BrowserWindow", () => {
       );
       fireEvent.keyDown(document, { code: "KeyA" });
 
-      expect(forwarded).toStrictEqual([]);
+      expect(fake.calls.filter(([method]) => method === "key")).toStrictEqual(
+        [],
+      );
     });
 
     // AND THE KEYBOARD IT TAKES IS ITS PAGE'S. Nothing else can put it there:

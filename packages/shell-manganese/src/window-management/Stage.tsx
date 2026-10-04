@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
 
@@ -47,7 +47,7 @@ type Props = {
    * over the windows, which is what takes the keyboard off them.
    */
   behindPanel: boolean;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The floating window the user has hold of, or `undefined` when none is. */
   draggingId: string | undefined;
   /**

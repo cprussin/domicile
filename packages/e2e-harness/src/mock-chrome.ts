@@ -9,7 +9,7 @@
 // `tests/density.rs` now, which reaches a 2x frame with no bun in the picture.
 // One caller and one reason left: a frame out of a real GPU.
 
-import { setDevicePixelRatioMessage } from "@domicile-desktop/sdk/chrome-message";
+import { setDevicePixelRatioMessage } from "./chrome-message";
 
 import {
   connectChromeSocket,

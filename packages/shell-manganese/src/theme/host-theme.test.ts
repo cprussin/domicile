@@ -1,119 +1,37 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type {
-  DomicileDisplay,
-  DomicileHost,
-  DomicileHostEventMap,
-  DomicileWindow,
-} from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import { hostTheme } from "./host-theme";
-
-/** What every call *out* to the compositor does here, unless it is recorded. */
-const ignored = (): undefined => undefined;
-/** An ask nobody answers. */
-const unanswered = (): Promise<never> => new Promise(() => undefined);
+import { rememberedTheme } from "./remembered-theme";
 
 /**
- * A compositor that states a theme and remembers being asked for one.
- *
- * Written out rather than cast from a partial, for `host-displays.test.ts`'s
- * reason: `DomicileClient` registers a listener for every event type in its
- * constructor, so a double missing `addEventListener` would throw there.
+ * A host, and the compositor behind it: what it states, and what it was asked
+ * for.
  */
-class Host implements DomicileHost {
-  readonly asked: Theme[] = [];
-  readonly captured: Theme[] = [];
-  displays: readonly DomicileDisplay[] | null = null;
-  brightness: number | null = null;
-  readonly windows: readonly DomicileWindow[] = [];
-  readonly focusedWindow: string | null = null;
-  readonly altKey = null;
-  readonly audioCards = null;
-  readonly audioInputs = null;
-  readonly audioOutputs = null;
-  readonly audioPlayback = null;
-  readonly audioRecording = null;
-  readonly batteryCharge = null;
-  readonly batteryCharging = null;
-  readonly clipboard = null;
-  readonly ctrlKey = null;
-  readonly extensions = null;
-  readonly idle = null;
-  readonly locked = null;
-  readonly metaKey = null;
-  readonly notifications = null;
-  readonly shiftKey = null;
-  readonly theme = null;
-  readonly tray = null;
-  readonly windowsTheme = null;
-
-  readonly #listeners = new Map<string, (event: never) => void>();
-
-  addEventListener<T extends keyof DomicileHostEventMap>(
-    type: T,
-    listener: (event: DomicileHostEventMap[T]) => void,
-  ): void {
-    this.#listeners.set(type, listener);
-  }
-
-  /** The compositor saying which way round the desk is drawn. */
-  states(theme: Theme): void {
-    this.#listeners.get("theme")?.(
-      Object.assign(new Event("theme"), { arrival: 0, theme }) as never,
-    );
-  }
-
-  /** The compositor saying which way round the desk's windows are drawn. */
-  turnsItsWindows(theme: Theme): void {
-    this.#listeners.get("windowstheme")?.(
-      Object.assign(new Event("windowstheme"), { arrival: 0, theme }) as never,
-    );
-  }
-
-  setTheme = (theme: Theme): void => {
-    this.asked.push(theme);
-  };
-
-  themeCaptured = (theme: Theme): void => {
-    this.captured.push(theme);
-  };
-
-  readonly activateExtension = ignored;
-  readonly activateTrayItem = ignored;
-  readonly dismissNotifications = ignored;
-  readonly invokeNotificationAction = ignored;
-  readonly closeApp = ignored;
-  readonly copyClipboardEntry = ignored;
-  readonly focusApp = ignored;
-  readonly focusChrome = ignored;
-  readonly grabShortcut = ignored;
-  readonly key = ignored;
-  readonly lock = ignored;
-  readonly pointerAxis = ignored;
-  readonly pointerButton = ignored;
-  readonly pointerLeave = ignored;
-  readonly pointerMotion = ignored;
-  readonly previewFile = unanswered;
-  readonly moveAudioStream = ignored;
-  readonly searchFiles = unanswered;
-  readonly searchApps = unanswered;
-  readonly setAudioMuted = ignored;
-  readonly setAudioPort = ignored;
-  readonly setAudioProfile = ignored;
-  readonly setAudioVolume = ignored;
-  readonly setBrightness = ignored;
-  readonly setDefaultAudioDevice = ignored;
-  readonly watchAudioLevels = ignored;
-  readonly spawn = ignored;
-  readonly unlock = ignored;
-  readonly warpPointer = ignored;
-}
-
-const connected = (): [DomicileClient, Host] => {
-  const host = new Host();
-  return [new DomicileClient(host), host];
+const connected = () => {
+  const fake = new FakeDomicileHost();
+  const called = (method: string) =>
+    fake.calls.filter(([name]) => name === method).map(([, theme]) => theme);
+  return [
+    fake.host,
+    {
+      get asked() {
+        return called("setTheme");
+      },
+      get captured() {
+        return called("themeCaptured");
+      },
+      /** The compositor saying which way round the desk is drawn. */
+      states: (theme: Theme) => {
+        fake.set({ theme });
+      },
+      /** The compositor saying which way round the desk's windows are drawn. */
+      turnsItsWindows: (theme: Theme) => {
+        fake.set({ windowsTheme: theme });
+      },
+    },
+  ] as const;
 };
 
 beforeEach(() => {
@@ -146,13 +64,17 @@ describe("the theme a shell paints in", () => {
 
   it("is remembered, so the next load of this page paints in it", () => {
     // The theme is the desk's and is never stored as a setting. What is
-    // stored is a guess for the milliseconds before the handshake lands, and
-    // this is the one place the desk's theme arrives — `on` is a single slot
-    // per message type, so a second registration to do the remembering would
-    // displace the provider's.
+    // stored is a guess for the milliseconds before the handshake lands.
     const [client, host] = connected();
     hostTheme(client).onTheme(() => undefined);
 
+    host.states("light");
+
+    expect(rememberedTheme()).toBe("light");
+  });
+
+  it("is the desk's own once it has stated one, before any provider", () => {
+    const [client, host] = connected();
     host.states("light");
 
     expect(hostTheme(client).theme).toBe("light");

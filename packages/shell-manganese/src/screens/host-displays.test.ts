@@ -1,106 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type {
-  DomicileDisplay,
-  DomicileHost,
-  DomicileHostEventMap,
-  DomicileWindow,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import { hostDisplays } from "./host-displays";
-
-/** What every call *out* to the compositor does here, which is nothing. */
-const ignored = (): undefined => undefined;
-/** An ask nobody answers. */
-const unanswered = (): Promise<never> => new Promise(() => undefined);
-
-/**
- * A compositor that only ever describes a desktop.
- *
- * The adapter reads `displays` and registers through `on`, and neither of those
- * is a call *out* — so every method here is a no-op and only the attribute and
- * the one event do anything. Written out rather than cast from a partial,
- * because `DomicileClient` registers a listener for every event type in its
- * constructor and a double missing `addEventListener` would throw there.
- */
-class Host implements DomicileHost {
-  displays: readonly DomicileDisplay[] | null = null;
-  brightness: number | null = null;
-  readonly windows: readonly DomicileWindow[] = [];
-  readonly focusedWindow: string | null = null;
-  readonly altKey = null;
-  readonly audioCards = null;
-  readonly audioInputs = null;
-  readonly audioOutputs = null;
-  readonly audioPlayback = null;
-  readonly audioRecording = null;
-  readonly batteryCharge = null;
-  readonly batteryCharging = null;
-  readonly clipboard = null;
-  readonly ctrlKey = null;
-  readonly extensions = null;
-  readonly idle = null;
-  readonly locked = null;
-  readonly metaKey = null;
-  readonly notifications = null;
-  readonly shiftKey = null;
-  readonly theme = null;
-  readonly tray = null;
-  readonly windowsTheme = null;
-
-  readonly #listeners = new Map<string, (event: never) => void>();
-
-  addEventListener<T extends keyof DomicileHostEventMap>(
-    type: T,
-    listener: (event: DomicileHostEventMap[T]) => void,
-  ): void {
-    this.#listeners.set(type, listener);
-  }
-
-  /** The attribute, and then the bare event — the engine's own order. */
-  describes(displays: readonly DomicileDisplay[]): void {
-    this.displays = displays;
-    this.#listeners.get("displayschanged")?.(
-      new Event("displayschanged") as never,
-    );
-  }
-
-  // Everything the chrome can ask a compositor for. None of it is this
-  // module's half — the adapter only ever reads and listens — so they are one
-  // shared no-op rather than fourteen empty bodies.
-  readonly activateExtension = ignored;
-  readonly activateTrayItem = ignored;
-  readonly dismissNotifications = ignored;
-  readonly invokeNotificationAction = ignored;
-  readonly closeApp = ignored;
-  readonly copyClipboardEntry = ignored;
-  readonly focusApp = ignored;
-  readonly focusChrome = ignored;
-  readonly grabShortcut = ignored;
-  readonly key = ignored;
-  readonly lock = ignored;
-  readonly pointerAxis = ignored;
-  readonly pointerButton = ignored;
-  readonly pointerLeave = ignored;
-  readonly pointerMotion = ignored;
-  readonly previewFile = unanswered;
-  readonly moveAudioStream = ignored;
-  readonly searchFiles = unanswered;
-  readonly searchApps = unanswered;
-  readonly setAudioMuted = ignored;
-  readonly setAudioPort = ignored;
-  readonly setAudioProfile = ignored;
-  readonly setAudioVolume = ignored;
-  readonly setBrightness = ignored;
-  readonly setDefaultAudioDevice = ignored;
-  readonly watchAudioLevels = ignored;
-  readonly setTheme = ignored;
-  readonly themeCaptured = ignored;
-  readonly spawn = ignored;
-  readonly unlock = ignored;
-  readonly warpPointer = ignored;
-}
 
 /** One screen, as the engine describes it. */
 const LEFT: DomicileDisplay = {
@@ -129,10 +32,17 @@ const RIGHT_LAID_OUT: Display = {
   position: [1920, 0],
 };
 
-/** A domicile client and the compositor that describes desktops to it. */
-const connected = (): [DomicileClient, Host] => {
-  const host = new Host();
-  return [new DomicileClient(host), host];
+/** A host, and the compositor that describes desktops to it. */
+const connected = () => {
+  const fake = new FakeDomicileHost();
+  return [
+    fake.host,
+    {
+      describes: (displays: readonly DomicileDisplay[]) => {
+        fake.set({ displays });
+      },
+    },
+  ] as const;
 };
 
 describe("the desktop a shell lays out against", () => {
@@ -191,17 +101,16 @@ describe("the desktop a shell lays out against", () => {
     expect(seen).toStrictEqual([]);
   });
 
-  it("does not silence a handler that displaced it", () => {
-    // `DomicileClient.on` is a single slot, so a second source over one client
-    // replaces the first. A teardown that removed whatever it found would
-    // then silence the live handler — which is a desktop that stops updating
-    // with nothing anywhere to say why.
+  it("lets go of its own handler and no other", () => {
+    // A page draws a provider per source, and a teardown that silenced every
+    // listener would be a desktop that stops updating with nothing anywhere
+    // to say why.
     const [client, host] = connected();
     const source = hostDisplays(client);
     const seen: unknown[] = [];
 
     const stopFirst = source.onDisplays(() => {
-      throw new Error("the displaced handler was called");
+      throw new Error("the stopped handler was called");
     });
     source.onDisplays((displays) => {
       seen.push(displays);

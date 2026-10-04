@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type {
-  HostMessageOf,
-  HostMessageType,
-  ShellConfigMessage,
-} from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { act, cleanup, render, screen } from "@testing-library/react";
@@ -17,71 +12,57 @@ const POINTER = 1;
 const PRIMARY = 0;
 const SECONDARY = 2;
 
-type Host = {
-  domicile: DomicileClient;
-  /** Deliver a host message to the shell, as the control channel would. */
-  emit: <T extends HostMessageType>(type: T, message: HostMessageOf<T>) => void;
-  focused: string[];
-  /** What the shell said it could not do. */
-  reported: string[];
-  spawned: (readonly string[])[];
-};
+/** `window.domicile`, under React's `act`. */
+const acting = (fake: FakeDomicileHost) => ({
+  appear: (...args: Parameters<FakeDomicileHost["appear"]>) => {
+    act(() => {
+      fake.appear(...args);
+    });
+  },
+  change: (...args: Parameters<FakeDomicileHost["change"]>) => {
+    act(() => {
+      fake.change(...args);
+    });
+  },
+  close: (appId: string) => {
+    act(() => {
+      fake.close(appId);
+    });
+  },
+  focus: (appId: string | null) => {
+    act(() => {
+      fake.set({ focusedWindow: appId });
+    });
+  },
+  press: (chord: string) => {
+    act(() => {
+      fake.dispatch("shortcut", { chord });
+    });
+  },
+});
 
-/** A domicile client that records what the shell asked of it. */
-const fakeHost = (): Host => {
-  const handlers = new Map<string, (message: never) => void>();
-  const host: Host = {
-    domicile: {
-      focusApp: (appId: string) => host.focused.push(appId),
-      grabShortcut: () => undefined,
-      off: (type: string) => {
-        handlers.delete(type);
-      },
-      on: (type: string, handler: (message: never) => void) => {
-        handlers.set(type, handler);
-      },
-      spawn: (command: readonly string[]) => host.spawned.push(command),
-    } as unknown as DomicileClient,
-    emit: (type, message) => {
-      act(() => {
-        handlers.get(type)?.(message as never);
-      });
-    },
-    focused: [],
-    reported: [],
-    spawned: [],
-  };
-  return host;
-};
-
-/** Enter's evdev code, which is what the compositor resolves `Return` to. */
-const ENTER = 28;
-
-/** The keyboard the compositor describes: Enter, and the key `us` has `t` on. */
-const KEYBOARD: ShellConfigMessage = {
-  keys: new Map([
-    ["Return", ENTER],
-    ["t", 20],
-  ]),
-};
-
-/**
- * A rendered shell, with the client that drives it, told the keyboard the
- * compositor sends as the page connects.
- */
-const shell = (keybindings?: ShellKeybindings): Host => {
-  const host = fakeHost();
+/** A rendered shell, with the host that drives it. */
+const shell = (keybindings?: ShellKeybindings) => {
+  const fake = new FakeDomicileHost();
+  const reported: string[] = [];
   render(
     <Shell
-      domicile={host.domicile}
+      domicile={fake.host}
       keybindings={keybindings}
       report={(error) => {
-        host.reported.push(error);
+        reported.push(error);
       }}
     />,
   );
-  host.emit("shell_config", KEYBOARD);
-  return host;
+  const called = (method: string) => () =>
+    fake.calls.filter(([name]) => name === method).map(([, first]) => first);
+  return {
+    ...acting(fake),
+    fake,
+    focused: called("focusApp"),
+    reported,
+    spawned: called("spawn"),
+  };
 };
 
 /** The window the desktop is showing for `appId`. */
@@ -116,23 +97,6 @@ const pointer = (
   });
 };
 
-const press = (
-  code: string,
-  modifiers: Partial<KeyboardEventInit> = {},
-): void => {
-  act(() => {
-    document.body.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        altKey: true,
-        bubbles: true,
-        cancelable: true,
-        code,
-        ...modifiers,
-      }),
-    );
-  });
-};
-
 beforeEach(() => {
   cleanup();
 });
@@ -141,60 +105,23 @@ describe("Shell", () => {
   describe("the windows", () => {
     it("mounts a window for a client the host announced, at the size it committed", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       const term = windowFor("term");
       expect(term.style.width).toBe("640px");
       expect(term.style.height).toBe("480px");
     });
 
-    it("holds one window for a client the host announces twice", () => {
-      // The compositor replays every open window to every chrome whenever any
-      // chrome connects, so a second announcement is news to nobody — and a
-      // second element would leave the first orphaned, still embedding the
-      // same surface and configuring the same client.
-      const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      expect(
-        document.querySelectorAll(`${APP_TAG_NAME}[app-id="term"]`).length,
-      ).toBe(1);
-    });
-
     it("takes the window down when the client goes", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      host.emit("app_closed", { app_id: "term" });
+      host.appear("term", { height: 480, width: 640 });
+      host.close("term");
       expect(document.querySelector(APP_TAG_NAME)).toBeNull();
     });
 
     it("opens each window clear of the last, and in front of it", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      host.emit("app_appeared", {
-        app_id: "editor",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
+      host.appear("editor", { height: 480, width: 640 });
       expect(windowFor("editor").style.top).not.toBe(
         windowFor("term").style.top,
       );
@@ -209,31 +136,24 @@ describe("Shell", () => {
       // Until then the window has nothing behind it, and says so with a
       // placeholder the stylesheet hangs off the absence of this attribute.
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: undefined,
-        title: undefined,
-      });
+      host.appear("term");
       expect(windowFor("term")).not.toHaveAttribute("data-drawn");
-      host.emit("app_resized", { app_id: "term", size: [640, 480] });
+      host.change("term", { height: 480, width: 640 });
       expect(windowFor("term")).toHaveAttribute("data-drawn");
     });
 
     it("draws a client's menu over its window, and takes it down when it goes", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       const window = windowFor("term");
 
-      host.emit("popup_placed", {
-        app_id: "menu",
+      host.appear("menu", {
         grab: true,
+        height: 240,
         parent: "term",
-        position: [12, 30],
-        size: [180, 240],
+        width: 180,
+        x: 12,
+        y: 30,
       });
 
       const menu = windowFor("menu");
@@ -247,7 +167,7 @@ describe("Shell", () => {
       expect(menu.style.height).toBe("240px");
       expect(menu.style.zIndex).toBe(window.style.zIndex);
 
-      host.emit("app_closed", { app_id: "menu" });
+      host.close("menu");
       expect(document.querySelector('[app-id="menu"]')).toBeNull();
       expect(windowFor("term")).toBeDefined();
     });
@@ -257,22 +177,14 @@ describe("Shell", () => {
       // and no frame is coming to say so: the hand-over skips a natively-drawn
       // window and `app_resized` only fires on a size that changed.
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       expect(windowFor("term")).toHaveAttribute("data-drawn");
     });
 
     it("shows the cursor the client asked for", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      host.emit("app_cursor", { app_id: "term", cursor: "text" });
+      host.appear("term", { height: 480, width: 640 });
+      host.change("term", { cursor: "text" });
       expect(windowFor("term").style.cursor).toBe("text");
     });
   });
@@ -282,13 +194,9 @@ describe("Shell", () => {
       // Nothing else would: the SDK routes keys to whichever window was last
       // clicked, so without this a terminal opened from a key hears nothing.
       const host = shell();
-      host.emit("focus_changed", { app_id: undefined });
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: undefined,
-        title: undefined,
-      });
-      expect(host.focused).toStrictEqual(["term"]);
+      host.focus(null);
+      host.appear("term");
+      expect(host.focused()).toStrictEqual(["term"]);
     });
 
     it("leaves it alone for a window replayed while catching up", () => {
@@ -296,69 +204,42 @@ describe("Shell", () => {
       // would move the desktop's keyboard onto whichever came last, throwing
       // away an answer the compositor already had.
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      expect(host.focused).toStrictEqual([]);
+      host.appear("term", { height: 480, width: 640 });
+      expect(host.focused()).toStrictEqual([]);
     });
 
-    it("opens a terminal on the key it is given for it", () => {
+    it("grabs the key it is given for a terminal, and opens one on it", () => {
       // Whatever key that is: `terminal` is the command, and the chord is the
       // shell's props'.
       const host = shell({
         keybindings: { "Meta+t": KeyAction.SendShell(["terminal"]) },
       });
-      press("KeyT", { altKey: false, metaKey: true });
-      press("Enter");
-      expect(host.spawned).toStrictEqual([["kitty"]]);
+      expect(host.fake.calls).toContainEqual(["grabShortcut", "Meta+t"]);
+      host.press("Meta+t");
+      host.press("Alt+Return");
+      expect(host.spawned()).toStrictEqual([["kitty"]]);
     });
 
     it("says which command it does not know, and does nothing", () => {
       const host = shell({
         keybindings: { "Alt+Return": KeyAction.SendShell(["kill"]) },
       });
-      press("Enter");
-      expect(host.spawned).toStrictEqual([]);
+      host.press("Alt+Return");
+      expect(host.spawned()).toStrictEqual([]);
       expect(host.reported).toStrictEqual(["simple: no command `kill`"]);
     });
 
-    it("opens a terminal on Alt+Enter in the page", () => {
+    it("opens a terminal on Alt+Enter", () => {
       const host = shell();
-      press("Enter");
-      expect(host.spawned).toStrictEqual([["kitty"]]);
-    });
-
-    it("leaves other chords to whichever window has the keyboard", () => {
-      const host = shell();
-      press("Enter", { shiftKey: true });
-      expect(host.spawned).toStrictEqual([]);
-    });
-
-    it("opens a terminal on the shortcut the compositor claims", () => {
-      // The other half of the same chord: once a client holds the keyboard the
-      // page never hears the press, so the compositor sends it back instead.
-      const host = shell();
-      host.emit("shortcut", {
-        altKey: true,
-        ctrlKey: false,
-        keycode: ENTER,
-        metaKey: false,
-        shiftKey: false,
-      });
-      expect(host.spawned).toStrictEqual([["kitty"]]);
+      host.press("Alt+Return");
+      expect(host.spawned()).toStrictEqual([["kitty"]]);
     });
   });
 
   describe("the gestures", () => {
     it("moves a window with an Alt drag", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       const term = windowFor("term");
       pointer("pointerdown", term, { x: 100, y: 100 });
       pointer("pointermove", term, { x: 130, y: 150 });
@@ -370,11 +251,7 @@ describe("Shell", () => {
 
     it("resizes it with an Alt drag of the secondary button", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       const term = windowFor("term");
       pointer("pointerdown", term, { button: SECONDARY, x: 100, y: 100 });
       pointer("pointermove", term, { button: SECONDARY, x: 110, y: 120 });
@@ -385,16 +262,8 @@ describe("Shell", () => {
 
     it("raises the window an Alt press lands on", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
-      host.emit("app_appeared", {
-        app_id: "editor",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
+      host.appear("editor", { height: 480, width: 640 });
       pointer("pointerdown", windowFor("term"), { x: 10, y: 10 });
       expect(Number(windowFor("term").style.zIndex)).toBeGreaterThan(
         Number(windowFor("editor").style.zIndex),
@@ -411,11 +280,7 @@ describe("Shell", () => {
 
     it("stays on the background under a window that opened over it", () => {
       const host = shell();
-      host.emit("app_appeared", {
-        app_id: "term",
-        size: [640, 480],
-        title: undefined,
-      });
+      host.appear("term", { height: 480, width: 640 });
       expect(screen.getByText("Alt + drag")).toBeInTheDocument();
     });
   });

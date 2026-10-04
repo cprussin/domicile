@@ -1,9 +1,11 @@
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { watchHost } from "../host/watch-host";
 import { arrivals } from "./arrivals";
+import { notificationOf } from "./notification-of";
 import { toastTimeout } from "./toast-timeout";
 
 export type NotificationCenter = {
@@ -34,9 +36,8 @@ type Desk = {
  * The desk's notifications, the toasts for the ones that just arrived, and
  * what has not been seen yet.
  *
- * `useTray`'s shape, and registered once for the whole desk for its reason:
- * pushed, whole, on every change and once more to a page that has just
- * connected. The list is the compositor's, so a reload keeps it; which of it is
+ * `useTray`'s shape, and read once for the whole desk for its reason: the
+ * whole list, read off the host and again on every change. The list is the compositor's, so a reload keeps it; which of it is
  * new is this page's to tell — see `arrivals` — and a reload toasts nothing.
  *
  * **A toast is a notification interrupting**, and nothing more: the toasts are
@@ -45,7 +46,7 @@ type Desk = {
  * or its application closes it, and its toast goes with it.
  */
 export const useNotifications = (
-  domicile: DomicileClient,
+  domicile: DomicileHost,
   toasts: ToastManager,
 ): NotificationCenter => {
   const [desk, setDesk] = useState<Desk>({
@@ -58,7 +59,7 @@ export const useNotifications = (
   const told = useRef<readonly Notification[] | undefined>(undefined);
 
   useEffect(() => {
-    domicile.on("notifications", ({ items }) => {
+    const heard = (items: readonly Notification[]) => {
       for (const arrived of arrivals(told.current, items)) {
         toasts.add({
           data: arrived,
@@ -79,7 +80,8 @@ export const useNotifications = (
         items,
         readUpTo: previous.readUpTo ?? latest(items),
       }));
-    });
+    };
+    return watchHost(domicile, "notificationschanged", itemsOf, heard);
   }, [domicile, toasts]);
 
   const read = useCallback(() => {
@@ -112,3 +114,8 @@ export const useNotifications = (
 /** The newest `time` in `items`, or `0` for none. */
 const latest = (items: readonly Notification[]): number =>
   Math.max(0, ...items.map(({ time }) => time));
+
+const itemsOf = ({
+  notifications,
+}: DomicileHost): readonly Notification[] | undefined =>
+  notifications?.map(notificationOf) ?? undefined;

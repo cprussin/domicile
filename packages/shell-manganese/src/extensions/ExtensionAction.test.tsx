@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import {
   WEBVIEW_CLOSE_EVENT,
@@ -39,12 +39,12 @@ const counter: Extension = {
 };
 
 /** A client that keeps every extension the tray activated, in order. */
-const recordingDomicile = (activated: string[]): DomicileClient =>
+const recordingDomicile = (activated: string[]): DomicileHost =>
   ({
     activateExtension: (id: string) => {
       activated.push(id);
     },
-  }) as unknown as DomicileClient;
+  }) as unknown as DomicileHost;
 
 const NO_DOMICILE = recordingDomicile([]);
 

@@ -1,7 +1,12 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 
-import { watchShared } from "../host/watch-shared";
+import { watchHost } from "../host/watch-host";
+
+/** The charge, 0 through 1, and whether a lead is in. */
+export type BatteryReading = {
+  charge: number;
+  charging: boolean;
+};
 
 /**
  * Watch the machine's battery: `onReading` is called with the charge as soon
@@ -18,15 +23,20 @@ import { watchShared } from "../host/watch-shared";
  * `/sys/class/power_supply`, which is in every kernel and wants no daemon —
  * see `domicile_host::battery`.
  *
- * Nothing is asked for. The charge is pushed when it moves far enough to draw
- * and once more to a page that has just connected, and the client holds a
- * message that arrived before this registered — so a bar mounted a beat after
- * the handshake still gets the reading that crossed in between.
- *
- * Shared with every other bar on the page — see `watchShared`: the page draws
- * a bar per monitor, and `on` is one slot.
+ * Nothing is asked for. The charge is an attribute of the host, moved when it
+ * moves far enough to draw — so a bar mounted a beat after the handshake reads
+ * the reading that crossed in between.
  */
 export const watchBattery = (
-  domicile: DomicileClient,
-  onReading: (reading: BatteryMessage) => void,
-): (() => void) => watchShared(domicile, "battery", onReading);
+  domicile: DomicileHost,
+  onReading: (reading: BatteryReading) => void,
+): (() => void) => watchHost(domicile, "batterychanged", readingOf, onReading);
+
+/** The charge the host holds, or `undefined` before it has said one. */
+const readingOf = ({
+  batteryCharge,
+  batteryCharging,
+}: DomicileHost): BatteryReading | undefined =>
+  batteryCharge === null || batteryCharging === null
+    ? undefined
+    : { charge: batteryCharge, charging: batteryCharging };

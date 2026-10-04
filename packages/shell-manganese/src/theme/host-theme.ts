@@ -1,7 +1,8 @@
+import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { ThemeMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 
+import { watchHost } from "../host/watch-host";
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 
 /**
@@ -15,8 +16,8 @@ const SITES_REPAINT_WITHIN_MS = 100;
  * The desktop's theme, as the component library wants to be told about it.
  *
  * The other half of the adapter `host-displays.ts` is: the design system has
- * no protocol dependency and the control channel has no idea what a provider
- * is, so the shell — which has both — is where they meet.
+ * no protocol dependency and the host has no idea what a provider is, so the
+ * shell — which has both — is where they meet.
  *
  * **`setTheme` asks and does not apply**, which is the shape of the whole
  * feature. The compositor is what answers, to every chrome on the desk rather
@@ -25,18 +26,14 @@ const SITES_REPAINT_WITHIN_MS = 100;
  * scheme from. A shell that painted itself on the click would be the one
  * monitor that had changed, on a desk whose windows had not.
  *
- * Built once per client and not per render. `DomicileClient.on` is a single
- * slot and `ThemeProvider` re-registers whenever its source's identity changes,
- * so a source rebuilt each render would re-register each render.
+ * Built once per host and not per render, because a source is the connection.
  */
-export const hostTheme = (domicile: DomicileClient): ThemeSource => {
+export const hostTheme = (domicile: DomicileHost): ThemeSource => {
   const turning: (() => void)[] = [];
-  // Registered now rather than when a wipe asks, because the handshake states
-  // the windows' theme too and the client replays what it holds to the first
-  // handler: registered late, that replay would read as the answer to a
-  // capture it came long before. Any answer settles every wipe waiting, since
-  // a newer turnover replaces an older one and only the newer is answered.
-  domicile.on("windows_theme", () => {
+  // Listened for now rather than when a wipe asks, so that any answer settles
+  // every wipe waiting: a newer turnover replaces an older one and only the
+  // newer is answered.
+  domicile.addEventListener("windowsthemechanged", () => {
     for (const settle of turning.splice(0)) {
       // The sites in browser windows are drawn by this engine, which is told
       // with the same message and repaints them a frame or two later.
@@ -44,38 +41,22 @@ export const hostTheme = (domicile: DomicileClient): ThemeSource => {
     }
   });
   return {
-    onTheme: (handler) => {
-      // Held, for `hostDisplays`'s reason: `off` is given the handler the client
-      // actually registered rather than the caller's, so a teardown removes one
-      // only if it is still the registered one.
-      //
-      // And this is the one place the desk's theme arrives, which is why the
-      // remembering is here rather than beside the entry point's pre-paint
-      // apply: `on` is a single slot per message type, so a second registration
-      // for `theme` would displace the provider's.
-      const registered = ({ theme }: ThemeMessage) => {
+    // This is the one place the desk's theme arrives, which is why the
+    // remembering is here rather than beside the entry point's pre-paint apply.
+    onTheme: (handler) =>
+      watchHost(domicile, "themechanged", themeOf, (theme) => {
         rememberTheme(theme);
         handler(theme);
-      };
-      domicile.on("theme", registered);
-      return () => {
-        domicile.off("theme", registered);
-      };
-    },
+      }),
     setTheme: (theme) => {
       domicile.setTheme(theme);
     },
     /**
-     * The guess, not the answer — see `remembered-theme.ts`. There is no
-     * `domicile.theme` to read: unlike the desktop, which is an attribute on the
-     * host because a component may mount long after it was described, the theme
-     * is a message, and the client replays the one it is holding to the first
-     * handler that registers. So the truth arrives through `onTheme` a
-     * microtask into the provider's first effect, and this is what the page
-     * paints in until it does.
+     * The desk's theme, once it has said one; until then the guess — see
+     * `remembered-theme.ts` — which is what the page paints in meanwhile.
      */
     get theme() {
-      return rememberedTheme();
+      return themeOf(domicile) ?? rememberedTheme();
     },
     turnWindows: (theme) =>
       new Promise((resolve) => {
@@ -84,3 +65,6 @@ export const hostTheme = (domicile: DomicileClient): ThemeSource => {
       }),
   };
 };
+
+const themeOf = ({ theme }: DomicileHost): Theme | undefined =>
+  theme ?? undefined;

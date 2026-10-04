@@ -1,6 +1,6 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { useContentSize } from "./useContentSize";
 
 type Props = {
   /** What every click asks, popup or not. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The extension whose action this is, as the engine last described it. */
   extension: Extension;
   /**

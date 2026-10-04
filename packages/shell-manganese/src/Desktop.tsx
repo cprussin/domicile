@@ -1,6 +1,6 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useCallback, useMemo, useState } from "react";
 
@@ -10,8 +10,10 @@ import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
 import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
+import { foundAppsOf } from "./launcher/found-apps";
 import { Launcher } from "./launcher/Launcher";
 import { LaunchKind } from "./launcher/launch";
+import { previewOf } from "./launcher/preview-of";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
 import { useLocked } from "./lock/useLocked";
@@ -37,7 +39,7 @@ import { siteOf } from "./window-management/window";
 import { WindowAction } from "./window-management/window-state";
 
 type Props = {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The keys this desktop binds itself, under the config's. */
   keybindings: ShellKeybindings;
   /** What goes on every monitor's bar. */
@@ -81,7 +83,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   // And the applications installed, which the compositor reads from the
   // machine's desktop entries for the same reason: a page has no filesystem.
   const searchApps = useCallback(
-    (query: string) => domicile.searchApps(query),
+    (query: string) => domicile.searchApps(query).then(foundAppsOf),
     [domicile],
   );
   // Asked while the panel is shut rather than as it opens, so its empty box's
@@ -90,7 +92,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   const opening = useOpeningApps(searchApps, windows.launcherOpen);
   // And its preview, of the same index, for the same reason.
   const preview = useCallback(
-    (path: string) => domicile.previewFile(path),
+    (path: string) => domicile.previewFile(path).then(previewOf),
     [domicile],
   );
 
@@ -100,8 +102,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   const clipboard = useClipboard(domicile);
 
   // And the extensions' actions, pushed for the same reason. Once for the desk
-  // rather than once per bar: `on` is a single slot, and the page draws a bar
-  // per monitor.
+  // rather than once per bar, which the page draws per monitor.
   const extensions = useExtensions(domicile);
 
   // And the system tray's icons, pushed and held once for the desk for the

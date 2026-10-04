@@ -7,8 +7,7 @@ import type {
   AudioDevice,
   AudioStream,
 } from "@domicile-desktop/sdk/audio";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -18,12 +17,13 @@ import { flex, hstack } from "../../styled-system/patterns";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
 import { useMeters } from "./useMeters";
+import type { Audio } from "./watch-audio";
 import type { watchAudioLevels } from "./watch-audio-levels";
 
 type Props = {
-  audio: AudioMessage;
+  audio: Audio;
   /** Where every change is asked for, and the meters with it. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** How the meters are watched; injected so tests can drive them. */
   watchLevels?: typeof watchAudioLevels | undefined;
 };
@@ -202,7 +202,7 @@ const byApp = (
 type DefaultProps = {
   device: AudioDevice;
   direction: Direction;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** What the slider is called: what it is for, rather than which it is. */
   label: string;
   meter: number | undefined;
@@ -240,7 +240,7 @@ const Default = ({
 type DevicesProps = {
   devices: readonly AudioDevice[];
   direction: Direction;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   levels: ReadonlyMap<string, number>;
 };
 
@@ -285,7 +285,7 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
 
 type AppsProps = {
   apps: readonly App[];
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** Where a recording can go: every input, monitors and all. */
   inputs: readonly AudioDevice[];
   levels: ReadonlyMap<string, number>;
@@ -358,7 +358,7 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
 
 type CardsProps = {
   cards: readonly AudioCard[];
-  domicile: DomicileClient;
+  domicile: DomicileHost;
 };
 
 const Cards = ({ cards, domicile }: CardsProps) => (
@@ -383,7 +383,7 @@ const Cards = ({ cards, domicile }: CardsProps) => (
 
 type PortProps = {
   device: AudioDevice;
-  domicile: DomicileClient;
+  domicile: DomicileHost;
 };
 
 /** A device's port, where it has more than one to choose. */

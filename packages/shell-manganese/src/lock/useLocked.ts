@@ -1,5 +1,7 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useCallback, useEffect, useState } from "react";
+
+import { watchHost } from "../host/watch-host";
 
 /** Where this desk's lock stands, as the compositor last said. */
 type LockState = {
@@ -39,7 +41,7 @@ type LockState = {
  * apart from the edge that shut it by whether this page was waiting on one.
  */
 export const useLocked = (
-  domicile: DomicileClient,
+  domicile: DomicileHost,
 ): LockState & { unlock: (passphrase: string) => void } => {
   const [state, setState] = useState<LockState>({
     checking: false,
@@ -47,20 +49,19 @@ export const useLocked = (
     refusals: 0,
   });
 
-  // Registered once and for the life of the shell, like `useClipboard`'s: `on`
-  // is a single slot whose hold delivers whatever arrived before it, and the
-  // message this is here for is exactly the one that arrives before the first
-  // render is over.
-  useEffect(() => {
-    domicile.on("locked", (message) => {
-      setState((was) => ({
-        checking: false,
-        locked: message.locked,
-        refusals:
-          was.checking && message.locked ? was.refusals + 1 : was.refusals,
-      }));
-    });
-  }, [domicile]);
+  // The engine says `lockedchanged` on every answer, not only on a change:
+  // a refusal is the desk saying it is still locked.
+  useEffect(
+    () =>
+      watchHost(domicile, "lockedchanged", lockedOf, (locked) => {
+        setState((was) => ({
+          checking: false,
+          locked,
+          refusals: was.checking && locked ? was.refusals + 1 : was.refusals,
+        }));
+      }),
+    [domicile],
+  );
 
   const unlock = useCallback(
     (passphrase: string) => {
@@ -72,3 +73,6 @@ export const useLocked = (
 
   return { ...state, unlock };
 };
+
+const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
+  locked ?? undefined;

@@ -162,8 +162,8 @@ export type DomicileWindow = {
  * One type for the five because they carry the same thing (which window) and
  * differ only in what else they carry. The fields a given type does not carry
  * are the empty string rather than absent, which is WebIDL's `DOMString` and
- * not a choice the SDK gets to make; `host-message.ts` is where each event
- * becomes a payload with only the fields that event means.
+ * not a choice the SDK gets to make. Superseded by
+ * {@link DomicileHost.windows}, which says absent as `null`.
  *
  * A cursor is not one of them. {@link DomicileAppCursorEvent} carries that,
  * because `DomicileCursorShape` is a closed set and a closed set has no
@@ -234,11 +234,10 @@ export type DomicileAppCursorEvent = Event & {
    *
    * Typed as the closed set because the engine's bindings now hold it to one:
    * `domicile_cursor_shape.idl` is the same list, and a value outside it
-   * cannot cross the bindings in either direction. `host-message.ts` parses it
-   * anyway — the DOM is a boundary, and this SDK is versioned apart from the
-   * engine it runs against, so the parse is what makes a shell built against a
-   * newer list than the engine ships a throw rather than an arrow where a hand
-   * should be.
+   * cannot cross the bindings in either direction. A shell built against a
+   * newer list than the engine ships can still be handed one it does not know,
+   * since this SDK is versioned apart from the engine it runs against, so read
+   * it as a keyword rather than switch over it exhaustively.
    */
   readonly cursor: CursorShape;
 
@@ -800,8 +799,8 @@ export type DomicileLockedEvent = Event & {
  * key it is on.
  *
  * **A string, and JSON in it.** The compositor's `shell_config` line, exactly
- * as it was sent: the engine forwards the line without reading it, and
- * `host-message.ts` is the first thing that does.
+ * as it was sent. The engine reads its keys itself, to resolve the chords
+ * `grabShortcut` is given by name; a shell has no use for it.
  *
  * Pushed when this page connects and again whenever a reload of the config
  * moves the keyboard.
@@ -1100,10 +1099,9 @@ export type DomicileHostEventMap = {
  * contextually typed as a plain `Event` by whichever arm TypeScript tries
  * first — so every use would need a cast to read `appId`, which is exactly the
  * thing a typed surface exists to remove. Declaring only what the SDK calls
- * keeps the events typed, and the members `EventTarget` would add
- * (`removeEventListener`, `dispatchEvent`) are ones the SDK has no business
- * calling on the host anyway: a page must never listen on `window.domicile`
- * directly — see `domicile-client.ts` — and nothing in a page dispatches to it.
+ * keeps the events typed: `addEventListener` and `removeEventListener` are
+ * declared with the event map, and `dispatchEvent` is left out, since nothing
+ * in a page dispatches to it.
  *
  * The practical consequence, worth knowing before writing a double: an
  * `EventTarget` does not satisfy this type. `lib.dom` types its callback as
@@ -1421,6 +1419,10 @@ export type DomicileHost = {
   readonly metaKey: boolean | null;
 
   addEventListener<T extends keyof DomicileHostEventMap>(
+    type: T,
+    listener: (event: DomicileHostEventMap[T]) => void,
+  ): void;
+  removeEventListener<T extends keyof DomicileHostEventMap>(
     type: T,
     listener: (event: DomicileHostEventMap[T]) => void,
   ): void;

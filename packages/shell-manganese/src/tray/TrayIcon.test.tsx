@@ -1,27 +1,30 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { TrayAction, TrayItem } from "@domicile-desktop/sdk/tray";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
+import type { TrayAction } from "@domicile-desktop/sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { TrayIcon } from "./TrayIcon";
 
 /** An application that sent a picture. */
-const network: TrayItem = {
+const network: DomicileTrayItem = {
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: ":1.42/org/ayatana/nm",
   title: "Wired connection 1",
 };
 
 /** And one whose picture the compositor could not draw. */
-const sync: TrayItem = {
-  icon: undefined,
+const sync: DomicileTrayItem = {
+  icon: "",
   id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
   title: "Syncthing",
 };
 
 /** A client resolving with the first click the tray hands it. */
 const clicked = (): {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   click: Promise<[string, TrayAction]>;
 } => {
   let heard: (click: [string, TrayAction]) => void = () => undefined;
@@ -32,21 +35,21 @@ const clicked = (): {
     activateTrayItem: (id: string, action: TrayAction) => {
       heard([id, action]);
     },
-  } as unknown as DomicileClient;
+  } as unknown as DomicileHost;
   return { click, domicile };
 };
 
 /** A client for a tray whose clicks the test does not read. */
 const NO_DOMICILE = {
   activateTrayItem: () => undefined,
-} as unknown as DomicileClient;
+} as unknown as DomicileHost;
 
-const renderIcon = (item: TrayItem) => {
+const renderIcon = (item: DomicileTrayItem) => {
   render(<TrayIcon domicile={NO_DOMICILE} item={item} />);
 };
 
 /** The icon of `item`, resolving with the first click it hands on. */
-const iconOf = (item: TrayItem) => {
+const iconOf = (item: DomicileTrayItem) => {
   const { click, domicile } = clicked();
   render(<TrayIcon domicile={domicile} item={item} />);
   return click;

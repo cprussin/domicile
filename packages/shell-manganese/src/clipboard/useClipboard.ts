@@ -1,6 +1,10 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { ClipboardMessage } from "@domicile-desktop/sdk/host-message";
+import type {
+  DomicileClipboardEntry,
+  DomicileHost,
+} from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useState } from "react";
+
+import { watchHost } from "../host/watch-host";
 
 /**
  * What has been copied on this desktop, newest first.
@@ -23,19 +27,19 @@ import { useEffect, useState } from "react";
  * since the history is in memory and never on disk.
  */
 export const useClipboard = (
-  domicile: DomicileClient,
-): ClipboardMessage["entries"] => {
-  const [entries, setEntries] = useState<ClipboardMessage["entries"]>([]);
+  domicile: DomicileHost,
+): readonly DomicileClipboardEntry[] => {
+  const [entries, setEntries] = useState<readonly DomicileClipboardEntry[]>([]);
 
-  // Registered once and for the life of the shell, rather than when the panel
-  // opens: `on` is a single slot whose hold delivers whatever arrived before
-  // it, and a handler that came and went with the panel would be handing that
-  // hold back a history at a time.
-  useEffect(() => {
-    domicile.on("clipboard", (message) => {
-      setEntries(message.entries);
-    });
-  }, [domicile]);
+  useEffect(
+    () => watchHost(domicile, "clipboardchanged", entriesOf, setEntries),
+    [domicile],
+  );
 
   return entries;
 };
+
+const entriesOf = ({
+  clipboard,
+}: DomicileHost): readonly DomicileClipboardEntry[] | undefined =>
+  clipboard ?? undefined;

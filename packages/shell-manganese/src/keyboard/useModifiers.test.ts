@@ -1,32 +1,20 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { useModifiers } from "./useModifiers";
 
 const HELD = { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false };
 
-/**
- * A stand-in for the client: it takes the handler the hook registers and lets
- * a test say what the host said. Narrower than a `DomicileClient` because the
- * hook uses two of its members.
- */
+/** A host whose modifiers the test says. */
 const client = () => {
-  const handlers = new Map<string, (message: never) => void>();
-  const domicile = {
-    off: (type: string) => {
-      handlers.delete(type);
-    },
-    on: (type: string, registered: (message: never) => void) => {
-      handlers.set(type, registered);
-    },
-  } as unknown as DomicileClient;
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
+    domicile: fake.host,
     /** The host saying which modifiers are held. */
     says: (held: typeof HELD) => {
       act(() => {
-        handlers.get("modifiers")?.(held as never);
+        fake.set(held);
       });
     },
   };

@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useEffect, useState } from "react";
 
 import { watchAudioLevels } from "./watch-audio-levels";
@@ -16,13 +16,13 @@ const FLOOR_DB = -60;
  *
  * **The ask is a lease**: renewed every second, and let go of when this
  * unmounts or the ids change — metering a microphone records it, and a panel
- * that shut must not leave it recording. See `watchAudioLevels` on the client.
+ * that shut must not leave it recording. See `watchAudioLevels` on the host.
  *
  * `watch` and `renewEvery` are injected so a test can drive the meters and
  * wait out a renewal.
  */
 export const useMeters = (
-  domicile: DomicileClient,
+  domicile: DomicileHost,
   ids: readonly string[],
   watch: typeof watchAudioLevels = watchAudioLevels,
   renewEvery: number = RENEW_EVERY,
@@ -32,11 +32,9 @@ export const useMeters = (
   );
   useEffect(
     () =>
-      watch(domicile, (message) => {
+      watch(domicile, (peaks) => {
         setLevels(
-          new Map(
-            [...message.levels].map(([id, peak]) => [id, onTheMeter(peak)]),
-          ),
+          new Map([...peaks].map(([id, peak]) => [id, onTheMeter(peak)])),
         );
       }),
     [domicile, watch],

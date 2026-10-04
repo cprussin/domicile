@@ -1,40 +1,22 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useLocked } from "./useLocked";
 
-/**
- * A stand-in for the client: it takes the one handler this hook registers and
- * lets a test say what the compositor said, and it records every passphrase it
- * was handed.
- *
- * Narrower than a `DomicileClient` for `useClipboard`'s reason — the hook uses
- * two members of it, and a double that implemented the rest would be claiming
- * a seam that size.
- */
+/** A host whose lock the test says, and the passphrases it was offered. */
 const client = () => {
-  let handler: ((message: HostMessageOf<"locked">) => void) | undefined;
-  const offered: string[] = [];
-  const domicile = {
-    on: (
-      _type: "locked",
-      registered: (message: HostMessageOf<"locked">) => void,
-    ) => {
-      handler = registered;
-    },
-    unlock: (passphrase: string) => {
-      offered.push(passphrase);
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
-    offered,
+    domicile: fake.host,
+    get offered() {
+      return fake.calls
+        .filter(([method]) => method === "unlock")
+        .map(([, passphrase]) => passphrase);
+    },
     says: (locked: boolean) => {
       act(() => {
-        handler?.({ locked });
+        fake.set({ locked });
       });
     },
   };

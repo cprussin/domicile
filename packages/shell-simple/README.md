@@ -28,7 +28,7 @@ ends it sits between:
 | Path | What |
 |---|---|
 | `src/Shell.tsx` | The whole desktop: the windows, the Alt gestures, the terminal command, and the legend in the background. All of the shell's state is the window list in here. |
-| `src/index.tsx` | The entry: its `Shell` builds the `DomicileClient`, binds the SDK, mounts the React root, and reports the density and the desktop size. |
+| `src/index.tsx` | The entry: its `Shell` takes `window.domicile` (nothing in a plain browser), installs `registerElements`, and mounts the React root. |
 | `src/shell.css` | Plain CSS — where a window sits, the placeholder over one with nothing behind it yet, and the legend. |
 | `vite.config.ts` | The module build, and the plugin that folds the stylesheet back into it. |
 

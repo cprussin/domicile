@@ -1,10 +1,9 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useEffect, useState } from "react";
-
 import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import type { BatteryReading } from "./watch-battery";
 import { watchBattery } from "./watch-battery";
 
 /** A tenth left is a warning rather than a reading. */
@@ -15,7 +14,7 @@ const FLASHING_PERCENT = 5;
 
 type Props = {
   /** Where the charge comes from: the host, over the control channel. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** How it is watched; injected so tests can drive a battery of their own. */
   watch?: typeof watchBattery | undefined;
 };
@@ -37,7 +36,7 @@ type Props = {
  * whole failure this readout was rebuilt to stop making.
  */
 export const Battery = ({ domicile, watch = watchBattery }: Props) => {
-  const [reading, setReading] = useState<BatteryMessage | undefined>(undefined);
+  const [reading, setReading] = useState<BatteryReading | undefined>(undefined);
 
   useEffect(() => watch(domicile, setReading), [domicile, watch]);
 
@@ -45,7 +44,7 @@ export const Battery = ({ domicile, watch = watchBattery }: Props) => {
 };
 
 /** The reading itself, once there is one. */
-const Meter = ({ reading }: { reading: BatteryMessage }) => {
+const Meter = ({ reading }: { reading: BatteryReading }) => {
   const percent = Math.round(reading.charge * 100);
   return (
     <div

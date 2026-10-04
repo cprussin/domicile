@@ -4,7 +4,7 @@ import {
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { focusApp } from "@domicile-desktop/sdk/focus-app";
 import { focusChrome } from "@domicile-desktop/sdk/focus-chrome";
 import { useEffect, useState } from "react";
@@ -57,7 +57,7 @@ type Props = {
   /** How it stacks: the window's own `z-index`, which the SDK reports. */
   depth: number;
   /** The channel the keyboard is asked for over. */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /**
    * The whole box this window's bar and contents span, which both of them turn
    * about — see {@link scaledAbout}. `undefined` for a window that is not on

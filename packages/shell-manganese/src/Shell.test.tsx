@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { DomicileDisplay } from "@domicile-desktop/sdk/domicile-host";
-import type { ShellConfigMessage } from "@domicile-desktop/sdk/host-message";
+import type {
+  DomicileDisplay,
+  DomicileHost,
+  DomicileHostEventMap,
+  DomicileWindow,
+} from "@domicile-desktop/sdk/domicile-host";
+import type { DomicileState } from "@domicile-desktop/sdk/fake-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
@@ -30,6 +35,7 @@ import { hostDisplays } from "./screens/host-displays";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
 import type { TopBarLayout } from "./top-bar/layout";
 import { laptop } from "./volume/fixture";
+import type { Audio } from "./volume/watch-audio";
 import { TITLE_BAR } from "./window-management/rect";
 import {
   movingStyles,
@@ -82,79 +88,82 @@ const dialogBox = (): { left: string; width: string } => {
   };
 };
 
-type Call = readonly [kind: string, ...args: unknown[]];
-
-// A double that both records what the chrome asks of the host and emits the
-// host events the chrome reacts to.
-class FakeDomicile {
-  readonly calls: Call[] = [];
-
-  /**
-   * The desktop, retained the way the real client retains it: a description is
-   * a fact rather than an event, and the chrome reads it as often as it is
-   * told it.
-   */
-  displays: readonly DomicileDisplay[] | undefined;
-
-  readonly #handlers = new Map<string, (message: unknown) => void>();
+/**
+ * `window.domicile` for the chrome: what the compositor says, under React's
+ * `act`, and every call the chrome makes. The host's search is the one ask
+ * answered, once {@link holds} has said what the home is.
+ */
+class Desk {
+  readonly fake = new FakeDomicileHost();
+  readonly host: DomicileHost;
 
   /** What the host's index holds, or `undefined` until a test says. */
   #home: readonly string[] | undefined;
   /** Searches the host has not answered yet. */
-  readonly #asked: { query: string; settle: (found: unknown) => void }[] = [];
+  readonly #asked: {
+    query: string;
+    settle: (found: {
+      files: string[];
+      indexing: boolean;
+      matched: number;
+    }) => void;
+  }[] = [];
 
-  on(type: string, handler: (message: never) => void): this {
-    this.#handlers.set(type, handler as (message: unknown) => void);
-    return this;
+  constructor() {
+    const asked = this.#asked;
+    const searchFiles = (query: string) => {
+      this.fake.calls.push(["searchFiles", query]);
+      return new Promise((settle) => {
+        asked.push({ query, settle });
+        this.#answer();
+      });
+    };
+    this.host = new Proxy(this.fake.host, {
+      get: (host, name) =>
+        name === "searchFiles" ? searchFiles : Reflect.get(host, name),
+    });
   }
 
-  // Only if it is still the registered one: `on` is a single slot, so a
-  // teardown that removed whatever it found could silence the handler that
-  // displaced it.
-  off(type: string, handler: (message: never) => void): this {
-    if (this.#handlers.get(type) === handler) {
-      this.#handlers.delete(type);
-    }
-    return this;
+  get calls() {
+    return this.fake.calls;
   }
 
   /** The host describing the desktop, which it does at least once. */
   describes(displays: readonly DomicileDisplay[]): void {
-    this.displays = displays;
-    this.emit("displays", { displays });
+    this.set({ displays });
   }
 
-  emit(type: string, message: Record<string, unknown>): void {
+  set(changes: Partial<DomicileState>): void {
     act(() => {
-      this.#handlers.get(type)?.({ type, ...message });
+      this.fake.set(changes);
     });
   }
 
-  spawn(command: readonly string[]): void {
-    this.calls.push(["spawn", command]);
-  }
-  /**
-   * The host's search, answered once {@link holds} has said what the home is —
-   * and never before, which is a desktop whose walk has told it nothing yet.
-   */
-  searchFiles(query: string): Promise<unknown> {
-    this.calls.push(["searchFiles", query]);
-    return new Promise((settle) => {
-      this.#asked.push({ query, settle });
-      this.#answer();
+  appear(appId: string, fields: Partial<DomicileWindow> = {}): void {
+    act(() => {
+      this.fake.appear(appId, fields);
     });
   }
 
-  /** The host's search for applications, which these tests never need answered. */
-  searchApps(query: string): Promise<unknown> {
-    this.calls.push(["searchApps", query]);
-    return new Promise(() => undefined);
+  change(appId: string, fields: Partial<DomicileWindow>): void {
+    act(() => {
+      this.fake.change(appId, fields);
+    });
   }
 
-  /** The host's preview, which these tests never need answered. */
-  previewFile(path: string): Promise<unknown> {
-    this.calls.push(["previewFile", path]);
-    return new Promise(() => undefined);
+  close(appId: string): void {
+    act(() => {
+      this.fake.close(appId);
+    });
+  }
+
+  dispatch<T extends keyof DomicileHostEventMap>(
+    type: T,
+    fields: Partial<Omit<DomicileHostEventMap[T], keyof Event>>,
+  ): void {
+    act(() => {
+      this.fake.dispatch(type, fields);
+    });
   }
 
   /** The home the host searches, which settles every search still waiting. */
@@ -171,59 +180,13 @@ class FakeDomicile {
     if (home !== undefined) {
       for (const { query, settle } of this.#asked.splice(0)) {
         const files = home.filter((path) => path.includes(query));
-        settle({ files, indexing: false, matched: files.length, query });
+        settle({ files, indexing: false, matched: files.length });
       }
     }
   }
-  copyClipboardEntry(entry: number): void {
-    this.calls.push(["copyClipboardEntry", entry]);
-  }
-  grabShortcut(shortcut: unknown): void {
-    this.calls.push(["grabShortcut", shortcut]);
-  }
-  focusApp(appId: string): void {
-    this.calls.push(["focusApp", appId]);
-  }
-  warpPointer(to: readonly number[]): void {
-    this.calls.push(["warpPointer", to]);
-  }
-  // The portal forwards the keys a focused window is given, so the shell's own
-  // keystrokes reach this once a window has the keyboard.
-  key(appId: string, keycode: number, pressed: boolean): void {
-    this.calls.push(["key", appId, keycode, pressed]);
-  }
-  focusChrome(): void {
-    this.calls.push(["focusChrome"]);
-  }
-  // What each client has drawn is the SDK's to remember, and the SDK reads it
-  // back off the client rather than off any element. Nothing here is about the
-  // pointer mapping that uses it, so every window maps its own box 1:1.
-  surfaceSizeOf(): undefined {
-    return undefined;
-  }
-  // No popup here is clicked, so every client is its own window.
-  windowOf(appId: string): string {
-    return appId;
-  }
-  closeApp(appId: string): void {
-    this.calls.push(["closeApp", appId]);
-  }
-  activateExtension(id: string): void {
-    this.calls.push(["activateExtension", id]);
-  }
-
-  activateTrayItem(id: string, action: string): void {
-    this.calls.push(["activateTrayItem", id, action]);
-  }
-  dismissNotifications(ids: readonly number[]): void {
-    this.calls.push(["dismissNotifications", ids]);
-  }
-  invokeNotificationAction(id: number, action: string): void {
-    this.calls.push(["invokeNotificationAction", id, action]);
-  }
 }
 
-let domicile: FakeDomicile;
+let domicile: Desk;
 
 /**
  * Renders the chrome on a desktop of `desktop`.
@@ -237,11 +200,12 @@ const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
   topBar?: TopBarLayout,
   keybindings: ShellKeybindings = MANGANESE_KEYS,
-  config: ShellConfigMessage = KEYBOARD,
 ) => {
-  domicile = new FakeDomicile();
-  domicile.displays = desktop;
-  const client = domicile as unknown as DomicileClient;
+  domicile = new Desk();
+  if (desktop !== undefined) {
+    domicile.fake.set({ displays: desktop });
+  }
+  const client = domicile.host;
   registerElements(client);
   // A standalone theme source rather than `hostTheme`: what the bar's toggle
   // does with the compositor is `host-theme.test.ts`'s, and a double that had
@@ -255,9 +219,6 @@ const renderingShell = (
       topBar={topBar}
     />,
   );
-  // The keyboard the keys are resolved on, which the compositor sends as the
-  // page connects.
-  domicile.emit("shell_config", config);
   return rendered;
 };
 
@@ -273,64 +234,7 @@ const renderUndescribedShell = () => renderingShell(undefined);
 
 /** A client the host announces, which is a window on the desktop. */
 const clientAppears = (appId: string, title = appId): void => {
-  domicile.emit("app_appeared", { app_id: appId, title });
-};
-
-/**
- * The keys these tests press: the `KeyboardEvent.code` of the key each keysym
- * is on under Programmer's Dvorak — the layout the sample config in the README
- * is written for — and that key's evdev code, which is what the compositor
- * resolves a keysym to and what a binding names.
- *
- * Written out rather than read off the SDK's table: what this checks is that
- * the shell answers the key the compositor resolved, so taking the number from
- * the table the SDK reads would check nothing.
- */
-const KEYS: Readonly<Record<string, readonly [code: string, keycode: number]>> =
-  {
-    a: ["KeyA", 30],
-    asterisk: ["Digit7", 8],
-    b: ["KeyN", 49],
-    braceleft: ["Digit3", 4],
-    braceright: ["Digit4", 5],
-    bracketleft: ["Digit2", 3],
-    bracketright: ["Digit0", 11],
-    Down: ["ArrowDown", 108],
-    d: ["KeyH", 35],
-    Escape: ["Escape", 1],
-    e: ["KeyD", 32],
-    equal: ["Digit6", 7],
-    exclam: ["Minus", 12],
-    f: ["KeyY", 21],
-    h: ["KeyJ", 36],
-    j: ["KeyC", 46],
-    k: ["KeyV", 47],
-    Left: ["ArrowLeft", 105],
-    l: ["KeyP", 25],
-    minus: ["Quote", 40],
-    parenleft: ["Digit5", 6],
-    parenright: ["Digit8", 9],
-    plus: ["Digit9", 10],
-    q: ["KeyX", 45],
-    Return: ["Enter", 28],
-    Right: ["ArrowRight", 106],
-    r: ["KeyO", 24],
-    s: ["Semicolon", 39],
-    space: ["Space", 57],
-    Tab: ["Tab", 15],
-    Up: ["ArrowUp", 103],
-    v: ["Period", 52],
-    w: ["Comma", 51],
-  };
-
-/** The key a keysym is on, or a throw for one these tests never wrote down. */
-const keyOf = (keysym: string): readonly [code: string, keycode: number] => {
-  const key = KEYS[keysym];
-  if (key === undefined) {
-    throw new Error(`test: no key written down for ${keysym}`);
-  } else {
-    return key;
-  }
+  domicile.appear(appId, { title });
 };
 
 /**
@@ -376,9 +280,8 @@ const WORKSPACE_KEYS = [
 ] as const;
 
 /**
- * The README's sample config, as the SDK delivers it once the compositor has
- * resolved every keysym: the bindings manganese shipped hard-coded before they
- * moved into the config.
+ * The README's sample config: the bindings manganese shipped hard-coded before
+ * they moved into the config.
  */
 const MANGANESE_KEYS: ShellKeybindings = {
   keybindings: Object.fromEntries([
@@ -430,37 +333,13 @@ const MANGANESE_KEYS: ShellKeybindings = {
   },
 };
 
-/** The keyboard these tests type on: every keysym in {@link KEYS}. */
-const KEYBOARD: ShellConfigMessage = {
-  keys: new Map(
-    Object.entries(KEYS).map(([keysym, [, keycode]]) => [keysym, keycode]),
-  ),
-};
-
 /**
- * A chord pressed on this page, which is where every press the desktop's own
- * chrome or a focused Wayland window hears arrives.
- *
- * By the *key* rather than by the letter on it: a binding names the key the
- * compositor resolved its keysym to, so a test presses the key Programmer's
- * Dvorak puts `h` on, exactly as the shell reads it.
+ * A chord pressed — on this page, or in a browser window — which the engine
+ * hands to the shell as a `shortcut` naming it as it was grabbed.
  */
 const press = (keysym: string, shift = false): void => {
-  fireEvent.keyDown(document, {
-    code: keyOf(keysym)[0],
-    metaKey: true,
-    shiftKey: shift,
-  });
-};
-
-/** The same chord, handed back by the host — what a focused `<webview>` does. */
-const hostPress = (keysym: string, shift = false): void => {
-  domicile.emit("shortcut", {
-    altKey: false,
-    ctrlKey: false,
-    keycode: keyOf(keysym)[1],
-    metaKey: true,
-    shiftKey: shift,
+  domicile.dispatch("shortcut", {
+    chord: `${shift ? "Shift+" : ""}Meta+${keysym}`,
   });
 };
 
@@ -490,15 +369,12 @@ const warpedTo = (): readonly [x: number, y: number] => {
   const asked = [...domicile.calls]
     .reverse()
     .find(([kind]) => kind === "warpPointer");
-  const to = asked?.[1];
-  if (
-    !Array.isArray(to) ||
-    typeof to[0] !== "number" ||
-    typeof to[1] !== "number"
-  ) {
+  const x = asked?.[1];
+  const y = asked?.[2];
+  if (typeof x !== "number" || typeof y !== "number") {
     throw new Error("test: the shell asked for no warp");
   } else {
-    return [to[0], to[1]];
+    return [x, y];
   }
 };
 
@@ -736,12 +612,15 @@ const boxOf = (element: HTMLElement) => ({
  * where every other one needs only the host.
  */
 const machineSays = (reading: { charge: number; charging: boolean }): void => {
-  domicile.emit("battery", reading);
+  domicile.set({
+    batteryCharge: reading.charge,
+    batteryCharging: reading.charging,
+  });
 };
 
 /** The compositor saying what has been copied on this desktop, newest first. */
 const copied = (entries: readonly { id: number; preview: string }[]): void => {
-  domicile.emit("clipboard", { entries });
+  domicile.set({ clipboard: entries });
 };
 
 /** An extension whose click is `action.onClicked`. */
@@ -755,7 +634,7 @@ const POPPED = "ponmlkjihgfedcbaponmlkjihgfedcba";
  * `action.disable()`d when `popped` is false.
  */
 const extensionsInstalled = (popped = true): void => {
-  domicile.emit("extensions", {
+  domicile.set({
     extensions: [
       {
         badgeColor: "#00000000",
@@ -764,7 +643,7 @@ const extensionsInstalled = (popped = true): void => {
         icon: "data:image/png;base64,iVBORw0KGgo=",
         id: CLICKED,
         name: "Clicked",
-        popup: undefined,
+        popup: null,
         title: "Clicked",
       },
       {
@@ -1035,7 +914,7 @@ describe("Shell", () => {
     it("shows the brightness the host says", () => {
       renderShell();
 
-      domicile.emit("brightness", { level: 0.6 });
+      domicile.set({ brightness: 0.6 });
 
       expect(
         screen.getByRole("button", { name: "Brightness 60%" }),
@@ -1045,7 +924,7 @@ describe("Shell", () => {
     it("shows the volume the host says", () => {
       renderShell();
 
-      domicile.emit("audio", laptop);
+      domicile.set(engineAudio(laptop));
 
       expect(screen.getByRole("button", { name: "Volume 50%" })).toBeVisible();
     });
@@ -1138,10 +1017,8 @@ describe("Shell", () => {
   describe("the system tray", () => {
     it("is on the bar, and a click activates the icon", async () => {
       renderShell();
-      domicile.emit("tray", {
-        items: [
-          { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
-        ],
+      domicile.set({
+        tray: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
       });
 
       await userEvent.click(screen.getByRole("button", { name: "Sync" }));
@@ -1155,10 +1032,8 @@ describe("Shell", () => {
 
     it("is left of the extensions, which are left of the workspaces", () => {
       renderShell();
-      domicile.emit("tray", {
-        items: [
-          { icon: undefined, id: ":1.9/StatusNotifierItem", title: "Sync" },
-        ],
+      domicile.set({
+        tray: [{ icon: "", id: ":1.9/StatusNotifierItem", title: "Sync" }],
       });
       extensionsInstalled();
 
@@ -1177,25 +1052,25 @@ describe("Shell", () => {
   });
 
   describe("the notifications", () => {
-    /** A notification as the client hands one on. */
+    /** A notification as the engine holds one. */
     const arrived = (id: number, summary: string) => ({
       actions: [],
       appName: "chat.example.com",
       body: "",
       clickable: true,
-      icon: undefined,
+      icon: "",
       id,
       summary,
       time: id,
-      timeoutMs: undefined,
+      timeoutMs: -1,
       urgency: "normal",
     });
 
     it("toasts what arrives, and the bell counts it", async () => {
       renderShell();
-      domicile.emit("notifications", { items: [] });
+      domicile.set({ notifications: [] });
 
-      domicile.emit("notifications", { items: [arrived(7, "New message")] });
+      domicile.set({ notifications: [arrived(7, "New message")] });
 
       expect(
         await screen.findByRole("button", { name: "New message" }),
@@ -1207,8 +1082,8 @@ describe("Shell", () => {
 
     it("lists them in the drawer the bell opens, and clears them all", async () => {
       renderShell();
-      domicile.emit("notifications", {
-        items: [arrived(1, "Older"), arrived(2, "Newer")],
+      domicile.set({
+        notifications: [arrived(1, "Older"), arrived(2, "Newer")],
       });
 
       await userEvent.click(
@@ -1260,14 +1135,14 @@ describe("Shell", () => {
       renderShell();
       extensionsInstalled();
       clientAppears("one");
-      domicile.emit("focus_changed", { app_id: "one" });
+      domicile.set({ focusedWindow: "one" });
       domicile.calls.length = 0;
 
       await userEvent.click(screen.getByRole("button", { name: "Popped" }));
 
       expect(domicile.calls).toContainEqual(["focusChrome"]);
 
-      domicile.emit("focus_changed", { app_id: undefined });
+      domicile.set({ focusedWindow: null });
       domicile.calls.length = 0;
       await userEvent.keyboard("{Escape}");
 
@@ -1329,12 +1204,13 @@ describe("Shell", () => {
       clientAppears("term");
       const window = boxOf(appElement(container, "term"));
 
-      domicile.emit("popup_placed", {
-        app_id: "menu",
+      domicile.appear("menu", {
         grab: true,
+        height: 240,
         parent: "term",
-        position: [12, 30],
-        size: [180, 240],
+        width: 180,
+        x: 12,
+        y: 30,
       });
 
       const menu = appElement(container, "menu");
@@ -1349,7 +1225,7 @@ describe("Shell", () => {
         container.querySelectorAll('[data-window="app:term"]').length,
       );
 
-      domicile.emit("app_closed", { app_id: "menu" });
+      domicile.close("menu");
       expect(() => appElement(container, "menu")).toThrow();
       expect(appElement(container, "term")).toBeDefined();
     });
@@ -1358,7 +1234,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term", "Terminal");
 
-      domicile.emit("app_titled", { app_id: "term", title: "vim ~/notes" });
+      domicile.change("term", { title: "vim ~/notes" });
 
       expect(barFor(container, "app:term")).toHaveTextContent("vim ~/notes");
     });
@@ -1420,7 +1296,7 @@ describe("Shell", () => {
       const { container } = renderShell();
       clientAppears("term");
 
-      domicile.emit("app_closed", { app_id: "term" });
+      domicile.close("term");
       motionsPlayOut(container);
 
       expect(windowsOnScreen(container)).toEqual([]);
@@ -1435,7 +1311,7 @@ describe("Shell", () => {
       clientAppears("term");
       const was = boxOf(appElement(container, "term"));
 
-      domicile.emit("app_closed", { app_id: "term" });
+      domicile.close("term");
 
       // The window's own element, not something standing in for it: what a
       // window shows must not change while the user watches it go.
@@ -1454,7 +1330,7 @@ describe("Shell", () => {
       clientAppears("term");
       clientAppears("editor");
 
-      domicile.emit("app_closed", { app_id: "editor" });
+      domicile.close("editor");
 
       expect(appElement(container, "editor")).toHaveAttribute(
         "data-motion",
@@ -1477,7 +1353,7 @@ describe("Shell", () => {
       clientAppears("term");
       clientAppears("editor");
 
-      domicile.emit("app_closed", { app_id: "editor" });
+      domicile.close("editor");
 
       expect(barFor(container, "app:editor")).toHaveAttribute(
         "data-focus",
@@ -1496,7 +1372,7 @@ describe("Shell", () => {
       clientAppears("two");
       press("e");
 
-      domicile.emit("app_closed", { app_id: "one" });
+      domicile.close("one");
 
       expect(Number(appElement(container, "one").style.zIndex)).toBeGreaterThan(
         Number(appElement(container, "two").style.zIndex),
@@ -1506,7 +1382,7 @@ describe("Shell", () => {
     it("takes it off the page once it has finished leaving", () => {
       const { container } = renderShell();
       clientAppears("term");
-      domicile.emit("app_closed", { app_id: "term" });
+      domicile.close("term");
 
       motionsPlayOut(container);
 
@@ -1765,41 +1641,17 @@ describe("Shell", () => {
       // the browser process is the only layer above a guest.
       renderShell();
 
-      expect(domicile.calls).toContainEqual([
-        "grabShortcut",
-        {
-          altKey: false,
-          ctrlKey: false,
-          keycode: keyOf("Return")[1],
-          metaKey: true,
-          shiftKey: false,
-        },
-      ]);
+      expect(domicile.calls).toContainEqual(["grabShortcut", "Meta+Return"]);
     });
 
     it("binds sway's keys when it is given none", () => {
-      // Every keysym the defaults name, on a key of its own.
-      const keysyms = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)]
-        .flatMap(Object.keys)
-        .map((chord) => chord.split("+").at(-1) ?? "");
-      const keys = new Map(
-        [...new Set(keysyms)].map((keysym, at) => [keysym, 100 + at] as const),
-      );
-      renderingShell(
-        [LEFT],
-        undefined,
-        { keybindings: DEFAULT_KEYBINDINGS, modes: DEFAULT_MODES },
-        { keys },
-      );
+      renderingShell([LEFT], undefined, {
+        keybindings: DEFAULT_KEYBINDINGS,
+        modes: DEFAULT_MODES,
+      });
       clientAppears("term");
 
-      domicile.emit("shortcut", {
-        altKey: false,
-        ctrlKey: false,
-        keycode: keys.get("q") ?? 0,
-        metaKey: true,
-        shiftKey: true,
-      });
+      press("q", true);
 
       expect(domicile.calls).toContainEqual(["closeApp", "term"]);
     });
@@ -1808,16 +1660,6 @@ describe("Shell", () => {
       renderShell();
 
       press("Return");
-
-      expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
-    });
-
-    it("answers the same chord handed back by the host", () => {
-      // A browser window has the keyboard, so the press never reaches this
-      // document: it arrives as a `shortcut` message instead.
-      renderShell();
-
-      hostPress("Return");
 
       expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
     });
@@ -2159,8 +2001,12 @@ describe("Shell", () => {
       // client's frame would be cut off across and stretched down.
       const { container } = renderShell();
       clientAppears("vault");
-      domicile.emit("app_min_size", { app_id: "vault", size: [1300, 300] });
-      domicile.emit("app_max_size", { app_id: "vault", size: [1400, 350] });
+      domicile.change("vault", {
+        maxHeight: 350,
+        maxWidth: 1400,
+        minHeight: 300,
+        minWidth: 1300,
+      });
 
       press("Tab", true);
 
@@ -2572,7 +2418,7 @@ describe("Shell", () => {
 
       clientAppears("two");
 
-      expect(domicile.calls).toContainEqual(["warpPointer", [1445, 571]]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 1445, 571]);
       expect(boxOf(appElement(container, "two"))).toMatchObject({
         height: "1018px",
         width: "950px",
@@ -2597,7 +2443,7 @@ describe("Shell", () => {
       press("h");
 
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(domicile.calls).toContainEqual(["warpPointer", [475, 571]]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 475, 571]);
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         height: "1018px",
         width: "950px",
@@ -2615,7 +2461,7 @@ describe("Shell", () => {
 
       press("l");
 
-      expect(domicile.calls).toContainEqual(["warpPointer", [2560, 512]]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 2560, 512]);
     });
 
     it("gives the keyboard to the window the pointer moves into", () => {
@@ -2658,7 +2504,7 @@ describe("Shell", () => {
       press("parenright");
       domicile.calls.length = 0;
 
-      domicile.emit("focus_requested", { app_id: "one" });
+      domicile.dispatch("focusrequested", { appId: "one" });
 
       // Granted, and on the workspace the window is on — which is what makes
       // granting it mean anything.
@@ -2691,7 +2537,7 @@ describe("Shell", () => {
       clientAppears("one");
       clientAppears("two");
 
-      domicile.emit("focus_changed", { app_id: "one" });
+      domicile.set({ focusedWindow: "one" });
 
       expect(barFor(container, "app:one").className).not.toBe(
         barFor(container, "app:two").className,
@@ -2845,7 +2691,7 @@ describe("the launcher", () => {
     // launcher that opens and then cannot be used.
     renderShell();
     clientAppears("one");
-    domicile.emit("focus_changed", { app_id: "one" });
+    domicile.set({ focusedWindow: "one" });
     domicile.calls.length = 0;
 
     press("space");
@@ -2859,11 +2705,11 @@ describe("the launcher", () => {
     // pointer to cross it.
     renderShell();
     clientAppears("one");
-    domicile.emit("focus_changed", { app_id: "one" });
+    domicile.set({ focusedWindow: "one" });
     press("space");
     // The compositor carrying out the request above, which is how the shell
     // learns the seat has moved.
-    domicile.emit("focus_changed", { app_id: undefined });
+    domicile.set({ focusedWindow: null });
     domicile.calls.length = 0;
 
     press("space");
@@ -2911,17 +2757,6 @@ describe("the launcher", () => {
     expect(screen.getByRole("dialog")).toHaveAttribute("data-ending-style");
   });
 
-  it("answers the same key handed back by the host", () => {
-    // A browser window has the keyboard, so `mod+space` never reaches this
-    // document. The launcher is the one thing on the desktop you most want to
-    // reach from inside a window, so this is the path that matters for it.
-    renderShell();
-
-    hostPress("space");
-
-    expect(launcherBox()).toBeVisible();
-  });
-
   it("leaves the tab that was open selected once it is dismissed", async () => {
     // The page takes the keyboard back from the client while the panel is up,
     // and the engine hands it to the guest that last had it: the browser in
@@ -2949,3 +2784,35 @@ describe("the launcher", () => {
     expect(barFor(container, "app:two").dataset.focus).toBe("focused");
   });
 });
+
+/** The desk's sound as the engine holds it: `audio`, in its spellings. */
+const engineAudio = (audio: Audio): Partial<DomicileState> => {
+  const device = ({
+    default: isDefault,
+    port,
+    ...rest
+  }: Audio["outputs"][number]) => ({
+    ...rest,
+    isDefault,
+    port: port ?? "",
+  });
+  const stream = ({
+    device: on,
+    title,
+    ...rest
+  }: Audio["playback"][number]) => ({
+    ...rest,
+    device: on ?? "",
+    title: title ?? "",
+  });
+  return {
+    audioCards: audio.cards.map(({ profile, ...rest }) => ({
+      ...rest,
+      profile: profile ?? "",
+    })),
+    audioInputs: audio.inputs.map(device),
+    audioOutputs: audio.outputs.map(device),
+    audioPlayback: audio.playback.map(stream),
+    audioRecording: audio.recording.map(stream),
+  };
+};

@@ -1,31 +1,26 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { HostMessageOf } from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useExtensions } from "./useExtensions";
 
 /**
- * A stand-in for the client that takes the one handler this hook registers and
- * lets a test say what the engine said. Narrow for `useClipboard`'s reason.
+ * A host whose extensions the test says, as the engine says them: an action
+ * with no popup has `null` for one.
  */
 const client = () => {
-  let handler: ((message: HostMessageOf<"extensions">) => void) | undefined;
-  const domicile = {
-    on: (
-      _type: "extensions",
-      registered: (message: HostMessageOf<"extensions">) => void,
-    ) => {
-      handler = registered;
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
+    domicile: fake.host,
     says: (extensions: readonly Extension[]) => {
       act(() => {
-        handler?.({ extensions });
+        fake.set({
+          extensions: extensions.map((said) => ({
+            ...said,
+            popup: said.popup ?? null,
+          })),
+        });
       });
     },
   };

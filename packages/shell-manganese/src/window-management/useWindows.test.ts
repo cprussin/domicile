@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
 import { useWindows } from "./useWindows";
@@ -17,50 +17,38 @@ const LEFT: Display = {
 
 const RIGHT: Display = { ...LEFT, name: "right", position: [1920, 0] };
 
-/**
- * A stand-in for the client: it takes the handlers this hook registers and
- * lets a test say what the compositor said.
- *
- * Narrower than a `DomicileClient` because the hook uses three of its members,
- * and a double that implemented the other fifteen would be claiming a seam
- * that size.
- */
+/** A host the test says windows and addresses through. */
 const client = () => {
-  const handlers = new Map<string, (message: never) => void>();
-  const spawned: (readonly string[])[] = [];
-  const locks: undefined[] = [];
-  const domicile = {
-    closeApp: () => undefined,
-    lock: () => {
-      locks.push(undefined);
-    },
-    on: (type: string, registered: (message: never) => void) => {
-      handlers.set(type, registered);
-    },
-    spawn: (command: readonly string[]) => {
-      spawned.push(command);
-    },
-  } as unknown as DomicileClient;
-
+  const fake = new FakeDomicileHost();
+  const called = (method: string) =>
+    fake.calls.filter(([name]) => name === method).map(([, first]) => first);
   return {
     /** A client the compositor announces. */
     announces: (appId: string) => {
       act(() => {
-        handlers.get("app_appeared")?.({
-          app_id: appId,
-          title: appId,
-        } as never);
+        fake.appear(appId, { title: appId });
       });
     },
-    domicile,
-    locks,
+    domicile: fake.host,
+    fake,
+    /** The window the compositor says has the keyboard. */
+    focuses: (appId: string | null) => {
+      act(() => {
+        fake.set({ focusedWindow: appId });
+      });
+    },
+    get locks() {
+      return called("lock");
+    },
     /** `domicile open-url`. */
     opens: (url: string) => {
       act(() => {
-        handlers.get("open_url")?.({ url } as never);
+        fake.dispatch("openurl", { url });
       });
     },
-    spawned,
+    get spawned() {
+      return called("spawn");
+    },
   };
 };
 
@@ -79,6 +67,32 @@ describe("the desktop", () => {
     expect(result.current.windows.map(({ id }) => id)).toEqual([
       appWindowId("kitty"),
     ]);
+  });
+
+  it("is reduced from what the host lists, whole", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("kitty");
+    host.announces("foot");
+
+    act(() => {
+      host.fake.close("kitty");
+    });
+
+    expect(result.current.windows.map(({ id }) => id)).toEqual([
+      appWindowId("foot"),
+    ]);
+  });
+
+  it("follows the keyboard where the host says it is", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("kitty");
+    host.announces("foot");
+
+    host.focuses("kitty");
+    expect(result.current.focusedId).toBe(appWindowId("kitty"));
+
+    host.focuses(null);
+    expect(result.current.focusedId).toBeUndefined();
   });
 
   it("takes up the screens the host describes", () => {

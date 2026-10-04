@@ -13,7 +13,7 @@ page in a <webview> ─ new Notification() ─▶ engine (Chrome's Linux bridge)
                                                                                      ▼
                                                         engine: `notifications` event
                                                                                      ▼
-                                         shell: DomicileClient.on("notifications") → toasts, bell, drawer
+                                         shell: domicile.notifications, notificationschanged → toasts, bell, drawer
 shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ engine ─▶ compositor
 ```
 
@@ -24,7 +24,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
 | The bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
 | `notifications` event, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
 | Web Notifications allowed without a prompt | patch 0068, `guard-webview-notifications.sh`; the shell's own page, `guard-shell-web-apis.sh` |
-| `Notification`, `DomicileClient.dismissNotifications`, `invokeNotificationAction` | `@domicile-desktop/sdk/notification`, `domicile-client` |
+| `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster`: the deck of toasts | `@domicile-desktop/component-library/Toaster` |
 | Toasts, the bell, the drawer | `packages/shell-manganese/src/notifications/` |
 

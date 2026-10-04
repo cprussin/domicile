@@ -1,7 +1,7 @@
 // What the chrome bound the SDK with, and which app has the keyboard.
 //
 // The input routing is installed on `document` once, at startup, and it
-// outlives any particular client: `registerElements` binds a domicile client
+// outlives any particular client: `registerElements` binds `window.domicile`
 // (and optionally a measurement strategy) into the one cell below, and
 // everything it installs reads that cell at dispatch rather than closing over
 // what it was handed. So a rebind reaches listeners that are already
@@ -14,7 +14,7 @@
 // engine's now and there is nothing to construct; what is left is the reason
 // above, which is the one that outlived it.
 
-import type { DomicileClient } from "./domicile-client";
+import type { DomicileHost } from "./domicile-host";
 import type { Measure } from "./measure";
 import { defaultMeasure } from "./measure";
 
@@ -29,8 +29,23 @@ import { defaultMeasure } from "./measure";
  * Mutable, and the same object across binds, because those are installed once
  * and a rebind has to reach them.
  */
+/** What input routing uses of `window.domicile`. */
+export type InputHost = Pick<
+  DomicileHost,
+  | "addEventListener"
+  | "focusApp"
+  | "focusChrome"
+  | "focusedWindow"
+  | "key"
+  | "pointerAxis"
+  | "pointerButton"
+  | "pointerLeave"
+  | "pointerMotion"
+  | "windows"
+>;
+
 export type ElementContext = {
-  domicile: DomicileClient;
+  domicile: InputHost;
   measure: Measure;
 };
 
@@ -38,7 +53,7 @@ let context: ElementContext | undefined;
 let focusedAppId: string | undefined;
 
 export const bindElementContext = (
-  domicile: DomicileClient,
+  domicile: InputHost,
   measure: Measure = defaultMeasure,
 ): ElementContext => {
   const bound = context ?? { domicile, measure };

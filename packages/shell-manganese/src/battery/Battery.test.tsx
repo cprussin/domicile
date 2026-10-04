@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, render, screen } from "@testing-library/react";
-
 import { css } from "../../styled-system/css";
 import { Battery } from "./Battery";
+import type { BatteryReading } from "./watch-battery";
 
 /**
  * A battery the test holds the wire to: `watch` is what the component is
@@ -13,10 +13,10 @@ import { Battery } from "./Battery";
  * out.
  */
 const heldBattery = () => {
-  const listeners: ((reading: BatteryMessage) => void)[] = [];
+  const listeners: ((reading: BatteryReading) => void)[] = [];
   const watching = { stopped: 0 };
   return {
-    report: (reading: BatteryMessage) => {
+    report: (reading: BatteryReading) => {
       act(() => {
         for (const onReading of listeners) {
           onReading(reading);
@@ -27,8 +27,8 @@ const heldBattery = () => {
       return watching.stopped;
     },
     watch: (
-      _domicile: DomicileClient,
-      onReading: (reading: BatteryMessage) => void,
+      _domicile: DomicileHost,
+      onReading: (reading: BatteryReading) => void,
     ) => {
       listeners.push(onReading);
       return () => {
@@ -42,7 +42,7 @@ const heldBattery = () => {
  * The client, which these cases never reach: `watch` is injected, so what the
  * component does with this is hand it straight back.
  */
-const NO_HOST = {} as DomicileClient;
+const NO_HOST = new FakeDomicileHost().host;
 
 /**
  * The readout: everything the charge is drawn in, which is what goes to danger

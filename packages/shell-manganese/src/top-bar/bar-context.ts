@@ -1,9 +1,11 @@
 // What every item on a monitor's bar can read: the bar's own props, handed
 // down through context so an item a user puts on the bar needs none.
 
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type {
+  DomicileHost,
+  DomicileTrayItem,
+} from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
-import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { createContext, useContext } from "react";
 
 import type { TrayOrder } from "../tray/useTrayOrder";
@@ -17,7 +19,7 @@ export type Bar = {
    * the machine — and what an extension's action and a new brightness are
    * clicked through.
    */
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The extensions with an action, which the tray shows. */
   extensions: readonly Extension[];
   /** Whether the keyboard is on this screen. */
@@ -39,7 +41,7 @@ export type Bar = {
   /** The monitor this bar is across, which the mixer opens over. */
   screen: string;
   /** The applications' tray icons. */
-  tray: readonly TrayItem[];
+  tray: readonly DomicileTrayItem[];
   /** The order the tray is in, and how a drag changes it. */
   trayOrder: TrayOrder;
   /** How many notifications arrived since the drawer was last opened. */

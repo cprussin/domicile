@@ -1,13 +1,8 @@
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Kbd } from "@domicile-desktop/component-library/Kbd";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
+import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import { FilePreviewKind } from "@domicile-desktop/sdk/file-preview";
-import type {
-  DesktopEntry,
-  FilePreviewMessage,
-  FoundAppsMessage,
-  FoundFilesMessage,
-} from "@domicile-desktop/sdk/host-message";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -43,6 +38,7 @@ import type { Choice } from "./choices";
 import { ChoiceKind, choicesFor, launchOf } from "./choices";
 import { FolderPreview } from "./FolderPreview";
 import type { FileRow } from "./file-row";
+import type { DesktopEntry, FoundApps } from "./found-apps";
 import type { Launch } from "./launch";
 import type { LearnedIcons } from "./learned-icons";
 import { learnedIcons, learnIcon } from "./learned-icons";
@@ -50,8 +46,8 @@ import type { Mark } from "./marked";
 import { marked } from "./marked";
 import { homeUrl, MediaKind, mediaOf } from "./media";
 import { TextPreview } from "./TextPreview";
+import type { Found } from "./useFound";
 import { useFound } from "./useFound";
-import type { FoundApps } from "./useFoundApps";
 import { useFoundApps } from "./useFoundApps";
 import { usePreview } from "./usePreview";
 import { useSettled } from "./useSettled";
@@ -105,13 +101,13 @@ type Props = {
 };
 
 /** How the panel asks what matches what is in its box. */
-type Search = (query: string) => Promise<FoundFilesMessage>;
+type Search = (query: string) => Promise<Found>;
 
 /** How the panel asks which applications match what is in its box. */
-type SearchApps = (query: string) => Promise<FoundAppsMessage>;
+type SearchApps = (query: string) => Promise<FoundApps>;
 
 /** How the panel asks what the highlighted file holds. */
-type Preview = (path: string) => Promise<FilePreviewMessage>;
+type Preview = (path: string) => Promise<FilePreview>;
 
 /** How a bookmark's preview says the icon its page named. */
 type Learn = (bookmark: string, icon: string) => void;

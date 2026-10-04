@@ -1,6 +1,6 @@
 import type { KeyBinding } from "@domicile-desktop/sdk/bind-keys";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useEffect, useEffectEvent, useRef } from "react";
 
@@ -15,7 +15,7 @@ const logToConsole = (error: string): void => {
 };
 
 type Options = {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The keys this desktop binds. */
   keybindings: ShellKeybindings;
   /** Whether the launcher is up, which silences every key but its own. */
@@ -36,7 +36,7 @@ type Options = {
 /**
  * The keys this desktop binds, answered.
  *
- * The SDK claims every chord, hears each press by whichever path it took, and
+ * The SDK grabs every chord, hears each press as the engine's `shortcut`, and
  * reads it in the binding mode; what is left here is what manganese means by
  * `send-shell <words>` — see `command.ts` — the launcher's modality, and the
  * mode itself, which is the desk's rather than this page's.
@@ -47,10 +47,9 @@ type Options = {
  * the desktop every page shares, and the mode that desktop is in comes back as
  * `mode` and is handed to the SDK — on this page and every other.
  *
- * Bound once per client and set of keys, not once per render: the keyboard
- * arrives once and again only when it changes, so a binding torn down and
- * made again would miss it. `keybindings` is a shell's options, made once. What changes between renders is read when a key is pressed.
- *
+ * Bound once per host and set of keys, not once per render: `keybindings` is
+ * a shell's options, made once. What changes between renders is read when a
+ * key is pressed.
  */
 export const useKeybindings = ({
   domicile,

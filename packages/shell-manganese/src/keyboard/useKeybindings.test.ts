@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { ShortcutMessage } from "@domicile-desktop/sdk/host-message";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { act, renderHook } from "@testing-library/react";
@@ -9,21 +8,6 @@ import { Direction } from "../window-management/direction";
 import type { WindowAction as Action } from "../window-management/window-state";
 import { WindowAction } from "../window-management/window-state";
 import { useKeybindings } from "./useKeybindings";
-
-/** Meta and the key `keycode`, and nothing else held. */
-const meta = (keycode: number): ShortcutMessage => ({
-  altKey: false,
-  ctrlKey: false,
-  keycode,
-  metaKey: true,
-  shiftKey: false,
-});
-
-// Evdev codes, which is all a binding names a key by.
-const SPACE = 57;
-const L = 38;
-const R = 19;
-const X = 45;
 
 /** A few of manganese's bindings, as a desktop binds them. */
 const KEYS: ShellKeybindings = {
@@ -38,44 +22,22 @@ const KEYS: ShellKeybindings = {
   },
 };
 
-/** The keyboard those keys are on, as the compositor describes it. */
-const KEYBOARD = {
-  keys: new Map([
-    ["l", L],
-    ["r", R],
-    ["space", SPACE],
-    ["x", X],
-  ]),
-};
-
-/**
- * A stand-in for the client: it takes the handlers the SDK registers and lets
- * a test say what the host said.
- */
+/** A host whose chord presses the test says. */
 const client = () => {
-  const handlers = new Map<string, (message: never) => void>();
-  const domicile = {
-    grabShortcut: () => undefined,
-    off: (type: string) => {
-      handlers.delete(type);
-    },
-    on: (type: string, registered: (message: never) => void) => {
-      handlers.set(type, registered);
-    },
-  } as unknown as DomicileClient;
+  const fake = new FakeDomicileHost();
   return {
-    domicile,
-    says: (type: string, message: unknown) => {
+    domicile: fake.host,
+    presses: (chord: string) => {
       act(() => {
-        handlers.get(type)?.(message as never);
+        fake.dispatch("shortcut", { chord });
       });
     },
   };
 };
 
-/** The hook over a client that has been sent {@link KEYBOARD}. */
+/** The hook over a host. */
 const bound = (launcherOpen = false) => {
-  const { domicile, says } = client();
+  const { domicile, presses } = client();
   const acted: Action[] = [];
   const modes: string[] = [];
   const reported: string[] = [];
@@ -99,15 +61,14 @@ const bound = (launcherOpen = false) => {
     },
     { initialProps: { mode: "default" } },
   );
-  says("shell_config", KEYBOARD);
-  return { acted, modes, reported, rerender, says };
+  return { acted, modes, presses, reported, rerender };
 };
 
 describe("useKeybindings", () => {
   it("does what a `send-shell` binding says", () => {
-    const { acted, says } = bound();
+    const { acted, presses } = bound();
 
-    says("shortcut", meta(L));
+    presses("Meta+l");
 
     expect(acted).toStrictEqual([WindowAction.FocusStepped(Direction.Right)]);
   });
@@ -115,37 +76,37 @@ describe("useKeybindings", () => {
   it("answers only the launcher's own key while it is up", () => {
     // The panel is modal: a window focused behind it is the desktop reacting
     // to keys somebody pressed at the panel.
-    const { acted, says } = bound(true);
+    const { acted, presses } = bound(true);
 
-    says("shortcut", meta(L));
-    says("shortcut", meta(SPACE));
+    presses("Meta+l");
+    presses("Meta+space");
 
     expect(acted).toStrictEqual([WindowAction.LauncherToggled()]);
   });
 
   it("says which command it does not know, and does nothing", () => {
-    const { acted, reported, says } = bound();
+    const { acted, reported, presses } = bound();
 
-    says("shortcut", meta(X));
+    presses("Meta+x");
 
     expect(acted).toStrictEqual([]);
     expect(reported).toStrictEqual(["manganese: no command `terminal`"]);
   });
 
   it("says when a key enters a mode", () => {
-    const { modes, says } = bound();
+    const { modes, presses } = bound();
 
-    says("shortcut", meta(R));
+    presses("Meta+r");
 
     expect(modes).toStrictEqual(["resize"]);
   });
 
   it("reads the keys in the mode the desktop is in", () => {
     // Which another page of the desk may have entered.
-    const { acted, modes, rerender, says } = bound();
+    const { acted, modes, rerender, presses } = bound();
 
     rerender({ mode: "resize" });
-    says("shortcut", meta(L));
+    presses("Meta+l");
 
     expect(acted).toStrictEqual([WindowAction.WindowGrown(Direction.Right)]);
     expect(modes).toStrictEqual([]);

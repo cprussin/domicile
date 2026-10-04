@@ -7,42 +7,43 @@
 > It ships built JavaScript and `.d.ts` from `dist/`, not the TypeScript in
 > `src/`: run `bun run build` before anything outside the workspace resolves it.
 
-The in-page half of Domicile. A Domicile chrome is ordinary web content; this
-package is what lets that content talk to the compositor and mount real Wayland
-clients as DOM elements.
+The in-page half of Domicile. A Domicile chrome is ordinary web content; it
+talks to the compositor through `window.domicile`, which the forked engine puts
+on a document it served, and mounts real Wayland clients as `<app>` elements.
+This package is the TypeScript for that surface plus helpers around it.
 
 It provides these:
 
-- **`DomicileClient`** (`./domicile-client`) — the client for `window.domicile`, the
-  typed control channel the forked engine puts on a document it served. It
-  takes a `DomicileHost` and gives back a handler table for what the compositor
-  says and a typed call per thing the chrome asks of it. There is no handshake
-  and no wire: what it adds over the host itself is that it **registers its own
-  listeners in its constructor and holds what arrives before your `on` does** —
-  a DOM event dispatched with no listener is gone, and a React shell registers
-  tens of milliseconds after the compositor has announced every window already
-  running. For the same reason a page must never call `addEventListener` on
-  `window.domicile` itself. One message is not the compositor's: `open_url` is
-  an address `domicile open-url` asked the desktop to open — what `BROWSER`
-  runs inside it. Opening it is the shell's.
+- **`DomicileHost`** (`./domicile-host`) — the type of `window.domicile`,
+  mirroring the engine's IDL. State is readonly attributes (`windows`,
+  `focusedWindow`, `displays`, `theme`, `locked`, `idle`, `extensions`,
+  `tray`, `notifications`, …), each with a bare `<name>changed` event: read,
+  then listen, and a late listener misses nothing. Moments are events —
+  `focusrequested`, `openurl`, `shortcut` — and the engine holds each type
+  until its first listener exists; `audiolevels` is not held. `searchFiles`,
+  `previewFile` and `searchApps` return promises, and a newer call rejects the
+  older with an `AbortError`. `openurl` is not the compositor's: it is an
+  address `domicile open-url` asked the desktop to open — what `BROWSER` runs
+  inside it — and opening it is the shell's. `window.domicile` is optional in
+  the types and absent in a plain browser, so a shell checks for it.
 - **`Shell`** (`./shell`) — the type of a shell module's `Shell` export: what
   Domicile calls, once, with the element to draw in. A module without one is
   refused on the screen.
 - **`registerElements`** (`./register-elements`) — the input routing behind the
-  engine's `<app>` tag. It forwards the pointer over a window to the client
-  underneath in that client's own surface coordinates, and routes the page's
-  keystrokes to whichever window was last reached for. Nothing here says how big
-  a window is: an `<app>`'s layout box *is* the client's
-  `xdg_toplevel.configure`, and the engine states it off the layout it
-  performed. All of it is delegated from `document` over
-  `closest("app")`: the tag is the engine's, so there is no element class to hang
-  any of it on, and nothing here is registered. A click on a window fires a
-  cancelable `domicile-focus-requested` and then focuses the client, and a press
-  that lands off every window fires a cancelable
+  engine's `<app>` tag, until the engine does it itself. It forwards the
+  pointer over a window to the client underneath in that client's own surface
+  coordinates, and routes the page's keystrokes to whichever window was last
+  reached for. Nothing here says how big a window is: an `<app>`'s layout box
+  *is* the client's `xdg_toplevel.configure`, and the engine states it off the
+  layout it performed. All of it is delegated from `document` over
+  `closest("app")`: the tag is the engine's, so there is no element class to
+  hang any of it on, and nothing here is registered. A click on a window fires
+  a cancelable `domicile-focus-requested` and then focuses the client, and a
+  press that lands off every window fires a cancelable
   `domicile-focus-release-requested` on the window that holds the keyboard and
   then hands it back to the page — so a shell that wants focus to be its own
-  decision calls `preventDefault()` on either, and a shell with no opinion needs
-  to know nothing about them. A right-click over a window also loses the
+  decision calls `preventDefault()` on either, and a shell with no opinion
+  needs to know nothing about them. A right-click over a window also loses the
   browser's own context menu, because the press is forwarded and the menu a
   right-click asked for is the client's, drawn inside its surface. Only over an
   `<app>`: a `contextmenu` anywhere else — the desktop, a shell's chrome, the
@@ -51,10 +52,15 @@ It provides these:
   TypeScript for the element, which is the fork's. The surface embed and the size
   a client is configured at are both the layout box's and the engine reports
   them; there is nothing to call.
-- **`focusApp`** (`./focus-app`) — put the keyboard on a client without a click.
-  Not the same as `DomicileClient.focusApp`, which asks the compositor and stops:
-  keyboard events reach `document` rather than an element, so the SDK has to be
-  told too.
+- **`focusApp`, `focusChrome`** (`./focus-app`, `./focus-chrome`) — put the
+  keyboard on a client, or back on the page, without a click:
+  `focusApp(domicile, appId)`, `focusChrome(domicile)`. Not the same as
+  `domicile.focusApp` / `domicile.focusChrome`, which ask the compositor and
+  stop: keyboard events reach `document` rather than an element, so the SDK has
+  to be told too.
+- **`windowOf`, `surfaceSizeOf`** (`./windows`) — over `domicile.windows`: the
+  window a popup belongs to, however many popups deep, and the size a client
+  drew at (`undefined` before it has drawn).
 - **`<webview>`** (`./webview-element`) — types and event names only. The
   element is the engine's: `src` is the address it loads, `goBack` /
   `goForward` / `stop` / `reload` are what a chrome's address bar drives it
@@ -82,39 +88,39 @@ It provides these:
   shell opens a window whose view carries `popupwindow="<windowId>"` from its
   first render — the engine reads it once, as the view is connected — and that
   view is then the extension's window.
-- **`Extension`** (`./extension`) — one row of the tray, as
-  `DomicileClient.on("extensions", …)` delivers it, and the Zod schema it is
-  parsed with. A click on one is `DomicileClient.activateExtension(id)`, which
-  grants it `activeTab`; one with a `popup` is then a `<webview>` at that
-  address.
-- **`TrayItem`, `TrayAction`** (`./tray`) — one icon of the system tray, as
-  `DomicileClient.on("tray", …)` delivers it, and the button a click was. A
-  click is `DomicileClient.activateTrayItem(id, action)`.
-- **`bindKeys`** (`./bind-keys`) — a shell's own keys, claimed and answered:
+- **`bindKeys`** (`./bind-keys`) — a shell's own keys, grabbed and answered:
   `bindKeys(domicile, { keybindings, modes }, { onCommand, onModeChanged })`,
-  each table a chord (`"Meta+Shift+l"`) to a `KeyAction`. The chords are
-  resolved by `./own-keybindings` against the keyboard the compositor
-  describes (`shell_config`), again whenever the layout moves. A
+  each table a chord (`"Meta+Shift+l"`) to a `KeyAction`. It grabs every chord
+  of every mode by name with `domicile.grabShortcut`, once each — the engine
+  finds the key each keysym is on, again whenever the layout moves — and
+  answers each `shortcut` event by its `chord` in the current mode. A
   `KeyAction.SendShell(words)` calls `onCommand(words)`, whose meaning is the
   shell's; `KeyAction.Mode(name)` is answered here, and `onModeChanged` says
   the mode moved. It returns `{ unbind, setMode }`: `setMode` is how a desktop
   of several pages keeps one mode across them (one the shell lacks goes back
-  to `default`). It owns the `shell_config` and `shortcut` slots of
-  `DomicileClient.on`, and the chords it claims are never given back — the
-  channel cannot release one. `./keybindings` is its pure half (what a press
-  does in a mode) and `./key-action` the action a binding carries.
-- **`Notification`** (`./notification`) — one notification, as
-  `DomicileClient.on("notifications", …)` delivers it: an application's or a
-  site's. A press is `invokeNotificationAction(id, key)`, a clear
-  `dismissNotifications(ids)`.
-- **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
-  document, or a stand-in that does nothing when there is none. `hasHost` is
-  beside it for code that needs the answer rather than the object.
+  to `default`). A chord written wrong throws before anything is grabbed; a
+  keysym the keyboard cannot type is logged. Grabs are never given back.
+  `./own-keybindings` is the grammar only (one spelling per chord, filed by
+  mode) and `./key-action` the action a binding carries.
+- **`FakeDomicileHost`** (`./fake-host`) — a `window.domicile` for a shell's
+  tests. `host` is what the shell is handed; `set` changes attributes and
+  dispatches each `<name>changed` they owe; `appear`, `change` and `close` edit
+  `windows`; `dispatch` fires a moment (`shortcut`, `openurl`,
+  `focusrequested`); `calls` records every method the shell called. The asks
+  return promises that never settle.
+- **Shapes a shell reshapes rows into** — `Extension` (`./extension`),
+  `TrayItem` and `TrayAction` (`./tray`), `Notification` (`./notification`),
+  `./audio` and `./file-preview`. The engine's own rows are
+  `DomicileExtension`, `DomicileTrayItem`, `DomicileNotification` and the rest
+  in `./domicile-host`. A tray click is `domicile.activateTrayItem(id,
+  action)`; an extension's is `domicile.activateExtension(id)`, which grants it
+  `activeTab`, and one with a `popup` is then a `<webview>` at that address. A
+  notification's press is `domicile.invokeNotificationAction(id, key)`, a clear
+  `domicile.dismissNotifications(ids)`.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
-  `domicile-scene::Transform`, `./domicile-host` mirroring the engine's IDL,
-  `./host-message` for what the client delivers and how an event becomes one,
-  `./cursor-shape` for the keyword set a client can ask for, and `./input`
-  keycode mapping.
+  `domicile-scene::Transform`, `./cursor-shape` for the keyword set a client
+  can ask for, `./theme`, `./display-transform`, and `./input` keycode
+  mapping.
 - **The routing parts, published so they can be substituted** — `./measure` is
   what `registerElements` takes an override of, and `./element-transform` and
   `./surface-coordinates` are what invert a window's affine so a click under a
@@ -123,37 +129,44 @@ It provides these:
   invert is a perspective projection, which is not an affine at all; `./measure`
   maps the window flat and says so on the console. A shell needs none of them;
   a test of one does.
-- **The compositor's own JSON wire**, which **a page no longer speaks** —
-  `./protocol`, `./chrome-message`, `./newline-frames` and `./host-stream` are
-  there for `@domicile-desktop/e2e-harness`, a headless stand-in for a chrome that
-  talks to the compositor's socket directly. The one exception is
-  `shell_config`, which the engine forwards as the compositor's line:
-  `./host-message` parses it with `./protocol`'s schema.
+
+The compositor's own JSON wire is not here: a page never speaks it. Its
+schemas and framing live in
+[`@domicile-desktop/e2e-harness`](../e2e-harness/README.md), the headless
+stand-in for a chrome that talks to the compositor's socket directly.
 
 ## Usage
 
 ```ts
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
-const domicile = new DomicileClient(connectToHost(window));
-registerElements(domicile);
+export const Shell: ShellModule = (root) => {
+  const domicile = window.domicile;
+  if (domicile === null || domicile === undefined) {
+    return; // a plain browser: no desktop
+  }
+  registerElements(domicile);
+
+  const show = () => {
+    // Render `domicile.windows` as `<app app-id="…">` elements into `root`.
+  };
+  show();
+  domicile.addEventListener("windowschanged", show);
+};
 ```
 
-That is the whole of it. There is nothing to await: `connect()` is gone with
-the handshake it performed, the compositor's protocol version is checked in the
-browser process and only logged, and the first call on the channel is what
-binds it. Say what you have to say as soon as you have a domicile.
+That is the whole of it. There is nothing to await and no setup call: the
+compositor's protocol version is checked in the browser process and only
+logged, the engine reports the page's size and density itself, and the first
+call on the channel is what binds it.
 
-Opened in an ordinary browser there is no `window.domicile` at all —
-`vite dev` on a shell's page is a real thing to do — and `connectToHost` hands
-back a stand-in that does nothing and says so once on the console. Ask
-`hasHost(window)` if your own code needs the answer.
+Opened in an ordinary browser there is no `window.domicile` at all. Develop
+against the real desktop instead (`./scripts/dev-shell.sh <shell>` in this
+repo).
 
-`navigator.domicile` is the same object and still reads, so `connectToHost`
-takes either global and prefers neither. `window.domicile` is the spelling the
-guides use.
+`navigator.domicile` is the same object and still reads. `window.domicile` is
+the spelling the guides use.
 
 Then render `<app app-id="…">` / `<webview src="…">` as normal DOM and style
 them with ordinary CSS — rounding, blur, transforms, and z-index all apply to the
@@ -184,25 +197,26 @@ document.addEventListener("keydown", follow);
 document.addEventListener("keyup", follow);
 ```
 
-**Not off the host's `modifiers` message, today.** It reports the compositor's
-seat, and the seat only knows the keys this page forwarded to it — which is
-only the keys pressed while a client held the keyboard. A modifier pressed
-while the chrome held it never reaches the seat, and the next forwarded key
-makes the message deny it: a shell that believed the message over its own
-keystrokes read a held Alt as let go of. The message is still sent, and is what
-will say so on the day the compositor reads input itself rather than being
-handed it by this page; it cannot know more than this page until then.
+**Not off the host's `altKey` / `ctrlKey` / `shiftKey` / `metaKey`, today.**
+They report the compositor's seat, and the seat only knows the keys this page
+forwarded to it — which is only the keys pressed while a client held the
+keyboard. A modifier pressed while the chrome held it never reaches the seat,
+and the next forwarded key makes the attributes deny it: a shell that believed
+them over its own keystrokes read a held Alt as let go of. They are still
+kept, and are what will say so on the day the compositor reads input itself
+rather than being handed it by this page; they cannot know more than this page
+until then.
 
 ## Dependencies
 
-`zod`, in two places and both of them boundaries. `./protocol` parses the
-compositor's JSON for the headless harness rather than casting it. And
-`./cursor-shape` parses one field off the typed channel — not because the
-engine fails to check it, since `DomicileAppCursorEvent.cursor` is a WebIDL
-`enum` over the same closed set, but because this package and the engine are
-published apart. A shape this list has and the running engine does not arrives
-as a keyword no `DomicileCursorShape` names, and an unknown keyword assigned to
-`style.cursor` fails silently.
+`zod`, for the schemas this package exports — `./cursor-shape`, `./theme`,
+`./display-transform`, `./extension`, `./tray`, `./notification` and
+`./file-preview` — which a shell parses what `window.domicile` hands it with.
+Not because the engine fails to check it — `DomicileWindow.cursor` is a WebIDL
+`enum` over the same closed set as `./cursor-shape` — but because this package
+and the engine are published apart. A shape this list has and the running
+engine does not arrives as a keyword no `DomicileCursorShape` names, and an
+unknown keyword assigned to `style.cursor` fails silently.
 
 Nothing else. `@cprussin/option-result` was a dependency for exactly one
 outcome — `connect()` returning `Result<number, HandshakeFailure>` — and there

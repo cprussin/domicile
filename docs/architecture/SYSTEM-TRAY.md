@@ -11,7 +11,7 @@ application ──RegisterStatusNotifierItem──▶ compositor (org.kde.Status
                                                     ▼
                                          engine: `tray` event, DomicileTrayItem
                                                     ▼
-                                    shell: DomicileClient.on("tray") → icons
+                                    shell: domicile.tray, traychanged → icons
 shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_item ─▶ compositor
             ─▶ Activate / SecondaryActivate / ContextMenu on the item
 ```
@@ -22,7 +22,7 @@ shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_ite
 | What an item's properties show as (title, picture, hidden), the `Registry`, pixmap → PNG | `packages/domicile-host/src/tray.rs`, `png.rs` |
 | The bus: watcher, host name, signals, clicks | `packages/domicile-compositor/src/tray.rs` |
 | `tray` event, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
-| `TrayItem`, `TrayAction`, `activateTrayItem` | `@domicile-desktop/sdk/tray`, `domicile-client` |
+| `DomicileTrayItem`, `tray`, `activateTrayItem`; `TrayItem`, `TrayAction` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/tray` |
 | Manganese's tray, one row with the extensions' actions, reorderable | `packages/shell-manganese/src/tray/` |
 
 ## Key decisions

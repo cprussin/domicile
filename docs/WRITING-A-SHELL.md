@@ -86,35 +86,29 @@ port.
 
 ## The connection
 
-One call, and it is the whole of the wiring:
+There is no wiring. The channel is `window.domicile`, a property the engine
+puts on a document it served:
 
 ```ts
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-
-const domicile = new DomicileClient(connectToHost(window));
+const domicile = window.domicile;
+if (domicile === null || domicile === undefined) {
+  return; // a plain browser: no desktop
+}
 ```
 
-`connectToHost` reads `window.domicile`, which is the control channel the
-engine puts on a document it served. There is nothing to configure and nothing
-to pass: it is a property of the page, so no query string carries a socket path
-and no two things can disagree about where the compositor is.
+There is nothing to configure and nothing to pass: it is a property of the
+page, so no query string carries a socket path and no two things can disagree
+about where the compositor is. Its type is `DomicileHost`, from
+`@domicile-desktop/sdk/domicile-host`.
 
 `navigator.domicile` is the same object and keeps working — the engine hangs
 one host off the window and answers both spellings with it, so a listener bound
-through either is bound to the one channel. Write `window.domicile`: system
-state is reached at `window.domicile.<interface>` with nothing to register
-first, and that is the surface the rest of this guide names.
+through either is bound to the one channel. Write `window.domicile`; it is the
+surface the rest of this guide names.
 
-A page with no compositor gets a stand-in that does nothing, so the layout
-still lays out, and `connectToHost` says once, on the console, that there was no
-compositor to find and so no window will ever appear. That one line covers the
-elements as well: the thing that defines `<app>` is the thing that binds
-`window.domicile`, so a page with an `<app>` that can never show a window is
-exactly the page this warned about. There an `<app>` is an
-`HTMLUnknownElement` — it takes a box and shows nothing, and the SDK routes
-pointers over it as usual. Ask `hasHost(window)` if you need the question
-answered in your own code; do not reconstruct it.
+**In a plain browser it is absent**, and the types say so: the property is
+optional and nullable, so every shell checks for it. There an `<app>` is an
+`HTMLUnknownElement` — it takes a box and shows nothing.
 
 Do not develop against that, though: it is the chrome with every window in it
 missing, and a desktop's interesting behavior is all on the other side of the
@@ -133,24 +127,35 @@ windows stay where they are
 **A shell does nothing about versions, and waits for nothing.** The channel is
 a typed surface rather than a message pipe: the compositor's protocol version
 is checked in the browser process, which logs a disagreement and carries on,
-and a page has no part in it. Say what you have to say as soon as you have a
-client, and the first call is what binds the channel.
+and a page has no part in it. Say what you have to say as soon as you have
+`window.domicile`, and the first call is what binds the channel.
 
-What a shell *does* have to think about is registration order, and
-`DomicileClient` is what handles it: it registers its own listeners in its
-constructor and holds anything that arrives before your `on` does. A React
-shell registers in its first effect flush, tens of milliseconds late, and every
-window already running is announced before then.
+**Nor does registration order matter.** What has a current value is an
+attribute — `windows`, `focusedWindow`, `displays`, `theme`, `locked`,
+`idle`, `extensions`, `tray`, `notifications` and the rest — and a change to
+it dispatches a bare `<name>changed` with no payload (`audiochanged`,
+`batterychanged` and `modifierschanged` each cover a group: `audioOutputs`
+and its siblings, `batteryCharge` and `batteryCharging`, `altKey` and its
+siblings). Read, then listen:
 
-**So never call `addEventListener` on `window.domicile` yourself.** It
-works, and it works for everything dispatched after your listener existed —
-which on a desktop with no clients open is everything, which is what makes the
-bug invisible until somebody reloads with a terminal running.
+```ts
+const show = () => draw(domicile.displays);
+show();
+domicile.addEventListener("displayschanged", show);
+```
 
-The desktop is not an event at all: `domicile.displays` reads it whenever you
-ask, so a component that mounts long after the compositor described one still
-gets it. `domicile.on("displays", …)` is for reacting to a change, not for
-learning what is there.
+A component that mounts long after the compositor described the desktop still
+reads it. An attribute is `null` until the compositor has said anything;
+`windows` starts empty.
+
+What has no current value — `focusrequested`, `openurl`, `shortcut` — is an
+event, and **the engine holds each type until its first listener exists**, so
+a React shell registering in its first effect flush misses none.
+`audiolevels` is the exception: a meter flows only while something listens.
+
+**Asks return promises.** `searchFiles`, `previewFile` and `searchApps`
+resolve with the answer; a newer call of the same one rejects the older with
+an `AbortError`, which is a superseded query rather than a failure.
 
 ## Reporting a failure
 
@@ -159,8 +164,8 @@ started from.
 
 There is no way for a page to stop the desktop, and it does not need one. What
 a shell can still get wrong is calling the compositor something it will not
-accept — an empty argv, a keycode of zero, a device pixel ratio that is not
-positive — and those *throw*, from the call, because they are bugs in the page
+accept — an empty argv, a keycode of zero, a chord written wrong — and those
+*throw*, from the call, because they are bugs in the page
 rather than outcomes it has to handle.
 
 ## The configuration
@@ -318,8 +323,8 @@ and a shell that read it would be asking the engine what the engine was told.
 { "theme": { "mode": "light" } }
 ```
 
-**What it changes is the whole desk, not the page.** The shell is told the
-theme with the handshake and again whenever it moves; the compositor hands the
+**What it changes is the whole desk, not the page.** The shell reads it as
+`domicile.theme`, and `themechanged` says it moved; the compositor hands the
 same value to the *settings portal* — `color-scheme` in the
 `org.freedesktop.appearance` namespace, which GTK4, Qt6, Electron and Firefox
 all read and follow while they run — and draws the sites in browser windows
@@ -330,9 +335,9 @@ once in the log that its clients will not be following it.
 animates the change — a view transition, say — captures the frame it leaves,
 and the windows are in it. So the compositor tells the chromes first and holds
 the windows until every chrome calls `domicile.themeCaptured(theme)`, then
-answers with a `windows_theme` message once they have repainted. Call it from
-inside the transition's update and return a promise that settles on that
-message: the old frame stays up until then, and the transition reveals windows
+sets `domicile.windowsTheme` and dispatches `windowsthemechanged` once they
+have repainted. Call it from inside the transition's update and return a
+promise that settles on that event: the old frame stays up until then, and the transition reveals windows
 already turned. A shell with no animation calls it as soon as it is told.
 One that never calls it gets its windows turned anyway, a second late.
 `ThemeProvider` in `@domicile-desktop/component-library` does all of this; a shell
@@ -426,14 +431,18 @@ One package, published to npm and usable outside this repo:
 
 | Package | What |
 |---|---|
-| `@domicile-desktop/sdk` | `DomicileClient` (the control channel), `connectToHost` (finding it), `registerElements` (the input routing over your `<app>` elements), `focusApp` and `focusChrome`, and the pure helpers around them. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
+| `@domicile-desktop/sdk` | The types of `window.domicile` (`domicile-host`) and of `Shell`; `registerElements` (the input routing over your `<app>` elements); `focusApp` and `focusChrome`; `bindKeys` (your keys); `windows` (`windowOf`, `surfaceSizeOf`); `fake-host` (`FakeDomicileHost`, for your tests); and pure helpers. `<app>` and `<webview>` are the engine's own tags: the SDK types them and names the events on them, and registers nothing. |
 
-It is not required. A shell may drive `window.domicile` itself — it is a
-typed surface rather than a wire, described in
-`@domicile-desktop/sdk/domicile-host` and, definitively, in the IDL under
+`window.domicile` is the API; the SDK is its types plus helpers. The
+definitive contract is the IDL under
 `packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/`.
-Doing so means handling the registration order above yourself, along with the
-input mapping that `registerElements` does.
+The one helper a shell cannot skip today is `registerElements`: until the
+engine routes input under `<app>` itself, it is what forwards the pointer and
+keyboard to clients.
+
+**Test against `FakeDomicileHost`.** Hand its `host` to your shell, `set`
+attributes (each dispatches the `<name>changed` it owes), `appear` and `close`
+windows, `dispatch` moments, and read back every call in `calls`.
 
 `@domicile-desktop/component-library` is **not** part of the contract. It is the React
 and Panda CSS design system this repo's own shells are built from, and it exists
@@ -448,28 +457,38 @@ One source file and a build config. The full version, with the comments, is in
 **`src/index.ts`** — the page, and the whole of the shell's behavior:
 
 ```ts
-import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root) => {
-  const domicile = new DomicileClient(connectToHost(window));
+  const domicile = window.domicile;
+  if (domicile === null || domicile === undefined) {
+    return;
+  }
   registerElements(domicile);
 
   const mounted = new Map<string, HTMLElement>();
 
-  domicile.on("app_appeared", ({ app_id }) => {
-    const element = document.createElement("app");
-    element.setAttribute("app-id", app_id);
-    root.append(element);
-    mounted.set(app_id, element);
-  });
+  const show = () => {
+    const windows = domicile.windows;
+    for (const [appId, element] of mounted) {
+      if (!windows.some((window) => window.appId === appId)) {
+        element.remove();
+        mounted.delete(appId);
+      }
+    }
+    for (const { appId } of windows) {
+      if (!mounted.has(appId)) {
+        const element = document.createElement("app");
+        element.setAttribute("app-id", appId);
+        root.append(element);
+        mounted.set(appId, element);
+      }
+    }
+  };
 
-  domicile.on("app_closed", ({ app_id }) => {
-    mounted.get(app_id)?.remove();
-    mounted.delete(app_id);
-  });
+  show();
+  domicile.addEventListener("windowschanged", show);
 };
 ```
 
@@ -482,23 +501,22 @@ That is a working desktop: every window full-screen, newest on top. A real
 shell differs from it only in where it puts the elements.
 
 **A window's menus are `<app>` elements too.** A client's popup — a menu, a
-tooltip — arrives as `popup_placed`: its own `app_id`, the `parent` it is over
-(a window, or another popup for a submenu), and a `position` and `size` in CSS
-pixels from the top-left of that parent's box. Mount an `<app>` for it there,
-above its window, and take it down on `app_closed` like any other. It is not a
-window: give it no frame, do not tile it, and draw it only where its window is
-drawn. The SDK already routes a click on one to its window's keyboard
-(`DomicileClient.windowOf`), and the compositor dismisses a menu when the
+tooltip — is an entry in `windows` whose `parent` is set: the window it is
+over, or another popup for a submenu. Its `x` and `y` are CSS pixels from the
+top-left of that parent's box, `width` and `height` its size, and `grab` says
+it is a menu. Mount an `<app>` for it there, above its window, and take it down
+when `windows` drops it like any other. It is not a window: give it no frame,
+do not tile it, and draw it only where its window is drawn. The SDK already
+routes a click on one to its window's keyboard (`windowOf`, from
+`@domicile-desktop/sdk/windows`), and the compositor dismisses a menu when the
 keyboard leaves its window. The example does it in a dozen lines; a popup the
 compositor placed near a screen edge is not moved back onto the screen.
 
-`app_closed` is in there rather than left out because without it every window
-leaks an element. The example's `app_closed` also *throws* on an app it never
-mounted, because a close for something never announced means the page and the
-compositor disagree about what is on screen.
+Removing what `windows` no longer lists is in there rather than left out
+because without it every closed window leaks an element.
 
-There is nothing to report. The engine tells the compositor the page's size
-and density itself, as the channel binds and on every change.
+There is no setup call. The engine tells the compositor the page's size and
+density itself, as the channel binds and on every change.
 
 There is no document to write. **Domicile writes it**: a charset, a
 viewport, and a `<body>` that fills the window with no margin. That last one is
@@ -526,20 +544,17 @@ anything a person would recognize.
 ## What a window has to be told
 
 **One thing, and it is CSS.** A client can ask for a cursor to be shown while
-the pointer is over its window, and that reaches you as `app_cursor`:
+the pointer is over its window, and that is the entry's `cursor` — a CSS
+keyword. In `show` above:
 
 ```ts
-domicile.on("app_cursor", ({ app_id, cursor }) => {
-  const element = mounted.get(app_id);
+for (const { appId, cursor } of domicile.windows) {
+  const element = mounted.get(appId);
   if (element !== undefined) {
     element.style.cursor = cursor;
   }
-});
+}
 ```
-
-A window that is not there is not a mistake here, unlike on `app_closed` above:
-the host drains what it was already sending for a client whose close you have
-acted on.
 
 That is all of it. The element is yours — you position it, size it, round it and
 blur it — and its cursor is the same kind of act. A React shell writes
@@ -549,19 +564,19 @@ blur it — and its cursor is the same kind of act. A React shell writes
 says at all: an `<app>`'s layout box *is* the client's
 `xdg_toplevel.configure`, and the engine states it off the layout it performed,
 so styling the element is the whole of resizing a window. And the size the
-client drew at comes back on its own. `app_resized` still arrives, and you are
-welcome to it — `shell-simple` uses it to take a "nothing here yet" placeholder
-down — but you do not have to route it anywhere: the SDK records it off the
-channel as the message goes past, because scaling a pointer position into the
-client's own pixels is the only use anyone has for it. A shell that holds that
-size is a courier.
+client drew at is the entry's `width` and `height` (`null` until it has drawn).
+You are welcome to it — `shell-simple` uses it to take a "nothing here yet"
+placeholder down — but you do not have to route it anywhere: the SDK reads it
+off `domicile.windows` (`surfaceSizeOf`), because scaling a pointer position
+into the client's own pixels is the only use anyone has for it. A shell that
+holds that size is a courier.
 
 The element is the engine's, and it has no methods of its own for either of
 these: a cursor is a style and a size is something the SDK already has.
 
-**A client's limits are yours to keep, if you size windows.** `app_min_size`
-and `app_max_size` say the smallest and largest a client will draw, per axis,
-with `undefined` for no limit. A box outside them gets a frame that does not
+**A client's limits are yours to keep, if you size windows.** `minWidth`,
+`minHeight`, `maxWidth` and `maxHeight` say the smallest and largest a client
+will draw, with `null` for no limit. A box outside them gets a frame that does not
 fill it: cut off at the box's edge where the client will not shrink, stretched
 where it will not grow. `shell-manganese` holds its floating windows inside
 them; a tiling layout that cannot is left with the cut-off edge.
@@ -668,23 +683,24 @@ treats the tag as an ordinary HTML element: it writes neither a property it does
 not recognize nor an `on…` prop for an event it has never heard of. Bind this
 event with `addEventListener` on a ref. `<webview>`'s four events are the same.
 
-**A client asking for focus** is the second, and it arrives as a message rather
-than an event: `domicile.on("focus_requested", ({ app_id }) => …)`. This is
+**A client asking for focus** is the second, and it arrives on the host rather
+than on the element, as `focusrequested` with the window's `appId`. This is
 `xdg-activation` — "open this link in the browser I already have running", and
 also the dialog that puts itself in front of what you were typing into. The
 compositor does not grant it and makes no attempt to tell those two apart; it
 passes the question on with the seat where it was. Answer with
-`domicile.focusApp(app_id)`, or do nothing, which is a desktop where a background
-window cannot take the keyboard.
+`focusApp(domicile, appId)`, or do nothing, which is a desktop where a
+background window cannot take the keyboard.
 
-**Where it actually is** comes back on `focus_changed`, which reports the
-answer rather than asking anything. Your shell's idea of the active window and
+**Where it actually is** is `domicile.focusedWindow` — `null` while your page
+holds it — and `focusedwindowchanged` says the compositor reported it. It is
+the answer rather than a question. Your shell's idea of the active window and
 the compositor's seat are two different facts, and this is the one that says
 where the keys are going. It also arrives for the one move the compositor makes
 on its own: a focused client that crashes hands the keyboard back to the page,
 because a keyboard pointed at a surface that is gone is a desktop that has
-stopped listening. That is a fallback and not a decision — the `app_closed` for
-that window reaches you first, so a shell that would rather move to the next
+stopped listening. That is a fallback and not a decision — `windows` drops
+that window first, so a shell that would rather move to the next
 window says so and has the last word.
 
 **If your focus follows the cursor, take the cursor with it.** A desktop where
@@ -694,7 +710,7 @@ the next pointer event over it — a window sliding into the space the layout
 just changed, without the user moving anything — focuses it again. sway answers
 this with `mouse_warping` and so does every other compositor, from the outside;
 here the shell is a page, and a page can read where the pointer is and cannot
-put it anywhere. So ask: `domicile.warpPointer([x, y])`, in your own page
+put it anywhere. So ask: `domicile.warpPointer(x, y)`, in your own page
 coordinates — the ones a `PointerEvent` reports as `clientX`/`clientY`, which
 are the ones you laid the window out in, on whichever monitor that is. A point
 outside your page is clamped into it, and where something else owns the
@@ -734,20 +750,25 @@ bindKeys(
 ```
 
 A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) and an xkb keysym name,
-joined by `+`. The compositor says which key each keysym is on in the
-configured layout (`shell_config`), so `Meta+parenleft` is right on
-Programmer's Dvorak and on QWERTY alike, and moves when the layout does. A
-chord written wrong, or whose keysym the keyboard cannot type, throws.
+joined by `+`. The engine finds the key each keysym is on in the configured
+layout, so `Meta+parenleft` is right on Programmer's Dvorak and on QWERTY
+alike, and moves when the layout does. A chord written wrong throws before
+anything is grabbed; a keysym the keyboard cannot type is logged, and the rest
+still work.
 
-It claims every chord, matches a press whether it landed on the page or in a
-`<webview>`, runs `Mode` itself, and hands you every `SendShell`. What a
+It grabs every chord of every mode by name (`domicile.grabShortcut`), answers
+each `shortcut` event by its `chord`, whether the press landed on the page or
+in a `<webview>`, runs `Mode` itself, and hands you every `SendShell`. It
+returns `{ setMode, unbind }`: `setMode` keeps one mode across a desktop of
+several pages. What a
 command *means* is yours. Take the keys from whoever configures your shell —
 manganese's are `runManganese({ keybindings })`, with sway's as the default —
 and your README is where your vocabulary lives; manganese's is
 [here](/packages/shell-manganese/README.md).
 
-**A claim is never given back**, so a key a layout change moves off stays the
-desk's until restart. Why it is built this way:
+**A grab is never given back**, so a bare key bound in a mode is taken from
+every client for the session, not only while the mode is on. Why it is built
+this way:
 [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
 
 ## When nobody is at the desk
@@ -756,10 +777,12 @@ A desk that has gone untouched for `idle.blank_after_seconds` turns its screens
 off, and your shell is told:
 
 ```ts
-domicile.on("idle", ({ idle }) => {
+const showIdle = () => {
   // `true` is a desk nobody is at. `false` is somebody back at it.
-  document.body.classList.toggle("idle", idle);
-});
+  document.body.classList.toggle("idle", domicile.idle === true);
+};
+showIdle();
+domicile.addEventListener("idlechanged", showIdle);
 ```
 
 **You cannot work this out for yourself, and the web platform's own answers are
@@ -768,37 +791,36 @@ visible while the glass is off — the compositor turns the connector off
 underneath the browser, which is told nothing about it. `visibilityState`, an
 idle detector and a timer of your own all say somebody is here on a desk nobody
 has been at for an hour. The compositor is what every key and every pointer
-movement on this desktop passes through, so counting hands is its job, and this
-message is that count.
+movement on this desktop passes through, so counting hands is its job, and
+`domicile.idle` is that count.
 
-**It is the state, not the edge, and you are told it again when your page
-connects.** The compositor decides an edge — a dark desk must not ask for a
-modeset on every tick — but a page reloads, and a page that has just loaded has
-missed every edge there was. So a shell rebuilt while the desk was idle comes
-back knowing it is idle, the same way it comes back knowing which windows are
-open.
+**It is the state, not the edge.** The compositor decides an edge — a dark
+desk must not ask for a modeset on every tick — but a page reloads, and a page
+that has just loaded has missed every edge there was. The attribute is what
+the compositor last said, so a shell rebuilt while the desk was idle comes back
+knowing it is idle, the same way it comes back knowing which windows are open.
 
 **It does not lead the blanking. Do not draw as if it does.** The screens go
-dark in the same breath the message arrives: there is no warning here to fade
+dark in the same breath `idlechanged` arrives: there is no warning here to fade
 on, count down with, or show a "locking in ten seconds" over. What *is* worth
 doing on the idle edge is arranging what will be true when the screens come
 **back** — because the other edge does lead. Relighting a CRTC takes tens of
 milliseconds and your repaint takes one, so a panel you close or a secret you
-put away on `idle: false` is already closed by the time there is light to read
+put away when `idle` turns `false` is already closed by the time there is light to read
 it by. A desk that warns before it goes dark wants a lead time nothing in the
 config states yet; [ROADMAP.md](/ROADMAP.md) carries that.
 
-**It is not the lock, and drawing on this message does not make one.** A dark
+**It is not the lock, and drawing on it does not make one.** A dark
 screen is a screen, and anybody can still type at this desktop: the seat is the
 compositor's, so refusing to deliver what is typed is its decision rather than
-your page's. A shell that raised a lock screen on `idle: true` alone has drawn a
-picture of one. The real thing is a message of its own, and its own state in the
+your page's. A shell that raised a lock screen on `idle` alone has drawn a picture of
+one. The real thing is an attribute of its own, and its own state in the
 compositor — see [A locked desk](#a-locked-desk).
 
-**A desktop that never blanks sends nothing at all** — not even `idle: false`.
+**A desktop that never blanks leaves `idle` at `null`** — not `false`.
 Leaving `idle.blank_after_seconds` out is a desk with no opinion about who is at
-it, so a shell that has never had one of these has no idle affordance to draw,
-which is a different thing from having been told somebody is here.
+it, so a shell that reads `null` has no idle affordance to draw, which is a
+different thing from having been told somebody is here.
 
 ## A locked desk
 
@@ -808,17 +830,19 @@ the user the desktop runs as, or `lock.passphrase`. Your shell is told, and what
 it draws is a lock screen:
 
 ```ts
-domicile.on("locked", ({ locked }) => {
+const showLocked = () => {
   // `true` is a desk that delivers nothing to any client. `false` is one that
   // does.
-  setLocked(locked);
-});
+  setLocked(domicile.locked === true);
+};
+showLocked();
+domicile.addEventListener("lockedchanged", showLocked);
 
 // And the way out, which is an offer rather than a decision:
 domicile.unlock(typed);
 
 // Or lock it now, from a chord or a menu item. The lock screen goes up on the
-// `locked: true` that answers it, like any other:
+// `lockedchanged` that answers it, like any other:
 domicile.lock();
 ```
 
@@ -841,7 +865,7 @@ the refusal is a line in the compositor's log, like a wrong passphrase.
 **And nothing is read out of the machine for you.** `searchFiles`,
 `previewFile` and `searchApps` at a locked desk never settle — the same nothing a desktop with no index
 answers, whatever the query or path, so it says nothing about what is on the
-disk. Ask again on `locked: false`. `setTheme` is still taken: it opens nothing
+disk. Ask again once `locked` is `false`. `setTheme` is still taken: it opens nothing
 and reads nothing.
 
 So the things that would defeat a lock a page held do not defeat this one. A
@@ -854,16 +878,18 @@ one edited in the devtools of the browser that is drawing it: there is no
 possible rather than a hole in one.** You are the thing forwarding, so you can
 hold the keyboard, take a passphrase into a field and show what you like — none
 of it arrives anywhere. `unlock` hands what was typed to the compositor, which
-checks it and, if it was right, sends `locked: false` to **every** chrome on
-the desk. Clear your lock screen on that message and never on your own submit: a
+checks it and, if it was right, turns `locked` `false` on **every** chrome on
+the desk. Clear your lock screen on that `lockedchanged` and never on your own
+submit: a
 page that believed its own keystrokes would be a lock anybody could open by
-editing the page, which is the same reason `setTheme` comes back as a `theme`
-event.
+editing the page, which is the same reason `setTheme` comes back as a
+`themechanged`.
 
-**A wrong passphrase is answered with `locked: true` again.** Every check is
-answered to every chrome once it is over, and nothing else sends `locked: true`
-to a desk being checked — that desk is already shut — so a `true` while your
-page has a passphrase out is the refusal. Hold your field until then, and clear
+**A wrong passphrase is answered with a `lockedchanged` whose `locked` is
+still `true`.** Every check is answered to every chrome once it is over, and
+nothing else dispatches `lockedchanged` at a desk being checked — that desk is
+already shut — so one while your page has a passphrase out, with `locked`
+`true`, is the refusal. Hold your field until then, and clear
 it on the refusal or the `false`. A verifier that could not check is answered
 the same way; the compositor tells the two apart only in its own log, without
 the passphrase in it. There is no count on this protocol yet;
@@ -871,21 +897,20 @@ the passphrase in it. There is no count on this protocol yet;
 
 **A right one takes as long as PAM takes, and the desk stays shut until then.**
 The check runs beside the compositor rather than in it, so nothing on the desk
-stalls — but a key your page forwards before `locked: false` arrives still
+stalls — but a key your page forwards before `locked` turns `false` still
 reaches no client, and a second `unlock` sent while the first is being checked
 is dropped. PAM also sleeps on a *wrong* password, a couple of seconds on most
 machines, so do not read a slow answer as no answer.
 
-**It is a state, and you are told it again when your page connects.** Which here
-is the point rather than a convenience: the edge that shut the desk went out
+**It is a state, and a page that loads late reads it.** Which here is the
+point rather than a convenience: the edge that shut the desk went out
 before a reloaded page existed, and a shell that had missed it would draw an open
 desktop over a desktop that is listening to nothing — and take a password into a
 text field no client will ever read.
 
-**A desktop that states neither sends none of these**, not even a `false`.
+**A desktop that states neither leaves `locked` at `null`**, not `false`.
 It cannot lock: a desk that locked with nothing to open it would be a desk nobody
-could get back into. So a shell that has never had one of these has no lock to
-draw, which is a different thing from having been told the desk is open.
+could get back into. So a shell that reads `null` has no lock to draw, which is a different thing from having been told the desk is open.
 
 One thing this is not, and it is worth knowing before you build on it. A
 desk that states `lock.passphrase` rather than `lock.pam_service` is opened by a
@@ -1018,7 +1043,7 @@ where `focusin` follows upstream's rules.
 There is one seat and something is always in it, and a browser window names no
 client — its page is inside your own. Three things follow, none optional:
 
-- **Say the page has the keyboard** with `domicile.focusChrome()` when a
+- **Say the page has the keyboard** with `focusChrome(domicile)` when a
   browser window becomes the window being worked in. Without it the terminal
   that was focused keeps the seat while the user types into a site, and every
   key they press is delivered to a window they have switched away from.
@@ -1053,9 +1078,10 @@ client — its page is inside your own. Three things follow, none optional:
 - **Your desktop chords still reach you**, because `bindKeys` claims them —
   see [Keybindings](#keybindings). The browser process is the only layer above
   a focused guest: a key pressed on a site reaches neither this page nor the
-  compositor, so a claimed chord comes back as a `shortcut` message rather than
-  a DOM event. `domicile.grabShortcut` is the claim underneath, for a chord the
-  config does not name.
+  compositor, so a claimed chord comes back as a `shortcut` event on
+  `window.domicile` rather than a key event on the page.
+  `domicile.grabShortcut("Meta+Shift+l")` is the grab underneath, for a chord
+  your bindings do not name; its press carries `chord: "Meta+Shift+l"`.
 
 Whether the window holds the keyboard at all is one question over both halves,
 and the fork makes it one test: a `<webview>` whose guest has the focus is your
@@ -1101,11 +1127,11 @@ whole, and a link is what this is for.
 
 **An app opening a link asks the same thing, of the desktop rather than of a
 page.** Inside a desktop `BROWSER` is `domicile-open-url`, which is `domicile
-open-url <url>`: the address reaches your page as an `open_url` message, and
-the window is yours to open the same way.
+open-url <url>`: the address reaches your page as an `openurl` event, held
+until you listen, and the window is yours to open the same way.
 
 ```ts
-domicile.on("open_url", ({ url }) => {
+domicile.addEventListener("openurl", ({ url }) => {
   openBrowserWindow(url);
 });
 ```
@@ -1191,13 +1217,15 @@ directories, absolute or under `~`.
 bubble: a named extension gets the permissions its manifest declares, and one
 dropped from the list is uninstalled on the reload.
 
-**What your shell sees** is `extensions`: the whole list on every change, and
-once when the page connects.
+**What your shell sees** is `domicile.extensions`: the whole list, `null`
+until the engine has said, with `extensionschanged` on every change.
 
 ```ts
-domicile.on("extensions", ({ extensions }) => {
-  drawTray(extensions.filter(({ enabled }) => enabled));
-});
+const showExtensions = () => {
+  drawTray((domicile.extensions ?? []).filter(({ enabled }) => enabled));
+};
+showExtensions();
+domicile.addEventListener("extensionschanged", showExtensions);
 ```
 
 | Field | What |
@@ -1207,10 +1235,10 @@ domicile.on("extensions", ({ extensions }) => {
 | `title` | The action's tooltip, and the icon's accessible name |
 | `icon` | A `data:image/png` URL at the page's device pixel ratio |
 | `badgeText`, `badgeColor` | The badge. `badgeColor` is `#rrggbbaa`, transparent when unset |
-| `popup` | The popup's `chrome-extension://` URL, or `undefined` |
+| `popup` | The popup's `chrome-extension://` URL, or `null` |
 | `enabled` | `false` after `action.disable()` |
 
-The row type is `Extension`, from `@domicile-desktop/sdk/extension`.
+The row type is `DomicileExtension`, from `@domicile-desktop/sdk/domicile-host`.
 
 **Every click is `domicile.activateExtension(id)`**, popup or not. It is
 Chrome's toolbar click: the extension gets `activeTab` on the focused browser
@@ -1304,13 +1332,15 @@ is manganese's.
 ## The system tray
 
 Applications' tray icons — StatusNotifierItem, which the compositor hosts on
-the session bus — arrive as `tray`: the whole tray on every change, and once on
-connecting. A click goes back with the button it was.
+the session bus — are `domicile.tray`: the whole tray, with `traychanged` on
+every change. A click goes back with the button it was.
 
 ```ts
-domicile.on("tray", ({ items }) => {
-  drawTray(items); // { id, title, icon: a data: URL or undefined }
-});
+const showTray = () => {
+  drawTray(domicile.tray ?? []); // { id, title, icon: a data: URL or "" }
+};
+showTray();
+domicile.addEventListener("traychanged", showTray);
 domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 ```
 
@@ -1322,14 +1352,16 @@ manganese's, drawing both kinds in one row the user can reorder.
 ## Notifications
 
 Every application's notification — and every site's, because the browser hands
-a Web Notification to the same server — arrives as `notifications`: every one
-nobody has cleared, oldest first, on every change and once on connecting. Which
-are new is yours to tell; the first list is history.
+a Web Notification to the same server — is in `domicile.notifications`: every
+one nobody has cleared, oldest first, with `notificationschanged` on every
+change. Which are new is yours to tell; the first list is history.
 
 ```ts
-domicile.on("notifications", ({ items }) => {
-  draw(items); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
-});
+const showNotifications = () => {
+  draw(domicile.notifications ?? []); // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+};
+showNotifications();
+domicile.addEventListener("notificationschanged", showNotifications);
 domicile.invokeNotificationAction(id, "default"); // a press on it, if clickable; or an action's key
 domicile.dismissNotifications([id]); // cleared: its application is told
 ```
@@ -1389,14 +1421,14 @@ That constraint pays for itself. A `<link>` is render-blocking and a
 from. With no link there is nothing to paint yet, and your first line is early
 enough.
 
-Early enough for *what*, though, is worth being exact about, because the theme
-arrives with the handshake and the handshake is a few milliseconds after that
-first line. A shell has two honest answers and `manganese` takes the second:
-paint in the dark the tokens default to and let the first `theme` message wipe
-to light where it has to, or write down the theme the desk was last seen in and
-paint in that. The second is a *guess* rather than a setting — the desk may
-have been reconfigured, or this may be a different desk — and it is corrected
-by the first message like any other guess.
+Early enough for *what*, though, is worth being exact about, because
+`domicile.theme` is `null` until the compositor has said, a few milliseconds
+after that first line. A shell has two honest answers and `manganese` takes the
+second: paint in the dark the tokens default to and let the first
+`themechanged` wipe to light where it has to, or write down the theme the desk
+was last seen in and paint in that. The second is a *guess* rather than a
+setting — the desk may have been reconfigured, or this may be a different desk
+— and it is corrected by the first `themechanged` like any other guess.
 
 There is no `node_modules` beside a shell and nothing resolves at run time, so
 everything the page needs has to be *in* the bundle. That is vite's default for

@@ -1,6 +1,6 @@
 // Taking the keyboard back to the page.
 
-import type { DomicileClient } from "./domicile-client";
+import type { InputHost } from "./element-context";
 import { setFocusedApp } from "./element-context";
 
 /**
@@ -22,7 +22,7 @@ import { setFocusedApp } from "./element-context";
  * client knows about. See `shell-manganese`'s `AppWindow`, which gives the
  * seat up here and asks for it back when the panel goes down.
  */
-export const focusChrome = (domicile: DomicileClient): void => {
+export const focusChrome = (domicile: InputHost): void => {
   setFocusedApp(undefined);
   domicile.focusChrome();
 };

@@ -1,16 +1,40 @@
-import { describe, expect, it, spyOn } from "bun:test";
-import type { DomicileShortcut } from "@domicile-desktop/sdk/domicile-host";
+import { afterEach, describe, expect, it } from "bun:test";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, within } from "@testing-library/react";
 
 import { exec, runManganese } from "./index";
+
+/** A desk of one screen behind this page, as the engine puts it there. */
+const onADesk = (): FakeDomicileHost => {
+  const fake = new FakeDomicileHost();
+  fake.set({
+    displays: [
+      {
+        height: 1080,
+        modeHeight: 1080,
+        modeWidth: 1920,
+        name: "left",
+        scale: 1,
+        transform: "normal",
+        width: 1920,
+        x: 0,
+        y: 0,
+      },
+    ],
+  });
+  (window as { domicile?: unknown }).domicile = fake.host;
+  return fake;
+};
+
+afterEach(() => {
+  delete (window as { domicile?: unknown }).domicile;
+});
 
 describe("runManganese", () => {
   // The library's whole promise: a layout of the user's own, on the bar of a
   // desktop they did not have to build.
   it("mounts manganese into the root with the bar it is given", async () => {
-    // A page with no compositor says so once on the console, which is the
-    // case here and not the thing under test.
-    const said = spyOn(console, "warn").mockImplementation(() => undefined);
+    onADesk();
     // Never put in the document: a desktop this test cannot unmount would
     // still be on the page every later test queries.
     const root = document.createElement("div");
@@ -26,59 +50,29 @@ describe("runManganese", () => {
     });
 
     expect(root).toContainElement(await within(root).findByText("mail 3/12"));
-    said.mockRestore();
   });
 
   // The other half of the promise: a desk's own keys, in place of manganese's.
-  // Under a compositor, so they are claimed: what is grabbed is what the shell
-  // was given and nothing else.
+  // What is grabbed is what the shell was given and nothing else.
   it("binds the keys it is given rather than its own", () => {
-    const grabbed: DomicileShortcut[] = [];
-    // The compositor, as far as a shell's start reaches it: events, its two
-    // readings not yet taken, and every call a no-op but the one under test.
-    const events = new EventTarget();
-    const READINGS = new Set<PropertyKey>(["brightness", "displays"]);
-    const host = new Proxy(events, {
-      get: (target, name) => {
-        if (name === "grabShortcut") {
-          return (shortcut: DomicileShortcut) => grabbed.push(shortcut);
-        } else if (READINGS.has(name)) {
-          return null;
-        } else if (name in target) {
-          return Reflect.get(target, name).bind(target);
-        } else {
-          return () => undefined;
-        }
-      },
-    });
-    const global = window as unknown as { domicile?: unknown };
-    global.domicile = host;
-    try {
-      act(() => {
-        runManganese({
-          keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
-        })(document.createElement("div"));
-      });
-      act(() => {
-        events.dispatchEvent(
-          Object.assign(new Event("shellconfig"), {
-            arrival: 0,
-            config: JSON.stringify({ keys: { x: 45 }, type: "shell_config" }),
-          }),
-        );
-      });
+    const fake = onADesk();
 
-      expect(grabbed).toEqual([
-        {
-          altKey: false,
-          ctrlKey: false,
-          keycode: 45,
-          metaKey: true,
-          shiftKey: false,
-        },
-      ]);
-    } finally {
-      delete global.domicile;
-    }
+    act(() => {
+      runManganese({
+        keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
+      })(document.createElement("div"));
+    });
+
+    expect(fake.calls.filter(([method]) => method === "grabShortcut")).toEqual([
+      ["grabShortcut", "Meta+x"],
+    ]);
+  });
+
+  it("draws nothing in a page with no desktop behind it", () => {
+    const root = document.createElement("div");
+
+    runManganese()(root);
+
+    expect(root.childElementCount).toBe(0);
   });
 });

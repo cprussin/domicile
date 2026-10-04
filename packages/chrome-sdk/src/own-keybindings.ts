@@ -1,17 +1,11 @@
-// The keys a shell binds itself, resolved against the keyboard the compositor
-// describes.
+// The keys a shell binds itself, filed by chord.
 //
-// A shell's keybindings are its props, so the page holds the chords — written
-// sway-style, `Meta+Shift+l` — and only the compositor holds the keymap. The
-// compositor sends every keysym the keyboard can type and the key it is on
-// (`shell_config`'s `keys`), and this is the rest: the chord grammar, and the
-// lookup.
+// A shell's keybindings are its props, written sway-style — `Meta+Shift+l` —
+// and the engine finds the key each keysym is on (`grabShortcut`). What is
+// left here is the half that needs no keyboard: the grammar, and one spelling
+// for each chord, so that `Shift+Meta+l` and `Meta+Shift+l` are one grab and
+// a `shortcut` event's `chord` finds its binding in every mode.
 
-import type {
-  Keybinding,
-  KeybindingsByMode,
-  ShortcutMessage,
-} from "./host-message";
 import type { KeyAction } from "./key-action";
 
 /** One mode's bindings: a chord, `Meta+Shift+l`, and what it does. */
@@ -25,35 +19,41 @@ export type ShellKeybindings = {
   readonly modes?: Readonly<Record<string, ModeKeybindings>>;
 };
 
-/**
- * The modifiers a chord can hold, by every spelling sway's accept. A map
- * rather than a record, so `constructor` is not a modifier.
- */
-const MODIFIERS: ReadonlyMap<string, keyof Omit<ShortcutMessage, "keycode">> =
-  new Map([
-    ["alt", "altKey"],
-    ["control", "ctrlKey"],
-    ["ctrl", "ctrlKey"],
-    ["logo", "metaKey"],
-    ["meta", "metaKey"],
-    ["mod1", "altKey"],
-    ["mod4", "metaKey"],
-    ["shift", "shiftKey"],
-    ["super", "metaKey"],
-  ]);
+/** Every mode's bindings, by mode and then by chord in its one spelling. */
+export type KeybindingsByMode = ReadonlyMap<
+  string,
+  ReadonlyMap<string, KeyAction>
+>;
+
+/** The modifiers in the order a chord is spelled with them. */
+const ORDER = ["Ctrl", "Alt", "Shift", "Meta"] as const;
+
+type Modifier = (typeof ORDER)[number];
 
 /**
- * `own`, every chord resolved to the key `keys` has its keysym on.
- *
- * Throws on a chord that is not one and on a keysym the keyboard
- * cannot type, naming it: both are the shell's bindings being wrong, and a
- * desktop that quietly dropped a key would leave its user pressing one that
- * does nothing.
+ * The modifiers a chord can hold, by every spelling sway's accept, lowercased.
+ * A map rather than a record, so `constructor` is not a modifier.
  */
-export const ownKeybindings = (
-  own: ShellKeybindings,
-  keys: ReadonlyMap<string, number>,
-): KeybindingsByMode => {
+const MODIFIERS: ReadonlyMap<string, Modifier> = new Map([
+  ["alt", "Alt"],
+  ["control", "Ctrl"],
+  ["ctrl", "Ctrl"],
+  ["logo", "Meta"],
+  ["meta", "Meta"],
+  ["mod1", "Alt"],
+  ["mod4", "Meta"],
+  ["shift", "Shift"],
+  ["super", "Meta"],
+]);
+
+/**
+ * `own`, every chord in its one spelling.
+ *
+ * @throws for a chord written wrong — whitespace, no keysym, a part that is no
+ *   modifier, one held twice — for two spellings of one chord in a mode, and
+ *   for a `modes.default`, naming each.
+ */
+export const ownKeybindings = (own: ShellKeybindings): KeybindingsByMode => {
   const modes = own.modes ?? {};
   if (Object.hasOwn(modes, "default")) {
     throw new Error(
@@ -62,24 +62,25 @@ export const ownKeybindings = (
   }
   return new Map(
     [["default", own.keybindings ?? {}] as const, ...Object.entries(modes)].map(
-      ([mode, bindings]) => [
-        mode,
-        Object.entries(bindings).map(
-          ([chord, action]): Keybinding => ({
-            action,
-            shortcut: shortcutOf(chord, keys),
-          }),
-        ),
-      ],
+      ([mode, bindings]) => [mode, filed(bindings)],
     ),
   );
 };
 
-/** `written`, as the key and the modifiers a press of it arrives as. */
-const shortcutOf = (
-  written: string,
-  keys: ReadonlyMap<string, number>,
-): ShortcutMessage => {
+/** One mode's bindings by chord, refusing two spellings of one. */
+const filed = (bindings: ModeKeybindings): ReadonlyMap<string, KeyAction> =>
+  Object.entries(bindings).reduce((by, [written, action]) => {
+    const chord = spelled(written);
+    if (by.has(chord)) {
+      throw new Error(
+        `domicile: chord ${JSON.stringify(written)} is ${chord}, which this mode already binds`,
+      );
+    }
+    return by.set(chord, action);
+  }, new Map<string, KeyAction>());
+
+/** `written` in its one spelling: modifiers in {@link ORDER}, then the keysym. */
+export const spelled = (written: string): string => {
   if (/\s/.test(written)) {
     throw new Error(
       `domicile: chord ${JSON.stringify(written)} has whitespace in it; write it as \`Meta+Shift+a\``,
@@ -92,31 +93,19 @@ const shortcutOf = (
       `domicile: chord ${JSON.stringify(written)} names no key; its last part is the keysym`,
     );
   }
-  const keycode = keys.get(keysym);
-  if (keycode === undefined) {
-    throw new Error(
-      `domicile: chord ${JSON.stringify(written)}: ${JSON.stringify(keysym)} is on no key of this keyboard`,
-    );
-  }
-  const held: ShortcutMessage = {
-    altKey: false,
-    ctrlKey: false,
-    keycode,
-    metaKey: false,
-    shiftKey: false,
-  };
-  return parts.slice(0, -1).reduce((chord, part) => {
+  const held = parts.slice(0, -1).reduce((modifiers, part) => {
     const modifier = MODIFIERS.get(part.toLowerCase());
     if (modifier === undefined) {
       throw new Error(
         `domicile: chord ${JSON.stringify(written)}: ${JSON.stringify(part)} is not a modifier`,
       );
-    } else if (chord[modifier]) {
+    } else if (modifiers.has(modifier)) {
       throw new Error(
         `domicile: chord ${JSON.stringify(written)} holds ${JSON.stringify(part)} twice, under one spelling or two`,
       );
     } else {
-      return { ...chord, [modifier]: true };
+      return modifiers.add(modifier);
     }
-  }, held);
+  }, new Set<Modifier>());
+  return [...ORDER.filter((modifier) => held.has(modifier)), keysym].join("+");
 };

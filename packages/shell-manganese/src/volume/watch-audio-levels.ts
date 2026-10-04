@@ -1,16 +1,25 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
-import type { AudioLevelsMessage } from "@domicile-desktop/sdk/host-message";
+import type {
+  DomicileAudioLevelsEvent,
+  DomicileHost,
+} from "@domicile-desktop/sdk/domicile-host";
 
-import { watchShared } from "../host/watch-shared";
+/** The loudest sample since the last report, 0 through 1, by id. */
+export type AudioLevels = ReadonlyMap<string, number>;
 
 /**
  * Watch the meters' levels: `onLevels` is called each time the host says
  * them, some twenty times a second while anything is metered, and what comes
  * back stops it. What is metered is asked for separately — see `useMeters`.
- *
- * Shared with every other bar on the page — see `watchShared`.
  */
 export const watchAudioLevels = (
-  domicile: DomicileClient,
-  onLevels: (levels: AudioLevelsMessage) => void,
-): (() => void) => watchShared(domicile, "audio_levels", onLevels);
+  domicile: DomicileHost,
+  onLevels: (levels: AudioLevels) => void,
+): (() => void) => {
+  const heard = ({ levels }: DomicileAudioLevelsEvent) => {
+    onLevels(new Map(levels.map(({ id, peak }) => [id, peak])));
+  };
+  domicile.addEventListener("audiolevels", heard);
+  return () => {
+    domicile.removeEventListener("audiolevels", heard);
+  };
+};

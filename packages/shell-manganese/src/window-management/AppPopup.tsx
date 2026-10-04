@@ -12,7 +12,7 @@ type Props = {
  * with none of a window's frame: no bar, no edge, no motion, and nothing to
  * grab. The SDK forwards the pointer over it to the popup, and a press on it
  * asks for its window's keyboard rather than its own — see the SDK's
- * `DomicileClient.windowOf`.
+ * `DomicileHost.windowOf`.
  *
  * Placed against the window's box rather than inside its element, because an
  * `<app>` is a replaced element and has no children. That is also why a

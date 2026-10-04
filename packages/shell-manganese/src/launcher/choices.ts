@@ -16,15 +16,11 @@
 // disagree about `localhost:5173` is one where the user has to remember which
 // box they are in.
 
-import type {
-  Bookmark,
-  DesktopEntry,
-} from "@domicile-desktop/sdk/host-message";
-
 import type { TaggedSearch, TaggedSite } from "../address/search";
 import { googleUrl, taggedSearch, taggedSite } from "../address/search";
 import { TypedAddressKind, typedAddress } from "../address/typed-address";
 import { fileRow } from "./file-row";
+import type { Bookmark, DesktopEntry } from "./found-apps";
 import { Launch } from "./launch";
 
 /** Which of the seven kinds of row a choice is. */

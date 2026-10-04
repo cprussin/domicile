@@ -1,6 +1,6 @@
 // Putting the keyboard on a client's window.
 
-import type { DomicileClient } from "./domicile-client";
+import type { InputHost } from "./element-context";
 import { setFocusedApp } from "./element-context";
 
 /**
@@ -22,7 +22,7 @@ import { setFocusedApp } from "./element-context";
  * keyboard leaves a window when another takes it or when a click lands on the
  * chrome, both of which say where it went.
  */
-export const focusApp = (domicile: DomicileClient, appId: string): void => {
+export const focusApp = (domicile: InputHost, appId: string): void => {
   setFocusedApp(appId);
   domicile.focusApp(appId);
 };

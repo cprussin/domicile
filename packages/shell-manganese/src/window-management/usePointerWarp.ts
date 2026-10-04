@@ -1,4 +1,4 @@
-import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Spot } from "./pointer-warp";
@@ -30,7 +30,7 @@ import type { WindowState } from "./window-state";
 const IN_FLIGHT = 4;
 
 type Options = {
-  domicile: DomicileClient;
+  domicile: DomicileHost;
   /** The window the keyboard is in and the box it is drawn in, or none. */
   focus: Focus | undefined;
   /**
@@ -268,7 +268,7 @@ export const usePointerWarp = ({
       // the first landing to arrive gives up both. What that trades for what
       // is in {@link Pointer.pointing}.
       sent.current = [...sent.current, to].slice(-IN_FLIGHT);
-      domicile.warpPointer(to);
+      domicile.warpPointer(to[0], to[1]);
     }
   });
 

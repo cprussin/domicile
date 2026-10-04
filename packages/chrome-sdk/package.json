@@ -22,14 +22,6 @@
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"
     },
-    "./chrome-message": {
-      "types": "./dist/chrome-message.d.ts",
-      "default": "./dist/chrome-message.js"
-    },
-    "./connect-to-host": {
-      "types": "./dist/connect-to-host.d.ts",
-      "default": "./dist/connect-to-host.js"
-    },
     "./cursor-shape": {
       "types": "./dist/cursor-shape.d.ts",
       "default": "./dist/cursor-shape.js"
@@ -37,10 +29,6 @@
     "./display-transform": {
       "types": "./dist/display-transform.d.ts",
       "default": "./dist/display-transform.js"
-    },
-    "./domicile-client": {
-      "types": "./dist/domicile-client.d.ts",
-      "default": "./dist/domicile-client.js"
     },
     "./domicile-host": {
       "types": "./dist/domicile-host.d.ts",
@@ -54,6 +42,10 @@
       "types": "./dist/extension.d.ts",
       "default": "./dist/extension.js"
     },
+    "./fake-host": {
+      "types": "./dist/fake-host.d.ts",
+      "default": "./dist/fake-host.js"
+    },
     "./file-preview": {
       "types": "./dist/file-preview.d.ts",
       "default": "./dist/file-preview.js"
@@ -66,14 +58,6 @@
       "types": "./dist/focus-chrome.d.ts",
       "default": "./dist/focus-chrome.js"
     },
-    "./host-message": {
-      "types": "./dist/host-message.d.ts",
-      "default": "./dist/host-message.js"
-    },
-    "./host-stream": {
-      "types": "./dist/host-stream.d.ts",
-      "default": "./dist/host-stream.js"
-    },
     "./input": {
       "types": "./dist/input.d.ts",
       "default": "./dist/input.js"
@@ -81,10 +65,6 @@
     "./key-action": {
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"
-    },
-    "./keybindings": {
-      "types": "./dist/keybindings.d.ts",
-      "default": "./dist/keybindings.js"
     },
     "./matrix": {
       "types": "./dist/matrix.d.ts",
@@ -94,10 +74,6 @@
       "types": "./dist/measure.d.ts",
       "default": "./dist/measure.js"
     },
-    "./newline-frames": {
-      "types": "./dist/newline-frames.d.ts",
-      "default": "./dist/newline-frames.js"
-    },
     "./notification": {
       "types": "./dist/notification.d.ts",
       "default": "./dist/notification.js"
@@ -105,10 +81,6 @@
     "./own-keybindings": {
       "types": "./dist/own-keybindings.d.ts",
       "default": "./dist/own-keybindings.js"
-    },
-    "./protocol": {
-      "types": "./dist/protocol.d.ts",
-      "default": "./dist/protocol.js"
     },
     "./register-elements": {
       "types": "./dist/register-elements.d.ts",
@@ -133,6 +105,10 @@
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"
+    },
+    "./windows": {
+      "types": "./dist/windows.d.ts",
+      "default": "./dist/windows.js"
     }
   },
   "files": [
