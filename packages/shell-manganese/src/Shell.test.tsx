@@ -956,6 +956,14 @@ describe("Shell", () => {
       );
     });
 
+    it("draws no focus ring on anything in it", () => {
+      const { container } = renderShell();
+
+      expect(container.querySelector("header")?.className).toContain(
+        css({ "& *": { outline: "none" } }),
+      );
+    });
+
     it("reads the date and the time down to the second", () => {
       renderShell();
 
