@@ -6,7 +6,9 @@ The open work and who can do it. What Domicile is and how it is built are
 the design doc that carries its detail.
 
 Nothing is released. The wire protocol is at `PROTOCOL_VERSION = 1`, and
-`packages/domicile-engine/engine-release.nix` pins the engine a user gets.
+`packages/domicile-engine/engine-pin.nix` picks the engine a user gets: the
+official build (`engine-official.nix`) when it is of `main`'s engine series,
+the checked one (`engine-release.nix`) otherwise.
 
 ## Where it stands
 
@@ -16,11 +18,16 @@ page, composited at native cost, and seven CSS properties are bit-exact against
 an ordinary element beside it. `<webview>` is a browser window the shell lays
 out, with history, loading and new-window reported to the page. Keys, the
 trackpad and a click reach the page on real hardware. A desk left alone goes
-dark and locks, and opens to its user's own password through PAM.
+dark and locks, and opens to its user's own password through PAM. A shell is a
+module the config names, built by `domicile`, with manganese a library and
+`@domicile-desktop/*` on npm. Extensions the config names run, their actions
+in the shell's tray, and every `<webview>` is a tab to them.
 
 The evidence for each of those is in the doc that made the claim —
 [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
-[A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md) — and in the
+[A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md),
+[COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md),
+[EXTENSIONS.md](docs/architecture/EXTENSIONS.md) — and in the
 `packages/domicile-engine/scripts/guard-*.sh` that assert it.
 
 ## In this repository
@@ -156,46 +163,44 @@ The evidence for each of those is in the doc that made the claim —
      to reach for the keyboard gets a lock screen rather than a warning they
      could have answered.
 
-4. **Chrome extensions.** Installed from `extensions` in the config, their
-   actions in the shell's tray with popups in a `<webview>`, and every
-   `<webview>` a tab to `chrome.tabs`. Slice 1 is done: the fork installs what
-   the config names, and manganese draws the actions in a tray on its bar and
-   opens their popups in a `<webview>` under them. Slice 2 is in the fork:
-   every `<webview>` is a tab and the desk one window, zoom included, a
-   tray click grants `activeTab`, and an extension's popup window is one the
-   shell draws.
-   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
-
-5. **The system tray's menus.** Icons, titles and clicks work: the compositor
+4. **The system tray's menus.** Icons, titles and clicks work: the compositor
    hosts StatusNotifierItem and manganese draws the tray left of the
    extensions'. Left: `com.canonical.dbusmenu`, without which most
    libappindicator items do nothing on a secondary click.
    [SYSTEM-TRAY.md](docs/architecture/SYSTEM-TRAY.md).
 
-6. **Which monitor toasts a notification.** The compositor serves
+5. **Which monitor toasts a notification.** The compositor serves
    `org.freedesktop.Notifications` — a site's Web Notification included — and
    manganese toasts them and keeps a drawer. Left: on one page over the desk,
    the toasts go to the top-right of the whole desk rather than the focused
-   screen; and inline reply.
+   screen; inline reply; and Chrome's bridge, which looks for the server once
+   at its start, so a slow bus could leave it on its own popups.
    [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
 
-7. **Native density on every monitor.** On a tty the shell is one page over
+6. **Native density on every monitor.** On a tty the shell is one page over
    the desk's bounding box, hosted on the fastest monitor and presented on the
    rest, rastered at the largest scale, and each lower-density monitor's part
    also rastered at its own (a cc tiling per display scale). Left: the
    hardware check, and an `<app>`'s scale from the monitor under it.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-8. **`domicile send-shell` from a terminal.** Keybindings are a shell's props
+7. **`domicile send-shell` from a terminal.** Keybindings are a shell's props
    and their commands reach the shell; the same command typed as
    `domicile send-shell focus right` has no route yet (supervisor → compositor
    → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
 
-9. **Composable shells.** The config becomes a TS, JS or JSON module whose
-   `Shell` export is the shell, built by `domicile` with no build of the
-   user's own; manganese becomes a library of bar items; keybindings become
-   the shell's props; the `@domicile-desktop/*` packages go to npm. Not started.
+8. **The rest of composable shells.** Phases 1, 2 and 4 shipped. Left in
+   phase 3: a `schemars` schema with generated `@domicile-desktop/sdk/config`
+   types, and `nix/home-manager.nix` building a TS config directory with
+   `bun2nix` (it writes `domicile.json` today).
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
+
+9. **`window.domicile` is the whole shell API.** Step one shipped: the engine
+   reports the desktop's size and density. Left: windows, focus and the rest
+   of the state as attributes with change events; moment events queued until
+   a listener exists; search and preview as promises; chords resolved by the
+   engine; `<app>` routing its own input; and `DomicileClient` deleted.
+   [WINDOW-DOMICILE.md](docs/architecture/WINDOW-DOMICILE.md).
 
 10. **`domicile load-shell` closes every browser window.** The shell's page
     owns them, so the reload takes them. The engine should own them and the
@@ -209,12 +214,36 @@ The evidence for each of those is in the doc that made the claim —
     leaves the desk. Not started.
     [PORTALS.md](docs/architecture/PORTALS.md).
 
+12. **manganese as small composable packages.** `@domicile-desktop/manganese`
+    is one package exporting the layout, the bar and every bar item. Split it
+    so a shell takes the pieces it wants — the clock, the tray, the mixer, the
+    window management — each a package of its own, with manganese the shell
+    that composes them. No design doc yet.
+
+13. **Bar modules for wifi and bluetooth.** The bar has the tray, workspaces,
+    clock, volume, brightness and battery; nothing shows or switches a network
+    or a bluetooth device. Each wants the compositor reading the system service
+    (NetworkManager, BlueZ) over D-Bus and stating it on the host protocol, as
+    battery and audio are, and a bar item in manganese. No design doc yet.
+
+14. **A History app.** A browser window has back and forward, and its address
+    bar suggests where the shell sent it, but nothing browses, searches or
+    clears the desk's history: `chrome://history` is refused like every
+    `chrome://` page (patch 0083). No design doc yet.
+
+15. **A Settings app.** Extensions and config values are set by editing the
+    config and nothing else. A Settings app manages both — and is where the
+    *Known gaps* below that want a place to write to land: a theme that lasts
+    past the desktop, and the cookies, site data and permissions
+    `chrome://settings` held. No design doc yet.
+
 ## In the engine fork — the agent on `crux`
 
 1. **The shm upload, on a GPU.** An shm client's frame is drawn into a GBM
-   buffer of the compositor's and submitted like a client's dmabuf. The copy
-   is tested on llvmpipe; the allocation and the browser's import of it have
-   never run, because no check has a render node.
+   buffer of the compositor's (`uploads.rs`) and submitted like a client's
+   dmabuf. The copy is tested on llvmpipe; the allocation and the browser's
+   import of it have never run, because no guard drives an shm client on
+   `crux`'s render node.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md), phase 2.
 
 2. **Presentation, measured.** Every number in the fork's docs comes from a
@@ -279,6 +308,10 @@ The evidence for each of those is in the doc that made the claim —
    run 36234732979 read both ends, both ways. Still open, and Chromium's rather
    than this guard's: a host that sends no keymap takes the browser down on its
    first modifiers instead of leaving it decoding without one.
+
+7. **`guard-shell.sh` launches through `domicile`** rather than repeating the
+   launch, last, so a mistake there cannot hold up what ordinary CI covers.
+   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
 ## Needs a machine with a screen
 
@@ -401,7 +434,7 @@ costs nothing.
   positioner's `constraint_adjustment` (flip, slide, resize) is never applied
   and a menu opened near an edge can hang off it. Fixing it wants the page to
   say where a window's box is on screen, or the positioner handed to the
-  shell to solve. `popup_placed` in `domicile-protocol`.
+  shell to solve. `popup_placed` in `domicile-host`.
 - **A client is offered 8-bit formats only.** The engine imports four
   fourccs (`FOURCCS` in `engine.rs`), so a client that would draw in 10 bits
   draws in 8. Widening it is a `FormatFromFourcc` case in the fork and an entry
@@ -466,7 +499,8 @@ costs nothing.
 - **A desk has no settings page.** A browser window is refused every
   `chrome://` page (patch 0083), and with them went the only place to clear
   cookies and site data, or to change a site's permissions. Nothing replaces
-  them yet. Printing went too: `window.print()` opens `chrome://print`.
+  them yet — the Settings app above is where they go. Printing went too:
+  `window.print()` opens `chrome://print`.
 - **What a browser window's resize costs is unmeasured.** Patch 0054 stops the
   shell's frame waiting for a `<webview>` to draw at each new size, as it never
   waited for an `<app>`; no guard times a resize of either, so "it is as fluid
@@ -501,7 +535,6 @@ costs nothing.
   carried between clients all the same —
   `zwp_primary_selection_device_manager_v1` is advertised, and
   `packages/domicile-compositor/tests/selection.rs` is the check.
-
 - **A theme picked off the toggle lasts as long as the desktop does.**
   `theme.mode` is what a desk comes up on and nothing writes back to it: the
   file is generated — by a shell, and on NixOS by home-manager — so a desktop
@@ -509,7 +542,7 @@ costs nothing.
   overrule the edit on the next rebuild anyway. What a click changes is the
   live desk, until it is restarted. Making it stick wants somewhere for a
   desktop's own state to live that is not the shell's generated config, and
-  there is no such place yet.
+  there is no such place yet; the Settings app above wants the same place.
 - **Whether a Wayland window is in the theme wipe's old frame is unmeasured.**
   The windows turn inside the shell's view transition, once it has captured
   the frame it wipes away from — see `domicile_host::theme_turnover`. A
@@ -526,18 +559,6 @@ costs nothing.
   desk that does not end cleanly leaves its variables behind until the next
   one replaces them. A desk in a window says nothing, so its session keeps its
   own portal.
-- **A domicile desk has no screenshot or screencast portal.**
-  `xdg-desktop-portal-gtk` implements neither interface, and the backend that
-  does on a wlroots desk — `xdg-desktop-portal-wlr` — screencopies through
-  `wlr-screencopy-unstable-v1`, which this compositor does not serve. What
-  keeps that backend out is its own `UseIn=`, which names wlroots, sway,
-  Wayfire, river, phosh and Hyprland and not domicile; leaving it out of a
-  desk's portal profile would not be enough on its own, because the frontend
-  falls through the profile to `UseIn=` and then to a last-resort gtk. Closing
-  it takes both halves: the protocol served (or an `impl.portal.ScreenCast` of
-  our own over the engine's capture path) *and* the backend named where the
-  frontend will look. [PORTALS.md](docs/architecture/PORTALS.md)'s
-  phase 2 is that plan.
 - **The settings portal answers one namespace and one key.** A desktop's
   backend usually carries GNOME's `org.gnome.desktop.interface` as well — the
   accent color, the interface font, the cursor theme — and Domicile has none
