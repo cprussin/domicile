@@ -10,8 +10,6 @@ import {
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
 import { connectToHost, hasHost } from "@domicile-desktop/sdk/connect-to-host";
-import { reportDesktopSize } from "@domicile-desktop/sdk/desktop-size";
-import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
@@ -131,15 +129,6 @@ export const runManganese =
         topBar={options.topBar}
       />,
     );
-
-    // Both halves of the desktop's mode, sent as soon as the shell is mounted.
-    //
-    // The density is what a client renders at; the size is how big the desktop
-    // *is*, and under the forked engine the compositor cannot see the window this
-    // page is in — without the second call the desktop stays at the compositor's
-    // startup placeholder however large the window really is.
-    reportDevicePixelRatio(domicile, window);
-    reportDesktopSize(domicile, window);
   };
 
 /** Manganese as shipped: what `"shell": "@domicile-desktop/manganese"` loads. */
