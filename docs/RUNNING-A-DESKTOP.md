@@ -60,8 +60,9 @@ anything else to your own `xdg-open`). What runs neither — GTK through GIO —
 reads `domicile-mimeapps.list`, which Domicile ships and puts first on every
 app's `XDG_DATA_DIRS`: nothing to write into your home. A browser you named
 yourself in a `mimeapps.list` is respected there; with none named, the desk is
-the default. Links a sandboxed app (Flatpak) opens through the portal do not reach
-the desk yet; see [/ROADMAP.md](/ROADMAP.md). `domicile open-url <url>` does the same from
+the default. A desk that is the session also tells the systemd user manager so
+and starts `domicile-session.target`, which is what lets the portal start in it
+— and so the theme and a sandboxed app's (Flatpak's) links reach the desk. `domicile open-url <url>` does the same from
 a terminal inside it.
 
 ## Your session's keys, in a window
@@ -293,6 +294,10 @@ through.
   `services.displayManager.sessionPackages = [domicile]` does the same without
   the module.
 - **The `domicile` PAM service** that `lock.pam_service = "domicile"` names.
+- **The graphical session.** `domicile-session.target`, which a desk that is
+  the session starts, and the package on the system profile so the portal
+  finds `domicile-mimeapps.list`. Services a home binds to
+  `graphical-session.target` start with the desk too.
 - **Portal routing.** With `xdg.portal.enable`, Domicile answers `Settings` and
   its `domicile-portals.conf` sends everything else to `xdg-desktop-portal-gtk`,
   which the module brings. The home-manager module offers the same to

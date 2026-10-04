@@ -50,6 +50,7 @@ pub mod config_path;
 pub mod config_watch;
 pub mod control;
 pub mod control_socket;
+pub mod graphical_session;
 pub mod handshake;
 pub mod heard;
 pub mod milestones;

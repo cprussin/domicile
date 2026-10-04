@@ -31,6 +31,7 @@ use domicile_launch::control::{answer, Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
+use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
@@ -41,6 +42,7 @@ use domicile_launch::restart::{
     clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
     Ending, Policy,
 };
+use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
@@ -444,6 +446,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // there is a compositor to put one under, and a whole desktop when there
     // is not. `domicile_launch::restart` holds why those are the two units.
     let policy = Policy::default();
+    // Held for the whole run: dropped, it ends the session the user manager
+    // was told about, whichever way this function returns.
+    let said = SaidSession::new(&platform);
     let desktop = Desktop {
         browser: &browser,
         components: &components,
@@ -453,6 +458,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         places: &places,
         platform: &platform,
         policy: &policy,
+        said: &said,
     };
     // What the last desktop's compositor said, kept across the loop so that a
     // run which gives up ends on the reason rather than on a pointer to it.
@@ -504,6 +510,8 @@ struct Desktop<'a> {
     /// engine started again waits is the same question as how long a desktop
     /// started again waits, and the answer is not two numbers.
     policy: &'a Policy,
+    /// The session the user manager is told about, said by each desktop.
+    said: &'a SaidSession,
 }
 
 /// One desktop, from its first process to its last.
@@ -582,6 +590,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
         &desktop.places.session,
         &mut running,
     )?;
+    desktop.said.say(desktop.places);
 
     println!();
     println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
@@ -914,6 +923,76 @@ fn session(session: &Path) -> Milestone {
                 own output above."
             .to_string(),
         patience: PATIENCE,
+    }
+}
+
+/// A run's desktops as the login session, said to the systemd user manager —
+/// see `domicile_launch::graphical_session`.
+///
+/// SAID FOR EACH DESKTOP, ENDED ONCE. Every desktop a run stands up says
+/// itself again — its display may be another, and saying is idempotent — but
+/// the session ends only when the run does: ending it is irreversible, and a
+/// desktop started again straight after would find its graphical session
+/// refused while that is still going down.
+///
+/// ONLY ON THE DRM PLATFORM, which is a desk that owns the screen and so is the
+/// session; a desk in a window says nothing, its session being the host's.
+///
+/// BEST EFFORT, LIKE THE COMPOSITOR'S OWN WORD TO THE BUS. A machine with no
+/// systemd user manager, or none that has `domicile-session.target`, is an
+/// ordinary desk whose portal does not start; it is said as a warning, rather
+/// than refusing a desk over it. A launcher killed outright never ends what it
+/// began, so a session started after it finds its variables until it says its
+/// own.
+struct SaidSession {
+    is_the_session: bool,
+    manager: Mutex<Option<zbus::blocking::Connection>>,
+}
+
+impl SaidSession {
+    fn new(platform: &str) -> Self {
+        SaidSession {
+            is_the_session: platform == "drm",
+            manager: Mutex::new(None),
+        }
+    }
+
+    /// Say the desktop that is up now.
+    fn say(&self, places: &Runtime) {
+        if self.is_the_session {
+            match Self::said(places) {
+                Ok(manager) => {
+                    *self.manager.lock().expect("nothing panics holding it") = Some(manager);
+                }
+                Err(why) => eprintln!(
+                    "domicile: the user manager was not told this desktop is the session, so \
+                     the portal will not start in it: {why}"
+                ),
+            }
+        }
+    }
+
+    fn said(places: &Runtime) -> Result<zbus::blocking::Connection, String> {
+        let at = places.session.display();
+        let published = std::fs::read_to_string(&places.session)
+            .map_err(|why| format!("cannot read {at}: {why}"))?;
+        let session: Session = serde_json::from_str(&published)
+            .map_err(|why| format!("{at} is not a session: {why}"))?;
+        let manager = notification::session_bus().map_err(|why| why.to_string())?;
+        graphical_session::begin(&manager, &session.wayland_display, &places.control)
+            .map_err(|why| why.to_string())?;
+        Ok(manager)
+    }
+}
+
+impl Drop for SaidSession {
+    fn drop(&mut self) {
+        let manager = self.manager.get_mut().expect("nothing panics holding it");
+        if let Some(manager) = manager {
+            if let Err(why) = graphical_session::end(manager) {
+                eprintln!("domicile: the user manager still holds this desktop's session: {why}");
+            }
+        }
     }
 }
 

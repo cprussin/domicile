@@ -475,6 +475,12 @@
         # interface it answers, and gtk for the rest.
         cp ${./nix/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
+        # The unit a desk that is the session starts, so the portal can.
+        mkdir -p "$out/lib/systemd/user"
+        cp ${./nix/domicile-session.target} \
+          "$out/lib/systemd/user/domicile-session.target"
+        cp ${./nix/domicile-session-shutdown.target} \
+          "$out/lib/systemd/user/domicile-session-shutdown.target"
         mkdir -p "$out/share/wayland-sessions"
         cat >"$out/share/wayland-sessions/domicile.desktop" <<DESKTOP
         [Desktop Entry]
@@ -1106,7 +1112,10 @@
               # What a NixOS configuration has to say for its options to
               # evaluate; nothing here builds a system.
               boot.loader.grub.enable = false;
-              fileSystems."/".device = "nodev";
+              fileSystems."/" = {
+                device = "nodev";
+                fsType = "tmpfs";
+              };
               system.stateVersion = pkgs.lib.trivial.release;
             };
             # What the display manager is actually handed: NixOS joins every
@@ -1134,6 +1143,39 @@
                 exit 1
               }
             done
+
+            # THE GRAPHICAL SESSION a desk that is the session starts, so the
+            # portal -- `Requisite=graphical-session.target` -- can: the unit
+            # the launcher starts, installed for the user manager to find.
+            [ ${pkgs.lib.boolToString (pkgs.lib.elem domicilePackage machine.config.systemd.packages)} = true ] || {
+              echo "the module does not install domicile's user units" >&2
+              exit 1
+            }
+            target=${domicilePackage}/lib/systemd/user/domicile-session.target
+            for line in 'BindsTo=graphical-session.target' 'Before=graphical-session.target'; do
+              grep -qxF "$line" "$target" || {
+                echo "domicile-session.target is missing: $line" >&2
+                cat "$target" >&2
+                exit 1
+              }
+            done
+            # And the one that ends it, which a running portal cannot hold
+            # off: it conflicts the graphical session down.
+            shutdown=${domicilePackage}/lib/systemd/user/domicile-session-shutdown.target
+            grep -qxF 'Conflicts=graphical-session.target graphical-session-pre.target' "$shutdown" || {
+              echo "domicile-session-shutdown.target does not conflict the session down" >&2
+              cat "$shutdown" >&2
+              exit 1
+            }
+
+            # AND THE DESK'S DEFAULT BROWSER WHERE THE PORTAL LOOKS: on the
+            # system profile, the portal running outside the desk. Read only
+            # where `XDG_CURRENT_DESKTOP` is `domicile`, which only a desk that
+            # is the session says to the user manager.
+            [ ${pkgs.lib.boolToString (pkgs.lib.elem domicilePackage machine.config.environment.systemPackages)} = true ] || {
+              echo "the module does not put domicile on the system profile" >&2
+              exit 1
+            }
 
             # THE PAM SERVICE a desk's `lock.pam_service` names, which a
             # home-manager module cannot declare. Without it a desk configured

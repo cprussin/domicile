@@ -3,8 +3,9 @@
 # `nix/home-manager.nix` describes the desk itself -- the config file, the
 # shell, the keys -- and declines the rest, because how a machine boots and
 # which PAM services it has are not a home directory's to decide. This is that
-# rest: the `domicile` login session, the PAM service a desk's lock opens
-# through, and where the desk's portal calls are routed.
+# rest: the `domicile` login session and the user unit it starts, the PAM
+# service a desk's lock opens through, and where the desk's portal calls are
+# routed.
 #
 # ONE SESSION, WHATEVER THE DESK. `domicile` runs the shell its config names,
 # so which desktop a machine boots into is the config's to say, not the login
@@ -49,6 +50,16 @@ in {
 
   config = lib.mkIf cfg.enable {
     services.displayManager.sessionPackages = [cfg.package];
+
+    # `domicile-session.target`, which a desk that is the session starts so
+    # that `graphical-session.target` -- and with it the portal -- can.
+    systemd.packages = [cfg.package];
+
+    # On the system profile too, for the portal: it runs outside the desk and
+    # finds `domicile-mimeapps.list` only here. Read only where
+    # `XDG_CURRENT_DESKTOP` is `domicile`, which only a desk that is the
+    # session says to the user manager.
+    environment.systemPackages = [cfg.package];
 
     # What `lock.pam_service = "domicile"` names. A desk that names a service
     # the machine does not have does not come up.
