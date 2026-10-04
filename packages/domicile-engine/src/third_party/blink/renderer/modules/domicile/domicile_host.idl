@@ -123,11 +123,6 @@
   [CallWith=ScriptState, RaisesException] undefined resizeApp(
       DOMString appId, double width, double height);
 
-  [CallWith=ScriptState, RaisesException] undefined setDesktopSize(
-      double width, double height);
-  [CallWith=ScriptState, RaisesException] undefined setDevicePixelRatio(
-      double ratio);
-
   // Draw the desktop the other way round.
   //
   // THE ONE CALL HERE THAT SAYS WHAT THE DESKTOP IS rather than asking it for

@@ -33,7 +33,14 @@ sorted() { tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' '; }
 touching="$(grep -l 'event_type_names.json5' "$ENGINE"/patches/*.patch 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')"
 expect "no patch adds to Blink's global event names" "" "$touching"
 
-global="$(grep -lE 'event_type_names::|core/event_type_names\.h' "$DOMICILE"/* 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')"
+# Except the platform's own events the fork LISTENS to, which are Blink's to
+# name and add nothing to its list: `resize` on the shell's window is how the
+# engine hears the desktop change size (DomicileHost::ReportGeometry). Named
+# one by one, so a fork event dispatched through Blink's list still fails here.
+LISTENED_TO="kResize"
+global="$(grep -oE 'event_type_names::k[A-Za-z]+' "$DOMICILE"/* 2>/dev/null |
+  grep -vE "::($(echo "$LISTENED_TO" | tr ' ' '|'))\$" |
+  cut -d: -f1 | xargs -r -n1 basename | sort -u | tr '\n' ' ')"
 expect "the fork's code names no event through Blink's list" "" "$global"
 
 [ -f "$NAMES_H" ]

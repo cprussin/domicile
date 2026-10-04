@@ -8,7 +8,6 @@
 // this.
 
 import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 
@@ -81,10 +80,4 @@ export const Shell = (root: HTMLElement): void => {
       mounted.delete(app_id);
     }
   });
-
-  // The ratio changes when the window moves display or the page zooms, and the
-  // page is the only part of Domicile that can see either. Sent straight away:
-  // there is no handshake to wait for, and the first call is what binds the
-  // channel.
-  reportDevicePixelRatio(domicile, window);
 };

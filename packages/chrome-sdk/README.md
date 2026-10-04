@@ -107,15 +107,6 @@ It provides these:
 - **`connectToHost`** (`./connect-to-host`) — the `DomicileHost` off the
   document, or a stand-in that does nothing when there is none. `hasHost` is
   beside it for code that needs the answer rather than the object.
-- **`reportDesktopSize`** (`./desktop-size`) — tell the host how big the page
-  is, and keep telling it. The desktop spans every display and the page is what
-  measures it, so a shell that never reported would leave the compositor
-  laying windows out against a size it guessed.
-- **`reportDevicePixelRatio`** (`./device-pixel-ratio`) — tell the host what
-  density the page is drawing at, and keep telling it. The ratio changes when
-  the window moves to another display or the page is zoomed, and the page is
-  the only part of Domicile that can see either; a chrome that reported it once
-  would leave every client drawing at the old resolution.
 - **Pure helpers** — affine `./matrix` math mirroring the Rust
   `domicile-scene::Transform`, `./domicile-host` mirroring the engine's IDL,
   `./host-message` for what the client delivers and how an event becomes one,
