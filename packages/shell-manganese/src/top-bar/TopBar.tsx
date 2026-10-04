@@ -87,6 +87,12 @@ export const TopBar = ({ layout, ...bar }: Props) => (
 );
 
 const barStyles = grid({
+  // No focus ring on anything in the bar: it is the browser's own, drawn over
+  // the wallpaper in a color nothing here chose, around controls whose panels
+  // already show what was opened.
+  "& *": {
+    outline: "none",
+  },
   // THE SCRIM, and it hangs below the bar rather than filling it. A gradient
   // inside the bar's own 32px has to be at its weakest at the lower edge and
   // is therefore weakest a few pixels under the text, which is the half of
