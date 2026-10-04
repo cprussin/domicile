@@ -9,34 +9,30 @@ import { css } from "../../styled-system/css";
 import { useContentSize } from "./useContentSize";
 
 type Props = {
-  /** What every click asks, popup or not. */
+  /** Client every click goes through. */
   domicile: DomicileClient;
-  /** The extension whose action this is, as the engine last described it. */
+  /** Extension this action belongs to. */
   extension: Extension;
   /**
-   * Asked to open the popup of the extension with this id, or to close the
-   * one that is open with `undefined`. The desktop decides: a popup is a panel
-   * over the windows, which takes the keyboard off them — see `AppWindow`.
+   * Requests the popup of the extension with this id, or `undefined` to close
+   * it. The desktop decides, because an open popup takes the keyboard from
+   * the windows (see `AppWindow`).
    */
   onOpen: (id: string | undefined) => void;
-  /** The extension whose popup is open, or `undefined` when none is. */
+  /** Id of the extension whose popup is open, if any. */
   opened: string | undefined;
 };
 
 /**
- * An extension's action: Chrome's toolbar icon, on the bar's tray.
+ * An extension's toolbar action, drawn in the bar's tray.
  *
- * **Every click is `activateExtension`**, which is Chrome's toolbar click: the
- * extension gets `activeTab` on the focused browser window. Then one with a
- * popup opens it in a panel under its icon, as a `<webview>` of the popup's
- * address — the page gets the extension API from its origin, not from the
- * view it is in. One without is `action.onClicked`, which the engine
- * dispatches.
+ * Every click calls `activateExtension`, which grants `activeTab` on the
+ * focused browser window. An action with a popup then opens it in a
+ * `<webview>` panel; the engine dispatches `action.onClicked` for one without.
  *
- * **The panel closes the way Chrome's does**: a press outside it, Escape, or
- * the popup's own `window.close()`, which the view says as `domicile-close`.
- * Escape is heard only while this page has the keyboard: a key pressed inside
- * the popup's page never reaches it, like every other guest's.
+ * The panel closes on an outside press, Escape, or the popup's
+ * `window.close()`. Escape works only while the shell page has the keyboard,
+ * since keys pressed in the popup never reach it.
  */
 export const ExtensionAction = ({
   domicile,
@@ -90,15 +86,15 @@ const Icon = ({ extension }: { extension: Extension }) => (
     <img
       alt=""
       className={imageStyles}
-      // Not the engine's to drag: a press and a move reorders the tray.
+      // Dragging reorders the tray, so the image itself is not draggable.
       draggable={false}
       src={extension.icon}
     />
     {extension.badgeText !== "" && (
       <span
         className={badgeStyles}
-        // Inline because it is the extension's runtime color, which Panda
-        // cannot read. `#rrggbbaa`, transparent when the extension set none.
+        // Inline because Panda can't read runtime values. `#rrggbbaa`,
+        // transparent when the extension set none.
         style={{ backgroundColor: extension.badgeColor }}
       >
         {extension.badgeText}
@@ -114,18 +110,14 @@ type PopupViewProps = {
 };
 
 /**
- * The popup's page, in a view of its own.
+ * The popup page in a `<webview>`.
  *
- * The view says `window.close()` as `domicile-close` and closes nothing
- * itself: it is this page's element, so taking it down is this page's answer.
- *
- * **Sized to its content**, as Chrome's popup bubble is, once the page says
- * what that is: never bigger than `viewStyles`' box, which is also its size
- * until then.
+ * The view reports `window.close()` as `domicile-close` and leaves closing to
+ * the shell. Like Chrome's popup, it sizes to its content, capped at
+ * `viewStyles`' box (also its size until the page reports one).
  */
 const PopupView = ({ onClose, popup }: PopupViewProps) => {
-  // `null` rather than `undefined` because that is what React's ref API hands
-  // a callback ref on unmount.
+  // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const size = useContentSize(view);
 
@@ -143,15 +135,13 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
   return (
     <webview
       className={viewStyles}
-      // An extension's action popup and not a tab, as Chrome's toolbar bubble
-      // is: an extension that lays itself out differently in a tab sees what
-      // it sees in Chrome. Read once as the view asks for its page, so it is
-      // here from the first render.
+      // Marks the page as an action popup rather than a tab, so extensions
+      // that lay out differently in a tab match Chrome. Read once, when the
+      // view loads its page.
       extensionpopup=""
       ref={setView}
       src={popup}
-      // Inline because it is the page's runtime size, which Panda cannot read.
-      // `viewStyles` caps it.
+      // Inline because Panda can't read runtime values. `viewStyles` caps it.
       style={
         size === undefined
           ? undefined
@@ -161,15 +151,14 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
   );
 };
 
-// What the badge is placed against.
+// Positions the badge.
 const iconStyles = css({ display: "inline-flex", position: "relative" });
 
-// Chrome's toolbar size for an action icon: 16px. The engine renders the PNG
-// at the page's density, so this is its layout size and not its pixels.
+// Chrome's 16px toolbar icon size, in CSS pixels. The engine renders the PNG at
+// the page's density.
 const imageStyles = css({ blockSize: 4, inlineSize: 4 });
 
-// Over the icon's lower corner, as Chrome draws it. White, as Chrome's default
-// badge text is, and as the bar's own text is.
+// Over the icon's lower corner, with white text, as in Chrome.
 const badgeStyles = css({
   borderRadius: "sm",
   color: "white",
@@ -184,11 +173,10 @@ const badgeStyles = css({
   whiteSpace: "nowrap",
 });
 
-// A `<webview>` is a replaced element that is 300x150 left to itself, so a
-// box until the popup's page reports its size, and the most it may then grow
-// to: the size popups are laid out for — Bitwarden's is 380px wide — and short
-// of Chrome's 600px cap on a screen too short for it. Block, so no line box
-// leaves a gap under it in the flush panel.
+// A `<webview>` defaults to 300x150, so this sets its size until the popup
+// reports one and caps how far it grows. The cap fits typical popups
+// (Bitwarden's is 380px wide) and stays under Chrome's 600px on short screens.
+// `display: block` avoids a line-box gap under it in the panel.
 const viewStyles = css({
   blockSize: "min({spacing.150}, 80vh)",
   borderStyle: "none",

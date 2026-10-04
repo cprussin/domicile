@@ -4,37 +4,29 @@ import type {
   HostMessageType,
 } from "@domicile-desktop/sdk/host-message";
 
-/** One host message type, as every watcher on the page shares it. */
+/** Shared state for one host message type. */
 type Shared = {
-  /** Who is watching now. */
+  /** Current watchers. */
   watchers: Set<(message: never) => void>;
-  /** What the host last said, for a watcher that starts after it did. */
+  /** Last message, replayed to late watchers. */
   last: { message: unknown } | undefined;
 };
 
-/** Per client, per type: one `on` each, however many watchers. */
+/** One `on` registration per client and type, shared by all watchers. */
 const shared = new WeakMap<DomicileClient, Map<HostMessageType, Shared>>();
 
 /**
- * Watch a host message `type` alongside every other watcher on the page:
- * `onMessage` is called with what the host last said, if it has said
- * anything, and again with everything it says after — and what comes back
- * stops it.
+ * Watch host messages of `type`, sharing one handler with other watchers.
+ * `onMessage` gets the last message, if any, then every later one. Returns a
+ * function that stops watching.
  *
- * **`on` is a single slot**, and the page draws a bar per monitor. A bar that
- * registered its own handler displaced the one before it, so only the last
- * monitor's bar heard the charge or the brightness — the others drew nothing
- * at all, which is how a battery that "isn't there" looks. This registers once
- * per client and fans out.
- *
- * **The last message is kept** for a watcher that starts late: a monitor
- * plugged in after the host said the charge, or a bar remounted. The host says
- * these again only when they move.
- *
- * **The `on` is never let go**, even when every watcher has stopped: an `off`
- * tells the client nobody will listen again, and anything it says after is
- * dropped — so the next monitor's bar would wait for a reading that already
- * went by. One handler kept for the life of the page is what that costs.
+ * - `on` holds one handler per type, and the page draws a bar per monitor, so
+ *   per-bar handlers would replace each other. This registers once and fans
+ *   out.
+ * - The last message is kept for late watchers (a new monitor, a remounted
+ *   bar), since the host resends only on change.
+ * - The handler is never removed: after `off` the client drops messages, so a
+ *   later watcher would miss them.
  */
 export const watchShared = <T extends HostMessageType>(
   domicile: DomicileClient,

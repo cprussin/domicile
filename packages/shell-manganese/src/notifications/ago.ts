@@ -1,4 +1,4 @@
-/** The locale an old notification's date is written in; see `clock/reading.ts`. */
+/** The locale for older dates; see `clock/reading.ts`. */
 const LOCALE = "en-US";
 
 const MINUTE_MS = 60 * 1000;
@@ -7,11 +7,11 @@ const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
 /**
- * How long ago `time` was at `now`, both milliseconds since the epoch, as a
- * notification's corner says it: `now`, `5m`, `3h`, `2d`, then the date.
+ * How long ago `time` was at `now` (both epoch milliseconds), as a compact
+ * label: `now`, `5m`, `3h`, `2d`, then the date.
  *
- * Short, because it is beside the sender's name on one line, and a time past
- * now — a sender's clock a little ahead of this page's — is now.
+ * Short to fit beside the sender's name. A future time, from a sender's clock
+ * running ahead, reads as `now`.
  */
 export const ago = (time: number, now: number): string => {
   const since = now - time;

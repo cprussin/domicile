@@ -51,8 +51,7 @@ describe("tabSwitched", () => {
     ).toStrictEqual({ concealed: ["a"], revealed: ["b"] });
   });
 
-  // A WINDOW COMING BACK FROM NOWHERE IS NOT A TAB. One that was on another
-  // workspace, or in the scratchpad, had nothing on screen to fade from.
+  // A window from another workspace or the scratchpad is not a tab switch.
   it("leaves a window that was not on screen at all alone", () => {
     expect(
       tabSwitched(
@@ -62,9 +61,8 @@ describe("tabSwitched", () => {
     ).toStrictEqual({ concealed: [], revealed: [] });
   });
 
-  // A TAB CLOSING IS NOT A SWITCH. The contents closing fade off the window
-  // under them, and that window fading in as well would show the desktop
-  // through both.
+  // A tab closing is not a switch; fading both would show the desktop
+  // through.
   it("leaves the window a closed tab uncovers alone", () => {
     expect(
       tabSwitched(
@@ -83,9 +81,8 @@ describe("tabSwitched", () => {
     ).toStrictEqual({ concealed: [], revealed: [] });
   });
 
-  // A window over the tiling is not one the tabs are fading between: the
-  // crossfade holds the pair at the tiled depths, and holding a float there
-  // would drop it under every window for as long as it plays.
+  // Floats are skipped; the crossfade's tiled depth would drop a float under
+  // every window.
   it("leaves a window that is not tiled alone", () => {
     expect(
       tabSwitched(

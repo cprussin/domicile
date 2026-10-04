@@ -4,11 +4,11 @@ import type { AudioLevelsMessage } from "@domicile-desktop/sdk/host-message";
 import { watchShared } from "../host/watch-shared";
 
 /**
- * Watch the meters' levels: `onLevels` is called each time the host says
- * them, some twenty times a second while anything is metered, and what comes
- * back stops it. What is metered is asked for separately — see `useMeters`.
+ * Calls `onLevels` with each meter update (about 20 per second while anything
+ * is metered). Returns an unsubscribe function.
  *
- * Shared with every other bar on the page — see `watchShared`.
+ * Choosing what to meter is separate; see `useMeters`. The subscription is
+ * shared across bars; see `watchShared`.
  */
 export const watchAudioLevels = (
   domicile: DomicileClient,

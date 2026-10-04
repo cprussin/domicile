@@ -7,7 +7,7 @@ type Props = {
   now?: typeof wallClock | undefined;
 };
 
-/** The live clock: in the middle of the top bar, and alone on every other screen. */
+/** The live clock, centered in the top bar or alone on a screen without one. */
 export const Clock = ({ now }: Props) => {
   const time = useNow(now);
 
@@ -18,15 +18,11 @@ export const Clock = ({ now }: Props) => {
   );
 };
 
-// No color of its own: in the top bar it takes the white the bar draws its
-// text in, and on a screen with no bar it takes the page's own foreground.
+// No color, so it inherits the bar's white or the page's foreground.
 const clockStyles = css({
-  // Ten pixels, which is what the desktop asks for and what no font-size token
-  // is: the scale steps from 8px to 12px. A rem rather than a px literal, the
-  // way every other off-scale length in this repo is written.
+  // 10px; the font-size scale jumps from 8px to 12px.
   fontSize: "0.625rem",
-  // A reading that changes every second must not change width every second,
-  // or the bar it is centered in jitters through every minute.
+  // Fixed-width digits, so the bar does not jitter every second.
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });

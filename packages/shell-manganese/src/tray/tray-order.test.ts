@@ -14,7 +14,7 @@ describe("arrange", () => {
   });
 
   it("puts items it has never placed after the rest, as they arrived", () => {
-    // And a remembered one that is not here takes no place.
+    // A remembered key that is not present takes no place.
     expect(
       arrange(["new", "b", "a", "newer"], identity, ["x", "a", "b"]),
     ).toStrictEqual(["a", "b", "new", "newer"]);
@@ -23,7 +23,7 @@ describe("arrange", () => {
 
 describe("place", () => {
   it("places shown items it had never placed after the rest, as they arrived", () => {
-    // And one it placed that is not shown keeps its place.
+    // A placed key that is not shown keeps its place.
     expect(place(["a", "gone"], ["new", "a", "newer"])).toStrictEqual([
       "a",
       "gone",
@@ -51,8 +51,7 @@ describe("moveTo", () => {
   });
 
   it("keeps the place of an item that is not shown", () => {
-    // `gone` was closed; it comes back between `a` and `b` whatever moved
-    // around it meanwhile.
+    // `gone` was closed; it returns between `a` and `b` despite other moves.
     expect(
       moveTo(["a", "gone", "b", "c"], ["a", "b", "c"], "c", "b"),
     ).toStrictEqual(["a", "gone", "c", "b"]);

@@ -4,9 +4,8 @@ import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-elemen
 import { ChooserMode, fileRequestOf } from "./file-request";
 
 /**
- * The engine's question, built rather than constructed: its type is the
- * fork's, and no DOM these tests run on has it. What it was answered with is
- * kept, in order.
+ * A fake engine file chooser event, recording its answers in order. Built by
+ * hand because the test DOM lacks the engine's event type.
  */
 const asking = (mode: string, answers: string[] = []) =>
   Object.assign(new Event(WEBVIEW_FILE_CHOOSER_EVENT), {
@@ -37,8 +36,7 @@ describe("fileRequestOf", () => {
     ]);
   });
 
-  // An engine newer than this shell can ask for something it cannot draw, and
-  // a picker drawn for the wrong question answers it wrongly.
+  // A newer engine may send a mode this shell does not know.
   it("refuses a mode it cannot name", () => {
     expect(() => fileRequestOf(asking("open-everything"))).toThrow();
   });

@@ -24,10 +24,7 @@ const placementOf = (id: string): Placement => ({
   tabbed: undefined,
 });
 
-/**
- * A desktop: the workspace on screen, the windows open, and which of them
- * that workspace is showing.
- */
+/** A desk with one screen: its workspace, open windows and shown windows. */
 const desktop = (
   current: string,
   windows: readonly ShellWindow[],
@@ -40,7 +37,7 @@ const desktop = (
   windows,
 });
 
-/** The one screen of most of these desks. */
+/** The screen most cases use. */
 const SCREEN = "screen";
 
 const showing = (shown: Shown) =>
@@ -48,7 +45,7 @@ const showing = (shown: Shown) =>
     initialProps: shown,
   });
 
-/** A desk of more than one screen, each showing its own workspace. */
+/** A desk of several screens, each showing its own workspace. */
 const showingDesk = (desk: Readonly<Record<string, Shown>>) =>
   renderHook((next: Readonly<Record<string, Shown>>) => useWindowMotion(next), {
     initialProps: desk,
@@ -85,10 +82,9 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, EDITOR.id)).toBe("resting");
     });
 
-    // REVEALING A WINDOW IS NOT OPENING ONE. A window behind a tab, or on a
-    // workspace nobody is looking at, has been on the desktop the whole time —
-    // and a desktop that played an arrival every time one came back into view
-    // would announce ten openings on every workspace switch.
+    // A window coming back into view (from behind a tab or another workspace)
+    // must not play the opening animation, or every switch would look like many
+    // windows opening.
     it("is not what a window merely coming back into view does", () => {
       const { rerender, result } = showing(
         desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
@@ -114,7 +110,7 @@ describe("useWindowMotion", () => {
         result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
       ).toMatchObject({
         motion: "closing",
-        // At the box it had, raised over the windows moving into it.
+        // At its old box, above the windows moving into it.
         placement: { ...placementOf(EDITOR.id), depth: LEAVING },
       });
     });
@@ -133,10 +129,8 @@ describe("useWindowMotion", () => {
     });
   });
 
-  // A TAB CLOSING IS NOT A WINDOW SHRINKING AWAY. Its tab closes up in the
-  // strip its neighbors close over, and when it was the one shown, its
-  // contents fade to the tab that takes its place rather than shrinking off
-  // it.
+  // A closing tab closes within its strip. If it was shown, its contents fade
+  // to the replacing tab instead of shrinking.
   describe("a tab that has closed", () => {
     const tabs = (windows: readonly ShellWindow[]): Shown => ({
       ...desktop("1", windows),
@@ -213,10 +207,9 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("restacking");
     });
 
-    // A NEW SHUFFLE IS A NEW ANIMATION. A browser restarts an animation only
-    // when its name changes, so a window raised back while it is still
-    // shuffling — or in the very frame it finished — has to be given the other
-    // of the two, or it plays nothing and never says it has finished.
+    // Browsers restart an animation only when its name changes. A window raised
+    // again while shuffling, or in the frame it finished, must get the other
+    // name, or it plays nothing and never reports finishing.
     it("starts over when raised back before it has finished", () => {
       const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
       act(() => {
@@ -296,7 +289,7 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
     });
 
-    // Each is given the other motion's name, so the browser starts it over.
+    // Each gets the other name so the browser restarts it.
     it("turns back when switched back before it has finished", () => {
       const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
       act(() => {
@@ -354,8 +347,7 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("arriving-from-start");
     });
 
-    // The bar of the window the keyboard was in goes on saying so while the
-    // workspace it is on leaves.
+    // The focused window's bar stays focused while its workspace leaves.
     it("keeps the workspace being left saying where the keyboard was", () => {
       const { rerender, result } = showing(
         desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
@@ -388,8 +380,8 @@ describe("useWindowMotion", () => {
     });
   });
 
-  // ONE LIST FOR THE DESK. Every window is drawn once, on the screen showing
-  // it, and a workspace switch is that screen's alone.
+  // Each window is drawn once, on the screen showing it, and a workspace switch
+  // affects only its screen.
   describe("on a desk of two screens", () => {
     const WINDOWS = [TERMINAL, EDITOR];
     const desk = (left: string) => ({

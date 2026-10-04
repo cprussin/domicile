@@ -9,23 +9,21 @@ import { center } from "../../styled-system/patterns";
 const MIDDLE_BUTTON = 1;
 
 type Props = {
-  /** What every click asks. */
+  /** Where clicks are sent. */
   domicile: DomicileClient;
   /** The icon, as the compositor last described it. */
   item: TrayItem;
 };
 
 /**
- * An application's StatusNotifierItem, on the bar's tray.
+ * An application's StatusNotifierItem in the bar's tray.
  *
- * **A click is the application's.** The primary button is `Activate` — its
- * window, usually — the middle one `SecondaryActivate`, and the secondary one
- * `ContextMenu`, which asks the application to open a menu of its own. The
- * page's own context menu is kept off the icon so that it does not open over
- * that one.
+ * Clicks go to the application: primary is `Activate`, middle
+ * `SecondaryActivate`, secondary `ContextMenu`. The page's context menu is
+ * suppressed so it does not cover the application's.
  *
- * An icon with no picture is labeled by the first letter of its title: an
- * application that sent nothing drawable is still one that can be clicked.
+ * An icon without an image shows the first letter of its title, so it can still
+ * be clicked.
  */
 export const TrayIcon = ({ domicile, item: { icon, id, title } }: Props) => (
   <Button
@@ -51,7 +49,7 @@ export const TrayIcon = ({ domicile, item: { icon, id, title } }: Props) => (
       <img
         alt=""
         className={imageStyles}
-        // Not the engine's to drag: a press and a move reorders the tray.
+        // Disable native drag; pointer drags reorder the tray.
         draggable={false}
         src={icon}
       />
@@ -59,11 +57,11 @@ export const TrayIcon = ({ domicile, item: { icon, id, title } }: Props) => (
   </Button>
 );
 
-// The extensions' size beside it, so the two kinds read as one row.
+// Same size as extension icons, so both read as one row.
 const imageStyles = css({ blockSize: 4, inlineSize: 4 });
 
-// The same box as a picture, so an icon without one does not shift the row.
-// Ten pixels, the bar's own size, which no font-size token is.
+// The same box as an image, so the row does not shift. Ten pixels, the bar's
+// size, which has no font-size token.
 const letterStyles = center({
   blockSize: 4,
   fontSize: "0.625rem",

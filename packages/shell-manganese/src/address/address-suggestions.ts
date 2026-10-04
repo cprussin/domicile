@@ -1,27 +1,13 @@
-// What an address bar offers under itself while it is being typed into.
+// The suggestions under a browser window's address bar.
 //
-// Two kinds of line, and the order between them is the design: what Enter
-// would do comes first, and where the window has been comes after it. The list
-// is a list of alternatives to the thing the user is already halfway to doing,
-// so the thing they are doing has to be on it — at the top, which is where
-// Chromium puts it and where the eye is already looking.
-//
-// WHERE THE WINDOW HAS BEEN IS WHERE THE SHELL SENT IT. A browser's own
-// suggestions come out of a history of pages that actually loaded; the engine
-// reports no address for a guest — see ROADMAP.md — so what there is to
-// suggest is the addresses this shell asked for. A link followed inside the
-// page is not one of them.
+// What Enter would do comes first, as in Chromium, then matching visits.
+// Visits are only the addresses this shell sent the window to: the engine
+// reports no address for links followed inside a guest (see ROADMAP.md).
 
 import type { TypedAddress } from "./typed-address";
 import { TypedAddressKind, typedAddress } from "./typed-address";
 
-/**
- * How many lines the list can grow to.
- *
- * A list longer than this is not a suggestion, and the lines past the first
- * few are never the answer — an address bar that offered a whole history would
- * be a history with a text box on top.
- */
+/** The most lines the list shows; lines past the first few are rarely used. */
 const MOST = 6;
 
 /** Which kind of line a suggestion is. */
@@ -52,11 +38,9 @@ export type AddressSuggestion = ReturnType<
 >;
 
 /**
- * What to offer for `typed`, given the addresses `visited` this window has
- * been sent to — oldest first, which is the order they are kept in.
+ * The suggestions for `typed`, given the addresses `visited` (oldest first).
  *
- * An empty line offers the visits alone: a bar that has just been focused is a
- * user about to go back somewhere, not a user about to search for nothing.
+ * An empty line offers recent visits only.
  */
 export const addressSuggestions = (
   typed: string,
@@ -78,7 +62,7 @@ export const addressSuggestions = (
   }
 };
 
-/** The typed line's own answer, as a line of the list. */
+/** The typed line's own action as a suggestion. */
 const suggestionFor = (action: TypedAddress): AddressSuggestion => {
   switch (action.kind) {
     case TypedAddressKind.Site: {

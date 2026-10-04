@@ -5,9 +5,9 @@ import type { Rect } from "../rect";
 import type { Float, Grip } from "./float";
 import { rectOf, stretched } from "./float";
 
-/** A drag of one border in progress, settled when it was taken hold of. */
+/** A border drag in progress, fixed when it started. */
 type Drag = {
-  /** The window's box when it was taken hold of, which the delta is from. */
+  /** The box when the drag started; the pointer delta applies to it. */
   box: Float;
   from: { x: number; y: number };
   grip: Grip;
@@ -21,16 +21,14 @@ type Options = {
   grip: Grip;
   onDrop: () => void;
   onGrab: () => void;
-  /** The whole box, since an edge at the top or the left moves it too. */
+  /** The whole box, since dragging the top or left edge moves it too. */
   onResize: (box: Rect) => void;
 };
 
 /**
- * Turning a drag on a floating window's border into that window resized: the
- * edges the border holds follow the pointer, and the rest stay put.
+ * Resizes a floating window by dragging one of its borders.
  *
- * The press is the element's and the rest of the drag is the window's, and the
- * drag is a ref rather than state — both for the reasons `useFloatDrag` gives.
+ * Listens for the rest of the drag on `window`, as `useFloatDrag` explains.
  */
 export const useFloatBorderDrag = ({
   float,
@@ -59,8 +57,7 @@ export const useFloatBorderDrag = ({
         );
       }
     };
-    // Idempotent, because both a release and a cancel can arrive for one
-    // drag — see `useFloatDrag`.
+    // Idempotent: one drag can get both a release and a cancel.
     const ended = () => {
       const started = running.current;
       if (started !== undefined) {

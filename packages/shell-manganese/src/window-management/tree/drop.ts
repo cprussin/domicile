@@ -1,9 +1,8 @@
-// A tiled window dragged onto another and let go: sway's `tiling_drag`.
+// Dropping a dragged tiled window onto another, as in sway's `tiling_drag`.
 //
-// Where it lands is read off where on the other window it was dropped. The
-// middle of a window trades places with it; an edge puts the dragged window on
-// that side of it — beside it in the container it is in where that container
-// runs that way, and in a new split of the two of them where it does not.
+// Dropping on the middle swaps the two. Dropping on an edge puts the window on
+// that side: in the target's container if it runs that way, else in a new
+// split with the target.
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
@@ -22,12 +21,10 @@ import type { Tiling } from "./tiling";
 import { withFocusOn } from "./tiling";
 
 /**
- * The tiling with the window `id` dropped on the window `target`, at `edge` of
- * it or on its middle where `edge` is `undefined` — and the focus on the
- * window that moved.
+ * The tiling with window `id` dropped on `target`'s `edge`, or its middle when
+ * `edge` is `undefined`, with focus on the moved window.
  *
- * Throws for a window that is not tiled here: the drag that names both was
- * started on this tiling's own windows.
+ * Throws if either window is not tiled here.
  */
 export const droppedOn = (
   tiling: Tiling,
@@ -47,10 +44,7 @@ export const droppedOn = (
   }
 };
 
-/**
- * The two windows in each other's places, which keeps both boxes the size
- * they were: a drop on a window's middle is a swap rather than a new layout.
- */
+/** Swaps the two windows, keeping both boxes' sizes. */
 const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
   const from = pathOf(root, id);
   const to = pathOf(root, target);
@@ -62,11 +56,10 @@ const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
 };
 
 /**
- * The window `id` taken out and put on the `edge` side of `target`.
+ * Removes window `id` and puts it on the `edge` side of `target`.
  *
- * Taken out first, the way a keyed `move` takes a window out: what it leaves
- * collapses the way a close makes it collapse, so the target's place is read
- * off the tree that is left.
+ * Removes it first, like a keyed `move`, so the tree collapses as after a
+ * close before the target is located.
  */
 const besideTarget = (
   root: LayoutNode,
@@ -76,8 +69,7 @@ const besideTarget = (
 ): LayoutNode => {
   const rest = withoutAt(root, pathOf(root, id));
   if (rest === undefined) {
-    // Which nothing can reach: the target is a second window in this tree,
-    // and it is still there once the dragged one has gone.
+    // Unreachable: the target is still in the tree.
     throw new Error(`layout tree: dropping ${id} left nothing to drop it on`);
   } else {
     return placedBeside(rest, pathOf(rest, target), Node.Window(id), edge);
@@ -85,10 +77,9 @@ const besideTarget = (
 };
 
 /**
- * `moving` on the `edge` side of the node at `at`: in the container around it
- * where that runs along the edge's axis, and wrapped up with it in a split of
- * that axis where it does not — which is also what a workspace of one window
- * gets, having no container around it at all.
+ * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
+ * parent runs along that axis, else in a new split with the node (also when
+ * there is no parent).
  */
 const placedBeside = (
   root: LayoutNode,

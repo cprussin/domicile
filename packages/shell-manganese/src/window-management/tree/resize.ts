@@ -1,5 +1,5 @@
-// sway's resize mode, on a tiled window: its share of the container it is in,
-// taken from or given to the window beside it.
+// sway's resize mode for tiled windows: moves share between the focused
+// window and its neighbor.
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
@@ -10,30 +10,26 @@ import type { Tiling } from "./tiling";
 import { focusPathOf } from "./tiling";
 
 /**
- * How much of a container one press moves.
+ * The share of a container one resize press moves.
  *
- * sway's own bindings say `10 px`, which this cannot mean: a tiled window's
- * size here is a share of its container rather than a length, and the shares
- * are what the tree holds. A fiftieth of the container is the same order of
- * size on a desktop-sized screen and is one press either way to undo.
+ * sway binds `10 px`, but the tree stores shares, not lengths. 2% is a similar
+ * size on a desktop screen.
  */
 export const RESIZE_STEP = 0.02;
 
 /**
- * The smallest share a window can be left with.
+ * The smallest share a window can have.
  *
- * Not a taste: a window squeezed to nothing has no title bar to grab and no
- * surface to point at, so it cannot be resized back.
+ * A window squeezed to nothing has no surface to grab, so it could not be
+ * resized back.
  */
 export const SMALLEST = 0.05;
 
 /**
- * The tiling with the focused window grown or shrunk one step `direction`.
+ * The tiling with the focused window resized one step in `direction`.
  *
- * Right and down grow it, left and up shrink it — which is what sway's resize
- * mode binds to `l`/`j` and `h`/`k`. The container that runs the way the user
- * asked is the one that gives: a window in a column cannot be made wider by
- * itself, so the ask climbs to the row the column is in.
+ * Right and down grow it; left and up shrink it, as in sway's resize mode. The
+ * resize applies to the nearest ancestor laid out along `direction`'s axis.
  */
 export const resized = (tiling: Tiling, direction: Direction): Tiling => {
   const { root } = tiling;
@@ -62,12 +58,11 @@ export const resized = (tiling: Tiling, direction: Direction): Tiling => {
 };
 
 /**
- * The container's shares with one step moved between the focused child and its
- * neighbor, or `undefined` when that would squeeze one of them out.
+ * The container's shares with one step moved between the focused child and a
+ * neighbor, or `undefined` if that would go below `SMALLEST`.
  *
- * The neighbor is the one on the side being resized towards, and the one
- * *behind* where there is nothing ahead: a window at the end of a row still
- * grows when it is asked to, by taking from what is before it.
+ * Uses the neighbor ahead in `direction`, or the one behind at the end of the
+ * row, so the last window can still grow.
  */
 const shared = (
   { container, index }: Ancestor,
@@ -80,8 +75,6 @@ const shared = (
   const shrinks = isForward(direction) ? from : index;
   const grown = container.fractions[grows];
   const shrunk = container.fractions[shrinks];
-  // Nothing to move where there is no neighbor to move it with, and nothing
-  // to take from a window that has the least a window can have.
   if (
     grown === undefined ||
     shrunk === undefined ||

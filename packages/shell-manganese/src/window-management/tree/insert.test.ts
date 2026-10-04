@@ -14,7 +14,7 @@ import {
 const tiled = (...ids: readonly string[]) =>
   ids.reduce((tiling, id) => inserted(tiling, id), NOTHING_TILED);
 
-/** A window beside a column of two, with the column's first being worked in. */
+/** A window beside a column of two, with focus on the column's first. */
 const NESTED = {
   depth: 2,
   root: LayoutNode.Container(
@@ -39,7 +39,7 @@ describe("inserted", () => {
   });
 
   it("tabs the workspace for the second one", () => {
-    // sway's `workspace_layout tabbed`, which is this desktop's default.
+    // sway's `workspace_layout tabbed`, the desktop's default.
     expect(tiled("a", "b").root).toMatchObject({ layout: Layout.Tabbed });
   });
 
@@ -63,8 +63,7 @@ describe("inserted", () => {
   });
 
   it("opens inside the container `focus parent` selected", () => {
-    // The focus is the outer container, so the window lands beside the column
-    // rather than inside it.
+    // With focus on the outer container, the window lands beside the column.
     const opened = inserted(focusedParent(focusedParent(NESTED)), "d");
 
     expect(opened.root).toMatchObject({

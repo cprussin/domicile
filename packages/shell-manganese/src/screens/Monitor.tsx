@@ -13,43 +13,43 @@ import {
   workspacesOn,
 } from "../window-management/window-state";
 
-/** What a monitor's bar knows of the desk's notifications. */
+/** The notification state a monitor's bar needs. */
 export type MonitorNotifications = {
   unread: number;
   onOpen: () => void;
 };
 
 type Props = {
-  /** Run a command: a press on this monitor's chrome. */
+  /** Run a command for this monitor's chrome. */
   act: (action: WindowAction) => void;
   domicile: DomicileClient;
-  /** The extensions with an action, for the tray on this monitor's bar. */
+  /** The extensions with an action, for the tray. */
   extensions: readonly Extension[];
   /** Which monitor this is. */
   name: string;
   /**
-   * The desk's notifications, as this monitor's bar has them: how many
-   * arrived unseen, whether the drawer is open, and how to open it.
+   * The notifications as this bar shows them: unseen count, whether the drawer
+   * is open, and how to open it.
    */
   notifications: MonitorNotifications;
-  /** The extension whose popup is open under this bar's tray, if any. */
+  /** The extension whose tray popup is open, if any. */
   opened: string | undefined;
-  /** An extension's popup opened under this bar's tray, or closed. */
+  /** Open or close an extension's tray popup. */
   onOpenExtension: (id: string | undefined) => void;
-  /** The system tray's icons, for this monitor's bar. */
+  /** The system tray icons. */
   tray: readonly TrayItem[];
-  /** The order of this monitor's tray, which is every monitor's. */
+  /** The tray order, shared by every monitor. */
   trayOrder: TrayOrder;
-  /** What goes on this monitor's bar, which is every monitor's. */
+  /** The bar layout, shared by every monitor. */
   topBar: TopBarLayout;
   windows: Windows;
 };
 
 /**
- * One monitor of the desk: the bar across the top of it.
+ * One monitor: the bar across its top.
  *
- * The windows are not here. The page spans the desk, so the `Stage` draws
- * every window once, at its place on the page, whichever monitor it is on.
+ * Windows are not drawn here. The page spans the whole desktop, so `Stage`
+ * draws each window once at its place on the page.
  */
 export const Monitor = ({
   act,

@@ -4,10 +4,10 @@ import userEvent from "@testing-library/user-event";
 
 import { Lock } from "./Lock";
 
-/** Where the lock stands, as `useLocked` would hand it over. */
+/** The lock state, as `useLocked` returns it. */
 type Standing = { checking: boolean; locked: boolean; refusals: number };
 
-/** The lock over a desk, recording every passphrase it was asked to offer. */
+/** Renders the lock, recording every passphrase it submits. */
 const lock = (locked = true) => {
   const offered: string[] = [];
   const drawn = (standing: Standing) => (
@@ -33,9 +33,8 @@ const lock = (locked = true) => {
 
 describe("Lock", () => {
   it("is out of reach while the desk is open", () => {
-    // Inert rather than unmounted, because it has to fade out after the desk
-    // opens — and a sheet over the whole desktop that was merely transparent
-    // would take every click on the desk with it, and every Tab too.
+    // Inert rather than unmounted so it can fade out. A transparent sheet would
+    // still catch every click and Tab.
     lock(false);
 
     expect(
@@ -51,8 +50,7 @@ describe("Lock", () => {
 
   describe("the keyboard", () => {
     it("is put in the field as the desk shuts", () => {
-      // On the edge rather than on mount: the sheet is on the page the whole
-      // time, so the moment it is shown is the moment the compositor says so.
+      // On the transition, not on mount: the sheet is always mounted.
       const { says } = lock(false);
 
       says({ locked: true });
@@ -61,8 +59,8 @@ describe("Lock", () => {
     });
 
     it("cannot be taken out of the field while the desk is shut", async () => {
-      // Nothing else on a locked desk is anything to type into, so a key that
-      // went anywhere but the field is a key of the passphrase thrown away.
+      // The field is the only input on a locked desktop, so a key elsewhere
+      // would be lost.
       const { user } = lock();
 
       await user.tab();
@@ -74,10 +72,8 @@ describe("Lock", () => {
   });
 
   it("offers what was typed and never decides anything itself", async () => {
-    // THE WHOLE OF WHAT THIS COMPONENT DOES WITH A PASSPHRASE IS HAND IT OVER.
-    // It is still on the page afterward, because what clears it is the
-    // compositor saying the desk opened — a lock screen that cleared itself on
-    // submit would be a lock anybody could open by pressing Enter.
+    // The component only submits the passphrase. The compositor's unlock clears
+    // it; clearing on submit would let Enter alone appear to unlock.
     const { offered, user } = lock();
 
     await user.type(screen.getByLabelText("Passphrase"), "open sesame{Enter}");
@@ -87,10 +83,7 @@ describe("Lock", () => {
   });
 
   it("keeps the passphrase out of the document", () => {
-    // A field whose value is readable off the screen over the shoulder of
-    // somebody standing at a locked desk is not a passphrase field. `type` is
-    // asserted rather than assumed because it is one attribute between a lock
-    // screen and a billboard.
+    // The passphrase must not be readable on screen.
     lock();
 
     expect(screen.getByLabelText("Passphrase").getAttribute("type")).toBe(
@@ -100,9 +93,7 @@ describe("Lock", () => {
 
   describe("a passphrase being checked", () => {
     it("stays in the field, and is not offered twice", async () => {
-      // Held rather than cleared, because nothing has said it was wrong yet —
-      // a field that emptied on Enter is a person who cannot see what they
-      // just sent.
+      // Kept until the compositor answers, so the user can see what they sent.
       const { field, offered, says, user } = lock();
       await user.type(field(), "open sesame{Enter}");
 
@@ -114,9 +105,8 @@ describe("Lock", () => {
     });
 
     it("is cleared once it is refused, and the refusal said", async () => {
-      // A refusal is the only thing that says the try was wrong, so it is the
-      // only thing that empties the field — and one somebody walked away from
-      // would be a guess left on the screen of a locked desk.
+      // Only a refusal clears the field, so a wrong guess is not left on
+      // screen.
       const { field, says, user } = lock();
       await user.type(field(), "wrong{Enter}");
       says({ checking: true });
@@ -137,8 +127,8 @@ describe("Lock", () => {
     });
 
     it("is cleared once the desk opens", async () => {
-      // The sheet outlives the lock to fade out, and a passphrase left in it
-      // would be one sitting in the page of an open desk.
+      // The sheet stays mounted to fade out, so the passphrase must not stay in
+      // it.
       const { field, says, user } = lock();
       await user.type(field(), "open sesame{Enter}");
 

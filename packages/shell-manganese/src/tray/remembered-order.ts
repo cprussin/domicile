@@ -1,39 +1,36 @@
 import { z } from "zod";
 
-// The order of the tray's icons, which is the user's and is nobody else's to
-// keep: the compositor sends the icons, and the engine the extensions, each in
-// an order of its own. So this page writes it down, and every page of the desk
-// reads the same one — they are one origin.
+// The user's tray icon order, stored locally. The compositor and engine each
+// send icons in their own order. Every page of the desktop shares one origin,
+// so they read the same stored order.
 
-/** Where the order is kept, suffixed per the versioning rule for persisted state. */
+/** The storage key, versioned per the persisted-state rule. */
 export const ORDER_KEY = "tray-order:v1";
 
 const orderSchema = z.array(z.string());
 
 /**
- * The order the user last put the tray in, as the keys `trayKey` makes, or
- * none at all on a machine that has not seen one.
+ * The stored tray order, as `trayKey` keys, or none if nothing is stored.
  *
- * Parsed rather than cast, because anything can be under the key: a value
- * this build cannot read is no order, and the tray falls back to the order the
- * icons arrived in until the user drags one.
+ * Parsed rather than cast: an unreadable value counts as no order, and the tray
+ * uses arrival order until the user drags an icon.
  */
 export const rememberedOrder = (): readonly string[] => {
   const stored = globalThis.localStorage.getItem(ORDER_KEY);
   return stored === null ? [] : parseOrder(stored);
 };
 
-/** Write the order down, for the other pages and the next load. */
+/** Store the order for other pages and future loads. */
 export const rememberOrder = (order: readonly string[]): void => {
   globalThis.localStorage.setItem(ORDER_KEY, JSON.stringify(order));
 };
 
-/** `stored` as an order, or none when it is not one. */
+/** `stored` as an order, or none if it is not one. */
 export const parseOrder = (stored: string): readonly string[] =>
   storedOrderSchema.safeParse(stored).data ?? [];
 
-// JSON that is not JSON is an issue of the parse rather than a throw, so a
-// mangled value is no order like any other value that is not one.
+// Invalid JSON is a parse issue, not a throw, so it is handled like any other
+// invalid value.
 const storedOrderSchema = z
   .string()
   .transform((text, context): unknown => {

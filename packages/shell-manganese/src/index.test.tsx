@@ -5,14 +5,11 @@ import { act, within } from "@testing-library/react";
 import { exec, runManganese } from "./index";
 
 describe("runManganese", () => {
-  // The library's whole promise: a layout of the user's own, on the bar of a
-  // desktop they did not have to build.
+  // A custom bar layout on the stock desktop.
   it("mounts manganese into the root with the bar it is given", async () => {
-    // A page with no compositor says so once on the console, which is the
-    // case here and not the thing under test.
+    // Without a compositor the shell logs a warning; not under test here.
     const said = spyOn(console, "warn").mockImplementation(() => undefined);
-    // Never put in the document: a desktop this test cannot unmount would
-    // still be on the page every later test queries.
+    // Not attached to the document, so it can't leak into later tests.
     const root = document.createElement("div");
 
     act(() => {
@@ -29,13 +26,12 @@ describe("runManganese", () => {
     said.mockRestore();
   });
 
-  // The other half of the promise: a desk's own keys, in place of manganese's.
-  // Under a compositor, so they are claimed: what is grabbed is what the shell
-  // was given and nothing else.
+  // Custom keybindings replace the defaults. Runs under a compositor so the
+  // grabbed keys can be checked.
   it("binds the keys it is given rather than its own", () => {
     const grabbed: DomicileShortcut[] = [];
-    // The compositor, as far as a shell's start reaches it: events, its two
-    // readings not yet taken, and every call a no-op but the one under test.
+    // Minimal compositor: events, unanswered readings, and no-op calls except
+    // the one under test.
     const events = new EventTarget();
     const READINGS = new Set<PropertyKey>(["brightness", "displays"]);
     const host = new Proxy(events, {

@@ -5,8 +5,8 @@ import { render } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { Scrim } from "./Scrim";
 
-// The real stylesheet, for what the motion and the settling resolve to — see
-// `TitleBar.test.tsx` for why the layers come off.
+// Loads the real stylesheet so motion and settling styles resolve. See
+// `TitleBar.test.tsx` for why the layers are stripped.
 const stylesheet = document.createElement("style");
 stylesheet.textContent = readFileSync(
   new URL("../../styled-system/styles.css", import.meta.url),
@@ -16,10 +16,10 @@ stylesheet.textContent = readFileSync(
   .replaceAll(/@layer [^{]+\{/g, "@media all{");
 document.head.append(stylesheet);
 
-/** The whole box of a window, bar included. */
+/** A window's full frame, title bar included. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 32 };
 
-/** The props every case here shares; each overrides the one it is about. */
+/** Default props; each test overrides what it checks. */
 const scrimProps = {
   depth: 0,
   dimmed: true,
@@ -83,8 +83,7 @@ describe("Scrim", () => {
     });
   });
 
-  // A scrim that stood still while its window grew in or slid away would be
-  // a gray box left behind on the desk.
+  // Otherwise the scrim would be left behind as a gray box.
   it("plays the motion of the window it is over, about that window's middle", () => {
     const { container } = render(<Scrim {...scrimProps} motion="opening" />);
 
@@ -106,8 +105,7 @@ describe("Scrim", () => {
     expect(scrim(container).style.getPropertyValue("--restack-to")).toBe("2");
   });
 
-  // Focus follows the cursor, so this changes every time the pointer crosses
-  // a window.
+  // Focus follows the cursor, so the dim changes often.
   it("eases in and out of the wash", () => {
     const { container } = render(<Scrim {...scrimProps} />);
 

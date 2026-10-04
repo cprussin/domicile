@@ -8,7 +8,7 @@ import { useTileDrag } from "./useTileDrag";
 const DRAGGED = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
 const OTHER = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
 
-/** A press, carrying what the hook actually reads off a pointer event. */
+/** A press with only the pointer-event fields the hook reads. */
 const press = (x: number, y: number, button = 0) =>
   ({
     button,
@@ -19,7 +19,7 @@ const press = (x: number, y: number, button = 0) =>
     // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the fields read
   }) as any;
 
-/** The secondary button, which resizes whatever it takes hold of. */
+/** The secondary button, which resizes. */
 const SECONDARY = 2;
 
 const moveTo = (x: number, y: number): void => {
@@ -87,7 +87,7 @@ describe("useTileDrag", () => {
     });
 
     it("says where it would land only when that changes", () => {
-      // Every move would otherwise redraw the desktop to say the same thing.
+      // Only changes are reported, to avoid a redraw on every move.
       const { calls, grab } = dragging();
       grab(100, 100);
       act(() => {
@@ -128,9 +128,8 @@ describe("useTileDrag", () => {
 
   describe("resizing", () => {
     it("drags the edges of the quarter it took hold of, move by move", () => {
-      // Each move by what it moved since the last one: the tree holds shares,
-      // and a share taken from the tree as it was at the press would be
-      // applied to one that has been stretched since.
+      // Deltas are per move: the tree stores shares, so a delta from the press
+      // would be applied to a tree already stretched.
       const { calls, grab } = dragging(true);
       grab(400, 300);
       act(() => {

@@ -4,17 +4,17 @@ import { useEffect, useRef } from "react";
 import type { Direction } from "../direction";
 import { Axis, axisOf } from "../direction";
 
-/** A drag of one border in progress, settled when it was taken hold of. */
+/** A border drag in progress, fixed when it started. */
 type Drag = {
   edge: Direction;
-  /** Where the pointer was at the last move, which the next is measured from. */
+  /** The pointer at the last move; the next delta is measured from it. */
   last: { x: number; y: number };
   onDrop: () => void;
   onStretch: (edge: Direction, by: number) => void;
 };
 
 type Options = {
-  /** Which side of the window this border is. */
+  /** The window side this border is on. */
   edge: Direction;
   onDrop: () => void;
   onGrab: () => void;
@@ -23,11 +23,9 @@ type Options = {
 };
 
 /**
- * Turning a drag on a tiled window's border into that edge moved: the pointer's
- * travel along the edge's axis, move by move, and nothing across it.
+ * Moves a tiled window's edge by the pointer's travel along the edge's axis.
  *
- * The press is the element's and the rest of the drag is the window's, and the
- * drag is a ref rather than state — both for the reasons `useFloatDrag` gives.
+ * Listens for the rest of the drag on `window`, as `useFloatDrag` explains.
  */
 export const useBorderDrag = ({
   edge,
@@ -46,8 +44,7 @@ export const useBorderDrag = ({
         running.current = followed(started, event.clientX, event.clientY);
       }
     };
-    // Idempotent, because both a release and a cancel can arrive for one
-    // drag — see `useFloatDrag`.
+    // Idempotent: one drag can get both a release and a cancel.
     const ended = () => {
       const started = running.current;
       if (started !== undefined) {
@@ -79,7 +76,7 @@ export const useBorderDrag = ({
   };
 };
 
-/** The drag with the pointer at `x`, `y`, and the edge moved to follow it. */
+/** Moves the edge to follow the pointer at `x`, `y`. */
 const followed = (drag: Drag, x: number, y: number): Drag => {
   const by =
     axisOf(drag.edge) === Axis.Horizontal ? x - drag.last.x : y - drag.last.y;

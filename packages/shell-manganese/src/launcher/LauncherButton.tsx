@@ -3,14 +3,11 @@ import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { css } from "../../styled-system/css";
 
 type Props = {
-  /** Open the launcher. */
+  /** Opens the launcher. */
   onOpen: () => void;
 };
 
-/**
- * The button at the bar's far start: the launcher, for a hand already on the
- * pointer. `mod+Space` is the same panel.
- */
+/** The bar's launcher button, the pointer equivalent of `mod+Space`. */
 export const LauncherButton = ({ onOpen }: Props) => (
   <button
     aria-label="Launcher"
@@ -23,9 +20,8 @@ export const LauncherButton = ({ onOpen }: Props) => (
   </button>
 );
 
-// The bell's shape: a round, borderless control in the bar's own white, lit on
-// hover. The margin takes back the bar's own gap (its start column's `gap: 4`),
-// so the tray starts right after the button.
+// Styled like the bell button. The negative margin cancels the bar's start
+// column `gap: 4`, so the tray sits right after the button.
 const buttonStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",

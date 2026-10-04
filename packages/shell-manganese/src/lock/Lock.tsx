@@ -8,68 +8,50 @@ import { css, cva } from "../../styled-system/css";
 import { center, hstack, vstack } from "../../styled-system/patterns";
 import { LockClock } from "./LockClock";
 
-/** What the field is called, which is also how a test finds it. */
+/** The field's label, also used by tests to find it. */
 const PASSPHRASE = "Passphrase";
 
 type Props = {
-  /** Whether the compositor says this desk is locked. */
+  /** Whether the compositor says the desktop is locked. */
   locked: boolean;
-  /** Whether a passphrase is out with the compositor, unanswered. */
+  /** Whether a submitted passphrase is awaiting the compositor's answer. */
   checking: boolean;
-  /** How many passphrases the compositor has turned down — see `useLocked`. */
+  /** How many passphrases the compositor has refused; see `useLocked`. */
   refusals: number;
   /**
-   * Offer this passphrase to the compositor.
+   * Submit a passphrase to the compositor.
    *
-   * What opens the desk is the compositor agreeing, and what says so is the
-   * `locked` message that turns {@link locked} off; what says it did not is
-   * {@link refusals} going up.
+   * Success arrives as {@link locked} turning off; failure as {@link refusals}
+   * going up.
    */
   onUnlock: (passphrase: string) => void;
 };
 
 /**
- * The lock screen: a sheet over the whole desktop with a passphrase on it.
+ * The lock screen: a full-desktop sheet with a passphrase field.
  *
- * **IT IS NOT WHAT LOCKS THE DESK, AND IT IS NOT WHAT UNLOCKS IT EITHER.** The
- * compositor holds the lock — while it is shut, nothing this page forwards is
- * put into the Wayland seat, so no client on this desk sees a keystroke or a
- * click. This component draws over a desktop that has already stopped listening
- * and collects what somebody types; the compositor decides whether that opens
- * anything. So there is no local state here for a click to flip, which is what
- * makes the lock survive a reload of this page.
+ * The compositor holds the lock and stops injecting this page's input into the
+ * Wayland seat while locked. This component holds no lock state; it only draws
+ * over the desktop and sends the passphrase, so reloading the page cannot
+ * unlock it. See docs/LOCK.md.
  *
- * A picture of the same thing would be indistinguishable from this one, and that
- * is fine: what the picture would be missing is not on the page at all.
+ * It stays mounted and is `inert` while unlocked so it can fade in and out;
+ * once faded it is `display: none`, so it never catches clicks on the desktop.
  *
- * **On the page the whole time, and inert while the desk is open.** It fades in
- * and out — the desktop blurring away under it and coming back into focus — so
- * it has to outlive the `locked` that took it away. While the desk is open it is
- * `inert` and, once the fade is over, `display: none`: a sheet over the whole
- * desktop that was merely transparent would take every click on the desk with
- * it, and the desk this shell draws is the one somebody is working at.
+ * While locked, focus stays in the field, since nothing else accepts input.
  *
- * **The keyboard stays in the field while the desk is shut.** Nothing else on a
- * locked desk is anything to type into, so a key that went anywhere else is a
- * key of the passphrase thrown away.
- *
- * **Nothing dismisses it.** Not Escape, not a click beside it, not submitting:
- * `ModalDialog` is the wrong primitive here for exactly that reason — every one
- * of its ways out is a way past this. The only thing that takes this off the
- * screen is the desk opening.
+ * Nothing dismisses it except unlocking: not Escape, an outside click or
+ * submit. That is why it does not use `ModalDialog`.
  */
 export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
   const field = useRef<HTMLInputElement>(null);
 
-  // The sheet is up because the desk shut, so the keyboard belongs in the field:
-  // a lock screen where the first thing typed goes nowhere is one somebody types
-  // their passphrase into twice. Taken on the edge, which is the moment the desk
-  // shut — the sheet itself is on the page the whole time.
+  // Focus the field when the desktop locks, so the first keys typed are not
+  // lost. Done on the transition because the sheet is always mounted.
   //
-  // And cleared as it opens: the sheet outlives the lock to fade out, and a
-  // passphrase left in it would be one sitting in the page of an open desk.
+  // Clear the field on unlock: the sheet stays mounted to fade out.
   useEffect(() => {
     if (locked) {
       field.current?.focus();
@@ -79,9 +61,8 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
     }
   }, [locked]);
 
-  // A refusal is the only thing that says a try was wrong, so it is the only
-  // thing that empties the field while the desk is shut — and one left full
-  // after it would be a guess left on the screen of a locked desk.
+  // Clear the field on a refusal, so a wrong guess is not left on a locked
+  // screen.
   useEffect(() => {
     if (refusals > 0) {
       setTyped("");
@@ -95,9 +76,8 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
     <div
       className={sheetStyles}
       inert={!locked}
-      // Nothing on the sheet takes the keyboard from the field. A press is
-      // still a press — the button submits on its click — it just leaves the
-      // focus where it was, and so does Tab, which has nowhere else to go.
+      // Keep focus in the field. The button still submits on click, and Tab has
+      // nowhere else to go.
       onKeyDown={(event) => {
         if (event.key === "Tab") {
           event.preventDefault();
@@ -115,13 +95,11 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
           <form
             className={formStyles({ shaken: shaken(refusals), wrong })}
             onSubmit={(event) => {
-              // The page is the desktop and has nowhere to navigate to; a
-              // submit that reloaded it would throw away the connection this
-              // shell is drawn over.
+              // Prevent navigation: reloading would drop the connection the
+              // shell runs on.
               event.preventDefault();
-              // One out at a time, which is also what the compositor allows:
-              // a second offered while the first is being checked is dropped
-              // there unchecked.
+              // One submission at a time; the compositor drops a second one
+              // sent while the first is being checked.
               if (!checking) {
                 onUnlock(typed);
               }
@@ -136,15 +114,13 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
               }}
               placeholder={PASSPHRASE}
               prefixIcon={<LockIcon />}
-              // Held as it was sent until the compositor answers, so what is
-              // being checked is what is on the screen.
+              // Read-only while checking, so the screen shows what is being
+              // checked.
               readOnly={checking}
               ref={field}
               rounded
               size="lg"
-              // The one attribute between a lock screen and a billboard: the
-              // screen of a locked desk is the screen somebody else is
-              // standing in front of.
+              // Keep the passphrase hidden from anyone looking at the screen.
               type="password"
               value={typed}
             />
@@ -169,22 +145,15 @@ export const Lock = ({ checking, locked, onUnlock, refusals }: Props) => {
   );
 };
 
-// Over everything, including the panels: the launcher and the clipboard are
-// `modal`, and a lock screen underneath an open launcher would be a locked desk
-// somebody could still type a path into. `lock` is the preset's token for that
-// one layer. One sheet for the whole desktop rather than one per screen, for the
-// wallpaper's reason — the page spans every display, so `position: fixed` is the
-// desktop.
+// Above everything, including modal panels like the launcher, so nothing can
+// take input over the lock. `lock` is the preset's z-index token for it. One
+// sheet spans every display, since the page is the whole desktop.
 //
-// The desktop under it in full color and out of focus, rather than a shutter:
-// the blur is what keeps it unreadable, and a shade richer is what keeps it
-// looking like the desk somebody left rather than a gray wall. A light veil and
-// a vignette are what make the clock legible over whatever was on the screen.
+// The desktop shows through blurred rather than hidden: the blur keeps it
+// unreadable. The veil and vignette keep the clock legible.
 //
-// It comes and goes by the blur as much as by the fade — the desktop slides out
-// of focus as the sheet comes up and back into it as the sheet goes — and
-// `display` is carried through the fade out (`allow-discrete`) so the sheet is
-// only taken out of the layout once there is nothing of it left to see.
+// It fades and blurs in and out together. `allow-discrete` delays `display:
+// none` until the fade ends.
 const sheetStyles = center({
   _starting: {
     backdropFilter: "blur(0) saturate(100%)",
@@ -207,8 +176,7 @@ const sheetStyles = center({
   zIndex: "lock",
 });
 
-// The clock and the field rise into place as the desktop blurs away, and sink
-// back as it comes into focus again.
+// The clock and field rise in as the desktop blurs, and sink as it clears.
 const contentStyles = vstack({
   _starting: {
     opacity: 0,
@@ -225,21 +193,16 @@ const contentStyles = vstack({
     "opacity {durations.slowest} {easings.out}, transform {durations.slowest} {easings.emphasized}",
 });
 
-// Under the pane rather than in the column, so a refusal said and taken back
-// does not move the clock.
+// Positioned under the pane, so showing a refusal does not move the clock.
 const entryStyles = css({
   position: "relative",
 });
 
-// A pane of the library's glass — see `ModalDialog`'s glass surface — around
-// the field and its button, with the line of light along its top edge that a
-// pane catches. The field is part of the pane rather than a card sitting on
-// it, as in the file picker's.
+// A glass pane (see `ModalDialog`) around the field and button.
 //
-// A refused passphrase shakes it, the way a head does, and edges it in
-// `danger` until somebody types again. Two keyframes of the same shake, taken
-// in turn, because an animation whose name does not change does not run
-// again — see `shaken`.
+// A refusal shakes it and outlines it in `danger` until the user types again.
+// There are two identical shake keyframes, alternated, because an animation
+// whose name does not change does not replay. See `shaken`.
 const formStyles = cva({
   base: hstack.raw({
     _before: {
@@ -299,7 +262,7 @@ const refusalStyles = css({
   textShadow: "textOverPhoto",
 });
 
-/** Which of the two shakes the pane is on, for the {@link refusals}th refusal. */
+/** Which shake keyframes to use for the {@link refusals}th refusal. */
 const shaken = (refusals: number): "never" | "once" | "again" => {
   if (refusals === 0) {
     return "never";

@@ -9,24 +9,20 @@ import {
 import { moveTo, place } from "./tray-order";
 
 export type TrayOrder = {
-  /** The order the user put the tray in; see `arrange`. */
+  /** The user's tray order; see `arrange`. */
   order: readonly string[];
-  /** Drag `dragged` onto `target`, among the `shown` keys; see `moveTo`. */
+  /** Move `dragged` onto `target` among the `shown` keys; see `moveTo`. */
   move: (shown: readonly string[], dragged: string, target: string) => void;
 };
 
 /**
- * The order of the tray's icons, remembered on this machine.
+ * The tray icon order, stored on this machine.
  *
- * Held once for the page rather than once per bar, for `useExtensions`'
- * reason: a page that is the whole desktop draws a bar per monitor, and a drag
- * on one is a drag on all of them. A desk that is a page per monitor hears the
- * others' drags as `storage` events, which the browser sends every page of the
- * origin but the one that wrote.
+ * Held once per page, not per bar, so a drag on one monitor's bar applies to
+ * all of them. Pages on other monitors receive it as a `storage` event.
  *
- * `shown` is the keys of every icon on the tray. One the order has never
- * placed is placed as it arrives, and written down, so an application closed
- * and opened again comes back where it was rather than last.
+ * `shown` is the keys of every icon on the tray. New keys are placed and stored
+ * on arrival, so a reopened application returns to its place.
  */
 export const useTrayOrder = (shown: readonly string[]): TrayOrder => {
   const [order, setOrder] = useState(rememberedOrder);

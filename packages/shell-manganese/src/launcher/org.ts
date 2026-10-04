@@ -1,7 +1,6 @@
-// An Org file's grammar, which `highlight.js` has none of: its outline,
-// markup and metadata, in the words the preview lights. Most are the words
-// every grammar uses; a headline's level, its keyword, its priority and its
-// tags, and a table's cells, are Org's own (`heading-1`, `todo`, `table`…).
+// A `highlight.js` grammar for Org, which it lacks. Most scopes are the
+// standard ones; Org-specific ones cover headline levels, keywords,
+// priorities, tags and table cells (`heading-1`, `todo`, `table`…).
 
 import type { common } from "lowlight";
 
@@ -10,8 +9,8 @@ type Grammar = (typeof common)[keyof typeof common];
 type Api = Parameters<Grammar>[0];
 
 /**
- * Org's grammar, for `lowlight.register`. A source block is lit in its own
- * language, so the grammar takes every language registered before it.
+ * Org's grammar, for `lowlight.register`. Source blocks are highlighted in
+ * their own language, so register it after every other language.
  */
 export const org: Grammar = (hljs) => ({
   contains: [
@@ -24,8 +23,7 @@ export const org: Grammar = (hljs) => ({
       ],
       end: /$/,
     },
-    // A headline's level as Org's own faces have it: four apart, then round
-    // again.
+    // Org's headline faces cycle every four levels.
     ...[1, 2, 3, 4].map((level) => ({
       begin: new RegExp(`^\\*{${level.toString()}}(\\*{4})* `),
       className: `heading-${level.toString()}`,
@@ -64,9 +62,9 @@ export const org: Grammar = (hljs) => ({
 });
 
 /**
- * Text set off by `marker` the way Org reads it: the marker after the start of
- * a line, a space or an opening bracket, and before its end, a space or
- * punctuation, with no space just inside either one.
+ * Org emphasis delimited by `marker`: preceded by line start, whitespace or an
+ * opening bracket, followed by line end, whitespace or punctuation, with no
+ * whitespace just inside the markers.
  */
 const emphasis = (marker: string): RegExp => {
   const m = `\\${marker}`;
@@ -75,8 +73,8 @@ const emphasis = (marker: string): RegExp => {
   );
 };
 
-// Markup a line can carry anywhere, a headline's and a table's included. Below
-// `emphasis`, because it is built as the module loads.
+// Inline markup, valid anywhere including headlines and tables. Defined after
+// `emphasis` because it calls it at load time.
 const INLINE = [
   { begin: /[<[]\d{4}-\d{2}-\d{2}[^>\]\n]*[>\]]/, className: "number" },
   { begin: /\[\[[^\]\n]+\](\[[^\]\n]+\])?\]/, className: "link" },
@@ -96,23 +94,20 @@ const INLINE = [
   })),
 ];
 
-// What a headline carries after its keyword, whatever its level.
+// Headline content after the keyword, at any level.
 const HEADLINE = [
   { begin: /\[#[A-Z0-9]\]/, className: "priority" },
   { begin: /(?<=\s):([\w@#%]+:)+(?=[ \t]*$)/, className: "tag" },
   ...INLINE,
 ];
 
-/** The rest of a line after a keyword or a property, lit as `className`. */
+/** Highlight the rest of the line as `className`. */
 const value = (className: string) => ({
   contains: [{ begin: /\S.*/, className }],
   end: /$/,
 });
 
-/**
- * A source block for each language registered, by its name or any alias, its
- * body lit in that language.
- */
+/** A source-block rule per registered language, matching its name or alias. */
 const sourceBlocks = (hljs: Api) =>
   hljs.listLanguages().map((name) => ({
     begin: new RegExp(

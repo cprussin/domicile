@@ -36,12 +36,8 @@ import {
   settlingStyles,
 } from "./window-management/window-styles";
 
-// The desktop as the *engine* describes it: a corner and an extent as four
-// numbers, which `screens/host-displays.ts` is what regroups into the rectangle
-// the component library lays out against. The double below holds this shape
-// rather than that one, so the mapping is exercised by every render here.
-//
-// Both lie down: two monitors of one page.
+// Displays in the engine's shape, so every render exercises the mapping in
+// `screens/host-displays.ts`. Two landscape monitors side by side.
 const LEFT: DomicileDisplay = {
   height: 1080,
   modeHeight: 1080,
@@ -66,14 +62,14 @@ const RIGHT: DomicileDisplay = {
   y: 0,
 };
 
-/** How tall the top bar is, which the windows below it start under. */
+/** The top bar's height; windows start below it. */
 const TOP_BAR = 32;
 
 /** The region a `<Screen>` renders for the display of this name. */
 const screenNamed = (container: HTMLElement, name: string): Element | null =>
   container.querySelector(`[data-screen="${name}"]`);
 
-/** Where the open dialog is laid out: the left edge and width of its box. */
+/** The open dialog's left edge and width. */
 const dialogBox = (): { left: string; width: string } => {
   const viewport = screen.getByRole("dialog").parentElement;
   return {
@@ -84,23 +80,18 @@ const dialogBox = (): { left: string; width: string } => {
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double that both records what the chrome asks of the host and emits the
-// host events the chrome reacts to.
+// Records the chrome's calls to the host and emits host events.
 class FakeDomicile {
   readonly calls: Call[] = [];
 
-  /**
-   * The desktop, retained the way the real client retains it: a description is
-   * a fact rather than an event, and the chrome reads it as often as it is
-   * told it.
-   */
+  /** The last description, retained as the real client retains it. */
   displays: readonly DomicileDisplay[] | undefined;
 
   readonly #handlers = new Map<string, (message: unknown) => void>();
 
-  /** What the host's index holds, or `undefined` until a test says. */
+  /** The files the host's index holds, or `undefined` until a test sets it. */
   #home: readonly string[] | undefined;
-  /** Searches the host has not answered yet. */
+  /** Searches not yet answered. */
   readonly #asked: { query: string; settle: (found: unknown) => void }[] = [];
 
   on(type: string, handler: (message: never) => void): this {
@@ -108,9 +99,8 @@ class FakeDomicile {
     return this;
   }
 
-  // Only if it is still the registered one: `on` is a single slot, so a
-  // teardown that removed whatever it found could silence the handler that
-  // displaced it.
+  // Only remove the current handler: `on` has a single slot, so removing
+  // whatever is registered could drop a newer handler.
   off(type: string, handler: (message: never) => void): this {
     if (this.#handlers.get(type) === handler) {
       this.#handlers.delete(type);
@@ -118,7 +108,7 @@ class FakeDomicile {
     return this;
   }
 
-  /** The host describing the desktop, which it does at least once. */
+  /** The host describes the desktop. */
   describes(displays: readonly DomicileDisplay[]): void {
     this.displays = displays;
     this.emit("displays", { displays });
@@ -133,10 +123,7 @@ class FakeDomicile {
   spawn(command: readonly string[]): void {
     this.calls.push(["spawn", command]);
   }
-  /**
-   * The host's search, answered once {@link holds} has said what the home is —
-   * and never before, which is a desktop whose walk has told it nothing yet.
-   */
+  /** Answered only after {@link holds} sets the index contents. */
   searchFiles(query: string): Promise<unknown> {
     this.calls.push(["searchFiles", query]);
     return new Promise((settle) => {
@@ -145,19 +132,19 @@ class FakeDomicile {
     });
   }
 
-  /** The host's search for applications, which these tests never need answered. */
+  /** Never answered; these tests do not need it. */
   searchApps(query: string): Promise<unknown> {
     this.calls.push(["searchApps", query]);
     return new Promise(() => undefined);
   }
 
-  /** The host's preview, which these tests never need answered. */
+  /** Never answered; these tests do not need it. */
   previewFile(path: string): Promise<unknown> {
     this.calls.push(["previewFile", path]);
     return new Promise(() => undefined);
   }
 
-  /** The home the host searches, which settles every search still waiting. */
+  /** Sets the index contents and answers every pending search. */
   async holds(files: readonly string[]): Promise<void> {
     this.#home = files;
     await act(async () => {
@@ -187,17 +174,16 @@ class FakeDomicile {
   warpPointer(to: readonly number[]): void {
     this.calls.push(["warpPointer", to]);
   }
-  // The portal forwards the keys a focused window is given, so the shell's own
-  // keystrokes reach this once a window has the keyboard.
+  // The portal forwards keys to the focused window, so shell keystrokes reach
+  // this once a window has the keyboard.
   key(appId: string, keycode: number, pressed: boolean): void {
     this.calls.push(["key", appId, keycode, pressed]);
   }
   focusChrome(): void {
     this.calls.push(["focusChrome"]);
   }
-  // What each client has drawn is the SDK's to remember, and the SDK reads it
-  // back off the client rather than off any element. Nothing here is about the
-  // pointer mapping that uses it, so every window maps its own box 1:1.
+  // These tests do not exercise pointer mapping, so every window maps its own
+  // box 1:1.
   surfaceSizeOf(): undefined {
     return undefined;
   }
@@ -226,12 +212,10 @@ class FakeDomicile {
 let domicile: FakeDomicile;
 
 /**
- * Renders the chrome on a desktop of `desktop`.
+ * Renders the chrome on `desktop`.
  *
- * Described *before* the first render by default, the way a shell that has
- * completed its handshake is: the chrome renders nothing until there is a
- * desktop to put it on. The tests that care about the gap pass `undefined` and
- * describe one themselves.
+ * The desktop is described before the first render by default, as after a
+ * completed handshake. Pass `undefined` to test the gap.
  */
 const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
@@ -243,9 +227,8 @@ const renderingShell = (
   domicile.displays = desktop;
   const client = domicile as unknown as DomicileClient;
   registerElements(client);
-  // A standalone theme source rather than `hostTheme`: what the bar's toggle
-  // does with the compositor is `host-theme.test.ts`'s, and a double that had
-  // to answer `theme` as well would make every test here depend on it.
+  // A standalone theme, so these tests do not depend on the host theme
+  // protocol; `host-theme.test.ts` covers that.
   const rendered = render(
     <Shell
       displays={hostDisplays(client)}
@@ -255,36 +238,29 @@ const renderingShell = (
       topBar={topBar}
     />,
   );
-  // The keyboard the keys are resolved on, which the compositor sends as the
-  // page connects.
+  // The compositor sends the keyboard map on connect.
   domicile.emit("shell_config", config);
   return rendered;
 };
 
-/** The chrome on a desktop the host has already described. */
+/** The chrome on an already described desktop. */
 const renderShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
   renderingShell(desktop);
 
-/**
- * The chrome before any desktop has been described — the gap between the page
- * loading and the host answering, and the whole of a shell that has no host.
- */
+/** The chrome before any desktop is described, or with no host at all. */
 const renderUndescribedShell = () => renderingShell(undefined);
 
-/** A client the host announces, which is a window on the desktop. */
+/** The host announces a client, which becomes a window. */
 const clientAppears = (appId: string, title = appId): void => {
   domicile.emit("app_appeared", { app_id: appId, title });
 };
 
 /**
- * The keys these tests press: the `KeyboardEvent.code` of the key each keysym
- * is on under Programmer's Dvorak — the layout the sample config in the README
- * is written for — and that key's evdev code, which is what the compositor
- * resolves a keysym to and what a binding names.
+ * The keys these tests press: each keysym's `KeyboardEvent.code` and evdev
+ * keycode under Programmer's Dvorak, the README sample's layout.
  *
- * Written out rather than read off the SDK's table: what this checks is that
- * the shell answers the key the compositor resolved, so taking the number from
- * the table the SDK reads would check nothing.
+ * Written out rather than taken from the SDK's table, so the test checks the
+ * shell against independent values.
  */
 const KEYS: Readonly<Record<string, readonly [code: string, keycode: number]>> =
   {
@@ -323,7 +299,7 @@ const KEYS: Readonly<Record<string, readonly [code: string, keycode: number]>> =
     w: ["Comma", 51],
   };
 
-/** The key a keysym is on, or a throw for one these tests never wrote down. */
+/** The key for a keysym; throws for one missing from {@link KEYS}. */
 const keyOf = (keysym: string): readonly [code: string, keycode: number] => {
   const key = KEYS[keysym];
   if (key === undefined) {
@@ -334,8 +310,8 @@ const keyOf = (keysym: string): readonly [code: string, keycode: number] => {
 };
 
 /**
- * One binding, as the README's sample writes it: Meta, Shift if `shift`, the
- * keysym, and the action in the config's old words.
+ * One binding in the README sample's form: Meta, Shift if `shift`, the
+ * keysym, and the action.
  */
 const line = (
   keysym: string,
@@ -375,11 +351,7 @@ const WORKSPACE_KEYS = [
   "asterisk",
 ] as const;
 
-/**
- * The README's sample config, as the SDK delivers it once the compositor has
- * resolved every keysym: the bindings manganese shipped hard-coded before they
- * moved into the config.
- */
+/** The README's sample config as the SDK delivers it, keysyms resolved. */
 const MANGANESE_KEYS: ShellKeybindings = {
   keybindings: Object.fromEntries([
     line("Return", false, "send-shell exec kitty"),
@@ -430,7 +402,7 @@ const MANGANESE_KEYS: ShellKeybindings = {
   },
 };
 
-/** The keyboard these tests type on: every keysym in {@link KEYS}. */
+/** The keyboard map for every keysym in {@link KEYS}. */
 const KEYBOARD: ShellConfigMessage = {
   keys: new Map(
     Object.entries(KEYS).map(([keysym, [, keycode]]) => [keysym, keycode]),
@@ -438,12 +410,11 @@ const KEYBOARD: ShellConfigMessage = {
 };
 
 /**
- * A chord pressed on this page, which is where every press the desktop's own
- * chrome or a focused Wayland window hears arrives.
+ * A chord pressed on this page, where the chrome and focused Wayland windows
+ * receive keys.
  *
- * By the *key* rather than by the letter on it: a binding names the key the
- * compositor resolved its keysym to, so a test presses the key Programmer's
- * Dvorak puts `h` on, exactly as the shell reads it.
+ * Presses the physical key, not the letter: a binding names the key the
+ * compositor resolved its keysym to.
  */
 const press = (keysym: string, shift = false): void => {
   fireEvent.keyDown(document, {
@@ -453,7 +424,7 @@ const press = (keysym: string, shift = false): void => {
   });
 };
 
-/** The same chord, handed back by the host — what a focused `<webview>` does. */
+/** The same chord forwarded by the host, as from a focused `<webview>`. */
 const hostPress = (keysym: string, shift = false): void => {
   domicile.emit("shortcut", {
     altKey: false,
@@ -464,27 +435,25 @@ const hostPress = (keysym: string, shift = false): void => {
   });
 };
 
-/** Where the page last saw the pointer, which every crossing is read against. */
+/** Moves the pointer on the page; crossings are judged against it. */
 const pointerAt = (x: number, y: number): void => {
   fireEvent.pointerMove(document, { clientX: x, clientY: y, pointerId: 1 });
 };
 
 /**
- * The pointer crossing into a window at a place on the page.
+ * The pointer crossing into a window at a point on the page.
  *
- * The event a browser fires first when a pointer enters an element — before
- * the `pointermove` behind it — and the one the desktop reads to decide
- * whether the pointer went to the window or the window came to the pointer.
+ * The desktop reads this `pointerover` to tell whether the pointer moved or
+ * the window moved under it.
  */
 const crossInto = (element: HTMLElement, x: number, y: number): void => {
   fireEvent.pointerOver(element, { clientX: x, clientY: y, pointerId: 1 });
 };
 
 /**
- * Where the shell last asked the engine to put the cursor.
+ * Where the shell last warped the cursor.
  *
- * Throws where it has asked for nothing: a case that reads this is one about
- * the warp, and no warp at all is that case failing rather than passing.
+ * Throws if it never warped, so a missing warp fails the test.
  */
 const warpedTo = (): readonly [x: number, y: number] => {
   const asked = [...domicile.calls]
@@ -502,10 +471,7 @@ const warpedTo = (): readonly [x: number, y: number] => {
   }
 };
 
-/**
- * What the page holds down, which is what hands the shell the pointer: Meta
- * pressed, or Meta let go of when it is not held.
- */
+/** Sets the page's held modifiers. Meta held hands the shell the pointer. */
 const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
   const meta = held.meta ?? false;
   (meta ? fireEvent.keyDown : fireEvent.keyUp)(document, {
@@ -516,7 +482,7 @@ const pageHolds = (held: { meta?: boolean; shift?: boolean }): void => {
   });
 };
 
-/** The windows on screen, by the client or the kind of window each one is. */
+/** The visible windows, by app ID or window label. */
 const windowsOnScreen = (container: HTMLElement): string[] =>
   [
     ...container.querySelectorAll(
@@ -529,7 +495,7 @@ const windowsOnScreen = (container: HTMLElement): string[] =>
       "",
   );
 
-/** Every window's title bar, in the order the windows were opened. */
+/** Every window's title bar, in opening order. */
 const titleBars = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>(
     "[data-window]:not([aria-hidden])",
@@ -545,7 +511,7 @@ const barFor = (container: HTMLElement, id: string): HTMLElement => {
   }
 };
 
-/** Everything on screen that is arriving or leaving, and what each is doing. */
+/** The motion of every element that is arriving or leaving. */
 const moving = (container: HTMLElement): string[] =>
   [
     ...container.querySelectorAll<HTMLElement>(
@@ -553,18 +519,16 @@ const moving = (container: HTMLElement): string[] =>
     ),
   ].map((element) => element.dataset.motion ?? "");
 
-/** The parts of one window that are arriving or leaving. */
+/** The elements in motion `motion`. */
 const movingParts = (container: HTMLElement, motion: string): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>(`[data-motion="${motion}"]`),
 ];
 
 /**
- * Everything that is arriving or leaving says it has finished.
+ * Ends every running animation.
  *
- * What a browser does by itself, and what nothing in a test DOM does: the
- * shell goes on drawing a window it has closed, and the workspace it has just
- * left, until the elements say their animations have ended. A case about what
- * the desktop shows *afterwards* has to play them out first.
+ * Test DOMs fire no `animationend`, and the shell keeps drawing closed windows
+ * and left workspaces until it arrives.
  */
 const motionsPlayOut = (container: HTMLElement): void => {
   for (const element of container.querySelectorAll(
@@ -574,14 +538,14 @@ const motionsPlayOut = (container: HTMLElement): void => {
   }
 };
 
-/** The sheet a drag is caught on, over one floating window. */
+/** The drag-catching sheets over floating windows. */
 const grabSheets = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>(
     "[data-window][aria-hidden]:not([data-border])",
   ),
 ];
 
-/** The border along the right edge of a floating window: its rightmost upright strip. */
+/** A floating window's right border: its rightmost vertical strip. */
 const rightBorder = (container: HTMLElement): HTMLElement => {
   const upright = [
     ...container.querySelectorAll<HTMLElement>("[data-border]"),
@@ -602,15 +566,15 @@ const rightBorder = (container: HTMLElement): HTMLElement => {
   }
 };
 
-/** The shadows cast under the floating windows on screen. */
+/** The shadows under floating windows. */
 const shadows = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>("[data-shadow]"),
 ];
 
 /**
- * The shadow under the one floating window on screen.
+ * The shadow under the only floating window.
  *
- * Throws where there is none, for the reason {@link groupOutline} does.
+ * Throws if there is none, like {@link groupOutline}.
  */
 const floatShadow = (container: HTMLElement): HTMLElement => {
   const [shadow] = shadows(container);
@@ -633,10 +597,8 @@ const appElement = (container: HTMLElement, appId: string): HTMLElement => {
 };
 
 /**
- * The page in the first browser window on screen asking for a window of its
- * own, which is what the engine reports when a `target="_blank"` link is
- * followed: a guest cannot be handed a window the browser process made, so the
- * address arrives on the element and opening one is the desktop's.
+ * The first browser window's page asks for a new window, as when a
+ * `target="_blank"` link is followed. The desktop opens it.
  */
 const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
   const view = container.querySelector("webview");
@@ -651,9 +613,8 @@ const pageAsksForAWindow = (container: HTMLElement, url: string): void => {
 };
 
 /**
- * An extension asking for a window of its own, `chrome.windows.create` with a
- * popup, which the engine dispatches on the browser window last worked in —
- * the first here, in every case that asks.
+ * An extension calls `chrome.windows.create` with a popup. The engine
+ * dispatches it on the last used browser window, the first one here.
  */
 const extensionAsksForAWindow = (
   container: HTMLElement,
@@ -676,7 +637,7 @@ const extensionAsksForAWindow = (
   }
 };
 
-/** The page in the first browser window on screen asking to be closed. */
+/** The first browser window's page asks to close. */
 const pageAsksToClose = (container: HTMLElement): void => {
   const view = container.querySelector("webview");
   if (view === null) {
@@ -686,17 +647,17 @@ const pageAsksToClose = (container: HTMLElement): void => {
   }
 };
 
-/** What every address bar on screen is showing, in the windows' own order. */
+/** Every address bar's value, in window order. */
 const addressesShowing = (): string[] =>
   screen
     .getAllByRole<HTMLInputElement>("combobox", { name: "Address" })
     .map((field) => field.value);
 
 /**
- * The wash over the window or tab `id` that sinks it while the commands are
- * pointed somewhere else — see `Scrim`.
+ * The scrim over window or tab `id` that dims it while commands target
+ * something else; see `Scrim`.
  *
- * Throws where there is none: every case that asks has that window open.
+ * Throws if there is none.
  */
 const scrimOver = (container: HTMLElement, id: string): HTMLElement => {
   const scrim = container.querySelector<HTMLElement>(`[data-scrim="${id}"]`);
@@ -707,19 +668,18 @@ const scrimOver = (container: HTMLElement, id: string): HTMLElement => {
   }
 };
 
-/** Whether the window or tab `id` is washed into the background. */
+/** Whether window or tab `id` is dimmed. */
 const dimmed = (container: HTMLElement, id: string): boolean =>
   scrimOver(container, id).dataset.dimmed !== undefined;
 
 /**
- * Whether `focus parent` has the commands pointed at a group: the bar of the
- * window the keyboard is in says so, by setting itself apart from the rest of
- * the group it raises.
+ * Whether `focus parent` targets a group: the focused window's bar marks
+ * itself apart from the group.
  */
 const pointedAtGroup = (container: HTMLElement): boolean =>
   titleBars(container).some((bar) => bar.dataset.focus === "leaf");
 
-/** Where an element was placed, as the numbers the layout worked out. */
+/** An element's laid-out box. */
 const boxOf = (element: HTMLElement) => ({
   height: element.style.blockSize,
   width: element.style.inlineSize,
@@ -727,32 +687,25 @@ const boxOf = (element: HTMLElement) => ({
   y: element.style.insetBlockStart,
 });
 
-/**
- * The compositor saying what the battery is doing.
- *
- * A message like every other one here, which is the point of the change that
- * put it on this channel: the charge used to come off `navigator.getBattery`,
- * and happy-dom has no such thing — so this case needed a platform stubbed in
- * where every other one needs only the host.
- */
+/** The compositor reports the battery state. */
 const machineSays = (reading: { charge: number; charging: boolean }): void => {
   domicile.emit("battery", reading);
 };
 
-/** The compositor saying what has been copied on this desktop, newest first. */
+/** The compositor reports the clipboard history, newest first. */
 const copied = (entries: readonly { id: number; preview: string }[]): void => {
   domicile.emit("clipboard", { entries });
 };
 
-/** An extension whose click is `action.onClicked`. */
+/** An extension whose click fires `action.onClicked`. */
 const CLICKED = "abcdefghijklmnopabcdefghijklmnop";
 
-/** And one whose click opens its popup. */
+/** An extension whose click opens its popup. */
 const POPPED = "ponmlkjihgfedcbaponmlkjihgfedcba";
 
 /**
- * The engine saying which extensions have an action: those two, the second
- * `action.disable()`d when `popped` is false.
+ * The engine reports both extensions' actions. The second is disabled when
+ * `popped` is false.
  */
 const extensionsInstalled = (popped = true): void => {
   domicile.emit("extensions", {
@@ -788,9 +741,8 @@ beforeEach(() => {
 describe("Shell", () => {
   describe("across the displays", () => {
     it("gives every display a bar, and every window one element on the desk", () => {
-      // A DESK OF SEVERAL MONITORS IS A DESKTOP ON EACH OF THEM, which is what
-      // a second monitor is for: each has its own bar. The windows are drawn
-      // once for the desk, so one that moves screens is the element it was.
+      // Each monitor gets its own bar. Windows are drawn once for the desk, so
+      // a window keeps its element when it changes screens.
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("term");
 
@@ -804,10 +756,8 @@ describe("Shell", () => {
     });
 
     it("shows a different workspace on each of them", () => {
-      // Two screens on one workspace would be one workspace drawn twice, which
-      // is one window embedded twice — and the second embedding takes the
-      // first's pixels, leaving a window that answers the keyboard and draws
-      // nothing. So the desk hands each screen one nobody else is on.
+      // Two screens on one workspace would embed a window twice, and the
+      // second embedding takes the first's pixels. Each screen gets its own.
       const { container } = renderShell([LEFT, RIGHT]);
 
       const marked = (name: string) =>
@@ -841,11 +791,8 @@ describe("Shell", () => {
     });
 
     it("mounts the chrome once, over the windows already open", () => {
-      // A chrome that reloads against a compositor with clients open is told
-      // about them, and nothing makes the host answer the handshake first. A
-      // chrome built before the desktop and rebuilt after it would take those
-      // windows down with it — every portal re-created blank, every embedded
-      // page reloaded to the URL its window was opened at.
+      // A reloaded chrome can learn of open clients before the handshake.
+      // Rebuilding it after would blank every portal and reload every page.
       const { container } = renderUndescribedShell();
       clientAppears("term", "Terminal");
 
@@ -861,10 +808,8 @@ describe("Shell", () => {
       domicile.describes([RIGHT]);
 
       expect(screenNamed(container, "left")).toBeNull();
-      // The same stage as before the unplug, and not a new one: a chrome
-      // rebuilt on a re-description reloads every embedded page to where it
-      // started and re-creates every portal blank, with nothing on screen to
-      // show for it. A monitor going is the commonest re-description there is.
+      // The same stage: rebuilding it would reload every page and blank every
+      // portal. Unplugging a monitor is the common case.
       expect(container.querySelector("main")).toBe(stage);
     });
   });
@@ -890,8 +835,7 @@ describe("Shell", () => {
 
   describe("the top bar", () => {
     it("lays out the items it is given, in the columns it is given them in", () => {
-      // The user's bar: an item of their own beside manganese's, and the rest
-      // of manganese's left off.
+      // A custom item beside some of manganese's, the rest left out.
       const { container } = renderingShell([LEFT], {
         left: [<BarLauncher key="launcher" />, <BarWorkspaces key="spaces" />],
         middle: [<span key="mail">mail 3/12</span>],
@@ -920,10 +864,8 @@ describe("Shell", () => {
     });
 
     it("draws its text white, with a shadow to keep it off the wallpaper", () => {
-      // The bar paints no background, so nothing else separates its text from
-      // whatever photograph is behind it. Declarations rather than a class
-      // name, because Panda hashes them: the check is that the element carries
-      // *these rules*.
+      // The bar has no background, so the shadow separates text from the
+      // wallpaper. Checked by declarations because Panda hashes class names.
       const { container } = renderShell();
 
       const bar = container.querySelector("header");
@@ -932,12 +874,9 @@ describe("Shell", () => {
     });
 
     it("hangs a scrim below itself so the text survives a bright wallpaper", () => {
-      // The shadow is a hairline under each letter; a wallpaper that is white
-      // across the whole top of the screen needs the ground darkened too. The
-      // scrim is deeper than the bar — a gradient that had to reach nothing by
-      // the bar's own edge would be at its weakest exactly where the text is —
-      // so it is a layer of its own that takes no pointer, rather than the
-      // bar's background.
+      // The text shadow alone is too thin for a bright wallpaper. The scrim
+      // extends below the bar so the gradient is not weakest under the text,
+      // so it is a separate layer that ignores the pointer.
       const { container } = renderShell();
 
       expect(container.querySelector("header")?.className).toContain(
@@ -973,7 +912,7 @@ describe("Shell", () => {
     });
 
     it("shows the workspace on screen and the ones with windows on them", () => {
-      // sway's own bar: an empty workspace nobody is looking at is not on it.
+      // As in sway's bar, an empty workspace that is not shown is omitted.
       renderShell();
       clientAppears("term");
       press("parenright");
@@ -1051,17 +990,14 @@ describe("Shell", () => {
     });
 
     it("draws no meter for a machine the host says nothing about", () => {
-      // A desktop PC, which the compositor sends no reading for at all. The
-      // bar showing `100%` on one would be the bug this readout was rebuilt
-      // to stop making, wearing a different hat.
+      // A desktop PC gets no battery reading; the bar must not show `100%`.
       renderShell();
 
       expect(screen.queryByRole("meter")).toBeNull();
     });
 
     it("opens the launcher from the button left of the tray", () => {
-      // `mod+Space` is still the launcher's key; the button is the same
-      // panel for a hand already on the pointer.
+      // `mod+Space` also opens it; the button is for pointer users.
       renderShell();
 
       fireEvent.click(screen.getByRole("button", { name: "Launcher" }));
@@ -1081,9 +1017,8 @@ describe("Shell", () => {
     });
 
     it("carries the theme toggle", () => {
-      // It changes what is already on screen rather than opening something,
-      // and there is no key to press instead. Two positions and no `system` —
-      // this bar is the system.
+      // No key does this. Two states and no `system`, since this bar is the
+      // system.
       renderShell();
 
       expect(
@@ -1095,8 +1030,7 @@ describe("Shell", () => {
 
   describe("the clipboard", () => {
     it("shows what has been copied, newest first", () => {
-      // Pushed: the history is here because the compositor said so, not
-      // because the panel asked on the way up.
+      // The compositor pushes the history; the panel does not ask for it.
       renderShell();
       copied([
         { id: 2, preview: "the newest" },
@@ -1121,8 +1055,8 @@ describe("Shell", () => {
     });
 
     it("puts the row that was picked back on the clipboard", () => {
-      // By the id the compositor gave it and never by its text: what the page
-      // may do to the seat's clipboard is choose among what is already on it.
+      // By id, never by text: the page may only choose among entries already
+      // on the seat's clipboard.
       renderShell();
       copied([{ id: 7, preview: "ssh-rsa AAAA" }]);
       press("v", true);
@@ -1255,8 +1189,8 @@ describe("Shell", () => {
     });
 
     it("takes the keyboard off the window while a popup is up, and gives it back", async () => {
-      // A popup is a page to type into that no client knows about, the
-      // launcher's case — see `AppWindow`.
+      // A popup is a page to type into, as with the launcher; see
+      // `AppWindow`.
       renderShell();
       extensionsInstalled();
       clientAppears("one");
@@ -1275,8 +1209,7 @@ describe("Shell", () => {
     });
 
     it("forgets a popup whose action was disabled while it was open", async () => {
-      // Its panel went with it, so an `action.enable()` later is not a click:
-      // the popup stays shut until the icon is pressed again.
+      // Re-enabling the action is not a click, so the popup stays closed.
       const { container } = renderShell();
       extensionsInstalled();
       await userEvent.click(screen.getByRole("button", { name: "Popped" }));
@@ -1296,9 +1229,7 @@ describe("Shell", () => {
 
   describe("the windows", () => {
     it("tiles a client's window over the whole workspace", () => {
-      // One window, so `gaps.smartGaps` leaves it the screen — under the bar,
-      // which is what the desktop takes off the top before laying anything
-      // out.
+      // One window, so `gaps.smartGaps` gives it the whole area below the bar.
       const { container } = renderShell();
       clientAppears("term");
 
@@ -1324,7 +1255,7 @@ describe("Shell", () => {
 
     it("draws a client's menu over its window, and takes it down when it goes", () => {
       // The workspace starts under the top bar, and a lone window's contents
-      // start under its own title bar.
+      // start under its title bar.
       const { container } = renderShell();
       clientAppears("term");
       const window = boxOf(appElement(container, "term"));
@@ -1344,7 +1275,7 @@ describe("Shell", () => {
         x: `${(Number.parseFloat(window.x) + 12).toString()}px`,
         y: `${(Number.parseFloat(window.y) + 30).toString()}px`,
       });
-      // Over its window, not in a frame of its own.
+      // Over its window, not in its own frame.
       expect(container.querySelectorAll("[data-window]").length).toBe(
         container.querySelectorAll('[data-window="app:term"]').length,
       );
@@ -1381,8 +1312,8 @@ describe("Shell", () => {
     });
 
     it("asks a client to close its own window", async () => {
-      // `closeApp` is a request: an editor with unsaved work may put a dialog
-      // up and stay, so the window goes when the host says it went.
+      // `closeApp` is a request: the client may show a dialog and stay, so the
+      // window goes only when the host reports it closed.
       const user = userEvent.setup();
       const { container } = renderShell();
       clientAppears("term");
@@ -1394,21 +1325,20 @@ describe("Shell", () => {
     });
 
     it("fills the screen from the button on the window's own bar", async () => {
-      // `mod+f`, reached with the pointer instead: the same toggle, on the
-      // window whose bar was pressed.
+      // The pointer equivalent of `mod+f`.
       const user = userEvent.setup();
       const { container } = renderShell();
       clientAppears("term");
 
       await user.click(screen.getByRole("button", { name: "Maximize" }));
 
-      // Over the top bar as well, which is what a fullscreen window covers.
+      // A fullscreen window covers the top bar too.
       expect(boxOf(appElement(container, "term"))).toMatchObject({
         height: `${(1080 - TITLE_BAR).toString()}px`,
         y: `${TITLE_BAR.toString()}px`,
       });
 
-      // And the same button is what gives the desktop back.
+      // The same button restores it.
       await user.click(screen.getByRole("button", { name: "Restore" }));
 
       expect(boxOf(appElement(container, "term"))).toMatchObject({
@@ -1426,10 +1356,8 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual([]);
     });
 
-    // A CLOSE IS THE ONE CHANGE THE DESKTOP CANNOT DRAW. Every other one ends
-    // with the desktop as it now is; this one ends with the window gone from
-    // the list, its workspace and the layout at once, so the page goes on
-    // drawing it from a record of what it was — see `closing.ts`.
+    // A closed window is gone from the state at once, so the page draws its
+    // exit from a snapshot; see `closing.ts`.
     it("plays a closed window out at the box it had, showing the window itself", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1437,8 +1365,7 @@ describe("Shell", () => {
 
       domicile.emit("app_closed", { app_id: "term" });
 
-      // The window's own element, not something standing in for it: what a
-      // window shows must not change while the user watches it go.
+      // The window's own element, so its contents do not change as it leaves.
       expect(appElement(container, "term")).toHaveAttribute(
         "data-motion",
         "closing",
@@ -1446,9 +1373,8 @@ describe("Shell", () => {
       expect(boxOf(appElement(container, "term"))).toEqual(was);
     });
 
-    // A TAB IS NOT A WINDOW. Closing the tab a tabbed workspace is showing
-    // closes it up across the strip and fades its contents, rather than
-    // shrinking the whole window away over the tab taking its place.
+    // Closing the visible tab collapses it along the strip and fades its
+    // contents, rather than shrinking the whole window over the next tab.
     it("closes a closed tab up along the strip it was in", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1463,15 +1389,14 @@ describe("Shell", () => {
       expect(
         barFor(container, "app:editor").style.getPropertyValue("--collapse-x"),
       ).toBe("0");
-      // Its contents only fade, to the tab taking its place under them.
+      // Its contents only fade, revealing the next tab underneath.
       expect(
         appElement(container, "editor").style.getPropertyValue("--collapse-x"),
       ).toBe("");
     });
 
-    // AND GOES ON SAYING WHAT IT SAID. Closing a window moves the keyboard to
-    // whatever is left, so a bar drawn from the desktop as it now is would
-    // lose its fill half way through the window's own departure.
+    // Closing moves the keyboard elsewhere, so the closing bar keeps its
+    // focused look from the snapshot.
     it("keeps its bar saying the keyboard was in it while it goes", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1485,11 +1410,8 @@ describe("Shell", () => {
       );
     });
 
-    // AND IS DRAWN OVER THE WINDOW MOVING INTO ITS PLACE. The neighbor eases
-    // into the box it had while it shrinks away inside it, and at the depth it
-    // used to have the neighbor would cover it before it had gone — two
-    // elements at one `z-index` are decided by the order they come in the
-    // document, and a closing window goes on being drawn where it always was.
+    // The neighbor grows into its space while it shrinks. At equal `z-index`
+    // document order would put the neighbor on top too early.
     it("draws a closing window over the one taking its space", () => {
       const { container } = renderShell();
       clientAppears("one");
@@ -1515,8 +1437,7 @@ describe("Shell", () => {
     });
 
     it("keeps a window that is on another workspace mounted and hidden", () => {
-      // Hidden rather than unmounted: a portal re-created is a portal blank,
-      // and an embedded page remounted is a page reloaded.
+      // Hidden, not unmounted: remounting blanks a portal and reloads a page.
       const { container } = renderShell();
       clientAppears("term");
 
@@ -1527,10 +1448,8 @@ describe("Shell", () => {
       expect(appElement(container, "term")).toBeInTheDocument();
     });
 
-    // A WORKSPACE SWITCH IS THE ONE CHANGE ON THIS DESKTOP WITH A DIRECTION.
-    // The workspaces are a row: the one arriving comes in from the side it was
-    // on and the one being left goes the other way, so the two pass each
-    // other rather than one blinking out and the other blinking in.
+    // Workspaces form a row: the arriving one slides in from its side and the
+    // leaving one slides out the other way.
     it("slides one workspace off as the next one slides in", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1543,8 +1462,7 @@ describe("Shell", () => {
       expect(moving(container)).toContain("arriving-from-start");
     });
 
-    // A scrim that stood still while its window slid in would be a gray box
-    // crossing nothing.
+    // Scrims move with their windows.
     it("brings the scrims on with the workspace", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1560,10 +1478,7 @@ describe("Shell", () => {
       );
     });
 
-    // A WORKSPACE IS A SCREENFUL, SO IT SLIDES ONE. The two are side by side
-    // in the row, so the one arriving starts a whole screen over and the one
-    // leaving ends a whole screen over — the keyframes read the width off the
-    // window, which is its own screen's.
+    // Each workspace slides by its own screen's width, read from the window.
     it("slides a workspace the width of its screen", () => {
       const { container } = renderShell([LEFT, RIGHT]);
 
@@ -1586,10 +1501,8 @@ describe("Shell", () => {
       expect(moving(container)).toContain("leaving-to-start");
     });
 
-    // A WINDOW SIMPLY COMING BACK INTO VIEW IS NOT A WINDOW OPENING. It has
-    // been on the desktop the whole time, and a desktop that played an
-    // arrival for it would announce every window on a workspace as new every
-    // time the workspace was reached.
+    // A window revealed by a workspace switch is not new, so it gets no
+    // opening animation.
     it("does not play a window in when a workspace switch reveals it", () => {
       const { container } = renderShell();
       clientAppears("term");
@@ -1602,10 +1515,8 @@ describe("Shell", () => {
       expect(moving(container)).toEqual([]);
     });
 
-    // A LINK WITH `target="_blank"`, end to end. The page in a browser window
-    // is a guest, so the browser process refuses the window it asks for and
-    // reports the address instead — and what the user asked for is a second
-    // browser window, address bar and all, which only the desktop can open.
+    // `target="_blank"`, end to end: the guest page cannot open a window, so
+    // the engine reports the address and the desktop opens a browser window.
     it("opens a second browser window when a page asks for one", async () => {
       const { container } = renderShell();
       press("space");
@@ -1619,9 +1530,9 @@ describe("Shell", () => {
       expect(addressesShowing()).toContain("https://example.com/opened");
     });
 
-    // Bitwarden's "Unlock", end to end: an extension's `chrome.windows.create`
-    // is a window the engine has an id for and nothing to show it in, and the
-    // desktop's answer is a browser window whose view is that window.
+    // Bitwarden's "Unlock", end to end: `chrome.windows.create` gives the
+    // engine a window ID with nothing to show it; the desktop opens a browser
+    // window for it.
     it("opens the window an extension asks for, as that window", async () => {
       const { container } = renderShell();
       press("space");
@@ -1642,9 +1553,8 @@ describe("Shell", () => {
       );
     });
 
-    // `window.close()` in the page, or an extension's `chrome.tabs.remove`:
-    // the engine closes nothing and asks, and the window goes the way its
-    // Close button takes it.
+    // `window.close()` or `chrome.tabs.remove`: the engine asks instead of
+    // closing, and the window closes as its Close button would.
     it("closes a browser window its page asks to close", async () => {
       const { container } = renderShell();
       press("space");
@@ -1681,9 +1591,7 @@ describe("Shell", () => {
     });
 
     it("moves the keyboard to a window whose bar the pointer crosses into", () => {
-      // Focus follows the cursor over the whole window, and the bar is part of
-      // it: crossing onto a bar on the way to the window below it is already
-      // arriving there.
+      // The bar is part of the window, so crossing onto it moves focus.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1696,8 +1604,8 @@ describe("Shell", () => {
     });
 
     it("moves the keyboard to a browser window whose page the pointer crosses into", async () => {
-      // The same rule as a client's window: the page is a guest, and what the
-      // shell hears is the pointer arriving over the element that holds it.
+      // The same rule for a guest page: the shell sees the pointer enter its
+      // element.
       const { container } = renderShell();
       press("space");
       await userEvent
@@ -1720,7 +1628,7 @@ describe("Shell", () => {
     });
 
     it("sinks every window but the one being worked in, and rings none", () => {
-      // Declarations rather than class names, because Panda hashes them.
+      // Checked by declarations because Panda hashes class names.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1737,7 +1645,7 @@ describe("Shell", () => {
     });
 
     it("sinks nothing while the desk shows one tab group alone", () => {
-      // Nothing else on the desk for the open tab to be picked out from.
+      // There is nothing else on the desk to set the open tab apart from.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1747,8 +1655,8 @@ describe("Shell", () => {
     });
 
     it("sinks a screen's only window while another screen is worked in", () => {
-      // Alone on its screen but not on the desk: the window on the next screen
-      // is something else the commands could be pointed at.
+      // Alone on its screen, but the commands could target the window on the
+      // other screen.
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("one");
       clientAppears("two");
@@ -1761,8 +1669,7 @@ describe("Shell", () => {
 
   describe("the keys, as the sway config binds them", () => {
     it("claims every chord it answers from the compositor", () => {
-      // Which is what answers a press while a `<webview>` has the keyboard:
-      // the browser process is the only layer above a guest.
+      // So presses reach the shell while a `<webview>` has the keyboard.
       renderShell();
 
       expect(domicile.calls).toContainEqual([
@@ -1778,7 +1685,7 @@ describe("Shell", () => {
     });
 
     it("binds sway's keys when it is given none", () => {
-      // Every keysym the defaults name, on a key of its own.
+      // Every keysym in the defaults, on its own key.
       const keysyms = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)]
         .flatMap(Object.keys)
         .map((chord) => chord.split("+").at(-1) ?? "");
@@ -1813,8 +1720,8 @@ describe("Shell", () => {
     });
 
     it("answers the same chord handed back by the host", () => {
-      // A browser window has the keyboard, so the press never reaches this
-      // document: it arrives as a `shortcut` message instead.
+      // A browser window has the keyboard, so the press arrives as a
+      // `shortcut` message.
       renderShell();
 
       hostPress("Return");
@@ -1829,8 +1736,7 @@ describe("Shell", () => {
 
       press("h");
 
-      // The bar of the window being worked in is the one drawn as focused,
-      // which is the only thing on screen that says where the keyboard is.
+      // The focused look on the bar is the only on-screen focus indicator.
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(barFor(container, "app:one").className).not.toBe(
         barFor(container, "app:two").className,
@@ -1850,9 +1756,8 @@ describe("Shell", () => {
     });
 
     it("makes one group of a split window and a window moved into it", () => {
-      // The whole of what a split is for: `mod+v` wraps the window being
-      // worked in in a column of one, and the window moved at that column
-      // from beside it joins it rather than trading places with it.
+      // `mod+v` wraps the focused window in a one-window column, so the window
+      // moved toward it joins the column instead of swapping.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1861,8 +1766,7 @@ describe("Shell", () => {
       press("h");
       press("l", true);
 
-      // One column of two, each the width of the workspace — not two windows
-      // side by side, which is what a swap would have left.
+      // One column of two full-width windows, not a swap.
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         width: "1920px",
         y: `${(TOP_BAR + TITLE_BAR).toString()}px`,
@@ -1880,9 +1784,8 @@ describe("Shell", () => {
 
       press("w");
 
-      // One tab each across the top, and the focused window's contents under
-      // them — over the other's, which is drawn in the same box beneath it so
-      // that it is already on screen when its tab is.
+      // One tab each across the top. Both contents share a box, the focused
+      // one on top, so the other is ready when its tab is picked.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
         width: "958px",
         x: "0px",
@@ -1896,9 +1799,8 @@ describe("Shell", () => {
     });
 
     it("lights the whole group `focus parent` selects, and back", () => {
-      // The whole of what `mod+a` does on screen. What it points the commands
-      // at is the container around the focus rather than the window in it, and
-      // nothing else on the desktop says which container that is.
+      // `mod+a` targets the container around the focus, and this highlight is
+      // the only indication of which container.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1907,20 +1809,20 @@ describe("Shell", () => {
 
       press("a");
 
-      // Every window of it comes up, and every bar of it is raised — the
-      // keyboard's own set apart from the rest.
+      // Every window in it is undimmed and every bar raised, the focused one
+      // marked apart.
       expect(dimmed(container, "app:one")).toBe(false);
       expect(barFor(container, "app:one").dataset.focus).toBe("selected");
       expect(barFor(container, "app:two").dataset.focus).toBe("leaf");
-      // And `mod+Shift+a` points them back at the window.
+      // `mod+Shift+a` returns to the window.
       press("a", true);
       expect(dimmed(container, "app:one")).toBe(true);
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
     it("lights a selected tab group's hidden tabs without raising them", () => {
-      // Raised, a hidden tab would read as open beside the tab that is.
-      // Beside a window of its own, or the tabs would be all the screen shows.
+      // A raised hidden tab would look open. A sibling window keeps the tabs
+      // from filling the screen.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1938,7 +1840,7 @@ describe("Shell", () => {
     });
 
     it("runs the open tab's edge under the tabs beside it", () => {
-      // Beside a window of its own, or the tabs would be all the screen shows.
+      // A sibling window keeps the tabs from filling the screen.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1957,8 +1859,7 @@ describe("Shell", () => {
     });
 
     it("grows each scrim in with the window it is over", () => {
-      // A wash drawn at full size over a window still growing in is a gray
-      // box out ahead of it.
+      // A full-size scrim over a growing window would stick out past it.
       const { container } = renderShell();
       clientAppears("one");
       press("e");
@@ -1970,11 +1871,9 @@ describe("Shell", () => {
     });
 
     it("keeps the group when the layout slides a window under the pointer", () => {
-      // What moving a group looks like from the desktop's side: the windows
-      // trade places under a hand that has not moved, and the `pointerover`
-      // one fires as it arrives carries the spot the pointer is already at.
-      // Answering that one handed the keyboard — and with it the selection —
-      // to whichever window the layout happened to slide past.
+      // Moving a group slides windows under a still pointer, and each fires
+      // `pointerover` at the pointer's spot. Following those would hand focus,
+      // and the selection, to whichever window passed by.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -1990,12 +1889,9 @@ describe("Shell", () => {
     });
 
     it("knows its own warp, at a place that is not a whole pixel", () => {
-      // Three windows divide the workspace into thirds that are not whole
-      // pixels, so the middle of one is a fraction — and the engine puts the
-      // cursor on the pixel beside it (`base::ClampRound`). A page that asked
-      // for the fraction does not recognize its own warp arriving, and reads
-      // the window the cursor came down on as one the user pointed at, in the
-      // middle of the layout easing past.
+      // Thirds of the workspace are not whole pixels, and the engine rounds
+      // the warp (`base::ClampRound`). The page must still recognize its own
+      // warp, or it treats the window under the cursor as a user's choice.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2006,15 +1902,13 @@ describe("Shell", () => {
       press("v");
       pointerAt(1700, 900);
 
-      // The group, moved along the row until it is the third of three.
+      // Move the group to the last of three.
       press("a");
       press("l", true);
       press("l", true);
 
-      // The engine puts the cursor down on a whole pixel whatever it was
-      // asked for, and the window it lands on says so — here the one the
-      // group was moved past, which does not hold the keyboard, so nothing
-      // but this rule stands between the crossing and the selection.
+      // The cursor lands on a rounded pixel over a window outside the group.
+      // Only this rule keeps the crossing from taking the selection.
       const [x, y] = warpedTo();
       crossInto(appElement(container, "two"), Math.round(x), Math.round(y));
 
@@ -2022,12 +1916,9 @@ describe("Shell", () => {
     });
 
     it("and hands it over to a pointer that really crossed into one", () => {
-      // The other half of the same rule, and the half that keeps focus
-      // following the cursor: a crossing at a place the pointer was not is
-      // the user choosing a window, and choosing one outside the group is
-      // choosing to leave it. The crossing says so on its own — a browser
-      // fires it *before* the move behind it, so a desktop that waited for
-      // the move would swallow the window the user had just reached for.
+      // A crossing at a point the pointer was not at is the user choosing a
+      // window, and choosing one outside the group leaves it. The browser fires
+      // `pointerover` before the move, so the desktop must act on it alone.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2050,7 +1941,7 @@ describe("Shell", () => {
 
       press("f");
 
-      // Over the bar as well, which is what a fullscreen window covers.
+      // A fullscreen window covers the top bar too.
       expect(boxOf(appElement(container, "term"))).toMatchObject({
         height: `${(1080 - TITLE_BAR).toString()}px`,
         y: `${TITLE_BAR.toString()}px`,
@@ -2091,8 +1982,7 @@ describe("Shell", () => {
 
       expect(windowsOnScreen(container)).toEqual(["one"]);
       press("parenright");
-      // Once the workspace it was on has finished sliding off: `one` is drawn
-      // for as long as that takes.
+      // After the old workspace finishes sliding off, which keeps `one` drawn.
       motionsPlayOut(container);
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
@@ -2116,7 +2006,7 @@ describe("Shell", () => {
       press("r");
       press("l");
 
-      // The window being worked in grows and the one beside it gives way.
+      // The focused window grows and its neighbor shrinks.
       expect(
         Number.parseFloat(appElement(container, "two").style.inlineSize),
       ).toBeGreaterThan(950);
@@ -2141,7 +2031,7 @@ describe("Shell", () => {
 
       press("Tab", true);
 
-      // A box of its own rather than the whole workspace, and over it.
+      // Its own box over the tiling, not the whole workspace.
       const floated = boxOf(appElement(container, "term"));
       expect(floated.width).not.toBe("1920px");
       expect(
@@ -2155,8 +2045,8 @@ describe("Shell", () => {
     });
 
     it("floats a window no smaller than its client will draw", () => {
-      // Wider than the 1280 a float opens at, and shorter than its 770: the
-      // client's frame would be cut off across and stretched down.
+      // Wider than the default float width of 1280 and shorter than its 770,
+      // so both limits apply.
       const { container } = renderShell();
       clientAppears("vault");
       domicile.emit("app_min_size", { app_id: "vault", size: [1300, 300] });
@@ -2171,8 +2061,7 @@ describe("Shell", () => {
     });
 
     it("keeps a window's bar across floating it and back", () => {
-      // The window under it is the same element either way and eases to its
-      // new box; a bar made anew would jump there and leave the window behind.
+      // The window eases to its new box; a new bar would jump there instead.
       const { container } = renderShell();
       clientAppears("term");
       const tiled = barFor(container, "app:term");
@@ -2197,15 +2086,13 @@ describe("Shell", () => {
     });
 
     it("puts a sheet over a float to catch a drag while the modifier is held", () => {
-      // The pointer over a client's surface belongs to the client, so the
-      // shell has to be handed it back before it can be told where a window
-      // is being dragged to.
+      // The client owns the pointer over its surface, so the shell needs a
+      // sheet on top to receive the drag.
       const { container } = renderShell();
       clientAppears("term");
       press("Tab", true);
 
-      // Let go of the chord that floated it: the sheet is up while the
-      // modifier is held, and the chord held it.
+      // The floating chord held the modifier; release it first.
       pageHolds({});
       expect(grabSheets(container)).toHaveLength(0);
 
@@ -2214,9 +2101,8 @@ describe("Shell", () => {
     });
 
     it("takes the sheet down when Meta comes up", () => {
-      // Chromium on Wayland reports the release of Meta with `metaKey` still
-      // set — the state from before the key came up — so the flag alone
-      // leaves the modifier held for good.
+      // Chromium on Wayland reports Meta's release with `metaKey` still set,
+      // so the flag alone would leave the modifier stuck.
       const { container } = renderShell();
       clientAppears("term");
       press("Tab", true);
@@ -2268,7 +2154,7 @@ describe("Shell", () => {
     });
 
     it("keeps a float's scrim on it while it is dragged rather than easing after it", () => {
-      // A scrim easing after every step of a drag trails behind the window.
+      // A transitioning scrim would trail the window during a drag.
       const { container } = renderShell();
       clientAppears("shell");
       clientAppears("term");
@@ -2284,8 +2170,8 @@ describe("Shell", () => {
     });
 
     it("drags a floating window onto the next screen and keeps hold of it", () => {
-      // The screen its middle is over takes it, and the drag goes on after its
-      // bar has gone from the screen that was pressed.
+      // The screen under the float's center takes it, and the drag continues
+      // after its bar leaves the pressed screen.
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("term");
       press("Tab", true);
@@ -2313,8 +2199,7 @@ describe("Shell", () => {
     });
 
     it("drags a browser window onto the next screen without loading its page again", async () => {
-      // One `<webview>` for the window wherever it is: another would be a new
-      // guest, and the page in it loaded from scratch.
+      // One `<webview>` throughout; a new one would reload the page.
       const { container } = renderShell([LEFT, RIGHT]);
       press("space");
       await userEvent
@@ -2338,8 +2223,7 @@ describe("Shell", () => {
     });
 
     it("draws a float over the edge between two screens once, whole", () => {
-      // One page spans the desk, so a float hanging over onto the next screen
-      // is one element at its place on the page, over both.
+      // One page spans the desk, so a float across two screens is one element.
       const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("term");
       press("Tab", true);
@@ -2399,9 +2283,8 @@ describe("Shell", () => {
 
       press("Tab", true);
 
-      // Around the whole frame — the bar and the contents under it — at the
-      // window's own depth, and before the window in the document, so the
-      // window paints over its own shadow and over nothing else's.
+      // Around the whole frame, at the window's depth, and earlier in the
+      // document so each window paints over only its own shadow.
       const shadow = floatShadow(container);
       const app = appElement(container, "term");
       const bar = barFor(container, "app:term");
@@ -2435,8 +2318,7 @@ describe("Shell", () => {
     });
 
     it("casts no shadow from a float that fills the screen", () => {
-      // Its shadow would fall off the edge of the screen — onto the next
-      // display, on a desk of more than one.
+      // Its shadow would spill onto the next display.
       const { container } = renderShell();
       clientAppears("term");
       press("Tab", true);
@@ -2459,8 +2341,8 @@ describe("Shell", () => {
       );
     });
     it("shuffles a float pressed on over the one covering it", () => {
-      // The two part, trade depths while apart and come back together — every
-      // part of each window with it, its scrim included.
+      // The two move apart, swap depths, and return, every part of each
+      // window included.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2516,8 +2398,7 @@ describe("Shell", () => {
     });
 
     it("starts a scrim's shuffle over with its window's", () => {
-      // Pressed back and forth faster than a shuffle takes: each press is a
-      // new animation, for the scrim as much as for the window under it.
+      // Each press restarts the animation, for scrims as well as windows.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2561,10 +2442,9 @@ describe("Shell", () => {
 
   describe("focus follows the cursor", () => {
     it("takes the pointer to a window that has just opened", () => {
-      // Nobody pressed a key for this one: the client finished starting and
-      // its window took the keyboard. The pointer is wherever it was — over
-      // the window that was there before, in a real session — and the first
-      // pointer event over that window would take the focus straight back.
+      // The window took focus without a key press. The pointer is still over
+      // the previous window, and the next pointer event would take focus
+      // back.
       const { container } = renderShell();
       clientAppears("one");
       press("b");
@@ -2582,12 +2462,9 @@ describe("Shell", () => {
     });
 
     it("takes the pointer with it when a key moves the focus", () => {
-      // `mouse_warping`, and the reason this desktop needs it: the window the
-      // focus came from is still under the pointer, and the first pointer
-      // event over it would hand the focus straight back. The pointer goes to
-      // the middle of the window's contents — 950 wide from the left edge,
-      // under its own title bar — which is the region a `pointerover` on
-      // focuses.
+      // sway's `mouse_warping`: otherwise the next pointer event over the old
+      // window would take focus back. The pointer goes to the center of the
+      // window's contents, below its title bar.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2607,8 +2484,8 @@ describe("Shell", () => {
     });
 
     it("takes the pointer to the middle of an empty screen a key moved to", () => {
-      // sway's `focus right` onto an output with nothing on it. The pointer
-      // left on the screen the keyboard came from would take it straight back.
+      // sway's `focus right` onto an empty output. Otherwise the pointer on
+      // the old screen would take focus back.
       renderShell([LEFT, RIGHT]);
       clientAppears("one");
       domicile.calls.length = 0;
@@ -2635,9 +2512,8 @@ describe("Shell", () => {
     });
 
     it("leaves the keyboard where it is when the pointer lands on the chrome", () => {
-      // The bar, the wallpaper and a float's own furniture are not windows:
-      // handing the keyboard back for them would make the desktop untypeable
-      // whenever the pointer came to rest on anything.
+      // The bar, wallpaper and float decorations are not windows; taking focus
+      // for them would make the desktop untypeable.
       const { container } = renderShell();
       clientAppears("term");
       domicile.calls.length = 0;
@@ -2660,8 +2536,7 @@ describe("Shell", () => {
 
       domicile.emit("focus_requested", { app_id: "one" });
 
-      // Granted, and on the workspace the window is on — which is what makes
-      // granting it mean anything.
+      // Granted, and its workspace is switched to.
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
       expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
         "aria-current",
@@ -2670,15 +2545,14 @@ describe("Shell", () => {
     });
 
     it("moves the keyboard to the screen the pointer moves onto", () => {
-      // An empty screen as much as one with a window on it, which is sway's
-      // focus following the mouse from one output to the next: the next
-      // window opens where the hand is.
+      // As in sway, even an empty screen takes focus, so the next window opens
+      // where the pointer is.
       const { container } = renderShell([LEFT, RIGHT]);
 
       pointerAt(2000, 500);
       clientAppears("term");
 
-      // Drawn there rather than only kept there.
+      // Shown there, not only assigned.
       const term = appElement(container, "term");
       expect(term).not.toHaveAttribute("hidden");
       expect(
@@ -2702,16 +2576,15 @@ describe("Shell", () => {
 
 describe("the launcher", () => {
   /**
-   * The launcher's own box, which is not the only combobox a desktop can have
-   * on screen: a browser window's address bar is one too, so the box is named
-   * and matched by name.
+   * The launcher's box, matched by name because a browser window's address
+   * bar is also a combobox.
    */
   const launcherBox = (): HTMLElement | null =>
     screen.queryByRole("combobox", {
       name: "Open an app, a file, a URL, or search",
     });
 
-  /** The same box where a case needs it to be there. */
+  /** Types into the launcher's box, which must be open. */
   const typeIntoLauncher = async (typed: string): Promise<void> => {
     await userEvent.setup().type(
       screen.getByRole("combobox", {
@@ -2721,13 +2594,13 @@ describe("the launcher", () => {
     );
   };
 
-  /** Where each browser window on the desktop was pointed. */
+  /** Each browser window's URL. */
   const browsing = (container: HTMLElement): string[] =>
     [...container.querySelectorAll("webview")].map(
       (view) => view.getAttribute("src") ?? "",
     );
 
-  /** What the host's index of the home holds, which is what fills the panel. */
+  /** Sets the files the host's index holds. */
   const homeHolds = (...files: readonly string[]): Promise<void> =>
     domicile.holds(files);
 
@@ -2748,9 +2621,7 @@ describe("the launcher", () => {
   });
 
   it("opens on mod+space and asks the host what matches its empty box", () => {
-    // The ask rides with the opening rather than with the shell starting: a
-    // home directory changes for reasons nothing here is watching, so the
-    // answer has to be current at the moment the panel is.
+    // Searched on each open, not at startup, so the results are current.
     renderShell();
 
     press("space");
@@ -2760,8 +2631,8 @@ describe("the launcher", () => {
   });
 
   it("asks the host for its empty box's applications before it is opened", () => {
-    // Unlike the files: an answer that landed after the panel did would push
-    // the rows under it down. See `launcher/useOpeningApps.ts`.
+    // Unlike files, fetched before opening so late results do not push rows
+    // down. See `launcher/useOpeningApps.ts`.
     renderShell();
 
     expect(domicile.calls).toContainEqual(["searchApps", ""]);
@@ -2779,21 +2650,19 @@ describe("the launcher", () => {
 
     await homeHolds("Notes/today.org", "todo.txt");
 
-    // A row is the name and then the directories above it — see
-    // `launcher/file-row.ts` — with the grid's gap, rather than any text,
-    // between the two.
+    // A row is the name, then its directories, separated by the grid's gap;
+    // see `launcher/file-row.ts`.
     expect(
       screen.getAllByRole("option").map((row) => row.textContent),
     ).toStrictEqual(["Notestoday.org", "todo.txt"]);
-    // Taken down here rather than by the shared `afterEach`: the highlight
-    // settles into a preview on a timer, and one that comes due between this
-    // test and its cleanup updates the panel outside `act`.
+    // Unmounted here: the preview timer could fire before shared cleanup and
+    // update the panel outside `act`.
     unmount();
   });
 
   it("opens a file with the user's default application and puts the panel away", async () => {
-    // `$HOME` is read by the spawned shell, because it exists there and
-    // nowhere this page can see. See `launcher/open-command.ts`.
+    // The spawned shell resolves `$HOME`; the page cannot. See
+    // `launcher/open-command.ts`.
     renderShell();
     press("space");
     await homeHolds("Notes/today.org");
@@ -2830,19 +2699,15 @@ describe("the launcher", () => {
 
     await typeIntoLauncher("!wiki mesa{Enter}");
 
-    // The address the window went to is what says where the query was sent,
-    // engine and escaping and all.
+    // The URL shows the search engine and escaping used.
     expect(browsing(container)).toStrictEqual([
       "https://en.wikipedia.org/wiki/Special:Search?search=mesa",
     ]);
   });
 
   it("takes the keyboard off the window it is opened over", () => {
-    // THE PANEL IS DRAWN BY THE PAGE AND THE KEYBOARD IS THE COMPOSITOR'S.
-    // A client holding the seat goes on receiving every keystroke while the
-    // launcher is up over it, so the box the user is typing into fills with
-    // nothing and the window underneath takes the letters — which is a
-    // launcher that opens and then cannot be used.
+    // The page draws the panel but the compositor routes keys. Without this,
+    // the focused client would keep receiving the typed text.
     renderShell();
     clientAppears("one");
     domicile.emit("focus_changed", { app_id: "one" });
@@ -2854,15 +2719,13 @@ describe("the launcher", () => {
   });
 
   it("hands the keyboard back to the window when it is put away", () => {
-    // The other half, and the one that makes taking it safe: the seat is the
-    // window's again the moment the panel is down, without waiting for the
-    // pointer to cross it.
+    // Focus returns as soon as the panel closes, without waiting for the
+    // pointer.
     renderShell();
     clientAppears("one");
     domicile.emit("focus_changed", { app_id: "one" });
     press("space");
-    // The compositor carrying out the request above, which is how the shell
-    // learns the seat has moved.
+    // The compositor confirms the focus change.
     domicile.emit("focus_changed", { app_id: undefined });
     domicile.calls.length = 0;
 
@@ -2872,10 +2735,8 @@ describe("the launcher", () => {
   });
 
   it("keeps the box focused over a browser window", async () => {
-    // A browser window's page is a guest frame, and a guest holding the
-    // page's focus hears the keyboard in a browsing context this document
-    // cannot: the window pulls the focus back to itself on its own, so a
-    // panel over it has to be the thing that says otherwise.
+    // A guest page keeps pulling focus back to itself, so the panel must
+    // hold it explicitly.
     const { container } = renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");
@@ -2887,8 +2748,8 @@ describe("the launcher", () => {
   });
 
   it("leaves nothing over the desktop once a launch puts it away", async () => {
-    // The panel closes as the window it opened arrives, and its backdrop has
-    // to go with it: one left behind takes every click on the page.
+    // The panel closes as the new window arrives. A leftover backdrop would
+    // capture every click.
     const { baseElement } = renderShell([LEFT]);
     press("space");
 
@@ -2900,9 +2761,7 @@ describe("the launcher", () => {
   });
 
   it("keeps the panel up while it closes", () => {
-    // The panel has to stay drawn until the dialog has finished closing: a
-    // panel taken away with the press that closed it is one that never gets
-    // to leave.
+    // It stays drawn until the dialog's close animation finishes.
     renderShell();
     press("space");
 
@@ -2912,9 +2771,8 @@ describe("the launcher", () => {
   });
 
   it("answers the same key handed back by the host", () => {
-    // A browser window has the keyboard, so `mod+space` never reaches this
-    // document. The launcher is the one thing on the desktop you most want to
-    // reach from inside a window, so this is the path that matters for it.
+    // A browser window has the keyboard, so `mod+space` arrives from the
+    // host. This is the main way to open the launcher from a window.
     renderShell();
 
     hostPress("space");
@@ -2923,9 +2781,9 @@ describe("the launcher", () => {
   });
 
   it("leaves the tab that was open selected once it is dismissed", async () => {
-    // The page takes the keyboard back from the client while the panel is up,
-    // and the engine hands it to the guest that last had it: the browser in
-    // the tab behind, which nobody can click.
+    // While the panel is up the engine may give focus back to the last guest,
+    // here the hidden tab's browser. Dismissing must keep the visible tab
+    // selected.
     const { container } = renderShell();
     press("space");
     await typeIntoLauncher("example.com{Enter}");

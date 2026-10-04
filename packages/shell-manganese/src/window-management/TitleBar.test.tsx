@@ -6,14 +6,11 @@ import { css } from "../../styled-system/css";
 import { TitleBar } from "./TitleBar";
 import { Layout } from "./tree/node";
 
-// The real stylesheet, because what a bar's arrival and its settling resolve
-// to is decided by the emitted CSS rather than by any one `css(...)` call: a
-// className on its own says nothing about the rule behind it.
+// Loads the real stylesheet, since the computed animation depends on the
+// emitted CSS, not on any one class name.
 //
-// The layers come off first: happy-dom drops `@layer` blocks whole, and Panda
-// emits everything inside them. `@media all` keeps the braces balanced and
-// matches unconditionally, and the layers are emitted weakest-first, so plain
-// source order lands on the same winner the cascade would.
+// happy-dom drops `@layer` blocks, so they are rewritten to `@media all`.
+// Panda emits layers weakest first, so source order gives the same cascade.
 const stylesheet = document.createElement("style");
 stylesheet.textContent = readFileSync(
   new URL("../../styled-system/styles.css", import.meta.url),
@@ -23,17 +20,17 @@ stylesheet.textContent = readFileSync(
   .replaceAll(/@layer [^{]+\{/g, "@media all{");
 document.head.append(stylesheet);
 
-/** Where a window's bar on screen is, which no case here is about. */
+/** An arbitrary bar position. */
 const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
 
-/** The whole box the window it names spans, which it turns about. */
+/** The window's whole box, which the bar scales about. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 32 };
 
 const nothingEnded = () => {
-  // Nothing in the case plays an animation to its end.
+  // No case here plays an animation to its end.
 };
 
-/** The props every case here shares; each overrides the one it is about. */
+/** Shared props; each case overrides the one it tests. */
 const barProps = {
   depth: 0,
   dragging: false,
@@ -58,9 +55,8 @@ const bar = (container: HTMLElement): HTMLElement => {
   }
 };
 
-// A window is two elements — the bar and the contents under it — so a bar that
-// arrived or settled differently from the window it names would be a frame
-// coming apart at the seam.
+// The bar and the contents are separate elements, so they must animate
+// identically or the window splits apart.
 describe("TitleBar", () => {
   it("plays the motion the window it names is playing", () => {
     const { container } = render(<TitleBar {...barProps} motion="opening" />);
@@ -73,12 +69,11 @@ describe("TitleBar", () => {
   it("turns about the middle of that window rather than its own", () => {
     const { container } = render(<TitleBar {...barProps} motion="opening" />);
 
-    // The frame's middle is (600, 447), which is 415 below the top of the bar.
+    // The frame's middle is (600, 447), 415 below the top of the bar.
     expect(bar(container)).toHaveStyle({ transformOrigin: "600px 415px" });
   });
 
-  // A tab closes up along the strip it is in, which is the bar's to say: the
-  // contents under a shown tab play the same keyframes and only fade.
+  // A tab collapses along its strip; the contents under it only fade.
   it("closes up across a tabbed container's strip", () => {
     const { container } = render(
       <TitleBar {...barProps} motion="closing-tab" tabbed={Layout.Tabbed} />,
@@ -90,7 +85,7 @@ describe("TitleBar", () => {
     expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
   });
 
-  // the keyboard can still reach for a moment is not one.
+  // A closing bar's buttons would do nothing.
   it("is nothing a pointer or a keyboard can reach while it leaves", () => {
     const { container } = render(<TitleBar {...barProps} motion="closing" />);
 
@@ -124,10 +119,8 @@ describe("TitleBar", () => {
   });
 
   it("follows the pointer exactly while its window is being dragged", () => {
-    // A floating window is dragged by this bar, and a bar easing towards each
-    // box the drag writes is one that trails the pointer holding it. Only the
-    // box: the colors below still ease, because a drag is when the pointer
-    // crosses the most windows.
+    // Easing the box would make the bar trail the pointer. Colors still ease,
+    // since a drag crosses many windows.
     const { container } = render(<TitleBar {...barProps} dragging />);
 
     const { transition } = globalThis.getComputedStyle(bar(container));
@@ -135,9 +128,8 @@ describe("TitleBar", () => {
     expect(transition).toContain("background-color");
   });
 
-  // Focus follows the cursor here, so these colors change as often as the
-  // pointer crosses a window: bars that snapped between them would flicker
-  // across the desktop on the way to anywhere.
+  // Focus follows the cursor, so these colors change often and would flicker
+  // without easing.
   it("eases between the colors that say where the keyboard is", () => {
     const { container } = render(<TitleBar {...barProps} />);
 
@@ -148,8 +140,7 @@ describe("TitleBar", () => {
   });
 
   it("sets the name of the window being worked in in a heavier face", () => {
-    // The other half of standing out, and the half that survives a user who
-    // cannot tell the accent from the card.
+    // Weight as well as color, for users who cannot tell the colors apart.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
     expect(bar(focused.container).className).toContain(
       css({ fontWeight: "medium" }),
@@ -162,8 +153,8 @@ describe("TitleBar", () => {
   });
 
   it("grounds the bar being worked in in the card, and sinks the rest below it", () => {
-    // The card is the address bar's ground, so the focused bar reads as the
-    // top of the window under it; the rest recede towards the desktop.
+    // The card matches the address bar's background, so the focused bar
+    // reads as part of its window.
     const focused = render(<TitleBar {...barProps} focus="focused" />);
     expect(bar(focused.container).className).toContain(
       css({ backgroundColor: "card" }),
@@ -176,8 +167,7 @@ describe("TitleBar", () => {
   });
 
   it("lifts a tab that is not open under the pointer, and no other bar", () => {
-    // A hidden tab is a thing to click; an open tab or a window's own bar
-    // already shows what clicking it would.
+    // Only a hidden tab has anything to show by clicking.
     const lift = css({
       _hover: {
         backgroundColor:
@@ -199,8 +189,7 @@ describe("TitleBar", () => {
   });
 
   it("draws no bar's edge in the accent, whatever it says about the keyboard", () => {
-    // The window the keyboard is in is picked out by the others receding —
-    // see `Scrim` — rather than by a line around it.
+    // The scrim on other windows marks focus instead. See `Scrim`.
     for (const focus of ["focused", "leaf", "resting", "selected"] as const) {
       const { container } = render(<TitleBar {...barProps} focus={focus} />);
 
@@ -211,8 +200,8 @@ describe("TitleBar", () => {
   });
 
   it("washes the keyboard's own bar in the accent inside a selected group", () => {
-    // Every bar of the group is raised to the card, so the card alone would
-    // not set this one apart.
+    // The whole group uses the card, so the card alone would not mark this
+    // one.
     const { container } = render(<TitleBar {...barProps} focus="leaf" />);
 
     expect(bar(container).className).toContain(
@@ -224,8 +213,7 @@ describe("TitleBar", () => {
     expect(bar(container).className).toContain(css({ fontWeight: "medium" }));
   });
 
-  // So the edge along the top of the window the strip opens onto runs under
-  // every tab.
+  // Continues the shown window's top edge under every hidden tab.
   describe("the line under a tab its container is not showing", () => {
     const under = (props: Partial<Parameters<typeof TitleBar>[0]>) =>
       bar(
@@ -242,8 +230,7 @@ describe("TitleBar", () => {
       );
     });
 
-    // But it takes the same room there, so opening a tab does not move its
-    // name and buttons down by the line it lost.
+    // It keeps the same width, so opening a tab does not shift its contents.
     it("is not drawn under a bar that is not such a tab", () => {
       const open = under({});
 
@@ -303,8 +290,7 @@ describe("TitleBar", () => {
     });
 
     it("offers the screen back once its window has it", () => {
-      // The bar is still drawn over a fullscreen window, so the same button
-      // is what gives the desktop back — and it has to say so.
+      // The bar stays over a fullscreen window, so its button restores it.
       const { queryByRole } = render(<TitleBar {...barProps} fullscreen />);
 
       expect(queryByRole("button", { name: "Maximize" })).toBeNull();

@@ -13,32 +13,26 @@ import { arrivalFrom, departureFor } from "./window-motion";
 import type { WorkspaceSwitch } from "./workspace-switch";
 import { switchedTo } from "./workspace-switch";
 
-/** One window as it is drawn: where it goes, and what it is doing there. */
+/** A window to draw: its placement and motion. */
 export type DrawnWindow = {
   /**
-   * Whether the keyboard is in it.
+   * Whether the window has keyboard focus.
    *
-   * Frozen for a window on its way off the screen, which is the whole reason
-   * this is here rather than worked out where it is drawn: closing a window or
-   * leaving a workspace moves the keyboard, and a bar that lost its fill half
-   * way through its own departure is the window changing while the user
-   * watches it go.
+   * Frozen while the window leaves, since closing or switching moves focus and
+   * the bar should not change mid-animation.
    */
   focused: boolean;
   motion: WindowMotion;
-  /** Where it goes, or `undefined` when it is not on screen at all. */
+  /** The window's placement, or `undefined` when it is off screen. */
   placement: Placement | undefined;
-  /**
-   * The shuffle it is playing — which way it parts, and the depths it trades —
-   * or `undefined` unless its motion is one of the two shuffles.
-   */
+  /** The shuffle the window is playing, or `undefined` when not shuffling. */
   restack: Restack | undefined;
-  /** The screen it is drawn on, or `undefined` when it is on none. */
+  /** The screen the window is drawn on, or `undefined` for none. */
   screen: string | undefined;
   window: ShellWindow;
 };
 
-/** And one tab, which names a whole container rather than a window. */
+/** A tab to draw. A tab names a container, not a window. */
 export type DrawnTab = {
   focused: boolean;
   motion: WindowMotion;
@@ -47,49 +41,46 @@ export type DrawnTab = {
   tab: PlacedTab;
 };
 
-/** What each screen of the desk shows, by the screen's name. */
+/** What each screen shows, by screen name. */
 type Desk = Readonly<Record<string, Shown>>;
 
 export type WindowMotions = {
   /** The windows to draw, in the order they were opened. */
   drawn: readonly DrawnWindow[];
   /**
-   * Called by a window or a bar on `screen` that has finished what it was
-   * doing. The screen is what says whose workspace switch has ended.
+   * Called when a window or bar on `screen` finishes an animation. `screen`
+   * identifies which workspace switch ended.
    */
   onPlayedOut: (
     id: string,
     motion: WindowMotion,
     screen: string | undefined,
   ) => void;
-  /** The tabs to draw, the ones sliding off among them. */
+  /** The tabs to draw, including ones sliding off. */
   tabs: readonly DrawnTab[];
 };
 
-/** A shuffle playing, and which of the two animations it is playing as. */
+/** A playing shuffle and which of the two animation names it uses. */
 type Shuffling = { motion: Shuffle; restack: Restack };
 
-/** A window closing, and the screen it is closing on. */
+/** A closing window and its screen. */
 type ClosingOn = Closing & { screen: string };
 
-/** What is still playing out, and so still being drawn. */
+/** Animations still playing. */
 type Playing = {
   closing: readonly ClosingOn[];
-  /** The windows that have just opened and are still growing in. */
+  /** Windows still playing their opening animation. */
   opening: readonly string[];
-  /** The floats still shuffling over, or under, one another. */
+  /** Floats still shuffling in the stack. */
   restacking: readonly Shuffling[];
   /**
-   * Which of the two shuffles each window was last given, kept after it has
-   * played: the next one it is given is the other — see {@link nextShuffle}.
+   * Each window's last shuffle name, kept after it ends so the next uses the
+   * other (see {@link nextShuffle}).
    */
   shuffled: readonly { id: string; motion: Shuffle }[];
-  /** The workspace each screen has just switched away from, by screen. */
+  /** The workspace each screen is switching away from, by screen. */
   switching: Readonly<Record<string, WorkspaceSwitch>>;
-  /**
-   * The windows a tab switch is crossfading between: the ones fading in, and
-   * the ones they are fading in over.
-   */
+  /** The windows in a tab switch crossfade. */
   tabbing: readonly { id: string; motion: TabFade }[];
 };
 
@@ -103,36 +94,23 @@ const NOTHING_PLAYING: Playing = {
 };
 
 /**
- * What every window on the desktop is doing, and what it takes to draw one
- * that the desktop no longer has.
+ * Each window's animation state, including windows the desktop has removed but
+ * that are still animating out.
  *
- * **The desktop as it was, compared against the desktop as it is.** Nothing
- * announces a close or a workspace switch — the reduction that does either
- * does it everywhere at once — so the only place those facts survive is the
- * difference between two renders, which is what `shown` below holds.
+ * Closes and workspace switches are detected by comparing the previous and
+ * current desk. This runs during render, not in an effect: an effect would
+ * first commit a render without the closed window, and React would unmount its
+ * `<webview>`, blanking the page during the close animation.
  *
- * Worked out while rendering rather than in an effect, which is not a detail:
- * an effect would first commit a render *without* the window that has gone,
- * and React takes an element out of the document the moment it stops being
- * rendered. A `<webview>` put back a frame later is a page reloaded from
- * scratch — a browser window blank for the whole of its own closing animation,
- * which is the one thing a window on its way out must not be.
+ * Animations end when the element reports it, so durations live only in the
+ * stylesheet (see `movingStyles`).
  *
- * Each of them is let go when it says it has finished rather than when a timer
- * here says so. How long any of this takes is the stylesheet's — see
- * `movingStyles` — and a duration written here as well would be a second copy
- * of it to keep in step.
- *
- * **One list for the whole desk.** Each window is drawn once, on the screen
- * showing it, so a float dragged onto the next screen is the element it was —
- * and a `<webview>` that stays put is a page that does not load again. A
- * workspace switch is its screen's alone.
+ * One list covers the whole desk, so a float dragged to another screen keeps
+ * its element and its `<webview>` does not reload.
  */
 export const useWindowMotion = (shown: Desk): WindowMotions => {
-  // One state rather than two, so that what was last drawn and what is
-  // playing because of it are never out of step: two updates made while
-  // rendering are two updates React can keep one of — the desktop the raise
-  // was read from kept, and the shuffle it started dropped.
+  // One state, not two: React may keep only one of two updates made during
+  // render, which would desync the last desk from the animations it started.
   const [{ before, playing }, setState] = useState({
     before: shown,
     playing: NOTHING_PLAYING,
@@ -161,7 +139,7 @@ export const useWindowMotion = (shown: Desk): WindowMotions => {
   };
 };
 
-/** Whether anything the page draws from has changed since the last render. */
+/** Whether anything drawn has changed since the last render. */
 const moved = (before: Desk, shown: Desk): boolean =>
   Object.keys(before).length !== Object.keys(shown).length ||
   Object.entries(shown).some(([name, now]) => {
@@ -177,16 +155,15 @@ const moved = (before: Desk, shown: Desk): boolean =>
   });
 
 /**
- * The windows the desk has open: every screen's list, which is the same list.
- * None on a desk of no screens, which draws nothing.
+ * The desk's open windows. Every screen has the same list; an empty desk has
+ * none.
  */
 const windowsOf = (desk: Desk): readonly ShellWindow[] =>
   Object.values(desk)[0]?.windows ?? [];
 
-/** What is playing once the desktop has moved from `before` to `shown`. */
+/** What is playing after the desk changes from `before` to `shown`. */
 const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
-  // The screens there were and still are: one just plugged in has nothing to
-  // have moved from.
+  // Only screens present in both renders; a new screen has no prior state.
   const screens = Object.entries(shown).flatMap(([name, now]) => {
     const was = before[name];
     return was === undefined ? [] : [{ name, now, was }];
@@ -217,18 +194,15 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
         })),
       ),
     ],
-    // The ones still open, and the ones that have just appeared. A window that
-    // closed while it was still growing in never says it has arrived — it is
-    // playing its departure instead — so the ones that are gone are dropped
-    // here rather than waiting to be told.
+    // Drop closed windows: a window closed while opening never reports the
+    // opening finished.
     opening: [
       ...playing.opening.filter((id) => holds(windows, id)),
       ...windows
         .filter(({ id }) => !holds(windowsOf(before), id))
         .map(({ id }) => id),
     ],
-    // A window raised again before it has settled plays the latest raise
-    // rather than both.
+    // A window raised again before settling plays only the latest raise.
     restacking: [
       ...playing.restacking.filter(
         ({ restack }) =>
@@ -248,8 +222,8 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
         return switching === undefined ? [] : [[name, switching]];
       }),
     ),
-    // A window switched back before it has finished plays the latest half —
-    // which is always the other one, so the browser starts it over.
+    // A window switched back mid-fade plays the latest half, which always
+    // differs from the current one, so the browser restarts it.
     tabbing: [
       ...playing.tabbing.filter(
         ({ id }) => holds(windows, id) && !fades.some((fade) => fade.id === id),
@@ -266,13 +240,10 @@ const shuffling = (shuffles: readonly Shuffling[], id: string): boolean =>
   shuffles.some(({ restack }) => restack.id === id);
 
 /**
- * Which of the two shuffles a window is given next: the one it was not given
- * last.
+ * The shuffle name a window gets next: the one it did not get last.
  *
- * Because a browser starts an animation over only when its name changes. A
- * window raised back while it is still shuffling, or in the frame it finished,
- * would otherwise keep the name it had — and play nothing, and never say it
- * had finished, and be stuck shuffling from then on.
+ * Browsers restart an animation only when its name changes. Reusing a name
+ * would play nothing, never report completion, and leave the window stuck.
  */
 const nextShuffle = (playing: Playing, id: string): Shuffle =>
   playing.shuffled.find((shuffled) => shuffled.id === id)?.motion ===
@@ -281,11 +252,10 @@ const nextShuffle = (playing: Playing, id: string): Shuffle =>
     : "restacking";
 
 /**
- * What is left playing once `id` on `screen` says it has finished `motion`.
+ * What is left playing after `id` on `screen` finishes `motion`.
  *
- * The same state back when nothing moved, so that React bails out rather than
- * re-rendering the desktop. Every element of every window that was arriving or
- * leaving says so, and all but the first of them have nothing left to report.
+ * Returns the same object when nothing changed so React skips the re-render.
+ * Every element of an animating window reports, and only the first matters.
  */
 const played = (
   playing: Playing,
@@ -298,9 +268,8 @@ const played = (
     case "arriving-from-start":
     case "leaving-to-end":
     case "leaving-to-start": {
-      // Whichever of them speaks first: they were all started together and
-      // they all run for the same length, so the first to finish is the
-      // switch finishing — on its own screen, whose switch it was.
+      // The first report ends the switch on its screen: all its animations
+      // start together and run equally long.
       return screen === undefined || playing.switching[screen] === undefined
         ? playing
         : {
@@ -327,8 +296,7 @@ const played = (
     }
     case "restacking":
     case "restacking-again": {
-      // Only the shuffle it is playing now: one it was raised out of is not
-      // the one that finished.
+      // Match the current shuffle only, not one it was raised out of.
       const restacking = playing.restacking.filter(
         (shuffle) => shuffle.restack.id !== id || shuffle.motion !== motion,
       );
@@ -346,9 +314,8 @@ const played = (
         : { ...playing, tabbing };
     }
     case "resting": {
-      // A window that is not doing anything cannot have finished doing it.
-      // What reaches here is an animation of the chrome's own — a spinner in
-      // a browser window's address bar — on its way up the document.
+      // A resting window has nothing to finish. These events come from chrome
+      // animations, such as the address bar spinner, bubbling up.
       return playing;
     }
   }
@@ -360,8 +327,8 @@ const drawnWindow = (
   window: ShellWindow,
 ): DrawnWindow => {
   const closing = playing.closing.find((gone) => gone.window.id === window.id);
-  // The screen showing it. One at most: a workspace is on one screen at a
-  // time, and a window is on one workspace.
+  // At most one screen shows it: a workspace is on one screen, and a window on
+  // one workspace.
   const placed = Object.entries(shown).flatMap(([screen, { placements }]) => {
     const placement = placements.find(({ id }) => id === window.id);
     return placement === undefined ? [] : [{ placement, screen }];
@@ -369,8 +336,8 @@ const drawnWindow = (
   if (closing !== undefined) {
     return {
       focused: closing.focused,
-      // A tab closes up in its strip rather than shrinking away with its
-      // window, and one that was shown fades to the tab taking its place.
+      // A tab closes within its strip instead of shrinking with its window, and
+      // a shown tab fades to the tab replacing it.
       motion:
         closing.placement.tabbed === undefined ? "closing" : "closing-tab",
       placement: closing.placement,
@@ -397,10 +364,9 @@ const drawnWindow = (
 };
 
 /**
- * How a window that is on `screen` got there, or what it last did there.
+ * The motion of a window on `screen`.
  *
- * Arriving outranks a raise: a window that is still growing in or sliding on
- * is not done arriving because something was put over it.
+ * Arrival outranks a raise: a raise does not end a window's arrival.
  */
 const arriving = (
   playing: Playing,
@@ -422,16 +388,11 @@ const arriving = (
 };
 
 /**
- * A window the desktop is not showing: sliding off with the workspace it is
- * on, or simply not drawn.
+ * A window not on screen: either sliding off with its workspace or not drawn.
  *
- * Not drawn covers every other way a window leaves the screen — behind a tab,
- * sent to the scratchpad, left on a workspace nobody is looking at — and none
- * of those is a movement. A window under a fullscreen one is not among them:
- * it keeps the box the layout gives it and is covered rather than taken off
- * the screen, which is what lets the window over it grow and shrink across it.
- * The window is hidden rather than unmounted, which is what keeps its client's
- * surface and its page alive.
+ * Hidden windows (behind a tab, in the scratchpad, on an unseen workspace) stay
+ * mounted to keep their surface and page alive. Windows under a fullscreen
+ * window are not in this group: they keep their box and are covered.
  */
 const leavingWindow = (
   switching: Playing["switching"],
@@ -463,10 +424,9 @@ const leavingWindow = (
 };
 
 /**
- * The tabs on every screen, and the ones the workspace each is leaving had.
+ * The tabs on every screen, plus those of the workspace each screen is leaving.
  *
- * A tab names a container rather than a window, so nothing about it opens or
- * closes: the only thing a tab can be doing is riding a workspace on or off.
+ * Tabs never open or close; they only slide with a workspace.
  */
 const drawnTabs = (
   shown: Desk,

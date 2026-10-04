@@ -9,10 +9,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { css } from "../../styled-system/css";
 import { AppWindow } from "./AppWindow";
 
-// The SDK reports each window's size to a client, asks it for the keyboard when
-// a window is clicked, and forwards the pointer over one in the client's own
-// coordinates. What is read here is only the keyboard: whether it moved, and on
-// whose say-so. The pointer mapping is the SDK's own and is tested there.
+// Records `focusApp` calls. Pointer mapping is the SDK's and tested there.
 let focused: string[] = [];
 
 const recordingDomicile = {
@@ -20,19 +17,15 @@ const recordingDomicile = {
     focused.push(appId);
   },
   focusChrome: () => undefined,
-  // Recorded only so a click does not throw out of the SDK's own handler: the
-  // button belongs to the client, and nothing here asserts on it.
-  //
-  // `key` is here for the same reason and one more: `registerElements` puts a
-  // listener on the *document*, and the focus it forwards from is module
-  // state, so a window left focused here is one a later test file's keystroke
-  // is forwarded to. Without this that keystroke throws out of a handler in
-  // another suite entirely.
+  // Stubs so the SDK's handlers do not throw. `key` matters beyond this file:
+  // `registerElements` listens on the document with module-level focus state,
+  // so a later test file's keystroke can be forwarded to a window left
+  // focused here.
   key: () => undefined,
   pointerButton: () => undefined,
   pointerMotion: () => undefined,
   surfaceSizeOf: () => undefined,
-  // Every client here is a window, which is its own.
+  // Every client here is a top-level window.
   windowOf: (appId: string) => appId,
 } as unknown as DomicileClient;
 
@@ -42,22 +35,19 @@ const stubMeasure: Measure = () => ({
   transform: [1, 0, 0, 1, 0, 0],
 });
 
-/** Where a window on screen is, which no case here is about. */
+/** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
-/** The whole box its bar and its contents span, which it turns about. */
+/** The box spanning title bar and contents. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
 
 const nothingEnded = () => {
-  // Nothing in the case plays an animation to its end.
+  // No test here needs the callback.
 };
 
 /**
- * The first length written into a `transition` or `animation` shorthand.
- *
- * Both start with theirs, and reading them back is how two of them are held
- * against each other without either being written down here: what matters is
- * that they are the same, not what they are.
+ * The first duration in a `transition` or `animation` shorthand. Lets tests
+ * compare durations without hard-coding them.
  */
 const lengthOf = (shorthand: string): string => {
   const found = /\d+m?s/.exec(shorthand);
@@ -68,11 +58,10 @@ const lengthOf = (shorthand: string): string => {
   }
 };
 
-/** The props every case here shares; each overrides the one it is about. */
+/** Default props; each test overrides what it checks. */
 const windowProps = {
   appId: "term",
-  // No panel of the desktop's own over this window: what happens when there
-  // is one is `Shell.test.tsx`'s, where the launcher that puts it up lives.
+  // Panel behavior is tested in `Shell.test.tsx`, with the launcher.
   behindPanel: false,
   clickThrough: false,
   cursor: undefined,
@@ -87,14 +76,11 @@ const windowProps = {
   rect: ON_SCREEN,
 } as const;
 
-// The real stylesheet, because what a window's arrival and its settling
-// resolve to is decided by the emitted CSS rather than by any one `css(...)`
-// call: a className on its own says nothing about the rule behind it.
+// Loads the real stylesheet so computed styles reflect the emitted CSS.
 //
-// The layers come off first: happy-dom drops `@layer` blocks whole, and Panda
-// emits everything inside them. `@media all` keeps the braces balanced and
-// matches unconditionally, and the layers are emitted weakest-first, so plain
-// source order lands on the same winner the cascade would.
+// happy-dom drops `@layer` blocks, so each becomes `@media all`, which always
+// matches. Panda emits layers weakest first, so source order gives the same
+// cascade winner.
 const stylesheet = document.createElement("style");
 stylesheet.textContent = readFileSync(
   new URL("../../styled-system/styles.css", import.meta.url),
@@ -120,8 +106,7 @@ beforeEach(() => {
 
 describe("AppWindow", () => {
   it("leaves its frame the resting color even while it is focused", () => {
-    // What picks out the window the keyboard is in is every other window
-    // receding — see `Scrim` — rather than a line around it.
+    // Focus is shown by dimming other windows (see `Scrim`), not a border.
     const { container } = render(<AppWindow {...windowProps} focused />);
 
     expect(portal(container).className).toContain(
@@ -135,7 +120,7 @@ describe("AppWindow", () => {
 
     expect(style.borderEndStartRadius).not.toBe("");
     expect(style.borderEndEndRadius).not.toBe("");
-    // Under the bar, where a radius would cut a notch out of the seam.
+    // A top radius would cut a notch under the title bar.
     expect(style.borderStartStartRadius).toBe("");
     expect(style.borderStartEndRadius).toBe("");
   });
@@ -148,7 +133,7 @@ describe("AppWindow", () => {
 
     expect(style.borderEndStartRadius).toBe("");
     expect(style.borderEndEndRadius).toBe("");
-    // A line around the edge of the screen says nothing the window does not.
+    // No edge at the screen border.
     expect(style.borderTopWidth).not.toBe("1px");
   });
 
@@ -158,10 +143,8 @@ describe("AppWindow", () => {
   });
 
   it("answers a click on the window itself rather than letting the SDK", () => {
-    // The SDK focuses a clicked client unless something says otherwise, and
-    // this shell says otherwise: which window the user is working in is one
-    // fact, and it has one owner. Left to the SDK the keyboard would move
-    // while the desktop went on drawing the window before it as focused.
+    // The shell owns focus. If the SDK moved the keyboard, the shell would
+    // still draw the previous window as focused.
     const { container } = render(
       <AppWindow {...windowProps} focused={false} />,
     );
@@ -170,8 +153,7 @@ describe("AppWindow", () => {
       new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
     );
 
-    // It moves when the shell says so, which is the `focused` prop coming
-    // back.
+    // Focus moves only when the `focused` prop changes.
     expect(focused).toStrictEqual([]);
   });
 
@@ -183,33 +165,24 @@ describe("AppWindow", () => {
   });
 
   it("gives the keyboard to the window the shell says is focused", () => {
-    // Without a click: the user types into what they just opened, switched to,
-    // or brought to the front. The shell names one window and this is what
-    // carries that to the compositor — and to the SDK, which is what routes the
-    // keystrokes that follow.
+    // Covers focus without a click, such as a newly opened or raised window.
     render(<AppWindow {...windowProps} focused />);
     expect(focused).toStrictEqual(["term"]);
   });
 
   it("says nothing while the window already has the keyboard", () => {
-    // The compositor answers every `focusApp` with a `focus_changed` saying it
-    // carried it out, and a window that asked again on the strength of that
-    // would ask for ever.
+    // Otherwise each `focus_changed` reply would trigger another request.
     render(<AppWindow {...windowProps} focused hasKeyboard />);
     expect(focused).toStrictEqual([]);
   });
 
   it("says so again when the keyboard has gone somewhere else", () => {
-    // The shell's idea of the active window and the compositor's seat are two
-    // facts and they come apart: a press on the bar, on the wallpaper, on any
-    // of the chrome hands the keyboard back to the page without the window the
-    // user is working in having changed. Nothing else the shell watches moves,
-    // so before this the desktop went on drawing a window as focused that every
-    // keystroke was missing.
+    // A press on chrome moves the keyboard to the page without changing the
+    // shell's focused window. The window must reclaim it.
     const { rerender } = render(
       <AppWindow {...windowProps} focused hasKeyboard />,
     );
-    // What the window asked for on the way in is not what this is about.
+    // Ignore the request made on mount.
     focused = [];
 
     rerender(<AppWindow {...windowProps} focused hasKeyboard={false} />);
@@ -218,16 +191,12 @@ describe("AppWindow", () => {
   });
 
   it("does not ask for the keyboard for a window the shell has not named", () => {
-    // Only that way round: "this window has it" is an instruction the compositor
-    // can carry out and "this window does not" is not one, so an unfocused
-    // window says nothing rather than handing the keyboard back.
+    // There is no "unfocus" request; the keyboard always belongs to someone.
     render(<AppWindow {...windowProps} focused={false} />);
     expect(focused).toStrictEqual([]);
   });
 
   it("shows the cursor the client asked for", () => {
-    // Ordinary CSS on an element this shell owns, which is what a cursor always
-    // was — the SDK used to write it only because it owned the element class.
     const { container } = render(
       <AppWindow {...windowProps} cursor="text" focused={false} />,
     );
@@ -236,8 +205,8 @@ describe("AppWindow", () => {
 
   describe("the way it moves", () => {
     it("plays the motion it is given", () => {
-      // A transform rather than the box, so the client is not reconfigured on
-      // every frame of it — see the keyframes in `panda.config.ts`.
+      // Animates a transform so the client is not resized each frame. See
+      // the keyframes in `panda.config.ts`.
       const { container } = render(
         <AppWindow {...windowProps} focused={false} motion="opening" />,
       );
@@ -247,25 +216,22 @@ describe("AppWindow", () => {
       ).toContain("windowOpening");
     });
 
-    // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
-    // them are separate elements, and each scaled about its own center would
-    // pull away from the other by a fraction of the window's height.
+    // The contents and title bar are separate elements. Each must scale about
+    // the same point or they would separate.
     it("turns about the middle of its whole frame rather than its own", () => {
       const { container } = render(
         <AppWindow {...windowProps} focused={false} motion="opening" />,
       );
 
-      // The frame's middle is (600, 417), which is 385 above the top of the
-      // contents at y = 32.
+      // The frame's middle is (600, 417), 385px below the contents' top at
+      // y = 32.
       expect(portal(container)).toHaveStyle({
         transformOrigin: "600px 385px",
       });
     });
 
-    // A WINDOW LEAVES IN THE TIME THE LAYOUT TAKES TO CLOSE OVER IT. Its
-    // neighbors ease into the box it had while it shrinks away inside it, so
-    // a departure that outlasted the settle would be a window still going over
-    // a desktop that had finished rearranging itself around it.
+    // Neighbors ease into the closing window's box, so the close animation
+    // must not outlast that transition.
     it("leaves in the time the layout takes to close over it", () => {
       const { container } = render(
         <AppWindow {...windowProps} focused={false} motion="closing" />,
@@ -286,8 +252,7 @@ describe("AppWindow", () => {
     });
 
     it("follows the pointer exactly while it is being dragged", () => {
-      // A drag writes a new box on every pointer move, and a window easing
-      // towards each of them trails the pointer instead of following it.
+      // Easing would make the window trail the pointer.
       const { container } = render(
         <AppWindow {...windowProps} dragging focused={false} />,
       );
@@ -297,9 +262,7 @@ describe("AppWindow", () => {
       ).not.toContain("inline-size");
     });
 
-    // A WINDOW FADES AS IT IS TAKEN HOLD OF AND AS IT IS LET GO. Both ends of
-    // a drag change its opacity, and a window that snapped between the two
-    // blinked.
+    // A drag changes opacity at both ends; snapping would look like a blink.
     it("fades to see-through as it is taken hold of", () => {
       const { container } = render(
         <AppWindow {...windowProps} dragging focused={false} />,
@@ -337,9 +300,7 @@ describe("AppWindow", () => {
     });
   });
 
-  // A WINDOW ON ITS WAY OUT ASKS FOR NOTHING AND ANSWERS NOTHING. The keyboard
-  // has moved on to whatever is left, and a window still asking for it would
-  // take it back from the window the user is now working in.
+  // A leaving window must not take the keyboard back from the next window.
   describe("while it is leaving", () => {
     it("does not ask for the keyboard it had", () => {
       render(<AppWindow {...windowProps} focused motion="closing" />);

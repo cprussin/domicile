@@ -1,12 +1,11 @@
-// Which files the launcher's preview draws itself rather than asking the host
-// to read: the ones the engine can show from a URL, by extension. A song is
-// both — the engine plays it, and the host reads its tags.
+// Files the preview loads by URL instead of asking the host to read them,
+// chosen by extension. For audio, the engine plays the file and the host reads
+// its tags.
 //
-// The engine serves them from `domicile://home/` — the user's home, to the
-// shell's own document only, and never a dotfile. See `kDomicileHomeHost` in
-// the engine.
+// The engine serves home at `domicile://home/`, to the shell only and without
+// dotfiles. See `kDomicileHomeHost` in the engine.
 
-/** What kind of element a file is previewed in. */
+/** The element type a file is previewed in. */
 export enum MediaKind {
   Image,
   Video,
@@ -39,7 +38,7 @@ const BY_EXTENSION: Readonly<Record<string, MediaKind>> = {
   webp: MediaKind.Image,
 };
 
-/** What `path` is previewed as, or `undefined` for one the host reads. */
+/** The media kind of `path`, or `undefined` if the host previews it. */
 export const mediaOf = (path: string): MediaKind | undefined => {
   const dot = path.lastIndexOf(".");
   return dot === -1
@@ -47,6 +46,6 @@ export const mediaOf = (path: string): MediaKind | undefined => {
     : BY_EXTENSION[path.slice(dot + 1).toLowerCase()];
 };
 
-/** Where the engine serves `path`, relative to home, from. */
+/** The engine URL for `path`, relative to home. */
 export const homeUrl = (path: string): string =>
   `domicile://home/${path.split("/").map(encodeURIComponent).join("/")}`;

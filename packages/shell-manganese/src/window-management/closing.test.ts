@@ -42,9 +42,8 @@ describe("departed", () => {
     ]);
   });
 
-  // WHAT IT SAID, IT GOES ON SAYING. Closing a window moves the keyboard to
-  // whatever is left, so a bar drawn from the desktop as it now is would lose
-  // its fill half way through the window's own departure.
+  // Focus moves on at once, so the bar must keep its old color while it
+  // leaves.
   it("remembers whether the keyboard was in it", () => {
     expect(
       departed(shown([TERMINAL, EDITOR], TERMINAL.id), [EDITOR]).map(
@@ -53,11 +52,8 @@ describe("departed", () => {
     ).toStrictEqual([true]);
   });
 
-  // AND IS DRAWN OVER THE WINDOWS CLOSING OVER ITS SPACE. They ease into the
-  // box it had while it shrinks away inside it, and at the depth it used to
-  // have they would cover it before it had gone — two elements at one
-  // `z-index` are decided by the order they come in the document, and this one
-  // goes on being drawn where it always was.
+  // Otherwise the neighbors easing into its space would cover it before it
+  // has gone.
   it("is raised above the windows moving into its place", () => {
     expect(
       departed(shown([TERMINAL, EDITOR]), [EDITOR]).map(
@@ -66,8 +62,7 @@ describe("departed", () => {
     ).toStrictEqual([LEAVING]);
   });
 
-  // Raised to `LEAVING`, contents a tab was hiding would be drawn over the
-  // window the tab is showing for the length of the departure.
+  // At `LEAVING`, a hidden tab's contents would cover the shown window.
   it("draws only the tab of a window a tab was hiding", () => {
     const before = shown([TERMINAL, EDITOR]);
     const hidden = {
@@ -83,9 +78,7 @@ describe("departed", () => {
     ).toStrictEqual([[undefined, undefined]]);
   });
 
-  // A TAB CLOSES UP ABOUT ITS OWN MIDDLE. The tabs beside it close over the
-  // gap it leaves, so the middle of the whole window — somewhere down in its
-  // contents — is not where it goes.
+  // A tab collapses about its own middle, not the window's.
   it("turns a closing tab about the tab itself", () => {
     const before = shown([TERMINAL, EDITOR]);
     const tab: Placement = {
@@ -112,8 +105,7 @@ describe("departed", () => {
     expect(departed(shown([TERMINAL]), [TERMINAL])).toStrictEqual([]);
   });
 
-  // A window closed on a workspace nobody is looking at has no rectangle to
-  // play out at, and the one it had belongs to whatever is on screen now.
+  // It has no rectangle to animate in.
   it("leaves out a window that was not on screen when it closed", () => {
     expect(
       departed(
@@ -130,10 +122,8 @@ describe("departed", () => {
   });
 });
 
-// A window is drawn where it always was, rather than moved to the end of the
-// list while it goes: a `<webview>` moved in the document reloads the page
-// inside it, which is a browser window going blank for the length of its own
-// closing animation.
+// A closing window keeps its index: moving a `<webview>` in the document
+// reloads its page.
 describe("withClosing", () => {
   it("draws a closing window where it was in the list", () => {
     const closing = departed(shown([TERMINAL, EDITOR, MAIL]), [TERMINAL, MAIL]);

@@ -1,4 +1,4 @@
-// What goes on the bar, and where.
+// The bar's layout.
 
 import type { ReactNode } from "react";
 
@@ -16,8 +16,8 @@ import {
 } from "./bar-items";
 
 /**
- * The bar's three columns. `middle` is centered on the screen whatever is in
- * the other two, so a clock there does not shift along as windows open.
+ * The bar's three columns. `middle` is centered on the screen regardless of the
+ * other two, so a clock there does not shift as items change.
  */
 export type TopBarLayout = {
   readonly left: readonly ReactNode[];
@@ -26,12 +26,10 @@ export type TopBarLayout = {
 };
 
 /**
- * Manganese's own bar.
+ * Manganese's default bar.
  *
- * **The launcher's button is first, at the far start**, right against the
- * tray. **The tray is left of the workspaces.** **The bell is last, at the far end**, because the
- * drawer it opens slides out from that edge: the control and what it opens are
- * on the same side of the screen.
+ * The launcher button is first, next to the tray. The bell is last because the
+ * drawer it opens slides out from that edge.
  */
 export const DEFAULT_TOP_BAR: TopBarLayout = {
   left: [

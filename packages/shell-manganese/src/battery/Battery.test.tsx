@@ -7,10 +7,8 @@ import { css } from "../../styled-system/css";
 import { Battery } from "./Battery";
 
 /**
- * A battery the test holds the wire to: `watch` is what the component is
- * handed in place of the one that listens to the host, and `report` is the
- * compositor saying a charge — one that moved, or a plug that went in or came
- * out.
+ * A test-controlled battery: `watch` replaces the host listener, and `report`
+ * sends a reading.
  */
 const heldBattery = () => {
   const listeners: ((reading: BatteryMessage) => void)[] = [];
@@ -38,17 +36,12 @@ const heldBattery = () => {
   };
 };
 
-/**
- * The client, which these cases never reach: `watch` is injected, so what the
- * component does with this is hand it straight back.
- */
+/** A client the component never uses, since `watch` is injected. */
 const NO_HOST = {} as DomicileClient;
 
 /**
- * The readout: everything the charge is drawn in, which is what goes to danger
- * and what flashes. Taken off the container rather than off a role, because
- * what is being asked about is the whole group and only the meter inside it
- * has a role of its own.
+ * The readout container, which holds everything that turns red and flashes.
+ * Only the meter inside has a role.
  */
 const readout = (container: HTMLElement): Element => {
   const element = container.firstElementChild;
@@ -156,8 +149,7 @@ describe("Battery", () => {
     });
 
     it("says so on the figures it shows rather than the level behind them", () => {
-      // A tenth and a bit reads as `10%`, and a readout that said ten and
-      // looked comfortable would be two answers to one question.
+      // 10.4% displays as `10%`, so the color must agree with that.
       const battery = heldBattery();
       const { container } = render(
         <Battery domicile={NO_HOST} watch={battery.watch} />,
@@ -170,8 +162,7 @@ describe("Battery", () => {
     });
 
     it("stops saying so once the lead is in", () => {
-      // A battery on AC is filling rather than running out, so there is
-      // nothing left to warn about.
+      // A charging battery needs no warning.
       const battery = heldBattery();
       const { container } = render(
         <Battery domicile={NO_HOST} watch={battery.watch} />,

@@ -2,7 +2,7 @@ import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 
 import { css } from "../../styled-system/css";
 
-/** The most a badge counts to before it says "and more". */
+/** The highest count the badge shows before it switches to "N+". */
 const MOST_COUNTED = 9;
 
 type Props = {
@@ -13,13 +13,11 @@ type Props = {
 };
 
 /**
- * The bell at the far end of the bar: what opens the drawer of notifications,
- * and how many arrived since it was last opened.
+ * The bar's bell: opens the notification drawer and shows the unseen count.
  *
- * The bar's last control, and the drawer slides out from the same edge, so the
- * bell is where the drawer comes from. It rings once whenever the count goes
- * up — the toast is what is read; this is what says there is something to go
- * back to once the toast has gone.
+ * It sits at the bar's far end because the drawer slides out from that edge. It
+ * swings when the count goes up, to point back to notifications whose toasts
+ * have gone.
  */
 export const NotificationBell = ({ onOpen, unread }: Props) => {
   const label =
@@ -34,8 +32,8 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
       type="button"
     >
       {/*
-        Keyed on the count, so a new arrival is a new element and the swing
-        plays again: an animation does not restart for a class it already has.
+        Keyed on the count so each new arrival remounts it and replays the
+        swing; an animation does not restart for a class it already has.
       */}
       <span aria-hidden className={bellStyles} key={unread}>
         <BellSimpleIcon size={15} weight="fill" />
@@ -49,8 +47,8 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
   );
 };
 
-// The theme toggle's shape beside it: a round, borderless control in the
-// bar's own white, lit on hover.
+// Matches the theme toggle: round, borderless, in the bar's white, lit on
+// hover.
 const buttonStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",
@@ -77,14 +75,13 @@ const bellStyles = css({
     animationTimingFunction: "{easings.out}",
   },
   display: "inline-flex",
-  // Hung from the top, which is where a bell swings from. Physical, because
-  // a bell does not hang from the start of a line.
+  // Swings from the top. A physical property, since the swing does not depend
+  // on text direction.
   transformOrigin: "top center",
 });
 
-// A count in a pill on the bell's shoulder, in the accent, so it is the one
-// spot of color on a bar that is otherwise white over a photograph — and with
-// the bar's own text shadow taken off, which would smudge figures this small.
+// The count in an accent-colored pill. The bar's text shadow is removed because
+// it smudges small figures.
 const badgeStyles = css({
   _starting: {
     transform: "scale(0)",

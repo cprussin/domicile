@@ -31,8 +31,8 @@ describe("nodeAt", () => {
   });
 
   it("throws for a path that leaves the tree", () => {
-    // A path is built from the tree it is walked in, so one that does not fit
-    // is a wiring fault rather than a missing window.
+    // Paths come from the same tree, so a mismatch is a bug, not a missing
+    // window.
     expect(() => nodeAt(TREE, [0, 1])).toThrow();
   });
 });
@@ -60,8 +60,7 @@ describe("replacedAt", () => {
   });
 
   it("leaves every other branch the object it already was", () => {
-    // Which is what keeps a window the focus moved past from re-rendering:
-    // React bails out on an unchanged prop, and a tree rebuilt whole has none.
+    // Untouched subtrees keep their identity, so React skips re-rendering them.
     const replaced = replacedAt(TREE, [1, 1], () => LayoutNode.Window("z"));
 
     expect(nodeAt(replaced, [0])).toBe(nodeAt(TREE, [0]));

@@ -43,8 +43,8 @@ describe("focusedIdOf", () => {
   });
 
   it("stays the window inside a focused container", () => {
-    // `focus parent` in sway selects the container for the *commands*; the
-    // keyboard is still in the window it was in.
+    // `focus parent` selects a container for commands; keyboard focus stays
+    // on the window.
     expect(focusedIdOf(focusedParent(NESTED))).toBe("b");
   });
 
@@ -55,7 +55,7 @@ describe("focusedIdOf", () => {
 
 describe("shownOver", () => {
   it("answers with the tab the outermost container hiding the window shows", () => {
-    // `c` is behind `b`, and both are behind `a`: only `a` is on screen.
+    // `c` is behind `b`, and both are behind `a`, so only `a` is visible.
     const root = LayoutNode.Container(
       Layout.Tabbed,
       [

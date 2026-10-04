@@ -3,27 +3,21 @@ import type {
   DisplaySource,
 } from "@domicile-desktop/component-library/display-source";
 
-/** What the one display is called where the page is the only screen there is. */
+/** The name of the single display when the page is the only screen. */
 const PAGE = "page";
 
 /**
- * The window as the whole desktop, for a shell with no host to describe one.
+ * The browser window as the whole desktop, for a shell running without a host.
  *
- * A `<Screen>` renders nothing until the desktop is described, which is right —
- * a region for a screen nobody has mentioned is a guess about where things are.
- * So the case where nothing ever will describe one needs an answer rather than
- * a fallback: opened in a plain browser for styling work there is no compositor
- * to ask, and the window is the only geometry there is. It is the same answer
- * the compositor gives to the same question, one process further out.
- *
- * Re-described on every resize, for the same reason the compositor re-describes
- * on one: the desktop is the window, so a window that changed is a desktop that
- * changed.
+ * `<Screen>` renders nothing until the desktop is described. In a plain browser
+ * (for example, for styling work) nothing ever describes it, so the window is
+ * used as the only display. Re-described on every resize, as the compositor
+ * does.
  */
 export const viewportDisplays = (view: Window): DisplaySource => ({
   get displays() {
-    // A getter, not a snapshot: the provider reads this when it mounts, and a
-    // window built at import time is not the window at that point.
+    // A getter, not a snapshot: the window size at import time may be stale by
+    // mount.
     return [displayOf(view)];
   },
   onDisplays: (handler) => {
@@ -40,8 +34,8 @@ export const viewportDisplays = (view: Window): DisplaySource => ({
 /**
  * The window as a display.
  *
- * `innerWidth`/`innerHeight` rather than the screen's: what a `<Screen>`
- * positions against is the page's coordinate space, which is the viewport's.
+ * Uses `innerWidth`/`innerHeight` because `<Screen>` positions against the
+ * viewport.
  */
 const displayOf = (view: Window): Display => ({
   name: PAGE,

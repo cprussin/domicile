@@ -5,7 +5,7 @@ import { Choice, choicesFor, launchOf } from "./choices";
 import { fileRow } from "./file-row";
 import { Launch } from "./launch";
 
-/** An application a desktop entry offers, as the host would have answered. */
+/** A desktop entry, as the host sends it. */
 const EDITOR = {
   command: ["gedit", "--new-window"],
   comment: "Edit text files",
@@ -15,14 +15,14 @@ const EDITOR = {
   preview: undefined,
 };
 
-/** A bookmark the desk offers, as the host would have answered. */
+/** A bookmark, as the host sends it. */
 const MAIL = {
   icon: undefined,
   name: "Mail",
   url: "https://mail.example.com",
 };
 
-/** What a home might have in it, as the host would have answered. */
+/** Sample file search results. */
 const FOUND = ["Notes/", "Notes/today.org", "notes.org"];
 
 const search = (query: string) =>
@@ -33,16 +33,14 @@ const search = (query: string) =>
 
 describe("choicesFor", () => {
   it("offers only the files for an empty box", () => {
-    // Enter on an empty box is a keystroke nobody meant as a command, and a
-    // search for the empty string is not a row anybody wants.
+    // An empty query has nothing to search for.
     expect(choicesFor("   ", FOUND, [], [])).toStrictEqual(
       FOUND.map(Choice.File),
     );
   });
 
   it("offers the files the host found, then a search for the words", () => {
-    // Always a search, even for a name that matched: the file is what was
-    // probably meant and the search is what is left if it was not.
+    // The search is the fallback, even when a file matched.
     expect(choicesFor("today", ["Notes/today.org"], [], [])).toStrictEqual([
       Choice.File("Notes/today.org"),
       search("today"),
@@ -56,8 +54,7 @@ describe("choicesFor", () => {
   });
 
   it("puts a URL first, then the files it matched, then a search", () => {
-    // `notes.org` is a real domain and, here, a real file. Both are offered,
-    // and the site is on top: a URL typed whole is a URL meant.
+    // `notes.org` is both a domain and a file. The site ranks first.
     expect(choicesFor("notes.org", ["notes.org"], [], [])).toStrictEqual([
       Choice.Site("https://notes.org"),
       Choice.File("notes.org"),
@@ -66,9 +63,8 @@ describe("choicesFor", () => {
   });
 
   it("offers a tagged query on its engine first, then the rows it would get anyway", () => {
-    // The tag says where the search was meant to go, so that row is on top;
-    // below it is what the line gets as typed, tag and all — the search among
-    // them on Google, so it is a second answer rather than the first again.
+    // The tagged search ranks first. The rows for the line as typed follow,
+    // with a Google search so it doesn't repeat the first row.
     expect(choicesFor("!wiki notes", ["Notes/"], [], [])).toStrictEqual([
       Choice.TaggedSearch({
         engine: Engine.Wikipedia,
@@ -97,9 +93,8 @@ describe("choicesFor", () => {
   });
 
   it("offers a path spelled like one, whether or not the host found it", () => {
-    // The list is what a home has in it, not what exists: `/etc/hosts` is not
-    // under home and is still a file. A leading `/`, `./`, `../` or `~/`
-    // cannot be a hostname or a search anybody meant — so it goes on top.
+    // The host only searches home, so a path-like query gets its own row, on
+    // top: it can't be a hostname or a search.
     expect(choicesFor("/etc/hosts", [], [], [])).toStrictEqual([
       Choice.File("/etc/hosts"),
       search("/etc/hosts"),
@@ -115,8 +110,7 @@ describe("choicesFor", () => {
   });
 
   it("offers the bookmarks among the applications, by name, above the files", () => {
-    // One list, not two: a bookmark is an application that happens to be a
-    // page, and which of the two a name is is not what anybody types.
+    // Applications and bookmarks share one ranked list.
     const paint = { ...EDITOR, id: "paint.desktop", name: "Paint" };
     expect(
       choicesFor("", ["notes.org"], [paint, EDITOR], [MAIL]),
@@ -166,7 +160,7 @@ describe("choicesFor", () => {
   });
 
   it("reads a typed ~/ as the home the host names its answers from", () => {
-    // And does not offer it twice when the host found it too.
+    // No duplicate when the host found it too.
     expect(choicesFor("~/notes.org", ["notes.org"], [], [])).toStrictEqual([
       Choice.File("notes.org"),
       search("~/notes.org"),

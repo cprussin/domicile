@@ -1,22 +1,16 @@
-// Which letters of a row the query is responsible for.
+// Marks the letters of a row that match the query, so users see why it matched.
 //
-// A filtered list answers "these ones" and leaves the user to work out why.
-// Marking the letters that matched answers the second question in the same
-// glance as the first — which is the whole of what a search field is for, and
-// what makes a narrowing list legible rather than magic.
-//
-// The rule is the host's search, read the other way round (see
-// `domicile_host::file_search`): every word of the query appears somewhere in
-// the path, ignoring case, so every place any of them appears is a place the
-// row earned.
+// Mirrors the host's search (see `domicile_host::file_search`): every query
+// word appears in the path, ignoring case. Every occurrence of any word is
+// marked.
 
-/** A run of a row's text, and whether the query is what put it there. */
+/** A run of a row's text, and whether it matched the query. */
 export type Mark = {
   matched: boolean;
   text: string;
 };
 
-/** `text` cut into the runs `query`'s words matched and the runs they did not. */
+/** Split `text` into matched and unmatched runs for `query`. */
 export const marked = (text: string, query: string): readonly Mark[] => {
   const lowered = text.toLowerCase();
   const words = query
@@ -31,14 +25,13 @@ export const marked = (text: string, query: string): readonly Mark[] => {
   return cut(text, runs);
 };
 
-/** Where `word` sits in `lowered`, every time it sits there. */
+/** A matched span of a row's text. */
 type Run = { at: number; to: number };
 
 const occurrences = (lowered: string, word: string): readonly Run[] => {
   const found: Run[] = [];
-  // `indexOf` from the last hit rather than a global regexp, because a query
-  // is somebody's typing: `a.b` and `c++` are words here, not patterns, and
-  // escaping them to make them literal again is the longer way round.
+  // `indexOf` rather than a regexp, so `a.b` and `c++` match literally
+  // without escaping.
   for (
     let at = lowered.indexOf(word);
     at !== -1;
@@ -50,11 +43,9 @@ const occurrences = (lowered: string, word: string): readonly Run[] => {
 };
 
 /**
- * The runs, with the ones that touch or overlap folded into one.
+ * Merge touching or overlapping runs.
  *
- * Two words can cover the same letters — `note notes` is a query that matches
- * — and two runs meeting in the middle of a name would draw a seam nothing
- * put there.
+ * Words can overlap (`note notes`), and unmerged runs would show a seam.
  */
 const merged = (runs: readonly Run[]): readonly Run[] =>
   runs.reduce<Run[]>((folded, run) => {
@@ -69,7 +60,7 @@ const merged = (runs: readonly Run[]): readonly Run[] =>
     }
   }, []);
 
-/** `text` split at the edges of `runs`, each piece saying which side it is on. */
+/** Split `text` at the edges of `runs` into marked pieces. */
 const cut = (text: string, runs: readonly Run[]): readonly Mark[] => {
   const pieces = runs.flatMap((run, index) => [
     { matched: false, text: text.slice(runs[index - 1]?.to ?? 0, run.at) },

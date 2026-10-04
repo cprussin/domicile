@@ -7,7 +7,7 @@ import { NOTHING_TILED } from "./tiling";
 
 const AREA = { height: 1000, width: 1000, x: 0, y: 0 };
 
-/** A window beside a column of two, with the commands pointed into the column. */
+/** A window beside a column of two, with focus in the column. */
 const COLUMN_BESIDE_A_WINDOW = {
   depth: 2,
   root: LayoutNode.Container(
@@ -146,10 +146,7 @@ describe("framesOf", () => {
     });
   });
 
-  // So that it is already on screen the moment its tab is: a window revealed
-  // from nothing takes a frame or two to be drawn, and the desktop shows
-  // through for as long as it does — behind a window opening over it, or one
-  // closing off it.
+  // Hidden tabs stay drawn, so a switch shows them without a blank frame.
   it("draws the tabs it is not showing under the one it is", () => {
     const tiled = framesOf(
       {
@@ -189,8 +186,8 @@ describe("framesOf", () => {
     expect(frameFor(tiled, "a").surface).toMatchObject({ y: TITLE_BAR * 2 });
   });
 
-  // What a tab closing plays out along: a tabbed container's tabs close up
-  // across the gap one leaves, and a stack's close up down it.
+  // Sets the direction a tab-close animation runs: across for tabbed, down for
+  // stacking.
   it("says which way the tabs a window's bar is one of run", () => {
     const tabbed = (layout: Layout.Stacking | Layout.Tabbed) =>
       framesOf(
@@ -212,8 +209,7 @@ describe("framesOf", () => {
     ]);
   });
 
-  // Closing a container's only tab closes the container with it, which is a
-  // window going rather than a tab.
+  // Closing a container's only tab closes the container too.
   it("says nothing of a container's only tab, or a bar of a window's own", () => {
     const only = framesOf(
       {
@@ -230,8 +226,8 @@ describe("framesOf", () => {
     ).toBeUndefined();
   });
 
-  // What a tab that is not open draws a line under itself in the color of:
-  // the open one's, so the strip's edge runs unbroken along the window's top.
+  // Inactive tabs underline in the open tab's color, so the edge runs
+  // unbroken.
   it("names the open tab to a tabbed container's other tabs, and to no other bar", () => {
     const tiled = framesOf(
       {
@@ -278,7 +274,7 @@ describe("framesOf", () => {
     expect(frameFor(behind, "a").openTab).toBeUndefined();
     expect(behind.tabs.map(({ openTab }) => openTab)).toStrictEqual(["a"]);
 
-    // A stack's bars sit one on another, each over the next one's edge.
+    // A stack's bars sit on each other's edges.
     const stacked = framesOf(
       {
         depth: 1,
@@ -321,8 +317,7 @@ describe("framesOf", () => {
         selected: false,
       },
     ]);
-    // And the windows inside it are laid out under the tabs, with title bars
-    // of their own.
+    // Its windows are laid out under the tabs, with their own title bars.
     expect(frameFor(tiled, "a").bar).toMatchObject({ y: TITLE_BAR });
   });
 

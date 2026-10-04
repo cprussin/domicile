@@ -29,7 +29,7 @@ const silentDomicile = {
   focusChrome: () => undefined,
 } as unknown as DomicileClient;
 
-/** A domicile client that keeps what the window told the host, in order. */
+/** Records the window's host calls, in order. */
 const recordingDomicile = (calls: string[]): DomicileClient =>
   ({
     ...silentDomicile,
@@ -39,7 +39,7 @@ const recordingDomicile = (calls: string[]): DomicileClient =>
   }) as unknown as DomicileClient;
 
 const noWindows = () => {
-  // Nothing in the case asks for a window of its own.
+  // No test here opens a window.
 };
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
@@ -61,12 +61,10 @@ const control = (name: string): HTMLElement =>
   screen.getByRole("button", { name });
 
 /**
- * The engine moving the guest's history and saying so, which is the only way a
- * chrome hears about one: the properties are the state and the event carries
- * nothing.
+ * Fires a history change with the given back/forward availability.
  *
- * `defineProperties` rather than assignment because they are readonly on the
- * real element — where the guest can go is the browser process's to say.
+ * Uses `defineProperties` because the properties are readonly on the real
+ * element.
  */
 const historyReaches = (
   element: HTMLWebViewElement,
@@ -80,11 +78,7 @@ const historyReaches = (
   fireEvent(element, new Event(WEBVIEW_HISTORY_CHANGE_EVENT));
 };
 
-/**
- * The engine starting or finishing a load in the guest and saying so, which
- * is the only way a chrome hears about one: the property is the state and the
- * event carries nothing.
- */
+/** Fires a loading change with the given state. */
 const loads = (element: HTMLWebViewElement, loading: boolean): void => {
   Object.defineProperty(element, "loading", {
     configurable: true,
@@ -94,13 +88,10 @@ const loads = (element: HTMLWebViewElement, loading: boolean): void => {
 };
 
 /**
- * The engine saying the page inside the view asked for a window of its own —
- * a `target="_blank"` link followed, a `window.open` called.
+ * Fires a new-window request (`target="_blank"`, `window.open`) for `url`.
  *
- * The one `<webview>` event that carries anything, and it has to: there is no
- * second view to read the address off yet, which is the whole of what the page
- * is asking for. Built rather than constructed, because the event's own type is
- * the engine's and no DOM this test runs on has it.
+ * Built from a plain `Event` because the test DOM lacks the engine's event
+ * type.
  */
 const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
   fireEvent(
@@ -110,11 +101,8 @@ const asksForAWindow = (element: HTMLWebViewElement, url: string): void => {
 };
 
 /**
- * The engine saying an extension called `chrome.windows.create` with a popup:
- * the window it already has an id for, the address to show in it and the size
- * it asked for. Dispatched on the browser window last worked in, which is what
- * every window here may be. Built rather than constructed, like the new
- * window's.
+ * Fires an extension's `chrome.windows.create` popup request. Built from a
+ * plain `Event`, like `asksForAWindow`.
  */
 const asksForAPopupWindow = (
   element: HTMLWebViewElement,
@@ -127,9 +115,8 @@ const asksForAPopupWindow = (
 };
 
 /**
- * The engine saying the page inside the view is waiting on a file, with every
- * answer the window gives it kept in order. Built rather than constructed, like
- * the new window's, and cancelable because taking it is `preventDefault()`.
+ * Fires a file chooser request, recording each answer in `answers`. Cancelable
+ * because taking it calls `preventDefault()`.
  */
 const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
   fireEvent(
@@ -143,7 +130,7 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
         answers.push(`choose ${paths.join(",")}`);
       },
       home: "/home/someone",
-      // A home with one file in it, which is all a picker here is asked about.
+      // One file in the home directory is enough for these tests.
       list: () => Promise.resolve(["notes.txt"]),
       mode: "open",
       suggestedName: "",
@@ -151,18 +138,14 @@ const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
   );
 };
 
-/** The picker's box, which is where its keyboard is. */
+/** The file picker's input. */
 const pickerBox = (): HTMLElement =>
   screen.getByRole("combobox", { name: "Filter or go to a path" });
 
 /**
- * The engine reporting where the guest now is and what it says about the
- * connection behind it — a page committing, a link followed, a certificate
- * going bad under a page that never moved.
+ * Fires a page change with the given URL and security state.
  *
- * `defineProperties` rather than assignment because both are readonly on the
- * real element: where the page is and what the connection is worth are the
- * browser process's to say.
+ * Uses `defineProperties` because both are readonly on the real element.
  */
 const shows = (
   element: HTMLWebViewElement,
@@ -177,9 +160,8 @@ const shows = (
 };
 
 /**
- * A view whose zoom works the way the engine's does: `setZoom` is a request,
- * and the answer arrives on the element with the event that says to read it.
- * Every factor asked for is kept, in order.
+ * Makes `setZoom` behave like the engine's: it sets `zoom` and fires a zoom
+ * change. Returns every requested factor, in order.
  */
 const zoomable = (element: HTMLWebViewElement, factor: number): number[] => {
   const asked: number[] = [];
@@ -195,10 +177,7 @@ const zoomable = (element: HTMLWebViewElement, factor: number): number[] => {
   return asked;
 };
 
-/**
- * A chord the page in the view left alone, handed back by the engine. A
- * `KeyboardEvent` of the engine's own type, because that is what arrives.
- */
+/** Fires a chord the guest page did not handle, as the engine forwards it. */
 const guestPresses = (
   element: HTMLWebViewElement,
   init: KeyboardEventInit,
@@ -210,9 +189,8 @@ const guestPresses = (
 };
 
 /**
- * A view whose find says what it was asked to do, in order, the way the
- * engine's `find` and `stopFinding` would be called — and that has found
- * nothing yet, which is where the engine's element starts.
+ * Records `find` and `stopFinding` calls, in order. Starts with no matches, as
+ * the engine's element does.
  */
 const findable = (element: HTMLWebViewElement): string[] => {
   const calls: string[] = [];
@@ -227,8 +205,8 @@ const findable = (element: HTMLWebViewElement): string[] => {
 };
 
 /**
- * The engine reporting what a find has found. `defineProperties` because both
- * are readonly on the real element: the count is the browser's.
+ * Fires a find result. Uses `defineProperties` because both are readonly on
+ * the real element.
  */
 const finds = (
   element: HTMLWebViewElement,
@@ -242,24 +220,24 @@ const finds = (
   fireEvent(element, new Event(WEBVIEW_FIND_CHANGE_EVENT));
 };
 
-/** The find bar's box, which is where its keyboard is. */
+/** The find bar's input. */
 const findBox = (): HTMLElement =>
   screen.getByRole("searchbox", { name: "Find in page" });
 
 loadEmittedStylesheet(document);
 
-/** Where a window on screen is, which no case here is about. */
+/** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
-/** The whole box its bar and its contents span, which it turns about. */
+/** The box spanning title bar and contents. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
 
 const nothingEnded = () => {
-  // Nothing in the case plays an animation to its end.
+  // No test here needs the callback.
 };
 
 const nothingClosed = () => {
-  // Nothing in the case asks for the window to close.
+  // No test here needs the callback.
 };
 
 describe("BrowserWindow", () => {
@@ -289,7 +267,7 @@ describe("BrowserWindow", () => {
 
     expect(style.borderEndStartRadius).not.toBe("");
     expect(style.borderEndEndRadius).not.toBe("");
-    // A radius clips the page in the view only if its overflow is clipped.
+    // A radius clips the view only if overflow is hidden.
     expect(style.overflow).toBe("hidden");
   });
 
@@ -319,13 +297,12 @@ describe("BrowserWindow", () => {
 
     expect(style.borderEndStartRadius).toBe("");
     expect(style.borderEndEndRadius).toBe("");
-    // A line around the edge of the screen says nothing the window does not.
+    // No edge at the screen border.
     expect(style.borderTopWidth).not.toBe("1px");
   });
 
   it("leaves its frame the resting color even while it is focused", () => {
-    // What picks out the window the keyboard is in is every other window
-    // receding — see `Scrim` — rather than a line around it.
+    // Focus is shown by dimming other windows (see `Scrim`), not a border.
     render(
       <BrowserWindow
         clickThrough={false}
@@ -407,10 +384,8 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // WHERE THE PAGE WENT, which is not where it was sent — and the difference
-    // is the whole of what the engine's page report bought. A window named
-    // after the shell's last ask wears the name of the page the user left, the
-    // moment they follow a link.
+    // Reports the page's actual URL, not the URL the shell sent, so the window
+    // is named after the page shown.
     it("reports where the page went, so the window's tab follows it", () => {
       const seen: string[] = [];
       const { container } = render(
@@ -442,11 +417,8 @@ describe("BrowserWindow", () => {
       expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
     });
 
-    // ONE REPORT PER PAGE, AND THE CALLBACK'S IDENTITY IS NOT A PAGE. The
-    // desktop hands this window a fresh arrow on every render — `Stage.tsx`
-    // builds one inline — so an effect keyed on the callback alone re-reports
-    // the page it already reported, the desktop renames the window, that
-    // renders the window again, and the loop does not stop.
+    // `Stage.tsx` passes a new callback each render. Re-reporting the same page
+    // would rename the window, re-render it and loop.
     it("reports a page once, however often it is re-rendered", () => {
       const seen: string[] = [];
       const windowProps = {
@@ -475,16 +447,14 @@ describe("BrowserWindow", () => {
       );
 
       shows(view(container), "https://elsewhere.example/landing", "secure");
-      // A fresh callback, which is what every render of the desktop hands it.
+      // A new callback, as the desktop passes on every render.
       rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
       rerender(<BrowserWindow {...windowProps} onNavigate={report()} />);
 
       expect(seen).toStrictEqual(["https://elsewhere.example/landing"]);
     });
 
-    // AND THE BAR FOLLOWS IT TOO. The shell sent this window to one place and
-    // the page went to another by itself; what the user reads has to be the
-    // second, or the address bar is describing a page that is not on screen.
+    // The address bar shows the page's actual URL.
     it("shows where the page went rather than where it was sent", () => {
       const { container } = render(
         <BrowserWindow
@@ -514,9 +484,8 @@ describe("BrowserWindow", () => {
       expect(address()).toHaveValue("https://elsewhere.example/landing");
     });
 
-    // AND SO DOES THE LOCK. This is the reading that used to come off the URL
-    // scheme, which answered "secure" for an expired certificate and for a
-    // page running active mixed content alike.
+    // The lock reflects the browser's security state, not the URL scheme. A
+    // `https` URL can still have a bad certificate or mixed content.
     it("draws the browser's verdict on the page, not a guess from its scheme", () => {
       const { container } = render(
         <BrowserWindow
@@ -539,8 +508,7 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      // Nothing reported yet: a window whose guest has committed no page has no
-      // verdict to draw, and must not invent one.
+      // No page committed yet, so the security state is unknown.
       expect(control("Connection is not known")).toBeVisible();
 
       shows(view(container), "https://expired.example.com", "dangerous");
@@ -549,10 +517,8 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // A LINK WITH `target="_blank"`, which without this does nothing at all. The
-  // page in the window is a guest, so the browser process refuses the window it
-  // asks for and reports the address instead — a window is the desktop's to
-  // open, and this window is not the one to open it.
+  // A `target="_blank"` link. The engine reports the URL instead of opening a
+  // window, so the desktop must open it.
   describe("a window its page asks for", () => {
     it("asks the desktop for the address the page wanted", async () => {
       const wanted = await new Promise<string>((resolve) => {
@@ -583,10 +549,9 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // AN EXTENSION'S OWN WINDOW: Bitwarden's "Unlock" from its autofill menu is
-  // a `chrome.windows.create` with a popup. The engine has the window's id
-  // already and nothing to show it in, so it asks the desktop — and the
-  // desktop's answer is a browser window that IS that window.
+  // An extension's popup window, such as Bitwarden's "Unlock" from its autofill
+  // menu (`chrome.windows.create`). The desktop opens a browser window bound to
+  // the engine's window id.
   describe("an extension's popup window", () => {
     const POPUP = "chrome-extension://vault/popup/index.html?uilocation=popout";
     const windowProps = {
@@ -631,10 +596,9 @@ describe("BrowserWindow", () => {
       });
     });
 
-    // THE VIEW IS THE EXTENSION'S WINDOW for as long as it lives, and the
-    // engine reads which one once, as it asks for its guest: a view made again
-    // would be a second guest, and the window the extension holds an id for
-    // would be left with nothing in it.
+    // The engine reads the window id once when creating the guest. Recreating
+    // the view would make a second guest and leave the extension's window
+    // empty.
     it("is that window, in one view however often it is re-rendered", () => {
       const { container, rerender } = render(
         <BrowserWindow
@@ -659,9 +623,7 @@ describe("BrowserWindow", () => {
       expect(view(container)).toBe(first);
     });
 
-    // An extension's window is its page and nothing else, as Chrome draws one:
-    // an address bar over it is a page the user is invited to navigate away
-    // from, leaving the extension's window showing something it never opened.
+    // As in Chrome, an extension's window shows only its page.
     it("draws no address bar", () => {
       render(
         <BrowserWindow
@@ -678,9 +640,8 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // `window.close()` in the page, or `chrome.tabs.remove` from an extension:
-  // the engine closes nothing and asks, and the window is the desktop's to
-  // close. See `WEBVIEW_CLOSE_EVENT`.
+  // `window.close()` or `chrome.tabs.remove`. The engine only reports the
+  // request; see `WEBVIEW_CLOSE_EVENT`.
   describe("a close its page asks for", () => {
     it("asks the desktop to close the window", async () => {
       await new Promise<void>((resolve) => {
@@ -710,10 +671,8 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // A PAGE WAITING ON A FILE IS WAITING ON THIS WINDOW. The engine draws no
-  // dialog of its own and cancels a question nobody takes, so the picker is
-  // this window's to draw — over its page, holding its keyboard, until it is
-  // answered.
+  // The engine draws no file dialog and cancels unanswered requests, so the
+  // window draws a picker over the page and gives it the keyboard.
   describe("a file its page asks for", () => {
     const windowProps = {
       clickThrough: false,
@@ -756,8 +715,7 @@ describe("BrowserWindow", () => {
       expect(pickerBox()).toHaveFocus();
     });
 
-    // The focus it gives its picker is its own, like the focus it gives its
-    // page, and not the user reaching for the window.
+    // Focusing the picker is not a user reach.
     it("says nothing when it puts the keyboard in its picker", async () => {
       const reaches: string[] = [];
       const { container } = render(
@@ -776,9 +734,8 @@ describe("BrowserWindow", () => {
       expect(reaches).toStrictEqual([]);
     });
 
-    // The window's keyboard is the picker's for as long as it is up, so a
-    // window the user comes back to hands it there and not to a page that is
-    // waiting on it.
+    // While the picker is open, refocusing the window focuses the picker, not
+    // the page.
     it("hands the keyboard back to the picker when the window is reached again", async () => {
       const { container, rerender } = render(
         <BrowserWindow {...windowProps} focused />,
@@ -793,8 +750,8 @@ describe("BrowserWindow", () => {
       expect(pickerBox()).toHaveFocus();
     });
 
-    // The newer question replaces the older — see `useFileRequest` — and is
-    // a question of its own, not the rest of the last one's typing.
+    // A newer request replaces the older one (see `useFileRequest`) and starts
+    // empty.
     it("starts afresh on a second question", async () => {
       const answers: string[] = [];
       const { container } = render(<BrowserWindow {...windowProps} focused />);
@@ -844,24 +801,20 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      // The window stacks the bar over the page and hands the page whatever
-      // height the bar leaves...
+      // The window is a flex column, so the page fills the height below the
+      // bar...
       expect(globalThis.getComputedStyle(browser()).display).toBe("flex");
       expect(globalThis.getComputedStyle(browser()).flexDirection).toBe(
         "column",
       );
-      // ...and the view takes it, which it has to be told to do: a `<webview>`
-      // is a replaced element and an unstretched one is 300x150 whatever it is
-      // put inside.
+      // ...and the view stretches to fill it. A `<webview>` is a replaced
+      // element with a 300x150 intrinsic size.
       expect(globalThis.getComputedStyle(view(container)).flexGrow).toBe("1");
     });
   });
 
   describe("the keyboard", () => {
-    // The window the user is working in takes the keyboard, and the compositor
-    // has one seat: whatever held it before must be told it no longer does, or
-    // `wl_keyboard` focus strands on a client the user has switched away from
-    // and every key they type goes to a window they cannot see.
+    // Otherwise the compositor keeps sending keys to the previous client.
     it("tells the host no client holds the keyboard when it takes focus", () => {
       const calls: string[] = [];
       render(
@@ -914,12 +867,9 @@ describe("BrowserWindow", () => {
       expect(calls).toStrictEqual([]);
     });
 
-    // AND THE PAGE STOPS FORWARDING KEYS TO THE CLIENT IT LEFT. The SDK sends
-    // every key this document hears to the client it last routed the keyboard
-    // to, and moving the seat does not change that — so a window that moved
-    // only the seat left the terminal before it named there. Nothing showed
-    // while the guest had the focus, because the document hears none of its
-    // keys; the launcher's box was where it showed, empty under every letter.
+    // The SDK forwards this document's keys to the last client it focused.
+    // Moving only the compositor's focus would keep forwarding there, so the
+    // launcher's input would receive no keys.
     it("stops the page forwarding its keys to the client it took the keyboard from", () => {
       const forwarded: string[] = [];
       const domicile = {
@@ -958,9 +908,7 @@ describe("BrowserWindow", () => {
       expect(forwarded).toStrictEqual([]);
     });
 
-    // AND THE KEYBOARD IT TAKES IS ITS PAGE'S. Nothing else can put it there:
-    // the page is a guest with a browsing context of its own, so the window
-    // being worked in is what focuses it.
+    // The guest page has its own browsing context, so the window must focus it.
     it("puts the keyboard in its page when it becomes the window being worked in", () => {
       const windowProps = {
         clickThrough: false,
@@ -989,13 +937,8 @@ describe("BrowserWindow", () => {
       expect(view(container)).toHaveFocus();
     });
 
-    // EXCEPT WHEN THE KEYBOARD IS ALREADY IN THIS WINDOW, WHICH IS WHAT A
-    // PRESS IN THE ADDRESS BAR PUTS IT THERE FOR. A press on the chrome is a
-    // reach like any other — it is what makes this the window being worked in
-    // — so the effect above runs on the focus that same press just took. A
-    // window that focused its page there would spend the user's click on the
-    // bar: the caret lands in the address bar and is taken out of it a moment
-    // later, which is an address bar that cannot be typed into at all.
+    // A click in the address bar also makes this the focused window. Focusing
+    // the page then would pull the caret out of the address bar.
     it("leaves the focus in its address bar when the press that reached it landed there", async () => {
       const windowProps = {
         clickThrough: false,
@@ -1020,21 +963,15 @@ describe("BrowserWindow", () => {
       );
       await userEvent.click(address());
 
-      // What the desktop does with that reach: this is the active window now.
+      // The desktop responds to the reach by focusing this window.
       rerender(<BrowserWindow {...windowProps} focused />);
 
       expect(address()).toHaveFocus();
     });
 
-    // AND IT GIVES THE KEYBOARD BACK, WHICH NOTHING ELSE CAN DO FOR IT. Every
-    // key the desktop delivers arrives in this document first — the SDK
-    // forwards it to whichever client the shell named — and a key pressed
-    // while a guest holds the page's focus never arrives at all: it is
-    // delivered inside a browsing context of its own and the document around
-    // it hears nothing. The compositor moving the seat to a client does not
-    // touch that. So a browser window that kept the focus after the user moved
-    // on is a desktop where no window can be typed into, which is what
-    // `focusChrome` cannot fix on its own.
+    // The SDK forwards keys from this document to clients, but keys sent to a
+    // focused guest never reach the document. A guest left focused would block
+    // typing into every client, and `focusChrome` cannot fix that.
     it("gives the keyboard back when the user moves to another window", () => {
       const windowProps = {
         clickThrough: false,
@@ -1064,11 +1001,8 @@ describe("BrowserWindow", () => {
       expect(view(container)).not.toHaveFocus();
     });
 
-    // The same rule, and the other half of the window: what the user left is
-    // not where the caret stays. The desktop still types — a press in the
-    // chrome does reach this document, and the SDK sends it on to whichever
-    // client holds the keyboard — so what a window that kept the caret shows
-    // is a bar that looks ready and swallows nothing.
+    // Keys pressed in chrome still reach the document and get forwarded, so a
+    // caret left in the address bar would look active but receive nothing.
     it("gives it back from its address bar too", async () => {
       const windowProps = {
         clickThrough: false,
@@ -1097,18 +1031,12 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // A CLICK ANYWHERE IN THE WINDOW IS THE USER STARTING TO WORK IN IT, and the
-  // two halves of the window say so differently. The chrome sends a pointer
-  // event this document can see. The page inside sends none at all — the view
-  // hosts a browsing context of its own and the guest keeps them — so what
-  // comes back from there is the focus the click took.
+  // Chrome clicks send pointer events this document sees. Guest page clicks
+  // send none, so the window listens for the guest taking focus instead.
   describe("reaching the window", () => {
-    // THE ONE THE ENGINE ACTUALLY SENDS. A guest takes focus at the moment the
-    // embedder's page loses it, and `Document::SetFocusedElement` dispatches
-    // `focus` and `focusin` only while the page is focused — so the element
-    // becomes `activeElement` and no focus event is dispatched at all. The
-    // fork's element says so in an event of its own instead; this is the
-    // window hearing it.
+    // A guest takes focus as the embedder page loses it, so Blink fires no
+    // `focus` or `focusin`. The engine fires `WEBVIEW_GUEST_FOCUS_EVENT`
+    // instead.
     it("reports a reach when the guest in the page takes focus", async () => {
       await new Promise<void>((resolve) => {
         const { container } = render(
@@ -1167,10 +1095,8 @@ describe("BrowserWindow", () => {
       });
     });
 
-    // A PAGE UNDER ANOTHER TAB TAKES FOCUS WITHOUT ANYONE REACHING FOR IT: the
-    // engine hands the keyboard back to the guest that last had it. The engine
-    // says so in a real `focusin` as well as its own event, and the window
-    // answers neither.
+    // When the page regains the keyboard, the engine refocuses the last guest
+    // and fires both `focusin` and its own event. The window ignores both.
     it("says nothing when the page under another tab takes focus", () => {
       const reaches: string[] = [];
       const { container } = render(
@@ -1204,11 +1130,8 @@ describe("BrowserWindow", () => {
     });
 
     it("reports a click in the page of the window it is already in", async () => {
-      // Focus follows the cursor here, so the window under the pointer is the
-      // one being worked in before the click lands — and a click in the page
-      // is the only thing that can raise a window whose page the user is
-      // already typing into. A window that answered only the reaches which
-      // found it inactive would sit under whatever was covering it.
+      // Focus follows the cursor, so the window is usually focused before the
+      // click. The click must still raise it.
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
@@ -1239,8 +1162,7 @@ describe("BrowserWindow", () => {
 
     it("reports a reach when an extension asks for the window in front", async () => {
       // `chrome.tabs.update(id, {active: true})` and `chrome.windows.update(id,
-      // {focused: true})` arrive on the view, and raising a window is what a
-      // reach does.
+      // {focused: true})` arrive on the view and raise the window.
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
@@ -1270,11 +1192,9 @@ describe("BrowserWindow", () => {
     });
 
     it("says nothing when the shell put the focus there itself", () => {
-      // The focus this window gives its own page is announced exactly the way
-      // a click there is: the element says so from inside `focus()`, whichever
-      // route the focus came by. So the window spends the announcement it
-      // caused — without it, the pointer arriving over a window would raise it
-      // as well as focus it, and crossing the desktop would restack it.
+      // Programmatic focus of the page fires the same event as a click. If it
+      // counted as a reach, moving the pointer across windows would restack
+      // them.
       const reaches: string[] = [];
       const windowProps = {
         clickThrough: false,
@@ -1299,8 +1219,8 @@ describe("BrowserWindow", () => {
       const { container, rerender } = render(
         <BrowserWindow {...windowProps} focused={false} />,
       );
-      // The engine's own half, which happy-dom's element cannot carry: the
-      // announcement comes out of the call that focuses the element.
+      // Simulates the engine firing the event from inside `focus()`, which
+      // happy-dom's element does not do.
       const guest = view(container);
       guest.addEventListener("focus", () => {
         guest.dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
@@ -1312,12 +1232,9 @@ describe("BrowserWindow", () => {
     });
 
     it("says nothing when it takes the focus back from nothing", async () => {
-      // The keyboard this window puts back in its own page when the chrome
-      // drops the focus — closing another window is the case
-      // `useReclaimFocus` exists for — is the shell's focus as much as the one
-      // a window is given for becoming active, and comes back as the same
-      // announcement. Left unspent, closing a window would raise whatever window
-      // the pointer last crossed.
+      // Focus restored by `useReclaimFocus` (such as after another window
+      // closes) is also programmatic. Counted as a reach, it would raise the
+      // window under the pointer.
       const reaches: string[] = [];
       const { container } = render(
         <BrowserWindow
@@ -1346,8 +1263,8 @@ describe("BrowserWindow", () => {
       guest.addEventListener("focus", () => {
         guest.dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
       });
-      // Something of the chrome takes the focus and then leaves it on nothing,
-      // which is what an element unmounted mid-press does.
+      // Chrome takes focus and then drops it, as when an element unmounts
+      // mid-press.
       const pressed = document.createElement("button");
       document.body.append(pressed);
       pressed.focus();
@@ -1362,10 +1279,7 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // A CONTROL THAT WOULD DO NOTHING SAYS SO BEFORE IT IS PRESSED. `goBack()`
-  // on a history with nothing behind it is a no-op in the browser process, so
-  // a live-looking button is the window telling the user something it cannot
-  // do.
+  // Buttons that would do nothing are disabled.
   describe("the history controls", () => {
     it("grays Back out until the page has somewhere to go back to", () => {
       const { container } = render(
@@ -1392,8 +1306,7 @@ describe("BrowserWindow", () => {
       expect(control("Back")).toBeDisabled();
       historyReaches(view(container), true, false);
       expect(control("Back")).not.toBeDisabled();
-      // Its own property, not the other one: a page that has been back once
-      // can go back again without being able to go forward.
+      // Back and forward availability are independent.
       expect(control("Forward")).toBeDisabled();
     });
 
@@ -1426,9 +1339,8 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // The bar's own behavior is `AddressBar`'s to test; what is this window's
-  // is the wiring — the one control reads the view's loading state, and
-  // whichever of the two it is drives the view.
+  // `AddressBar` tests the button itself. This checks that it reads the view's
+  // loading state and drives the view.
   describe("the reload button", () => {
     it("becomes a stop button while the view says a page is arriving", () => {
       const { container } = render(
@@ -1452,8 +1364,7 @@ describe("BrowserWindow", () => {
           src="https://example.com"
         />,
       );
-      // A window whose guest has said nothing is a window with nothing on the
-      // way: the element answers false until the browser says otherwise.
+      // The element reports not loading until the browser says otherwise.
       expect(control("Reload")).toBeVisible();
       loads(view(container), true);
       expect(control("Stop")).toBeVisible();
@@ -1524,7 +1435,7 @@ describe("BrowserWindow", () => {
         />,
       );
 
-    /** A view whose history controls say what they were asked to do. */
+    /** Records the history controls' calls. */
     const driven = (element: HTMLWebViewElement): string[] => {
       const calls: string[] = [];
       element.goBack = () => {
@@ -1539,9 +1450,8 @@ describe("BrowserWindow", () => {
       return calls;
     };
 
-    // THE PAGE'S HALF OF THE WINDOW SENDS NO KEYS OUT, so this is the only
-    // way a chord pressed there arrives: the engine hands back the ones the
-    // page left alone.
+    // Keys pressed in the page never reach this document. The engine forwards
+    // chords the page did not handle.
     it("answers a chord the page left alone", () => {
       const { container } = renderWindow();
       const calls = driven(view(container));
@@ -1584,8 +1494,8 @@ describe("BrowserWindow", () => {
       expect(asked).toStrictEqual([1.5, 1.25, 1]);
     });
 
-    // Ctrl and the wheel over the page, which the engine turns into a request
-    // rather than a zoom, so it takes the same steps a key does.
+    // The engine turns Ctrl+wheel over the page into a zoom request, which uses
+    // the same steps as the keys.
     it("zooms when the wheel asks it to", () => {
       const { container } = renderWindow();
       const asked = zoomable(view(container), 1);
@@ -1638,8 +1548,7 @@ describe("BrowserWindow", () => {
         />,
       );
 
-    // Ctrl+F pressed in the page, which the page left alone and the engine
-    // handed back — the way a find bar is almost always opened.
+    // Ctrl+F pressed in the page, forwarded by the engine.
     it("opens a find bar on Ctrl+F, with the keyboard in it", () => {
       const { container } = renderWindow();
 
@@ -1648,8 +1557,8 @@ describe("BrowserWindow", () => {
       expect(findBox()).toHaveFocus();
     });
 
-    // Chrome's Ctrl+F with the bar already up: back into the box, with what
-    // it holds selected so the next thing typed replaces it.
+    // As in Chrome, Ctrl+F with the bar open refocuses it with its text
+    // selected.
     it("takes the keyboard back on Ctrl+F with the bar already up", async () => {
       const { container } = renderWindow();
       findable(view(container));
@@ -1706,8 +1615,8 @@ describe("BrowserWindow", () => {
       expect(screen.getByText("2/3")).toBeInTheDocument();
     });
 
-    // Escape in a find bar, as in Chrome: the match it was on stays selected,
-    // and the keyboard goes back to the page it was finding in.
+    // As in Chrome, Escape keeps the current match selected and refocuses the
+    // page.
     it("stops and hands the page back the keyboard on Escape", async () => {
       const { container } = renderWindow();
       const calls = findable(view(container));
@@ -1758,13 +1667,12 @@ describe("BrowserWindow", () => {
         src="https://example.com"
       />,
     );
-    // A hidden element is out of the accessibility tree, so it has no
-    // accessible name left to match on — being the only region is enough.
+    // A hidden element has no accessible name, but it is the only region.
     expect(screen.getByRole("region", { hidden: true })).not.toBeVisible();
   });
 
   describe("the way it moves", () => {
-    /** The props every case here shares; each overrides the one it is about. */
+    /** Default props; each test overrides what it checks. */
     const windowProps = {
       clickThrough: false,
       covered: false,
@@ -1793,9 +1701,8 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // A WINDOW TURNS ABOUT ONE POINT, NOT TWO. Its contents and the bar above
-    // them are separate elements, and each scaled about its own center would
-    // pull away from the other by a fraction of the window's height.
+    // The contents and title bar are separate elements. Each must scale about
+    // the same point or they would separate.
     it("turns about the middle of its whole frame rather than its own", () => {
       render(<BrowserWindow {...windowProps} motion="opening" />);
 
@@ -1811,8 +1718,7 @@ describe("BrowserWindow", () => {
     });
 
     it("follows the pointer exactly while it is being dragged", () => {
-      // A drag writes a new box on every pointer move, and a window easing
-      // towards each of them trails the pointer instead of following it.
+      // Easing would make the window trail the pointer.
       render(<BrowserWindow {...windowProps} dragging />);
 
       expect(globalThis.getComputedStyle(browser()).transition).not.toContain(
@@ -1820,9 +1726,7 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // A WINDOW FADES AS IT IS TAKEN HOLD OF AND AS IT IS LET GO. Both ends of
-    // a drag change its opacity, and a window that snapped between the two
-    // blinked.
+    // A drag changes opacity at both ends; snapping would look like a blink.
     it("fades to see-through as it is taken hold of", () => {
       render(<BrowserWindow {...windowProps} dragging />);
 
@@ -1839,11 +1743,8 @@ describe("BrowserWindow", () => {
       );
     });
 
-    // A WINDOW ON ITS WAY OUT ASKS FOR NOTHING AND ANSWERS NOTHING. Its page
-    // goes on being drawn — that is the whole point of drawing it rather than
-    // something standing in for it — but the keyboard has moved on to whatever
-    // is left, and a window still pulling the focus back into its own guest is
-    // one the user cannot type past.
+    // A leaving window still shows its page, but must not pull focus back into
+    // its guest.
     it("leaves the keyboard alone while it is leaving", () => {
       const calls: string[] = [];
 

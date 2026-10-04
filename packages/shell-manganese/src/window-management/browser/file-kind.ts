@@ -1,5 +1,5 @@
-// What a file is, as far as its name says: the picker's glyph, its tile's
-// color and the Kind column all come from here.
+// A file's kind from its name, for the picker's icon, tile color and Kind
+// column.
 
 export enum FileKind {
   Archive,
@@ -12,7 +12,7 @@ export enum FileKind {
   Other,
 }
 
-/** Extensions by the kind they say a file is, lower case and dotless. */
+/** Extensions per kind, lowercase and without the dot. */
 const KINDS: ReadonlyMap<string, FileKind> = new Map([
   ...["7z", "bz2", "gz", "rar", "tar", "tgz", "xz", "zip", "zst"].map(
     (extension) => [extension, FileKind.Archive] as const,
@@ -53,14 +53,13 @@ const KINDS: ReadonlyMap<string, FileKind> = new Map([
 
 export const fileKindOf = (name: string): FileKind => {
   const extension = extensionOf(name);
-  // Most files are none of the kinds above: that is what `Other` is.
   return (
     (extension === undefined ? undefined : KINDS.get(extension)) ??
     FileKind.Other
   );
 };
 
-/** What the Kind column says: the extension, and what it makes the file. */
+/** The Kind column text: the extension and its kind. */
 export const kindLabel = (name: string): string => {
   const extension = extensionOf(name);
   return extension === undefined
@@ -69,8 +68,8 @@ export const kindLabel = (name: string): string => {
 };
 
 /**
- * The lower-cased text after a name's last dot, or `undefined` when there is
- * none — a leading dot starts a name, it does not end one.
+ * The lowercase extension after the last dot, if any. A leading dot (a
+ * dotfile) is not an extension.
  */
 const extensionOf = (name: string): string | undefined => {
   const dot = name.lastIndexOf(".");

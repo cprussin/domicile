@@ -9,15 +9,14 @@ import type {
 
 import { hostTheme } from "./host-theme";
 
-/** What every call *out* to the compositor does here, unless it is recorded. */
+/** A no-op for every outgoing compositor call that is not recorded. */
 const ignored = (): undefined => undefined;
 
 /**
- * A compositor that states a theme and remembers being asked for one.
+ * A compositor stub that sends a theme and records theme requests.
  *
- * Written out rather than cast from a partial, for `host-displays.test.ts`'s
- * reason: `DomicileClient` registers a listener for every event type in its
- * constructor, so a double missing `addEventListener` would throw there.
+ * Written out rather than cast from a partial because `DomicileClient`'s
+ * constructor calls `addEventListener` (as in `host-displays.test.ts`).
  */
 class Host implements DomicileHost {
   readonly asked: Theme[] = [];
@@ -34,14 +33,14 @@ class Host implements DomicileHost {
     this.#listeners.set(type, listener);
   }
 
-  /** The compositor saying which way round the desk is drawn. */
+  /** Sends the desktop's theme. */
   states(theme: Theme): void {
     this.#listeners.get("theme")?.(
       Object.assign(new Event("theme"), { arrival: 0, theme }) as never,
     );
   }
 
-  /** The compositor saying which way round the desk's windows are drawn. */
+  /** Sends the windows' theme. */
   turnsItsWindows(theme: Theme): void {
     this.#listeners.get("windowstheme")?.(
       Object.assign(new Event("windowstheme"), { arrival: 0, theme }) as never,
@@ -109,10 +108,9 @@ describe("the theme a shell paints in", () => {
   });
 
   it("is asked for rather than applied", () => {
-    // THE LOAD-BEARING ONE. A click is a request: the compositor answers to
-    // every chrome on the desk, and hands the same value to the settings
-    // portal its GTK and Qt clients read. A source that applied it here would
-    // be the shell changing while every window stayed as it was.
+    // A click only requests the change. The compositor applies it to every
+    // chrome and to the settings portal GTK and Qt clients read; applying it
+    // locally would change the shell but not the windows.
     const [client, host] = connected();
 
     hostTheme(client).setTheme("light");
@@ -121,11 +119,9 @@ describe("the theme a shell paints in", () => {
   });
 
   it("is remembered, so the next load of this page paints in it", () => {
-    // The theme is the desk's and is never stored as a setting. What is
-    // stored is a guess for the milliseconds before the handshake lands, and
-    // this is the one place the desk's theme arrives — `on` is a single slot
-    // per message type, so a second registration to do the remembering would
-    // displace the provider's.
+    // The remembered guess is written here because this is the only place the
+    // theme arrives. `on` is one slot per message type, so a second
+    // registration would replace the provider's.
     const [client, host] = connected();
     hostTheme(client).onTheme(() => undefined);
 
@@ -165,12 +161,11 @@ describe("the windows a shell's wipe passes across", () => {
   });
 
   it("have turned once the desk says so, and not before", async () => {
-    // What the wipe holds its old frame for: a wipe that started sooner
-    // would reveal windows still drawn the old way, and they would pop over
-    // behind it.
+    // The wipe holds its old frame until windows repaint; starting sooner would
+    // reveal windows still in the old theme.
     const [client, host] = connected();
-    // The handshake states the windows' theme too, and a shell has said
-    // hello long before anybody clicks: that one is not an answer.
+    // The handshake also sends the windows' theme, long before any click; that
+    // one is not an answer.
     host.turnsItsWindows("dark");
     const turning = hostTheme(client).turnWindows("light");
 

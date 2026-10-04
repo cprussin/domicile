@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { AddressSuggestion, addressSuggestions } from "./address-suggestions";
 
-/** Where a window has been, oldest first, which is the order it is kept in. */
+/** Where a window has been, oldest first. */
 const VISITED = [
   "https://example.com",
   "https://docs.example.com/guide",
@@ -12,8 +12,7 @@ const VISITED = [
 describe("addressSuggestions", () => {
   describe("with nothing typed", () => {
     it("offers where the window has been, most recent first", () => {
-      // What an address bar shows the moment it is focused: the user is most
-      // likely going back to where they just were.
+      // On focus the user is most likely going back to a recent page.
       expect(addressSuggestions("", VISITED)).toStrictEqual([
         AddressSuggestion.Visited("https://news.ycombinator.com"),
         AddressSuggestion.Visited("https://docs.example.com/guide"),
@@ -27,10 +26,7 @@ describe("addressSuggestions", () => {
   });
 
   describe("with something typed", () => {
-    // WHAT ENTER WOULD DO COMES FIRST, always. The list is a list of
-    // alternatives to the thing the user is already halfway to doing, so the
-    // thing they are doing has to be on it — and at the top, where Chromium
-    // puts it.
+    // What Enter would do always comes first, as in Chromium.
     it("leads with the address the typed line would load", () => {
       expect(addressSuggestions("docs.example.com", VISITED)[0]).toStrictEqual(
         AddressSuggestion.Site("https://docs.example.com"),
@@ -66,9 +62,8 @@ describe("addressSuggestions", () => {
     });
 
     it("offers a visited address once, not twice", () => {
-      // Typing a whole address the window has already been to would otherwise
-      // put the same URL on two lines — one as what Enter does and one as a
-      // place it has been — which reads as two different destinations.
+      // Otherwise the same URL would appear twice, once as Enter's action and
+      // once as a visit.
       const suggestions = addressSuggestions("https://example.com", VISITED);
 
       expect(suggestions).toStrictEqual([
@@ -77,8 +72,7 @@ describe("addressSuggestions", () => {
     });
 
     it("keeps the list a list rather than a history", () => {
-      // A list longer than the screen is not a suggestion, and the ones past
-      // the first few are never the answer.
+      // Lines past the first few are rarely the answer.
       const many = Array.from(
         { length: 30 },
         (_, index) => `https://example.com/${index.toString()}`,

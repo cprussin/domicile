@@ -13,7 +13,7 @@ const sync: TrayItem = {
   title: "Syncthing",
 };
 
-/** An extension's action, with no popup so a click is one call. */
+/** An extension's action with no popup, so a click is one call. */
 const counter: Extension = {
   badgeColor: "#00000000",
   badgeText: "",
@@ -25,7 +25,7 @@ const counter: Extension = {
   title: "Counter",
 };
 
-/** And one `action.disable()` turned off. */
+/** An extension action disabled with `action.disable()`. */
 const off: Extension = {
   ...counter,
   enabled: false,
@@ -36,7 +36,7 @@ const off: Extension = {
 const SYNC = `status-notifier:${sync.id}`;
 const COUNTER = `extension:${counter.id}`;
 
-/** A client that keeps every click the tray hands on, in order. */
+/** A client that records every click the tray forwards, in order. */
 const recordingDomicile = (clicked: string[]): DomicileClient =>
   ({
     activateExtension: (id: string) => {
@@ -83,7 +83,7 @@ const labels = () =>
 
 const button = (name: string) => screen.getByRole("button", { name });
 
-/** Press `from` and move the pointer over `to`. */
+/** Press on `from` and move the pointer over `to`. */
 const drag = (from: string, to: string) => {
   fireEvent.pointerDown(button(from), { button: 0, pointerId: 1 });
   fireEvent.pointerOver(button(to), { pointerId: 1 });
@@ -92,7 +92,7 @@ const drag = (from: string, to: string) => {
 describe("Tray", () => {
   describe("rendering", () => {
     it("draws applications' icons and enabled extensions' actions in one row", () => {
-      // Applications first, as they arrived, until the user says otherwise.
+      // Applications first, in arrival order, until the user reorders.
       renderTray({ extensions: [counter, off] });
 
       expect(labels()).toStrictEqual(["Syncthing", "Counter"]);
@@ -123,7 +123,7 @@ describe("Tray", () => {
     });
 
     it("keeps an application's place when it retitles its icon", () => {
-      // A tooltip that says how many are unread, or which network is up.
+      // For example, an unread count or the connected network.
       renderTray({
         items: [{ ...sync, title: "Syncthing (paused)" }],
         order: [SYNC, COUNTER],
@@ -133,10 +133,10 @@ describe("Tray", () => {
     });
 
     it("leaves no picture for the engine to drag instead", () => {
-      // A native drag of an `<img>` cancels the pointer the reorder follows.
+      // A native `<img>` drag would cancel the pointer events the reorder uses.
       const { container } = renderTray({});
 
-      // Decorative pictures, which have no role to find them by.
+      // Decorative images have no role to query by.
       expect(
         [...container.querySelectorAll("img")].map((image) =>
           image.getAttribute("draggable"),

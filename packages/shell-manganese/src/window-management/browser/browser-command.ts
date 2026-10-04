@@ -1,12 +1,10 @@
-// The keys a browser window answers, as Chrome binds them.
+// Browser window keybindings, matching Chrome's.
 //
-// Matched on `key` — the character — rather than `code`, the physical key,
-// because that is what Chrome's own bindings follow and what a user reads off
-// the keycap: Ctrl+plus zooms in wherever the layout puts plus. The desktop's
-// bindings are the config's, claimed from the compositor — see
-// `keyboard/useKeybindings.ts` — and a chord claimed is never delivered here.
+// Matches on `key` (the character), not `code`, as Chrome does, so Ctrl+plus
+// works on any layout. Desktop bindings are claimed from the compositor and
+// never reach here; see `keyboard/useKeybindings.ts`.
 
-/** What a browser window can be told to do from the keyboard. */
+/** A browser action triggered from the keyboard. */
 export enum BrowserCommand {
   Back = "Back",
   Find = "Find",
@@ -17,26 +15,23 @@ export enum BrowserCommand {
   ZoomReset = "ZoomReset",
 }
 
-/** A key that went down, as much of a `KeyboardEvent` as a binding reads. */
+/** The `KeyboardEvent` fields a binding reads. */
 type Press = Pick<
   KeyboardEvent,
   "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
 >;
 
 /**
- * The command a press is bound to, or `undefined` for one that is not a
- * browser's — which is most keys, and not a failure.
+ * The command bound to a press, if any.
  *
- * Every other modifier has to be up: a chord with one more held is a different
- * chord, and answering it anyway would be a browser taking a key somebody
- * bound to something else.
+ * Extra modifiers make a different chord, which may be bound elsewhere, so
+ * they return `undefined`.
  */
 export const browserCommandFor = (press: Press): BrowserCommand | undefined => {
   if (press.altKey && !press.ctrlKey && !press.metaKey && !press.shiftKey) {
     return altCommandFor(press.key);
   } else if (press.ctrlKey && !press.altKey && !press.metaKey) {
-    // Shift either way: it is what turns `=` into `+` and `r` into `R`, and
-    // Chrome answers both halves of each pair.
+    // Shift is ignored: Chrome accepts both `=` and `+`, `r` and `R`.
     return ctrlCommandFor(press.key);
   } else {
     return undefined;

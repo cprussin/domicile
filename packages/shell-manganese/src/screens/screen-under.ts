@@ -3,16 +3,14 @@ import type { Display } from "@domicile-desktop/component-library/display-source
 import type { Spot } from "../window-management/pointer-warp";
 
 /**
- * The display a pointer at `spot` is on, or `undefined` off every one of them.
+ * The display containing `spot`, or `undefined` if none does.
  *
- * **ONE ANSWER FOR BOTH KINDS OF PAGE.** A page that is one monitor is told
- * the whole desk with its own display at the origin, so every spot it hears a
- * pointer at is inside that display; a page that is the whole desktop has
- * every display at its own place on it. Either way the display is the one
- * whose rectangle holds the spot.
+ * Works for both page kinds: a per-monitor page has its display at the origin,
+ * and a whole-desktop page has every display at its place. Either way the
+ * answer is the display whose rectangle contains the spot.
  *
- * Its left and top edges and not its right and bottom ones, so the column two
- * screens share belongs to the one that starts there.
+ * Rectangles include their left and top edges only, so a shared edge belongs to
+ * the screen that starts there.
  */
 export const screenUnder = (
   displays: readonly Display[],

@@ -5,9 +5,7 @@ import { parseCommand } from "./command";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES, exec } from "./commands";
 
 describe("manganese's default keys", () => {
-  // Every binding a desk gets without asking has to be a command this shell
-  // answers: a default that said "unknown command" would be a key that does
-  // nothing on every desk.
+  // Every default binding must parse, or that key does nothing.
   it("are every one a command manganese knows, or a mode it has", () => {
     const tables = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)];
     for (const table of tables) {
@@ -47,7 +45,7 @@ describe("manganese's default keys", () => {
     });
   });
 
-  // No terminal: which one, if any, is the user's to bind with `exec`.
+  // No default terminal binding; users bind their own with `exec`.
   it("launch nothing on Meta+Return", () => {
     expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toBeUndefined();
   });

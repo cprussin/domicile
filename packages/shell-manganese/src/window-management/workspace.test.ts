@@ -43,7 +43,7 @@ describe("opened", () => {
   });
 
   it("tiles a window even while a float is being worked in", () => {
-    // sway opens a new window into the tiling whatever is floating over it.
+    // Matches sway: a new window tiles even while a lone float has focus.
     const workspace = opened(floatToggled(tiling("a"), SCREEN), "b");
 
     expect(windowsOf(workspace.tiling)).toEqual(["b"]);
@@ -109,8 +109,8 @@ describe("floatToggled", () => {
   });
 
   it("floats the whole container `focus parent` selected", () => {
-    // `mod+a` then `mod+Shift+Tab`, as in sway: the group leaves the tiling
-    // as one float, laid out inside it the way it was tiled.
+    // `mod+a` then `mod+Shift+Tab`, as in sway: the group floats as one,
+    // keeping its internal layout.
     const workspace = floatToggled(parentFocused(grouped()), SCREEN);
 
     expect(windowsOf(workspace.tiling)).toEqual(["a"]);
@@ -202,8 +202,8 @@ describe("a floating group", () => {
   });
 
   it("keeps the group selected while the pointer rests in it", () => {
-    // Focus follows the cursor, so the window being worked in is reported
-    // again constantly; that must not undo `focus parent`.
+    // Focus follows the cursor, so the focused window is reported again
+    // constantly; that must not undo `focus parent`.
     const selected = parentFocused(floated());
 
     expect(selectedIn(reached(selected, "c"))).toMatchObject({
@@ -245,12 +245,8 @@ const cascaded = () =>
 
 describe("reached", () => {
   it("changes nothing when the window being worked in is reached again", () => {
-    // "A reach that moves nothing returns the state it was given", which is
-    // what `AppWindow` leans on for the press it reports in the window the
-    // user is already in — focus follows the cursor, so that is most presses.
-    // Re-pointing the focus at the window it is already on used to be
-    // invisible; it is not, now that the depth along the chain is what
-    // `focus parent` selected with.
+    // `AppWindow` relies on this for presses in the focused window, which is
+    // most presses. Refocusing would also undo `focus parent`.
     const selected = parentFocused(tiling("a", "b"));
 
     expect(reached(selected, "b")).toBe(selected);
@@ -278,21 +274,21 @@ describe("focusLeaves", () => {
   });
 
   it("is every way out of a window filling the screen", () => {
-    // sway's: the tiling behind it is not what the user can see.
+    // Matches sway: the tiling behind it is hidden.
     const full = fullscreenToggled(tiling("a", "b"), false);
 
     expect(focusLeaves(full, Direction.Left)).toBe(true);
   });
 
   it("is no way out of a window filling every screen", () => {
-    // sway's: there is no other screen to see.
+    // Matches sway: there is no other screen to move to.
     const global = fullscreenToggled(tiling("a", "b"), true);
 
     expect(focusLeaves(global, Direction.Right)).toBe(false);
   });
 
   it("is never from a floating window", () => {
-    // sway keeps `focus <direction>` among the floats on their workspace.
+    // Matches sway: `focus <direction>` stays among the workspace's floats.
     expect(
       focusLeaves(floatToggled(tiling("a"), SCREEN), Direction.Right),
     ).toBe(false);
@@ -307,8 +303,8 @@ describe("enteredBy", () => {
   });
 
   it("puts the commands back on a window", () => {
-    // A `focus parent` made before the keyboard left is not what the next
-    // key acts on once it comes back — sway lands the focus on a window.
+    // Matches sway: returning focus lands on a window, not an earlier
+    // `focus parent` selection.
     const selected = parentFocused(
       containerLaidOut(tiling("a", "b"), Layout.SplitH),
     );
@@ -369,20 +365,16 @@ describe("the keyed commands", () => {
   });
 
   it("leaves the tiling alone while a float has the keyboard", () => {
-    // `focus parent` acts on the layer the keyboard is in, the way every
-    // other keyed command does, and a floating window has left the tree —
-    // so there is no container around it to select. A tiling that selected
-    // one anyway would draw a line round a group nothing is pointed at.
+    // `focus parent` acts on the focused layer, and a float has no parent
+    // container.
     const floating = floatToggled(tiling("a", "b", "c"), SCREEN);
 
     expect(parentFocused(floating).tiling).toBe(floating.tiling);
   });
 
   it("takes the commands out of the tiling with the keyboard", () => {
-    // A selection is what the keys are pointed at, and the keyboard going to
-    // a float takes them out of the tree with it — so coming back lands on
-    // the window the tiling was in rather than on a container chosen before
-    // the user left it, which is what sway's `mode_toggle` does.
+    // Matches sway's `mode_toggle`: returning to the tiling lands on a
+    // window, not on the container selected before leaving.
     const floated = floatToggled(tiling("a", "b", "c"), SCREEN);
     const selected = parentFocused(modeToggled(floated));
 
@@ -392,9 +384,7 @@ describe("the keyed commands", () => {
   });
 
   it("takes them out of it when the pointer crosses a float, too", () => {
-    // Focus follows the cursor here, so this is the everyday way out of the
-    // tiling rather than `mod+Tab`: the pointer reaching a floating window
-    // is the keyboard leaving the tree, and the selection goes with it.
+    // Focus follows the cursor, so this is the usual way to leave the tiling.
     const floated = floatToggled(tiling("a", "b", "c"), SCREEN);
     const selected = parentFocused(modeToggled(floated));
 

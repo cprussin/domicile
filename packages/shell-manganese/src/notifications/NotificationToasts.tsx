@@ -9,30 +9,29 @@ import { css } from "../../styled-system/css";
 import { TOP_BAR } from "../top-bar/TopBar";
 import { NotificationCard } from "./NotificationCard";
 
-/** The most toasts up at once; the rest wait in the drawer. */
+/** The most toasts shown at once; the rest are only in the drawer. */
 const MOST_SHOWN = 4;
 
 type Props = {
-  /** What says which toasts are up — `useNotifications` adds to it. */
+  /** The toast manager; `useNotifications` adds to it. */
   manager: ToastManager;
-  /** The time now, for how long ago each arrived. */
+  /** The current time, for the relative timestamps. */
   now: number;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
   /**
-   * Whether toasts are drawn now: not over a locked desk, whose lock screen
-   * they would read out to whoever is in front of it.
+   * Whether to show toasts. False while locked, so the lock screen does not
+   * show notification content.
    */
   shown: boolean;
 };
 
 /**
- * Notifications as they arrive: a deck of toasts in the top trailing corner,
- * under the bar and over the windows, each the same card the drawer lists.
+ * Toasts for new notifications, stacked in the top trailing corner under the
+ * bar and over windows. Each uses the drawer's card.
  *
- * Putting a toast away — the cross, a swipe, its time running out — is only
- * that: the notification is still in the drawer. Pressing one takes its
- * action, which its application answers and the compositor then lets go of.
+ * Dismissing a toast (close, swipe or timeout) leaves the notification in the
+ * drawer. Pressing one takes its action.
  */
 export const NotificationToasts = ({
   manager,
@@ -49,7 +48,7 @@ export const NotificationToasts = ({
   </Toaster.Provider>
 );
 
-/** The toaster, inside the provider whose toasts it draws. */
+/** Renders the toasts inside their provider. */
 const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
   const { close } = useToastManager();
   return (
@@ -63,8 +62,7 @@ const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
             notification={notification}
             now={now}
             onAction={(key, event) => {
-              // The release at the end of a swipe that put it away is not a
-              // press on it.
+              // Ignore the pointer release that ends a dismissing swipe.
               if (
                 event.currentTarget.closest("[data-swipe-direction]") === null
               ) {
@@ -83,9 +81,8 @@ const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
 };
 
 /**
- * The notification a toast was added for. Every toast here is added by
- * `useNotifications` with one, so a toast without is a bug in that, and
- * throws.
+ * The notification a toast was added for. `useNotifications` always attaches
+ * one, so a missing one is a bug and throws.
  */
 const toastNotification = (data: Notification | undefined): Notification => {
   if (data === undefined) {
@@ -97,10 +94,9 @@ const toastNotification = (data: Notification | undefined): Notification => {
   }
 };
 
-// The box the deck is laid out in: the trailing corner of the screen, from
-// just under the bar, inset from the edge by the gap the bar keeps. Fixed, so
-// it is over the windows wherever they are, and it takes no pointer itself —
-// only the cards do — so the windows under its empty part are still theirs.
+// The toast region: the trailing corner, under the bar, inset by the bar's gap.
+// Fixed so it stays over windows, and it ignores the pointer except on the
+// cards so windows under its empty area stay clickable.
 const regionStyles = css({
   "& > *": {
     pointerEvents: "auto",

@@ -3,12 +3,11 @@ import type { Extension } from "@domicile-desktop/sdk/extension";
 import { useEffect, useState } from "react";
 
 /**
- * The extensions with an action, as the engine last described them.
+ * The extensions with an action, as the engine last reported them.
  *
- * Pushed, whole, on every change and once more to a page that has just
- * connected — so, like `useClipboard`, there is nothing to ask for. Registered
- * once for the whole desk rather than once per bar: `on` is a single slot, and
- * a desk drawn as several monitors on one page has a bar per monitor.
+ * The engine pushes the full list on every change and on connect. Registered
+ * once per page, not per bar, because `on` holds one handler and a page can
+ * draw a bar per monitor.
  */
 export const useExtensions = (
   domicile: DomicileClient,

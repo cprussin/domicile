@@ -1,31 +1,22 @@
 import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
-/** Where a view's history reaches, which is what its controls are for. */
+/** Whether a view can go back or forward, for its history controls. */
 type HistoryAvailability = {
   canGoBack: boolean;
   canGoForward: boolean;
 };
 
-/**
- * A history that reaches neither way, which is what a window with no view in
- * it yet can do.
- */
+/** No history in either direction, as for a window with no view yet. */
 const NOWHERE: HistoryAvailability = { canGoBack: false, canGoForward: false };
 
 /**
- * Where the page inside a `<webview>` can be sent, kept current.
+ * The current back/forward availability of a `<webview>`.
  *
- * **The element is the state and the event is only a nudge.** The engine
- * pushes nothing with `domicile-history-change`; what changed is readable on
- * the element, and this reads it — once as it mounts and again every time the
- * view says so. Reading on mount is the half that cannot be dropped: a React
- * shell registers its listeners in its first effect flush, and an event
- * dispatched before that is gone, so a window that only ever listened would
- * gray out a live control until the user navigated again.
- *
- * `null` rather than `undefined` for the missing view because that is what
- * React's ref API hands a callback ref, which is where the element comes from.
+ * `domicile-history-change` carries no data, so this reads the element's
+ * properties on mount and on each event. The mount read is required: an event
+ * fired before the first effect runs is missed. Takes `null` because the
+ * element comes from a callback ref.
  */
 export const useHistoryAvailability = (
   view: HTMLWebViewElement | null,

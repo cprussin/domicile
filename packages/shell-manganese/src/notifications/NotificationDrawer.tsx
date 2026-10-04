@@ -9,12 +9,12 @@ import { center, flex, vstack } from "../../styled-system/patterns";
 import { NotificationCard } from "./NotificationCard";
 
 type Props = {
-  /** Every notification nobody has cleared, in the order to list them. */
+  /** Every uncleared notification, in display order. */
   items: readonly Notification[];
-  /** The time now, for how long ago each arrived. */
+  /** The current time, for the relative timestamps. */
   now: number;
   open: boolean;
-  /** The screen it slides out on: the one whose bell opened it. */
+  /** The screen it opens on: the one whose bell was pressed. */
   screen: string | undefined;
   onOpenChange: (open: boolean) => void;
   /** Clear `ids`. */
@@ -24,12 +24,11 @@ type Props = {
 };
 
 /**
- * Every recent notification, in a drawer that slides out from the edge the
- * bell is on: each one to press or clear, and all of them to clear at once.
+ * The notification drawer, sliding out from the bell's edge. Each notification
+ * can be pressed or cleared, or all cleared at once.
  *
- * A notification stays here after its toast has gone, until it is cleared or
- * its application takes it back, so this is where something missed is found
- * again.
+ * A notification stays here after its toast is gone, until it is cleared or its
+ * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
  */
 export const NotificationDrawer = ({
   items,
@@ -108,9 +107,8 @@ const listStyles = flex({
   paddingInline: 0,
 });
 
-// Each one on a surface of its own, a shade off the panel's, which is lifted
-// on hover — and slides in from the edge when it arrives while the drawer is
-// open, which is the toast's own entrance, smaller.
+// Each card on its own surface, lifted on hover. A card that arrives while the
+// drawer is open slides in like a toast.
 const rowStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 7%, transparent)",
@@ -120,7 +118,7 @@ const rowStyles = css({
     opacity: 0,
     transform: "translateX({spacing.4})",
   },
-  // A critical one is ringed in the danger color, as its toast was.
+  // Critical notifications get a danger ring, as their toasts do.
   "&:has([data-urgency=critical])": {
     borderColor: "color-mix(in oklab, {colors.danger} 55%, transparent)",
   },
@@ -154,8 +152,7 @@ const emptyStyles = vstack({
   textAlign: "center",
 });
 
-// The bell, quiet, in a pool of the accent: the drawer is not broken, it is
-// empty, and that is the good case.
+// The empty state: no notifications is the normal case, not an error.
 const glowStyles = center({
   backgroundImage:
     "radial-gradient(circle, color-mix(in oklab, {colors.accent} 28%, transparent), transparent 70%)",

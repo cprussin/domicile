@@ -23,8 +23,8 @@ const ONLY = { depth: 0, root: LayoutNode.Window("a") };
 
 describe("split", () => {
   it("wraps the focused window in a container of its own", () => {
-    // Which is what `splitv` does in sway: nothing moves until the next
-    // window opens, and then it opens below rather than beside.
+    // As with sway's `splitv`, nothing moves until the next window opens
+    // below.
     const vertical = split(withFocusOn(ROW, "b"), Axis.Vertical);
 
     expect(vertical.root).toMatchObject({
@@ -33,9 +33,8 @@ describe("split", () => {
   });
 
   it("keeps a selected container selected, one level deeper", () => {
-    // sway splits whatever `focus parent` is pointed at and leaves it
-    // pointed there: the container is inside a new one, and it is still the
-    // container the next key acts on.
+    // sway wraps the `focus parent` selection in a new container and keeps it
+    // selected.
     const selected = focusedParent(withFocusOn(ROW, "a"));
 
     expect(focusedNodeOf(split(selected, Axis.Vertical))).toMatchObject({
@@ -81,8 +80,7 @@ describe("laidOut", () => {
       ]),
     };
 
-    // The focus is the column, so it is the column that becomes a stack —
-    // not the row it sits in.
+    // With focus on the column, the column becomes a stack, not its row.
     const stacked = laidOut(
       focusedParent(withFocusOn(nested, "b")),
       Layout.Stacking,
@@ -95,8 +93,8 @@ describe("laidOut", () => {
   });
 
   it("leaves the container it rearranged as the selected one", () => {
-    // What `mod+a mod+s mod+w` has to be able to mean: a stack laid out
-    // again as tabs, rather than the second key acting on the window.
+    // `mod+a mod+s mod+w` turns the stack into tabs; the second key must not
+    // act on the window.
     const stacked = laidOut(focusedParent(ROW), Layout.Stacking);
 
     expect(focusedNodeOf(laidOut(stacked, Layout.Tabbed))).toMatchObject({

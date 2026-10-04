@@ -5,9 +5,8 @@ import type { BatteryMessage } from "@domicile-desktop/sdk/host-message";
 import { watchShared } from "./watch-shared";
 
 /**
- * The client, as much of it as this touches: one slot per message type, and an
- * `off` that removes a handler only if it is still the registered one — which
- * is `DomicileClient`'s own contract, and the reason this module exists.
+ * Fake client with `DomicileClient`'s contract: one handler per message type,
+ * and an `off` that removes a handler only if it is still registered.
  */
 const heldClient = () => {
   const handlers = new Map<string, (message: BatteryMessage) => void>();

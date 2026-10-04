@@ -4,10 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { useFound } from "./useFound";
 
-/**
- * A stand-in for the host's search: it records each query and lets a test
- * answer them in whatever order it likes, which is the order that matters.
- */
+/** Fake host search that records queries so a test can answer in any order. */
 const host = () => {
   const asked: { query: string; settle: (found: FoundFilesMessage) => void }[] =
     [];
@@ -43,9 +40,7 @@ const host = () => {
 
 describe("useFound", () => {
   it("has found nothing before the host has answered", () => {
-    // Not "still being built" either, which is a claim rather than an absence:
-    // nothing has said so, and a panel that announced an index it has heard
-    // nothing about would be guessing on the compositor's behalf.
+    // Not "indexing" either: the host hasn't said so.
     const home = host();
 
     const { result } = renderHook(() => useFound(home.search, ""));
@@ -72,8 +67,7 @@ describe("useFound", () => {
   });
 
   it("keeps the answer to the box when a keystroke ago's arrives after it", async () => {
-    // Somebody typing faster than the host answers has two searches in flight,
-    // and the host owes them no order. The rows are for what is in the box.
+    // Answers can arrive out of order; only the current query's is used.
     const home = host();
     const { rerender, result } = renderHook(
       ({ query }) => useFound(home.search, query),
@@ -88,9 +82,8 @@ describe("useFound", () => {
   });
 
   it("asks again while the home is still being walked", async () => {
-    // WHAT FILLS THE PANEL IN UNDER THE PERSON TYPING. An answer from a
-    // half-built index is only the files found so far, and nothing else will
-    // tell this page when there are more.
+    // A half-built index returns partial results, and nothing signals when
+    // more are found, so the hook polls.
     const home = host();
     const { result } = renderHook(() => useFound(home.search, "plan"));
 

@@ -14,9 +14,7 @@ describe("titleFocus", () => {
   });
 
   it("marks a tab its container is showing more quietly", () => {
-    // sway's `focused_inactive`: the tab that is open, in a container the
-    // keyboard is not in. Without a state of its own it would be drawn like
-    // the focused window, and two windows would claim the keyboard at once.
+    // sway's `focused_inactive`: the open tab of an unfocused container.
     expect(
       titleFocus({
         hasKeyboard: false,
@@ -57,8 +55,8 @@ describe("titleFocus", () => {
   });
 
   it("sets the keyboard's own bar apart inside that group", () => {
-    // Every bar of the group is raised, so the one the keyboard is in needs
-    // more than the raise to stand apart from them.
+    // Every bar in the group is raised, so the focused one needs its own
+    // state.
     expect(
       titleFocus({
         hasKeyboard: true,

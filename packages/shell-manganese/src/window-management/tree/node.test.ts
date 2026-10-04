@@ -24,8 +24,7 @@ describe("LayoutNode.Container", () => {
   });
 
   it("refuses to hold no children at all", () => {
-    // An empty container is a hole in the layout: it takes up space, shows
-    // nothing, and cannot be focused out of. A workspace with nothing on it
+    // An empty container would take space and trap focus. An empty workspace
     // has no root instead.
     expect(() => LayoutNode.Container(Layout.SplitH, [])).toThrow();
   });
@@ -52,8 +51,8 @@ describe("windowsIn", () => {
 
 describe("axisOf", () => {
   it("reads a tabbed container as the horizontal thing it looks like", () => {
-    // Which is what decides the keys: `focus right` in a tabbed container is
-    // the next tab, and `focus down` leaves it.
+    // So `focus right` in a tabbed container picks the next tab, and
+    // `focus down` leaves it.
     expect(axisOf(Layout.Tabbed)).toBe(Axis.Horizontal);
     expect(axisOf(Layout.Stacking)).toBe(Axis.Vertical);
   });

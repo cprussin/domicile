@@ -1,19 +1,16 @@
 import { WEBVIEW_CONTENT_SIZE_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
-/** The size a page's content wants, in CSS pixels. */
+/** A page's content size, in CSS pixels. */
 export type ContentSize = { height: number; width: number };
 
 /**
- * The size the page inside a `<webview>` wants, kept current, or `undefined`
- * until the page has laid out — the engine reports 0 by 0 until then.
+ * The content size of the page in a `<webview>`, or `undefined` until it has
+ * laid out (the engine reports 0x0 until then).
  *
- * **The element is the state and the event is only a nudge**, as in
- * `useFindResult`: read once as it mounts and again every time the view says
- * so.
- *
- * `null` rather than `undefined` for the missing view because that is what
- * React's ref API hands a callback ref, which is where the element comes from.
+ * Reads the size from the element on mount and on each resize event, as
+ * `useFindResult` does. `view` is `null` when missing because it comes from a
+ * callback ref.
  */
 export const useContentSize = (
   view: HTMLWebViewElement | null,

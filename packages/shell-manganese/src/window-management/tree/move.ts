@@ -1,16 +1,10 @@
-// `move left` and the other three: the focused window (or the container
-// `focus parent` selected) carried through the tree.
+// Directional move (`move left` and so on) of the focused window, or of the
+// container `focus parent` selected.
 //
-// The same outward walk `focus-direction.ts` does, with a different thing to
-// do at each stop. Inside the container the window is *in*, moving is
-// reordering it past its neighbor — or, where that neighbor is a container
-// rather than a window, *into* it, as far in as whatever that container is
-// showing, which is how a split and a move make a group. In a container
-// further out — one that runs the right way where the window's own does
-// not — it is the window leaving the container it was in and landing beside
-// it. And where nothing around it runs that way at all,
-// the workspace itself gains a split of the other orientation, which is what
-// i3 does with a window pushed across the grain.
+// Walks outward like `focus-direction.ts`. In its own container the node
+// swaps with a window neighbor or enters a container neighbor. In an outer
+// container running that way, it moves out to sit beside its old branch. If
+// none runs that way, the workspace is split the other way, as in i3.
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
@@ -28,7 +22,7 @@ import { withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
 import { focusedChildIn, focusPathOf, withCommandsOn } from "./tiling";
 
-/** The tiling with what the focus is pointed at moved one place `direction`. */
+/** The tiling with the focused node moved one place `direction`. */
 export const movedBy = (tiling: Tiling, direction: Direction): Tiling => {
   const { root } = tiling;
   if (root === undefined) {
@@ -37,9 +31,8 @@ export const movedBy = (tiling: Tiling, direction: Direction): Tiling => {
     const path = focusPathOf(root, tiling.depth);
     const moving = nodeAt(root, path);
     const moved = relocated(root, path, moving, direction);
-    // What moved stays what the keys are pointed at wherever it landed — the
-    // window, or the container `focus parent` selected — which is also what
-    // re-points every container it moved through.
+    // Keep the commands on the moved node, which also updates the focus of
+    // every container along its new path.
     return moved === undefined
       ? tiling
       : withCommandsOn({ ...tiling, root: moved }, moving);
@@ -47,12 +40,10 @@ export const movedBy = (tiling: Tiling, direction: Direction): Tiling => {
 };
 
 /**
- * The whole tree with `moving` somewhere else, or `undefined` when there is
- * nowhere for it to go.
+ * The tree with `moving` relocated, or `undefined` if it cannot move.
  *
- * The candidates in the order sway tries them: the container the window is in,
- * then each container outside it that runs the right way, and last the
- * workspace itself.
+ * Tries, in sway's order: its own container, each outer container running
+ * that way, then the workspace.
  */
 const relocated = (
   root: LayoutNode,
@@ -61,7 +52,7 @@ const relocated = (
   direction: Direction,
 ): LayoutNode | undefined => {
   if (path.length === 0) {
-    // The whole workspace is the one window, which has nowhere to be moved to.
+    // A lone root node has nowhere to go.
     return undefined;
   } else {
     const along = ancestorsOf(root, path).filter(
@@ -84,9 +75,7 @@ const relocated = (
 const holds = ({ path }: Ancestor, moving: Path): boolean =>
   path.length === moving.length - 1;
 
-// Past its neighbor, or into it: a neighbor that is a window is one the
-// moving node trades places with, and a neighbor that is a container is one
-// it goes inside.
+// Swaps with a window neighbor, or enters a container neighbor.
 const reordered = (
   root: LayoutNode,
   ancestor: Ancestor,
@@ -106,22 +95,13 @@ const reordered = (
 };
 
 /**
- * The moving node inside the container beside it, which is what a split and a
- * move make one group out of.
+ * Moves the node into the neighboring container, at the spot
+ * {@link entryInto} picks.
  *
- * Where it lands in there is sway's rule, which is a descent rather than a
- * place: see {@link entryInto}. It goes in at the edge it came from where
- * the container runs the way it is moving, and where that container runs
- * across it the same question is asked again of whatever it is showing.
- *
- * **The two containers answer for their sizes differently, on purpose.** What
- * the node was in *lost* a child and nothing was put back, so it collapses
- * the way a closed window's container does: the windows left in it keep the
- * sizes they were dragged to relative to each other, and share out what the
- * one that went was using. What the node joined *gained* one, which is
- * the arrival {@link withChildAt} evens out — the same answer a window
- * opening into a container gets, and for the same reason: the alternative is
- * a node taking half of whichever sibling it happened to land beside.
+ * Sizes are handled differently on purpose. The old container collapses as
+ * after a close, so the remaining windows keep their relative sizes. The new
+ * one evens out via {@link withChildAt}, as when a window opens, so the node
+ * does not take half of one sibling.
  */
 const joined = (
   root: LayoutNode,
@@ -135,9 +115,7 @@ const joined = (
   const entered = replacedAt(neighbor, inside, () =>
     withChildAt(into, at, moving),
   );
-  // Taken out of the container the way a close takes a window out, because
-  // that is what the container has lost: nothing was put back into it, so
-  // what is left keeps the sizes it was dragged to and shares out what went.
+  // Remove it as a close would, so the rest keep their relative sizes.
   const kept = withoutAt(
     {
       ...container,
@@ -148,17 +126,15 @@ const joined = (
     [index],
   );
   if (kept === undefined) {
-    // Which nothing can reach: only a container of one comes back empty, and
-    // this one holds at least two — the node being moved, and the neighbor it
-    // is being moved into.
+    // Unreachable: the container still holds the neighbor.
     throw new Error("layout tree: a container of two has lost both of them");
   } else {
     return replacedAt(root, path, () => kept);
   }
 };
 
-// A swap, so the two boxes keep their sizes and trade contents: a window
-// moved along a row of resized windows does not resize the row.
+// Swaps contents but keeps box sizes, so moving along a resized row does not
+// resize it.
 const traded = (
   root: LayoutNode,
   { container, index, path }: Ancestor,
@@ -186,28 +162,21 @@ const traded = (
 
 /** Where a node moved `direction` into a container ends up. */
 type Entry = {
-  /**
-   * Where among {@link into}'s children it goes — the index it is put in
-   * front of, which is the length of the list where it goes on the end.
-   */
+  /** The index in {@link into}'s children it is inserted at. */
   at: number;
-  /** The container that ends up holding it. */
+  /** The container that receives it. */
   into: Container;
-  /** Where that container is, from the neighbor the node was moved at. */
+  /** The path to that container from the neighbor. */
   path: Path;
 };
 
 /**
  * Where a node moved `direction` into `container` lands.
  *
- * sway's own descent — `container_move_to_container_from_direction` calls
- * itself. A container running the way the node is moving takes it at the edge
- * it came from: the near end of a row, the first of a set of tabs, with
- * everything already in there past it. One running *across* is not where the
- * question stops, because the node has to land somewhere along it — so the
- * same question is asked of whatever that container last had the focus in,
- * down to the window it is showing, and the node lands beside that window on
- * the side it came from.
+ * Mirrors sway's recursive `container_move_to_container_from_direction`. A
+ * container running that way takes it at the near end. One running across
+ * recurses into its focused child, and the node lands beside the shown window
+ * on the side it came from.
  */
 const entryInto = (container: Container, direction: Direction): Entry => {
   const forward = isForward(direction);
@@ -235,9 +204,8 @@ const entryInto = (container: Container, direction: Direction): Entry => {
   }
 };
 
-// Out of whatever it was in and in beside it, in the container that runs the
-// right way. What it leaves behind collapses the way a closed window's
-// container does.
+// Moves the node out of its branch to sit beside it in an outer container
+// running that way. The branch collapses as after a close.
 const movedOut = (
   root: LayoutNode,
   { container, index, path }: Ancestor,
@@ -254,7 +222,7 @@ const movedOut = (
       kept === undefined
         ? container.children.filter((_, at) => at !== index)
         : container.children.map((child, at) => (at === index ? kept : child));
-    // Into the slot the branch it came from left empty, or past that branch.
+    // Into the slot of an emptied branch, or past the branch.
     const at = kept !== undefined && isForward(direction) ? index + 1 : index;
     const children = [...siblings.slice(0, at), node, ...siblings.slice(at)];
     return replacedAt(root, path, () => flattened(container, children, at));
@@ -262,13 +230,11 @@ const movedOut = (
 };
 
 /**
- * The workspace split the other way, with the window on that side of
- * everything else.
+ * Wraps the workspace in a split along `direction`, with the node on that
+ * side.
  *
- * `undefined` where the root is already a split the way the window is being
- * pushed: that is the edge of the workspace, and there is nowhere further to
- * go. A tabbed or stacking root is not that edge — its end tab pushed past the
- * end splits out beside the rest.
+ * `undefined` if the root is already that split, since the node is at the
+ * workspace edge. A tabbed or stacking root still splits.
  */
 const acrossWorkspace = (
   root: LayoutNode,
@@ -293,7 +259,7 @@ const acrossWorkspace = (
   }
 };
 
-/** A container of one node is that node, the way a closed window leaves one. */
+/** Collapses a one-child container into its child, as a close does. */
 const flattened = (
   container: Container,
   children: readonly LayoutNode[],

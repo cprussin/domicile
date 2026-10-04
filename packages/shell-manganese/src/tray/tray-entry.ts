@@ -4,21 +4,18 @@ import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { shownInTray } from "../extensions/shown";
 import { arrange } from "./tray-order";
 
-/** What an icon on the tray is: an application's, or an extension's. */
+/** A tray icon: an application's or an extension's. */
 export enum TrayEntryKind {
   Extension,
   StatusNotifier,
 }
 
 /**
- * One icon on the tray, with the key its place is remembered by.
+ * One tray icon, with the key its position is remembered by.
  *
- * **The key outlives the icon**, which is the point of it: an application
- * closed and opened again, or an extension turned off and on, comes back where
- * the user put it. Both ids are: an extension's is its own for good, and the
- * compositor names an application's icon by what the application calls
- * itself rather than by the bus name it answered on this time. Not its title,
- * which a network indicator changes with the connection.
+ * The key is stable across restarts, so an application reopened or an extension
+ * re-enabled returns to its place. The compositor keys application icons by the
+ * application's own id, not its bus name or its title, which can change.
  */
 export const TrayEntry = {
   Extension: (extension: Extension) => ({
@@ -36,8 +33,8 @@ export const TrayEntry = {
 export type TrayEntry = ReturnType<(typeof TrayEntry)[keyof typeof TrayEntry]>;
 
 /**
- * Every icon the tray draws, in the user's `order`: the applications' and then
- * the extensions' where it has placed neither.
+ * Every tray icon in the user's `order`; unplaced ones go after, applications
+ * before extensions.
  */
 export const trayEntries = (
   items: readonly TrayItem[],

@@ -4,20 +4,16 @@ import type { Rect } from "../rect";
 import { placedAt, settlingStyles } from "../window-styles";
 
 type Props = {
-  /** Where the window being dragged would go if it were let go of now. */
+  /** Where the dragged window would land if dropped now. */
   rect: Rect;
 };
 
 /**
- * Where a tiled window being dragged would land — sway's drop indicator.
+ * Shows where a dragged tiled window would land, like sway's drop indicator.
  *
- * A move retiles nothing until it is let go of, so without this the user is
- * dropping blind: half of a window says it goes beside it, the whole of one
- * says the two trade places. It eases between boxes as the pointer crosses
- * them rather than jumping.
- *
- * Drawn the way `Scrim` is and for its reasons — after every window, at the
- * tiling's depth, taking no pointer.
+ * Nothing retiles until the drop, so this is the only preview. Like `Scrim`,
+ * it is drawn after every window at the tiling's depth and ignores the
+ * pointer.
  */
 export const DropIndicator = ({ rect }: Props) => (
   <div

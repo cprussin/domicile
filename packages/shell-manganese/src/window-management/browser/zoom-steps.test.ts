@@ -14,9 +14,8 @@ describe("zoomedIn", () => {
     expect(zoomedIn(1)).toBe(1.1);
   });
 
-  // THE FACTOR HAS BEEN THROUGH A LOGARITHM AND BACK by the time the browser
-  // reports it, so a third is not exactly a third — and stepping "past" one
-  // that fell a hair short of a level would land back on that same level.
+  // Reported factors are inexact, and stepping from one just below a level
+  // must not land on that same level.
   it("steps past a level the browser reported a hair off", () => {
     expect(zoomedIn(1 / 3 - 1e-9)).toBe(0.5);
   });

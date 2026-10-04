@@ -57,8 +57,7 @@ describe("stretched", () => {
   });
 
   it("measures a share of the container it moves an edge in", () => {
-    // The row of `c` and `d` is half the screen wide, so fifty pixels is a
-    // tenth of it.
+    // The `c`/`d` row is 500px wide, so 50px is a tenth of it.
     const inner = stretched(NESTED, "c", Direction.Right, 50, AREA, 0).root;
 
     expect(inner).toMatchObject({

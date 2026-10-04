@@ -1,5 +1,5 @@
-// Wikipedia's serifed W, drawn the way a Phosphor icon is so it sits in a
-// row beside them: Phosphor draws no Wikipedia logo of its own.
+// Wikipedia's W, drawn in Phosphor's style to match the other icons. Phosphor
+// has no Wikipedia logo.
 
 import SSRBase from "@phosphor-icons/react/dist/lib/SSRBase";
 import type {
@@ -14,7 +14,7 @@ export const WikipediaLogoIcon = forwardRef<SVGSVGElement, IconProps>(
 );
 WikipediaLogoIcon.displayName = "WikipediaLogoIcon";
 
-/** The W at a stroke width, as Phosphor's weights are strokes of a width. */
+/** The W at a stroke width, matching a Phosphor weight. */
 const w = (strokeWidth: number): ReactElement => (
   <g
     fill="none"
