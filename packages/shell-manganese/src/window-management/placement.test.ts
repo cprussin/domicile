@@ -43,12 +43,11 @@ describe("placementsOf", () => {
   it("places nothing on an empty workspace", () => {
     expect(placementsOf(NO_WINDOWS, GEOMETRY)).toEqual({
       placements: [],
-      selection: undefined,
       tabs: [],
     });
   });
 
-  it("marks out the container `focus parent` selected", () => {
+  it("marks the windows inside the container `focus parent` selected", () => {
     // `mod+a` with two windows tiled points the commands at the container
     // holding both, which is the whole of the workspace.
     const state = reduce(
@@ -56,10 +55,9 @@ describe("placementsOf", () => {
       WindowAction.ParentFocused(),
     );
 
-    expect(placementsOf(state, GEOMETRY).selection).toEqual({
-      depth: TILED,
-      rect: GEOMETRY.workspace,
-    });
+    expect(
+      placementsOf(state, GEOMETRY).placements.map(({ selected }) => selected),
+    ).toEqual([true, true]);
   });
 
   it("gives a lone tiled window the whole workspace, with no gaps", () => {
@@ -72,6 +70,7 @@ describe("placementsOf", () => {
       frame: { height: 1048, width: 1920, x: 0, y: 32 },
       id: appWindowId("kitty"),
       openTab: undefined,
+      selected: false,
       surface: {
         height: 1048 - TITLE_BAR,
         width: 1920,

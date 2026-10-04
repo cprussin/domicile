@@ -18,8 +18,8 @@ import type { WindowMotion } from "./window-motion";
 const PRIMARY_BUTTON = 0;
 
 type Props = {
-  /** Whether that window is all the screen shows — see {@link TitleBar}. */
-  alone: boolean;
+  /** Whether this is a tab its container is not showing — see {@link TitleBar}. */
+  besideOpenTab: boolean;
   /** How it stacks, which is the depth of the window it names. */
   depth: number;
   /** Whether the user has hold of this window — see {@link TitleBar}. */
@@ -44,8 +44,6 @@ type Props = {
   onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
-  /** What the open tab beside this one says — see {@link TitleBar}. */
-  openTab: TitleFocus | undefined;
   /**
    * Where the bar is drawn: the placement's rather than the float's own, which
    * a fullscreen window has left for the whole screen.
@@ -86,7 +84,7 @@ type Props = {
  * click, and only the desktop's modifier picks a lone tiled window up.
  */
 export const WindowTitleBar = ({
-  alone,
+  besideOpenTab,
   depth,
   dragging,
   float,
@@ -102,7 +100,6 @@ export const WindowTitleBar = ({
   onGrab,
   onMotionEnded,
   onMove,
-  openTab,
   rect,
   restack,
   tabbed,
@@ -134,7 +131,7 @@ export const WindowTitleBar = ({
   });
   return (
     <TitleBar
-      alone={alone}
+      besideOpenTab={besideOpenTab}
       depth={depth}
       dragging={dragging}
       focus={focus}
@@ -145,7 +142,6 @@ export const WindowTitleBar = ({
       onFullscreen={onFullscreen}
       onMiddleClick={tabbed === undefined ? undefined : onClose}
       onMotionEnded={onMotionEnded}
-      openTab={openTab}
       rect={rect}
       restack={restack}
       tabbed={tabbed}

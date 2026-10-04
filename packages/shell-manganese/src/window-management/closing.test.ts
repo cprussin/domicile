@@ -18,6 +18,7 @@ const placementOf = (id: string): Placement => ({
   frame: { height: 800, width: 1200, x: 0, y: 32 },
   id,
   openTab: undefined,
+  selected: false,
   surface: { height: 770, width: 1200, x: 0, y: 62 },
   tabbed: undefined,
 });

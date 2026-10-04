@@ -41,6 +41,11 @@ export type Frame = {
    */
   openTab: string | undefined;
   /**
+   * Whether it is inside the container `focus parent` selected: the windows
+   * the commands now act on, which the desktop lights together.
+   */
+  selected: boolean;
+  /**
    * Where its contents go, or `undefined` for a window a tabbed or stacking
    * container is not currently showing: the tab is on screen and the window
    * behind it is not.
@@ -69,25 +74,17 @@ export type Tab = {
   /** The window its container's open tab is named after — see `Frame.openTab`. */
   openTab: string | undefined;
   rect: Rect;
+  /** Whether it is inside the container `focus parent` selected. */
+  selected: boolean;
 };
 
 /** Everything a workspace's tiling puts on screen. */
 export type Tiled = {
   frames: readonly Frame[];
-  /**
-   * The container `focus parent` has selected, or `undefined` while the
-   * commands are pointed at a window.
-   *
-   * What the desktop draws a line around, because a group that nothing on
-   * screen marks out is one the user has to keep in their head: the keys that
-   * split, lay out and move act on it rather than on the window the keyboard
-   * is in, and the window's own frame goes on saying where the keyboard is.
-   */
-  selection: Rect | undefined;
   tabs: readonly Tab[];
 };
 
-const NOTHING: Tiled = { frames: [], selection: undefined, tabs: [] };
+const NOTHING: Tiled = { frames: [], tabs: [] };
 
 /**
  * The tiling laid out over `area`, with `gap` between neighbors.
@@ -100,7 +97,7 @@ export const framesOf = (tiling: Tiling, area: Rect, gap: number): Tiled => {
   const { root } = tiling;
   return root === undefined
     ? NOTHING
-    : placed(root, area, gap, focusPathOf(root, tiling.depth));
+    : placed(root, area, gap, focusPathOf(root, tiling.depth), false);
 };
 
 /**
@@ -136,16 +133,17 @@ export const areaOf = (
  * One node laid out in `area`, and everything inside it.
  *
  * `pointed` is where the commands are, from this node down — the rest of the
- * focus path, or `undefined` for a node they are not pointed inside. It is
- * carried through the same walk the rectangles come out of rather than looked
- * up in a second one, because the rectangle the selected container is drawn at
- * *is* the area this gave it.
+ * focus path, or `undefined` for a node they are not pointed inside — and
+ * `selected` is whether this node is inside the container `focus parent`
+ * selected. Both are carried through the same walk the rectangles come out of
+ * rather than worked out in a second one.
  */
 const placed = (
   node: LayoutNode,
   area: Rect,
   gap: number,
   pointed: Path | undefined,
+  selected: boolean,
 ): Tiled => {
   switch (node.kind) {
     case NodeKind.Window: {
@@ -156,18 +154,18 @@ const placed = (
             behind: undefined,
             id: node.id,
             openTab: undefined,
+            selected,
             surface: surfaceOf(area),
             tabbed: undefined,
           },
         ],
-        selection: undefined,
         tabs: [],
       };
     }
     case NodeKind.Container: {
       // The path ending here is this container being the one selected: a
       // window is where it ends when nothing is, and a window is not a group.
-      const selection = pointed?.length === 0 ? area : undefined;
+      const inside = selected || pointed?.length === 0;
       switch (node.layout) {
         case Layout.SplitH:
         case Layout.SplitV: {
@@ -178,14 +176,14 @@ const placed = (
                 sliceOf(node, area, gap, at),
                 gap,
                 within(pointed, at),
+                inside,
               ),
             ),
-            selection,
           );
         }
         case Layout.Stacking:
         case Layout.Tabbed: {
-          return titled(node, node.layout, area, gap, pointed, selection);
+          return titled(node, node.layout, area, gap, pointed, inside);
         }
       }
     }
@@ -266,7 +264,7 @@ const titled = (
   area: Rect,
   gap: number,
   pointed: Path | undefined,
-  selection: Rect | undefined,
+  selected: boolean,
 ): Tiled => {
   const contents = contentsOf(container, area);
   const open = focusedWindowIn(container);
@@ -284,11 +282,11 @@ const titled = (
                 behind: showing ? undefined : contents,
                 id: child.id,
                 openTab,
+                selected,
                 surface: showing ? contents : undefined,
                 tabbed: container.children.length > 1 ? layout : undefined,
               },
             ],
-            selection: undefined,
             tabs: [],
           };
         }
@@ -298,19 +296,18 @@ const titled = (
             id: focusedWindowIn(child),
             openTab,
             rect: bar,
+            selected,
           };
           const inside = showing
-            ? placed(child, contents, gap, within(pointed, at))
+            ? placed(child, contents, gap, within(pointed, at), selected)
             : NOTHING;
           return {
             frames: inside.frames,
-            selection: inside.selection,
             tabs: [tab, ...inside.tabs],
           };
         }
       }
     }),
-    selection,
   );
 };
 
@@ -341,16 +338,7 @@ const contentsOf = (container: Container, area: Rect): Rect => {
   };
 };
 
-// The whole tiling has one selection at most, and the first of these is it:
-// a container that is selected is not pointed *inside*, so the one this was
-// given and the ones that came back from inside it are never both there.
-const joined = (
-  placements: readonly Tiled[],
-  selection: Rect | undefined,
-): Tiled => ({
+const joined = (placements: readonly Tiled[]): Tiled => ({
   frames: placements.flatMap(({ frames }) => frames),
-  selection:
-    selection ??
-    placements.find(({ selection: inside }) => inside !== undefined)?.selection,
   tabs: placements.flatMap(({ tabs }) => tabs),
 });

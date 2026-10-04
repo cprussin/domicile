@@ -323,11 +323,11 @@ describe("BrowserWindow", () => {
     expect(style.borderTopWidth).not.toBe("1px");
   });
 
-  it("leaves its frame the resting color while it is all the screen shows", () => {
-    // Focused, but with nothing else on the screen to be picked out from.
+  it("leaves its frame the resting color even while it is focused", () => {
+    // What picks out the window the keyboard is in is every other window
+    // receding — see `Scrim` — rather than a line around it.
     render(
       <BrowserWindow
-        alone
         clickThrough={false}
         covered={false}
         depth={0}

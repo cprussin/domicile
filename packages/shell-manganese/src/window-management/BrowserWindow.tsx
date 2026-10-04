@@ -37,10 +37,8 @@ import {
   clickThroughStyles,
   draggingStyles,
   edgeStyles,
-  focusedEdgeStyles,
   movingStyles,
   placedAt,
-  restingEdgeStyles,
   scaledAbout,
   settlingStyles,
   shuffledBy,
@@ -48,12 +46,6 @@ import {
 } from "./window-styles";
 
 type Props = {
-  /**
-   * Whether it is all the desk shows, alone or as a tab group — see
-   * `showsOneThing` — which leaves its frame the resting color even while it
-   * is focused: there is nothing else for it to be picked out from.
-   */
-  alone?: boolean;
   /**
    * How the window says a client no longer holds the keyboard.
    *
@@ -206,7 +198,6 @@ type Props = {
  * itself; this is the chrome the user drives it with.
  */
 export const BrowserWindow = ({
-  alone = false,
   clickThrough,
   covered,
   depth,
@@ -633,8 +624,6 @@ export const BrowserWindow = ({
         // Neither a line nor rounded corners around the screen's own edge.
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
-        // And the same color the bar is drawn in, for the same reason.
-        focused && !alone ? focusedEdgeStyles : restingEdgeStyles,
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,

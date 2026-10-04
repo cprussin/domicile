@@ -37,11 +37,7 @@ const frameFor = (
 
 describe("framesOf", () => {
   it("places nothing for a workspace with nothing tiled", () => {
-    expect(framesOf(NOTHING_TILED, AREA, 0)).toEqual({
-      frames: [],
-      selection: undefined,
-      tabs: [],
-    });
+    expect(framesOf(NOTHING_TILED, AREA, 0)).toEqual({ frames: [], tabs: [] });
   });
 
   it("gives a lone window the whole area, bar included", () => {
@@ -52,6 +48,7 @@ describe("framesOf", () => {
       behind: undefined,
       id: "a",
       openTab: undefined,
+      selected: false,
       surface: {
         height: 1000 - TITLE_BAR,
         width: 1000,
@@ -321,6 +318,7 @@ describe("framesOf", () => {
         id: "a",
         openTab: undefined,
         rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
+        selected: false,
       },
     ]);
     // And the windows inside it are laid out under the tabs, with title bars
@@ -355,29 +353,33 @@ describe("framesOf", () => {
         id: "a",
         openTab: "c",
         rect: { height: TITLE_BAR, width: 498, x: 0, y: 0 },
+        selected: false,
       },
     ]);
   });
 
-  it("marks out the container `focus parent` selected", () => {
+  it("marks every window inside the container `focus parent` selected", () => {
     const tiled = framesOf({ ...COLUMN_BESIDE_A_WINDOW, depth: 1 }, AREA, 0);
 
-    expect(tiled.selection).toEqual({
-      height: 1000,
-      width: 500,
-      x: 500,
-      y: 0,
-    });
+    expect(tiled.frames.map(({ id, selected }) => [id, selected])).toEqual([
+      ["a", false],
+      ["b", true],
+      ["c", true],
+    ]);
   });
 
-  it("marks nothing out while the commands are pointed at a window", () => {
-    expect(framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0).selection).toBeUndefined();
+  it("marks nothing while the commands are pointed at a window", () => {
+    expect(
+      framesOf(COLUMN_BESIDE_A_WINDOW, AREA, 0).frames.some(
+        ({ selected }) => selected,
+      ),
+    ).toBe(false);
   });
 
-  it("marks out a container under the tabs it is shown behind", () => {
+  it("marks the tabs and hidden windows of a selected container too", () => {
     const tiled = framesOf(
       {
-        depth: 1,
+        depth: 0,
         root: LayoutNode.Container(
           Layout.Tabbed,
           [
@@ -394,11 +396,7 @@ describe("framesOf", () => {
       0,
     );
 
-    expect(tiled.selection).toEqual({
-      height: 1000 - TITLE_BAR,
-      width: 1000,
-      x: 0,
-      y: TITLE_BAR,
-    });
+    expect(tiled.frames.every(({ selected }) => selected)).toBe(true);
+    expect(tiled.tabs.map(({ selected }) => selected)).toEqual([true]);
   });
 });
