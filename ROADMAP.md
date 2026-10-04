@@ -322,9 +322,9 @@ these is one run, and each has a line to look for.
   dark for the second half — the new one must come up dark too.
 - **A desktop from a display manager.** Import `nixosModules.default`, set
   `programs.domicile.enable` and
-  `services.displayManager.defaultSession = "manganese"`. The login screen
-  should offer `manganese` and boot into it on the drm platform. Only the
-  evaluation is checked here.
+  `services.displayManager.defaultSession = "domicile"`, with a `shell` in the
+  config. The login screen should offer `domicile` and boot into that shell
+  on the drm platform. Only the evaluation is checked here.
 - **A desk that locks with PAM.** Set `programs.domicile.enable` from
   `nixosModules.default`, `lock.pam_service = "domicile"` and
   `idle.blank_after_seconds = 60`, and walk away. Your password should give

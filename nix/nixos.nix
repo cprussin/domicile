@@ -3,12 +3,16 @@
 # `nix/home-manager.nix` describes the desk itself -- the config file, the
 # shell, the keys -- and declines the rest, because how a machine boots and
 # which PAM services it has are not a home directory's to decide. This is that
-# rest: each desktop as a login session, the PAM service a desk's lock opens
+# rest: the `domicile` login session, the PAM service a desk's lock opens
 # through, and where the desk's portal calls are routed.
 #
-# IT CHOOSES NO DEFAULT SESSION AND ENABLES NO DISPLAY MANAGER. Offering a
-# desktop at the login screen is this module's; booting into one is
-# `services.displayManager.defaultSession = "manganese"` in the machine's own
+# ONE SESSION, WHATEVER THE DESK. `domicile` runs the shell its config names,
+# so which desktop a machine boots into is the config's to say, not the login
+# screen's.
+#
+# IT CHOOSES NO DEFAULT SESSION AND ENABLES NO DISPLAY MANAGER. Offering the
+# session is this module's; booting into it is
+# `services.displayManager.defaultSession = "domicile"` in the machine's own
 # configuration.
 #
 # CURRIED, for the reason the home-manager module is: `domicilePackages` is
@@ -21,34 +25,30 @@
 }: let
   cfg = config.programs.domicile;
 in {
+  imports = [
+    (lib.mkRemovedOptionModule ["programs" "domicile" "desktops"] ''
+      There is one session, `domicile`, which runs the shell the config names:
+      set `"shell"` in ~/.config/domicile/domicile.json (`programs.domicile.shell`
+      in the home-manager module) instead.
+    '')
+  ];
+
   options.programs.domicile = {
-    enable = lib.mkEnableOption "Domicile's desktops as login sessions, and the PAM service a desk's lock opens through";
+    enable = lib.mkEnableOption "the `domicile` login session, and the PAM service a desk's lock opens through";
 
     package = lib.mkOption {
       description = ''
-        The package providing Domicile's portal backend and its routing.
+        The package providing the `domicile` session, Domicile's portal
+        backend and its routing.
       '';
       type = lib.types.package;
       default = domicilePackages.domicile;
       defaultText = lib.literalExpression "domicile.packages.\${system}.domicile";
     };
-
-    desktops = lib.mkOption {
-      description = ''
-        The desktops a display manager offers, each a session named after
-        itself: `manganese` runs `manganese`. A desktop is the shell plus
-        Domicile, so it reads the same `~/.config/domicile/domicile.json` the
-        home-manager module writes. `domicile` itself is one too: a
-        `domicile` session running the shell that config names.
-      '';
-      type = lib.types.listOf lib.types.package;
-      default = [domicilePackages.manganese];
-      defaultText = lib.literalExpression "[ domicile.packages.\${system}.manganese ]";
-    };
   };
 
   config = lib.mkIf cfg.enable {
-    services.displayManager.sessionPackages = cfg.desktops;
+    services.displayManager.sessionPackages = [cfg.package];
 
     # What `lock.pam_service = "domicile"` names. A desk that names a service
     # the machine does not have does not come up.

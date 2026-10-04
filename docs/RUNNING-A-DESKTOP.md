@@ -282,19 +282,17 @@ through.
   imports = [domicile.nixosModules.default];
 
   programs.domicile.enable = true;
-  # Booting into one is the machine's own line; the module offers, not picks.
-  services.displayManager.defaultSession = "manganese";
+  # Booting into it is the machine's own line; the module offers, not picks.
+  services.displayManager.defaultSession = "domicile";
 }
 ```
 
-- **Each desktop is a login session named after itself.** `manganese` is the
-  default; `programs.domicile.desktops` lists others. The package carries the
-  session file, so `services.displayManager.sessionPackages = [manganese]`
-  does the same without the module.
-- **A desk with a shell of its own** lists `domicile` itself:
-  `desktops = [domicile.packages.${system}.domicile]` is a `domicile` session
-  running the shell its config names, which the home-manager module's `shell`
-  writes there.
+- **One login session, `domicile`, whatever the desk.** It runs the shell the
+  config names — `"shell": "@domicile-desktop/manganese"`, a built module, or
+  the home-manager module's `shell` — so which desktop it is lives in the
+  config, not the login screen. The package carries the session file, so
+  `services.displayManager.sessionPackages = [domicile]` does the same without
+  the module.
 - **The `domicile` PAM service** that `lock.pam_service = "domicile"` names.
 - **Portal routing.** With `xdg.portal.enable`, Domicile answers `Settings` and
   its `domicile-portals.conf` sends everything else to `xdg-desktop-portal-gtk`,
