@@ -76,6 +76,12 @@ One mechanism for all dialogs, then one backend per interface on top of it.
 - **Grants persist in the frontend's `PermissionStore`**, not here. Restore
   tokens for ScreenCast and RemoteDesktop are ours, kept under
   `$XDG_STATE_HOME/domicile/`.
+- **A region across monitors is captured at the highest density it
+  touches.** Monitors may differ in density and a stream has one scale;
+  downscaling loses nothing a lower one could show.
+- **No print preview.** The portal hands over the document only after the
+  dialog closes, so there is nothing to preview; gtk's backend draws none
+  either.
 - **While something is shared, the shell shows it.** A `capturing` state rides
   the same push (who, what, stop), so a shell can draw an indicator and end a
   session.
@@ -156,12 +162,3 @@ Phase 5: printing, and gtk leaves.
 
 - [ ] Print over IPP
 - [ ] `xdg-desktop-portal-gtk` out of `nix/nixos.nix`, `nix/home-manager.nix` and the flake's checks; the conf names only domicile and the keyring
-
-## Open questions
-
-- **Region capture on a desk drawn by a page.** A region spanning two
-  monitors at different densities has no single scale. Recommendation: capture
-  at the highest density it touches.
-- **Print preview.** The portal hands the document only after the dialog
-  closes, so a preview is the app's or nobody's. Recommendation: none, as
-  gtk's backend does.
