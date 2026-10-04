@@ -379,7 +379,8 @@ if wanted engine; then
       scripts/engine-guard-webview-active-tab.sh \
       scripts/engine-guard-webview-popup-window.sh \
       scripts/engine-guard-webview-passkey-extension.sh \
-      scripts/engine-guard-control-arrival.sh
+      scripts/engine-guard-control-arrival.sh \
+      scripts/engine-guard-desktop-geometry.sh
     ! engine_stop; } &&
   engine_serial scripts/engine-guard-css-and-resize.sh &&
   run engine-guard-latency scripts/engine-guard-latency.sh &&

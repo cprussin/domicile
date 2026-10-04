@@ -1112,10 +1112,6 @@ export type DomicileHost = {
    */
   closeApp(appId: string): void;
 
-  setDesktopSize(width: number, height: number): void;
-  /** Throws on anything but a positive ratio: the compositor divides by it. */
-  setDevicePixelRatio(ratio: number): void;
-
   /**
    * Draw the desktop the other way round.
    *

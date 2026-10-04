@@ -115,12 +115,6 @@ class FakeHost implements DomicileHost {
   closeApp(appId: string): void {
     this.calls.push(["closeApp", appId]);
   }
-  setDesktopSize(width: number, height: number): void {
-    this.calls.push(["setDesktopSize", width, height]);
-  }
-  setDevicePixelRatio(ratio: number): void {
-    this.calls.push(["setDevicePixelRatio", ratio]);
-  }
   setTheme(theme: Theme): void {
     this.calls.push(["setTheme", theme]);
   }
@@ -935,9 +929,6 @@ describe("DomicileClient", () => {
         "reply",
       ]);
 
-      domicile.setDevicePixelRatio(2);
-      expect(host.lastCall()).toStrictEqual(["setDevicePixelRatio", 2]);
-
       // Passed on and nothing else: what a page draws comes back as a `theme`
       // message, because every chrome on the desk is told.
       domicile.setTheme("light");
@@ -1033,9 +1024,9 @@ describe("DomicileClient", () => {
     });
 
     it("spreads a pointer's destination into the two doubles the host takes", () => {
-      // The same unpacking `setDesktopSize` does below, for the same reason: a
-      // place on the desktop is one value to a shell and two arguments to
-      // WebIDL, and a CSS pixel is fractional the whole way across.
+      // A place on the desktop is one value to a shell and two arguments to
+      // WebIDL, which has no tuple, and a CSS pixel is fractional the whole
+      // way across.
       domicile.warpPointer([960.5, 540.25]);
       expect(host.lastCall()).toStrictEqual(["warpPointer", 960.5, 540.25]);
     });
@@ -1057,15 +1048,6 @@ describe("DomicileClient", () => {
           shiftKey: true,
         }),
       ).toBe(true);
-    });
-
-    it("spreads a size into the two doubles the host takes", () => {
-      // A box is one value to a shell and two arguments to WebIDL, which has
-      // no tuple. Unpacked here rather than at every call site — and the
-      // fractions survive, because a CSS pixel is fractional and the whole
-      // path is `double`.
-      domicile.setDesktopSize([1280.5, 800]);
-      expect(host.lastCall()).toStrictEqual(["setDesktopSize", 1280.5, 800]);
     });
   });
 
