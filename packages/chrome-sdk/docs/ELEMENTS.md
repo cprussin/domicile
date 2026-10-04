@@ -42,6 +42,9 @@ once, when the view connects. The SDK provides types only.
   - `domicile-close`: the page in a shell's own view (no `window`) called
     `window.close()`. The shell removes the view. A browser window closes in
     the browser.
+  - `domicile-focus-request`: the page called `window.focus()` or
+    `client.focus()` (how a site answers a click on its notification), or an
+    extension asked for the tab. The shell raises the view.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
 - **Browser windows:** `DomicileClient.on("browser_windows", …)` delivers the

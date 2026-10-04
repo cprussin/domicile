@@ -1465,6 +1465,11 @@ void WebViewGuest::Close() {
   }
 }
 
+void WebViewGuest::ActivateContents(content::WebContents* contents) {
+  LOG(INFO) << "domicile: a <webview>'s page asked to be in front.";
+  client_->FocusRequested();
+}
+
 void WebViewGuest::EnablePreferredSize() {
   LOG(INFO) << "domicile: asked a <webview>'s page for its content size.";
   guest_contents_->GetPrimaryMainFrame()
