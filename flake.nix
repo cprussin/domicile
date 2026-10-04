@@ -406,6 +406,10 @@
       # a symlink: nothing asks where *it* really is.
       domicilePackage = pkgs.runCommand "domicile"
         {
+          # A login session as the desktops are, below: `domicile` with no
+          # shell named runs the one its config names, so this session is
+          # the desk the config describes.
+          passthru.providedSessions = [ "domicile" ];
           meta = {
             description = "Run a Domicile desktop from a shell you built yourself";
             license = pkgs.lib.licenses.mit;
@@ -455,6 +459,15 @@
         # interface it answers, and gtk for the rest.
         cp ${./nix/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
+        mkdir -p "$out/share/wayland-sessions"
+        cat >"$out/share/wayland-sessions/domicile.desktop" <<DESKTOP
+        [Desktop Entry]
+        Type=Application
+        Name=Domicile
+        Comment=The desktop your config names
+        Exec=$out/bin/domicile
+        DesktopNames=domicile
+        DESKTOP
       '';
 
       # A desktop: Domicile with the module already chosen.
@@ -966,6 +979,10 @@
             expect '.output.profiles[0].name == "desk"'
             expect '.output.profiles[0].displays[0] | .display == "drm-1" and .enabled == false'
             expect '.output.profiles[0].displays[1] | .scale == 1.2 and .transform == "rotate-270"'
+            # The shell named to the module is the config's own as well, so a
+            # `domicile` started without the wrapper -- the `domicile` login
+            # session -- runs it too.
+            expect '.shell == "${desktops.simple}/shell.js"'
 
             # NO NULLS, because `domicile` reads several keys' absence as an
             # answer and refuses a null for most of them -- and one refused
@@ -1070,7 +1087,8 @@
               imports = [ self.nixosModules.domicile ];
               programs.domicile = {
                 enable = true;
-                desktops = [ desktops.simple ];
+                # A desktop, and Domicile itself: the desk its config names.
+                desktops = [ desktops.simple domicilePackage ];
               };
               # The module offers sessions and enables nothing: a machine
               # that boots to a login screen has said this itself.
@@ -1084,7 +1102,7 @@
             # What the display manager is actually handed: NixOS joins every
             # session package's `share/wayland-sessions` here and refuses one
             # that lacks the file its `providedSessions` names.
-            session = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions/simple.desktop";
+            sessions = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions";
           in
           pkgs.runCommand "nixos-module-evaluates" { } ''
             # A desktop is a login session named after itself, which is what a
@@ -1092,15 +1110,18 @@
             # desktop as the desktop it is: the display manager sets
             # `XDG_CURRENT_DESKTOP` from `DesktopNames` before the compositor
             # gets the chance to.
-            for line in \
-              'Exec=${desktops.simple}/bin/simple' \
-              'DesktopNames=domicile'
+            for session in \
+              'simple Exec=${desktops.simple}/bin/simple' \
+              'domicile Exec=${domicilePackage}/bin/domicile'
             do
-              grep -qxF "$line" ${session} || {
-                echo "the simple session is missing: $line" >&2
-                cat ${session} >&2
-                exit 1
-              }
+              set -- $session
+              for line in "$2" 'DesktopNames=domicile'; do
+                grep -qxF "$line" "${sessions}/$1.desktop" || {
+                  echo "the $1 session is missing: $line" >&2
+                  cat "${sessions}/$1.desktop" >&2
+                  exit 1
+                }
+              done
             done
 
             # THE PAM SERVICE a desk's `lock.pam_service` names, which a

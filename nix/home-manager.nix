@@ -568,6 +568,12 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    # The config's own shell as well, so a `domicile` started without the
+    # wrapper below -- the `domicile` login session the NixOS module offers --
+    # runs the same one. A default, so `settings.shell` stated outright wins.
+    programs.domicile.settings.shell =
+      lib.mkIf (cfg.shell != null) (lib.mkDefault (toString cfg.shell));
+
     # Wrapped only when there is something to bake in, so a configuration that
     # names no shell installs the package itself rather than a wrapper around
     # it that adds nothing.
