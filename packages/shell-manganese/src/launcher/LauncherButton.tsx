@@ -24,7 +24,8 @@ export const LauncherButton = ({ onOpen }: Props) => (
 );
 
 // The bell's shape: a round, borderless control in the bar's own white, lit on
-// hover. The margin is the gap from the tray beside it, on top of the bar's own.
+// hover. The margin takes back the bar's own gap (its start column's `gap: 4`),
+// so the tray starts right after the button.
 const buttonStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",
@@ -39,7 +40,7 @@ const buttonStyles = css({
   flexShrink: 0,
   inlineSize: 7,
   justifyContent: "center",
-  marginInlineEnd: 2,
+  marginInlineEnd: -4,
   padding: 0,
   transition: "background-color {durations.fast} {easings.default}",
 });
