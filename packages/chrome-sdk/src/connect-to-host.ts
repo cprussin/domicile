@@ -160,8 +160,6 @@ const absentHost = (): DomicileHost => ({
   setAudioVolume: () => undefined,
   setBrightness: () => undefined,
   setDefaultAudioDevice: () => undefined,
-  setDesktopSize: () => undefined,
-  setDevicePixelRatio: () => undefined,
   setTheme: () => undefined,
   spawn: () => undefined,
   themeCaptured: () => undefined,

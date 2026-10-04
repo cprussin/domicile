@@ -82,8 +82,6 @@ class Host implements DomicileHost {
   readonly setBrightness = ignored;
   readonly setDefaultAudioDevice = ignored;
   readonly watchAudioLevels = ignored;
-  readonly setDesktopSize = ignored;
-  readonly setDevicePixelRatio = ignored;
   readonly spawn = ignored;
   readonly unlock = ignored;
   readonly warpPointer = ignored;

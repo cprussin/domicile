@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/functional/callback.h"
 #include "components/domicile/common/cursor_shape.h"
 #include "components/domicile/common/display_transform.h"
 #include "components/domicile/common/theme.h"
@@ -16,7 +17,11 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
+#include "third_party/blink/renderer/core/css/media_query_list.h"
+#include "third_party/blink/renderer/core/css/media_query_list_listener.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
+#include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -50,8 +55,40 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_tray_item.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
+
+namespace {
+
+// `resize` on the shell's window, which is the desktop changing size.
+class DesktopResized final : public NativeEventListener {
+ public:
+  explicit DesktopResized(base::RepeatingClosure report)
+      : report_(std::move(report)) {}
+
+  void Invoke(ExecutionContext*, Event*) override { report_.Run(); }
+
+ private:
+  const base::RepeatingClosure report_;
+};
+
+// The ratio the last report named stopped matching: the window moved to a
+// display of another density, or the page was zoomed.
+class DensityChanged final : public MediaQueryListListener {
+ public:
+  explicit DensityChanged(base::RepeatingClosure report)
+      : report_(std::move(report)) {}
+
+  void NotifyMediaQueryChanged() override { report_.Run(); }
+
+ private:
+  const base::RepeatingClosure report_;
+};
+
+}  // namespace
 
 DomicileHost::DomicileHost(LocalDOMWindow& window)
     : window_(&window),
@@ -96,7 +133,53 @@ bool DomicileHost::EnsureBound() {
   window_->GetBrowserInterfaceBroker().GetInterface(
       tray_.BindNewPipeAndPassReceiver(task_runner));
   tray_->SetClient(tray_receiver_.BindNewPipeAndPassRemote(task_runner));
+
+  ReportGeometry();
   return true;
+}
+
+void DomicileHost::ReportGeometry() {
+  // WrapWeakPersistent: the listeners belong to the window and its media
+  // queries, which can outlive nothing here, but a callback that kept this
+  // host alive would keep the channel open for a document that is gone.
+  resize_listener_ = MakeGarbageCollected<DesktopResized>(BindRepeating(
+      &DomicileHost::ReportDesktopSize, WrapWeakPersistent(this)));
+  density_listener_ = MakeGarbageCollected<DensityChanged>(BindRepeating(
+      &DomicileHost::ReportDevicePixelRatio, WrapWeakPersistent(this)));
+  window_->addEventListener(event_type_names::kResize, resize_listener_.Get());
+  ReportDevicePixelRatio();
+  ReportDesktopSize();
+}
+
+void DomicileHost::ReportDesktopSize() {
+  if (!window_ || !channel_.is_bound()) {
+    return;
+  }
+  // CSS pixels, which are the compositor's logical units. The density goes
+  // separately and the compositor multiplies.
+  channel_->SetDesktopSize(window_->innerWidth(), window_->innerHeight());
+}
+
+void DomicileHost::ReportDevicePixelRatio() {
+  if (!window_ || !channel_.is_bound()) {
+    return;
+  }
+  const double ratio = window_->devicePixelRatio();
+  // Zero or less is not a scale, and the compositor would divide by it.
+  if (!(ratio > 0)) {
+    return;
+  }
+  channel_->SetDevicePixelRatio(ratio);
+
+  if (density_query_) {
+    density_query_->RemoveListener(density_listener_.Get());
+  }
+  StringBuilder query;
+  query.Append("(resolution: ");
+  query.AppendNumber(ratio);
+  query.Append("dppx)");
+  density_query_ = window_->matchMedia(query.ToString());
+  density_query_->AddListener(density_listener_.Get());
 }
 
 void DomicileHost::spawn(ScriptState* script_state,
@@ -334,26 +417,6 @@ void DomicileHost::resizeApp(ScriptState*, const String& app_id, double width,
                              ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->ResizeApp(app_id, width, height);
-  }
-}
-
-void DomicileHost::setDesktopSize(ScriptState*, double width, double height,
-                                  ExceptionState& exception_state) {
-  if (Ready(exception_state)) {
-    channel_->SetDesktopSize(width, height);
-  }
-}
-
-void DomicileHost::setDevicePixelRatio(ScriptState*, double ratio,
-                                       ExceptionState& exception_state) {
-  // A ratio of zero or less is not a scale, and the compositor would divide by
-  // it. Refused here because the page is where the mistake is.
-  if (!(ratio > 0)) {
-    exception_state.ThrowTypeError("ratio must be greater than zero");
-    return;
-  }
-  if (Ready(exception_state)) {
-    channel_->SetDevicePixelRatio(ratio);
   }
 }
 
@@ -999,6 +1062,9 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(client_receiver_);
   visitor->Trace(tray_);
   visitor->Trace(tray_receiver_);
+  visitor->Trace(resize_listener_);
+  visitor->Trace(density_query_);
+  visitor->Trace(density_listener_);
   EventTarget::Trace(visitor);
 }
 

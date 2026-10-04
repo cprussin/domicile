@@ -493,18 +493,12 @@ keyboard leaves its window. The example does it in a dozen lines; a popup the
 compositor placed near a screen edge is not moved back onto the screen.
 
 `app_closed` is in there rather than left out because without it every window
-leaks an element. Two things the snippet leaves out and the example does in
-full:
+leaks an element. The example's `app_closed` also *throws* on an app it never
+mounted, because a close for something never announced means the page and the
+compositor disagree about what is on screen.
 
-- its `app_closed` *throws* on an app it never mounted, because a close for
-  something never announced means the page and the compositor disagree about
-  what is on screen;
-- it calls `reportDevicePixelRatio(domicile, window)` from
-  `@domicile-desktop/sdk/device-pixel-ratio`. The page is the only part of
-  Domicile that can see the display's density — it changes when the window
-  moves display or the page zooms — and a compositor never told it has every
-  client drawing at the wrong resolution, blurry or oversized, with nothing
-  said.
+There is nothing to report. The engine tells the compositor the page's size
+and density itself, as the channel binds and on every change.
 
 There is no document to write. **Domicile writes it**: a charset, a
 viewport, and a `<body>` that fills the window with no margin. That last one is

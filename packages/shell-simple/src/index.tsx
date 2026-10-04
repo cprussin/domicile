@@ -3,8 +3,6 @@
 // this module does nothing but install its stylesheet.
 
 import { connectToHost } from "@domicile-desktop/sdk/connect-to-host";
-import { reportDesktopSize } from "@domicile-desktop/sdk/desktop-size";
-import { reportDevicePixelRatio } from "@domicile-desktop/sdk/device-pixel-ratio";
 import { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import { registerElements } from "@domicile-desktop/sdk/register-elements";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
@@ -28,11 +26,4 @@ export const Shell: ShellModule = (root) => {
   const mount = document.createElement("div");
   root.append(mount);
   createRoot(mount).render(<Desktop domicile={domicile} />);
-
-  // The density is what a client renders at; the size is how big the desktop
-  // *is*, and under the forked engine the compositor cannot see the window this
-  // page is in — without the second call the desktop stays at the compositor's
-  // startup placeholder however large the window really is.
-  reportDevicePixelRatio(domicile, window);
-  reportDesktopSize(domicile, window);
 };
