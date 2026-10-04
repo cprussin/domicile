@@ -10,22 +10,16 @@ import { wrapperOf } from "./wrapperOf";
 type ChangeTarget = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
 
 type Options = {
-  /**
-   * The wrapped control component (e.g. `Input` or `Textarea`).
-   */
+  /** The control under test, such as `Input` or `Textarea`. */
   Component: AnyComponent;
-  /** Label used for `aria-label` (e.g. "Name" for Input, "Bio" for Textarea). */
+  /** The control's `aria-label`. */
   defaultLabel: string;
 };
 
 /**
- * Shared behavioral test suite for `Input` and `Textarea`. Both components
- * wrap the same `_control/` machinery, so the rendering / value-handling /
- * prop-forwarding / interactions / clearable assertions are identical apart
- * from the wrapped component itself.
+ * Shared tests for `Input` and `Textarea`, which both build on `_control/`.
  *
- * Component-specific tests (e.g. Textarea's resize handle or Input's `type`
- * variants) live in the host test file.
+ * Component-specific tests live in each component's own test file.
  */
 export const runControlSuite = ({ Component, defaultLabel }: Options) => {
   describe("rendering", () => {
@@ -112,7 +106,6 @@ export const runControlSuite = ({ Component, defaultLabel }: Options) => {
         />,
       );
       await user.type(screen.getByRole("textbox"), "hi");
-      // onChange should fire on every keystroke and accumulate the value.
       expect(seen).toEqual(["h", "hi"]);
       expect(screen.getByRole("textbox")).toHaveValue("hi");
     });

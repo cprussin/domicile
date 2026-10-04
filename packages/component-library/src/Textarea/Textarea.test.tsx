@@ -50,19 +50,15 @@ describe(Textarea, () => {
     it("writes an inline blockSize matching the rendered scrollHeight", () => {
       render(<Textarea aria-label="Bio" autoSize defaultValue="hello" />);
       const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
-      // The layout effect sets blockSize to `${scrollHeight}px` after the
-      // first commit. In test environments scrollHeight may be 0 (no layout
-      // engine), but the style should still be set to a px value rather
-      // than an empty string.
+      // happy-dom has no layout, so `scrollHeight` may be 0, but the style
+      // is still a px value.
       expect(textarea.style.blockSize).toMatch(/^\d+px$/);
     });
 
     it("ignores an explicit height prop when autoSize is set", () => {
       render(<Textarea aria-label="Bio" autoSize height={40} />);
       const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
-      // The `height` prop would normally render as `blockSize: 10rem`, but
-      // autoSize owns blockSize via the layout effect — so the rem value
-      // must not appear on the element.
+      // `autoSize` overrides the `height` prop's block size.
       expect(textarea.style.blockSize).not.toBe("10rem");
     });
 

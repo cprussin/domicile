@@ -1,5 +1,5 @@
-// A shell that is a package — `my-shell` on npm, `github:me/my-shell` — and
-// where it is installed.
+// Shells distributed as packages, such as `my-shell` on npm or
+// `github:me/my-shell`.
 
 import path from "node:path";
 
@@ -8,9 +8,10 @@ import { z } from "zod";
 import type { Manifest } from "./project";
 
 /**
- * Where `spec` is installed: a project of its own under the cache, so two
- * packages never share a lockfile and the second start of one installs
- * nothing.
+ * The project directory under the cache that `spec` installs into.
+ *
+ * Each package gets its own project, so packages never share a lockfile and a
+ * second start installs nothing.
  */
 export const packageProject = (cache: string, spec: string): string =>
   path.join(
@@ -20,9 +21,10 @@ export const packageProject = (cache: string, spec: string): string =>
   );
 
 /**
- * The name the package installed as. Its project lists exactly one
- * dependency, because it is made for that package alone; anything else is a
- * project somebody changed by hand.
+ * The installed package's name.
+ *
+ * Throws unless the project lists exactly one dependency. The project exists
+ * for that package alone, so anything else means someone edited it by hand.
  */
 export const installedName = (manifest: Manifest): string => {
   const names = Object.keys(manifest.dependencies ?? {});
@@ -35,15 +37,15 @@ export const installedName = (manifest: Manifest): string => {
   return name;
 };
 
-/** A package's own `package.json`, as far as a shell's is read. */
+/** The fields of a shell package's `package.json` read here. */
 const shellManifestSchema = z.looseObject({
   domicile: z.looseObject({ shell: z.string().min(1) }).optional(),
 });
 
 /**
- * The prebuilt module a package's `package.json` names as
- * `"domicile": { "shell": "dist/shell.js" }`, relative to it — or
- * `undefined`, and the package is built from its entry.
+ * The prebuilt module a package's `package.json` names in
+ * `"domicile": { "shell": "dist/shell.js" }`, relative to that file.
+ * `undefined` means the package is built from its entry.
  */
 export const prebuiltOf = (text: string): string | undefined =>
   shellManifestSchema.parse(JSON.parse(text)).domicile?.shell;

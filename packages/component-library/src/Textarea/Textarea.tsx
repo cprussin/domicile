@@ -57,9 +57,8 @@ export const Textarea = ({
   width,
   ...props
 }: Props) => {
-  // The caller's ref as well as this textarea's own, so consumers can drive
-  // the textarea imperatively (focus, selection, scroll) without losing the
-  // internal wiring that clear, autoSize and the resize handle read.
+  // Merges the caller's ref with ours, which clear, autoSize and the resize
+  // handle use.
   const [textareaRef, setTextareaRef] =
     useStableRef<HTMLTextAreaElement>(externalRef);
   const { currentValue, isEmpty, setValue } = useControlValue({
@@ -67,11 +66,9 @@ export const Textarea = ({
     value: props.value,
   });
 
-  // Autosize: shrink to 0 to read the natural content height, then set
-  // blockSize to that scrollHeight. Layout effect so the user never sees
-  // a frame at the intermediate 0 height. `maxHeight` is enforced via the
-  // inline style below, so values past the cap overflow into a scrollable
-  // textarea rather than expanding the wrapper.
+  // Autosize: collapse to 0, then set the block size to `scrollHeight`. A
+  // layout effect, so the 0 height is never painted. Content past
+  // `maxHeight` scrolls.
   // biome-ignore lint/correctness/useExhaustiveDependencies: currentValue is the trigger — the effect reads scrollHeight off the DOM, not the value itself, but must re-run on every content change
   useLayoutEffect(() => {
     if (autoSize === false) {
@@ -100,9 +97,8 @@ export const Textarea = ({
     }
   };
 
-  // Autosize owns blockSize, so manual resize and an explicit `height` both
-  // fight it; disable both implicitly. Consumers still cap growth via
-  // `maxHeight`.
+  // Autosize controls the block size, so it disables manual resize and
+  // `height`. `maxHeight` still applies.
   const resizeHandleDisabled = disableResize === true || autoSize === true;
 
   return (
@@ -118,9 +114,8 @@ export const Textarea = ({
       style={controlSizingStyle({ width })}
     >
       <PrefixIconStack multiline prefixIcon={prefixIcon} size={size} />
-      {/* BaseField.Control is generically typed; the three casts below
-       * (spread props, onChange, ref) bridge our textarea-typed surface
-       * onto its element-agnostic one. */}
+      {/* The casts below adapt textarea types to BaseField.Control's
+       * element-agnostic types. */}
       <BaseField.Control
         {...(props as ComponentProps<typeof BaseField.Control>)}
         className={cx(textareaStyles, multilineSizeStyles({ size }))}
@@ -133,14 +128,11 @@ export const Textarea = ({
         ref={setTextareaRef as unknown as Ref<HTMLElement>}
         render={<textarea />}
         style={controlSizingStyle({
-          // `autoSize` writes blockSize imperatively in the layout effect;
-          // a fixed `height` would just be overwritten each render.
+          // With `autoSize`, the layout effect sets the block size.
           height: autoSize === true ? undefined : height,
           maxHeight,
-          // Clamp user-supplied `minHeight` to the size's intrinsic control
-          // height so a too-small value can never shrink the textarea below
-          // one line of the control. When `minHeight` isn't supplied at all,
-          // the per-size minimum from `multilineSizeStyles` already applies.
+          // Never shorter than one control line. Without `minHeight`,
+          // `multilineSizeStyles` sets the minimum.
           minHeight:
             minHeight === undefined
               ? undefined
@@ -180,33 +172,21 @@ const textareaStyles = css({
   marginBlock: "-1px",
   minInlineSize: 0,
   outlineStyle: "none",
-  // Small inline-end padding so wrapped text doesn't sit flush against
-  // the scrollbar when the content overflows vertically. Inline-start
-  // stays at 0 so the textarea aligns with the wrapper's own padding.
+  // Keeps text off the scrollbar. The wrapper owns the inline-start padding.
   paddingInlineEnd: 2,
   paddingInlineStart: 0,
   resize: "none",
   verticalAlign: "middle",
 });
 
-// The rounded variant combines two per-size adjustments on top of the
-// `control` recipe:
-//   1. inlinePadding is inflated by 1.5 spacing units (xs:1.5→3, sm:2.5→4,
-//      md:3→4.5, lg:3.5→5, xl:4→5.5) so the pill shape doesn't crowd content
-//   2. borderRadius is set to a per-size value (unlike Input's
-//      `borderRadius: "full"`, which uses a half-blockSize pill — Textarea
-//      can grow vertically, so a fixed radius keeps the corners visually
-//      correct as it grows)
-// Values inlined as literals (not derived from a helper or computed via
-// `SIZES.map(...)`) so Panda's static extractor can emit the corresponding
-// atomic classes — values from a helper return or runtime map are opaque to
-// the extractor.
+// `rounded` adds 1.5 spacing units to the recipe's inline padding and sets a
+// per-size radius. Input uses `full`, but a textarea grows, so a fixed radius
+// keeps the corners right. Values are literals because Panda's static
+// extractor can't read helper results.
 const wrapperStyles = cva({
   base: {
     blockSize: "auto",
-    // Owned here (not in `wrapperBase`) so Select can override to
-    // `pointer` without losing the property race — see `wrapperBase.ts`
-    // for the rationale.
+    // Not in `wrapperBase`, so Select can override it; see `wrapperBase.ts`.
     cursor: "text",
     position: "relative",
   },

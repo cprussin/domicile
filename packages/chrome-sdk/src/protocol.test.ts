@@ -59,11 +59,8 @@ describe("parseHostMessage", () => {
   });
 
   it("normalizes the size of a client that has not committed to undefined", () => {
-    // A toplevel maps before it draws, and how big a Wayland client wants to
-    // be is something it says by drawing — so the size is absent on the
-    // message that announces it, and arrives on the `app_resized` that
-    // follows. The host sends JSON null, the same way it does for a title it
-    // does not have.
+    // A window has no size until it draws; the host sends `null` and the
+    // size follows in `app_resized`.
     const message = parseHostMessage(
       '{"type":"app_appeared","app_id":"term","title":null,"size":null}',
     );
@@ -76,9 +73,7 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes what a client calls its window", () => {
-    // A toplevel is announced when the client creates it, which is before
-    // `set_title` — so the name arrives on its own message, and again whenever
-    // it changes.
+    // The title arrives after `app_appeared`, and again on each change.
     expect(
       parseHostMessage(
         '{"type":"app_titled","app_id":"term","title":"a terminal"}',
@@ -91,10 +86,7 @@ describe("parseHostMessage", () => {
   });
 
   it("reads a client that named its window nothing as having no name", () => {
-    // `set_title("")` is the only way a client can say it has no name —
-    // xdg-shell has no request that takes one back — so the empty string is
-    // the reachable case, and a chrome that drew it literally would render a
-    // nameless tab rather than fall back to the app id.
+    // xdg-shell cannot clear a title, so clients send `set_title("")`.
     expect(
       parseHostMessage('{"type":"app_titled","app_id":"term","title":""}'),
     ).toStrictEqual({ app_id: "term", title: undefined, type: "app_titled" });
@@ -122,10 +114,7 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes who holds the keyboard, both ways round", () => {
-    // The one host message with a nullable field. `null` means the chrome
-    // itself has the keyboard — an answer a desktop draws differently, not an
-    // absence of one — and it dies here rather than in the page, the same way
-    // `app_appeared`'s optional title does.
+    // `null` means the chrome has focus.
     expect(
       parseHostMessage(
         JSON.stringify({ app_id: "app-1", type: "focus_changed" }),
@@ -138,12 +127,8 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes whether anybody is at the desk, both ways round", () => {
-    // A state rather than an edge, which is the shape the wire needs and not
-    // the one the compositor's own seam has: that one reports the turn the
-    // answer changed on, because a dark desk restating itself is a modeset a
-    // second. A page reloads, so what it is sent is where the desk stands —
-    // and both answers cross, because a shell told only about going idle would
-    // have no message to come back from.
+    // Sent as a state, not an edge, so a reloaded page learns the current
+    // value. Both values must decode.
     expect(
       parseHostMessage(JSON.stringify({ idle: true, type: "idle" })),
     ).toStrictEqual({ idle: true, type: "idle" });
@@ -154,11 +139,8 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes whether the desk is locked, both ways round", () => {
-    // A state for the reason `idle` above is one, and here it is the whole
-    // point: the compositor holds the lock, so a page reload does not open the
-    // desk — and a reloaded page is told `true` rather than left to have missed
-    // the edge that raised its lock screen. Both directions, because an
-    // inversion is a lock screen that clears when the desk shuts.
+    // A reloaded page must learn the desk is still locked. An inverted value
+    // would hide the lock screen while locked.
     expect(
       parseHostMessage(JSON.stringify({ locked: true, type: "locked" })),
     ).toStrictEqual({ locked: true, type: "locked" });
@@ -169,9 +151,7 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes the desktop's displays", () => {
-    // The shell lays out against these: one page spans every display, and a
-    // display is a region of it, so the position is what puts a `<Screen>`
-    // over the right part of the page.
+    // One page spans every display; `position` places each `<Screen>`.
     expect(
       parseHostMessage(
         JSON.stringify({
@@ -220,10 +200,8 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes a monitor on its side", () => {
-    // The three fields a `<Screen>` turns into a CSS transform. `size` is the
-    // box the shell lays out in, `mode` is the pixels the panel has, and
-    // neither is derivable from the other: `scale` on the wire is the integer
-    // `wl_output` one, so 1800 times 2 is not 2160.
+    // `size`, `mode` and `transform` are independent: `scale` is the integer
+    // `wl_output` scale, so `size` times `scale` need not equal `mode`.
     expect(
       parseHostMessage(
         JSON.stringify({
@@ -256,11 +234,8 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes a display from before any of it was turned or scanned out", () => {
-    // Not a compatibility floor — nothing completes a handshake and then sends
-    // a `displays` without these. It is that a captured session or a
-    // hand-written frame is still something a shell reads, and the answer for
-    // both is the desktop that had no notion of them: lying down. `[0, 0]` and
-    // not the size, because a mode nobody stated is not a mode.
+    // Captured or hand-written frames may omit `mode` and `transform`. They
+    // default to `[0, 0]` (unknown) and `normal`.
     expect(
       parseHostMessage(
         JSON.stringify({
@@ -286,19 +261,15 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes a desktop of no displays as an empty one, not a missing one", () => {
-    // A desktop with no screens on it, which the compositor does not send —
-    // the window-following case is a display named `domicile-0` rather than an
-    // empty list. The shape still has to decode: a shell that treated it as
-    // absent would wait forever for a layout that had already arrived.
+    // The compositor never sends this, but it must still decode as a valid
+    // (empty) layout.
     expect(
       parseHostMessage(JSON.stringify({ displays: [], type: "displays" })),
     ).toStrictEqual({ displays: [], type: "displays" });
   });
 
-  // `looseObject` passes unknown keys through, so asserting on a *valid* frame
-  // cannot tell a validating schema from an empty one — only a rejection can.
-  // Each of these is a frame a shell would read as a coordinate, a size or a
-  // name it does not have, rather than as an error.
+  // `looseObject` accepts unknown keys, so only rejections prove the schema
+  // validates.
   it.each([
     ["a position of one number", { position: [0] }],
     ["a fractional position", { position: [0.5, 0] }],
@@ -332,9 +303,7 @@ describe("parseHostMessage", () => {
   });
 
   it("throws when the desktop itself is missing from the message", () => {
-    // The chrome-side twin of the empty-list case: a `displays` frame with no
-    // list at all is a host that said nothing, and it must not read as a
-    // desktop of no displays — which is a real answer with a real meaning.
+    // A missing list must not decode as an empty one.
     expect(() => parseHostMessage('{"type":"displays"}')).toThrow();
   });
 
@@ -345,8 +314,8 @@ describe("parseHostMessage", () => {
   });
 
   it("decodes a shortcut the compositor took for the desktop", () => {
-    // It arrives as a message rather than a DOM event because the page is not
-    // what received it — which is the whole point of claiming one.
+    // The compositor consumed the key, so it arrives as a message, not a DOM
+    // event.
     const message = parseHostMessage(
       JSON.stringify({
         shortcut: {

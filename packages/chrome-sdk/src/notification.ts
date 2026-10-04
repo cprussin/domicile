@@ -1,21 +1,14 @@
-// A notification, as a shell draws it and presses it.
+// Notification types for a shell's notification center.
 //
-// Its own module for `tray.ts`'s reason: both halves of the SDK name one —
-// `DomicileClient` hands the list on, and the wire schema parses the same
-// shape — and a shell's notification center imports it without the client.
-//
-// A notification is an application's call to `org.freedesktop.Notifications`
-// on the session bus, which the compositor serves and a page cannot reach —
-// see `crate::notifications` in `domicile-compositor`. A page's own Web
-// Notification arrives the same way, because the browser shows one by calling
-// that server. What a press does is the application's.
+// The compositor serves `org.freedesktop.Notifications` (see
+// `crate::notifications` in `domicile-compositor`); web notifications arrive
+// the same way. See `docs/architecture/NOTIFICATIONS.md`.
 
 import { z } from "zod";
 
 /**
- * How much a notification asks to be noticed: the spec's `urgency` hint.
- * `critical` is something the user should not miss, and stays up until it is
- * dismissed whatever it asked for.
+ * The spec's `urgency` hint. A `critical` notification stays up until
+ * dismissed, whatever its timeout.
  */
 export const notificationUrgencySchema = z.enum(["low", "normal", "critical"]);
 
@@ -23,50 +16,44 @@ export type NotificationUrgency = z.infer<typeof notificationUrgencySchema>;
 
 /** One button of a notification. */
 export type NotificationAction = {
-  /** What {@link DomicileClient.invokeNotificationAction} names it by. */
+  /** The key for {@link DomicileClient.invokeNotificationAction}. */
   key: string;
-  /** What the button says. */
+  /** The button text. */
   label: string;
 };
 
 /** One notification. */
 export type Notification = {
   /**
-   * What {@link DomicileClient.dismissNotifications} and
-   * {@link DomicileClient.invokeNotificationAction} name it by. One its
-   * application replaced keeps its id and arrives with new contents.
+   * The id for {@link DomicileClient.dismissNotifications} and
+   * {@link DomicileClient.invokeNotificationAction}. A replaced notification
+   * keeps its id.
    */
   id: number;
-  /** Who sent it, as it named itself. May be empty. */
+  /** The sender's self-reported name. May be empty. */
   appName: string;
-  /** The one line that says what happened. */
+  /** A one-line summary. */
   summary: string;
-  /** More, as plain text — never markup. May be empty. */
+  /** Plain text, never markup. May be empty. */
   body: string;
   /**
-   * The picture, as a `data:` URL: the notification's own image, or its
-   * application's icon. `undefined` where there was nothing to draw.
+   * The notification's image or its app's icon, as a `data:` URL, or
+   * `undefined` if neither exists.
    */
   icon: string | undefined;
   urgency: NotificationUrgency;
-  /** Its buttons. A press on the notification itself is {@link clickable}. */
+  /** Its buttons. See {@link clickable} for a press on the body. */
   actions: readonly NotificationAction[];
-  /**
-   * Whether pressing the notification itself does something: invoke the
-   * `"default"` action for that.
-   */
+  /** Whether pressing the body invokes the `"default"` action. */
   clickable: boolean;
   /**
-   * How long it asked to stay up, in milliseconds: `0` for until it is
-   * dismissed, `undefined` for the shell's choice.
+   * Requested display time in milliseconds: `0` means until dismissed,
+   * `undefined` means the shell decides.
    */
   timeoutMs: number | undefined;
-  /** When it arrived, or was last replaced: milliseconds since the epoch. */
+  /** When it arrived or was last replaced, in milliseconds since the epoch. */
   time: number;
 };
 
-/**
- * The action key a press on the notification itself is, where it is
- * {@link Notification.clickable}.
- */
+/** The action key for a press on a {@link Notification.clickable} body. */
 export const DEFAULT_NOTIFICATION_ACTION = "default";

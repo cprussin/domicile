@@ -19,10 +19,7 @@ export const keepControlFocusedOnMouseDown: MouseEventHandler<HTMLElement> = (
 };
 
 const focusControl = (root: HTMLElement) => {
-  // The parentElement fallback is load-bearing for `TrailingGroup`, which
-  // attaches `keepControlFocusedOnMouseDown` to a sibling of the control
-  // (not an ancestor). Searching from the trailing-group span itself never
-  // finds the input; searching its parent (the wrapper div) does.
+  // `TrailingGroup` is a sibling of the control, so search its parent too.
   const control =
     root.querySelector<HTMLInputElement | HTMLTextAreaElement>(
       "[data-control]",

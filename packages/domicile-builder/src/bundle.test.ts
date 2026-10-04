@@ -5,13 +5,13 @@ import path from "node:path";
 
 import { bundle } from "./bundle";
 
-/** This checkout, which is laid out as Domicile's install is. */
+/** This checkout, which has the same layout as a Domicile install. */
 const DOMICILE = path.resolve(import.meta.dir, "..", "..", "..");
 
 describe("bundle", () => {
-  // The one test that builds: a user's entry outside any project, importing
-  // manganese and React from Domicile and nothing installed of its own, into
-  // a directory whose parent does not exist yet, as a fresh cache's does not.
+  // An entry outside any project, with nothing installed, gets manganese and
+  // React from Domicile. Its output directory's parent does not exist yet, as
+  // in a fresh cache.
   it("builds an entry against Domicile's manganese into a module with its `Shell` and its styles", async () => {
     const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
     const entry = path.join(desk, "domicile.tsx");
@@ -33,8 +33,8 @@ describe("bundle", () => {
     expect(built).toContain("@layer utilities");
   }, 120_000);
 
-  // A rule only exists for a `css()` call the build scanned, so a user's own
-  // call must be scanned beside manganese's.
+  // Panda only emits rules for `css()` calls it scans, so the user's files
+  // must be scanned too.
   it("builds the rules of the user's own `css()` calls", async () => {
     const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
     const entry = path.join(desk, "domicile.tsx");

@@ -1,11 +1,8 @@
-// The desk's sound, as a shell's mixer draws it and asks of it.
+// Audio state types shared by the client and host halves of the SDK.
 //
-// Its own module for `tray.ts`'s reason: both halves of the SDK need these
-// shapes, and only one of them is the wire. The compositor reads the sound
-// server with `pactl` — PulseAudio's or PipeWire's — see `domicile_host::audio`.
-//
-// Every id is the compositor's, opaque here: what a request names a device or
-// a stream by, taken from the last `audio` message.
+// The compositor reads the sound server (PulseAudio or PipeWire) through
+// `pactl`; see `domicile_host::audio`. Ids are opaque compositor ids taken from
+// the last `audio` message.
 
 /** A port of a device, or a profile of a card: something to switch it to. */
 export type AudioChoice = {
@@ -13,8 +10,8 @@ export type AudioChoice = {
   name: string;
   description: string;
   /**
-   * `false` for a port whose jack is empty, or a profile that needs one.
-   * Still choosable, as every mixer lets it be.
+   * `false` for a port with an empty jack, or a profile that needs one. It can
+   * still be selected.
    */
   available: boolean;
 };
@@ -24,19 +21,18 @@ export type AudioDevice = {
   id: string;
   description: string;
   /**
-   * The loudest of its channels, as a fraction of the server's 100% — more
-   * than 1 for one turned up past it.
+   * The loudest channel's volume as a fraction of 100%. Can exceed 1.
    */
   volume: number;
   muted: boolean;
   /** Whether new streams go to it. */
   default: boolean;
   /**
-   * Whether it is an output's monitor — what the output plays, as something
-   * to record. Always `false` for an output.
+   * Whether it is an output's monitor source, which records what the output
+   * plays. Always `false` for an output.
    */
   monitor: boolean;
-  /** Speakers, headphones, a line in. Often empty. */
+  /** E.g. speakers, headphones, line in. Often empty. */
   ports: readonly AudioChoice[];
   /** The {@link AudioChoice.name} of the port in use, if it has ports. */
   port: string | undefined;
@@ -45,24 +41,24 @@ export type AudioDevice = {
 /** Something playing (a sink input) or recording (a source output). */
 export type AudioStream = {
   id: string;
-  /** Who is playing or recording it. */
+  /** The application playing or recording it. */
   application: string;
-  /** What it is — a song, a call — where the application said. */
+  /** The stream title, if the application set one. */
   title: string | undefined;
   volume: number;
   muted: boolean;
   /**
    * The {@link AudioDevice.id} it plays to or records from, or `undefined`
-   * for one the next message will settle.
+   * until the next message reports it.
    */
   device: string | undefined;
 };
 
-/** A sound card, and the profiles that say which of its devices are on. */
+/** A sound card and its profiles, which select the enabled devices. */
 export type AudioCard = {
   id: string;
   description: string;
-  /** Best first. */
+  /** Sorted best first. */
   profiles: readonly AudioChoice[];
   /** The {@link AudioChoice.name} of the profile in use. */
   profile: string | undefined;

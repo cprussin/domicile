@@ -5,18 +5,10 @@ import path from "node:path";
 import { parseHostMessage } from "./protocol";
 
 /**
- * The other half of `domicile-protocol/tests/wire.rs`.
+ * Checks that the zod schemas accept every message Rust writes.
  *
- * Both sides of this protocol are written by hand, in different languages,
- * and each one's own tests assert against its own literals — so both can be
- * internally consistent and disagree with each other. What that looks like at
- * runtime is a chrome dropping a message it cannot parse (`chrome-socket.ts`
- * discards whatever the schema rejects), which from the page is
- * indistinguishable from a compositor that never sent one.
- *
- * So this reads the bytes Rust is pinned to writing and requires the schemas
- * to accept every one. It needs no compositor: the thing under test is two
- * definitions agreeing, and the fixture is what they agree about.
+ * The fixture is pinned by `domicile-protocol/tests/wire.rs`. A mismatch would
+ * otherwise show up only as silently dropped messages.
  */
 const FIXTURE = path.join(
   import.meta.dir,
@@ -30,8 +22,7 @@ const lines = readFileSync(FIXTURE, "utf8")
 
 describe("the wire fixture", () => {
   it("has lines in it", () => {
-    // Otherwise every assertion below passes over an empty list, and a moved
-    // or emptied fixture reads as a green suite.
+    // Guards against a missing or empty fixture passing vacuously.
     expect(lines.length).toBeGreaterThan(10);
   });
 
@@ -40,15 +31,12 @@ describe("the wire fixture", () => {
     (number, line) => {
       const decoded = parseHostMessage(line);
 
-      // `undefined` is the SDK's "a newer host sent something I don't know",
-      // which for a line this repo generated means the two definitions have
-      // drifted apart rather than that anything is newer.
+      // `undefined` means an unknown type, so the definitions have drifted.
       expect(
         decoded,
         `line ${number} is not a message this SDK knows`,
       ).toBeDefined();
-      // And the type survives, so a schema that decoded it as something else
-      // is caught too.
+      // Catches a line decoded as the wrong message type.
       expect(decoded?.type).toBe(JSON.parse(line).type);
     },
   );

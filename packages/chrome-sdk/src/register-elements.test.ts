@@ -15,14 +15,13 @@ import { claimShortcut } from "./shortcut-claims";
 
 type Call = readonly [kind: string, ...args: unknown[]];
 
-// A double for the domicile client, capturing the input calls the delegation
-// makes and answering for what each client has drawn. Only the surface the
-// delegation uses is implemented.
+// A fake domicile client that records input calls and reports each client's
+// drawn size. Implements only what input routing uses.
 class FakeDomicile {
   readonly calls: Call[] = [];
   readonly #drawn = new Map<string, SurfaceSize>();
 
-  /** As `app_resized` would: the client says what it drew by drawing. */
+  /** Record a client's drawn size, as `app_resized` would. */
   drew(appId: string, size: SurfaceSize): void {
     this.#drawn.set(appId, size);
   }
@@ -30,7 +29,7 @@ class FakeDomicile {
   surfaceSizeOf(appId: string): SurfaceSize | undefined {
     return this.#drawn.get(appId);
   }
-  /** Every client here is a window, but `menu`, which is over `term`. */
+  /** Every client is its own window except `menu`, a popup over `term`. */
   windowOf(appId: string): string {
     return appId === "menu" ? "term" : appId;
   }
@@ -75,15 +74,13 @@ const mountApp = (appId?: string): HTMLElement => {
   return element;
 };
 
-/** A pointer event, as the delegation on `document` receives it. */
+/** A bubbling pointer event. */
 const pointer = (type: string, init: MouseEventInit = {}): MouseEvent =>
   new MouseEvent(type, { bubbles: true, ...init });
 
 describe("registerElements", () => {
   let domicile: FakeDomicile;
-  // A shell listens for focus requests on `document` rather than per window, so
-  // those listeners outlive the element that was clicked and the body this
-  // empties between tests. Aborting is what takes them off again.
+  // Removes each test's `document` listeners.
   let shell: AbortController;
 
   beforeEach(() => {
@@ -101,8 +98,7 @@ describe("registerElements", () => {
 
   describe("the pointer over a window", () => {
     it("forwards motion in the client's own surface coordinates", () => {
-      // The element measures 10x20 here, so a client that drew at 100x200 puts
-      // the pointer ten times further into its surface than into the box.
+      // The element measures 10x20; the surface is 100x200.
       const element = mountApp("term");
       domicile.drew("term", [100, 200]);
 
@@ -114,8 +110,7 @@ describe("registerElements", () => {
     });
 
     it("maps the element's own pixels 1:1 for a client that has not drawn", () => {
-      // A toplevel maps before it draws, and the pointer is over it in the
-      // meantime. Its own box is the only scale there is.
+      // A toplevel maps before it draws, so there is no surface size yet.
       const element = mountApp("term");
 
       element.dispatchEvent(
@@ -160,10 +155,8 @@ describe("registerElements", () => {
     });
 
     it("tells the client when the pointer leaves its window", () => {
-      // `pointerout` rather than `pointerleave`, which does not bubble and so
-      // cannot be delegated at all. The two differ only for a pointer moving
-      // into a descendant, and an `<app>` is a replaced element: it has no
-      // rendered children to move into.
+      // `pointerout`, because `pointerleave` does not bubble. They only differ
+      // for descendants, and an `<app>` has none.
       const element = mountApp("term");
 
       element.dispatchEvent(pointer("pointerout"));
@@ -172,8 +165,7 @@ describe("registerElements", () => {
     });
 
     it("says nothing for a pointer that is over no window at all", () => {
-      // The desktop behind the windows is the page's own, and a click on it is
-      // nobody's client's.
+      // The desktop background belongs to the page, not to any client.
       mountApp("term");
 
       document.body.dispatchEvent(
@@ -195,11 +187,8 @@ describe("registerElements", () => {
     });
 
     it("swallows the menu the secondary button would have opened over a window", () => {
-      // The press itself is forwarded, so without this the browser answers a
-      // click the client has already been sent: its own context menu opens over
-      // the window the user right-clicked in, and the menu the client drew —
-      // which is what a right-click in a terminal or an editor is for — is
-      // behind it.
+      // The client gets the right-click, so the browser's context menu would
+      // cover the client's own menu.
       const element = mountApp("term");
 
       const menu = pointer("contextmenu", { cancelable: true });
@@ -209,10 +198,8 @@ describe("registerElements", () => {
     });
 
     it("leaves the menu alone for a press that is over no window at all", () => {
-      // The desktop behind the windows is the page's own, and so is the menu
-      // over it: a shell that wants none says so in its own stylesheet, and one
-      // that draws its own on `contextmenu` needs the event still cancelable
-      // when it arrives.
+      // The shell decides what a right-click on the desktop does, so the event
+      // must stay cancelable.
       mountApp("term");
 
       const menu = pointer("contextmenu", { cancelable: true });
@@ -239,9 +226,8 @@ describe("registerElements", () => {
     });
 
     it("asks for a popup's window when the popup is clicked", () => {
-      // A menu is not a window a shell knows, and the keyboard is already in
-      // it — but a click on it is the user working in its window, and a
-      // shell that moved the keyboard elsewhere would dismiss it.
+      // The shell knows windows, not popups, so the request names the popup's
+      // window.
       const element = mountApp("menu");
       const requests: (string | undefined)[] = [];
       document.addEventListener(
@@ -256,7 +242,7 @@ describe("registerElements", () => {
 
       expect(requests).toStrictEqual(["term"]);
       expect(domicile.calls).toContainEqual(["focusApp", "term"]);
-      // The press itself is the menu's.
+      // The button press still goes to the popup.
       expect(domicile.calls).toContainEqual(["button", "menu", BTN_LEFT, true]);
     });
 
@@ -273,8 +259,7 @@ describe("registerElements", () => {
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
 
       expect(domicile.calls).not.toContainEqual(["focusApp", "term"]);
-      // The click itself still belongs to the client: what the shell refused is
-      // the keyboard, not the button the user pressed.
+      // The shell refused focus, not the click.
       expect(domicile.calls).toContainEqual(["button", "term", BTN_LEFT, true]);
     });
   });
@@ -297,8 +282,7 @@ describe("registerElements", () => {
     });
 
     it("gives a client the keyboard without a click", () => {
-      // What a shell calls when it puts a window on screen that nobody clicked
-      // — opening it, or switching to its tab.
+      // For example, when a shell opens a window or switches to its tab.
       mountApp("term");
 
       focusApp(domicile as unknown as DomicileClient, "term");
@@ -308,17 +292,16 @@ describe("registerElements", () => {
         new KeyboardEvent("keydown", { bubbles: true, code: "KeyA" }),
       );
       expect(domicile.calls).toContainEqual(["key", "term", 30, true]);
-      // Released, because a key left down is left down for the whole suite.
+      // Release the key so it does not stay down for later tests.
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
       );
     });
 
     it("keeps a chord the desktop claimed out of the focused window", () => {
-      // A Wayland window is an element in this page, so DOM focus never leaves
-      // the document and the shell's own `keydown` handler sees the press as
-      // well as the forwarding here. Without the claim both act: Alt+Enter
-      // spawns a terminal *and* types a newline into the one already open.
+      // The shell's `keydown` handler sees keys sent to Wayland windows too.
+      // Without the claim, Alt+Enter would also type a newline into the
+      // focused terminal.
       claimShortcut({ altKey: true, keycode: 28 });
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
@@ -343,10 +326,8 @@ describe("registerElements", () => {
     });
 
     it("ignores the browser's auto-repeat while a key is held", () => {
-      // Wayland sends one press and one release; the client synthesizes repeat
-      // itself from `wl_keyboard.repeat_info`. Forwarding the browser's repeats
-      // as fresh presses gives the client two repeat sources at once, which it
-      // renders as the same character over and over.
+      // Wayland clients generate their own repeats from
+      // `wl_keyboard.repeat_info`. Forwarding the browser's would double them.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       domicile.calls.length = 0;
@@ -374,13 +355,9 @@ describe("registerElements", () => {
     });
 
     it("releases a key wherever the keyboard went between press and release", () => {
-      // The compositor's xkb state outlives every window, and it only unlocks a
-      // lock key on the release of the press it saw lock it. Under
-      // `caps:swapescape` the physical Escape key *is* Caps_Lock (evdev 1), so a
-      // press forwarded without its release latches capitals into every Wayland
-      // client there will ever be — no later press of that key can clear it,
-      // while the page's own webviews, which never touch that state, keep
-      // typing normally.
+      // A lost release leaves the key down in the compositor's xkb state. Under
+      // `caps:swapescape`, Escape (evdev 1) is Caps_Lock, so a lost release
+      // locks capitals in every Wayland client.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
@@ -388,7 +365,7 @@ describe("registerElements", () => {
       );
       domicile.calls.length = 0;
 
-      // The keyboard goes back to the chrome while the key is still down.
+      // Focus moves to the chrome while the key is down.
       document.body.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "Escape" }),
@@ -398,9 +375,8 @@ describe("registerElements", () => {
     });
 
     it("releases what it is holding when the page loses the keyboard", () => {
-      // A window the user alt-tabs away from is never told the key came up, so
-      // the release has to be sent on the way out. Otherwise the key is held
-      // down in the compositor for as long as the desktop runs.
+      // The page never sees the keyup, so the key would stay down in the
+      // compositor.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
@@ -414,10 +390,8 @@ describe("registerElements", () => {
     });
 
     it("releases what it is holding when a browser window takes the focus", () => {
-      // A key released while a `<webview>` guest has the focus comes up on the
-      // site and never in this document. Super held on a terminal through
-      // Super+l onto a browser window stayed down in the seat, and every
-      // window after it took each key as a Super chord.
+      // A keyup inside a `<webview>` never reaches this document, so a held
+      // Super would stay down in the seat.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
@@ -433,8 +407,7 @@ describe("registerElements", () => {
     });
 
     it("releases what it is holding when the page goes away", () => {
-      // A reload never delivers the keyup, and blur is not what fires when the
-      // page is navigated away from.
+      // Navigation fires `pagehide`, not `blur`, and no keyup follows.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
@@ -448,9 +421,8 @@ describe("registerElements", () => {
     });
 
     it("releases onto the domicile that is connected now", () => {
-      // The release is for the compositor's sake — its seat is what holds the
-      // key down — so it belongs on the connection to that compositor, not on
-      // whichever client object happened to be bound when the key went down.
+      // The compositor's seat holds the key down, so release it on the
+      // current connection.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       document.dispatchEvent(
@@ -471,12 +443,9 @@ describe("registerElements", () => {
     });
 
     it("stops routing keys to a window that has left the page", () => {
-      // A shell takes an element down when its client closes, and with the tag
-      // the engine's there is no callback to hear that on. Left alone, every
-      // keystroke after a window closes is taken from the page — the forward
-      // calls `preventDefault()` — and sent to a client that is gone, which is a
-      // desktop that works right up until you close a window. The chrome is told
-      // it has the keyboard back as well, because the page is where it went.
+      // `<app>` has no disconnect callback. Without this check, every key
+      // would be `preventDefault`ed and sent to the closed client. Focus
+      // returns to the chrome instead.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       element.remove();
@@ -490,9 +459,8 @@ describe("registerElements", () => {
     });
 
     it("leaves the keyboard alone when an unfocused window goes away", () => {
-      // Closing a background window must not steal the keyboard from the one
-      // that has it. The repair above is keyed on the window the keyboard was
-      // routed to and not on whichever window left.
+      // Closing a background window must not take focus from the focused
+      // one.
       const focusedWindow = mountApp("term");
       focusedWindow.dispatchEvent(pointer("pointerdown", { button: 0 }));
       const other = mountApp("editor");
@@ -504,18 +472,15 @@ describe("registerElements", () => {
       );
 
       expect(domicile.calls).toStrictEqual([["key", "term", 30, true]]);
-      // Released, because a key left down is left down for the whole suite.
+      // Release the key so it does not stay down for later tests.
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
       );
     });
 
     it("releases a key this page never saw pressed", () => {
-      // Super held while the page reloads comes up on a page that never saw
-      // it go down. Kept back, it stays down in the compositor's seat, and
-      // every key after it reaches the client as Super+key. So every release
-      // is sent, and the seat — which knows what it holds — drops one it never
-      // saw pressed.
+      // For example, Super held across a reload. The seat ignores releases for
+      // keys it does not hold, so sending every release is safe.
       mountApp("term").dispatchEvent(pointer("pointerdown", { button: 0 }));
       domicile.calls.length = 0;
 
@@ -527,11 +492,8 @@ describe("registerElements", () => {
     });
 
     it("keeps the keyboard where it is when the shell cancels the release", () => {
-      // The other half of the focus contract, and the half a shell that draws
-      // its own window chrome needs: a press on a float's title bar or on the
-      // sheet an Alt+drag is caught on lands off every `<app>`, and the SDK
-      // cannot tell that chrome from the wallpaper behind it. The shell can, so
-      // it is asked.
+      // A press on shell-drawn window decorations lands outside every `<app>`.
+      // Only the shell can tell that from the desktop background.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       const chrome = document.createElement("div");
@@ -551,16 +513,15 @@ describe("registerElements", () => {
       );
 
       expect(domicile.calls).toStrictEqual([["key", "term", 30, true]]);
-      // Released, because a key left down is left down for the whole suite.
+      // Release the key so it does not stay down for later tests.
       document.dispatchEvent(
         new KeyboardEvent("keyup", { bubbles: true, code: "KeyA" }),
       );
     });
 
     it("names the window whose keyboard is being asked for", () => {
-      // The press is what a shell decides on — a float's own chrome is a reach
-      // for that window, and the desktop behind it is a reach away — and the
-      // app id is which window is about to lose the keyboard.
+      // `pressed` is the clicked element; `appId` is the window about to lose
+      // focus.
       const element = mountApp("term");
       element.dispatchEvent(pointer("pointerdown", { button: 0 }));
       const chrome = document.createElement("div");

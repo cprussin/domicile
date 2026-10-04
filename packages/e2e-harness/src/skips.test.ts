@@ -10,8 +10,7 @@ const SCRIPTS = join(import.meta.dir, "..", "..", "..", "scripts");
 /**
  * Every script in `scripts/`, as `[name, contents]`.
  *
- * Not recursing is what leaves `lib/harness.sh` out — it is sourced rather
- * than run, and cannot be skipped.
+ * Does not recurse, which leaves out the sourced `lib/harness.sh`.
  */
 const shellScripts = (): [string, string][] =>
   readdirSync(SCRIPTS)
@@ -19,11 +18,8 @@ const shellScripts = (): [string, string][] =>
     .map((name) => [name, readFileSync(join(SCRIPTS, name), "utf8")]);
 
 describe("a skip that says why", () => {
-  // The rule is `check.sh`'s: it reads the reason with
-  // `sed -n 's/^ *SKIP: *//p'` over the script's output, so a reason printed
-  // any other way is a reason the runner never shows. Under
-  // `DOMICILE_CHECK_STRICT=1` that becomes `FAILED ()`, which is the empty
-  // failure `check.sh`'s own comments say cost a session.
+  // `check.sh` reads the reason with `sed -n 's/^ *SKIP: *//p'`, so it shows
+  // no reason printed any other way.
   for (const [name, script] of shellScripts()) {
     it(`${name} prints a reason for every skip`, () => {
       expect(skipFaults(script)).toStrictEqual([]);
@@ -47,8 +43,7 @@ describe("a skip that says why", () => {
   });
 
   it("does not take a mid-sentence mention for a reason", () => {
-    // `check.sh` anchors the prefix to the start of a line, so prose that
-    // merely contains the word satisfies a substring test and nothing else.
+    // `check.sh` anchors the prefix to the start of a line.
     expect(
       skipFaults('echo "this would SKIP: if weston were absent"\nexit 77\n'),
     ).toStrictEqual(["2: exits 77 without a SKIP: line for check.sh to read"]);

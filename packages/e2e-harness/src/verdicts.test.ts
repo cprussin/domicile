@@ -14,9 +14,8 @@ const HARNESS = join(SCRIPTS, "lib", "harness.sh");
 /**
  * Runs `harness_fault` against `pid` and reports what the shell saw.
  *
- * Drives the real file rather than reasoning about its text: whether the bail
- * re-checks the compositor is a behavior, and the previous version of this
- * module tried to police it by reading and could be defeated by a rename.
+ * Runs the real file, because a text scan cannot tell whether the bail
+ * re-checks the compositor.
  */
 const bail = (pid: string): { status: number; out: string } => {
   const run = spawnSync(
@@ -40,11 +39,8 @@ const verdict = (pid: string): { status: number; out: string } => {
 /**
  * Every script in `scripts/`, as `[name, contents]`.
  *
- * All of them, not the `e2e-*.sh` ones: `check.sh` runs the `test-*.sh`
- * checks in the same loop and says why, and a script that drives a compositor
- * can reach for `exit 99` whatever it is called. Reading the directory
- * without recursing is also what leaves `lib/harness.sh` out, which is the
- * one file the rules below are about rather than applied to.
+ * Includes `test-*.sh`, since any script can drive a compositor. Does not
+ * recurse, which leaves out `lib/harness.sh` itself.
  */
 const shellScripts = (): [string, string][] =>
   readdirSync(SCRIPTS)
@@ -53,17 +49,13 @@ const shellScripts = (): [string, string][] =>
 
 describe("harness_fault", () => {
   it("blames the compositor when the compositor is gone", () => {
-    // The failure this whole mechanism exists for. A pid past `pid_max`
-    // rather than one recently exited, which the kernel is free to hand
-    // straight back to the next process this test starts.
+    // A pid past `pid_max`: a recently exited pid could be reused by the
+    // kernel.
     const { out, status } = bail("2147483647");
     expect(status).toBe(1);
     expect(out).toContain("the compositor exited before it did the thing");
-    // Says so in as many words, because the whole point is that the reader
-    // does not go looking at this suite.
     expect(out).toContain("Not this script's harness");
-    // And none of the caller's own diagnosis, which is about a machine that
-    // was working when the message was written.
+    // The caller's diagnosis assumes a live compositor, so it is omitted.
     expect(out).not.toContain("why");
   });
 
@@ -77,10 +69,8 @@ describe("harness_fault", () => {
 
 describe("compositor_verdict", () => {
   it("says the compositor is gone rather than repeating the diagnosis", () => {
-    // The mutant this exists for aborts the process, and "it never logged the
-    // refusal" is a poor way to say "it is not running". A verdict either
-    // way — the compositor is what failed — so the status stays 1 and only
-    // the reason changes.
+    // Still a compositor failure (status 1), but the caller's diagnosis no
+    // longer applies.
     const { out, status } = verdict("2147483647");
     expect(status).toBe(1);
     expect(out).toContain("the compositor exited");
@@ -95,9 +85,8 @@ describe("compositor_verdict", () => {
 });
 
 describe("a helper handed no pid", () => {
-  // `kill -0 ""` fails, so an empty pid would read as a compositor that is
-  // gone — this suite's own bookkeeping reported as the loudest possible
-  // verdict on the code, which is the one thing this file exists to prevent.
+  // `kill -0 ""` fails, so an empty pid would look like a dead compositor and
+  // blame the code for a script bug.
   it("blames the script, from either helper", () => {
     for (const { out, status } of [bail(""), verdict("")]) {
       expect(status).toBe(99);
@@ -126,8 +115,8 @@ describe("after, passed and every_check_ran", () => {
   });
 
   it("fails the run when a decision was skipped", () => {
-    // The whole point: a bail that no-ops leaves its decision undecided, and
-    // without this the script reaches the end and exits green.
+    // A bail that does nothing leaves a decision undecided. Without the count
+    // the script would exit green.
     const { out, status } = run('passed "one"; every_check_ran 2');
     expect(status).toBe(1);
     expect(out).toContain("1 of 2 checks reached a verdict");
@@ -146,7 +135,7 @@ describe("after, passed and every_check_ran", () => {
   });
 
   it("reports both numbers itself when the premise does not hold", () => {
-    // So no caller spells the count a second time and gets them out of step.
+    // So callers do not repeat the count and let it drift.
     const { out } = run('after 2 || echo "bailed"');
     expect(out).toContain("2 checks should have passed before this one; 0 did");
     expect(out).toContain("bailed");
@@ -186,17 +175,15 @@ describe("bailFaults", () => {
   });
 
   it("finds an exit 99 a person would actually write", () => {
-    // Quoted and arithmetic forms both really exit 99. Not exhaustive and
-    // cannot be — `rc=99; exit $rc` is two lines — which is why the scripts
-    // count their own verdicts and check the count at the end.
+    // Not exhaustive: `rc=99; exit $rc` is missed, which is why scripts also
+    // count their verdicts.
     expect(bailFaults(['exit "99"'].join("\n"))).toHaveLength(1);
     expect(bailFaults(["exit $((99))"].join("\n"))).toHaveLength(1);
   });
 
   it("reports a definition written in bash's other function syntax", () => {
-    // `function harness_fault {` has no parens. Six lines of it after the
-    // source line shadow the sourced helper for every call below, and the
-    // copy is free to leave the liveness check out.
+    // `function harness_fault {` has no parens. Defined after the source
+    // line, it shadows the real helper.
     expect(
       bailFaults(
         [
@@ -210,9 +197,8 @@ describe("bailFaults", () => {
   });
 
   it("is not satisfied by a source line that does not source", () => {
-    // Each of these names the helper's path and reaches none of it. The
-    // shellcheck directive is the sharp one: it belongs directly above a real
-    // source line, so a substring rule makes it a license to delete that line.
+    // Each names the helper's path without sourcing it. A substring rule
+    // would accept the shellcheck directive alone.
     for (const script of [
       '# shellcheck source=scripts/lib/harness.sh\nharness_fault "$COMP" "x"',
       '# . "$ROOT/scripts/lib/harness.sh"\nharness_fault "$COMP" "x"',
@@ -225,9 +211,8 @@ describe("bailFaults", () => {
   });
 
   it("reports a subshell-body definition, which is worse than a copy", () => {
-    // `harness_fault() ( ... )` evades a `{`-only rule, and the `exit` inside
-    // it ends the subshell rather than the script — a bail that no-ops without
-    // anything being unsourced.
+    // The `exit` inside `harness_fault() ( ... )` ends only the subshell, so
+    // the bail does nothing.
     expect(
       bailFaults(
         [
@@ -241,8 +226,7 @@ describe("bailFaults", () => {
   });
 
   it("holds compositor_verdict to the same rules as harness_fault", () => {
-    // It was outside all three: a script whose only ending is this one fails
-    // exactly as a script whose only ending is the other does.
+    // Bypassing either helper hides a compositor crash.
     expect(
       bailFaults(['compositor_verdict "$COMP" "FAIL: it did not"'].join("\n")),
     ).toStrictEqual([
@@ -261,20 +245,16 @@ describe("bailFaults", () => {
   });
 
   it("reports a script that spells the bail out for itself", () => {
-    // A copy is a copy the behavior test does not drive, and a scan cannot
-    // tell one that re-checks the compositor from one that does not. The
-    // helper says so itself; nothing enforced it until this.
+    // The behavior test does not cover a copy, and a scan cannot tell whether
+    // the copy re-checks the compositor.
     expect(
       bailFaults(["harness_fault () {", "  exit 99", "}"].join("\n")),
     ).toContain("defines its own harness_fault");
   });
 
   it("reads a call wherever a command can start", () => {
-    // Not just at the start of a line. The wrapper form was `e2e-hidpi.sh`'s
-    // own, until the batch that ported it, and no script uses it now. Kept
-    // forward-looking: a script whose only reach into the helpers is a call
-    // like these, and which forgot the source line, would otherwise be
-    // invisible to the rule below.
+    // Otherwise a script that calls a helper only in these forms, without the
+    // source line, would go unreported.
     for (const script of [
       'if [ -z "$X" ]; then harness_fault "$COMP" "x"; fi',
       'for i in 1; do harness_fault "$COMP" "x"; done',
@@ -286,9 +266,8 @@ describe("bailFaults", () => {
   });
 
   it("does not read prose or a quoted regex as a call", () => {
-    // `after` and `passed` are ordinary English, so the words appear in the
-    // comments of a dozen scripts that have nothing to do with this — and a
-    // lone `|` is nearly always inside a pattern rather than a pipe.
+    // `after` and `passed` are common words in script comments, and a lone `|`
+    // is usually inside a pattern.
     expect(bailFaults('grep -E "before|after" log')).toStrictEqual([]);
     expect(
       bailFaults("# a bail that no-ops, if passed is not reached"),
@@ -296,9 +275,8 @@ describe("bailFaults", () => {
   });
 
   it("reports a script that calls the bail it cannot reach", () => {
-    // The worst failure of the three and the quietest: `set -e` is off, so a
-    // missing source makes the call a no-op, the `if` body completes, and the
-    // verdict below it blames the compositor for a harness fault.
+    // `set -e` is off, so the missing helper does nothing and the verdict
+    // below blames the compositor.
     expect(
       bailFaults(['harness_fault "$COMP" "it worked"'].join("\n")),
     ).toStrictEqual([
@@ -321,23 +299,11 @@ describe("bailFaults", () => {
 });
 
 describe("every script that can tell a dead compositor apart", () => {
-  // Read once and asserted on, so a scan that found nothing — the scripts
-  // renamed, moved, or this file's idea of where they live gone stale — fails
-  // instead of reporting an empty list of offenders as success.
+  // Read once so the next test can fail an empty scan.
   const scripts = shellScripts();
 
   it("scans the scripts", () => {
-    // Named because an empty scan must fail rather than report no offenders.
-    //
-    // This canary has now been renamed three times by the batch that deleted
-    // the script it named: `e2e-electron.sh`, then `test-xvfb-verdict.sh`,
-    // which went with the presented path. The last rename claimed the scripts
-    // it moved to were "about this repository's own machinery rather than
-    // about a chrome, and so outlive whatever the chrome turns out to be" —
-    // and one of them did not, because the machinery in question was the
-    // machinery *of* that path. So no claim of durability this time: these are
-    // two scripts that exist today, and the next deletion that takes one will
-    // fail here and pick two more.
+    // Any two existing scripts will do. If one is deleted, pick another.
     expect(scripts.map(([name]) => name)).toContain("test-annotate.sh");
     expect(scripts.map(([name]) => name)).toContain(
       "test-css-and-resize-verdict.sh",

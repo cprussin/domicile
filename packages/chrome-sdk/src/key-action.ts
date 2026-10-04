@@ -1,10 +1,6 @@
-// What a key a shell binds does: a command for the shell, or a change of the
-// binding mode the keys are read in.
-//
-// Its own module for `file-preview.ts`'s reason: a shell builds one for each
-// of its bindings, and `bind-keys.ts` switches on it.
+// The action a keybinding runs: a shell command or a binding mode change.
 
-/** Which of the two things a binding can do. */
+/** The kind of action a binding runs. */
 export enum KeyActionKind {
   SendShell,
   Mode,
@@ -12,13 +8,13 @@ export enum KeyActionKind {
 
 export const KeyAction = {
   /**
-   * Read the keys in another binding mode. The SDK answers this itself — a
-   * shell is told the mode changed, never asked to change it.
+   * Switch to another binding mode. The SDK handles this itself and tells the
+   * shell the mode changed.
    */
   Mode: (name: string) => ({ kind: KeyActionKind.Mode as const, name }),
   /**
-   * A command for the shell, as words — the words `domicile send-shell`
-   * would carry. What they mean is the shell's vocabulary, not the SDK's.
+   * A command for the shell, as the arguments `domicile send-shell` would
+   * pass. The shell defines what they mean.
    */
   SendShell: (args: readonly string[]) => ({
     args,

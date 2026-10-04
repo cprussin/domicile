@@ -28,8 +28,7 @@ export const Field = ({
   const [controlElement, setControlElement] = useState<
     HTMLDivElement | undefined
   >(undefined);
-  // React passes `null` to ref callbacks on unmount; map that to `undefined`
-  // to keep the codebase's no-`null` convention.
+  // React passes `null` on unmount; the codebase uses `undefined`.
   const setControlElementRef = useCallback((el: HTMLDivElement | null) => {
     setControlElement(el ?? undefined);
   }, []);
@@ -38,11 +37,9 @@ export const Field = ({
     <BaseField.Root
       {...props}
       className={rootStyles}
-      // Stable hook for wrapperBase's "label-hover → control hover" rule
-      // (`[data-domicile-field]:has(> label:hover) > div > &`). base-ui doesn't
-      // emit a discriminating attribute on the Field root, and a generic
-      // `label:hover ~ div *` selector would leak hover state into unrelated
-      // controls that happen to follow a hovered label on the page.
+      // Lets wrapperBase show control hover while the label is hovered.
+      // base-ui sets no attribute on the root to select on, and a generic
+      // `label:hover ~ div *` would match unrelated controls.
       data-domicile-field=""
       invalid={error === undefined ? invalid : true}
     >
@@ -81,10 +78,8 @@ const resolveError = (
   explicit ??
   (valid === false && nativeMessage !== "" ? nativeMessage : undefined);
 
-// No flex `gap` on the root — the label↔control and control↔hint gaps
-// are set independently via directional margins on the label and hint
-// (`marginBlockEnd` / `marginBlockStart` below) so the hint can sit
-// tighter under the control than the label does above it.
+// No `gap`: the label and hint set their own spacing, so the hint can sit
+// closer to the control than the label.
 const rootStyles = flex({
   cursor: { _disabled: "not-allowed", base: "auto" },
   direction: "column",
@@ -102,17 +97,10 @@ const labelStyles = css({
   _disabled: { color: "muted", opacity: "disabled" },
   _invalid: { color: "danger" },
   color: "foreground",
-  // Pointer cursor on the label signals "clicking me focuses the
-  // control" — the conventional affordance for a form label, and
-  // matches the wrapped control's own cursor: when the control is
-  // disabled the label switches to not-allowed alongside it.
+  // Clicking the label focuses the control.
   cursor: { _disabled: "not-allowed", base: "pointer" },
-  // `display: block` makes the label fill the field's full inline width
-  // so clicks anywhere on the row — not just on the text glyphs — hit
-  // the label and forward to the control. The space between the label
-  // and the control is `paddingBlockEnd` (rather than `marginBlockEnd`
-  // or the parent's flex `gap`) for the same reason: it counts as part
-  // of the label's hit region instead of being inert space below it.
+  // Block display and `paddingBlockEnd` (not margin) put the whole row and
+  // the space below it in the label's click target.
   display: "block",
   fontSize: "xs",
   fontVariantNumeric: "tabular-nums",

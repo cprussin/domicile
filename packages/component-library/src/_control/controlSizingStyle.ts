@@ -2,14 +2,6 @@ import type { CSSProperties } from "react";
 
 import { spacing } from "../spacing";
 
-/**
- * Builds the inline-style object Input/Textarea use to override the wrapper's
- * dimensions. The numeric props on those components are interpreted as
- * spacing-scale steps (matching the preset's `step × 0.25rem` formula), so
- * `width: 80` becomes `inlineSize: "20rem"`. Returns `undefined` (rather than
- * an empty object) when nothing is set so React doesn't bother applying a
- * style attribute.
- */
 type Dimensions = {
   height?: number | undefined;
   maxHeight?: number | undefined;
@@ -17,6 +9,10 @@ type Dimensions = {
   width?: number | undefined;
 };
 
+/**
+ * Inline styles for a control wrapper's size props, in spacing steps
+ * (`width: 80` is `20rem`). Returns `undefined` when no size is set.
+ */
 export const controlSizingStyle = (
   dimensions: Dimensions,
 ): CSSProperties | undefined => {

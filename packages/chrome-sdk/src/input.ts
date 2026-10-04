@@ -1,7 +1,7 @@
 // Helpers for forwarding chrome input to Wayland clients.
 
-// Map a JS KeyboardEvent.code to a Linux evdev keycode (from
-// input-event-codes.h). The compositor adds the +8 xkb offset.
+// KeyboardEvent.code to Linux evdev keycode (input-event-codes.h). The
+// compositor adds the +8 xkb offset.
 const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
   Again: 129,
   AltLeft: 56,
@@ -166,8 +166,7 @@ const EVDEV_BY_CODE: Readonly<Record<string, number>> = {
 export const evdevFromCode = (code: string): number | undefined =>
   EVDEV_BY_CODE[code];
 
-// Linux input-event-codes.h button codes. Written as the header writes them:
-// the digit grouping biome would otherwise impose reads as a different number.
+// Linux button codes, written as input-event-codes.h writes them.
 // biome-ignore-start lint/style/useNumericSeparators: mirrors input-event-codes.h
 export const BTN_LEFT = 0x110;
 export const BTN_RIGHT = 0x111;

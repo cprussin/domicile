@@ -1,10 +1,8 @@
-// Converting a DOM `WheelEvent` into the two things `wl_pointer` wants for a
-// scroll: a continuous surface-local distance (`axis`) and a discrete
-// high-resolution step (`axis_value120`).
+// Converts a DOM `WheelEvent` to `wl_pointer` scroll values: a distance
+// (`axis`) and a high-resolution step (`axis_value120`).
 //
-// The DOM reports scroll in one of three units depending on the device and the
-// browser, so both outputs are derived from a single normalized quantity — how
-// much of a classic wheel detent the event represents.
+// The DOM reports deltas in pixels, lines or pages, so both values are derived
+// from the fraction of a wheel detent the event represents.
 
 /** The subset of `WheelEvent` the conversion reads. */
 export type WheelDelta = {
@@ -24,8 +22,7 @@ export type AxisDelta = {
 // `wl_pointer.axis_value120` counts 120 units per detent of a classic wheel.
 const UNITS_PER_DETENT = 120;
 
-// What one detent measures in each of the DOM's delta units, and the pixel
-// distance a detent scrolls — the conventions browsers themselves use.
+// One detent in each `deltaMode` unit, per browser convention.
 const PIXELS_PER_DETENT = 100;
 const DETENT_BY_DELTA_MODE: Readonly<Record<number, number>> = {
   0: PIXELS_PER_DETENT,
@@ -53,8 +50,6 @@ export const axisFromWheel = ({
   };
 };
 
-// Multiplying before dividing keeps a whole number of detents exact, which
-// matters because the common case is a pixel-mode wheel that must pass through
-// its own delta untouched.
+// Multiply first so pixel-mode deltas pass through exactly.
 const rescale = (delta: number, target: number, perDetent: number): number =>
   (delta * target) / perDetent;

@@ -1,11 +1,9 @@
 import { cva } from "../../styled-system/css";
 
 /**
- * Per-size text-layout values for the elements inside a multiline control
- * (Textarea + its prefix-icon stack). These must match the wrapped textarea's
- * own per-line metrics so the icon visually aligns with the first line of
- * text. Single-line Inputs inherit sizing from the `control` recipe's
- * `blockSize` instead.
+ * Line metrics for each size of a multiline control and its prefix icon.
+ *
+ * Must match the textarea's metrics so the icon aligns with the first line.
  */
 export const multilineSizeStyles = cva({
   variants: {

@@ -1,18 +1,15 @@
-// What a press does in a shell's keys.
+// Matches a key press to a shell keybinding.
 //
-// Pure, and apart from `bind-keys.ts`, because this is the decision in
-// answering a key — which press is which chord — and a decision inside a DOM
-// listener cannot be asserted on.
+// Kept separate from `bind-keys.ts` as pure functions so tests can assert on
+// them.
 
 import type { KeybindingsByMode, ShortcutMessage } from "./host-message";
 import type { KeyAction } from "./key-action";
 
 /**
- * What `press` does in `mode`, or `undefined` when nothing there is bound to
- * it.
+ * The action bound to `press` in `mode`, or `undefined` if none.
  *
- * Every modifier is part of the chord, the way the compositor's claim is:
- * Ctrl+Meta+Return is a combination nobody bound.
+ * Modifiers must match exactly, as in the compositor's grab.
  */
 export const actionFor = (
   bindings: KeybindingsByMode,
@@ -22,7 +19,7 @@ export const actionFor = (
   bindings.get(mode)?.find(({ shortcut }) => sameChord(shortcut, press))
     ?.action;
 
-/** Whether two chords are one: the same key, with the same modifiers held. */
+/** Whether two chords have the same key and modifiers. */
 export const sameChord = (a: ShortcutMessage, b: ShortcutMessage): boolean =>
   a.keycode === b.keycode &&
   a.altKey === b.altKey &&

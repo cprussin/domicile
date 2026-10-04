@@ -43,17 +43,12 @@ import {
   tray,
 } from "./host-message";
 
-/** The fields a `DomicileAppEvent` carries, all of them optional to a test. */
+/** `DomicileAppEvent` fields, all optional. */
 type AppEventFields = Partial<Omit<DomicileAppEvent, keyof Event>>;
 
 /**
- * A `DomicileAppEvent`, with the fields that event does not carry left as what
- * the engine fills them with: the empty string, a zero behind a false
- * `hasSize`, and a zero `arrival` for the tests that are not about the hop.
- *
- * `Object.assign` onto an `Event` rather than a subclass per event type: what
- * these functions read is the fields, and five classes saying that would be a
- * test of the test.
+ * A `DomicileAppEvent` with unset fields defaulted the way the engine fills
+ * them: empty strings and zeros.
  */
 const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
   Object.assign(new Event(type), {
@@ -70,12 +65,7 @@ const appEvent = (type: string, fields: AppEventFields): DomicileAppEvent =>
     ...fields,
   });
 
-/**
- * A `DomicileAppCursorEvent`. Its own builder because it is its own event: a
- * `DomicileCursorShape` has no member meaning "not a cursor", so the shape is
- * named at every call rather than defaulted to a sentinel the engine cannot
- * send.
- */
+/** A `DomicileAppCursorEvent`. */
 const appCursorEvent = (
   appId: string,
   cursor: string,
@@ -83,19 +73,15 @@ const appCursorEvent = (
   Object.assign(new Event("appcursor"), {
     appId,
     arrival: 0,
-    // Cast because the point of the test below is the value the engine's own
-    // type says cannot be here — which is what `appCursor` is being asked to
-    // refuse, and what a shell running against an older engine would see.
+    // Cast so a test can pass a keyword outside the type, as an engine of a
+    // different version could.
     cursor: cursor as DomicileAppCursorEvent["cursor"],
   });
 
 describe("a window appearing", () => {
   it("has no size until the client has drawn", () => {
-    // `hasSize` rather than the numbers, which are zero — and that zero is the
-    // one shape a shell must not read as a size. A toplevel maps before it
-    // draws, and how big a Wayland client wants to be is something it says by
-    // drawing; a chrome that believed the zero would open the window at
-    // nothing at all, which is what happened when absence was spelled `[0, 0]`.
+    // A window can appear before it draws. Its zero width and height must
+    // not be read as a size.
     expect(
       appAppeared(appEvent("appappeared", { appId: "term" })).size,
     ).toBeUndefined();
@@ -117,12 +103,8 @@ describe("a window appearing", () => {
 
 describe("a window's name", () => {
   it("is nothing when nobody has named it", () => {
-    // The empty string is the only way the engine can say "no name", and it
-    // covers two clients that mean it differently — one that has not sent
-    // `set_title` yet, and one that named its window *nothing*, which
-    // `xdg_toplevel.set_title("")` is the only way to say. Both are the same
-    // nothing to a chrome that draws names, and this is where they become it
-    // rather than at every place a name is drawn.
+    // The engine sends "" both before `set_title` and for an empty title.
+    // Both mean no name.
     expect(
       appTitled(titledEvent({ appId: "term", title: "" })).title,
     ).toBeUndefined();
@@ -137,8 +119,7 @@ describe("a window's name", () => {
 
 describe("a resize", () => {
   it("keeps the fractions, because a CSS pixel has them", () => {
-    // Doubles the whole way across. This comes from a layout box, and reading
-    // it as an integer is what left every window configured at zero.
+    // Sizes come from a layout box, so they are fractional.
     expect(
       appResized(
         appEvent("appresized", {
@@ -154,9 +135,7 @@ describe("a resize", () => {
 
 describe("a window's size limits", () => {
   it("read a zero on an axis as no limit on it", () => {
-    // xdg-shell's spelling, which the engine passes on: a client that will be
-    // no narrower than 680 and any height says `680x0`. As a number the zero
-    // is a limit a shell would clamp every window to, so it is not one here.
+    // In xdg-shell, `680x0` means at least 680 wide and any height.
     expect(
       appSizeLimit(
         appEvent("appminsize", {
@@ -197,8 +176,7 @@ describe("a popup", () => {
 
 describe("focus moving", () => {
   it("reads an empty app id as the chrome holding the keyboard", () => {
-    // An answer, and one a desktop draws differently from any window being
-    // active — not an absence to be skipped over.
+    // The chrome having focus is a real state that a shell draws.
     expect(focusChanged(appEvent("focuschanged", { appId: "" }))).toStrictEqual(
       {
         app_id: undefined,
@@ -215,13 +193,9 @@ describe("focus moving", () => {
 
 describe("a cursor a client asked for", () => {
   it("refuses a keyword CSS does not know", () => {
-    // The page's half of a closed set the engine now also holds: the browser
-    // refuses a name that is not a shape when it reads the compositor's
-    // socket, so this parse is a second reading rather than the only one. It
-    // stays because the DOM is a boundary — an event can be constructed by
-    // anything in the page — and because assigning an unknown keyword to
-    // `style.cursor` is a silent no-op, so the symptom of a value that got
-    // through would be an arrow where a hand should be with nothing said.
+    // The engine also validates this. The SDK checks again because any page
+    // code can construct the event, and `style.cursor` silently ignores an
+    // unknown keyword.
     expect(() => {
       appCursor(appCursorEvent("term", "pointr"));
     }).toThrow();
@@ -237,9 +211,8 @@ describe("a cursor a client asked for", () => {
 
 describe("a claimed press", () => {
   it("comes back with the fields it was claimed with", () => {
-    // The same shape in both directions is the point of the dictionary: a
-    // shell compares what it grabbed against what fired, field for field,
-    // without parsing a string. Flat, and nothing of the `Event` around it.
+    // Same fields as `grabShortcut` takes, so a shell can compare them
+    // directly.
     const fields = {
       altKey: true,
       ctrlKey: false,
@@ -258,9 +231,8 @@ describe("a claimed press", () => {
 
 describe("the modifiers the seat holds", () => {
   it("arrives under the web's names", () => {
-    // Not xkb's depressed/latched/locked masks: the compositor has already
-    // resolved those against the keymap, and a page holding a mask could not
-    // read it without the keymap too.
+    // Booleans, not xkb masks: the compositor resolves them against the
+    // keymap.
     const fields = {
       altKey: true,
       ctrlKey: false,
@@ -278,11 +250,8 @@ describe("the modifiers the seat holds", () => {
 
 describe("what a search found", () => {
   it("arrives as the query it answers, the paths, how many and whether that is all", () => {
-    // `indexing` is the one field a launcher cannot work out for itself: a
-    // short answer from an index still being built and a short answer from a
-    // small home look identical, and only one of them means "keep typing, it
-    // is coming". `query` is what tells an answer from the answer to a
-    // keystroke ago.
+    // `indexing` tells a partial result from a complete one. `query` tells
+    // this answer from one to an earlier keystroke.
     const fields = {
       files: ["Notes/", "Notes/today.org"],
       indexing: true,
@@ -355,7 +324,7 @@ describe("what applications matched", () => {
 });
 
 describe("what a file holds", () => {
-  /** A `DomicileFilePreviewEvent`, with what its kind does not carry empty. */
+  /** A `DomicileFilePreviewEvent` with unused fields empty. */
   const previewEvent = (
     fields: Partial<Omit<DomicileFilePreviewEvent, keyof Event>>,
   ): DomicileFilePreviewEvent =>
@@ -410,16 +379,14 @@ describe("what a file holds", () => {
   });
 
   it("refuses a kind it does not know rather than drawing nothing", () => {
-    // An engine newer than this SDK could say one. A preview that silently
-    // drew as empty would be that skew with nothing said.
+    // A newer engine could send one. Failing loudly exposes the version skew.
     expect(() => filePreview(previewEvent({ kind: "video" }))).toThrow();
   });
 });
 
 describe("the charge", () => {
   it("arrives as the fraction and the lead, without the hop", () => {
-    // The two fields a bar draws and nothing else: `arrival` is the SDK's
-    // own bookkeeping and no shell has a use for it.
+    // `arrival` is dropped; shells do not use it.
     const charge = battery(
       Object.assign(new Event("battery"), {
         arrival: 0,
@@ -432,8 +399,7 @@ describe("the charge", () => {
   });
 
   it("carries an empty battery as an empty battery", () => {
-    // Zero is a reading. A machine with no battery sends no message at all,
-    // so there is nothing here for `0` to be mistaken for.
+    // Zero is a valid reading. A machine with no battery sends no event.
     expect(
       battery(
         Object.assign(new Event("battery"), {
@@ -446,11 +412,7 @@ describe("the charge", () => {
   });
 });
 
-/** A `DomicileAppTitledEvent`, which carries only the window and its name. */
-// `arrival` defaulted rather than asked of every caller: the three tests that
-// use this are about a window's name, and a hop each of them would have to
-// spell out is a field that makes them harder to read without asserting
-// anything.
+/** A `DomicileAppTitledEvent` with `arrival` defaulted. */
 const titledEvent = (
   fields: Omit<DomicileAppTitledEvent, keyof Event | "arrival">,
 ): DomicileAppTitledEvent =>
@@ -458,9 +420,7 @@ const titledEvent = (
 
 describe("the clipboard", () => {
   it("arrives as the rows a manager draws, without the hop", () => {
-    // The entries and nothing else: `arrival` is the SDK's own bookkeeping,
-    // and the engine's rows are objects with an id and a preview on them
-    // rather than anything a shell would rather have.
+    // Only the entries; `arrival` is dropped.
     const history = clipboard(
       Object.assign(new Event("clipboard"), {
         arrival: 0,
@@ -480,9 +440,8 @@ describe("the clipboard", () => {
   });
 
   it("carries a desktop nothing was copied on as an empty history", () => {
-    // Not a silence, for the same reason a home with no files is not one: a
-    // shell told nothing would wait for a message it has already been sent,
-    // and this is the ordinary state of a desktop that has just started.
+    // An empty history is still an event, so a newly started shell does not
+    // wait for one.
     const history = clipboard(
       Object.assign(new Event("clipboard"), {
         arrival: 0,
@@ -521,8 +480,7 @@ describe("the system tray", () => {
   });
 
   it("has no icon for an item the engine carries an empty one for", () => {
-    // The compositor found nothing it could draw, and a shell labels it
-    // instead of drawing a broken image.
+    // The compositor could not draw the icon; a shell shows a label instead.
     const icons = tray(
       Object.assign(new Event("tray"), {
         arrival: 0,
@@ -539,7 +497,7 @@ describe("the system tray", () => {
 });
 
 describe("the notifications", () => {
-  /** One notification, as the engine carries it. */
+  /** One notification as the engine sends it. */
   const carried = (
     fields: Partial<DomicileNotificationsEvent["items"][number]>,
   ) => ({
@@ -586,9 +544,8 @@ describe("the notifications", () => {
   });
 
   it("reads the engine's empty and negative stand-ins as nothing said", () => {
-    // An empty picture is one the compositor could not draw, and `-1` is a
-    // notification that left how long it stays up to the shell; `0` is one
-    // that asked to stay until it is dismissed, which is something said.
+    // Empty icon and `-1` timeout mean unset. `0` means stay until dismissed,
+    // so it is kept.
     const [lasting, critical] = arrived([
       carried({ icon: "", timeoutMs: 0 }),
       carried({ id: 8, urgency: "critical" }),
@@ -607,7 +564,7 @@ describe("the extensions in the tray", () => {
   const ID = "abcdefghijklmnopabcdefghijklmnop";
   const ICON = "data:image/png;base64,iVBORw0KGgo=";
 
-  /** One row as the engine hands it over, with a popup it names. */
+  /** One extension as the engine sends it, with a popup. */
   const row = (fields: Partial<DomicileExtension>): DomicileExtension => ({
     badgeColor: "#1c3a2eff",
     badgeText: "7",
@@ -626,9 +583,7 @@ describe("the extensions in the tray", () => {
     Object.assign(new Event("extensions"), { extensions: rows });
 
   it("arrives as the rows a tray draws, a missing popup as undefined", () => {
-    // The engine's `USVString?` is `null` for an action with no popup, which a
-    // shell reads as "activate it" -- and `undefined` is how this SDK spells
-    // an absence.
+    // The engine sends `null` for no popup; the SDK uses `undefined`.
     expect(
       extensions(extensionsEvent([row({}), row({ popup: null })])),
     ).toStrictEqual({
@@ -658,8 +613,8 @@ describe("the extensions in the tray", () => {
   });
 
   it("refuses an icon that is not a PNG it can draw", () => {
-    // The engine renders every icon to a PNG data URL. Anything else is an
-    // engine and an SDK that disagree, and an <img> would draw it as nothing.
+    // The engine renders every icon to a PNG data URL. Anything else means
+    // the engine and SDK disagree.
     expect(() =>
       extensions(
         extensionsEvent([row({ icon: `chrome-extension://${ID}/icon.png` })]),
@@ -668,18 +623,14 @@ describe("the extensions in the tray", () => {
   });
 
   it("refuses an id that is not an extension's", () => {
-    // What `activateExtension` is handed back. An id the engine would not
-    // recognize is a click that does nothing, said nowhere.
+    // An invalid id would make `activateExtension` fail silently.
     expect(() => extensions(extensionsEvent([row({ id: "" })]))).toThrow();
   });
 });
 
 describe("whether anybody is at the desk", () => {
   it("arrives as the state, both ways round and without the hop", () => {
-    // THE ONE WAY THIS CAN BE WRONG IS BACKWARD, and backward is the worst
-    // answer there is: a shell that dims when somebody sits down and clears
-    // when they walk away. Both directions, because an inversion reads
-    // perfectly well from either one alone.
+    // Test both values: an inverted mapping would pass a single-value test.
     expect(
       idle(
         Object.assign(new Event("idle"), {
@@ -702,11 +653,8 @@ describe("whether anybody is at the desk", () => {
 
 describe("whether the desk is locked", () => {
   it("arrives as the state, both ways round and without the hop", () => {
-    // BACKWARD IS THE WORST ANSWER HERE TOO, and worse than it is for idle: a
-    // shell that cleared its lock screen on `locked: true` would draw an open
-    // desktop over a desk that delivers nothing, and take a passphrase into a
-    // field nothing will ever read. Both directions, because an inversion reads
-    // perfectly well from either one alone.
+    // Test both values: an inverted mapping would pass a single-value test,
+    // and would hide the lock screen while locked.
     expect(
       locked(
         Object.assign(new Event("locked"), {
@@ -728,7 +676,7 @@ describe("whether the desk is locked", () => {
 });
 
 describe("the keys the config binds", () => {
-  /** A `shellconfig` event carrying `config` as the line the compositor sent. */
+  /** A `shellconfig` event carrying `config` as JSON. */
   const configEvent = (config: unknown): DomicileShellConfigEvent =>
     Object.assign(new Event("shellconfig"), {
       arrival: 0,
@@ -749,8 +697,7 @@ describe("the keys the config binds", () => {
   });
 
   it("refuses a line that is not the message", () => {
-    // The engine forwards the line without reading it, so this is the first
-    // thing that does.
+    // The engine forwards the line unparsed, so the SDK must validate it.
     expect(() =>
       shellConfig(
         configEvent({ keys: { Return: "28" }, type: "shell_config" }),

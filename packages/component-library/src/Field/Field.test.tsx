@@ -12,10 +12,8 @@ import { Input } from "../Input/Input";
 import { Field } from "./Field";
 
 /**
- * happy-dom (the test runtime preload) implements `ValidityState` but doesn't
- * always populate the platform-specific `validationMessage` string for every
- * constraint. This probe runs once at module load so the dependent test can
- * be conditionally skipped rather than silently early-returning at runtime.
+ * Whether happy-dom fills `validationMessage`; it doesn't for every
+ * constraint. The dependent test is skipped when it doesn't.
  */
 const runtimeSupportsValidationMessage = () => {
   if (typeof document === "undefined") {
@@ -173,20 +171,9 @@ describe(Field, () => {
           <Input defaultValue="x" type="text" />
         </Field>,
       );
-      // `waitForElementToBeRemoved` rather than a `waitFor` around
-      // `expect(...).not.toBeInTheDocument()`. The popover leaves the DOM
-      // about fifteen milliseconds after the rerender, but a poll is
-      // evaluated once synchronously before that, and the jest-dom matcher
-      // pays for its own failure: its message is
-      // `stringify(element.cloneNode(true))`, and stringifying a happy-dom
-      // node walks the property graph out through `ownerDocument` into the
-      // whole rendered tree. That one failed poll measured five to nine
-      // seconds here and grows with the size of the document, which is what
-      // pushed this case past its budget when turbo runs the workspace
-      // suites at once. `waitForElementToBeRemoved` polls on the query's
-      // result instead and throws a pre-built error, so no failing poll
-      // serializes anything. The condition asserted is the same one, plus
-      // the element having been there to be removed.
+      // Not `waitFor` with `not.toBeInTheDocument()`: its first poll fails,
+      // and the jest-dom failure message serializes the whole happy-dom
+      // document, which takes seconds and times the test out under turbo.
       await waitForElementToBeRemoved(() => screen.queryByText("Too short"));
     });
 
@@ -200,11 +187,8 @@ describe(Field, () => {
           </Field>,
         );
         const input = screen.getByRole("textbox") as HTMLInputElement;
-        // Base UI's blur validation suppresses a bare `valueMissing` error
-        // until the control has been dirtied by user input (it treats an
-        // untouched empty required field as "not yet worth complaining
-        // about"). Typing a too-short value both dirties the field and
-        // trips the `minLength` constraint, so blur commits a real error.
+        // Base UI ignores `valueMissing` on blur until the field is dirty.
+        // A too-short value dirties it and fails `minLength`.
         await user.type(input, "ab");
         await user.tab();
         const message = input.validationMessage;

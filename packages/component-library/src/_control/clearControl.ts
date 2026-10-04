@@ -1,9 +1,8 @@
 /**
- * Programmatically clears an input or textarea. Writes through the prototype
- * `value` setter (rather than assigning `control.value = ""` directly) so
- * React's synthetic-event tracker observes the change and fires `onChange`.
- * Without this dance, React skips the change event because its bookkeeping
- * still thinks the value matches the last-rendered value.
+ * Clears an input or textarea and fires React's `onChange`.
+ *
+ * Uses the prototype `value` setter because React ignores the input event
+ * after a direct `control.value = ""` assignment.
  */
 export const clearControl = <E extends HTMLInputElement | HTMLTextAreaElement>(
   control: E,
@@ -14,7 +13,6 @@ export const clearControl = <E extends HTMLInputElement | HTMLTextAreaElement>(
     setter.call(control, "");
     control.dispatchEvent(new Event("input", { bubbles: true }));
   }
-  // Clicking the clear button moved focus from the input to the button;
-  // restore focus so the user can keep typing immediately.
+  // The clear button took focus; return it so the user can keep typing.
   control.focus();
 };

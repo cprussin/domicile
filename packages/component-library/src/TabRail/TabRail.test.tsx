@@ -12,8 +12,7 @@ const TABS: TabRailTab[] = [
 
 const noop = () => undefined;
 
-// Presentational rail: it reports actions through callbacks and holds no state
-// beyond the drag affordance, so these drive props directly and assert callbacks.
+// The rail holds no state beyond drag feedback, so tests assert callbacks.
 const renderRail = (over: Partial<Parameters<typeof TabRail>[0]> = {}) =>
   render(
     <TabRail
@@ -114,9 +113,8 @@ describe("TabRail", () => {
   it("suppresses the middle button's browser default, so the scrollable rail doesn't autoscroll", () => {
     renderRail();
     const tab = screen.getByRole("button", { name: "First" });
-    // `fireEvent` returns `dispatchEvent`'s verdict: `false` once the handler
-    // has called `preventDefault`. The primary button keeps its default, which
-    // is what focuses the row and starts a drag.
+    // `fireEvent` returns `false` if the handler called `preventDefault`. The
+    // primary button's default focuses the row and starts a drag.
     expect(fireEvent.mouseDown(tab, { button: 1 })).toBe(false);
     expect(fireEvent.mouseDown(tab, { button: 0 })).toBe(true);
   });
@@ -224,7 +222,6 @@ describe("TabRail", () => {
   });
 });
 
-/** A middle-click on `target` — the pointer press userEvent turns into the
- *  `auxclick` the rail listens for. */
+/** Middle-clicks `target`, which userEvent turns into an `auxclick`. */
 const middleClick = (target: Element) =>
   userEvent.pointer({ keys: "[MouseMiddle]", target });

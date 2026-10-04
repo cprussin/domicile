@@ -1,64 +1,42 @@
 /**
- * A display the host described: where it sits on the desktop and how big it
- * is, in the desktop's own logical coordinates, which start at the origin.
+ * A display's name and its rectangle in logical desktop coordinates.
  *
- * A regrouping of what the host protocol's `DisplayInfo` carries rather than a
- * copy of it. Declared here rather than imported so this package stays
- * framework- and protocol-free: what `<Screen>` needs is a rectangle and a
- * name.
+ * Declared here instead of importing the protocol's `DisplayInfo`, so this
+ * package has no protocol dependency.
  */
 export type Display = {
-  /** What a `<Screen name>` matches. Unique across the desktop. */
+  /** Matched by `<Screen name>`. Unique across the desktop. */
   name: string;
-  /** Top-left corner, logical, in normalized desktop coordinates. */
+  /** Top-left corner in logical desktop coordinates. */
   position: readonly [number, number];
-  /** What clients on this display draw at. */
+  /** The scale clients on this display render at. */
   scale: number;
   /** Logical width and height. */
   size: readonly [number, number];
 };
 
 /**
- * Where a `DisplayProvider` gets the desktop from.
+ * Supplies a `DisplayProvider` with display lists, usually adapted from a
+ * `DomicileClient`.
  *
- * Two halves, because a provider does not necessarily mount in time to hear
- * the description it needs: `displays` is what the host has already said, and
- * `onDisplays` is every description after that — the desktop is described on
- * connecting and again whenever it changes, latest wins.
+ * `displays` is the latest list so far, for a provider that mounts after it
+ * arrived. `onDisplays` delivers later lists. They can overlap: a
+ * `DomicileClient` replays its last value to the first handler, so handlers
+ * must accept a list they have already seen.
  *
- * The two overlap rather than partition: `DomicileClient` replays anything it
- * is holding for a type to the first handler that registers, so an adapter over
- * one may call the handler synchronously, inside registration, with the same
- * desktop `displays` just gave. A handler has to be safe to call with a
- * description it has already seen.
- *
- * A port rather than the `DomicileClient` itself: the component library has no
- * protocol dependency, and a source is a few lines to write over one.
- *
- * **A source is the connection, so it has to be as stable as one.** The
- * provider registers on it whenever its identity changes, and
- * `DomicileClient.on` is a single slot — a source rebuilt every render would re-register on every
- * render. Build it once, with `useMemo` or outside the component.
+ * Keep a source stable (build it once, with `useMemo` or outside the
+ * component). The provider re-registers whenever its identity changes.
  */
 export type DisplaySource = {
-  /** The desktop as described so far, or `undefined` until it has been. */
+  /** The latest display list, or `undefined` before the first. */
   displays: readonly Display[] | undefined;
   /**
-   * Registers the one handler for further descriptions, returning the teardown
-   * that stops it. A provider that unmounted while its source outlived it
-   * would otherwise keep being told, and would set state on a tree that is
-   * gone — the source is the connection, so it is the longer-lived of the two.
+   * Registers the single handler for later lists and returns its teardown.
+   * May call `handler` before returning.
    *
-   * A source over a `DomicileClient` implements the teardown with
-   * `off("displays", handler)` on it, which removes the handler only if it is
-   * still the registered one — `on` is a single slot, so a teardown that
-   * removed whatever it found could silence a handler that had displaced it.
-   * React does not produce that order on its own (a cleanup runs before the
-   * effect that replaces it), so for the provider the teardown is simply the
-   * unregistration; the handler argument is what keeps it safe for anything
-   * that does not run under React's ordering.
-   *
-   * May call `handler` before it returns — see above.
+   * Over a `DomicileClient`, tear down with `off("displays", handler)`, which
+   * removes the handler only if it is still registered. That way a stale
+   * teardown can't remove a newer handler.
    */
   onDisplays: (handler: (displays: readonly Display[]) => void) => () => void;
 };

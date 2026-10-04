@@ -6,10 +6,7 @@ import { css, cva } from "../../styled-system/css";
 import { flex, hstack } from "../../styled-system/patterns";
 import type { ExtendProps } from "../extend-props";
 
-/**
- * One section: the `value` that names it, the `label` on its button, and the
- * `content` it opens to.
- */
+/** One accordion section: its `value` key, button `label` and `content`. */
 export type AccordionItem = {
   value: string;
   label: ReactNode;
@@ -21,10 +18,7 @@ type Props = ExtendProps<
   typeof BaseAccordion.Root<string>,
   {
     items: readonly AccordionItem[];
-    /**
-     * `sm` for sections under something they belong to — "more of these"
-     * under one of them: a smaller, quieter label.
-     */
+    /** `sm` gives a smaller, dimmer label, for nested or secondary sections. */
     size?: Size | undefined;
   }
 >;
@@ -33,17 +27,11 @@ export const SIZES = ["md", "sm"] as const;
 export type Size = (typeof SIZES)[number];
 
 /**
- * Sections stacked under their labels, each opening in place with the rest
- * pushed down: more of a panel without leaving it.
+ * Collapsible sections, styled over the @base-ui/react Accordion.
  *
- * Wraps the @base-ui/react Accordion primitive, which owns the behavior — the
- * buttons' `aria-expanded`, arrow keys between them, the panels' heights — so
- * this layer is the look: a label and a caret that turns, a panel that grows
- * to its content. One section open at a time unless `multiple`; closed panels
- * unmount, so what is inside holds no state while it is shut.
- *
- * **Drawn in `currentcolor`**, as `Slider` is, so it reads in a card and over
- * a photograph alike.
+ * One section opens at a time unless `multiple`. Closed panels unmount, so
+ * their content loses state. Drawn in `currentcolor` so it fits any
+ * background.
  */
 export const Accordion = ({ items, size = "md", ...rootProps }: Props) => (
   <BaseAccordion.Root className={rootStyles} {...rootProps}>
@@ -76,7 +64,7 @@ const rootStyles = flex({
   inlineSize: "100%",
 });
 
-// A hairline between sections, in the color of whatever holds them.
+// Divider between sections, tinted from `currentcolor`.
 const itemStyles = css({
   "& + &": {
     borderBlockStart:
@@ -135,7 +123,7 @@ const labelStyles = cva({
   },
 });
 
-// Turned over while its section is open: base-ui marks the trigger.
+// Flips while the section is open; base-ui sets `data-panel-open`.
 const caretStyles = css({
   "[data-panel-open] > &": {
     transform: "rotate(180deg)",
@@ -144,7 +132,7 @@ const caretStyles = css({
   transition: "transform {durations.normal} {easings.out}",
 });
 
-// Grows to its content and back, off the height base-ui measures.
+// Animates height using the value base-ui measures.
 const panelStyles = css({
   "&[data-ending-style], &[data-starting-style]": {
     blockSize: 0,
@@ -154,7 +142,6 @@ const panelStyles = css({
   transition: "block-size {durations.normal} {easings.out}",
 });
 
-// As far from its label as from what comes after it.
 const contentStyles = css({
   paddingBlock: 2,
   paddingInline: 1,

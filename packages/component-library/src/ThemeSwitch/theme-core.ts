@@ -2,35 +2,25 @@ import { flushSync } from "react-dom";
 
 import { token } from "../../styled-system/tokens";
 
-// The theme model and its flip mechanics, with no React or context deps, so the
-// controller (`ThemeProvider`) and the toggle (`ThemeSwitch`) can both build on
-// it without importing each other.
+// The theme model and flip animation, free of React context so `ThemeProvider`
+// and `ThemeSwitch` can share it without importing each other.
 
 export const THEMES = ["dark", "light"] as const;
 
 /**
- * Which way round the page is drawn.
+ * The color theme of the page.
  *
- * **Two, and there is no `system`.** Every other theme control has a third
- * position because it belongs to a program running *on* a desktop, with an OS
- * preference above it to defer to. This library dresses Domicile's own chrome,
- * and Domicile is the system — so `prefers-color-scheme` under it reports what
- * the engine was told rather than anything above the engine, and a `system`
- * here would be the desk deferring to itself.
- *
- * What the desk *is* on comes from outside this package entirely; see
- * {@link ThemeSource}.
+ * There is no `system` value: Domicile is the system, so
+ * `prefers-color-scheme` only reflects this setting. The current value comes
+ * from a {@link ThemeSource}.
  */
 export type Theme = (typeof THEMES)[number];
 
 /**
- * The theme a page is in before anything has said otherwise.
+ * The theme a page paints in before its source reports one.
  *
- * Dark, because dark is the attribute-less state of `<html>` — the preset
- * publishes dark as `base` and light behind `[data-theme=light]` — and because
- * it is what `theme.mode` in the compositor's config defaults to. The two
- * agree on purpose: a page that paints before the desk has told it anything
- * paints in the theme the desk most likely has.
+ * Matches the default of `theme.mode` in the compositor config, and the
+ * preset's attribute-less `<html>` state.
  */
 export const DEFAULT_THEME: Theme = "dark";
 
@@ -38,14 +28,11 @@ export const DEFAULT_THEME: Theme = "dark";
 const THEME_ATTRIBUTE = "data-theme";
 
 /**
- * Put a theme on `<html>`, which is what makes the tokens resolve to it.
+ * Applies a theme to `<html>` so the tokens resolve to it.
  *
- * Dark removes the attribute rather than setting `data-theme="dark"`: the
- * preset's condition is `[data-theme=light] &`, so dark is the absence and
- * writing it out would be a second spelling of the same state.
- *
- * Safe before React mounts — a shell calls it from its entry point so the
- * first paint is already the right way round.
+ * Dark removes the attribute because the preset only matches
+ * `[data-theme=light]`. Safe to call before React mounts, so a shell's first
+ * paint can use the right theme.
  */
 export const applyTheme = (theme: Theme): void => {
   const root = globalThis.document?.documentElement;
@@ -56,7 +43,7 @@ export const applyTheme = (theme: Theme): void => {
   }
 };
 
-/** The other one. A toggle with two positions flips rather than cycles. */
+/** The opposite of each theme. */
 export const OTHER_THEME: Record<Theme, Theme> = {
   dark: "light",
   light: "dark",
@@ -66,42 +53,30 @@ export type FlipThemeOptions = {
   previous: Theme;
   next: Theme;
   /**
-   * Flip the page's theme. Called inside the wipe's view transition update
-   * callback (or synchronously in the no-wipe branch). Normally
-   * {@link applyTheme}, so the design tokens resolve to the new theme's values.
+   * Applies the new theme to the page, normally with {@link applyTheme}.
+   * Called inside the view transition update, or synchronously without one.
    */
   applyNextTheme: () => void;
   /**
-   * Turn the desk's windows, once the frame the wipe starts from is captured.
-   * The wipe holds that frame until this settles — see
+   * Repaints the other windows after the wipe's start frame is captured. See
    * {@link ThemeSource.turnWindows}.
    */
   turnWindows: () => Promise<void>;
   /**
-   * Commit the new theme to React state. Called inside `flushSync` after the
-   * wipe finishes (and before the rise), so that the toggle's
-   * `data-theme-mode` attribute has the new value committed *before* the slot
-   * override is dropped — otherwise the OLD active slot would briefly retarget
-   * center before React commits the NEW theme and re-parks it.
+   * Commits the new theme to React state. Called in `flushSync` after the
+   * wipe, so `data-theme-mode` updates before the slot override is removed.
+   * Otherwise the old icon would briefly rise.
    */
   commitTheme: () => void;
 };
 
 /**
- * Run the ThemeSwitch's set → wipe → rise animation around a theme change.
+ * Runs the set, wipe and rise animation around a theme change.
  *
- * Wires `data-theme-setting` (slot sequencing) and `data-theme-flipping` /
- * `data-theme-flip-to` (page wipe) on `<html>`, runs the wipe via
- * `document.startViewTransition` where the browser supports it, and falls back
- * to a snap apply otherwise. Total animation: 150ms set + 500ms wipe + 200ms
- * rise, with the old frame held between set and wipe for as long as the
- * desk's windows take to turn.
- *
- * **Driven by the theme *arriving*, not by the click.** The desk owns the
- * theme, so a shell's toggle asks and the answer comes back to every page on
- * the desk — which means this also runs when the config is edited, or when the
- * toggle on another monitor is the one that was clicked. The click is not the
- * event; being told is.
+ * Uses `document.startViewTransition` for the wipe when available and applies
+ * the theme instantly otherwise. Call it when a new theme arrives from the
+ * source, not on click: the change may come from a config edit or another
+ * monitor.
  */
 export const flipThemeWithAnimation = ({
   previous,
@@ -111,17 +86,12 @@ export const flipThemeWithAnimation = ({
   turnWindows,
 }: FlipThemeOptions): void => {
   const root = document.documentElement;
-  // Phase 1 (set): force every slot below the window via the
-  // `data-theme-setting` descendant rule. Only the currently active slot
-  // actually moves.
+  // Set: move both icons below the window.
   root.setAttribute("data-theme-setting", "");
   window.setTimeout(() => {
     const startRise = () => {
-      // flushSync so the new `data-theme-mode` attribute is committed *before*
-      // the override drops — otherwise removing `data-theme-setting` while the
-      // attribute is still OLD would let the OLD active slot's target snap
-      // back to translateY(0) and start rising before React commits the new
-      // theme.
+      // Commit `data-theme-mode` before removing the override, or the old
+      // icon would start rising.
       flushSync(() => {
         commitTheme();
       });
@@ -131,9 +101,7 @@ export const flipThemeWithAnimation = ({
       previous === next ||
       typeof document.startViewTransition !== "function"
     ) {
-      // Nothing to wipe between, or nothing to wipe with: the slots still
-      // set and rise, and the theme snaps over in between -- the windows'
-      // too, which have nothing to wait for.
+      // No wipe: apply the theme between set and rise.
       applyNextTheme();
       turnWindows().catch((error: unknown) => {
         // biome-ignore lint/suspicious/noConsole: surfacing a failed turnover
@@ -141,17 +109,13 @@ export const flipThemeWithAnimation = ({
       });
       startRise();
     } else {
-      // Phase 2 (wipe). The two attributes drive the rules in the
-      // pandacss preset: `data-theme-flipping` suppresses per-element
-      // transitions so color changes don't bleed into the snapshots, and
-      // `data-theme-flip-to` picks the wipe direction (dark = top-down,
-      // light = bottom-up). Both are cleared in `finished`, immediately
-      // before the rise triggers.
+      // Wipe. In the preset, `data-theme-flipping` disables element
+      // transitions so they don't leak into the snapshots, and
+      // `data-theme-flip-to` sets the wipe direction.
       root.setAttribute("data-theme-flipping", "");
       root.setAttribute("data-theme-flip-to", next);
-      // The old frame is captured before this update runs, and the wipe
-      // starts once it settles: the windows turn in between, behind a frame
-      // that still shows them the old way.
+      // The old frame is captured before this runs, and the wipe waits for
+      // it to settle, so the windows repaint behind the old frame.
       const transition = document.startViewTransition(() => {
         applyNextTheme();
         return turnWindows();
@@ -166,7 +130,5 @@ export const flipThemeWithAnimation = ({
   }, SET_DURATION_MS);
 };
 
-// The set phase's slot transition runs for `{durations.fast}` (see the
-// `data-theme-setting` override in `slotStyles`). Source the JS timeout
-// that ends the phase from the same token so the two can't drift.
+// Matches the set transition in `slotStyles` so the two can't drift.
 const SET_DURATION_MS = Number.parseFloat(token("durations.fast"));

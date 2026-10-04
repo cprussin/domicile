@@ -67,17 +67,12 @@ export const Button = ({
   label,
   ...passthroughProps
 }: Props) => {
-  // The caller's ref as well as this button's own. `sharedProps` below sets
-  // `ref` after `passthroughProps` is spread, so a button that did not pass it
-  // on here would replace the caller's ref with its own and hand the element
-  // back to nobody — see `useStableRef` for what that breaks.
+  // Merges the caller's ref with ours, since `sharedProps` sets `ref` after
+  // spreading `passthroughProps`. See `useStableRef`.
   //
-  // THE CAST IS THE POLYMORPHISM. `Props` is a union, so the ref arrives as a
-  // ref for an anchor or a ref for a button, and a ref's element is a
-  // parameter — contravariant — so the two do not unify into a ref for either.
-  // What TypeScript cannot see is that the `href` which picked the member of
-  // the union is the same `href` that picks the element below: this is the
-  // anchor's ref exactly when an anchor is what gets drawn.
+  // The cast is safe: `href` selects both the `Props` member and the rendered
+  // element, so this is an anchor ref exactly when an anchor renders.
+  // TypeScript can't unify the two contravariant ref types.
   const forwarded = passthroughProps.ref as
     | Ref<HTMLAnchorElement | HTMLButtonElement>
     | undefined;
@@ -86,14 +81,10 @@ export const Button = ({
   >(forwarded);
   const [renderedLoading, setRenderedLoading] = useState(loading);
 
-  // Smooth handoff from the `_loading` pulse animation back to the resting
-  // opacity. The pulse is keyframe-based, so removing the `data-loading`
-  // attribute would snap opacity to the rest value instantly. Instead we
-  // (1) snapshot the live computed opacity into an inline `style`, freezing
-  // the in-flight pulse where it was; (2) drop the loading attribute on the
-  // next render; (3) clear the inline style next frame so the control
-  // recipe's `opacity` transition takes over from that frozen starting value
-  // and animates smoothly back to 1.
+  // Ends the loading pulse smoothly. Removing `data-loading` alone would snap
+  // the keyframed opacity. So: freeze the current opacity inline, drop
+  // `data-loading`, then clear the inline style next frame so the recipe's
+  // `opacity` transition animates from there.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `elementRef` is a stable RefObject from useStableRef; biome doesn't see through the helper
   useLayoutEffect(() => {
     if (loading === true && renderedLoading === false) {
@@ -104,10 +95,6 @@ export const Button = ({
           elementRef.current,
         ).opacity;
       }
-      // setRenderedLoading triggers a re-render that removes the `data-loading`
-      // attribute; the inline opacity we just set persists into that render and
-      // is cleared on the next frame so the control recipe's `opacity`
-      // transition takes over from the frozen starting value.
       setRenderedLoading(false);
       requestAnimationFrame(() => {
         if (elementRef.current !== null) {
@@ -141,7 +128,6 @@ export const Button = ({
   };
 
   if (passthroughProps.href === undefined) {
-    // `<button disabled>` is the native disabled mechanism — fires no click.
     return (
       <BaseButton
         {...passthroughProps}
@@ -150,11 +136,9 @@ export const Button = ({
       />
     );
   } else {
-    // Anchors have no native `disabled` — that attribute would render as
-    // invalid HTML and the link would still navigate. Emulate it with
-    // `aria-disabled`, `data-disabled` (so the control recipe's `_disabled`
-    // condition matches: `:is(:disabled, [data-disabled])`), and an
-    // onClick guard.
+    // Anchors have no `disabled` attribute, so emulate it: `aria-disabled`,
+    // `data-disabled` for the recipe's `_disabled` condition, and a click
+    // guard.
     return (
       // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: anchor with href is interactive; onClick is the disabled-state guard that responds to keyboard via the native anchor behavior
       <a
@@ -177,17 +161,11 @@ export const Button = ({
 };
 
 const iconOnlyStyles = css({
-  // Match both `:disabled` (button) and `[data-disabled]` (anchor) so the
-  // icon-only hover/active scale doesn't fire on a "disabled" anchor
-  // (anchors don't get the `:disabled` pseudo-class).
+  // Anchors don't match `:disabled`, so also check `[data-disabled]`.
   ".group:not([data-disabled]):not(:disabled):active &": { scale: 1.1 },
   ".group:not([data-disabled]):not(:disabled):hover &": { scale: 1.2 },
-  // `inline-flex` + center alignment so the icon sits at the geometric
-  // center of the wrapper rather than on the line-height baseline. A
-  // bare inline wrapper sizes its line box to the font's line-height,
-  // and the inline icon child (img or mask span) settles on the
-  // baseline of that line — pushing the icon visibly down relative to
-  // the button's flex-centered wrapper.
+  // Centers the icon. As plain inline content it sits on the text baseline,
+  // below center.
   alignItems: "center",
   display: "inline-flex",
   justifyContent: "center",

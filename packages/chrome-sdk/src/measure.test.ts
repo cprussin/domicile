@@ -15,25 +15,15 @@ const blankStyle = (style: Partial<CSSStyleDeclaration>): CSSStyleDeclaration =>
   }) as CSSStyleDeclaration;
 
 /**
- * An element whose computed style is whatever the test says. happy-dom
- * resolves almost nothing, so the properties under test have to be supplied
- * rather than set as CSS and read back.
+ * Measures a detached element with a stubbed computed style, since happy-dom
+ * resolves almost no CSS.
  *
- * The stub answers *every* element with the same style, not just this one, so
- * it is only honest while the fixture has nothing above it. It does not: the
- * element is never inserted, so `defaultMeasure`'s walk up the flat tree ends
- * immediately and the one style is the only one read. Give a fixture here a
- * parent and each of these cases silently starts composing its transform once
- * per ancestor — `scale(2)` measured as `scale(4)` — with nothing in the
- * failure to say why. A case that wants ancestors wants `measuredInside`,
- * which keys a style per element.
+ * The stub returns the same style for every element, so the element must have
+ * no parent. Use `measuredInside` for cases with ancestors.
  */
 const measuredWith = (style: Partial<CSSStyleDeclaration>, zoom?: number) => {
   const element = document.createElement("div");
-  // `currentCSSZoom` is the engine's own statement of the compounded zoom over
-  // an element, and happy-dom has no such property — it is a getter with no
-  // seam to inject, so the case assigns it the way the slot case assigns
-  // `assignedSlot`.
+  // happy-dom has no `currentCSSZoom`, so define it on the element.
   if (zoom !== undefined) {
     Object.defineProperty(element, "currentCSSZoom", { value: zoom });
   }
@@ -48,13 +38,10 @@ const measuredWith = (style: Partial<CSSStyleDeclaration>, zoom?: number) => {
 };
 
 /**
- * What the SDK writes to the console while `measuring` runs.
+ * Collects console warnings logged while `measuring` runs.
  *
- * The record of what has already been said is module state that outlives any
- * one test, so every case here has to reach for a value no other case uses:
- * the record is keyed on the property and the computed value together, so a
- * case that reused another's `rotate` — or another's `perspective` — would
- * find it already reported and see nothing.
+ * Each warning is logged once per module, keyed on property and value, so
+ * every case must use a value no other case uses.
  */
 const warningsWhile = (measuring: () => void): string[] => {
   const warnings: string[] = [];
@@ -79,13 +66,8 @@ const warningsFrom = (...styles: Partial<CSSStyleDeclaration>[]): string[] =>
   });
 
 /**
- * An `<app>` inside a chain of ancestors, each with its own computed
- * style. The shared helper above answers every element with one style, which
- * is what the single-element cases want and the opposite of what these do.
- *
- * `ancestors` is outermost first, so the array reads the way the DOM nests.
- * An element the map does not know is a bug in the test rather than a case to
- * absorb, so it throws instead of defaulting.
+ * Measures an element nested in `ancestors` (outermost first), each with its
+ * own computed style.
  */
 const measuredInside = (
   ancestors: readonly Partial<CSSStyleDeclaration>[],
@@ -111,11 +93,9 @@ const measuredInside = (
 };
 
 /**
- * Measure `element` with `getComputedStyle` answering from `styles`.
+ * Measures `element` with `getComputedStyle` answering from `styles`.
  *
- * An element the map does not name throws rather than defaulting. A default
- * would let a walk that visited the *wrong* element pass by answering it
- * blankly, which is the failure every case using this is about.
+ * Throws for an unknown element so a walk visiting the wrong element fails.
  */
 const measuredAnswering = (
   styles: ReadonlyMap<Element, Partial<CSSStyleDeclaration>>,
@@ -139,18 +119,14 @@ const measuredAnswering = (
 describe("defaultMeasure", () => {
   describe("what it reads off an element", () => {
     it("says it once, not once per measurement", () => {
-      // Measuring happens on every pointer move over a window, so a value
-      // reported each time would bury the console the moment anyone used one.
+      // Measurement runs on every pointer move, so warn only once.
       const style = { rotate: "sideways 45deg" };
       expect(warningsFrom(style)).toHaveLength(1);
       expect(warningsFrom(style)).toStrictEqual([]);
     });
 
     it("reads the independent rotate property, not just `transform`", () => {
-      // `rotate: 45deg` is not reported in `getComputedStyle(...).transform`,
-      // so an element written that way turns in the page while a reading that
-      // took only `transform` maps a click as if it had not — a silent
-      // disagreement rather than an error.
+      // Computed `transform` does not include the `rotate` property.
       const { transform } = measuredWith({ rotate: "90deg" });
       expect(transform.slice(0, 4).map(Math.round)).toStrictEqual([
         0, 1, -1, 0,
@@ -164,17 +140,13 @@ describe("defaultMeasure", () => {
     });
 
     it("survives the centering idiom, which resolves to a percentage", () => {
-      // `translate` keeps its percentages in the computed value, where
-      // `transform` does not — and a matrix cannot be built from a relative
-      // length. Measuring runs on every pointer move over a window, so a throw
-      // here stops a click reaching the client at all.
+      // Computed `translate` keeps percentages, which `DOMMatrix` rejects. A
+      // throw here would drop pointer input.
       expect(() => measuredWith({ translate: "-50% -50%" })).not.toThrow();
     });
 
     it("turns a window the way an axis rotation turns it", () => {
-      // `rotate` takes an axis as well as an angle, and CSS spells that with a
-      // different function than the plain angle form. Emitting the wrong one
-      // maps clicks square while the page turns the window.
+      // An axis rotation needs `rotate3d`, not `rotate`.
       const [a, b, c, d] = measuredWith({ rotate: "x 45deg" }).transform;
       expect([a, b, c]).toStrictEqual([1, 0, 0]);
       expect(d).toBeCloseTo(Math.SQRT1_2, 4);
@@ -193,10 +165,8 @@ describe("defaultMeasure", () => {
     });
 
     it("composes the independent properties in the order CSS applies them", () => {
-      // CSS applies translate, then rotate, then scale, then `transform`. The
-      // order is not a detail: a quarter turn and a stretch compose to
-      // different matrices each way round, so a window using both lands
-      // somewhere else entirely if they are multiplied backward.
+      // CSS applies translate, rotate, scale, then `transform`. Rotation and
+      // non-uniform scale do not commute.
       const { transform } = measuredWith({ rotate: "90deg", scale: "2 1" });
 
       // Turn-then-stretch. The other order would give [0, 1, -2, 0].
@@ -206,9 +176,7 @@ describe("defaultMeasure", () => {
     });
 
     it("says so when it cannot read a rotate the element asked for", () => {
-      // The fall-through: a shape none of the forms account for. Returning
-      // identity in silence is the failure this function exists to prevent, so
-      // it must not be how the function itself fails.
+      // An unrecognized shape must warn, not silently become identity.
       const warnings = warningsFrom({ rotate: "1 0 0" });
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain("rotate");
@@ -222,21 +190,14 @@ describe("defaultMeasure", () => {
 
 describe("a zoom over the window, which is not a transform", () => {
   it("maps a click through the zoom in effect over the window", () => {
-    // `zoom` scales the element's box without appearing in any transform, and
-    // `getBoundingClientRect` already reports the scaled box — so a mapping
-    // built from the transforms alone inverted a click by exactly the zoom
-    // factor, and a window at `zoom: 2` was clicked half way to where the user
-    // pressed.
+    // `zoom` scales the box without appearing in any transform.
     expect(measuredWith({}, 2).transform.slice(0, 4)).toStrictEqual([
       2, 0, 0, 2,
     ]);
   });
 
   it("composes the zoom with the window's own transform", () => {
-    // The zoom is what takes the element's own pixels into the space its
-    // transform is written in, so the two multiply. Replacing one with the
-    // other reads the same in the commonest case — either alone — and is
-    // wrong wherever a shell uses both.
+    // Zoom and transform multiply; neither replaces the other.
     expect(
       measuredWith({ scale: "3" }, 2).transform.slice(0, 4).map(Math.round),
     ).toStrictEqual([6, 0, 0, 6]);
@@ -245,11 +206,8 @@ describe("a zoom over the window, which is not a transform", () => {
 
 describe("a projection no affine can express", () => {
   it("says so when a perspective above the window projects it", () => {
-    // The classic idiom: a container states a `perspective` and the thing
-    // inside it turns out of the plane. What the engine draws is a projection,
-    // which divides by a different number at every corner — not something a
-    // 6-tuple can hold, so the mapping cannot be corrected and has to be
-    // declared instead.
+    // A container's `perspective` projects a child turned out of the plane.
+    // No affine can express that, so it must warn.
     const warnings = warningsWhile(() => {
       measuredInside([{ perspective: "501px" }], {
         transform: "rotateY(40deg)",
@@ -261,9 +219,7 @@ describe("a projection no affine can express", () => {
   });
 
   it("says so when the window's own transform carries the perspective", () => {
-    // `perspective()` is also a transform function, so the projection can
-    // arrive without the property ever being set — and then it is the
-    // element's own matrix that stops being affine over its plane.
+    // `perspective()` in the element's own transform also projects.
     const warnings = warningsWhile(() => {
       measuredWith({ transform: "perspective(601px) rotateY(40deg)" });
     });
@@ -273,9 +229,7 @@ describe("a projection no affine can express", () => {
   });
 
   it("says nothing about a 3D turn with no perspective over it", () => {
-    // Without a perspective, CSS draws a 3D rotation by dropping z — which is
-    // exactly the 2D part of the matrix the mapping already composes. Warning
-    // here would cry wolf about the case the SDK gets right.
+    // Without perspective, CSS draws the 2D part, which the mapping uses.
     expect(
       warningsWhile(() => {
         measuredWith({ transform: "rotateX(35deg)" });
@@ -284,9 +238,8 @@ describe("a projection no affine can express", () => {
   });
 
   it("says nothing when a flat ancestor flattens the turn first", () => {
-    // `transform-style: flat` is the default, and it flattens a child into the
-    // plane before anything above it is applied — so the perspective two
-    // levels up has a flat plane to project, and the composed affine is right.
+    // The default `transform-style: flat` flattens the turn before the
+    // perspective applies, so the affine is correct.
     expect(
       warningsWhile(() => {
         measuredInside([{ perspective: "802px" }, {}], {
@@ -297,8 +250,7 @@ describe("a projection no affine can express", () => {
   });
 
   it("says so when preserve-3d carries the turn up to the perspective", () => {
-    // The other half of that: an ancestor that preserves the 3D space hands
-    // the turn to the perspective above it, so the projection is back.
+    // `preserve-3d` passes the turn up to the perspective.
     const warnings = warningsWhile(() => {
       measuredInside(
         [{ perspective: "903px" }, { transformStyle: "preserve-3d" }],
@@ -311,13 +263,10 @@ describe("a projection no affine can express", () => {
 });
 
 describe("how many unreadable transforms it will report", () => {
-  // After every case that asserts what is reported, on purpose: this fills the
-  // module's record of what it has already said, so such a case below it would
-  // find the reporting exhausted and see nothing.
+  // Must run after the other warning cases: it fills the module's capped
+  // warning set.
   it("stops rather than growing without a bound", () => {
-    // The key is the whole computed string, and a `transition` on `rotate`
-    // produces a new one every frame — so the record has to stop somewhere or
-    // it is a leak on a path that runs per frame.
+    // An animated value yields a new key every frame, so the set is capped.
     const attempts = 40;
     const warned = Array.from({ length: attempts }, (_, index) =>
       warningsFrom({ rotate: `axis${index.toString()} 45deg` }),
@@ -330,10 +279,8 @@ describe("how many unreadable transforms it will report", () => {
 
 describe("transforms above the element", () => {
   it("follows a container that turned, not just its own transform", () => {
-    // `getBoundingClientRect` reports an axis-aligned box, so a parent's
-    // rotation is invisible in it and the element's own transform cannot
-    // explain it. A click on a window inside a rotated container reached the
-    // client at the coordinate it would have had if nothing had turned.
+    // `getBoundingClientRect` is axis-aligned, so it hides a parent's
+    // rotation.
     const measured = measuredInside([{ transform: "rotate(90deg)" }]);
 
     const [a, b, c, d] = measured.transform;
@@ -344,10 +291,8 @@ describe("transforms above the element", () => {
   });
 
   it("composes the whole chain, outermost last", () => {
-    // Two ancestors and the element itself, each contributing. Order matters:
-    // an ancestor's transform applies to the result of everything inside it,
-    // so multiplying the other way round turns a scale-then-rotate into a
-    // rotate-then-scale, which differs whenever the scale is not uniform.
+    // An ancestor's transform applies after its descendants'. Reversing the
+    // order changes the result for non-uniform scales.
     const measured = measuredInside(
       [{ transform: "scale(2, 1)" }, { transform: "rotate(90deg)" }],
       { transform: "scale(3, 1)" },
@@ -364,18 +309,14 @@ describe("transforms above the element", () => {
 });
 
 describe("where an element is painted, rather than where it is written", () => {
-  /** An element whose flat-tree parent is a slot rather than its writer. */
+  /** Assigns `element` to `slot`. */
   const slottedInto = (element: Element, slot: HTMLSlotElement): void => {
-    // Assigned by hand: happy-dom does not distribute to slots, and the
-    // property is a getter with no seam to inject.
+    // happy-dom does not distribute to slots.
     Object.defineProperty(element, "assignedSlot", { value: slot });
   };
 
   it("crosses a shadow boundary to the element that holds it", () => {
-    // `parentElement` is null at a shadow root, so a walk that used it stopped
-    // there and mapped the pointer as if nothing above had turned.
-    // A chrome that renders its windows from a component library puts them in
-    // a shadow tree without thinking about it.
+    // `parentElement` is null at a shadow root.
     const turned = document.createElement("div");
     const host = document.createElement("div");
     turned.append(host);
@@ -396,13 +337,11 @@ describe("where an element is painted, rather than where it is written", () => {
   });
 
   it("stops at an ancestor painted in the top layer", () => {
-    // A modal dialog is painted outside its ancestors, so their transforms do
-    // not apply to it. Walking up as if they did maps a click through a
-    // transform that never touched the window — a case that was right before
-    // the walk existed.
+    // A modal is painted outside its ancestors, so their transforms do not
+    // apply.
     const turned = document.createElement("div");
     const modal = document.createElement("div");
-    // happy-dom has no top layer, so the selector is what has to be answered.
+    // happy-dom has no top layer, so stub the selector match.
     modal.matches = ((selector: string) =>
       selector.includes(":modal")) as Element["matches"];
     turned.append(modal);
@@ -417,16 +356,13 @@ describe("where an element is painted, rather than where it is written", () => {
       element,
     );
 
-    // The modal's own transform counts — the element is inside it — and the
-    // rotation above it does not.
+    // The modal's own transform applies; the rotation above it does not.
     expect(measured.transform.slice(0, 4)).toStrictEqual([2, 0, 0, 3]);
   });
 
   it("is painted where its slot is, not where it is written", () => {
-    // Slotted content is drawn in the slot's place in the tree, so the
-    // transforms above it are the slot's ancestors' — the element's written
-    // parent never touches it. `parentElement` reports the writer, which is
-    // what makes this its own case rather than the shadow-host one.
+    // Slotted content takes the slot's ancestors' transforms, not those of
+    // its `parentElement`.
     const writer = document.createElement("div");
     const element = document.createElement("div");
     writer.append(element);
@@ -448,10 +384,7 @@ describe("where an element is painted, rather than where it is written", () => {
   });
 
   it("stops at an ancestor painted in the top layer's popover half", () => {
-    // The other half of the same selector list. Asked as one list, so an
-    // engine that knows `:modal` and not `:popover-open` throws on the whole
-    // thing — and a suite that only ever answers `:modal` cannot tell that
-    // half from a selector that was never asked for.
+    // Checks the `:popover-open` half of the selector list.
     const turned = document.createElement("div");
     const popover = document.createElement("div");
     popover.matches = ((selector: string) =>
@@ -472,9 +405,7 @@ describe("where an element is painted, rather than where it is written", () => {
   });
 
   it("takes nothing from above an element that is itself in the top layer", () => {
-    // The window *is* the dialog. Its ancestors' transforms do not reach it,
-    // so the walk does not start — distinct from stopping at an ancestor that
-    // is in the top layer, where that ancestor's own transform still counts.
+    // The window itself is the dialog, so no ancestor transform applies.
     const turned = document.createElement("div");
     const element = document.createElement("div");
     element.matches = ((selector: string) =>

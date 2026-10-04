@@ -1,23 +1,11 @@
-// Pointer input over an `<app>`, which belongs to the client underneath it.
+// Forwards pointer events over an `<app>` to its Wayland client.
 //
-// Delegated from `document` rather than bound per element, because the tag is
-// the engine's: there is no longer a class with a constructor to install a
-// listener in. Every handler asks the same question — `closest(APP_TAG_NAME)` on
-// the event's target — and does nothing when the answer is no window, which is
-// what a click on the desktop behind them is.
+// Listeners are delegated from `document` because `<app>` is an engine tag
+// with no SDK class to attach them to. Each handler finds the window with
+// `closest(APP_TAG_NAME)` and ignores events outside any window.
 //
-// Delegation is not only what is left; it is also one listener per event type
-// for a desktop of any size, where the element bound five of its own to every
-// window on the page.
-//
-// What it costs, and it is worth stating because it was free before: a listener
-// on `document` is the last to hear a bubbling event, so a shell that listens
-// on a container of its own and calls `stopPropagation()` now suppresses the
-// forward. The element's own listeners fired first and could not be suppressed
-// that way. Nothing in this repository does it — `shell-simple` takes the
-// pointer in the *capture* phase, which stops the event before the element ever
-// had it, and `shell-manganese` takes it with `pointer-events: none` and a
-// sheet over the window — so the two shells are unaffected either way.
+// Because the listeners are on `document`, a shell that calls
+// `stopPropagation()` on a bubbling pointer event also stops the forward.
 
 import type { AppFocusRequest } from "./app-element";
 import { APP_FOCUS_REQUESTED_EVENT, APP_TAG_NAME } from "./app-element";
@@ -28,8 +16,8 @@ import { surfaceLocal } from "./surface-coordinates";
 import { axisFromWheel } from "./wheel-axis";
 
 /**
- * The scale a client that has not committed a buffer is mapped through: its
- * own box, 1:1. See {@link surfaceLocal}.
+ * Surface size for a client that has not drawn yet, so coordinates map 1:1
+ * to its box. See {@link surfaceLocal}.
  */
 const NOT_DRAWN_YET = [0, 0] as const;
 
@@ -61,44 +49,20 @@ export const installPointerInput = (context: ElementContext): void => {
     });
   });
 
-  // The menu the secondary button would open, which is the browser answering a
-  // press this page has already given away. The right button over a window is
-  // the client's — a terminal's paste menu, an editor's — and it is drawn inside
-  // the client's own surface, so Chromium's menu opens on top of the menu the
-  // user actually asked for. Nothing else in this repository is in a position to
-  // stop it: a shell can only suppress the menu on chrome it drew itself, and
-  // the contents of a window are not that.
-  //
-  // The event rather than the press, because only the *default action* is
-  // wrong. The press is forwarded above and stays forwarded; `preventDefault`
-  // here takes away the browser's menu and nothing else, so a shell that draws
-  // a desktop menu of its own on `contextmenu` still gets the event, still
-  // uncanceled, everywhere the pointer is not over a window.
-  //
-  // AND `<webview>` IS DELIBERATELY LEFT ALONE, which costs nothing to arrange:
-  // the page in one is a guest with a browsing context of its own, so no press
-  // inside it reaches this document — see `webview-element.ts`, where that is
-  // also why a guest taking focus has to be reported in an event of its own. A
-  // right-click on a web page is answered in the guest and gets the browser's
-  // menu, which is what a right-click on a web page should get; a browser window
-  // on this desktop is a browser window. The `closest` below would not reach
-  // one, and it should not try.
-  //
-  // `forApp` rather than a narrower test, for the reason every handler here uses
-  // it: the menu goes exactly where the press went. An `<app>` naming no client
-  // is sent no press, so there is nothing over it for a menu to be answering.
+  // Suppress Chromium's context menu over a window: the client draws its own
+  // menu for the right-click. Only the default action is prevented, so a
+  // shell's own `contextmenu` handler still runs elsewhere. `<webview>` guests
+  // keep the browser menu; their events never reach this document.
   document.addEventListener("contextmenu", (event) => {
     forApp(event, () => {
       event.preventDefault();
     });
   });
 
-  // `pointerout` rather than `pointerleave`, which does not bubble and so
-  // cannot be delegated at all. The two differ only for a pointer moving into a
-  // descendant of the element, and an `<app>` is a replaced element: it has no
-  // rendered children to move into. Moving from one window straight to another
-  // fires this on the first before `pointermove` reaches the second, so the
-  // client the pointer left is told before the one it arrived at.
+  // `pointerout`, because `pointerleave` does not bubble and cannot be
+  // delegated. An `<app>` has no rendered children, so the two behave the
+  // same. It fires before `pointermove` on the next window, so leave precedes
+  // enter.
   document.addEventListener("pointerout", (event) => {
     forApp(event, (_element, appId) => {
       context.domicile.pointerLeave(appId);
@@ -117,17 +81,10 @@ export const installPointerInput = (context: ElementContext): void => {
 };
 
 /**
- * The window an event landed in, and the client it stands for — or nothing.
+ * Calls `forward` with the `<app>` containing the event target and its app id.
  *
- * `closest` rather than a check that the target *is* the element: what a
- * forward needs to know is which window the pointer is over, and that is a
- * question about the tree rather than about the engine's layout choice for the
- * tag. Asking it the narrow way would be the SDK relying on `<app>` being a
- * replaced element, which is not its business to rely on.
- *
- * An element with no `app-id` stands for no client, so there is nothing to
- * forward to. Read off the attribute rather than the reflected `appId` property,
- * which a stock browser's `HTMLUnknownElement` does not have.
+ * Does nothing outside an `<app>` or for one without an `app-id`. Reads the
+ * attribute because stock Chromium's `HTMLUnknownElement` has no `appId`.
  */
 const forApp = (
   event: Event,
@@ -145,21 +102,17 @@ const forApp = (
 };
 
 /**
- * A click is the user reaching for this window, and in most shells the keyboard
- * follows it — but *most* is not *every*, and the SDK is in no position to know
- * which this is. So it asks, and focuses only if the shell lets the request
- * stand. See {@link APP_FOCUS_REQUESTED_EVENT}.
+ * Focuses the clicked window unless the shell cancels
+ * {@link APP_FOCUS_REQUESTED_EVENT}.
  *
- * Dispatched on the element rather than on `document` even though this listener
- * is document-level: it bubbles either way, and a shell that does bind per
- * window should get the event on the window it bound to.
+ * Dispatched on the element so per-window listeners receive it.
  */
 const requestFocus = (
   context: ElementContext,
   element: HTMLAppElement,
   pressed: string,
 ): void => {
-  // A popup's window rather than the popup: see `DomicileClient.windowOf`.
+  // Focus a popup's window, not the popup: see `DomicileClient.windowOf`.
   const appId = context.domicile.windowOf(pressed);
   const unanswered = element.dispatchEvent(
     new CustomEvent<AppFocusRequest>(APP_FOCUS_REQUESTED_EVENT, {
@@ -174,13 +127,10 @@ const requestFocus = (
 };
 
 /**
- * Where the pointer is, in the client's own surface pixels.
+ * Forwards the pointer position in the client's surface pixels.
  *
- * Motion is the one forward that needs a layout box: without one there is no
- * surface-local coordinate to report, while focus and button state still are
- * meaningful. The element's own element->screen affine inverts back to surface
- * coordinates, so any CSS transform on the element is undone here rather than
- * approximated by its axis-aligned box.
+ * Inverts the element's full element->screen affine rather than its bounding
+ * box (see `defaultMeasure` for limits).
  */
 const forwardMotion = (
   context: ElementContext,

@@ -1,7 +1,7 @@
-// What the builder says as it goes: one JSON line per step on stdout, which
-// `domicile` draws as a progress bar.
+// The builder's progress output: one JSON line per step on stdout, which
+// `domicile` shows as a progress bar.
 
-/** Which step a line is. */
+/** The kind of step a line reports. */
 export enum StepKind {
   Resolving,
   Installing,
@@ -12,7 +12,7 @@ export enum StepKind {
 }
 
 export const Step = {
-  /** The entry built: `module` in `root`, which is what the engine serves. */
+  /** The entry is built; the engine serves `module` from `root`. */
   Built: (root: string, module: string, cached: boolean) => ({
     cached,
     kind: StepKind.Built as const,
@@ -21,13 +21,13 @@ export const Step = {
   }),
   /** Bundling the entry against Domicile's packages. */
   Bundling: () => ({ kind: StepKind.Bundling as const }),
-  /** The config evaluated: the compositor's sections, as JSON at `config`. */
+  /** The config is evaluated; its sections are JSON at `config`. */
   Evaluated: (config: string, cached: boolean) => ({
     cached,
     config,
     kind: StepKind.Evaluated as const,
   }),
-  /** The build failed, and why. */
+  /** The build failed, with the reason. */
   Failed: (why: string) => ({ kind: StepKind.Failed as const, why }),
   /** Installing the packages the entry imports that the project lacks. */
   Installing: (packages: readonly string[]) => ({
@@ -41,8 +41,8 @@ export const Step = {
 export type Step = ReturnType<(typeof Step)[keyof typeof Step]>;
 
 /**
- * `step` as the line `domicile` reads: `{"step":"built","root":...}`. The
- * wire's words are this function's alone.
+ * Serialize `step` as the line `domicile` reads, like `{"step":"built",...}`.
+ * This is the only place that defines the wire format.
  */
 export const line = (step: Step): string => {
   switch (step.kind) {

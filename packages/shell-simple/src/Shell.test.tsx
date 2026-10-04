@@ -12,7 +12,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { Shell } from "./Shell";
 
-/** The pointer every gesture here is made with, and the buttons it presses. */
+/** Pointer id and buttons for the gesture tests. */
 const POINTER = 1;
 const PRIMARY = 0;
 const SECONDARY = 2;
@@ -22,7 +22,7 @@ type Host = {
   /** Deliver a host message to the shell, as the control channel would. */
   emit: <T extends HostMessageType>(type: T, message: HostMessageOf<T>) => void;
   focused: string[];
-  /** What the shell said it could not do. */
+  /** Errors the shell reported. */
   reported: string[];
   spawned: (readonly string[])[];
 };
@@ -54,10 +54,10 @@ const fakeHost = (): Host => {
   return host;
 };
 
-/** Enter's evdev code, which is what the compositor resolves `Return` to. */
+/** Enter's evdev code. The compositor resolves `Return` to it. */
 const ENTER = 28;
 
-/** The keyboard the compositor describes: Enter, and the key `us` has `t` on. */
+/** The compositor's keymap: Enter, and `t` on the `us` layout. */
 const KEYBOARD: ShellConfigMessage = {
   keys: new Map([
     ["Return", ENTER],
@@ -65,10 +65,7 @@ const KEYBOARD: ShellConfigMessage = {
   ]),
 };
 
-/**
- * A rendered shell, with the client that drives it, told the keyboard the
- * compositor sends as the page connects.
- */
+/** Renders a shell and sends it the keymap, as the compositor does. */
 const shell = (keybindings?: ShellKeybindings): Host => {
   const host = fakeHost();
   render(
@@ -152,10 +149,8 @@ describe("Shell", () => {
     });
 
     it("holds one window for a client the host announces twice", () => {
-      // The compositor replays every open window to every chrome whenever any
-      // chrome connects, so a second announcement is news to nobody — and a
-      // second element would leave the first orphaned, still embedding the
-      // same surface and configuring the same client.
+      // The compositor replays all open windows to every chrome when any chrome
+      // connects. A second element would embed the same surface as the first.
       const host = shell();
       host.emit("app_appeared", {
         app_id: "term",
@@ -206,8 +201,8 @@ describe("Shell", () => {
 
   describe("what the host pushes at a window", () => {
     it("marks a window drawn when the client says how big it drew", () => {
-      // Until then the window has nothing behind it, and says so with a
-      // placeholder the stylesheet hangs off the absence of this attribute.
+      // Until then the stylesheet shows a placeholder, keyed off this
+      // attribute's absence.
       const host = shell();
       host.emit("app_appeared", {
         app_id: "term",
@@ -253,9 +248,9 @@ describe("Shell", () => {
     });
 
     it("marks a window that arrives already drawn", () => {
-      // A size on the announcement is the replay a reconnecting chrome gets,
-      // and no frame is coming to say so: the hand-over skips a natively-drawn
-      // window and `app_resized` only fires on a size that changed.
+      // A size on the announcement means a replay to a reconnecting chrome. No
+      // frame follows: the hand-over skips natively drawn windows, and
+      // `app_resized` fires only when the size changes.
       const host = shell();
       host.emit("app_appeared", {
         app_id: "term",
@@ -279,8 +274,8 @@ describe("Shell", () => {
 
   describe("the keyboard", () => {
     it("gives it to a window opened once the host has caught up", () => {
-      // Nothing else would: the SDK routes keys to whichever window was last
-      // clicked, so without this a terminal opened from a key hears nothing.
+      // The SDK routes keys to the last clicked window, so without this a
+      // terminal opened from a key gets no input.
       const host = shell();
       host.emit("focus_changed", { app_id: undefined });
       host.emit("app_appeared", {
@@ -292,9 +287,8 @@ describe("Shell", () => {
     });
 
     it("leaves it alone for a window replayed while catching up", () => {
-      // The replay is every window that was already running. Focusing those
-      // would move the desktop's keyboard onto whichever came last, throwing
-      // away an answer the compositor already had.
+      // Replayed windows were already running. Focusing them would move focus
+      // to the last one replayed and override the compositor's focus.
       const host = shell();
       host.emit("app_appeared", {
         app_id: "term",
@@ -305,8 +299,7 @@ describe("Shell", () => {
     });
 
     it("opens a terminal on the key it is given for it", () => {
-      // Whatever key that is: `terminal` is the command, and the chord is the
-      // shell's props'.
+      // `terminal` is the command; the chord comes from the shell's props.
       const host = shell({
         keybindings: { "Meta+t": KeyAction.SendShell(["terminal"]) },
       });
@@ -337,8 +330,8 @@ describe("Shell", () => {
     });
 
     it("opens a terminal on the shortcut the compositor claims", () => {
-      // The other half of the same chord: once a client holds the keyboard the
-      // page never hears the press, so the compositor sends it back instead.
+      // Once a client has the keyboard the page never sees the press, so the
+      // compositor sends it as a shortcut.
       const host = shell();
       host.emit("shortcut", {
         altKey: true,

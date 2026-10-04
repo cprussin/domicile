@@ -11,7 +11,7 @@ import type {
 import { KeyAction } from "./key-action";
 import type { ShellKeybindings } from "./own-keybindings";
 
-/** Meta and the key `keycode`, and nothing else held. */
+/** A chord of Meta plus `keycode`. */
 const meta = (keycode: number, shiftKey = false): ShortcutMessage => ({
   altKey: false,
   ctrlKey: false,
@@ -20,13 +20,12 @@ const meta = (keycode: number, shiftKey = false): ShortcutMessage => ({
   shiftKey,
 });
 
-// The evdev codes of the keys these press: `input.ts`'s numbering, written out
-// so the test is not reading the table the code under test reads.
+// Evdev codes, written out so the test does not share `input.ts`'s table.
 const ENTER = 28;
 const ESCAPE = 1;
 const R = 19;
 
-/** The shell's keys, as a shell binds them. */
+/** The shell's keybindings. */
 const DESK: ShellKeybindings = {
   keybindings: {
     "Meta+Return": KeyAction.SendShell(["terminal"]),
@@ -40,7 +39,7 @@ const DESK: ShellKeybindings = {
   },
 };
 
-/** The keyboard the compositor describes, the keys above on it. */
+/** A keymap with the keys above. */
 const KEYBOARD: ShellConfigMessage = {
   keys: new Map([
     ["Escape", ESCAPE],
@@ -49,10 +48,7 @@ const KEYBOARD: ShellConfigMessage = {
   ]),
 };
 
-/**
- * The two things `bindKeys` uses of a client: its single-slot handlers, and
- * the claim. Messages are handed to whatever registered, as the client does.
- */
+/** A client with single-slot handlers and a recorded `grabShortcut`. */
 class FakeClient {
   readonly grabbed: DomicileShortcut[] = [];
   readonly #handlers = new Map<string, (message: never) => void>();
@@ -84,7 +80,7 @@ class FakeClient {
   }
 }
 
-/** Everything the handlers were told, in order. */
+/** The handler calls, in order. */
 type Heard =
   | readonly ["command", readonly string[]]
   | readonly ["mode", string];
@@ -110,7 +106,7 @@ const bound = (own: ShellKeybindings = DESK) => {
   return { client, heard, setMode: binding.setMode };
 };
 
-/** A chord pressed on the page, by the key's `code`. */
+/** Dispatch a Meta `keydown` with `code` on the document. */
 const pressing = (
   code: string,
   init: KeyboardEventInit = {},
@@ -140,7 +136,7 @@ describe("bindKeys", () => {
     });
 
     it("claims the keys again where a new layout put them", () => {
-      // A chord names a keysym: on another layout it is another key.
+      // A chord names a keysym, so another layout moves it to another key.
       const { client } = bound();
       client.emit("shell_config", KEYBOARD);
 
@@ -234,7 +230,7 @@ describe("bindKeys", () => {
     });
 
     it("reads the keys in a mode the shell sets, without telling it back", () => {
-      // Another page of the desk entered it: the shell knows already.
+      // Another page entered the mode, so the shell already knows.
       const { client, heard, setMode } = bound();
       client.emit("shell_config", KEYBOARD);
 
@@ -271,7 +267,7 @@ describe("bindKeys", () => {
     });
 
     it("keeps a mode set before the keyboard arrives, and checks it then", () => {
-      // A page can be told the desk's mode before it is told the keyboard.
+      // A page can learn the mode before the keymap arrives.
       const { client, heard, setMode } = bound();
 
       setMode("resize");

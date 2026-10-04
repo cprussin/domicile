@@ -1,12 +1,8 @@
-// Wiring the SDK to a domicile client: bind the element context and install the
-// document-level input routing the `<app>` tag needs.
+// Connects the SDK to a domicile client: binds the element context and
+// installs the document-level input routing for `<app>` elements.
 //
-// Nothing is registered any more, and the name is kept anyway: it is the one
-// call every shell makes, and `<app>` and `<webview>` are the engine's tags —
-// `customElements.define` cannot take a name without a hyphen, which is the
-// whole reason they are the engine's. What used to be a custom element's
-// `connectedCallback`, `attributeChangedCallback` and five listeners per window
-// is two document-level installations here.
+// The engine defines `<app>` and `<webview>`, so no custom elements are
+// registered here.
 
 import type { DomicileClient } from "./domicile-client";
 import type { ElementContext } from "./element-context";
@@ -25,19 +21,15 @@ let inputInstalled = false;
 /**
  * Wire the SDK to a domicile client.
  *
- * Idempotent: safe to call once at chrome startup, and safe to call again with a
- * different client (which is how tests rebind between cases). The input
- * listeners are installed once — they are on `document`, and they read the
- * context at dispatch, which is one cell a rebind writes through.
+ * Safe to call again with a different client. Input listeners are installed
+ * once and read the current context at dispatch.
  */
 export const registerElements = (
   domicile: DomicileClient,
   { measure }: RegisterOptions = {},
 ): void => {
   const context = bindElementContext(domicile, measure);
-  // `document` is absent when the SDK is loaded outside a browsing context (a
-  // unit test of the message layer, say); binding the client is still useful
-  // there, and listening for input that cannot arrive is not.
+  // `document` is absent outside a browser, such as in message-layer tests.
   if (typeof document !== "undefined") {
     installInput(context);
   }

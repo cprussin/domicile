@@ -19,9 +19,8 @@ describe("surfaceLocal", () => {
   });
 
   it("inverts a rotation instead of using the axis-aligned box", () => {
-    // The demo shell rotates `.app`, which an element-box mapping would skew:
-    // this 100x50 element's local (0, 0) is at screen (60, 20), not the box's
-    // top-left corner (10, 20).
+    // Rotated 90 degrees, the element's local (0, 0) is at screen (60, 20),
+    // not at the bounding box's corner (10, 20).
     const matrix = elementToScreen({
       box: { left: 10, top: 20 },
       linear: rotate(Math.PI / 2),

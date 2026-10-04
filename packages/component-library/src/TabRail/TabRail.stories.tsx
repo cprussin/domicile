@@ -28,9 +28,7 @@ const reorder = (
   return [...without.slice(0, at), from, ...without.slice(at)];
 };
 
-// The rail is controlled (activeId + callbacks), so the story owns the state it
-// drives: selecting, closing, opening, and reordering all flow back through
-// `setTabs`/`setActiveId`, the way an app's controller would.
+// The rail is controlled, so the story holds the tab state as an app would.
 const Demo = () => {
   const [tabs, setTabs] = useState<TabRailTab[]>(INITIAL);
   const [activeId, setActiveId] = useState("a");

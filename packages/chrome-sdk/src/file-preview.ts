@@ -1,13 +1,11 @@
-// What a path holds, as a launcher's preview draws it.
+// A preview of a path's contents, as a launcher draws it.
 //
-// Its own module because both halves of the SDK read it: `host-message.ts`
-// turns the engine's `filepreview` event into one, and a shell switches on it.
-// The wire's words are the engine's `kind` strings; this is the memory form,
-// and `filePreviewKindSchema` is the one place the two meet.
+// `host-message.ts` parses the engine's `filepreview` event into one.
+// `filePreviewKindSchema` maps the engine's `kind` strings to the enum.
 
 import { z } from "zod";
 
-/** Which of the five things a preview can be. */
+/** The kinds of file preview. */
 export enum FilePreviewKind {
   Text,
   Directory,
@@ -16,30 +14,30 @@ export enum FilePreviewKind {
   Unreadable,
 }
 
-/** What a song says of itself. A tag it does not say is `undefined`. */
+/** An audio file's tags. A missing tag is `undefined`. */
 export type AudioTags = {
   album: string | undefined;
   artist: string | undefined;
-  /** The picture it carries of itself, as a `data:` URL. */
+  /** Embedded cover art, as a `data:` URL. */
   cover: string | undefined;
-  /** How long it plays, in seconds. */
+  /** Length in seconds. */
   duration: number;
   title: string | undefined;
 };
 
 export const FilePreview = {
-  /** A file that plays as sound, by what it says of itself. */
+  /** An audio file and its tags. */
   Audio: (tags: AudioTags) => ({ kind: FilePreviewKind.Audio as const, tags }),
-  /** A file that is not text, and so has nothing a preview can draw. */
+  /** A non-text file with nothing to preview. */
   Binary: () => ({ kind: FilePreviewKind.Binary as const }),
-  /** The front of what a directory holds, a directory ending in `/`. */
+  /** The first entries of a directory. Subdirectories end in `/`. */
   Directory: (entries: readonly string[]) => ({
     entries,
     kind: FilePreviewKind.Directory as const,
   }),
-  /** The front of a file that reads as text. */
+  /** The start of a text file. */
   Text: (text: string) => ({ kind: FilePreviewKind.Text as const, text }),
-  /** Not in the home's index, or not readable: nothing to show. */
+  /** Not in the home's index, or not readable. */
   Unreadable: () => ({ kind: FilePreviewKind.Unreadable as const }),
 };
 
@@ -47,7 +45,7 @@ export type FilePreview = ReturnType<
   (typeof FilePreview)[keyof typeof FilePreview]
 >;
 
-/** The engine's `kind` word, read as the kind it names. */
+/** Parses the engine's `kind` string into a {@link FilePreviewKind}. */
 export const filePreviewKindSchema = z
   .enum(["text", "directory", "audio", "binary", "unreadable"])
   .transform((kind) => {

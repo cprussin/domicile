@@ -7,11 +7,8 @@ import { themes } from "storybook/theming";
 
 import "./storybook.css";
 
-// Wraps the default DocsContainer with a theme that follows the
-// `addon-themes` selection. The decorator below sets a `theme` global
-// (values: `"dark"` | `"light"`); we subscribe to channel events so the
-// docs CHROME (table of contents, prose colors, prop tables) switches
-// alongside the story canvas.
+// Docs container whose theme follows the `addon-themes` selection, so the docs
+// page switches theme with the story canvas.
 const ThemedDocsContainer = ({
   context,
   children,
@@ -44,10 +41,8 @@ const ThemedDocsContainer = ({
 
 const preview = {
   decorators: [
-    // Mirror the chrome's theming mechanism: light = `data-theme="light"` on
-    // the document root, dark = no attribute (the `base` value in the domicile
-    // Panda preset). Matches the preset's `_light` condition selector
-    // `[data-theme=light] &`.
+    // Matches the preset: `data-theme="light"` on the root is light, no
+    // attribute is dark.
     withThemeByDataAttribute({
       attributeName: "data-theme",
       defaultTheme: "dark",
