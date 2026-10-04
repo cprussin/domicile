@@ -5,7 +5,7 @@
 //
 // An interface rather than a dictionary because WebIDL will not have a
 // dictionary as the type of an attribute, and this is read off
-// `navigator.domicile.displays` rather than handed over in a call.
+// `DomicileHost.displays` rather than handed over in a call.
 //
 // Integers, unlike the sizes elsewhere on this channel. Those come from a
 // layout box, where a CSS pixel is fractional; a display comes from the

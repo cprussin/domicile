@@ -27,7 +27,7 @@ It provides these:
   inside it — and opening it is the shell's.
 - **`Shell`** (`./shell`) — the type of a shell module's `Shell` export: what
   Domicile calls, once, with the element to draw in and the desktop. The
-  engine hands the desktop out once per document, so there is no global: a
+  engine makes the desktop for the call, so there is no global: a
   shell keeps it however it likes (a React context, a variable) and passes it
   on. A module without one is
   refused on the screen.

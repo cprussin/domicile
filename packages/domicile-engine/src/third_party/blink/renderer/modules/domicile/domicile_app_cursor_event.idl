@@ -1,7 +1,7 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// The event behind navigator.domicile.onappcursor.
+// The event behind DomicileHost.onappcursor.
 //
 // ITS OWN INTERFACE BECAUSE THE CURSOR IS AN ENUM. `DomicileAppEvent` carries
 // the five events that differ only in which window they name, and it carried

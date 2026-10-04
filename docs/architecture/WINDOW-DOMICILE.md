@@ -138,8 +138,9 @@ and `host-stream` move to `@domicile-desktop/e2e-harness`, their only user.
   and the client together. No compatibility layer outlives that step.
 - **The desktop is handed to `Shell`, not found on a global.** The shell
   stores it however it likes — a React context, a variable — and nothing
-  pollutes the global namespace. The engine answers `navigator.domicile` once
-  per document, to the document Domicile writes, so the shell's copy is the
+  pollutes the global namespace. The engine runs the shell module itself
+  (`DomicileShell`) and passes the desktop into the call, so there is no
+  `navigator.domicile` or `window.domicile` at all and the shell's copy is the
   only one.
 - **The do-nothing stand-in goes.** Only Domicile calls a shell, so there is
   no plain-browser case and no null check. Styling a shell without a desktop is
@@ -168,6 +169,8 @@ Each step ships alone.
       go; the wire modules move to `e2e-harness`
 - [x] `Shell(root, domicile)`: the document hands the desktop over; the engine
       answers it once per document
+- [x] the engine runs the shell and passes the desktop itself; `navigator.domicile`
+      and `window.domicile` go
 - [ ] the engine drops what nothing reads now: the events the attributes and
       promises replace (`appappeared` and the other seven `app*`,
       `focuschanged`, `files`, …) and `shellconfig`

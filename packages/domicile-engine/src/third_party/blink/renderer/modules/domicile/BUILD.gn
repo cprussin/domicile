@@ -62,6 +62,8 @@ blink_modules_sources("domicile") {
     "domicile_shell_config_event.cc",
     "domicile_shell_config_event.h",
     "domicile_shortcut_event.cc",
+    "domicile_shell.cc",
+    "domicile_shell.h",
     "domicile_shortcut_event.h",
     "domicile_theme_event.cc",
     "domicile_theme_event.h",
@@ -79,10 +81,6 @@ blink_modules_sources("domicile") {
     "domicile_window.h",
     "domicile_host.cc",
     "domicile_host.h",
-    "navigator_domicile.cc",
-    "navigator_domicile.h",
-    "window_domicile.cc",
-    "window_domicile.h",
   ]
 
   deps = [
@@ -90,6 +88,8 @@ blink_modules_sources("domicile") {
     # `DomicileCursorShape` and the compositor's is a `mojom::CursorShape`, and
     # the wire name is how one becomes the other -- so the same list the
     # browser parsed the compositor's JSON with is the one that names it here.
+    # The scheme and host DomicileShell runs the shell document on.
+    "//components/domicile:common",
     "//components/domicile:cursor_shape",
     "//components/domicile:display_transform",
     # And the wire names of the themes, for the same reason and in both

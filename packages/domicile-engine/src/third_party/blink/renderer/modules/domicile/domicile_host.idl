@@ -1,7 +1,7 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// navigator.domicile — the shell's control channel to the compositor.
+// The desktop a shell is handed — the shell's control channel to the compositor.
 //
 // Not a web standard and not proposed as one. It exists in Domicile's engine
 // fork, on documents served over domicile://, and nowhere else.
