@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# Whether a console's mouse is libinput's, and its wheel a wheel.
+# Checks a mouse on a tty goes through libinput and its wheel scrolls.
 #
-# Left to `EventConverterEvdevImpl` a mouse is raw -- one count to one pixel,
-# no acceleration -- and its wheel does nothing, because that converter has no
-# `REL_WHEEL` case. Patch 0059 routes a mouse to libinput behind
-# `kLibinputHandleMouse`, the launcher enables it, and the converter
-# dispatches a wheel's clicks through `WheelTicks`. Any one missing is the
-# sluggish pointer back, with nothing in any log to say so.
+# `EventConverterEvdevImpl` gives an unaccelerated pointer and ignores
+# `REL_WHEEL`. A patch routes mice to libinput behind `kLibinputHandleMouse`,
+# the launcher enables that feature, and the converter dispatches wheel clicks
+# through `WheelTicks`. Missing any piece silently brings back the raw pointer.
 #
-# NO CHROMIUM TREE. The series and `src/` are the source of truth, so this
-# runs in the shell group on every push.
+# Reads `src/` and the patches, not a Chromium tree, so it runs in the shell
+# group.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,7 +60,7 @@ else
     "no patch adds domicile/wheel_ticks.cc to ui/events/ozone/evdev/BUILD.gn"
 fi
 
-# Registered, or it does not link and a `--gtest_filter` matching nothing
+# An unregistered test is not linked, and a `--gtest_filter` matching nothing
 # exits zero.
 if in_patches '"//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc"'; then
   ok "the unit test is in ozone_unittests"

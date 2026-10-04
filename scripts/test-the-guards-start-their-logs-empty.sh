@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# Every log an engine guard starts a process writing into is removed first.
+# Tests that engine guards remove each log before starting a process that
+# writes to it.
 #
-# `cmd >"$LOG" 2>&1 &` truncates the log in the forked child, not before the
-# next line of the guard runs. A guard that then waits for a line in it can
-# read the last run's copy: the claim's, when the control reuses the path, or a
-# previous job's, since /tmp outlives jobs on `crux`. Run 36657136674 on
-# cprussin/domicile#738: the content-script control found the claim's
-# `serving` line, then read the port from a log its own server had just
-# emptied -- "its page server never said which port it took".
+# `cmd >"$LOG" 2>&1 &` truncates the log in the forked child, possibly after
+# the guard's next line runs. A guard waiting for a line can then read a stale
+# copy: the claim's, when the control reuses the path, or a previous job's,
+# since /tmp outlives jobs on `crux` (seen in run 36657136674 on
+# cprussin/domicile#738).
 #
-# Removed first, a wait on the log sees nothing until this run's writer writes.
-# `>>` is left alone: those logs are meant to gather.
+# Logs written with `>>` are meant to accumulate and are not checked.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +32,7 @@ for script in "$SCRIPTS"/guard-*.sh; do
   }' "$script")
 done
 
-# Nothing checked is a pattern that stopped matching, which would pass silently.
+# Zero checks means the pattern stopped matching.
 if [ "$checked" -eq 0 ]; then
   echo "FAIL: found no guard under $SCRIPTS that starts a writer into a log" >&2
   exit 1

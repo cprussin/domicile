@@ -1,8 +1,7 @@
 name: Turbo test
 
-# The TypeScript side, which is turbo's own job — `bun run turbo test` is what
-# `check.sh typescript` runs, and the cache below is the only reason this is a
-# workflow of its own rather than a group in the e2e job.
+# The TypeScript checks, as `./scripts/check.sh typescript` runs them. A
+# separate workflow so it can keep its own turbo cache.
 on:
   pull_request:
   push:
@@ -14,7 +13,7 @@ concurrency:
 
 env:
   # Nothing in this group may skip: bun is set up below and turbo needs nothing
-  # else, so a skip here is a task that stopped running.
+  # else.
   DOMICILE_CHECK_STRICT: "1"
 
 jobs:
@@ -31,11 +30,8 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-
 
-      # Through `check.sh` rather than `bun run turbo test` directly, so that
-      # what CI checks and what `./scripts/check.sh typescript` checks cannot
-      # be two different lists. The cache directory is turbo's own
-      # `TURBO_CACHE_DIR`, which is how it reaches turbo without this job
-      # knowing the command.
+      # Through `check.sh` so CI and `./scripts/check.sh typescript` run the
+      # same list. `TURBO_CACHE_DIR` points turbo at the restored cache.
       - env:
           TURBO_CACHE_DIR: .turbo/cache
         run: ./scripts/check.sh typescript

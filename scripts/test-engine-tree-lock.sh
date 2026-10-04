@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# The tree lock's one job: never release a tree it did not take.
+# Asserts the tree lock refuses a second taker and never releases a tree its
+# caller did not take.
 #
-# The lock is what stands between a CI reset and a four-hour build running in
-# the same checkout, and the failure it prevents is silent — a binary linked
-# from two different trees, which nothing downstream looks for. So the parts
-# that could quietly stop working are the parts worth a test: whether a second
-# taker is actually refused, and whether the unconditional `drop` at the end of
-# a job can be made to release somebody else's lock.
+# The lock keeps a CI reset out of a checkout that a long build is using.
+# Without it, the build silently links a binary from two trees.
 #
-# The real script, out of `.github/scripts`, copied nowhere. `DOMICILE_TREE_LOCK`
-# is its own test seam: without it the lock is beside the checkout, which on
-# the machine that matters is `/build`, and a test has no business there.
+# `DOMICILE_TREE_LOCK` relocates the lock; by default it lives under `/build`.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -59,25 +54,20 @@ contains "the refusal names who holds it" "'alice'" "$held"
 contains "the refusal reports an age" "held for 0m" "$held"
 contains "the refusal explains what a reset would do to a running build" \
   "two different trees" "$held"
-# THE ONE COMMAND. A message that says a lock is stale and leaves the reader to
-# work out where it is has explained the problem and not the fix, and the fix
-# is one `rm` nobody should have to derive from a script they have not read.
+# The refusal prints the exact `rm` that clears a stale lock.
 contains "the refusal prints the command that clears a stale lock" \
   "rm -rf $WORK/lock" "$held"
 
-# THE CASE THAT MAKES `drop` A CHECK RATHER THAN AN `rm`. Both workflows drop
-# from an `if: always()` step, which runs on the path where *taking* the lock
-# is what failed — so the losing run reaches `drop` while the winner is
-# building. An unconditional remove there releases the tree in the middle of
-# that build, which is the exact corruption the lock exists to prevent,
-# arrived at through the lock.
+# Both workflows drop from an `if: always()` step, which also runs when taking
+# the lock failed. A losing run then reaches `drop` while the winner builds, so
+# `drop` must check the owner.
 lock drop bob >/dev/null
 expect "a run that does not hold it cannot drop it" ok "$(status "$(lock who)")"
 contains "and it is still alice's" "'alice'" "$(lock who)"
 
-# `holds`: whether a job that did not take the tree still has it. engine.yml
-# takes the tree in its build job and runs the checks against it in the next
-# one, so the checks job asks before trusting what is in it.
+# `holds` checks whether a job still has a tree it did not take itself.
+# engine.yml takes the tree in its build job and checks against it in the
+# next job.
 expect "the holder holds it" ok "$(status "$(lock holds alice)")"
 expect "somebody else does not" refused "$(status "$(lock holds bob)")"
 contains "and is told who does" "'alice'" "$(lock holds bob)"
@@ -87,22 +77,19 @@ expect "a tree nobody holds is held by nobody" refused "$(status "$(lock holds a
 contains "and then nothing holds it" "is not locked" "$(lock who)"
 expect "the tree can be taken again" ok "$(status "$(lock take carol)")"
 
-# Dropping nothing is not a failure: the `always()` step also runs on the path
-# where the job failed before the lock was ever taken.
+# The `always()` step also runs when the job failed before taking the lock.
 lock drop carol >/dev/null
 expect "dropping an unheld tree is a no-op, not an error" ok \
   "$(status "$(lock drop carol)")"
 
-# AGE IS THE WHOLE POINT OF THE TIMESTAMP. "Taken at 04:12" answers a question
-# nobody has; the question is whether to wait or to clear, and eleven hours is
-# the answer to it.
+# Age decides whether to wait or clear a lock, so the output shows age, not
+# the time it was taken.
 lock take dave >/dev/null
 echo "$(( $(date +%s) - 40200 ))" >"$WORK/lock/since"
 contains "an old lock reads in hours and minutes" "held for 11h 10m" "$(lock who)"
 
-# Three ways the timestamp can be unusable, and none of them may produce a
-# confident wrong number: a lock reported as held for -3h is worse than one
-# reported as unknown, because the first invites clearing it.
+# An unusable timestamp reads as unknown age. A wrong number such as -3h could
+# lead someone to clear a live lock.
 echo "not a number" >"$WORK/lock/since"
 contains "a corrupt timestamp is unknown, not nonsense" "unknown age" "$(lock who)"
 rm -f "$WORK/lock/since"
@@ -114,25 +101,17 @@ contains "a clock that moved backward is unknown, not negative" \
 rm -f "$WORK/lock/owner"
 contains "a lock with no name in it still refuses a taker" \
   "did not write their name" "$(lock take erin)"
-# And nobody can claim it by guessing the empty name: `drop` compares what is
-# in the lock, and an unnamed lock matches nothing.
+# `drop` compares the stored owner, so an empty owner cannot drop an unnamed
+# lock.
 lock drop "" >/dev/null 2>&1
 expect "an unnamed lock is not droppable by an empty owner" ok \
   "$(status "$(lock who)")"
 contains "so it is still there to be cleared by hand" "is locked by" "$(lock who)"
 
-# ONE LOCK PER TREE, AND THE PATH IS RESOLVED TO FIND IT.
-#
-# This used to put the lock beside the checkout -- `dirname` of
-# `/build/chromium/src` -- and then at the build root for the whole pool, when
-# that path became a symlink `engine-tree-pool.sh` swapped between trees. CI no
-# longer swaps it: the pool hands each run its own tree's path, so two runs in
-# two different trees are the ordinary case and one lock for the pool would
-# serialize them for no reason.
-#
-# What has to hold instead is that the name is derived from the TREE and not
-# from the path typed, so a person building through `/build/chromium/src` and a
-# job building through `/build/trees/tree-0/src` collide when they should.
+# One lock per tree, named from the resolved tree path. The pool gives each
+# run its own tree, so runs in different trees must not block each other. A
+# person building through `/build/chromium/src` and a job building through
+# `/build/trees/tree-0/src` must collide.
 unset DOMICILE_TREE_LOCK
 POOL="$WORK/pool"
 mkdir -p "$POOL/trees/tree-0/src" "$POOL/trees/tree-1/src"
@@ -145,14 +124,13 @@ expect "the lock is at the build root, not inside the tree it names" ok \
 expect "so nothing that moves the tree can strand it" ok \
   "$([ ! -e "$POOL/trees/tree-0/.domicile-tree-lock" ] && echo ok || echo "it went into the tree")"
 
-# THE CASE THE PER-TREE NAME EXISTS FOR. The convenience path and the real path
-# are the same tree, so the second take must be refused -- otherwise a person
-# and a job compile in one tree at once and siso links a binary from both.
+# The symlinked path and the real path are the same tree, so the second take
+# is refused. Otherwise two builds compile in one tree at once.
 out="$(DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/trees/tree-0/src" gail 2>&1 || true)"
 expect "the real path and the convenience path are one tree" refused \
   "$(case "$out" in (*locked*) echo refused ;; (*) echo "$out" ;; esac)"
 
-# And the tree nobody is in is free, which is the whole point of per-tree.
+# A different tree stays free.
 expect "a different tree is free while that one is held" ok \
   "$(DOMICILE_BUILD_ROOT="$POOL" "$LOCK_SH" take "$POOL/trees/tree-1/src" gail >/dev/null 2>&1 && echo ok || echo "refused")"
 

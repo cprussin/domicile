@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Whether a compile-slot holder's run is over, as GitHub says: only `completed`
-# is a yes, any other status is a no, and anything unanswered is "could not
-# ask" -- never a yes, because a yes clears a slot a live build may be linking in.
+# Tests `crux-run-finished.sh`: only GitHub's `completed` status means the slot
+# holder's run is over. Any other status is "no", and a failed query is "could
+# not ask", never "yes", since "yes" frees a slot a live build may be using.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,7 +15,7 @@ expect() {
   else printf '  FAIL  %s\n    wanted: %s\n    got:    %s\n' "$1" "$2" "$3"; FAILED=$((FAILED + 1)); fi
 }
 
-# A curl that answers with $STATUS for the URL it was asked, or fails.
+# A curl stub that answers with $STATUS and records the URL, or fails.
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/curl" <<'STUB'
 #!/usr/bin/env bash

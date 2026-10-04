@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# engine.yml's compile queue is held for the build and nothing after it.
+# Checks that engine.yml holds the `crux-compile` concurrency group only for
+# the build.
 #
-# A compiling run waits in the `crux-compile` concurrency group. It covered the
-# whole engine job, so the group was held for the checks, packaging, publish
-# and write-back as well: over 24h it was held 10.9h for 5.9h of Build, and one
-# cold 80-minute build kept five PRs needing ~2 minutes of compile each waiting
-# 40-86 minutes.
-#
-# So the build is a job of its own, `build`, and only it is in the group. The
-# checks are the `engine` job, outside it -- still named `engine`, the check
-# name anything outside this file knows. They run in the tree the build took,
-# which stays locked across the gap between the two jobs so nothing resets it,
-# and a third job drops it if the checks never got to.
+# Holding it for checks, packaging and publishing made short builds wait behind
+# long ones. The `build` job is in the group; the `engine` job (the required
+# check name) runs the checks outside it in the same tree. The tree stays
+# locked between the two jobs, and `drop-tree` releases it if the checks never
+# finish.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,8 +26,8 @@ has() { # what, pattern, text
     fail "$1" "no line matches: $2"
   fi
 }
-# A whole line, as written: GitHub's `cancelled()` is exempt from
-# test-american-english.sh only spelled as GitHub spells it, not escaped.
+# Matches a whole literal line. GitHub's `cancelled()` is exempt from
+# test-american-english.sh only when spelled literally, not escaped.
 has_line() { # what, line, text
   if printf '%s\n' "$3" | grep -qxF -- "$2"; then
     ok "$1"
@@ -85,8 +80,8 @@ has "and hands that tree on" \
 lacks "and runs no checks" 'check\.sh engine|scripts/engine-guard-' "$build"
 lacks "and publishes nothing" \
   'engine-release-(package|publish|repin)\.sh|engine-proof\.sh record' "$build"
-# LOCKED ACROSS THE GAP. A build job that dropped its tree on success would
-# hand it to whichever run picked next, which could reset it under the checks.
+# The build job keeps the tree locked on success, so no other run can reset it
+# before the checks.
 drop="$(step_running "$build" 'engine-tree-lock\.sh drop')"
 has_line "drops the tree only if it failed or was canceled" \
   "        if: \${{ (failure() || cancelled()) && env.CHROMIUM != '' }}" "$drop"
@@ -105,7 +100,7 @@ lacks "without taking a tree of its own" \
 lacks "and compiles no Chromium" "$COMPILES" "$engine"
 has "in the tree the build took" \
   'CHROMIUM: \$\{\{ needs\.build\.outputs\.chromium \}\}' "$engine"
-# RED WHEN THE BUILD IS. A skipped required check reads as passing.
+# A skipped required check reads as passing, so a failed build must fail it.
 has_line "runs whenever the build ran, so a red build is a red engine" \
   "    if: \${{ !cancelled() && needs.build.result != 'skipped' }}" "$engine"
 has "and fails when the build did" "needs\\.build\\.result != 'success'" \

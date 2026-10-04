@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# Whether the compositor advertises exactly the pixel formats the engine
-# imports.
+# Tests that the compositor advertises the pixel formats the engine imports.
 #
-# Two lists, in two languages: `FormatFromFourcc` in the fork's
-# brokered_frame_sink.cc, which refuses any other fourcc, and `FOURCCS` in the
-# compositor's engine.rs, which is all `zwp_linux_dmabuf_v1` offers a client.
-# A format in the first and not the second is one no client is offered; one in
-# the second and not the first is a window whose every frame is refused. That
-# is how imv drew nothing: it chose XR30, the renderer advertised it, and the
-# engine had no SharedImageFormat for it.
+# `FormatFromFourcc` in the fork's brokered_frame_sink.cc refuses any other
+# fourcc. `FOURCCS` in the compositor's engine.rs is what `zwp_linux_dmabuf_v1`
+# offers clients. A format only the compositor lists gets every frame refused;
+# for example imv picked XR30 and drew nothing.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,7 +24,7 @@ engine=$(sed -n '/FormatFromFourcc(uint32_t fourcc)/,/^}/p' "$ENGINE" |
 compositor=$(sed -n '/pub const FOURCCS/,/\];/p' "$COMPOSITOR" |
   grep -o '0x[0-9a-fA-F_]*' | sed 's/0x//; s/_//g' | tr 'A-F' 'a-f' | sort)
 
-# Empty is a parse that found nothing, which would agree with itself.
+# An empty parse would agree with itself.
 if [ -z "$engine" ] || [ -z "$compositor" ]; then
   echo "FAIL: read no fourccs (engine: '$engine', compositor: '$compositor')" >&2
   exit 1

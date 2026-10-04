@@ -1,32 +1,21 @@
 #!/usr/bin/env bash
-# Whether the desktop comes back when the machine does.
+# Tests that the desktop lights its displays again after a suspend.
 #
-# A SUSPEND IS NOT A CONSOLE SWITCH, AND logind TREATS THEM AS NOTHING ALIKE.
-# `session_device_pause_all` and `session_device_resume_all` have exactly three
-# callers between them and all three are VT paths -- `logind-seat.c` when a
-# seat's active session changes and `logind-session.c` on the switch itself --
-# so the evdev descriptors this session took stay open across a suspend and
-# nothing sends `PauseDevice`. `DROP_MASTER` is asked for in exactly one place
-# too (`logind-session-device.c`), on the same VT path, so DRM master is still
-# this process's when the machine comes back. The session never leaves
-# `Active`.
+# logind treats a suspend differently from a VT switch. Only VT paths pause
+# devices or drop DRM master, so across a suspend the evdev descriptors stay
+# open, master is kept, and the session stays `Active`.
 #
-# WHICH LEAVES ONE THING LOST AND IT IS THE ONE THAT MATTERS. The GPU resumes
-# with its CRTCs reset, and the connectors report exactly what they reported
-# before: same panels, same modes, same origins. So the hotplug guard --
-# `ModesetWouldChangeAnything`, which exists because this driver used to
-# modeset in a loop -- answers "nothing changed" and every panel stays dark.
-# The resume has to say that what the hardware confirmed before the sleep is
-# not a state anything can be compared to any more.
+# The GPU resumes with its CRTCs reset, but the connectors report the same
+# panels and modes. `ModesetWouldChangeAnything` then sees no change and the
+# panels stay dark. On resume the driver must forget what the hardware
+# confirmed before the sleep.
 #
-# `PrepareForSleep(b)` IS HOW THE MACHINE SAYS SO: `true` on the way down and
-# `false` once it is back, broadcast on `org.freedesktop.login1.Manager`.
-# logind emits the `false` even for a sleep that failed, so a wake is a wake
-# whether or not anything was suspended.
+# logind broadcasts `PrepareForSleep(b)` on `org.freedesktop.login1.Manager`:
+# `true` going down, `false` on return. It sends `false` even after a failed
+# sleep.
 #
-# NO CHROMIUM TREE. The series is the source of truth, so this reads `src/`
-# and `patches/`, which is what makes it cheap enough to run in the shell
-# group on every push rather than only when the fork is built.
+# Needs no Chromium tree: it reads `src/` and `patches/`, so it runs in the
+# shell group on every push.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,8 +28,7 @@ FAILED=0
 ok()   { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# Added lines only (`^+`), so a patch that merely quotes upstream in context
-# cannot satisfy this.
+# Added lines only (`^+`), so upstream code quoted as context does not count.
 added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
 in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
@@ -58,9 +46,8 @@ for f in drm_sleep.h drm_sleep.cc drm_sleep_unittest.cc; do
   fi
 done
 
-# THE SIGNAL, AND THE OBJECT IT COMES FROM. `PrepareForSleep` is the manager's,
-# not the session's: it is one broadcast for the whole machine, so there is no
-# `GetSessionByPID` in this path at all.
+# `PrepareForSleep` is a machine-wide broadcast from the manager, not the
+# session, so this path needs no `GetSessionByPID`.
 for named in PrepareForSleep org.freedesktop.login1.Manager /org/freedesktop/login1; do
   if in_sleeper "$named"; then
     ok "the sleeper names $named"
@@ -69,10 +56,9 @@ for named in PrepareForSleep org.freedesktop.login1.Manager /org/freedesktop/log
   fi
 done
 
-# READ AS A SIGNAL, NOT AS A PROPERTY. `Session.Active` next door arrives inside
-# a variant because a property does; `PrepareForSleep`'s body is a plain `b`.
-# Reading this one with the property reader pops nothing, and a desktop that
-# never lights again is the whole of what that mistake looks like.
+# `PrepareForSleep`'s body is a plain `b`, not a variant like the
+# `Session.Active` property. The property reader would pop nothing and the
+# desktop would never light again.
 if in_sleeper 'PopVariantOfBool'; then
   fail "the signal's body is read as a signal's" \
     "domicile/drm_sleep.cc reads PrepareForSleep through the property reader"
@@ -80,11 +66,8 @@ else
   ok "the signal's body is read as a signal's"
 fi
 
-# NOTHING IS HANDED BACK FOR A SLEEP. logind pauses no device and drops no
-# master across a suspend -- see the head of this file -- so a drop here would
-# be this process giving away a display nobody asked it for, and the take on
-# the way back is a round trip that can only fail while the session never
-# stopped being active.
+# logind keeps master across a suspend, so dropping it would give the display
+# away, and taking it back is a round trip that can only fail.
 for refused in RelinquishDisplayControl TakeDisplayControl; do
   if in_sleeper "$refused"; then
     fail "a sleep does not move DRM master" \
@@ -94,8 +77,8 @@ for refused in RelinquishDisplayControl TakeDisplayControl; do
   fi
 done
 
-# THE WAKE FORCES A MODESET, which is the whole point and the half that cannot
-# be inferred from a hotplug: the hardware reports what it reported before.
+# The wake must force a modeset: the hardware reports what it did before, so
+# hotplug handling sees nothing to do.
 if in_sleeper 'Relight'; then
   ok "the wake asks for a relight"
 else
@@ -109,9 +92,8 @@ else
     "no DrmModeset::Relight in domicile/drm_modeset.cc"
 fi
 
-# AND IT FORCES IT BY FORGETTING, which is the one line that makes it work.
 # `ModesetWouldChangeAnything` compares against what the hardware last
-# confirmed; after a resume that comparison is true and useless.
+# confirmed. Clearing that is what forces the modeset.
 if in_modeset 'confirmed_.clear()'; then
   ok "a relight forgets what the hardware confirmed"
 else
@@ -119,7 +101,7 @@ else
     "DrmModeset::Relight leaves confirmed_ in place, so the hotplug guard eats the resume"
 fi
 
-# THE WIRING, which is a patch because `ozone_platform_drm.cc` is upstream's.
+# Wired in by a patch because `ozone_platform_drm.cc` is upstream's.
 for wired in 'DrmSleep' 'domicile/drm_sleep.cc'; do
   if in_patches "$wired"; then
     ok "a patch carries $wired"
@@ -128,13 +110,8 @@ for wired in 'DrmSleep' 'domicile/drm_sleep.cc'; do
   fi
 done
 
-# THE FLOOR, WHICH HAS ONE HOME NOW. It used to be written in both
-# engine.yml and engine-drm-probe.yml, and this asserted it was in each —
-# which is the check that noticed nothing when the two copies parted
-# (`DrmScreenTest:26` against `:18`, and this suite missing from one of
-# them altogether). `scripts/engine-drm-unit-tests.sh` is the one list, and
-# both jobs run it, so there is one thing to assert and the filter that
-# runs is derived from the same array rather than written beside it.
+# `scripts/engine-drm-unit-tests.sh` holds the per-suite test count floors.
+# Both engine.yml and engine-drm-probe.yml run it.
 FLOORS="$ROOT/scripts/engine-drm-unit-tests.sh"
 if grep -qE "^ *DrmSleepTest:[0-9]+$" "$FLOORS" 2>/dev/null; then
   ok "the DRM suite list carries a floor for the suite"

@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# A build that steps aside for whoever is waiting for the compile slot.
+# Asserts `engine-yielding-build.sh` yields the compile slot to waiting jobs.
 #
-# The production engine is an official build, hours long, on a machine with one
-# compile slot. Held for those hours, it would queue every pull request's
-# minute-long compile behind it. So it runs under this wrapper, which stops the
-# build whenever somebody is waiting, hands them the slot, takes it back and
-# starts the build again -- which picks up where it left off, because a build is
-# incremental.
+# The production engine build takes hours on a machine with one compile slot.
+# The wrapper stops the build while another job waits, hands over the slot,
+# takes it back and restarts the build, which resumes incrementally.
 #
-# What is worth a test is that the three things a build can do still come out
-# as themselves: finish, fail, and be interrupted and then finish.
+# Checks that the build's outcome survives: it finishes, fails, or is
+# interrupted and then finishes.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,9 +22,9 @@ export DOMICILE_COMPILE_SLOT_POLL=0.1 DOMICILE_COMPILE_SLOT_WAIT=10
 export DOMICILE_YIELD_POLL=0.1
 export DOMICILE_RENDER_NODE_LOCK="$WORK/node" DOMICILE_RENDER_NODE_NOISE="$WORK/noise"
 export DOMICILE_RENDER_NODE_POLL=1 DOMICILE_RENDER_NODE_NOISE_BEAT=1
-# The production build and the waiter are two jobs, so two runners: on a CI
-# runner both would share its name, and the waiter would clear the build's
-# hold as a dead job's -- see engine-compile-slot.sh.
+# The production build and the waiter run as separate jobs on separate
+# runners. With a shared RUNNER_NAME, the waiter would clear the build's hold as
+# a dead job's (see engine-compile-slot.sh).
 unset RUNNER_NAME
 
 FAILED=0
@@ -50,7 +47,7 @@ contains() { # what, needle, haystack
   esac
 }
 
-# A build that counts its starts, runs for a while and exits with <status>.
+# A build that logs each start, sleeps, and exits with <status>.
 BUILD="$WORK/build"
 cat >"$BUILD" <<'EOF'
 #!/usr/bin/env bash
@@ -75,7 +72,7 @@ expect "without being started again" 1 "$(starts "$WORK/ran-failing")"
 
 # --- somebody waiting ---------------------------------------------------------
 
-# A pull request arrives while the build runs, compiles for a moment, and goes.
+# A pull request takes the slot mid-build, compiles briefly, and drops it.
 ( sleep 0.5
   "$SLOT_SH" take pr >/dev/null
   sleep 0.5
@@ -88,9 +85,8 @@ expect "having been started again" 2 "$(starts "$WORK/ran-yielding")"
 contains "and says whom it stepped aside for" "'pr'" "$out"
 contains "and it holds the slot again" "'prod'" "$("$SLOT_SH" who)"
 
-# A pull request's latency guard, which waits for the build to stop being
-# noise. Stepping aside is stopping; the build starts again once the guard has
-# measured and let go of the machine.
+# A pull request's latency guard waits for the noise to stop. The build stops,
+# and restarts once the guard has measured and released the machine.
 ( sleep 0.5
   DOMICILE_RENDER_NODE_QUIET_WAIT=10 "$NODE_SH" quiet latency >/dev/null 2>&1
   sleep 0.5
@@ -103,7 +99,7 @@ expect "a build that stepped aside for a measurement still finishes" 0 "$status"
 expect "having been started again" 2 "$(starts "$WORK/ran-quiet")"
 contains "and says whom it stepped aside for" "'latency'" "$out"
 
-# A build killed mid-run leaves nothing of itself running.
+# An interrupted build leaves no process running.
 if pgrep -f "$WORK/ran-yielding" >/dev/null; then
   fail "the interrupted build is not left running" "$(pgrep -af "$WORK/ran-yielding")"
 else

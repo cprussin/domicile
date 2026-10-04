@@ -1,24 +1,15 @@
 #!/usr/bin/env bash
-# Prove the compositor advertises `zwp_linux_dmabuf_v1`, which is what a GPU
-# client binds before it can hand over a buffer at all.
+# Checks the compositor advertises `zwp_linux_dmabuf_v1`, which a GPU client
+# binds before it can send a buffer.
 #
 #   nix develop .#full -c ./scripts/e2e-dmabuf.sh
 #
-# Nothing appears on screen: this is a headless check of the message plane, with
-# no chrome and no output; a desktop that draws is what opens a window.
-#
-# Unlike the other e2e scripts this one needs REAL GPU HARDWARE — a DRM render
-# node (/dev/dri/renderD*) the client can allocate against. Without one the
-# compositor still advertises the global (Mesa's software EGL is enough for
-# that), but no client can produce a buffer, so the second half is skipped
-# rather than failed.
+# Headless: no chrome and no output. Mesa's software EGL is enough to
+# advertise the global.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
-# Built here rather than merely checked for. A binary that exists but predates
-# the source is the worst of both: every check runs, and every check reports on
-# code that is not the code in the tree. Incremental and near-free when there is
-# nothing to do.
+# Always build: a stale binary would test code that is not in the tree.
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"
   exit 1
@@ -34,9 +25,8 @@ COMPLOG="$(mktemp)"
 CLILOG="$(mktemp)"
 MOCK=""; CLI=""
 
-# Frame handling logs at debug and buffer releases at trace: this script's
-# whole job is telling apart "no commit arrived" from "imported but never
-# delivered".
+# Trace level logs buffer releases, which separate "no commit arrived" from
+# "imported but never delivered".
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=trace}" \
   "$BIN" --session "$SOCK.session" --chrome-socket "$SOCK" >"$COMPLOG" 2>&1 &
 COMP=$!
@@ -44,25 +34,20 @@ disown "$COMP" 2>/dev/null || true   # so teardown's kill doesn't print "Killed"
 cleanup() { kill -9 "$COMP" $MOCK $CLI 2>/dev/null; rm -f "$CHROME" "$COMPLOG" "$CLILOG"; }
 trap cleanup EXIT
 
-# The compositor logs through `tracing`, which colors its field names; the
-# greps below read the log as plain text.
+# Strips tracing's color escapes so the greps below match.
 plain() { sed 's/\x1b\[[0-9;]*m//g' "$COMPLOG"; }
 
-# Everything the compositor has to say about a failure. A `.expect()` in the
-# import path aborts the process, and a Rust panic is not one of tracing's
-# levels, so it has to be matched separately or it goes unseen.
+# Prints the compositor's warnings, errors and panics. Panics are not tracing
+# levels, so they are matched separately.
 compositor_trouble() {
   plain | grep -aE "[[:space:]](WARN|ERROR)[[:space:]]|panicked at|stack backtrace" \
     | cut -c1-300 | tail -8
   if ! kill -0 "$COMP" 2>/dev/null; then
     echo "  (the compositor process is gone: it died mid-run)"
-  # A compositor that is alive but not answering has blocked its event loop —
-  # usually on the GPU — and a client waiting for a frame callback looks exactly
-  # like a client that never drew. Binding a global proves the loop still turns.
+  # A blocked event loop (often on the GPU) looks like a client that never
+  # drew. Binding a global with wayland-info shows the loop still runs.
   elif ! command -v wayland-info >/dev/null 2>&1; then
-    # Without the tool there is no evidence either way, and the branch below
-    # would read `command not found` as a blocked event loop — accusing the
-    # compositor on the strength of a missing package.
+    # Without wayland-info, the next branch would misreport a blocked loop.
     echo "  (no wayland-info here, so whether it is still answering is unknown)"
   elif WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info >/dev/null 2>&1; then
     echo "  (the compositor is alive and still answering clients)"
@@ -71,21 +56,19 @@ compositor_trouble() {
   fi
   echo "  --- the last thing the compositor did (whole lines: the timestamps say"
   echo "      whether it is stuck on the last step or finished it long ago):"
-  # Whole lines, not `grep -o` fragments: the module path is `…::dmabuf_import`,
-  # so matching bare words pulls "import:" out of it and drops both the stage
-  # name and the fields (buffer size, payload bytes) that make the line useful.
+  # Whole lines, not `grep -o`: the module path `…::dmabuf_import` would
+  # match "import:" and drop the stage name and fields.
   plain | grep -aE "readback:|outbound:|dropped a frame|broadcast app frame|buffer released|toplevel mapped|chrome client connected" \
     | sed 's/^[0-9-]*T//' | cut -c1-150 | tail -18 | sed 's/^/  /'
 }
 
-# One line of the handshake tally: how many times the client saw or sent an event.
+# Prints how many times the client saw or sent an event.
 handshake_step() { printf '  %-30s %s\n' "$1" "$(grep -acE "$2" "$CLILOG")"; }
 
-# A client that cannot set up its GPU context creates its window first and gives
-# up after — which from the compositor's side is indistinguishable from a client
-# that is merely slow. Its own output is the only place that shows.
+# Prints the client's own output and handshake progress. A client that fails
+# GPU setup after creating its window looks slow from the compositor's side.
 client_trouble() {
-  # The client's own messages: everything that is not a `[123.456]` protocol line.
+  # Messages that are not `[123.456]` protocol lines.
   echo "  --- what ${GPU_CLIENT[0]} said:"
   grep -avE '^[[:space:]]*\[[0-9:]+\.[0-9]+\]' "$CLILOG" | cut -c1-300 | tail -10 | sed 's/^/  /'
   kill -0 "$CLI" 2>/dev/null && echo "  (it is still running)" || echo "  (it has exited)"
@@ -116,20 +99,13 @@ if WAYLAND_DISPLAY=wayland-1 timeout 5 wayland-info 2>/dev/null | grep -q zwp_li
   echo "PASS: the compositor advertises zwp_linux_dmabuf_v1"
 else
   echo "FAIL: the compositor advertised no dmabuf global. Its own reason:"
-  # The compositor logs exactly why it gave up on EGL — a missing libEGL, no
-  # device, a context it could not create — so print that rather than guess.
+  # The compositor logs why EGL setup failed.
   compositor_trouble
   echo "  (libEGL is dlopen'd, so it must be on LD_LIBRARY_PATH, not just linkable.)"
   exit 1
 fi
 
-# The import itself is no longer this script's to prove. It used to read a
-# client's dmabuf back and assert the pixels reached the chrome; that path is
-# deleted, and a client's buffer now goes to the display compositor through the
-# engine. What proves it end to end is
+# The import itself is checked end to end by
 # `packages/domicile-engine/scripts/guard-client-window.sh`, which needs a
-# Chromium build and a GPU and so cannot live here.
-#
-# What is left is the half that runs anywhere and is worth running: the global
-# is advertised, which is what every dmabuf client binds before it draws.
+# Chromium build and a GPU.
 exit 0

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Whether every engine guard and spike removes its browser profile on exit.
+# Tests that every engine guard and spike removes its browser profile on exit.
 #
-# Each one wipes its profile before it starts Chrome, and until this, never
-# after. On crux /tmp is tmpfs, private to the runner's unit and cleared only
-# when the unit stops, so the last run's profiles stayed in RAM: 230-630M each,
-# 5.1G on one runner on 2026-09-28, beside a cold Chromium link that needs most
-# of the machine.
+# On crux /tmp is tmpfs, private to the runner's unit and cleared only when the
+# unit stops. Leftover profiles are 230-630M each and compete for RAM with a
+# cold Chromium link.
 #
-# Not moved under $TMPDIR instead: Chrome's process singleton puts a socket
-# beside the profile, the job's $TMPDIR is two nix shells deep, and that path
-# is past the 107 bytes a Unix socket allows -- see spike.sh.
+# Profiles cannot move under $TMPDIR: Chrome puts a singleton socket beside
+# the profile, and the job's $TMPDIR is too deep for the 107-byte Unix socket
+# path limit (see spike.sh).
 #
-# A script that hands its profile to spike.sh, as a `PROFILE=... \` prefix on
-# that command, leaves the removal to spike.sh, which is checked like the rest.
+# A script that passes its profile to spike.sh with a `PROFILE=... \` prefix
+# leaves the removal to spike.sh, which is checked too.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -35,7 +33,7 @@ for script in "$SCRIPTS"/*.sh; do
   fi
 done
 
-# Nothing checked is a pattern that stopped matching, which would pass silently.
+# Zero checks means the pattern stopped matching.
 if [ "$checked" -eq 0 ]; then
   echo "FAIL: found no script under $SCRIPTS that makes its own profile" >&2
   exit 1

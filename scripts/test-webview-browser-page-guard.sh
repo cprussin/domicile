@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Which end the browser-page guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-browser-page.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-browser-page.sh`. Worth a
-# test of its own because its control passes on the OPPOSITE of the run's
-# reading -- the refusal must appear in the run and must not in the control --
-# and a chain written by symmetry gets one of the two backward.
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly.
+# The control passes on the opposite reading from the run: the refusal must
+# appear in the run and must not appear in the control. Runs the verdict block
+# from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -89,8 +86,8 @@ echo
 echo "the run — chrome://history in a browser window"
 expect "a refusal and a live browser is the pass" "pass" "$(verdict 0)"
 expect "a signal is a failure" "fail" "$(verdict 0 SAW_CRASH=1)"
-# Named before the missing refusal it also causes: an engine without patch
-# 0083 crashes AND does not refuse, and the crash is the bug.
+# An engine without patch 0083 both crashes and does not refuse. The crash is
+# the bug, so it is named first.
 expect "a signal names where it landed, even with no refusal" "yes" \
   "$(blames "TabInterface" 0 SAW_CRASH=1 SAW_REFUSAL=0)"
 expect "no refusal is a failure" "fail" "$(verdict 0 SAW_REFUSAL=0)"

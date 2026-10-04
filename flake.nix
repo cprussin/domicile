@@ -10,10 +10,8 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
 
-      # Toolchain needed to build & test the pure-logic Rust crates
-      # (domicile-config, domicile-scene, domicile-protocol) and the whole
-      # TypeScript workspace. No graphics/GPU deps required for these — keeps
-      # `nix develop` fast and the test loop tight.
+      # Tools to build and test the pure-logic Rust crates and the TypeScript
+      # workspace. No graphics libraries, so `nix develop` stays fast.
       coreTools = with pkgs; [
         cargo
         rustc
@@ -21,41 +19,28 @@
         clippy
         rust-analyzer
         pkg-config
-        # The TypeScript side: bun is the package manager and test runner,
-        # biome the linter/formatter, turbo the task orchestrator (installed
-        # from the lockfile by `bun install`). Node is pinned to match
-        # package.json's `engines.node` (>=24).
+        # bun runs packages and tests, biome lints and formats. turbo comes
+        # from the lockfile via `bun install`. Node matches package.json's
+        # `engines.node` (>=24).
         bun
         biome
         nodejs_24
-        # `scripts/update-engine-release.sh` reads a GitHub release with curl
-        # and jq; `.github/scripts/engine-release-*.sh` do the same and pack a
-        # zstd tarball; `spike-iframe.sh` fetches a page. In the core shell
-        # rather than the full one because the release workflow runs in it.
-        #
-        # Fetching the engine itself is NOT among these any more: that is a
-        # `fetchurl` in a derivation now, and nix does the download, the hash
-        # and the cache.
+        # For the engine release scripts (`scripts/update-engine-release.sh`,
+        # `.github/scripts/engine-release-*.sh`) and `spike-iframe.sh`. In the
+        # core shell because the release workflow runs there.
         curl
         jq
         zstd
-        # WITH THE CA BUNDLE, because this curl shadows the system's inside
-        # every shell and every `nix run` app. It reads CAs from OpenSSL's
-        # default path, which on a Fedora- or SUSE-shaped host holds nothing —
-        # and the release scripts would report a certificate failure as "no
-        # release tagged engine-nightly", the least true message available.
-        #
-        # This package alone is what fixes it: its setup hook exports
-        # `NIX_SSL_CERT_FILE`, which nixpkgs' OpenSSL honors. Setting
-        # `SSL_CERT_FILE` on the shells instead does nothing at all — it is in
-        # nix's own ignore list and never reaches the shell, which is worth
-        # writing down because it looks like it would.
+        # This curl shadows the system's and reads CAs from OpenSSL's default
+        # path, which is empty on Fedora- and SUSE-style hosts. cacert's setup
+        # hook exports `NIX_SSL_CERT_FILE` to fix that. Setting `SSL_CERT_FILE`
+        # on the shell does not work: nix drops it.
         cacert
       ];
 
-      # Native libraries the compositor needs: Smithay's Wayland stack, and the
-      # GL and DRM the dmabuf import goes through. Split out so the core shell
-      # stays lean; enter with `nix develop .#full` to build against them.
+      # Native libraries the compositor needs: Smithay's Wayland stack, plus GL
+      # and DRM for dmabuf import. Only in `nix develop .#full`, so the core
+      # shell stays small.
       hostLibs = with pkgs; [
         wayland
         wayland-protocols
@@ -69,41 +54,29 @@
         # Minimal Wayland clients for exercising the compositor in tests.
         weston
         wayland-utils
-        # A terminal to launch via the demo shell's Alt+Enter keybinding.
+        # The terminal the demo shell's Alt+Enter binding launches.
         kitty
-        # Xvfb is what gives the compositor's own window a display to open on
-        # where there is none — `--present`, under `e2e-a-dense-display.sh` and
-        # `e2e-chrome-fills-a-window.sh`.
+        # A display for the compositor's `--present` window in headless e2e
+        # tests (`e2e-a-dense-display.sh`, `e2e-chrome-fills-a-window.sh`).
         xvfb
-        # There is no window manager on an Xvfb, so `xdotool` is what resizes
-        # Domicile's own window in `e2e-chrome-fills-a-window.sh` — the one
-        # check that drives `--present`. Without it here that check skips, and
-        # `nix run .#e2e-chrome-fills-a-window` could never do anything else.
+        # Resizes Domicile's window under Xvfb, which has no window manager.
+        # `e2e-chrome-fills-a-window.sh` skips without it.
         xdotool
       ];
 
-      # What `libdomicile_engine.so` was linked against.
+      # Runtime libraries for the prebuilt Chromium engine
+      # (`libdomicile_engine.so`).
       #
-      # The engine is a Chromium component, so it needs Chromium's runtime
-      # libraries — and the compositor `dlopen`s it, which means they have to
-      # be on the loader path of the shell the *compositor* runs in, not the
-      # one the engine was built in. Before this the two sets lived in
-      # different shells and neither was a superset: from the full shell the
-      # engine would not load (`libglib-2.0.so.0: cannot open shared object
-      # file`), and from Chromium's toolchain shell there was no EGL, so no
-      # client could hand the compositor a dmabuf in the first place.
-      #
-      # Its own list rather than folded into `hostLibs` because nothing here is
-      # Domicile's: it is what a prebuilt Chromium needs, and it changes when
-      # Chromium's does. `packages/domicile-engine/CHROMIUM_PIN` says which
-      # Chromium that is.
+      # The compositor `dlopen`s the engine, so these must be on the loader
+      # path of the shell the compositor runs in. Kept apart from `hostLibs`
+      # because they track Chromium (`packages/domicile-engine/CHROMIUM_PIN`),
+      # not Domicile.
       engineRuntimeLibs = with pkgs; [
         glib
         nss
         nspr
         dbus
-        # `atk` and `at-spi2-atk` are aliases of this in current nixpkgs, so
-        # naming all three would put the same store path on the path thrice.
+        # Also provides `atk` and `at-spi2-atk`, which are aliases of it.
         at-spi2-core
         cups
         expat
@@ -113,24 +86,17 @@
         gdk-pixbuf
         gtk3
         libdrm
-        # libgbm.so.1, which Chromium needs to allocate buffers on a GPU. It
-        # was on the dev shell's library path separately and missing here, so
-        # the list called "what a prebuilt Chromium needs" did not have it —
-        # which `autoPatchelfHook` said the first time anything asked.
+        # libgbm.so.1, for GPU buffer allocation.
         libgbm
-        # libinput.so.10, which the engine reads a trackpad through as of patch
-        # 0027 and `use_libinput = true`. It is a hard link, not a `dlopen`:
-        # `autoPatchelfHook` would refuse the package without it, which is the
-        # cheapest possible place for this to be noticed.
+        # libinput.so.10, for trackpad input (`use_libinput = true`). Linked,
+        # not `dlopen`ed, so `autoPatchelfHook` fails the build without it.
         libinput
         libxshmfence
-        # libudev.so.1, which Chromium opens to enumerate input and GPU
-        # devices. `udev` is an alias of this in nixpkgs; naming the package it
-        # actually comes from keeps the list one entry per store path.
+        # libudev.so.1, to enumerate input and GPU devices. `udev` is an alias
+        # of this package.
         systemd
-        # Chromium links a wider set of X client libraries than winit does, and
-        # needs them whether or not it runs on X: the ozone platform is chosen
-        # at runtime, so they have to resolve either way.
+        # X client libraries. Chromium picks its ozone platform at runtime, so
+        # these must resolve even when it does not run on X.
         libxcomposite
         libxdamage
         libxext
@@ -142,20 +108,13 @@
 
       # ── The engine CI built, as a package ───────────────────────────────
       #
-      # The alternative was a script that curled the release, checked a
-      # checksum, cached the result by name and patched the ELF — every one of
-      # which nix already does, and does better: `fetchurl` is the checksum and
-      # the cache, the store path is the name, and `autoPatchelfHook` is the
-      # patching. It is also the only version that works on NixOS, where a
-      # generic-linux Chromium cannot start at all: `/lib64/ld-linux-x86-64.so.2`
-      # is a stub whose whole job is to say so.
+      # `autoPatchelfHook` makes the generic-linux build start on NixOS.
+      # `dontStrip` because stripping a large release binary gains nothing.
+      # `autoPatchelfIgnoreMissingDeps` is unset so a missing library fails
+      # the build, not the desktop.
       #
-      # `dontStrip` because this is somebody else's release build and stripping
-      # a 517 MB binary buys nothing here. `autoPatchelfIgnoreMissingDeps` is
-      # not set: a library Chromium needs and this list lacks should fail the
-      # build rather than the desktop.
-      # The production build when there is one of this series, the checked
-      # build otherwise. See engine-pin.nix.
+      # Uses the production build of this series when one exists, else the
+      # checked build. See engine-pin.nix.
       engineRelease = import ./packages/domicile-engine/engine-pin.nix {
         checked = import ./packages/domicile-engine/engine-release.nix;
         official =
@@ -172,9 +131,8 @@
         buildInputs = engineRuntimeLibs;
         dontStrip = true;
 
-        # The tarball holds one directory, and that directory is the engine:
-        # `chrome` sits directly inside it, which is what `DOMICILE_ENGINE`
-        # names and what `libexec/domicile/engine` points at.
+        # The tarball holds one directory: the engine, with `chrome` directly
+        # inside. `DOMICILE_ENGINE` and `libexec/domicile/engine` point at it.
         unpackPhase = ''
           runHook preUnpack
           mkdir -p unpacked
@@ -190,41 +148,18 @@
           runHook postInstall
         '';
 
-        # WHAT `autoPatchelfHook` CANNOT SEE. It rewrites the interpreter and
-        # the rpath from what a binary *links*, and Chromium does not link its
-        # GL stack — it `dlopen`s `libEGL.so.1` at run time and decides what it
-        # got. So the patched engine started, ran, and lost its GPU process on
-        # every machine:
+        # Chromium `dlopen`s `libEGL.so.1` at run time, which
+        # `autoPatchelfHook` cannot see. Without it on the path the GPU process
+        # exits and the window stays white.
         #
-        #   Could not dlopen native EGL: libEGL.so.1: cannot open shared
-        #   object file: No such file or directory
-        #   … Exiting GPU process due to errors during initialization
+        # A wrapper, not an rpath: chrome re-execs itself for its zygote and
+        # renderers, and only environment variables reach those children.
+        # `/run/opengl-driver/lib` comes first so NixOS uses the driver
+        # matching its kernel; the nixpkgs libraries cover other hosts.
         #
-        # which is a white window and a desktop that never draws. Reported from
-        # a real machine with a working AMD GPU, whose compositor half had
-        # already found the same card and imported dmabufs from it.
-        #
-        # A wrapper rather than an rpath, and this is the one place that
-        # distinction has bitten before: chrome re-execs itself for its zygote
-        # and its renderers, so anything that has to survive into the children
-        # must be inherited. An environment variable is; a loader invoked by
-        # hand is not.
-        #
-        # `/run/opengl-driver/lib` first, because on NixOS that is the vendor
-        # library matching the running kernel driver, and the nixpkgs copies
-        # behind it are what a non-NixOS host has instead. The dev shell's own
-        # `LD_LIBRARY_PATH` is built the same way and says the same thing.
-        #
-        # GSETTINGS SCHEMAS FOR THE SAME REASON. Chromium's GTK half asks GIO
-        # for settings, and GIO finds schemas through `XDG_DATA_DIRS`; nixpkgs
-        # puts them under `share/gsettings-schemas/<name>`, where a host's own
-        # data dirs never look. With none found there is no schema source at
-        # all, and every start printed
-        #
-        #   GLib-GIO-CRITICAL **: g_settings_schema_source_lookup: assertion
-        #   'source != NULL' failed
-        #
-        # Prefixed, so the host's own dirs still follow.
+        # GIO finds GSettings schemas through `XDG_DATA_DIRS`, and nixpkgs
+        # installs them where host data dirs never look. Without them every
+        # start logs a GLib-GIO-CRITICAL. Prefixed, so host dirs still follow.
         postFixup = ''
           mv "$out/chrome" "$out/.chrome-unwrapped"
           makeWrapper "$out/.chrome-unwrapped" "$out/chrome" \
@@ -244,8 +179,8 @@
             }"
         '';
 
-        # The two things every consumer of this looks up by name, so a release
-        # missing one fails here rather than four minutes into a desktop.
+        # Fail the build, not the desktop, if a release lacks a file consumers
+        # look up by name.
         doInstallCheck = true;
         installCheckPhase = ''
           for needed in chrome libdomicile_engine.so; do
@@ -254,18 +189,16 @@
               exit 1
             }
           done
-          # Through the wrapper, which is the only way anything starts this.
+          # Run through the wrapper, as every caller does.
           "$out/chrome" --version
-          # And that the wrapper is one: a `mv` that silently did nothing
-          # leaves the real binary here under its own name, `--version` still
-          # works, and the GPU process still dies on the machine that runs it.
+          # Check `chrome` is the wrapper. If the `mv` failed, the unwrapped
+          # binary still passes `--version` but loses its GPU process at run
+          # time.
           grep -q LD_LIBRARY_PATH "$out/chrome" || {
             echo "the engine's chrome is not wrapped, so it carries no GL path" >&2
             exit 1
           }
-          # And that it carries GSettings schemas. Without them GIO has no
-          # schema source at all, and the engine's first GTK settings lookup
-          # prints a GLib-GIO-CRITICAL on every start.
+          # Check the wrapper adds compiled GSettings schemas.
           schemas=$(grep -o "[^:\"']*/share/gsettings-schemas/[^:\"']*" "$out/chrome" || true)
           [ -n "$schemas" ] || {
             echo "the engine's chrome carries no GSettings schemas" >&2
@@ -282,8 +215,7 @@
         meta = {
           description =
             "The patched Chromium domicile-compositor uses as its engine";
-          # Chromium's, as nixpkgs' own chromium says; see
-          # packages/domicile-engine/LICENSE.
+          # Chromium's license; see packages/domicile-engine/LICENSE.
           license = pkgs.lib.licenses.bsd3;
         };
       };
@@ -291,12 +223,11 @@
       # ── The three things a desktop is made of ───────────────────────────
       #
       # `domicile` starts a bridge, an engine and a compositor, and finds each
-      # beside itself. A checkout builds them; these are the same three built
-      # once, in the store, so `nix run` starts a desktop instead of a build.
+      # beside itself. These build them in the store so `nix run` starts a
+      # desktop without building.
 
-      # The page. Only the renderer bundle: `build:vite` also produces the
-      # launcher, main and preload bundles, and none of those is a web page —
-      # they are how a shell is started somewhere that is not a browser.
+      # A shell's web page: only the renderer bundle. `build:vite`'s launcher,
+      # main and preload bundles are for running a shell outside a browser.
       shellPage = name: pkgs.stdenv.mkDerivation {
         pname = "domicile-page-${name}";
         version = "0.0.0";
@@ -309,30 +240,19 @@
             --filter "./packages/shell-${name}" --no-daemon
           runHook postBuild
         '';
-        # `main_window` is what the shell's own `vite.config.ts` calls
-        # the one window it opens, and it stays that here: this installs the
-        # shell's build rather than rearranging it.
+        # `main_window` is the window name in the shell's `vite.config.ts`.
         installPhase = ''
           runHook preInstall
           cp -R "packages/shell-${name}/.vite/renderer/main_window" "$out"
           runHook postInstall
         '';
-        # A page with nothing to load is not a page, and the way that fails at
-        # runtime is a browser on a blank screen — which reads as the seam.
+        # Fail the build if there is no entry module; at run time that shows
+        # only as a blank screen.
         #
-        # `shell.js` now rather than `index.html`: a shell in this workspace is
-        # a *module*, Domicile writes the document, and the name is fixed by
-        # `@domicile-desktop/component-library/vite-shell` precisely so that something
-        # other than the shell can name it. A build that emitted a hashed entry
-        # would satisfy no check anybody could write.
-        #
-        # AND THIS IS NOW THE ONLY PLACE THAT KNOWS THE NAME. `domicile` is
-        # handed a module and loads that module, whatever it is called; the
-        # `shell.js` constant it used to hold is gone, and with it the last
-        # reason a shell outside this repository had to adopt the convention.
-        # So the convention is this workspace's own, asserted here where it is
-        # produced and read one derivation below where the desktop is wrapped
-        # — the two halves of one build, rather than a launcher rule.
+        # A shell is a module and Domicile writes the document.
+        # `@domicile-desktop/component-library/vite-shell` fixes the entry name
+        # as `shell.js`. `domicile` accepts any module name, so this check and
+        # `desktop` below are the only places that rely on it.
         doInstallCheck = true;
         installCheckPhase = ''
           [ -f "$out/shell.js" ] || {
@@ -343,14 +263,12 @@
         '';
       };
 
-      # What a shell is built against: the workspace's own packages, built as a
-      # checkout builds them, with every `node_modules` beside them -- the
-      # `--domicile` the builder resolves manganese and React from, laid out
-      # exactly as this repository is because that is the layout it reads.
+      # The built workspace a shell is built against: the builder's
+      # `--domicile`, from which it resolves manganese and React. Laid out like
+      # this repository, because that is the layout the builder reads.
       #
-      # Every package with a `package.json`, not only the three a build
-      # touches: each one's `node_modules` links its workspace siblings, and a
-      # sibling left out is a dangling link the fixup refuses.
+      # Copies every package with a `package.json`: each `node_modules` links
+      # its workspace siblings, and the fixup rejects dangling links.
       shellWorkspace = pkgs.stdenv.mkDerivation {
         pname = "domicile-shell-workspace";
         version = "0.0.0";
@@ -374,10 +292,8 @@
         '';
       };
 
-      # The program `domicile` builds a shell with, out of an entry or a
-      # package: bun running `@domicile-desktop/builder` against the workspace above.
-      # A script rather than a wrapper around a binary, because there is no
-      # binary: the builder is TypeScript that bun runs as it is.
+      # The program `domicile` builds a shell with, from an entry or a
+      # package. A script, because the builder is TypeScript run by bun.
       domicileBuilder = pkgs.writeShellScript "domicile-builder" ''
         exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/domicile-builder/src/main.ts \
           --domicile ${shellWorkspace} "$@"
@@ -390,30 +306,21 @@
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
-      #   libexec/domicile/builder    what builds a shell from an entry or a package
-      #   libexec/domicile/shells/    Domicile's own shells, prebuilt: what
+      #   libexec/domicile/builder    builds a shell from an entry or a package
+      #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names
       #
-      # THE BINARIES ARE COPIED, NOT SYMLINKED, and that is the whole trick.
-      # `domicile` finds its siblings from `current_exe`, which on Linux reads
-      # `/proc/self/exe` and therefore *resolves symlinks*. A `bin/domicile`
-      # symlinked into the Rust derivation would report that derivation's path,
-      # where there is no `libexec` and never will be — so the desktop would
-      # refuse to start, naming a directory nobody wrote. Copied, it reports a
-      # path inside this layout, which is the one that has the other two.
-      #
-      # Only the binary's own path matters, so the engine under `libexec` stays
-      # a symlink: nothing asks where *it* really is.
+      # The binaries are copied, not symlinked. `domicile` finds its siblings
+      # from `current_exe`, which resolves symlinks, so a symlink would point
+      # into the Rust derivation where there is no `libexec`. The engine can
+      # stay a symlink because nothing resolves its path.
       domicilePackage = pkgs.runCommand "domicile"
         {
-          # THE LOGIN SESSION, and the only one: `domicile` with no shell
-          # named runs the one its config names, so this session is whatever
-          # desk the config describes. `share/wayland-sessions` is where a
-          # display manager looks; `providedSessions` is the top-level
-          # attribute NixOS's `sessionPackages` refuses a package without;
-          # `DesktopNames` is what the display manager sets
-          # `XDG_CURRENT_DESKTOP` from. No `OZONE`: a display manager's session
-          # is on a VT, and `XDG_VTNR` already picks the drm platform.
+          # The login session. `domicile` with no shell argument runs the
+          # shell its config names. NixOS's `sessionPackages` requires
+          # `providedSessions`. The display manager sets `XDG_CURRENT_DESKTOP`
+          # from `DesktopNames`. No `OZONE`: the session runs on a VT, and
+          # `XDG_VTNR` already selects the drm platform.
           passthru.providedSessions = [ "domicile" ];
           meta = {
             description = "Run a Domicile desktop from a shell you built yourself";
@@ -425,14 +332,12 @@
         mkdir -p "$out/bin" "$out/libexec/domicile"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
-        # What `BROWSER` names inside a desktop, found beside `domicile` for the
-        # reason the compositor is; copied for the same reason too.
+        # `BROWSER` inside a desktop. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
-        # What a desktop links in as `xdg-open`, first on every app's PATH.
+        # `xdg-open` inside a desktop, first on every app's PATH.
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
-        # The same program as the handler for web links, so `xdg-open` and
-        # anything asking which browser is the default open a browser window of
-        # the desktop it was run in. Hidden: it is not something to launch.
+        # Registers `domicile-open-url` as the web link handler, so links open
+        # in a browser window of the current desktop. Hidden from launchers.
         mkdir -p "$out/share/applications"
         cat >"$out/share/applications/domicile-open-url.desktop" <<DESKTOP
         [Desktop Entry]
@@ -443,12 +348,10 @@
         MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
         NoDisplay=true
         DESKTOP
-        # And the file that makes it the default, read by GIO and
-        # `xdg-open`'s own lookup only where `XDG_CURRENT_DESKTOP` is
-        # `domicile`. `domicile` puts this `share` in front of every app's
-        # `XDG_DATA_DIRS`, so a desk needs nothing in the home for it; another
-        # session on the same machine never reads it. A browser the user named
-        # in a `mimeapps.list` of their own outranks it, as the spec says.
+        # Makes that handler the default. GIO and `xdg-open` read this file
+        # only when `XDG_CURRENT_DESKTOP` is `domicile`, and `domicile` puts
+        # this `share` first in every app's `XDG_DATA_DIRS`. A user's own
+        # `mimeapps.list` still takes precedence.
         cat >"$out/share/applications/domicile-mimeapps.list" <<MIMEAPPS
         [Default Applications]
         text/html=domicile-open-url.desktop
@@ -460,22 +363,18 @@
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
-        # How `xdg-desktop-portal` learns that this desktop answers `Settings`
-        # itself, which is how a theme reaches the desk's GTK, Qt and Electron
-        # windows. The compositor takes the name in that file while it runs and
-        # sets the `XDG_CURRENT_DESKTOP` it is matched on for every client it
-        # spawns; this is the third of the three, and the only one that is not
-        # code. Installed here rather than beside the engine because it is a
-        # fact about the desktop rather than about the browser.
+        # Tells `xdg-desktop-portal` that Domicile implements `Settings`, which
+        # carries the theme to GTK, Qt and Electron apps. The compositor owns
+        # the D-Bus name and sets the matching `XDG_CURRENT_DESKTOP` on clients.
         mkdir -p "$out/share/xdg-desktop-portal/portals"
         cp ${./nix/domicile.portal} \
           "$out/share/xdg-desktop-portal/portals/domicile.portal"
-        # And where a desk's portal calls go, which since xdg-desktop-portal
-        # 1.17 is this file rather than `UseIn`: Domicile first, for the one
-        # interface it answers, and gtk for the rest.
+        # Routes portal calls (xdg-desktop-portal >= 1.17): Domicile for
+        # `Settings`, gtk for the rest.
         cp ${./nix/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
-        # The unit a desk that is the session starts, so the portal can.
+        # The user target the login session starts. It binds
+        # `graphical-session.target`, which the portal requires.
         mkdir -p "$out/lib/systemd/user"
         cp ${./nix/domicile-session.target} \
           "$out/lib/systemd/user/domicile-session.target"
@@ -492,37 +391,15 @@
         DESKTOP
       '';
 
-      # A desktop: Domicile with the module already chosen.
+      # A desktop: `domicile` wrapped with a prebuilt shell module. The wrapper
+      # `exec`s, so `current_exe` is still the copied binary above.
       #
-      # A wrapper, and the only one left, because that is all a desktop is —
-      # `domicile` with one argument it does not have to be told twice. It
-      # `exec`s, so `current_exe` inside is the copied binary above and the
-      # siblings are found from there.
+      # `domicile` takes the module file, not its directory. `shellPage`'s
+      # install check guarantees `shell.js` exists.
       #
-      # The module rather than the directory holding it, because that is what
-      # `domicile` takes: a directory is refused now, with a message telling
-      # whoever typed it to name the file. `shellPage`'s install check above is
-      # what makes joining `shell.js` on here safe — a build that emitted
-      # anything else never reaches this line.
-      #
-      # AND IT BRINGS THE TERMINAL IT PROMISES. `simple` binds Alt+Return to
-      # `domicile.spawn(["kitty"])`, and the compositor runs that through the
-      # environment it was started in -- so on a machine without kitty on
-      # `PATH` the desktop answers the chord with
-      # `failed to spawn client err=No such file or directory`, in a log the
-      # person pressing the key is not reading. It was on `PATH` for everyone
-      # who developed this, because `kitty` is in the dev shell's
-      # `buildInputs`; `nix run github:cprussin/domicile#manganese` is not the
-      # dev shell, and that is the whole of how it went unnoticed.
-      #
-      # `--suffix` rather than `--prefix`, so a person who has their own kitty
-      # gets theirs: this is a floor under a desktop somebody is trying out,
-      # not a choice being taken away from them. A shell of your own that
-      # spawns something else is unaffected either way -- `.#domicile` takes
-      # the page as an argument and wraps no `PATH` at all.
-      #
-      # `manganese` binds no terminal: a config names its own with `exec`, so
-      # `.#manganese` as shipped opens none. The kitty here is `simple`'s.
+      # Adds kitty to `PATH` because `simple` binds Alt+Return to
+      # `domicile.spawn(["kitty"])`. `--suffix`, so a user's own kitty wins.
+      # `manganese` binds no terminal.
       desktop = { name, description }:
         pkgs.runCommand name
           {
@@ -534,13 +411,9 @@
               platforms = [ system ];
             };
           } ''
-          # `--add-flags`, which puts the page in FRONT -- and here that is
-          # right, unlike in the home-manager module next door. This binary is
-          # called `manganese`, not `domicile`: it is one desktop and nothing
-          # else, so there is no `manganese which-shell` for a leading
-          # argument to get in the way of. The module installs a `domicile`,
-          # where the verbs are the whole point, and supplies the shell at the
-          # end for exactly that reason.
+          # `--add-flags` puts the page first. That is fine here because this
+          # binary has no subcommands; the home-manager module's `domicile`
+          # does, so it appends the shell instead.
           makeWrapper ${domicilePackage}/bin/domicile "$out/bin/${name}" \
             --add-flags ${shellPage name}/shell.js \
             --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.kitty ]}
@@ -548,47 +421,27 @@
 
       # ── What a user installs ────────────────────────────────────────────
       #
-      # A desktop, or Domicile itself. A desktop — `nix build .#manganese`,
-      # `.#simple` — is Domicile with a page already chosen, and is what
-      # somebody who wants one of the two this repository ships installs.
-      # `.#domicile` is the same runner with the choice left open, for somebody
-      # whose desktop is their own; it takes the path to a built shell.
+      # - `.#manganese`, `.#simple`: Domicile with one of this repository's
+      #   shells.
+      # - `.#domicile`: Domicile alone; takes the path to a built shell.
       #
-      # What there is still no `default` *package* for is the same reason as
-      # ever: which desktop you want is the one question this flake cannot
-      # answer for you. `nix run` does have a default, and it is Domicile
-      # asking that question rather than answering it.
+      # There is no default package because the flake cannot pick a desktop
+      # for you. The default `nix run` app is `domicile`, which takes a shell.
 
-      # The workspace's Rust crates, by the file that makes one.
+      # Every package with a `Cargo.toml`.
       rustCrates = builtins.attrNames (pkgs.lib.filterAttrs
         (name: _: builtins.pathExists (./packages + "/${name}/Cargo.toml"))
         (builtins.readDir ./packages));
 
-      # The two Rust binaries, which no output exposes on their own.
-      #
-      # `domicile-compositor` is not a thing to install: it takes a chrome
-      # socket and a session file on its command line and refuses to start
-      # without them, so a user who ran it would get a usage error. `domicile`
-      # is the thing to install, and it is installed by the layout below rather
-      # than from here, because finding its siblings depends on where it sits.
+      # The Rust binaries. Not an output: `domicile-compositor` is only started
+      # by `domicile`, and `domicile` must be installed in `domicilePackage`'s
+      # layout to find its siblings.
       domicileBinaries = pkgs.rustPlatform.buildRustPackage {
         pname = "domicile-binaries";
         version = "0.0.0";
-        # Whole crate directories rather than the `.rs` files in them, and
-        # `scripts/` and `ROADMAP.md` besides.
-        #
-        # Twice now this filter has been *almost* right, which is the failure
-        # mode worth naming: it drops something an `include_str!` reaches for,
-        # and a build with no checkout to compare against says only that a file
-        # is missing. First the two GLSL shaders under `src/shaders`, dropped
-        # by a filter on the `.rs` extension. Then two e2e scripts and
-        # `ROADMAP.md`, which the *test* targets read to check that what those
-        # files say still matches the code — invisible here, because
-        # `cargoBuildFlags` never builds a test target, so the filter and
-        # `doCheck = false` were quietly holding each other up.
-        #
-        # So the rule is the whole of what `cargo` can reach, not the whole of
-        # what this particular build happens to compile.
+        # Include everything cargo can reach, not only `.rs` files:
+        # `include_str!` reads shaders, and tests read `scripts/` and
+        # `ROADMAP.md`. A narrower filter breaks with only "file missing".
         src = pkgs.lib.fileset.toSource {
           root = ./.;
           fileset = pkgs.lib.fileset.unions
@@ -598,59 +451,33 @@
         cargoLock.lockFile = ./Cargo.lock;
 
         nativeBuildInputs = [ pkgs.pkg-config pkgs.makeWrapper ];
-        # libxkbcommon is the only one linked; the rest are here because
-        # Smithay's winit and EGL paths probe for them at build time. What they
-        # are `dlopen`ed from at *run* time is the wrapper below.
+        # Only libxkbcommon is linked. Smithay's winit and EGL code probes for
+        # the rest at build time; `postFixup` makes them loadable at run time.
         buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm ];
 
-        # `default-members` leaves `domicile-compositor` out — it is the one
-        # thing in the workspace that needs a graphics stack — so it has to be
-        # named.
-        # Both binaries a desktop is, out of one build: `domicile` supervises
-        # and `domicile-compositor` is supervised, and they land in the same
-        # `bin/` — which is where `domicile` looks for the second.
-        #
-        # And the binaries by name, not just the packages: `domicile-compositor`
-        # owns a second `[[bin]]`, `domicile-test-client`, which exists so that
-        # cargo builds a Wayland client whenever it builds the tests that spawn
-        # one. It is test scaffolding, and naming the binaries here is what
-        # keeps it out of what this package installs.
+        # `domicile-compositor` must be named because `default-members` omits
+        # it. Binaries are named too, so the test-only `domicile-test-client`
+        # binary is not installed.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
           "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open"
         ];
 
-        # Not because they would fail — none needs a GPU, and CI runs them on
-        # Mesa's software EGL — but because a package
-        # build is not where this workspace's tests are paid for. `cargo-test`
-        # runs them on every push, against the same lockfile, and running them
-        # again per install buys nothing but minutes.
+        # CI's `cargo-test` job runs the tests on every push; repeating them
+        # per install only costs time.
         doCheck = false;
 
-        # The compositor `dlopen`s libEGL to import client dmabufs, and winit
-        # `dlopen`s the Wayland and X11 client libraries to work out which
-        # display server it is talking to. None of that is linkage, so none of
-        # it is on the loader path without saying so. `/run/opengl-driver/lib`
-        # first because on NixOS that is the EGL vendor matching the running
-        # kernel driver; the nixpkgs copies behind it cover other hosts.
+        # Add `dlopen`ed libraries to the rpath: libEGL for dmabuf import, the
+        # Wayland and X11 client libraries winit probes, and libpam for the
+        # lock screen's `lock.pam_service`. `/run/opengl-driver/lib` comes
+        # first so NixOS uses the EGL matching its kernel driver.
         #
-        # `pam` is the same arrangement for the lock: a desk that names a
-        # `lock.pam_service` `dlopen`s libpam, and one that does not never
-        # loads it. The service itself is the machine's to declare.
+        # - `DOMICILE_PNP_IDS`: hwdata's EDID vendor table. Read at run time,
+        #   not vendored, because it is GPL-2+.
+        # - `DOMICILE_PACTL`, `DOMICILE_PAREC`: volume control and meters.
+        #   PipeWire systems may have no `pactl` on `PATH`.
         #
-        # `DOMICILE_PNP_IDS` is the other thing the wrapper hands over: the
-        # table that turns the three letters an EDID names its maker with into
-        # the vendor's own name. It is hwdata's file, read at run time, and
-        # NOT vendored — `pnp.ids` is GPL-2+ data and this tree is MIT OR
-        # Apache-2.0. `--set-default` rather than `--set` so somebody pointing
-        # the variable at their own copy still wins; a compositor that finds no
-        # table names monitors the way their firmware does and says so once.
-        #
-        # `DOMICILE_PACTL` is the mixer's: the shell's volume is read and set
-        # through `pactl`, which speaks to PulseAudio and to PipeWire's
-        # `pipewire-pulse` alike, and a NixOS desk on PipeWire has none on its
-        # `PATH`. `DOMICILE_PAREC` is its meters', from the same package.
-        # `--set-default` for the table's reason.
+        # `--set-default` so a user's own value wins.
         postFixup = ''
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
@@ -665,26 +492,16 @@
         '';
       };
 
-      # Everything `bun install` would fetch, as one derivation.
+      # Everything `bun install` fetches, as one fixed-output derivation.
       #
-      # Fixed-output because it is the one step that needs the network, and its
-      # input is the lockfile rather than the source: only the manifests are in
-      # `src`, so editing a `.ts` file does not re-resolve the world. Scripts
-      # are not run: nothing in the tree needs one, and a postinstall that
-      # reaches for the network is a build that cannot be reproduced.
+      # `src` holds only the manifests, so editing source does not refetch.
+      # Install scripts are skipped so the result is reproducible.
       #
-      # `outputHash` changes with `bun.lock`, and keeping the two in step is a
-      # person's job — the pinned nixpkgs has no `buildBunPackage`, so nothing
-      # derives one from the other.
-      #
-      # A mismatch is a loud failure naming both hashes, but *only on a store
-      # that has not built this before*: a fixed-output derivation's path is a
-      # function of the hash and the name rather than of its inputs, so once
-      # the path is valid nix skips the builder entirely. On a machine that has
-      # built it once, a stale hash is silence — the shell quietly built
-      # against the old dependency tree, which is worse than the mismatch.
-      # The reliably cold store is a fresh CI runner, which is the strongest
-      # argument for `.github/workflows/nix-build.yml` existing.
+      # Update `outputHash` by hand whenever `bun.lock` changes. A stale hash
+      # fails only on a store that has not built this path before; elsewhere
+      # nix silently reuses the old modules. CI
+      # (`.github/workflows/nix-build.yml`) builds on a cold store and
+      # catches it.
       nodeModules = pkgs.stdenv.mkDerivation {
         pname = "domicile-node-modules";
         version = "0.0.0";
@@ -704,29 +521,15 @@
           bun install --frozen-lockfile --ignore-scripts --no-progress
           runHook postBuild
         '';
-        # Every `node_modules` bun made, at the depth it made it. Not just the
-        # root one: bun hoists what it can and leaves the rest per package —
-        # `panda` and `tsc` are both in `packages/*/node_modules/.bin`, and a
-        # build with only the root tree gets `command not found` from a script
-        # that works in a checkout. The layout is preserved exactly because
-        # what is in these directories is relative symlinks, and they only
-        # resolve if the depth they were made at is the depth they are used at.
+        # Copy every `node_modules`, root and per package, at its original
+        # depth. Some tools (`panda`, `tsc`) live only in per-package trees,
+        # and the relative symlinks inside resolve only at the same depth.
         installPhase = ''
           runHook preInstall
           rm -rf node_modules/.cache
-          # What makes this hash a constant rather than a coin flip.
-          #
-          # `bun install` is not deterministic here: about one run in six links
-          # a transitive package's own `.bin` entry that the other five do not
-          # (`update-browserslist-db`'s, as it happens), and a fixed-output
-          # derivation whose output varies is a hash that is simply *wrong* for
-          # some fraction of everyone — on a clean checkout, with the lockfile
-          # untouched, with nothing to suggest what went wrong.
-          #
-          # These directories are bun's own internal store; nothing reaches
-          # into them. What is run here comes from the root and per-package
-          # `.bin`, both kept above. So they are dropped rather than trusted to
-          # come out the same twice.
+          # Keep the output hash stable. `bun install` sometimes links an
+          # extra `.bin` entry inside its internal store (about one run in
+          # six). Nothing uses those directories, so drop them.
           find node_modules/.bun -mindepth 3 -maxdepth 3 \
             -type d -path '*/node_modules/.bin' -exec rm -rf {} +
           mkdir -p "$out"
@@ -744,11 +547,9 @@
       };
 
 
-      # Everything a workspace build needs before it can run turbo: the
-      # installed modules copied in writable, shebangs patched to the store's
-      # node, and turbo's own writable directories. Shared by the three
-      # derivations that build out of this workspace, because a second copy of
-      # it is a second thing to keep true.
+      # Prepares a workspace build to run turbo: writable modules, patched
+      # shebangs and turbo's writable directories. Shared by every derivation
+      # that builds the workspace.
       sharedShellConfigure = ''
             runHook preConfigure
             cp -a "${nodeModules}/node_modules" node_modules
@@ -756,26 +557,21 @@
               cp -a "$tree" "packages/$(basename "$(dirname "$tree")")/node_modules"
             done
             chmod -R u+w node_modules packages/*/node_modules
-            # The workspace's binaries are `#!/usr/bin/env node` shims, and a
-            # sandboxed build has no `/usr/bin/env` — `turbo` fails to exec
-            # with `bad interpreter` before it has run anything. Only visible
-            # in a sandbox: without one the build quietly borrows the host's,
-            # so this passed on the machine it was written on and failed on the
-            # first CI run. `patchShebangs` rewrites them to the store's node.
+            # The sandbox has no `/usr/bin/env`, so `#!/usr/bin/env node`
+            # shims fail with `bad interpreter`. Point them at the store's node.
             patchShebangs node_modules packages/*/node_modules
             export HOME="$TMPDIR"
-            # `//#build:install-modules` runs `bun install` unless this is set,
-            # and there is no network here — the modules above are the install.
+            # Stops `//#build:install-modules` from running `bun install`;
+            # there is no network, and the modules are already in place.
             export CI=1
-            # turbo writes both of these, and $HOME is the only writable place.
+            # turbo writes a cache and telemetry state; only $TMPDIR is
+            # writable.
             export TURBO_CACHE_DIR="$TMPDIR/turbo"
             export TURBO_TELEMETRY_DISABLED=1
             runHook postConfigure
           '';
 
-      # The two desktops this repository ships. Bound once so that
-      # `packages` and `apps` are the same two things rather than two lists
-      # that have to be kept saying the same thing.
+      # The desktops this repository ships, shared by `packages` and `apps`.
       desktops = {
         manganese = desktop {
           name = "manganese";
@@ -787,7 +583,7 @@
         };
       };
 
-      # The two desktops, as things to run rather than things to install.
+      # The desktops as `nix run` apps.
       domicileApps = pkgs.lib.mapAttrs
         (name: package: {
           type = "app";
@@ -797,31 +593,25 @@
         desktops;
     in
     {
-      # DOMICILE AS A HOME-MANAGER MODULE, so a desk is described where the
-      # rest of a person's environment is rather than in a file they write by
-      # hand and remember to keep somewhere.
+      # Home-manager module for configuring Domicile alongside the rest of a
+      # user's environment.
       #
-      # NOT under `${system}`, because a module is not a build product: the
-      # thing home-manager imports is the same expression on every machine,
-      # and it reads `pkgs` from the configuration importing it. What IS
-      # system-bound is the default package, so the module is given this
-      # flake's `packages` for one and takes an override for everything else.
+      # Not per-system: the module reads `pkgs` from the importing
+      # configuration. It gets this flake's `packages` as the default package,
+      # which users can override.
       #
-      # What it deliberately leaves out -- a desktop as a login session, and
-      # the PAM service a desk's `lock.pam_service` names -- is a decision
-      # about a machine rather than a home directory, and is `nixosModules`
-      # below.
+      # The login session and the lock screen's PAM service are machine
+      # settings, so they live in `nixosModules`.
       homeManagerModules = rec {
         domicile = import ./nix/home-manager.nix {
           domicilePackages = self.packages.${system};
         };
-        # `default` so `imports = [domicile.homeManagerModules.default]` works,
-        # and the name beside it so a configuration importing several flakes'
-        # modules can say which one this is.
+        # `default` for `imports = [domicile.homeManagerModules.default]`;
+        # `domicile` for configurations that import several flakes' modules.
         default = domicile;
       };
 
-      # THE MACHINE'S HALF, beside it and curried the same way.
+      # NixOS module for the machine-level settings.
       nixosModules = rec {
         domicile = import ./nix/nixos.nix {
           domicilePackages = self.packages.${system};
@@ -829,58 +619,30 @@
         default = domicile;
       };
 
-      # No `default`. `nix build` on its own has nothing to build here on
-      # purpose: which desktop you want is the only question this flake cannot
-      # answer for you, and `.#domicile` is the runner rather than a desktop.
+      # No `default`: the flake cannot choose a desktop for you.
       packages.${system} = desktops // {
-        # Domicile itself, so `nix profile install .#domicile` puts `domicile`
-        # on `PATH` for somebody whose desktop is their own.
+        # Domicile alone, for users with their own shell.
         domicile = domicilePackage;
-        # The engine on its own, for `nix build .#engine` and for anyone who
-        # wants a path to put in `DOMICILE_ENGINE` themselves.
+        # The engine alone, for setting `DOMICILE_ENGINE` yourself.
         engine = domicileEngine;
         # The shell builder on its own, for `DOMICILE_BUILDER`.
         builder = domicileBuilder;
       };
 
-      # WHAT `nix run` OFFERS, AND WHY IT IS THIS SHORT.
-      #
-      # There are two things a person wants from this flake: run a desktop, or
-      # build the engine one runs on. Everything else here drives a checkout —
-      # `check.sh`, the e2e scripts, the measurements — and those belong to
-      # somebody who has cloned the repository, where `./scripts/<name>.sh` is
-      # a shorter way to say the same thing.
-      #
-      # There were five `dev-*` apps over those scripts, and they are gone.
-      # They existed to run a check with no checkout, which took staging the
-      # store's read-only source into the user's cache and building there —
-      # seventy lines nothing ran. Not CI, which checks out and runs
-      # `./scripts/check.sh` in `nix develop .#full`; not a person with a
-      # checkout, for whom `./scripts/<name>.sh` is shorter. `nix develop`
-      # alone cannot replace them — it hands over the *environment*, not the
-      # source, and leaves you in your own directory — and the honest answer
-      # to that is `git clone`, not seventy lines of staging that nothing
-      # exercises.
+      # `nix run` offers only running a desktop and building the engine.
+      # Checks, e2e scripts and measurements need a checkout; run them as
+      # `./scripts/<name>.sh`.
 
-      # WHAT `nix flake check` IS FOR HERE: the two modules, which nothing else
-      # evaluates.
+      # `nix flake check` evaluates the two modules, which nothing else does.
       #
-      # `scripts/test-the-home-manager-module-agrees.sh` compares its option
-      # NAMES against the Rust schema without nix, which is the half a Claude
-      # web session can run. This is the other half -- the types, the
-      # defaults, and that the whole thing produces the JSON somebody's desk
-      # is -- and it needs an evaluator.
+      # `scripts/test-the-home-manager-module-agrees.sh` checks option names
+      # against the Rust schema without nix. These checks cover types,
+      # defaults and the generated config JSON.
       #
-      # `evalModules` WITH A STUB RATHER THAN home-manager AS AN INPUT. The
-      # module sets only a few things outside its own namespace --
-      # `home.packages`, `xdg.configFile`, two lists of `xdg.portal`, and the
-      # `assertions` and `warnings` a removed option speaks through -- so
-      # declaring those is the whole of what it takes to evaluate it.
-      # `xdg.mimeApps` is left out on purpose: the module setting it is an
-      # evaluation error here. Taking home-manager as a flake input to check
-      # one module would put its whole closure behind every `nix flake check`,
-      # and a stub that has drifted fails loudly here rather than silently
-      # passing.
+      # The home-manager check stubs the few options the module sets outside
+      # its namespace, instead of adding home-manager as an input and its
+      # closure to every check. `xdg.mimeApps` is left out so that setting it
+      # is an evaluation error.
       checks.${system} = {
         home-manager-module =
           let
@@ -896,8 +658,7 @@
                   });
                   default = { };
                 };
-                # Where a removed option says what replaced it, as
-                # home-manager's own module system does.
+                # Where a removed option names its replacement.
                 assertions = lib.mkOption {
                   type = lib.types.listOf lib.types.unspecified;
                   default = [ ];
@@ -916,9 +677,8 @@
                 };
               };
             };
-            # A desk with one of everything the schema has, so the check covers
-            # the shapes rather than the happy path: a turned monitor at a
-            # fractional scale, one turned off, a described display and a
+            # A config using each part of the schema: a rotated monitor at a
+            # fractional scale, a disabled one, a described display and a
             # keyboard.
             desk = { ... }: {
               programs.domicile = {
@@ -961,13 +721,9 @@
             };
             written = evaluated.config.xdg.configFile."domicile/domicile.json".source;
 
-            # THE SAME MODULE OVER A `domicile` THAT ONLY PRINTS ITS ARGUMENTS,
-            # so the command lines the wrapper builds can be read back.
-            #
-            # Running the real one here would need a desktop to answer
-            # `which-shell` and a compositor to start, neither of which a
-            # sandbox has -- and what is under test is which words reach the
-            # binary, which a stand-in shows exactly.
+            # The same module with a `domicile` that prints its arguments, to
+            # test the wrapper's command lines. The real binary needs a
+            # compositor, which the sandbox lacks.
             sawArgs = pkgs.lib.evalModules {
               modules = [
                 stub
@@ -979,10 +735,8 @@
             };
           in
           pkgs.runCommand "home-manager-module-evaluates" { nativeBuildInputs = [ pkgs.jq ]; } ''
-            # The generated file has to be the config file domicile parses, so
-            # this asserts the values at their keys rather than just that
-            # something was written -- read with `jq`, because how
-            # `pkgs.formats.json` lays the file out is its business.
+            # Assert values at their keys with `jq`, independent of how
+            # `pkgs.formats.json` formats the file.
             cp ${written} config.json
             expect() {
               jq -e "$1" config.json >/dev/null || {
@@ -998,32 +752,21 @@
             expect '.output.profiles[0].name == "desk"'
             expect '.output.profiles[0].displays[0] | .display == "drm-1" and .enabled == false'
             expect '.output.profiles[0].displays[1] | .scale == 1.2 and .transform == "rotate-270"'
-            # The shell named to the module is the config's own as well, so a
-            # `domicile` started without the wrapper -- the `domicile` login
-            # session -- runs it too.
+            # The shell is also written to the config, so the login session,
+            # which runs `domicile` without the wrapper, uses it too.
             expect '.shell == "${desktops.simple}/shell.js"'
 
-            # NO NULLS, because `domicile` reads several keys' absence as an
-            # answer and refuses a null for most of them -- and one refused
-            # key is the whole file refused: every profile, the keyboard, all
-            # of it. The desk above sets a `mode` on one placement and not on
-            # the other, so an unset option really is a null sitting inside a
-            # list here, and `withoutNulls` walking into that list is what this
-            # asserts.
+            # No nulls: `domicile` rejects a null for most keys, and one bad
+            # key rejects the whole file. The desk sets `mode` on only one
+            # display, so this checks that `withoutNulls` recurses into lists.
             expect '[.. | select(. == null)] | length == 0'
 
-            # And the other direction: a mode that IS set reaches the file.
+            # A mode that is set reaches the file.
             expect '.output.profiles[0].displays[1].mode == [3840, 2160]'
 
-            # THE OTHER HALF OF WHAT THIS MODULE DOES, and the half that is
-            # invisible in the config file: which words the installed `domicile`
-            # is actually run with.
-            #
-            # `domicile which-shell` IS THE ONE THAT USED TO BREAK. The wrapper
-            # was `wrapProgram --add-flags`, which puts the shell in FRONT --
-            # and a verb is only a verb as the first word, so installing this
-            # module turned the one command it must not break into
-            # `too many arguments: which-shell`.
+            # Check the arguments the wrapped `domicile` receives. The shell
+            # must go last, because a subcommand is recognized only as the
+            # first argument.
             domicile=${sawArgs.config.programs.domicile.finalPackage}/bin/domicile
 
             saw() { # what was typed -> what reached the binary
@@ -1036,28 +779,25 @@
               }
             }
 
-            # Nothing typed: the configured shell, which is the point of this.
+            # No arguments: the configured shell.
             saw "${desktops.simple}/shell.js"
-            # A verb, handed over untouched.
+            # A subcommand passes through unchanged.
             saw "which-shell" which-shell
-            # And the verb that takes a shell: the word after it is that verb's
-            # argument, not a shell to run, so nothing is appended to it either.
+            # `load-shell`'s argument is not a shell to run, so nothing is
+            # appended.
             saw "load-shell ./other.js" load-shell ./other.js
-            # A shell typed out: what was said beats what was configured.
+            # An explicit shell overrides the configured one.
             saw "./other.js" ./other.js
-            # And a config flag is not a shell -- the path after it is skipped,
-            # so the configured shell still goes on the end.
+            # `--config`'s path is not a shell, so the configured shell is
+            # still appended.
             saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
 
-            # And the verb that takes an address, for the same reason.
+            # `open-url` takes an address, so nothing is appended.
             saw "open-url https://example.com" open-url https://example.com
 
-            # THE DEFAULT BROWSER IS THE DESK'S, NOT THE HOME'S: inside a desk a
-            # web link is `domicile-open-url`'s unless the user names a browser,
-            # and the file that says so
-            # ships with Domicile -- `domicile` puts its `share` in front of
-            # every app's `XDG_DATA_DIRS` -- so the module writes none. A home
-            # needing a file for links to open in the desk was a trap.
+            # The default-browser file ships in Domicile's `share`, which
+            # `domicile` puts first in `XDG_DATA_DIRS`. The module must not
+            # write one into the home.
             [ ${pkgs.lib.boolToString (evaluated.config.xdg.configFile ? "domicile-mimeapps.list")} = false ] || {
               echo "the module still writes domicile-mimeapps.list into the home" >&2
               exit 1
@@ -1076,11 +816,9 @@
               }
             done
 
-            # THE PORTAL, offered to home-manager's `xdg.portal` rather than
-            # turned on: the backend that answers `Settings`, the
-            # `domicile-portals.conf` that routes the rest, and the gtk backend
-            # that conf routes it to -- all inert until the home enables
-            # portals.
+            # The module adds Domicile's portal backend, its
+            # `domicile-portals.conf` and the gtk backend to `xdg.portal`
+            # without enabling portals.
             ${pkgs.lib.concatMapStrings ({ option, package }: ''
               [ ${pkgs.lib.boolToString (pkgs.lib.elem package evaluated.config.xdg.portal.${option})} = true ] || {
                 echo "xdg.portal.${option} does not hold ${package.name}" >&2
@@ -1095,25 +833,18 @@
             touch "$out"
           '';
 
-        # THE NIXOS MODULE, against a real NixOS evaluation rather than a stub.
-        #
-        # The home-manager check above stubs what its module touches; this one
-        # cannot, because what is under test is NixOS's own reading of what the
-        # module hands it. `sessionPackages` refuses a package without a
-        # top-level `providedSessions`, and a stub would accept one -- which
-        # is the mistake a desk's own configuration made before this module.
-        # Evaluating NixOS builds nothing, so this costs an evaluation and the
-        # desktop the session names.
+        # The NixOS module, evaluated with real NixOS instead of a stub, since
+        # NixOS's own checks (such as `sessionPackages` requiring
+        # `providedSessions`) are what is under test. Evaluation builds no
+        # system.
         nixos-module =
           let
             machine = pkgs.nixos {
               imports = [ self.nixosModules.domicile ];
               programs.domicile.enable = true;
-              # The module offers sessions and enables nothing: a machine
-              # that boots to a login screen has said this itself.
+              # The module does not enable a display manager itself.
               services.displayManager.enable = true;
-              # What a NixOS configuration has to say for its options to
-              # evaluate; nothing here builds a system.
+              # The minimum a NixOS configuration needs to evaluate.
               boot.loader.grub.enable = false;
               fileSystems."/" = {
                 device = "nodev";
@@ -1121,24 +852,20 @@
               };
               system.stateVersion = pkgs.lib.trivial.release;
             };
-            # What the display manager is actually handed: NixOS joins every
-            # session package's `share/wayland-sessions` here and refuses one
-            # that lacks the file its `providedSessions` names.
+            # The sessions the display manager receives. NixOS rejects a
+            # package missing the file its `providedSessions` names.
             inherit (machine.config.services.displayManager.sessionData) sessionNames;
             session = "${machine.config.services.displayManager.sessionData.desktops}/share/wayland-sessions/domicile.desktop";
           in
           pkgs.runCommand "nixos-module-evaluates" { } ''
-            # ONE SESSION, `domicile`, whatever the desk: `domicile` runs the
-            # shell its config names, so which desktop it is is the config's to
-            # say and not the login screen's.
+            # One session, `domicile`; the config chooses the shell.
             [ ${pkgs.lib.escapeShellArg (toString sessionNames)} = domicile ] || {
               echo "the sessions NixOS sees are: ${toString sessionNames}" >&2
               echo "and they should have been: domicile" >&2
               exit 1
             }
-            # It runs `domicile` as the desktop it is: the display manager sets
-            # `XDG_CURRENT_DESKTOP` from `DesktopNames` before the compositor
-            # gets the chance to.
+            # The display manager sets `XDG_CURRENT_DESKTOP` from
+            # `DesktopNames` before the compositor starts.
             for line in 'Exec=${domicilePackage}/bin/domicile' 'DesktopNames=domicile'; do
               grep -qxF "$line" ${session} || {
                 echo "the domicile session is missing: $line" >&2
@@ -1147,9 +874,9 @@
               }
             done
 
-            # THE GRAPHICAL SESSION a desk that is the session starts, so the
-            # portal -- `Requisite=graphical-session.target` -- can: the unit
-            # the launcher starts, installed for the user manager to find.
+            # The user units must be installed: the launcher starts
+            # `domicile-session.target`, which binds
+            # `graphical-session.target`, which the portal requires.
             [ ${pkgs.lib.boolToString (pkgs.lib.elem domicilePackage machine.config.systemd.packages)} = true ] || {
               echo "the module does not install domicile's user units" >&2
               exit 1
@@ -1162,8 +889,8 @@
                 exit 1
               }
             done
-            # And the one that ends it, which a running portal cannot hold
-            # off: it conflicts the graphical session down.
+            # The shutdown target stops the graphical session even while the
+            # portal runs.
             shutdown=${domicilePackage}/lib/systemd/user/domicile-session-shutdown.target
             grep -qxF 'Conflicts=graphical-session.target graphical-session-pre.target' "$shutdown" || {
               echo "domicile-session-shutdown.target does not conflict the session down" >&2
@@ -1171,28 +898,23 @@
               exit 1
             }
 
-            # AND THE DESK'S DEFAULT BROWSER WHERE THE PORTAL LOOKS: on the
-            # system profile, the portal running outside the desk. Read only
-            # where `XDG_CURRENT_DESKTOP` is `domicile`, which only a desk that
-            # is the session says to the user manager.
+            # Domicile must be on the system profile so the portal, which runs
+            # outside the desktop, finds its default-browser file.
             [ ${pkgs.lib.boolToString (pkgs.lib.elem domicilePackage machine.config.environment.systemPackages)} = true ] || {
               echo "the module does not put domicile on the system profile" >&2
               exit 1
             }
 
-            # THE PAM SERVICE a desk's `lock.pam_service` names, which a
-            # home-manager module cannot declare. Without it a desk configured
-            # to lock does not come up.
+            # The PAM service `lock.pam_service` names. Home-manager cannot
+            # declare it, and a desktop configured to lock fails to start
+            # without it.
             [ ${pkgs.lib.boolToString (machine.config.security.pam.services ? domicile)} = true ] || {
               echo "the module declared no domicile PAM service" >&2
               exit 1
             }
 
-            # AND WHERE THE DESK'S PORTAL CALLS GO. Since xdg-desktop-portal
-            # 1.17 a desktop states that in `<desktop>-portals.conf`; `UseIn` in the
-            # `.portal` file is only the deprecated fallback. Domicile answers
-            # `Settings` and nothing else, so everything is routed to it first
-            # and to gtk after.
+            # `domicile-portals.conf` routes portal calls to Domicile first
+            # (it implements only `Settings`), then gtk.
             found=
             for package in ${toString machine.config.xdg.portal.configPackages}; do
               conf="$package/share/xdg-desktop-portal/domicile-portals.conf"
@@ -1209,7 +931,7 @@
               cat "$found" >&2
               exit 1
             }
-            # And gtk is there to be routed to.
+            # The gtk backend must be installed.
             [ ${pkgs.lib.boolToString (pkgs.lib.elem pkgs.xdg-desktop-portal-gtk machine.config.xdg.portal.extraPortals)} = true ] || {
               echo "the module offers no xdg-desktop-portal-gtk for that conf to name" >&2
               exit 1
@@ -1220,26 +942,20 @@
       };
 
       apps.${system} = {
-        # A bare `nix run github:cprussin/domicile` is Domicile itself, taking
-        # the shell to run. Not manganese, which it was: a desktop is a page
-        # somebody built, and the flake having two of its own does not make
-        # either of them the default answer to "run Domicile". `#manganese`
-        # and `#simple` are how you ask for those.
+        # `nix run github:cprussin/domicile` runs `domicile`, which takes the
+        # shell to run. Use `#manganese` or `#simple` for a bundled desktop.
         default = {
           type = "app";
           program = pkgs.lib.getExe domicilePackage;
           meta.description = domicilePackage.meta.description;
         };
         inherit (domicileApps) manganese simple;
-        # No `engine` app. `nix build .#engine` is how you get the engine —
-        # it is a browser, not a thing to run — and an app here would have
-        # been `nix run .#engine -- manganese` launching bare Chromium with
-        # `manganese` as a URL to open. That command used to work and now
-        # means something else, which is worse than it not existing.
+        # No `engine` app: running it would only start bare Chromium. Use
+        # `nix build .#engine`.
       };
 
       devShells.${system} = {
-        # Default shell: everything needed for the TDD pure-logic core.
+        # Default shell: tools for the pure-logic crates and TypeScript.
         default = pkgs.mkShell {
           packages = coreTools;
           RUST_BACKTRACE = "1";
@@ -1252,40 +968,33 @@
           '';
         };
 
-        # Full shell: adds the Wayland/DRM/GPU libraries domicile-compositor needs.
+        # Full shell: adds the libraries domicile-compositor needs.
         full = pkgs.mkShell {
           packages = coreTools ++ hostLibs;
           RUST_BACKTRACE = "1";
           FORCE_COLOR = 1;
           BIOME_BINARY = pkgs.lib.getExe pkgs.biome;
-          # The same table the installed compositor's wrapper sets, so that a
-          # `cargo run` out of a checkout names a monitor's maker the way an
-          # installed desktop does rather than in three letters.
+          # The EDID vendor table the installed wrapper sets, so `cargo run`
+          # names monitor makers the same way.
           DOMICILE_PNP_IDS = "${pkgs.hwdata}/share/hwdata/pnp.ids";
-          # The compositor `dlopen`s libEGL to import client dmabufs, and
-          # `mkShell` only wires build-time linkage — a package in `packages`
-          # is not on the runtime loader path. `/run/opengl-driver/lib` comes
-          # first because on NixOS that is the EGL vendor matching the running
-          # kernel driver; the nixpkgs copies behind it cover a non-NixOS host.
+          # `dlopen`ed libraries are not on the loader path from `packages`
+          # alone. `/run/opengl-driver/lib` comes first so NixOS uses the EGL
+          # matching its kernel driver.
           LD_LIBRARY_PATH =
             "/run/opengl-driver/lib:${pkgs.lib.makeLibraryPath [
               pkgs.libGL
               pkgs.mesa
               pkgs.libgbm
-              # winit dlopens the Wayland and X11 client libraries to decide
-              # which display server it is talking to, so both have to be here
-              # even though only one gets used. Without them it reports
-              # `NoWaylandLib` and opens no window — the same shape of failure
-              # libEGL had, for the same reason.
+              # winit probes both Wayland and X11 client libraries. Without
+              # them it reports `NoWaylandLib` and opens no window.
               pkgs.wayland
               pkgs.libxkbcommon
               pkgs.libx11
               pkgs.libxcursor
               pkgs.libxrandr
               pkgs.libxi
-              # And libpam, which the lock `dlopen`s for a desk that names a
-              # `lock.pam_service` -- and which its tests load too, so they run
-              # against the PAM the package does rather than the host's.
+              # libpam for the lock screen, so tests use the same PAM as the
+              # package instead of the host's.
               pkgs.pam
             ]}:${pkgs.lib.makeLibraryPath engineRuntimeLibs}";
           shellHook = ''

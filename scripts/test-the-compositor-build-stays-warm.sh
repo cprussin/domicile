@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# The engine group's compositor build keeps its cargo target across runs.
+# Tests that the engine group's compositor build keeps its cargo target across
+# runs.
 #
-# Checkout wipes `target/` every run, so the compositor was a cold cargo build
-# each time. Given DOMICILE_CARGO_TARGET, the build links `target` there first.
+# Checkout wipes `target/` every run. With DOMICILE_CARGO_TARGET set, the build
+# links `target` to that directory first.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Which end the webview-active-tab guard blames, and which readings it calls a
-# pass.
+# Tests the verdict of `guard-webview-active-tab.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-active-tab.sh`, run out of
-# the real script rather than copied, as `test-webview-tabs-guard.sh` does. The
-# cases that matter most are the two that stop at the grant: a click the tray
-# granted nothing for, and a grant that painted nothing, blame different ends.
-# And the control's inversion: a color with no click is the failure that makes
-# the claim's color not the click's.
+# Runs the verdict block from the real guard. Key cases: a click with no grant
+# and a grant with no paint blame different components; in the control, the
+# color with no click is the failure.
 #
-# Plus what the guard cannot check at runtime: the id it expects is the one the
-# fixture's key makes, the color it looks for is the one the fixture paints,
-# and the fixture asks for activeTab and no host.
+# Also checks what the guard cannot check at runtime: the expected id matches
+# the fixture's key, the expected color matches what the fixture paints, and
+# the fixture requests activeTab and no host permissions.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,7 +37,7 @@ expect() {
   fi
 }
 
-# Pass or fail, not the sentence: the sentences will be reworded.
+# Prints pass, fail or neither. Sentences are not compared, since they change.
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
@@ -55,8 +52,7 @@ verdict() { # $1 MEASURED
   )
 }
 
-# Whether the failing sentence names `$2`, where WHICH end it blames is the
-# point.
+# Whether the failure message contains `$2`, i.e. blames the right component.
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
@@ -68,10 +64,10 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<leg> <probe status> <sent> <tray> <activated> <granted>": the
-# probe's 0 (the color), 1 (the witness alone) or 2 (neither), whether the
-# stand-in sent the list, whether the fixture reached the tray, whether the
-# shell clicked it, and whether the tray logged the grant.
+# MEASURED is "<leg> <probe status> <sent> <tray> <activated> <granted>": probe
+# status 0 (color), 1 (witness only) or 2 (neither); whether the stand-in sent
+# the list; whether the fixture reached the tray; whether the shell clicked it;
+# whether the tray logged the grant.
 echo "the claim — a click, and the page painted"
 expect "painted after a granted click is the pass" "pass" \
   "$(verdict "painted 0 1 1 1 1")"
@@ -87,7 +83,7 @@ expect "a shell that never clicked is a failure" "fail" \
 expect "and says it was never focused" "yes" \
   "$(says "painted 1 1 1 0 0" "focused")"
 
-# THE TWO CASES THE GUARD IS FOR.
+# The two cases the guard exists for.
 expect "a click the tray granted nothing for is a failure" "fail" \
   "$(verdict "painted 1 1 1 1 0")"
 expect "and blames the active tab or Activate" "yes" \
@@ -102,7 +98,7 @@ echo
 echo "the control — no click, and the page unpainted"
 expect "unpainted, installed and unclicked is the pass" "pass" \
   "$(verdict "control 1 1 1 0 0")"
-# INVERTED: the color is the failure, because it is the claim's reading.
+# Inverted: the color is the failure, because it is the claim's reading.
 expect "painted with no click is a failure" "fail" \
   "$(verdict "control 0 1 1 0 0")"
 expect "and says the claim proves nothing" "yes" \
@@ -141,12 +137,10 @@ expect "and may, by activeTab and nothing else" "yes" \
 expect "and has no popup, so the click is its onClicked" "yes" \
   "$(grep -qF 'default_popup' "$FIXTURE/manifest.json" && echo no || echo yes)"
 
-# THE CLICK WAITS FOR THE LISTENER. An event with no listener registered yet is
-# dropped, not queued: the tray row arrives at install, before the service
-# worker has run, and a click then is granted and never dispatched -- "painted
-# 1 1 1 1 1" with no refusal, as on cprussin/domicile#738. So the worker badges
-# its action once onClicked is registered, and the shell clicks only a row
-# carrying that badge.
+# An event with no listener yet is dropped. The tray row appears at install,
+# before the service worker runs, so an early click is granted but never
+# dispatched (cprussin/domicile#738). The worker badges its action once
+# onClicked is registered, and the shell clicks only a badged row.
 SHELL_MODULE="$SCRIPTS/guard-webview-active-tab.js"
 LISTENS="$(grep -n 'action.onClicked.addListener' "$FIXTURE/background.js" | cut -d: -f1)"
 BADGES="$(grep -n 'action.setBadgeText({ text: "on" })' "$FIXTURE/background.js" | cut -d: -f1)"
@@ -157,12 +151,10 @@ expect "and the shell counts it in the tray only with that badge" "yes" \
   "$(grep -qF 'extension.badgeText === "on"' "$SHELL_MODULE" &&
     echo yes || echo no)"
 
-# THE CLICK WAITS FOR THE PAGE. `url` is the guest's visible entry, which can
-# be a pending one, and `loading` falls for a load that stopped short of a
-# commit: "painted 1 1 1 1 1" refused for the host, as on
-# cprussin/domicile#797. So the still page says it is up once it has loaded,
-# by a same-document commit to `#ready`, and the shell clicks only once its
-# <webview> is showing that.
+# `url` can be a pending entry and `loading` can clear for a load that never
+# committed, so the click could land before the page (cprussin/domicile#797).
+# The still page commits `#ready` after load, and the shell clicks only once
+# its <webview> shows that URL.
 SERVER="$SCRIPTS/guard-webview-content-script-server.py"
 SERVER_LOG="$(mktemp)"
 python3 "$SERVER" --port 0 --color 123456 --still >"$SERVER_LOG" 2>&1 &

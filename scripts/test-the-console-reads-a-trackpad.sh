@@ -1,32 +1,26 @@
 #!/usr/bin/env bash
-# Whether a trackpad has anything at all reading it.
+# Tests that the console browser turns trackpad input into pointer motion.
 #
-# NOTHING IN AN UNPATCHED TREE TURNS A PAD INTO POINTER MOTION, and that is not
-# a figure of speech. `CreateConverter`
-# (`ui/events/ozone/evdev/input_device_opener_evdev.cc`) has exactly one
-# touchpad branch, `#if defined(USE_EVDEV_GESTURES)`, and that flag is
-# `use_evdev_gestures = is_chromeos_device`. A laptop pad is not a touchscreen
-# either -- `HasTouchscreen()` is `HasAbsXY() && HasDirect()` and
-# `INPUT_PROP_POINTER` makes `HasDirect()` false -- so it falls through to
-# `EventConverterEvdevImpl`, whose `ProcessEvents` handles `EV_MSC`, `EV_KEY`,
-# `EV_REL`, `EV_SYN` and `EV_SW` and has no `EV_ABS` case. Every finger
-# position is read off the descriptor and dropped, `x_offset_` stays zero,
-# `FlushEvents` returns before `cursor_->MoveCursor`, and NOTHING IS LOGGED
-# because nothing failed. The symptom is a pointer that draws and does not
-# move, which is what the machine did.
+# In an unpatched tree nothing turns pad input into pointer motion.
+# `CreateConverter` (`ui/events/ozone/evdev/input_device_opener_evdev.cc`)
+# has one touchpad branch, gated on `USE_EVDEV_GESTURES`, which is ChromeOS
+# only. A laptop pad is not a touchscreen (`INPUT_PROP_POINTER` makes
+# `HasDirect()` false), so it gets `EventConverterEvdevImpl`, which has no
+# `EV_ABS` case. Finger positions are dropped without a log, and the pointer
+# draws but does not move.
 #
-# So two things have to be true together, and either alone is useless:
+# Two things are needed together:
 #
-#   use_libinput = true   or the converter is not even compiled
+#   use_libinput = true   or the converter is not compiled
 #   patch 0027            or libinput opens the device by name and gets EACCES,
 #                         because on a console logind owns `/dev/input/*` and
-#                         this browser is not root
+#                         the browser is not root
 #
-# The build-argument half is asserted by `test-the-builds-agree-on-ozone.sh`,
-# which checks both `gn gen` blocks. This is the patch half.
+# `test-the-builds-agree-on-ozone.sh` checks the build argument. This checks
+# the patch.
 #
-# NO CHROMIUM TREE. The series and `src/` are the source of truth, so this runs
-# in the shell group on every push.
+# Needs no Chromium tree: it reads the patch series and `src/`, so it runs in
+# the shell group on every push.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,8 +38,8 @@ removed="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^-' || true)"
 in_added()   { case "$added"   in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 in_removed() { case "$removed" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
-# The positive first, so a series that stopped touching these files at all
-# cannot pass every check below by saying nothing.
+# Checked first, so a series that stops touching these files cannot pass the
+# checks below by omission.
 if in_added "libinput_event_converter"; then
   ok "the series touches the libinput converter"
 else
@@ -53,9 +47,8 @@ else
     "no patch mentions libinput_event_converter, so a touchpad has no reader"
 fi
 
-# THE DESCRIPTOR, WHICH IS THE WHOLE PATCH. `CreateConverter` is handed an
-# already-open `fd` and every other branch takes it; the libinput branch
-# dropped it and opened the path itself.
+# `CreateConverter` receives an open `fd`. The libinput branch must use it
+# instead of opening the path itself.
 if in_added "LibInputEventConverter::Create(std::move(fd)"; then
   ok "the libinput branch is handed the descriptor the opener already has"
 else
@@ -70,9 +63,8 @@ else
     "libinput still calls open() on a node logind owns, which answers EACCES"
 fi
 
-# On the heap, and that is not a style preference: libinput keeps the pointer
-# as its user data for the life of the context, and the context is moved out of
-# `Create`, so a member address would dangle before libinput ever asked.
+# On the heap: libinput keeps the pointer as user data for the context's life,
+# and the context is moved out of `Create`, so a member address would dangle.
 if in_added "struct OpenedDevice"; then
   ok "the descriptor is parked somewhere a move cannot invalidate"
 else
@@ -80,9 +72,8 @@ else
     "no OpenedDevice holder, so open_restricted has nowhere to read an fd from"
 fi
 
-# A second ask is a bug, not a case to fall back for: one device per context is
-# this class's own documented rule. Falling back to open() would be the exact
-# call that cannot work, made quietly.
+# The class allows one device per context, so a second request is a bug.
+# Falling back to open() there would fail with EACCES and log nothing.
 if in_added "has no descriptor left to give it"; then
   ok "a second ask is refused rather than quietly retried with open()"
 else
@@ -90,13 +81,10 @@ else
     "no refusal, so a spent context falls back to the open() that fails"
 fi
 
-# AND THE BUILD HAS TO BE ABLE TO LOAD WHAT IT LINKS. `use_libinput = true`
-# links libinput into `libcontent.so`, and `v8_context_snapshot_generator` is a
-# host tool the build links and then RUNS -- so a sysroot that satisfied the
-# linker is not enough, and the build died on `libinput.so.10: cannot open
-# shared object file` ten minutes in. `tools/nix/make-shell-for-system.nix`
-# already carries a list of libraries headed by that exact error and that exact
-# binary's name; this is the assertion that libinput stays in it.
+# `use_libinput = true` links libinput into `libcontent.so`, and the build runs
+# the host tool `v8_context_snapshot_generator`. The build shell must be able
+# to load libinput.so.10, so it must stay in the library list in
+# `tools/nix/make-shell-for-system.nix`.
 if in_added "libinput # libinput.so.10"; then
   ok "the build shell can load what the browser links"
 else
@@ -104,11 +92,9 @@ else
     "libinput is not in tools/nix/make-shell-for-system.nix, so every host binary the build runs dies on libinput.so.10"
 fi
 
-# ROUTING IS A FLAG, NOT A PATCH. `EventDeviceInfo::UseLibinput` prefers an
-# overridden `kLibinputHandleTouchpad` to its own heuristics, and the feature
-# is FEATURE_DISABLED_BY_DEFAULT -- so without the override an ordinary
-# multitouch pad is not routed to libinput at all and the patch above never
-# runs.
+# Routing needs a flag. `EventDeviceInfo::UseLibinput` prefers an overridden
+# `kLibinputHandleTouchpad` to its heuristics, and the feature is disabled by
+# default. Without the override an ordinary pad never reaches libinput.
 if grep -q -- "--enable-features=LibinputHandleTouchpad" "$LAUNCH"; then
   ok "the launcher routes touchpads to libinput"
 else

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# How the history guard's module paces itself, against a browser in miniature.
+# Tests how `guard-webview-history.js` waits for each reading, against a fake
+# <webview>.
 #
-# Each step waits for what it needs to have happened, bounded by a timeout, so a
-# healthy engine runs in seconds and a broken one falls back to the bounds —
-# which are the fixed schedule this replaced, and so the same readings.
+# Each step waits for its reading up to a timeout, so a healthy engine
+# finishes in seconds and a broken one still yields every reading.
 #
-# Runs the real `guard-webview-history.js` under bun with a fake <webview>: each
-# navigation starts loading, commits and finishes LATENCY ms apart, announcing
-# as the engine does, and `/slow` is held for SLOW_MS unless stopped.
+# The fake: each navigation starts, commits and finishes LATENCY ms apart,
+# with the engine's events, and `/slow` is held for SLOW_MS unless stopped.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -153,7 +152,7 @@ run() { # $1 behavior, $2 drive, $3 settle, $4 step, $5 quiet, $6 hold, $7 cap
     "drive=$2&src=http://fixture&settle=$3&step=$4&quiet=$5&hold=$6" \
     "$1" "$SLOW_MS" "$7" 2>&1
 }
-# The ms at which the first line holding $2 was said, or nothing.
+# The ms of the first output line containing $2, or nothing.
 when() { # $1 output, $2 text
   printf '%s\n' "$1" | awk -v text="$2" 'index($0, text) { print $1; exit }'
 }
@@ -167,8 +166,8 @@ at_least() { # $1 ms, $2 minimum
   if [ -n "$1" ] && [ "$1" -ge "$2" ]; then echo yes; else echo no; fi
 }
 
-# Bounds far above what a healthy step takes, and a cap below the first of them:
-# a run that sat out any bound never finishes.
+# Timeouts are well above a healthy step, and the cap is below the first
+# timeout, so a run that waits out any timeout is cut off by the cap.
 POSITIVE="$(run healthy history 3000 2000 200 100 2900)"
 echo "the positive run, on a healthy engine"
 expect "finishes without sitting out a bound" "no" "$(has "$POSITIVE" TIMEOUT)"
@@ -190,8 +189,8 @@ expect "pending is read while /slow is held" "yes" \
   "$(has "$POSITIVE" "loading-state at=pending loading=true")"
 expect "after-stop is read once the load is canceled" "yes" \
   "$(has "$POSITIVE" "loading-state at=after-stop loading=false")"
-# The request has to be at the fixture before stop(), or there is nothing to
-# cancel and `asked /slow` never appears.
+# The request must reach the fixture before stop(), or there is nothing to
+# cancel.
 ASKED="$(when "$POSITIVE" "fixture asked /slow")"
 STOPPED="$(when "$POSITIVE" "GUARD calling stop")"
 expect "stop() gives the pending load its hold first" "yes" \
@@ -203,7 +202,7 @@ echo "the control, on a healthy engine"
 expect "finishes without sitting out a bound" "no" "$(has "$CONTROL" TIMEOUT)"
 expect "the guest showed two pages and then the slow one" "/one /two /slow " \
   "$(shown "$CONTROL")"
-# Nothing is driven, so there is nothing to wait for: the absence gets `quiet`.
+# The control drives nothing, so each step waits out its `quiet` window.
 NOT_BACK="$(when "$CONTROL" "GUARD not calling goBack")"
 AFTER_BACK="$(when "$CONTROL" "history-state at=after-back")"
 expect "an undriven step is watched for its quiet window" "yes" \
@@ -215,7 +214,8 @@ expect "pending is read while /slow is held" "yes" \
 expect "the run waits for the slow page to arrive" "yes" \
   "$(has "$CONTROL" "loading-state at=after-stop loading=false")"
 
-# The address changes before the load starts: no step may take that as arrived.
+# The address changes before the load starts; no step may treat that as
+# arrival.
 PENDING="$(run pending-url history 3000 2000 200 100 2900)"
 echo
 echo "an engine that shows an address before loading it"
@@ -226,8 +226,8 @@ expect "after-back is read once back's answer is in" "yes" \
 expect "after-forward is read once the guest is forward" "yes" \
   "$(has "$PENDING" "history-state at=after-forward can=true/false events=2")"
 
-# Nothing ever arrives: every step sits out its bound, and every reading is
-# still taken for the verdict to judge.
+# Nothing arrives: every step hits its timeout, and every reading is still
+# taken.
 DEAD="$(run dead history 300 200 50 50 5000)"
 echo
 echo "an engine where nothing ever arrives"
@@ -236,8 +236,8 @@ expect "takes all four history readings" "4" \
   "$(printf '%s\n' "$DEAD" | grep -c "GUARD history-state")"
 expect "takes all three loading readings" "3" \
   "$(printf '%s\n' "$DEAD" | grep -c "GUARD loading-state")"
-# 300 + 5 × 200 + 50: the first page, five steps and the hold. The last waits
-# for a load to end, and none began.
+# 300 + 5 × 200 + 50: the first page, five steps and the hold. The last step
+# waits for a load to end, and none began.
 expect "gives every step its whole bound" "yes" \
   "$(at_least "$(when "$DEAD" "GUARD done")" 1350)"
 

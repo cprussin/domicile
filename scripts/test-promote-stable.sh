@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# `stable` is the newest main that runs the official engine.
+# Tests `promote-stable.sh`, which moves `stable` to the newest main commit
+# that runs the official engine.
 #
-# Main takes a merge as soon as its checks pass, but the official engine (PGO,
-# ThinLTO, no DCHECKs) is built nightly, so after a merge that moves the fork
-# main runs the CHECKED engine until the night's build is pinned. Somebody
-# running `nix run github:cprussin/domicile/stable` should never get that one.
-# So stable.yml moves `stable` to each main commit whose official pin is of the
-# checked pin's series -- the commit engine-pin.nix picks the official engine
-# for -- and leaves it where it is otherwise.
+# The official engine (PGO, ThinLTO, no DCHECKs) builds nightly, so after a
+# fork change main runs the checked engine until that night's pin. `stable`
+# moves only to commits whose official pin matches the checked pin's series.
 #
-# `git` is real against a local remote.
+# Uses real `git` against a local remote.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -56,8 +53,8 @@ setup() {
   cp "$PROMOTE" "$WORK/repo/.github/scripts/"
 }
 
-# A commit on main pinning these two series, pushed, and the checkout left on
-# it detached, as `actions/checkout` leaves it.
+# Pushes a commit on main pinning these two series, then detaches the
+# checkout as `actions/checkout` does.
 merge() { # checked series, official series
   git -C "$WORK/repo" checkout -q main 2>/dev/null || true
   printf '{\n  identity = "%s";\n}\n' "$1" >"$WORK/repo/$CHECKED"

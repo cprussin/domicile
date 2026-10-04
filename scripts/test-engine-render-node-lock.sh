@@ -1,34 +1,19 @@
 #!/usr/bin/env bash
-# What keeps two runners off one card, asserted.
+# Asserts the render node lock keeps two runners off one GPU.
 #
-# `crux` grew a second job slot so that the every-pull-request guard would stop
-# queueing behind Chromium builds. That slot is worth hours a day and it costs
-# one thing: the single slot used to be an accidental lock over the render
-# node, and `guard-latency.sh` times sixty keystroke-to-pixel rounds against
-# it. A second job on the card during those rounds is indistinguishable from
-# the regression the guard exists to catch.
+# `crux` has two job slots. `guard-latency.sh` times keystroke-to-pixel rounds
+# on the render node, and a second job on the card during those rounds looks
+# like a regression. `.github/scripts/engine-render-node-lock.sh` must:
 #
-# `.github/scripts/engine-render-node-lock.sh` is what replaces the accident
-# with something deliberate, and the three things it has to get right are the
-# three ways a lock between two runners goes wrong:
-#
-# - **It waits.** The tree lock refuses instead, because on a one-slot machine
-#   a run that waits is a run already holding the slot its holder needs. Two
-#   slots retire that argument, and a lock that refused here would turn every
-#   overlap into a red check.
-# - **It gives up rather than waiting forever**, because a wait with no bound
-#   is a job that holds a runner until the timeout GitHub imposes.
-# - **It clears a lock nothing will come back for.** A canceled run is the
-#   ordinary way this leaks and `pinned-engine.yml` cancels superseded runs, so
-#   a lock only a person could clear would wedge the every-PR job within a day.
-#   This is the rule the TREE lock deliberately does not have, and the reason
-#   the two differ is the cost of guessing wrong: a guard that has to be re-run
-#   against a reset that lands inside somebody's four-hour build.
-#
-# And the one that is not about waiting at all: a drop only drops what it owns.
-# The workflow drops this in an `if: always()` step, which is reached by a run
-# that never took the lock, and an unconditional `rm` there hands the card to a
-# third job in the middle of the holder's timed guard.
+# - **Wait.** The tree lock refuses instead, but here a refusal would turn
+#   every overlap into a red check.
+# - **Give up after a bound**, so a wait cannot hold a runner until GitHub's
+#   timeout.
+# - **Clear a stale lock.** `pinned-engine.yml` cancels superseded runs, which
+#   leaks locks. The tree lock does not do this because a wrong guess there
+#   resets a tree mid-build; here it only costs a re-run.
+# - **Drop only its own lock.** The drop runs in an `if: always()` step, also
+#   reached by runs that never took the lock.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,8 +47,8 @@ contains() { # what, needle, haystack
   esac
 }
 
-# Status on the first line, output after it, so a case can assert on either
-# without running the script twice.
+# Prints status on the first line and output after it, so a case can assert
+# on either without running the script twice.
 run() {
   local out status
   out="$("$LOCK_SH" "$@" 2>&1)"
@@ -86,9 +71,8 @@ contains "who names the holder" "engine-run-1" "$(output_of "$r")"
 
 # --- a card somebody else has ------------------------------------------------
 
-# THE WAIT IS BOUNDED, and this is the assertion that says so. A zero budget
-# makes the first refusal the last one, which is the same code path a real
-# twenty-minute wait ends on and takes no time to run.
+# The wait is bounded. A zero budget ends on the same code path as a real
+# twenty-minute wait.
 r="$(DOMICILE_RENDER_NODE_MAX_WAIT=0 run take engine-run-2)"
 expect "a held render node is not taken from under its owner" 1 "$(status_of "$r")"
 contains "and the failure names who has it" "engine-run-1" "$(output_of "$r")"
@@ -98,8 +82,8 @@ expect "and the owner is unchanged" "engine-run-1" \
 
 # --- a drop that is not the holder's -----------------------------------------
 
-# The `if: always()` case: a step that failed to take the lock still reaches the
-# drop. It must not clear somebody else's.
+# The `if: always()` case: a step that failed to take the lock still reaches
+# the drop, which must not clear another run's lock.
 r="$(run drop engine-run-2)"
 expect "a non-owner's drop is not an error" 0 "$(status_of "$r")"
 contains "and it says whose the lock is" "engine-run-1" "$(output_of "$r")"
@@ -124,10 +108,8 @@ contains "who says so when the card is free" "nobody" "$(output_of "$r")"
 
 # --- a lock nothing is coming back for ---------------------------------------
 
-# THE CASE THE TREE LOCK REFUSES TO HANDLE, and the reason this one does is in
-# both headers: a canceled run leaves this behind, `pinned-engine.yml` cancels
-# superseded runs, and the cost of clearing it wrongly is a re-run rather than
-# a build compiled from two trees.
+# A canceled run leaves its lock behind. Clearing it wrongly costs a re-run,
+# not a build from two trees, so this lock clears stale entries.
 "$LOCK_SH" take engine-that-was-canceled >/dev/null 2>&1
 r="$(DOMICILE_RENDER_NODE_STALE_AFTER=0 run take engine-run-3)"
 expect "a lock older than any guard could hold it is taken" 0 "$(status_of "$r")"
@@ -137,17 +119,14 @@ contains "and the warning names who left it" "engine-that-was-canceled" \
 expect "and the new owner has it" "engine-run-3" \
   "$(cat "$WORK/lock/owner" 2>/dev/null)"
 
-# A lock is stolen once per `take` and not in a loop: the second refusal after a
-# steal is a real holder that arrived in between, and spinning on it would hand
-# the card to whoever asks most often.
+# A take steals at most once. A refusal after a steal is a real holder, and
+# retrying in a loop would favor whoever asks most often.
 "$LOCK_SH" drop engine-run-3 >/dev/null 2>&1
 
 # --- a timestamp that cannot be read -----------------------------------------
 
-# A lock from the future is a clock that moved, and a lock with no timestamp is
-# one this script did not write. Neither is evidence of abandonment, so neither
-# is stolen -- otherwise the one thing that reliably clears a lock is corrupting
-# the file that says how old it is.
+# A future timestamp means the clock moved, and a missing one means another
+# writer. Neither proves abandonment, so neither is stolen.
 "$LOCK_SH" take engine-run-4 >/dev/null 2>&1
 echo "not-a-number" >"$WORK/lock/since"
 r="$(DOMICILE_RENDER_NODE_STALE_AFTER=0 DOMICILE_RENDER_NODE_MAX_WAIT=0 run take engine-run-5)"
@@ -165,12 +144,9 @@ rm -rf "$WORK/lock"
 
 # --- a quiet machine ---------------------------------------------------------
 
-# WHAT THE CARD ALONE DID NOT BUY. Main run 36226737213 held the card and its
-# latency guard read a floor of 44.61 ms, commit to pixel 49.04 ms, while run
-# 36228817911 compiled Chromium on the other runner. Quiet runs read 19-29 ms.
-# So the timed guard asks for the machine, not only the card: compiles and
-# guards register as noise with `noisy`, and `quiet` takes the card only when
-# there is none.
+# Holding the card is not enough: a Chromium compile on the other runner
+# roughly doubled measured latency. Compiles and guards register as noise with
+# `noisy`, and `quiet` takes the card only when there is no noise.
 noise_count() {
   find "$WORK/noise" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
 }
@@ -191,7 +167,7 @@ expect "a quiet machine's card is taken" 0 "$(status_of "$r")"
 expect "and held by the measurement" "latency-1" \
   "$(cat "$WORK/lock/owner" 2>/dev/null)"
 
-# Noise does not start inside somebody's measurement.
+# Noise does not start during a measurement.
 r="$(DOMICILE_RENDER_NODE_MAX_WAIT=0 run noisy build-2 -- touch "$WORK/build-2-ran")"
 expect "noise does not run beside a measurement" 1 "$(status_of "$r")"
 contains "and says whose measurement" "latency-1" "$(output_of "$r")"
@@ -202,7 +178,7 @@ else
 fi
 expect "and it leaves no registration behind" 0 "$(noise_count)"
 
-# It waits instead, and goes ahead once the measurement is over.
+# It waits, and runs once the measurement ends.
 DOMICILE_RENDER_NODE_MAX_WAIT=20 \
   "$LOCK_SH" noisy build-3 -- touch "$WORK/build-3-ran" >/dev/null 2>&1 &
 waiting=$!
@@ -219,10 +195,9 @@ if [ -e "$WORK/build-3-ran" ]; then ok "and its command ran"; else
   fail "and its command ran" "no $WORK/build-3-ran"
 fi
 
-# No measurement beside noise, and failing to get one is "did not run" (77),
-# which STRICT makes a failure: not a pass, and not a regression either. The
-# noise outlives the stale bound by then, so this also says the heartbeat keeps
-# a live registration live.
+# A measurement that cannot get a quiet machine exits 77 ("did not run"), which
+# strict mode fails. The noise outlives the stale bound here, so this also
+# checks that the heartbeat keeps a live registration.
 DOMICILE_RENDER_NODE_NOISE_BEAT=1 DOMICILE_RENDER_NODE_NOISE_STALE=2 \
   "$LOCK_SH" noisy build-4 -- \
   sh -c "sleep 5; date +%s.%N >'$WORK/build-4-ended'" >/dev/null 2>&1 &
@@ -253,7 +228,7 @@ fi
 wait "$noisy_pid"
 "$LOCK_SH" drop latency-3 >/dev/null 2>&1
 
-# A card somebody else holds is waited for too.
+# A card another job holds is also waited for.
 "$LOCK_SH" take pinned-1 >/dev/null 2>&1
 r="$(DOMICILE_RENDER_NODE_QUIET_WAIT=0 run quiet latency-4)"
 expect "a measurement does not take a card somebody holds" 77 "$(status_of "$r")"
@@ -262,9 +237,9 @@ contains "and names who holds it" "pinned-1" "$(output_of "$r")"
 
 # --- noise that steps aside --------------------------------------------------
 
-# The production build is noise for hours, and a measurement waiting on it
-# would wait for hours. So a measurement waiting on noise says so, and noise
-# that can stop and resume -- engine-yielding-build.sh -- asks.
+# The production build is noise for hours. A waiting measurement marks the
+# machine wanted, and noise that can pause (engine-yielding-build.sh) checks
+# for that.
 r="$(run wanted build-6)"
 expect "nobody waiting for quiet is not wanted" 1 "$(status_of "$r")"
 DOMICILE_RENDER_NODE_NOISE_BEAT=1 "$LOCK_SH" noisy build-6 -- sleep 4 \
@@ -284,8 +259,8 @@ wait "$noisy_pid"
 
 # --- noise nothing is keeping alive ------------------------------------------
 
-# A registration whose heartbeat stopped is a run that was killed. Waiting on it
-# would make every measurement after it a skip.
+# A registration whose heartbeat stopped belongs to a killed run. Waiting on
+# it would turn every later measurement into a skip.
 mkdir -p "$WORK/noise/abandoned"
 echo "engine-run-that-was-killed" >"$WORK/noise/abandoned/owner"
 echo $(($(date +%s) - 3600)) >"$WORK/noise/abandoned/since"
@@ -295,8 +270,8 @@ contains "and clearing it is said out loud" "::warning::" "$(output_of "$r")"
 contains "and names who left it" "engine-run-that-was-killed" "$(output_of "$r")"
 "$LOCK_SH" drop latency-5 >/dev/null 2>&1
 
-# And the heartbeat stops with the wrapper it speaks for: one killed outright
-# never reaches its own cleanup.
+# The heartbeat stops with its wrapper, since a wrapper killed outright never
+# runs its cleanup.
 DOMICILE_RENDER_NODE_NOISE_BEAT=1 "$LOCK_SH" noisy build-5 -- \
   sh -c "echo \$\$ >'$WORK/build-5-pid'; exec sleep 30" >/dev/null 2>&1 &
 killed=$!

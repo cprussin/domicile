@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# Publish every public `@domicile-desktop/*` package to npm, as an alpha of this commit:
-# `0.0.0-alpha-<sha>` under the `latest` dist-tag. No semver yet; a version
-# names the commit it was built from.
+# Publish every public `@domicile-desktop/*` package to npm as
+# `0.0.0-alpha-<sha>` under the `latest` dist-tag. There is no semver yet.
 #
-# `bun pm pack` rather than `npm pack`, because bun is what rewrites
-# `workspace:*` and `catalog:` to real ranges; `npm publish` of the tarball
-# rather than `bun publish`, because npm is what speaks trusted publishing
-# (GitHub's OIDC token, no secret) and attaches provenance.
+# - `bun pm pack`: bun rewrites `workspace:*` and `catalog:` to real ranges.
+# - `npm publish`: npm supports trusted publishing (GitHub's OIDC token, no
+#   secret) and provenance.
+# - `alpha-<sha>`, not `alpha.<sha>`: semver reads an all-digit identifier as
+#   numeric, and one with a leading zero is not a valid version.
 #
-# `alpha-<sha>`, not `alpha.<sha>`: a dot-separated identifier of digits alone
-# is numeric to semver, and a short sha that happens to be all digits with a
-# leading zero is then not a version at all.
-#
-# DOMICILE_PUBLISH_DRY_RUN=<dir> packs into <dir> and publishes nothing — what
-# scripts/test-publish-packages.sh runs.
+# DOMICILE_PUBLISH_DRY_RUN=<dir> packs into <dir> and publishes nothing, for
+# scripts/test-publish-packages.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -24,10 +20,9 @@ PACKAGES=(chrome-sdk component-library shell-manganese)
 VERSION="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
 OUT="${DOMICILE_PUBLISH_DRY_RUN:-$(mktemp -d)}"
 
-# The versions are written into the manifests to be packed, and into
-# `bun.lock` — which is where `bun pm pack` reads a sibling's version from when
-# it resolves `workspace:*` — and all of it is put back after, whatever
-# happens: a dry run is run from a working copy.
+# Versions go into the manifests and `bun.lock`, where `bun pm pack` reads a
+# sibling's version for `workspace:*`. All of it is restored on exit, because a
+# dry run runs in a working copy.
 SAVED="$(mktemp -d)"
 restore() {
   for package in "${PACKAGES[@]}"; do

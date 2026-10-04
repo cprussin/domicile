@@ -1,24 +1,14 @@
 #!/usr/bin/env bash
-# The three libraries that decide whether a check can run here, driven directly.
+# Tests the libraries that decide whether a check can run: `engine-guard.sh`,
+# `nix-check.sh` and `rust-check.sh`.
 #
-# `check.sh` reads exit 77 as "did not run" and everything else non-zero as
-# "failed", and under `DOMICILE_CHECK_STRICT=1` a skip is itself a failure that
-# names which check stopped running. All of that depends on a check getting the
-# status right when its prerequisite is missing, and all three prerequisites
-# here are absent on most machines: `nix`, a warm Chromium tree, and a
-# libxkbcommon the C compiler can resolve.
+# `check.sh` reads exit 77 as "did not run" and other non-zero statuses as
+# failures. A missing prerequisite (nix, a built Chromium tree, a linkable
+# libxkbcommon) must exit 77: exit 1 makes `check.sh` fail on a laptop, and
+# exit 0 reports a pass that measured nothing.
 #
-# Getting it wrong is expensive in both directions. Exit 1 without nix makes
-# `./scripts/check.sh` unrunnable on a laptop, which is how a suite stops being
-# run at all. Exit 0 without the tree is worse and is the failure this
-# repository has shipped three times: a check that reported a pass having
-# measured nothing. Before exit 77 existed, a green CI run named ten suites
-# where nine had run.
-#
-# Driven as libraries rather than through a script that sources them, for the
-# reason `packages/e2e-harness/src/verdicts.test.ts` drives `lib/harness.sh`
-# directly: the behavior belongs to the library, and a test that reached it
-# through one of its callers would be asserting that caller's wiring instead.
+# The libraries are sourced directly, so the test covers their behavior and
+# not a caller's wiring.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,18 +29,14 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# A library sourced in a shell of its own, so its `exit` is the status here and
-# its output is a string to assert on. `bash -c` rather than a subshell: these
-# libraries end in `exit`, and an `exit` inside `( ... )` in this script would
-# leave the enclosing run without a verdict.
+# Sources a library in its own `bash -c` and runs a line, printing the output.
+# The libraries call `exit`, so each runs in a separate process.
 drive() { # library, line to run after sourcing
   drive_in "$ROOT" "$@"
 }
 
-# The same, with a ROOT of the caller's choosing. It has to be set BEFORE the
-# library is sourced, because that is when `ENGINE_SCRIPTS` is computed from it
-# -- a `ROOT=...` in the line that runs afterward is too late, which is how the
-# stand-in cases below first reported the real guard directory instead.
+# Like `drive`, with a custom ROOT. ROOT must be set before sourcing, because
+# the library computes `ENGINE_SCRIPTS` from it at that point.
 drive_in() { # root, library, line to run after sourcing
   bash -c "set -u; ROOT='$1'; . '$2'; $3" 2>&1
 }
@@ -82,10 +68,7 @@ expect_skip() { # what, library, line
 
 echo "an engine check with no warm tree"
 
-# A directory that exists and holds no build, which is the shape a fresh
-# checkout of the engine package has. Asserted separately from a path that does
-# not exist at all, because "the tree is there and was never built" is the case
-# a person actually hits and the one a bare `[ -d ]` would wave through.
+# A tree with no build, as in a fresh checkout. A bare `[ -d ]` would pass it.
 mkdir -p "$WORK/empty-tree"
 expect_skip "an unbuilt tree is a skip, not a pass" \
   "$ENGINE_LIB" "DOMICILE_CHROMIUM='$WORK/empty-tree' require_engine_out"
@@ -93,9 +76,8 @@ expect_skip "an unbuilt tree is a skip, not a pass" \
 expect_skip "a tree that is not there is a skip, not a pass" \
   "$ENGINE_LIB" "DOMICILE_CHROMIUM='$WORK/no-such-tree' require_engine_out"
 
-# And the positive: a directory laid out like a built tree must NOT skip, or
-# every assertion above is satisfied by a library that skips unconditionally —
-# which would be a guard suite that never runs and always passes.
+# A built tree must not skip; otherwise a library that always skips would pass
+# the cases above.
 mkdir -p "$WORK/built-tree/out/Domicile"
 status="$(drive_status "$ENGINE_LIB" \
   "DOMICILE_CHROMIUM='$WORK/built-tree' require_engine_out")"
@@ -106,12 +88,9 @@ else
     "it exited $status with a build in place, so the guards would never run"
 fi
 
-# Where the guards are pointed, which is the whole reason this is a library and
-# not a line in each script: `engine.yml` runs them against the warm tree's
-# `out/Domicile`, `engine-release.yml` against a tarball unpacked into
-# `out/Release-staged`, and `pinned-engine.yml` against a store path that is an
-# out directory itself. A library that resolved only the first would send the
-# other two at the wrong build and report on it.
+# The out directory varies by caller: `engine.yml` uses `out/Domicile`,
+# `engine-release.yml` uses `out/Release-staged`, and `pinned-engine.yml` uses a
+# store path that is itself an out directory.
 out="$(drive "$ENGINE_LIB" \
   "DOMICILE_CHROMIUM='$WORK/built-tree' require_engine_out && printf '%s' \"\$ENGINE_OUT\"")"
 if [ "$out" = "$WORK/built-tree/out/Domicile" ]; then
@@ -131,11 +110,8 @@ else
     "ENGINE_OUT came out as '$out'"
 fi
 
-# `.`, which is not a corner case: `pinned-engine.yml` points the guards at the
-# store path `nix build .#engine` produces, and that path IS an out directory
-# rather than a tree with one inside it. A library that only understood
-# `out/<something>` would send that job at `$ENGINE/out/Domicile`, which does
-# not exist, and the skip it produced would read as "no engine is pinned".
+# `.` is used by `pinned-engine.yml`, whose `nix build .#engine` store path is
+# the out directory itself.
 mkdir -p "$WORK/store-engine"
 touch "$WORK/store-engine/chrome"
 out="$(drive "$ENGINE_LIB" \
@@ -147,33 +123,16 @@ else
     "ENGINE_OUT came out as '$out'"
 fi
 
-# A named out directory that is not there is a skip and not a pass, for the
-# reason the unbuilt tree is: `engine-release.yml` names one it has just
-# unpacked, and a typo there would otherwise be a guard reporting on a build
-# nobody produced.
+# A missing named out directory (e.g. a typo in `engine-release.yml`) skips.
 expect_skip "a named out directory that is missing is a skip" \
   "$ENGINE_LIB" \
   "DOMICILE_CHROMIUM='$WORK/built-tree' DOMICILE_ENGINE_OUT=no-such-build require_engine_out"
 
-# --- and the guard is TOLD which build, not merely checked against it -------
+# --- the guard receives the resolved build -----------------------------------
 
-# THE ASSERTION THIS FILE WAS MISSING, and run 35552949513 is what it cost. The
-# cases above establish that the library resolves the right directory; not one
-# of them established that the GUARD is given it. It was not: `require_engine_out`
-# set its own `ENGINE_OUT` and never exported `OUT`, which is the variable the
-# guards actually read -- so every guard fell back to its own default of
-# `out/Domicile`, relative to whatever directory it was handed.
-#
-# That is invisible on the caller whose out directory IS `out/Domicile`, which
-# is `engine.yml` and therefore the whole `engine` group. It is fatal on the two
-# that name their own: `pinned-engine.yml` passes `.`, because the store path
-# `nix build .#engine` produces is an out directory rather than a tree with one
-# inside it, and it failed with `no engine at .../domicile-engine-c92e314/out/Domicile/chrome`
-# -- a directory that cannot exist. `engine-release.yml` passes
-# `out/Release-staged` and would have gone the same way on the next release.
-#
-# So what is asserted is the guard's own view of it, read out of a stand-in that
-# reports what it was given. Bookkeeping the caller cannot see is not a contract.
+# Guards read `OUT`, not `ENGINE_OUT`, and default to `out/Domicile`. Without
+# `export OUT`, every caller that names another out directory reads the wrong
+# build. A stand-in guard prints the `OUT` it received.
 echo "the guard is told which build to read"
 
 STANDIN="$WORK/standin/packages/domicile-engine/scripts"
@@ -184,7 +143,7 @@ printf 'dir=%s out=%s negative=%s\n' "$1" "${OUT:-UNSET}" "${NEGATIVE:-unset}"
 GUARD
 chmod +x "$STANDIN/guard-says-what-it-got.sh"
 
-# `lib-annotate.sh` too, because the library sources it from beside the guards.
+# The library sources `lib-annotate.sh` from the guards' directory.
 cp "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh" "$STANDIN/"
 
 mkdir -p "$WORK/store-engine-2"
@@ -208,8 +167,7 @@ else
   fail "a named out directory reaches the guard" "the guard saw: $got"
 fi
 
-# The one that failed in CI. `.` has to arrive as `.`, because the guard joins
-# it to the directory and `out/Domicile` under a store path is nowhere.
+# `.` must arrive as `.`; the guard joins it to the engine directory.
 touch "$WORK/store-engine-2/chrome"
 got="$(saw "." "$WORK/store-engine-2")"
 if [ "$got" = "dir=$WORK/store-engine-2 out=. negative=unset" ]; then
@@ -219,33 +177,17 @@ else
     "the guard saw: $got"
 fi
 
-# --- whether the control runs is the caller's call ---------------------------
+# --- the caller decides whether the control runs -----------------------------
 
-# A CHECK RUNS ITS CONTROL; TWO CALLERS SAY THEY DO NOT WANT IT, and both said
-# so in prose before this refactor moved the decision. `pinned-engine.yml`:
-#
-#   No negative control alongside this. `engine.yml` already runs this script
-#   with `NEGATIVE=1` to show it can fail, and that property belongs to the
-#   script rather than to either caller -- a second copy here would buy nothing
-#   and spend the slot twice.
-#
-# It is the job that runs on EVERY pull request, measured at 1m51s, and the
-# control is another whole run of the same guard. `engine-release.yml` invokes
-# it the same way, once per release. Folding the pair into the check overrode
-# both silently, which is what this asserts against.
-#
-# DEFAULT ON, OPT OUT, and that direction is the whole safety of it: a caller
-# that forgets to ask for the control gets it anyway, where the reverse would
-# drop all fourteen of the group's controls the first time somebody forgot. What
-# stops the group ITSELF from opting out is asserted in
-# `scripts/test-the-workflows-delegate-their-checks.sh`.
+# The control runs by default. `pinned-engine.yml` and `engine-release.yml` opt
+# out with `DOMICILE_GUARD_CONTROL=0`, since `engine.yml` already runs each
+# control. Defaulting on means a caller that forgets still gets the control.
+# `scripts/test-the-workflows-delegate-their-checks.sh` checks `engine.yml`
+# never opts out.
 echo "whether the control runs"
 
-# Set as its own statement, not as a prefix to `require_engine_out`. A variable
-# assignment in front of a FUNCTION call does not outlive that call in bash --
-# which is what keeps `NEGATIVE=1 engine_guard` from leaking into the next run,
-# and which made the first version of this case set a variable nothing would
-# ever read. `DOMICILE_GUARD_CONTROL` is read later, by `wants_control`.
+# Exported as its own statement: a prefix assignment on a function call does
+# not outlive the call, and `wants_control` reads it later.
 ran_what() { # DOMICILE_GUARD_CONTROL value (empty for unset)
   drive_in "$WORK/standin" "$ENGINE_LIB" \
     "${1:+export DOMICILE_GUARD_CONTROL='$1';} DOMICILE_CHROMIUM='$WORK/built-tree' require_engine_out && engine_guard_and_control guard-says-what-it-got.sh" |
@@ -269,9 +211,7 @@ else
   fail "a caller that does not want the control gets only the guard" "it ran: $got"
 fi
 
-# And it is the CONTROL that is dropped, never the guard. An opt-out that turned
-# the pair off entirely would be a check measuring nothing and passing, which is
-# the failure every other case in this file is about.
+# Opting out must drop only the control, never the guard.
 case "$got" in
   (*negative=1*)
     fail "opting out drops the control and not the guard" \
@@ -284,11 +224,8 @@ esac
 
 echo "a rust check with nothing to link against"
 
-# A `cc` of our own, because what the library asks is whether the COMPILER can
-# resolve `-lxkbcommon` -- which is a question about its search path, and nix's
-# search path is not the distribution's. Looking for the file under
-# `/usr/lib/x86_64-linux-gnu` instead would report it missing inside
-# `nix develop .#full`, where it is present and nowhere near there.
+# A stand-in `cc`, since the library asks the compiler whether
+# `-lxkbcommon` links.
 STANDIN_CC="$WORK/cc"
 mkdir -p "$STANDIN_CC"
 cc_that() { # exit status the stand-in compiler gives every invocation
@@ -300,27 +237,20 @@ cc_that 1
 expect_skip "a cc that cannot resolve -lxkbcommon is a skip, not a failure of the code" \
   "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries"
 
-# The words have to name the library and a way to get one, because replacing a
-# message nobody can act on is the whole point. What it replaces is
-# `rust-lld: error: unable to find library -lxkbcommon` under two hundred lines
-# of object file names, arriving after `cargo fmt` and `cargo clippy` have both
-# passed -- which reads as a broken tree rather than as a library nobody
-# installed, and cost this repository a baseline run to tell apart.
+# The skip message must name the library and how to get it.
 why="$(drive "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
 case "$why" in
   (*xkbcommon*"nix develop"*) ok "it names the library and where to get one" ;;
   (*) fail "it names the library and where to get one" "the skip said: $why" ;;
 esac
 
-# No compiler at all is its own answer. A machine with no `cc` links nothing,
-# and telling it to install a development package would be advice that does
-# not help.
+# With no `cc` at all, installing libxkbcommon would not help, so this has its
+# own message.
 expect_skip "no cc is a skip, not a failure of the code" \
   "$RUST_LIB" "PATH='$WORK/nowhere' require_linkable_libraries"
 
-# AND THE POSITIVE, for the reason the nix one below gives: every assertion
-# above is satisfied by a library that skips unconditionally, which would be a
-# `cargo test` that never runs and never fails.
+# A working `cc` must not skip; otherwise a library that always skips would
+# pass the cases above.
 cc_that 0
 status="$(drive_status "$RUST_LIB" "PATH='$STANDIN_CC' require_linkable_libraries")"
 if [ "$status" -eq 0 ]; then
@@ -332,24 +262,12 @@ fi
 
 echo "a nix check with no nix"
 
-# `PATH` emptied rather than filtered, because a filter has to guess where nix
-# is and the interesting case is only that it cannot be found. The library is
-# allowed to need nothing else: it has one job before nix exists, which is to
-# say so.
+# An empty PATH, so nix cannot be found wherever it is installed.
 expect_skip "no nix is a skip, not a failure of the code" \
   "$NIX_LIB" "PATH='$WORK/nowhere' require_nix"
 
-# THE POSITIVE, AND IT SYNTHESIZES ITS OWN NIX RATHER THAN NEEDING ONE. An
-# earlier version skipped this case on a machine without nix, and exited 77 to
-# say so — which made the whole file a skip on `ubuntu-latest`, where `e2e.yml`
-# runs the `shell` group under `DOMICILE_CHECK_STRICT=1` and the only skip
-# allowed is `e2e-dmabuf`. So it failed the job: run 35552949504, `58 passed, 1
-# failed`, the one failure being this file declining to run.
-#
-# It was the wrong instinct twice over. `require_nix` asks `command -v nix`, so
-# what the positive case needs is a `nix` on PATH and not a working Nix — and a
-# stub is a better subject anyway, because it tests the library's own rule
-# instead of the machine's. Nothing here is allowed to skip now.
+# A stub `nix` on PATH must not skip. A stub keeps this test runnable on CI
+# machines without nix, where strict mode forbids a skip.
 STUB="$WORK/stub-bin"
 mkdir -p "$STUB"
 printf '#!/bin/sh\nexit 0\n' >"$STUB/nix"

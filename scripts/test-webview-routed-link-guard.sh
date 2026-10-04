@@ -1,42 +1,23 @@
 #!/usr/bin/env bash
-# Which end the routed-link guard blames, and which answers it calls a pass.
+# Tests the verdict of `guard-webview-routed-link.sh`: which readings pass and
+# which component a failure blames.
 #
-# The unit is the verdict block in `guard-webview-routed-link.sh` — the `if`
-# chain that turns seven readings and the run's mode into either a pass or one
-# sentence naming an end. The readings are not independent: a run where the
-# shell page never ran has established nothing, a run with no page in the
-# window is not a run about a link at all, and "the browser was never asked" is
-# only a finding once a press has landed on a link. So the chain is ordered,
-# and an ordered chain is a thing that can be got wrong in a way no failing
-# engine would ever reveal — the wrong arm answers, with a true-sounding
-# sentence about the wrong layer, and the next person spends a CI cycle on it.
+# The checks are ordered: "the browser was never asked" only means something
+# once a press landed on a link. Key cases:
 #
-# ONE ARM CARRIES THE WHOLE EXPERIMENT, and it is the one a verdict written by
-# symmetry leaves out: the shell being asked for a window WITHOUT the engine
-# having logged the routed-link line is a FAILURE, not the claim. Both halves
-# of `WebViewGuest` send the same `NewWindowRequested` — `CreateCustomWebContents`
-# for a `target="_blank"`, and `OpenURLFromTab` for this — so the shell's own
-# event cannot tell them apart. Only the engine's line can. A guard that called
-# an ask alone a pass would go green against a fork carrying #447 and no
-# override at all, which is exactly the fork this change exists to improve on.
+#   - The shell asked for a window without the engine's routed-link line
+#     fails. `CreateCustomWebContents` (target="_blank") and `OpenURLFromTab`
+#     (this path) both send `NewWindowRequested`, so only the engine's line
+#     shows the delegate under test ran.
+#   - The run and control press the same point on the same link with
+#     different buttons. A middle press that navigated in place arrived as a
+#     left press; that blames the driver or hit test, not the delegate.
+#   - In the control, a request is the failure, and so is a press that
+#     followed no link.
+#   - Whether the browser was asked separates a gesture that never reached
+#     the delegate from a delegate that dropped it.
 #
-# THE SECOND ONE IS ABOUT THE BUTTON. The run and its control press the SAME
-# POINT on the SAME LINK and differ only in which button. So a middle press
-# that navigated the guest in place is not the defect this guard is about: it
-# is the press having arrived as a left one — a driver that dropped the flag,
-# or a build whose hit test ignores it — and blaming the delegate for that
-# would send the next person into the browser process over an argument.
-#
-# The rest matter for the reasons the other webview guards' do:
-#
-#   in the control run, an ask is the failure, and so is a press that followed
-#     no link — its absence of an ask means nothing if nothing was clicked
-#   whether the browser was asked at all is what separates a gesture that never
-#     reached the delegate from a delegate that took it and dropped it
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# Runs the verdict block from the real guard, so moving it fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,10 +27,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-webview-routed-link.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `fi` that closes the decision. Both ends are whole
-# lines at column zero, so this cannot half-match: the nested `fi` in the
-# control's arm is indented, and the block stops before the `if [ -n "$PASSED" ]`
-# below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the column-zero `fi` that ends the decision. The nested
+# `fi` is indented, so the match cannot stop early.
 BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -67,10 +46,9 @@ expect() {
   fi
 }
 
-# A run in which everything the claim wants is true; each case below changes one
-# reading. `SAW_MOVED=0` in the baseline because a middle press must NOT take
-# the guest anywhere: the page moving is the CONTROL's positive reading, and a
-# claim run that had it was pressed with the wrong button.
+# A run where every reading has its passing value; each case overrides one.
+# `SAW_MOVED=0` because a middle press must not navigate the guest; moving is
+# the control's passing reading.
 verdict() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -96,9 +74,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point. Not
-# the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behavior.
+# The failure message, for cases that check which component it blames. Tests
+# match a keyword, not the whole sentence.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     SAW_SHELL=1
@@ -127,8 +104,8 @@ blames() { # $1 word, then the args verdict takes
   esac
 }
 
-# The control's own shape: it presses the same link with the left button, so the
-# guest follows it in place, and the browser is asked for nothing.
+# The control's readings: a left press on the same link navigates in place
+# and requests nothing.
 control() { # the overrides a case adds
   verdict 1 SAW_ROUTED=0 SAW_ASKED=0 SAW_MOVED=1 "$@"
 }
@@ -159,25 +136,22 @@ expect "a press that never reached the page blames the hit test" "yes" \
 echo
 echo "the positive run — a middle click on an ordinary link"
 expect "everything arriving is the pass" "pass" "$(verdict 0)"
-# THE ARM THE WHOLE GUARD TURNS ON. The shell was asked for a window and the
-# engine never logged the routed-link line, so the ask came from
-# CreateCustomWebContents — #447's path — and the delegate under test never ran.
+# The key arm: with no routed-link line, the request came from
+# CreateCustomWebContents and the delegate under test never ran.
 expect "an ask with no routed line is a failure" "fail" \
   "$(verdict 0 SAW_ROUTED=0)"
 expect "an ask with no routed line blames the other path" "yes" \
   "$(blames "CreateCustomWebContents" 0 SAW_ROUTED=0)"
 expect "an ask with no routed line is not read as a pass" "no" \
   "$(blames "the delegate took it" 0 SAW_ROUTED=0)"
-# THE ONE THAT READS LIKE THE DEFECT AND IS NOT: the press arrived as a left
-# one, so the run measured the control's gesture under the claim's name.
+# Looks like the defect but is not: the press arrived as a left press.
 expect "a guest that moved in place is a failure" "fail" \
   "$(verdict 0 SAW_ROUTED=0 SAW_ASKED=0 SAW_MOVED=1)"
 expect "a guest that moved in place blames the button" "yes" \
   "$(blames "button" 0 SAW_ROUTED=0 SAW_ASKED=0 SAW_MOVED=1)"
 expect "a guest that moved in place does not blame the other path" "no" \
   "$(blames "CreateCustomWebContents" 0 SAW_ROUTED=0 SAW_ASKED=0 SAW_MOVED=1)"
-# AND THE TWO SIDES OF A CLICK THAT DID NOTHING, which is the defect this guard
-# exists to catch and which has two causes in two layers.
+# A click that did nothing has two causes in two layers.
 expect "nothing at all is a failure" "fail" \
   "$(verdict 0 SAW_ROUTED=0 SAW_ASKED=0)"
 expect "nothing at all blames the routing" "yes" \
@@ -187,8 +161,7 @@ expect "a routed line with no ask blames the report" "yes" \
   "$(blames "TOOK IT AND SAID NOTHING" 0 SAW_ASKED=0)"
 expect "a routed line with no ask does not blame the routing" "no" \
   "$(blames "NEVER ASKED" 0 SAW_ASKED=0)"
-# A guest that both asked for a window AND went there itself has done the
-# gesture twice, which is a worse desktop than doing it once wrongly.
+# Requesting a window and also navigating performs the gesture twice.
 expect "asking and moving both is a failure" "fail" "$(verdict 0 SAW_MOVED=1)"
 expect "asking and moving both blames the double action" "yes" \
   "$(blames "TWICE" 0 SAW_MOVED=1)"
@@ -199,8 +172,8 @@ expect "following the link in place is the pass" "pass" "$(control)"
 expect "an ask is the control's failure" "fail" "$(control SAW_ASKED=1)"
 expect "an ask says the positive run measures nothing" "yes" \
   "$(controlBlames "any press" SAW_ASKED=1)"
-# The engine's line is the same finding one layer earlier: an ordinary left
-# click has no business reaching this delegate.
+# The engine's line in the control fails too: a left click must not reach
+# this delegate.
 expect "a routed line with no ask is the control's failure" "fail" \
   "$(control SAW_ROUTED=1)"
 expect "a press that followed no link is the control's failure" "fail" \

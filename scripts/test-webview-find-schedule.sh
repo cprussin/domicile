@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# How the find guard's module paces itself, against a browser in miniature.
+# Tests how `guard-webview-find.js` waits for each reading, against a fake
+# <webview>.
 #
-# Each step waits for the reading it needs, bounded by a timeout, so a healthy
-# engine runs in seconds and a broken one falls back to the bounds — and gets
-# every reading all the same, for the verdict to judge.
+# Each step waits for its reading up to a timeout, so a healthy engine
+# finishes in seconds and a broken one still yields every reading for the
+# verdict.
 #
-# Runs the real `guard-webview-find.js` under bun with a fake <webview>: a
-# navigation starts loading, commits and finishes LATENCY ms apart, a find's
-# count settles in two answers as the browser's does frame by frame, and a new
-# page ends a find.
+# The fake: a navigation starts, commits and finishes LATENCY ms apart; a
+# find's count settles in two answers, frame by frame; a new page ends a find.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -138,7 +137,7 @@ run() { # $1 behavior, $2 drive, $3 settle, $4 step, $5 quiet, $6 cap
     "drive=$2&src=http://fixture&word=quokkaish&matches=3&settle=$3&step=$4&quiet=$5" \
     "$1" "$6" 2>&1
 }
-# The ms at which the first line holding $2 was said, or nothing.
+# The ms of the first output line containing $2, or nothing.
 when() { # $1 output, $2 text
   printf '%s\n' "$1" | awk -v text="$2" 'index($0, text) { print $1; exit }'
 }
@@ -149,12 +148,12 @@ at_least() { # $1 ms, $2 minimum
   if [ -n "$1" ] && [ "$1" -ge "$2" ]; then echo yes; else echo no; fi
 }
 
-# Bounds far above what a healthy step takes, and a cap below the first of
-# them: a run that sat out any bound never finishes.
+# Timeouts are well above a healthy step, and the cap is below the first
+# timeout, so a run that waits out any timeout is cut off by the cap.
 POSITIVE="$(run healthy find 3000 2000 200 2900)"
 echo "the positive run, on a healthy engine"
 expect "finishes without sitting out a bound" "no" "$(has "$POSITIVE" TIMEOUT)"
-# Not the main frame's 2/1 that arrives first: the count has to settle.
+# Not the main frame's early 2/1: the count must settle first.
 expect "found is read once the count has settled" "yes" \
   "$(has "$POSITIVE" "find-state at=found find=3/1")"
 expect "next is read once the second is selected" "yes" \
@@ -177,7 +176,7 @@ echo
 echo "the control, on a healthy engine"
 expect "finishes without sitting out a bound" "no" "$(has "$CONTROL" TIMEOUT)"
 expect "calls no find" "no" "$(has "$CONTROL" "GUARD calling")"
-# Nothing is driven, so there is nothing to wait for: the absence gets `quiet`.
+# The control drives nothing, so each step waits out its `quiet` window.
 NOT_FIND="$(when "$CONTROL" "GUARD not calling find")"
 FOUND="$(when "$CONTROL" "find-state at=found")"
 expect "an undriven step is watched for its quiet window" "yes" \
@@ -185,16 +184,16 @@ expect "an undriven step is watched for its quiet window" "yes" \
 expect "every reading is 0/0 with no event" "6" \
   "$(printf '%s\n' "$CONTROL" | grep -c "find-state at=[a-z]* find=0/0 events=0")"
 
-# Nothing ever arrives: every step sits out its bound, and every reading is
-# still taken for the verdict to judge.
+# Nothing arrives: every step hits its timeout, and every reading is still
+# taken.
 DEAD="$(run dead find 300 200 50 5000)"
 echo
 echo "an engine where nothing ever arrives"
 expect "still finishes" "no" "$(has "$DEAD" TIMEOUT)"
 expect "takes all six readings" "6" \
   "$(printf '%s\n' "$DEAD" | grep -c "GUARD find-state")"
-# 300 + 5 × 200: the first page and five steps. The sixth, stopFinding(),
-# waits for 0/0, which an element that never found anything already reads.
+# 300 + 5 × 200: the first page and five steps. stopFinding() waits for 0/0,
+# which an element that never found anything already reads.
 expect "gives every step its whole bound" "yes" \
   "$(at_least "$(when "$DEAD" "GUARD done")" 1300)"
 

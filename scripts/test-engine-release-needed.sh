@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
-# What the engine job has left to do about a release, decided once.
+# Asserts what the engine job decides a pull request still owes for a release.
 #
-# An engine change is ONE pull request now, and this is the step that decides
-# what that pull request still owes. Three states, and the cost between them
-# is four hours:
+# Three states:
 #
-#   - `engine-release.nix` already names this series. Nothing to do; this is
-#     every pull request that does not move the fork, which is most of them.
-#   - It does not, but a release for this series is already published — a
-#     re-run, a force-push that did not change the series, a branch that
-#     rebased onto one that had already built it. Regenerate the file and push
+#   - `engine-release.nix` already names this series: nothing to do. This is
+#     most pull requests.
+#   - A release for this series is already published (a re-run, or a
+#     force-push or rebase that kept the series): regenerate the file and push
 #     it. No build.
-#   - Nothing is published. Build the release configuration, publish it,
-#     regenerate, push.
+#   - Nothing is published: build, publish, regenerate, push.
 #
-# THE EXPENSIVE MISTAKE IS SAYING "BUILD" WHEN NOTHING NEEDED BUILDING, and
-# the one after it is saying "nothing to do" when the fork moved — that is a
-# repository that describes one engine and ships another, which is #411. So
-# both directions get cases below.
+# Both errors are costly: a needless build takes four hours, and skipping a
+# needed one ships an engine the repository does not describe (#411).
 #
-# The API half is faked. What is under test is the decision, not GitHub.
+# The GitHub API is faked; the decision is under test.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,9 +41,8 @@ expect() {
 
 BIN="$WORK/bin"
 mkdir -p "$BIN"
-# GitHub, as far as this script can tell: a release exists iff `$FAKE_STATE`
-# names it. `-f` is honored by exiting 22, which is what the real curl does and
-# what the script reads "no such release" out of.
+# Fake GitHub API: a release exists iff `$FAKE_STATE` names it. Exits 22 for a
+# missing release, as the real `curl -f` does.
 cat > "$BIN/curl" <<'FAKE'
 #!/usr/bin/env bash
 url="${!#}"
@@ -65,9 +58,8 @@ chmod +x "$BIN/curl"
 IDENTITY="$(cd "$ROOT" && .github/scripts/engine-series-stamp.sh identity)"
 TAG="engine-s${IDENTITY:0:12}"
 
-# The repository's own `engine-release.nix`, put back after each case: these
-# run against the real checkout, because what "this series" means is the whole
-# question and a fake tree would be answering a different one.
+# Runs against the real checkout, since "this series" is computed from it.
+# Restores `engine-release.nix` after each case.
 RELEASE="$ROOT/packages/domicile-engine/engine-release.nix"
 cp "$RELEASE" "$WORK/engine-release.nix.orig"
 restore() { cp "$WORK/engine-release.nix.orig" "$RELEASE"; }
@@ -98,10 +90,9 @@ out="$(needed "$TAG")"
 expect "nothing to build" false "$(key "$out" build)"
 expect "and nothing to write" false "$(key "$out" write)"
 
-# THE CASE THAT MUST NOT COST FOUR HOURS. The file already names this series,
-# so whether a release is *also* findable is not a question worth an API call
-# — and answering it wrong in the other direction would rebuild Chromium for a
-# pull request that changed a comment.
+# The file already names this series, so the script must not query the API.
+# A wrong answer would rebuild Chromium for a pull request that does not change
+# the fork.
 out="$(needed "")"
 expect "even when the API cannot find the release, there is nothing to do" \
   false "$(key "$out" build)"
@@ -120,11 +111,9 @@ expect "and the identity is stated in full" "$IDENTITY" "$(key "$out" identity)"
 echo
 echo "== the fork moved and this series is already published =="
 
-# A re-run, a force-push that left the series alone, or a branch rebased onto
-# one that had already built it. The tarball exists and is the right one —
-# rebuilding it would be four hours to produce a DIFFERENT tarball, since
-# Chromium does not build byte-for-byte twice, and the hash already published
-# is the one anything pinned to it is using.
+# A rebuild would take four hours and produce a different tarball, since
+# Chromium builds are not reproducible, and the published hash is already in
+# use.
 restore
 pins "0000000000000000000000000000000000000000000000000000000000000000"
 out="$(needed "$TAG")"

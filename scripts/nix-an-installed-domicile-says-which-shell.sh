@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# What an installed `domicile` says when it is given the wrong arguments.
+# Checks an installed `domicile` reports bad arguments correctly.
 #
-# The order matters and is the whole check: given a path that is not a shell,
-# `domicile` must complain about the SHELL rather than about the compositor or
-# the engine. A binary that cannot find its own components gets there first and
-# says so instead — which is the failure
-# `nix-domicile-is-laid-out-to-find-itself.sh` asserts the layout against, and
-# this is the same claim made from the outside, by running the thing.
+# Given a path that is not a shell, `domicile` must complain about the shell.
+# A binary that cannot find its compositor or engine fails earlier with a
+# different error, so this also checks the layout from the outside (see
+# `nix-domicile-is-laid-out-to-find-itself.sh`).
 #
-# The desktops get the opposite question: they carry their own page, so they
-# take no shell argument at all and must refuse one.
+# Desktops carry their own page, so they must refuse a shell argument.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,15 +26,8 @@ case "$said" in
     ;;
 esac
 
-# CAPTURED AND THEN MATCHED, NOT PIPED INTO `grep -q`, and this is what
-# `set -o pipefail` does to that shape: `domicile` with no shell is a usage
-# error and exits non-zero, so the pipeline fails however well `grep` matched.
-# Run 35552949482 failed here with `domicile: given no shell, it did not say
-# so` while `domicile` was saying exactly that. The original step got away with
-# it by running under `set -eu` without `pipefail`; a script that keeps
-# `pipefail` -- which it should -- has to stop piping a command whose failure is
-# the thing being asserted. `guard-css-and-resize.sh`'s header records the same
-# trap from the other end.
+# Capture, then match. Piping into `grep -q` fails under `pipefail`, because
+# `domicile` exits non-zero on a usage error.
 said="$("$out/bin/domicile" 2>&1 || true)"
 case "$said" in
   (*"which shell?"*) ;;
@@ -50,8 +40,7 @@ esac
 
 for name in manganese simple; do
   desktop="$(nix build --no-link --print-out-paths ".#$name")"
-  # Captured for the reason above: `--nope` is a usage error and exits
-  # non-zero, which under `pipefail` fails the pipeline that proves it.
+  # Captured for the same reason: `--nope` exits non-zero.
   said="$("$desktop/bin/$name" --nope 2>&1 || true)"
   case "$said" in
     (*"too many arguments"*) ;;

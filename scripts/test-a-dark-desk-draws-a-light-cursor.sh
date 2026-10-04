@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# A dark desk draws a light pointer.
+# Checks a dark theme gets a light pointer on a tty.
 #
-# On a console the pointer is Chromium's own art: `wm::CursorLoader` renders
-# the lottie assets in `ui_lottie_resources` (patch 0026 is why it reaches
-# them at all), and that art is a black fill in a white outline whatever the
-# desk looks like -- a dark arrow on dark panels.
+# On a tty, `wm::CursorLoader` draws Chromium's lottie cursors, which default
+# to a black fill with a white outline. Three pieces recolor them:
 #
-# The art takes both colors as parameters, and `wm::GetCursorData` accepts
-# both. The loader passes on only the fill, so the patch gives it the outline
-# too; `CursorColorScheme` picks the pair from the process's color scheme,
-# which is the desk's windows theme (see `test-the-theme-reaches-the-web.sh`);
-# and `DesktopNativeCursorManager` is what holds the loader. Any one of the
-# three missing compiles and draws the same black arrow.
+# - `CursorColorScheme` picks fill and outline from the theme (see
+#   `test-the-theme-reaches-the-web.sh`).
+# - A patch to `cursor_loader.cc` passes the outline to `wm::GetCursorData`.
+# - A patch to `DesktopNativeCursorManager` gives its loader the scheme.
 #
-# A nested desktop is not covered and does not need to be: there the loader
-# takes the host's cursor theme, and colors only the assets it falls back to.
+# Missing any one still compiles and draws a black arrow. Nested desktops use
+# the host's cursor theme and are not covered.
 #
-# BUILDLESS ON PURPOSE, like `test-the-theme-reaches-the-web.sh`.
-# `cursor_color_scheme_unittest.cc` is the half that asserts the colors, and
-# it runs only where an engine builds.
+# Needs no engine build. `cursor_color_scheme_unittest.cc` checks the colors.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,8 +35,7 @@ grep -q 'SK_ColorWHITE' "$SCHEME" || fail \
   "$SCHEME never picks a white fill" \
   "A dark desk would keep the black arrow."
 
-# Only the patch is read from here on, because the files it edits are
-# Chromium's and are not in this repository.
+# The remaining files are Chromium's, so read the patches.
 LOADER="$(grep -l 'ui/wm/core/cursor_loader.cc' "$PATCHES"/*.patch)"
 [ -n "$LOADER" ] || fail \
   "no patch edits ui/wm/core/cursor_loader.cc" \

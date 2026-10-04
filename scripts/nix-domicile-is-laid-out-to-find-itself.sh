@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# That the `domicile` derivation places its parts where `domicile` looks.
+# Checks the `domicile` derivation places its parts where `domicile` looks.
 #
-# `domicile` finds the compositor and the engine relative to its own binary —
-# `current_exe`, then `../libexec` beside it — which is what lets one derivation
-# hold a desktop. The consequence is that HOW the files are placed is part of
-# the contract, and nothing about a successful `nix build` says they were placed
-# that way.
-#
-# THE SYMLINK IS THE ONE THAT BIT. A `bin/domicile` that is a symlink into
-# another derivation resolves, through `current_exe`, into a store path with no
-# `libexec` beside it — so the desktop refuses to start, at run time, on a
-# machine that built everything green. See
-# `/docs/architecture/THE-DOMICILE-BINARY.md` for why the flake only places
-# files.
+# `domicile` finds the compositor and engine from `current_exe` and
+# `../libexec`. If `bin/domicile` is a symlink into another derivation,
+# `current_exe` resolves to a path with no `libexec`, and the desktop fails at
+# run time despite a green build. See
+# `/docs/architecture/THE-DOMICILE-BINARY.md`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

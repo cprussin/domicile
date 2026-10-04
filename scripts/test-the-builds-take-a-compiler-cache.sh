@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
-# Whether the two engine builds hand `gn` a compiler cache when the machine has
-# one, refuse when it is named and missing, and ask for none when it is not.
+# Tests that the engine build scripts pass `gn` a compiler cache when one is
+# named, refuse a named cache that is missing, and pass none when unnamed.
 #
-# The argument line is part of the build's identity: `gn` bakes `cc_wrapper`
-# into every compile command, so a `gn gen` that quietly fell back to no
-# wrapper would cost a full rebuild and report nothing. Hence the refusals are
-# asserted, and asserted to happen before `gn` is reached.
+# `gn` bakes `cc_wrapper` into every compile command, so a silent fallback
+# would cost a full rebuild. Refusals must happen before `gn` runs.
 #
-# NOT VALID ON crux, which has a bootstrapped /build/depot_tools that
-# `engine-depot-tools.sh` prefers and puts ahead of this file's fakes. 77 so
-# `check.sh` reports a skip rather than a confusing red; the hosted runner has
-# no /build and never takes this branch.
-#
-# `SKIP: ` on one line is the whole of the form -- check.sh lifts the reason
-# with `sed -n 's/^ *SKIP: *//p' | head -1`.
+# Skips (exit 77) on crux, where `engine-depot-tools.sh` prefers the
+# bootstrapped /build/depot_tools over this test's fakes. check.sh reads the
+# reason from the first `SKIP: ` line.
 if [ -x /build/depot_tools/autoninja ] &&
   [ -f /build/depot_tools/python3_bin_reldir.txt ]; then
   echo "SKIP: /build/depot_tools is bootstrapped here, so the build scripts would resolve the real gn ahead of this test's fakes"
@@ -32,8 +26,7 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# The positive first: a renamed variable must not pass every case below
-# vacuously, which is how the ozone test next door lost its grip once already.
+# A renamed variable must not let every case below pass vacuously.
 for build in "$MEASURED" "$RELEASE" "$IN_JOB"; do
   [ -f "$build" ] || { echo "no build script at $build" >&2; exit 1; }
   grep -q 'DOMICILE_CC_WRAPPER' "$build" || {
@@ -44,23 +37,21 @@ for build in "$MEASURED" "$RELEASE" "$IN_JOB"; do
   }
 done
 
-# Whatever this machine exports would pass the assertions below for the builds.
+# Variables exported by this machine would satisfy the assertions below.
 unset CCACHE_BASEDIR CCACHE_NOHASHDIR
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# A checkout is only ever `cd`-ed into and handed to `gn`, so an empty
-# directory is the whole of it -- plus the bootstrapped depot_tools the release
-# script resolves through engine-depot-tools.sh, which asks for exactly these
-# two files.
+# The scripts only `cd` into the checkout and pass it to `gn`, so an empty
+# directory works, plus the two depot_tools files engine-depot-tools.sh checks
+# for.
 SRC="$WORK/src"
 mkdir -p "$SRC/third_party/depot_tools"
 : >"$SRC/third_party/depot_tools/python3_bin_reldir.txt"
 
-# `gn` records the arguments, on PATH ahead of anything real. `autoninja` only
-# has to succeed and is not read: both build scripts `exec` it, so a fake that
-# exits 0 is what lets this read gn's file afterwards.
+# The fake `gn` records its arguments. Both scripts `exec` `autoninja`, so a
+# fake that exits 0 lets the test read gn's file afterwards.
 mkdir -p "$WORK/bin"
 cat >"$WORK/bin/gn" <<'GN'
 #!/bin/sh
@@ -77,10 +68,8 @@ cp "$WORK/bin/autoninja" "$SRC/third_party/depot_tools/autoninja"
 chmod +x "$WORK/bin/gn" "$WORK/bin/autoninja" \
   "$SRC/third_party/depot_tools/autoninja"
 
-# The cache itself, and a file that is present and not executable: those are
-# different failures on a real machine -- a ccache that was garbage collected
-# versus one whose symlink points at a directory -- and the build has no
-# business telling them apart.
+# A working cache, and a file that exists but is not executable. The build
+# need not distinguish a missing cache from a broken one.
 CACHE="$WORK/bin/ccache"
 cat >"$CACHE" <<'CCACHE'
 #!/bin/sh
@@ -94,9 +83,8 @@ esac
 CCACHE
 chmod +x "$CACHE"
 
-# A ccache that compiles and will not answer for itself. Not a contrived case:
-# an unreadable cache directory, a full filesystem and a DOMICILE_CC_WRAPPER
-# pointing at something that is not ccache all land here.
+# A ccache that compiles but fails its stats commands, as happens with an
+# unreadable cache directory, a full disk, or a wrapper that is not ccache.
 MUTE="$WORK/bin/mute-ccache"
 cat >"$MUTE" <<'MUTE'
 #!/bin/sh
@@ -109,13 +97,12 @@ chmod +x "$MUTE"
 NOT_EXECUTABLE="$WORK/not-executable"
 : >"$NOT_EXECUTABLE"
 
-# `cc_wrapper = "ccache"` is the form Chromium's cc_wrapper.gni documents, so a
-# bare name is a thing somebody will set. It is on PATH here because $WORK/bin
-# is, which is exactly how it would be on a machine that has ccache.
+# Chromium's cc_wrapper.gni documents `cc_wrapper = "ccache"`, so a bare
+# name on PATH must work.
 BY_NAME="ccache"
 
-# Each case runs a build script with PATH holding the fakes and nothing else
-# that matters, and leaves its `gn` arguments in $GN_ARGS_FILE for the caller.
+# Runs a build script with the fakes first on PATH. Leaves `gn` arguments in
+# $GN_ARGS_FILE.
 run_build() {
   local build="$1"
   GN_ARGS_FILE="$WORK/gn-args"
@@ -126,8 +113,7 @@ run_build() {
   return "$STATUS"
 }
 
-# engine-build.sh is the one that takes a sentinel and reports the cache, so it
-# is run rather than read.
+# engine-build.sh takes a sentinel and reports cache stats, so run it.
 run_job() {
   GN_ARGS_FILE="$WORK/gn-args"
   export GN_ARGS_FILE
@@ -143,8 +129,7 @@ run_job() {
 for build in "$MEASURED" "$RELEASE"; do
   name="$(basename "$build")"
 
-  # NO CACHE NAMED IS NOT AN ERROR. Every machine that is not crux builds this
-  # way, including the container the rest of this suite runs in.
+  # No cache named is not an error; every machine except crux builds this way.
   unset DOMICILE_CC_WRAPPER
   if run_build "$build"; then
     if grep -q 'cc_wrapper' "$WORK/gn-args"; then
@@ -158,8 +143,7 @@ for build in "$MEASURED" "$RELEASE"; do
       "it exited $STATUS instead: $(cat "$WORK/out")"
   fi
 
-  # THE CACHE, NAMED AS THE ARGUMENT `gn` BAKES. Quoted, because gn's argument
-  # grammar makes an unquoted path a syntax error rather than a string.
+  # Quoted, since gn rejects an unquoted path.
   export DOMICILE_CC_WRAPPER="$CACHE"
   if run_build "$build"; then
     if grep -qF "cc_wrapper = \"$CACHE\"" "$WORK/gn-args"; then
@@ -173,11 +157,10 @@ for build in "$MEASURED" "$RELEASE"; do
       "it exited $STATUS instead: $(cat "$WORK/out")"
   fi
 
-  # ONE CACHE FOR EVERY TREE. crux builds in /build/trees/tree-N/src, and a
-  # compile keyed on which tree it ran in misses in every other one: run
-  # 36236156550 got 0 hits out of 44,033 in tree-1, minutes after tree-0 had
-  # built nearly the same series. Physical, as ccache compares it with getcwd.
-  # Read off autoninja, because that is the process the compiles inherit from.
+  # crux builds in several /build/trees/tree-N/src directories. Without a
+  # shared base directory, a cache entry from one tree misses in every other.
+  # Use the physical path, since ccache compares it with getcwd. Read from
+  # autoninja's environment, which the compiles inherit.
   NINJA_ENV_FILE="$WORK/ninja-env"
   export NINJA_ENV_FILE
   rm -f "$NINJA_ENV_FILE"
@@ -191,8 +174,7 @@ for build in "$MEASURED" "$RELEASE"; do
   fi
   unset NINJA_ENV_FILE
 
-  # A bare name resolves: refusing `ccache`, the spelling Chromium's
-  # cc_wrapper.gni documents, would be a refusal nobody could read.
+  # A bare name must resolve, since cc_wrapper.gni documents `ccache`.
   export DOMICILE_CC_WRAPPER="$BY_NAME"
   if run_build "$build"; then
     if grep -qF "cc_wrapper = \"$BY_NAME\"" "$WORK/gn-args"; then
@@ -206,8 +188,8 @@ for build in "$MEASURED" "$RELEASE"; do
       "it exited $STATUS: $(cat "$WORK/out")"
   fi
 
-  # AND THE TWO REFUSALS, which are the point of the file. A build that fell
-  # back here would compile Chromium from scratch and say nothing.
+  # A missing or non-executable cache must be refused. Falling back would
+  # rebuild Chromium from scratch without saying so.
   for absent in "$WORK/nothing-is-here" "$NOT_EXECUTABLE"; do
     export DOMICILE_CC_WRAPPER="$absent"
     case "$absent" in
@@ -218,8 +200,8 @@ for build in "$MEASURED" "$RELEASE"; do
       fail "$name refuses a cache that $what" \
         "it exited 0 and passed: $(cat "$WORK/gn-args")"
     elif [ -e "$WORK/gn-args" ]; then
-      # Refusing after `gn gen` has already rewritten out/Domicile, which is
-      # the rebuild this exists to prevent.
+      # Refusing after `gn gen` is too late: it has already rewritten
+      # out/Domicile.
       fail "$name refuses a cache that $what" \
         "it refused only after reaching gn, which had already written: $(cat "$WORK/gn-args")"
     elif grep -qF "$absent" "$WORK/out"; then
@@ -232,13 +214,11 @@ for build in "$MEASURED" "$RELEASE"; do
   unset DOMICILE_CC_WRAPPER
 done
 
-# WHAT THE JOB REPORTS. A failed report must not take the rest of the log with
-# it: the step's verdict is the sentinel, and engine-build-in-shell.sh only
-# PRINTS the shell's exit status, so throwing here would fail nothing and lose
-# the lines below.
+# A failed cache report must not cut off the log. The sentinel decides the
+# step's result and engine-build-in-shell.sh only prints the exit status, so
+# failing here would lose output without failing anything.
 #
-# The unset case matters most: a run that lost the variable builds uncached
-# and would otherwise print nothing about a cache at all.
+# With no cache set, the job must still say so.
 unset DOMICILE_CC_WRAPPER
 if run_job; then
   if ! grep -q 'DOMICILE_CC_WRAPPER' "$WORK/out"; then
@@ -255,8 +235,8 @@ else
     "it exited $STATUS: $(cat "$WORK/out")"
 fi
 
-# ONE CONFIGURATION: the job's build is the one that ships, with every target
-# the checks load, and with DCHECKs on -- out/Domicile had them by default.
+# The job builds only the shipped configuration (out/Release), with every
+# target the checks load and DCHECKs on.
 echo "the job builds the shipped configuration, and only that"
 unset DOMICILE_CC_WRAPPER
 run_job
@@ -291,8 +271,8 @@ if run_job; then
     fail "the job reports the cache's statistics" \
       "no ccache line among: $(cat "$WORK/out")"
   fi
-  # Per build, and why a call went uncached: the cache is shared, so its
-  # running totals mix every build that ever ran.
+  # The cache is shared, so zero its stats to report this build alone, and show
+  # why calls went uncached.
   if [ "$(head -1 "$WORK/ninja-args")" = "ccache zeroed" ]; then
     ok "the job zeroes the statistics before it builds"
   else
@@ -316,8 +296,8 @@ if run_job; then
     fail "a cache that will not report says so and the build still finishes" \
       "it said nothing about $MUTE: $(cat "$WORK/out")"
   elif grep -q '::warning::' "$WORK/out"; then
-    # The tail's `  | ` prefix makes a workflow command unparseable, and an
-    # unparsed `::` reads as though it had been parsed.
+    # The tail's `  | ` prefix breaks workflow commands, so a `::warning::`
+    # there would look parsed but is not.
     fail "a cache that will not report says so and the build still finishes" \
       "it emitted a ::warning:: that the tail's prefix makes unparseable"
   elif grep -q 'engine-build.sh finished' "$WORK/out"; then
@@ -332,20 +312,17 @@ else
 fi
 unset DOMICILE_CC_WRAPPER
 
-# THE PRODUCTION BUILD IS THE SAME SCRIPT, OFFICIAL. It is what users run, so
-# it is optimized as Chrome is -- PGO and ThinLTO -- and carries no DCHECKs.
-# PGO needs Google's profile for this revision, which a checkout only has if
-# something fetched it, so the script does. Recorded by a stand-in for the
-# fetcher rather than by reaching Google Cloud Storage.
+# The official build uses the same script with PGO and ThinLTO and no
+# DCHECKs. PGO needs Google's profile for this revision, so the script fetches
+# it. A stand-in records the fetch instead of reaching Google Cloud Storage.
 mkdir -p "$SRC/tools"
 cat >"$SRC/tools/update_pgo_profiles.py" <<'PGO'
 import os, sys
 open(os.environ["PGO_ARGS_FILE"], "w").write(" ".join(sys.argv[1:]))
 PGO
 export PGO_ARGS_FILE="$WORK/pgo-args"
-# V8's builtins have a profile of their own, fetched by a DEPS hook of their
-# own; an official build without it stops at `gen/v8/embedded.S`, which is how
-# the first production run ended (36339801978).
+# V8's builtins have their own profile and fetch hook. Without it an official
+# build fails at `gen/v8/embedded.S`.
 mkdir -p "$SRC/v8/tools/builtins-pgo"
 cat >"$SRC/v8/tools/builtins-pgo/download_profiles.py" <<'V8PGO'
 import os, sys

@@ -1,64 +1,34 @@
 #!/usr/bin/env bash
-# The engine job's budget, against the work its own steps do.
+# Tests the engine job's `timeout-minutes` against the work its steps do.
 #
-# `engine.yml` builds Chromium TWICE on the run that matters. `out/Domicile` is
-# the component build everything above the release steps is proved against;
-# `out/Release` is `is_component_build = false` in a directory of its own, and
-# it is what gets packaged, published and named by `engine-release.nix`. On a
-# tree that already carries the series both are incremental and the job is
-# minutes. On a pin roll neither is: the reset moves the checkout onto a fresh
-# upstream revision, and each output directory is compiled from nothing.
+# On a pin roll the checkout moves to a fresh upstream revision and the engine
+# compiles from scratch, which takes hours. A job killed mid-compile publishes
+# nothing and never writes `engine-release.nix` back, so the repin pull request
+# stays red.
 #
-# `timeout-minutes: 360` did not hold that, and the way it failed is the reason
-# this file exists. Run 35714578006 (job 106702924356), the pull request that
-# rolled `CHROMIUM_PIN` to `86298bb`:
-#
-#   set up, reset, sync, apply, stamp   13:13:01 -> 13:14:56    1m55s
-#   Build (out/Domicile, from scratch)  13:14:56 -> 18:22:13    5h07m
-#   The engine's checks                 18:22:13 -> 18:31:13    9m
-#   Build the release configuration     18:31:13 -> 19:18:35    CANCELED 47m in
-#   package / guard / publish / repin                           SKIPPED
-#
-# Six hours and five minutes of `crux`, and nothing came out of it: no tarball,
-# no release, and `engine-release.nix` never written back — which is the step
-# that makes a repin pull request go green, so the branch stayed red for the
-# absence of the thing the run was killed before producing. The log's last
-# lines are `Terminate orphan process` for siso and a swarm of clang++, so the
-# compile was killed in flight.
-#
-# WHAT A COLD RELEASE BUILD COSTS IS MEASURED, not guessed at. `engine-release.yml`
-# runs the same `engine-release-build.sh` into the same `out/Release`, and its
-# own runs after a pin moved are the number:
-#
-#   run 35559130923   Build   03:55:29 -> 07:41:50   3h46m
-#   run 35620485558   Build   15:40:31 -> 19:05:58   3h25m
-#
-# So the floor below is the repin above with its canceled step replaced by the
-# longer of those two, plus the package, the guard, the publish and the
-# write-back that a finished run still owes:
+# The floor comes from measured runs. Run 35714578006 (a repin to `86298bb`)
+# took 1m55s to set up, 5h07m for a cold `out/Domicile`, 9m of checks, and was
+# canceled at 360 minutes during the release build. Cold `out/Release` builds
+# in `engine-release.yml` took 3h46m (run 35559130923) and 3h25m
+# (run 35620485558). Adding the longer one and ~4m for packaging:
 #
 #   1m55s + 5h07m + 9m + 3h46m + ~4m  =  9h09m  =  549 minutes
 #
-# THE FLOOR IS NOT THE BUDGET, AND MUST NOT BE READ AS ONE. It is the point
-# below which a budget is refuted by a run that has already happened; how much
-# headroom a budget carries over it is a judgment about a machine that also
-# serves its owner's interactive builds — the same from-scratch `out/Domicile`
-# has been measured at 4h16m on a quiet machine and 5h07m in CI. A test can
-# assert the first and has no business asserting the second.
+# The floor is a lower bound, not the budget. Headroom above it is a judgment
+# about a machine that also runs its owner's builds, which a test cannot check.
 #
-# AND THE BUDGET CANNOT DEPEND ON THE CASE. `timeout-minutes` is fixed before
-# the job starts, and which case a run is in — does the checkout carry this
-# series, does this series still owe a release — is decided by steps INSIDE it.
-# So the one number has to hold the most expensive run this job can have, and
-# the cheap run pays nothing for that: a budget is a ceiling, not a spend.
+# `timeout-minutes` is fixed before the job starts, while steps inside it
+# decide whether a run is cheap or cold. So one budget must hold the most
+# expensive run; a cheap run does not spend it.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKFLOWS="$ROOT/.github/workflows"
 [ -d "$WORKFLOWS" ] || { echo "no $WORKFLOWS" >&2; exit 1; }
 
-# The measured cold repin, in minutes. See the arithmetic above -- two builds,
-# from before engine.yml built only out/Release, so now a generous floor.
+# The measured cold repin, in minutes; see above. It includes both a cold
+# out/Domicile and a cold out/Release, so it is above what the job costs if it
+# builds only out/Release.
 FLOOR=549
 
 FAILED=0
@@ -68,44 +38,34 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 
-# A workflow's commands, with its whole-line comments taken out. Every question
-# below is about what a step RUNS, and these files name their scripts in prose
-# as often as they run them — this one names both builds in the header you are
-# reading.
+# A workflow with whole-line comments removed. The checks below are about what
+# steps run, and these files also name scripts in comments.
 commands() { grep -v '^[[:space:]]*#' "$1"; }
 
-# The building job's `timeout-minutes` as the file writes it, empty if it
-# writes none. The largest: engine.yml also has a short `plan` job on crux,
-# and the budget these rules are about is the job that compiles.
+# The compiling job's declared `timeout-minutes`, or empty. Takes the largest,
+# because engine.yml also has a short `plan` job on crux.
 declared() { # workflow
   commands "$1" |
     sed -n 's/^[[:space:]]*timeout-minutes:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
     sort -n | tail -1
 }
 
-# And the budget the job actually runs under, which is not the same question:
-# GitHub applies 360 minutes to a job that declares nothing. That is the
-# platform's documented number rather than this file's guess at one, and the
-# rules below are about how long a run may take — so they read it, while the
-# rule above reads the declaration and says so when it is missing.
+# The budget the job runs under: the declared one, or GitHub's documented
+# default of 360 minutes.
 budget() { # workflow
   printf '%s\n' "$(declared "$1")" | grep . || printf '360\n'
 }
 
 # --- a budget is declared, never inherited -----------------------------------
 
-# GITHUB'S DEFAULT IS 360, WHICH IS THE NUMBER THAT BROKE. A job with no
-# `timeout-minutes` gets it silently, so a crux workflow that leaves the key
-# out has not chosen a small budget — it has failed to choose at all, and the
-# evidence above is what that costs on a machine where a build is hours.
+# A job without `timeout-minutes` gets GitHub's 360 silently, which a cold
+# repin overruns.
 echo "every crux workflow says how long its job may take"
 
 crux=0
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
-  # The machine, not the filename, for the reason test-engine-concurrency.sh
-  # globs the same way: a workflow is in scope the moment it asks for that
-  # runner.
+# Selected by runner, not filename, as test-engine-concurrency.sh does.
   grep -q 'self-hosted, *crux' "$workflow" || continue
   crux=$((crux + 1))
 
@@ -126,10 +86,10 @@ fi
 
 # --- building and checking costs more than building ---------------------------
 
-# ASKED OF THE STEPS, NOT OF THE FILENAME. `engine-build-in-shell.sh` builds the
-# release configuration plus everything the checks load, and the job then runs
-# them; a workflow that only runs `engine-release-build.sh` does strictly less,
-# and cannot be given more time.
+# Selected by the steps, not the filename. `engine-build-in-shell.sh` builds
+# the release configuration plus what the checks load, then runs the checks. A
+# workflow that only runs `engine-release-build.sh` does less, so it must not
+# get more time.
 echo "the job that builds and checks has the larger budget"
 
 both=""
@@ -165,20 +125,17 @@ done
 
 # --- a run that waits for the compile slot still finishes -------------------
 
-# THE WAIT COMES OUT OF THE SAME BUDGET. A run whose tree is cold waits for
-# `engine-compile-slot.sh` while another run compiles, and what it waits behind
-# can be a cold repin -- run 36064386536 refused after 30 minutes behind one
-# that had held the slot for 2h18m. So the wait has to outlast a cold repin,
-# and whatever it spent, the run still has to fit its own cold repin after it:
-# a job killed mid-compile has spent its whole budget and published nothing.
+# Waiting for `engine-compile-slot.sh` uses the same budget. A cold run may
+# wait behind another run's cold repin (run 36064386536 gave up after 30
+# minutes behind a 2h18m hold). So the wait must outlast a cold repin, and the
+# run must still fit its own cold repin after waiting.
 #
-# AND THE BUDGET HAS A CEILING OF ITS OWN. The last thing a repin run does is
-# push `engine-release.nix` back with GITHUB_TOKEN, which GitHub expires after
-# 24 hours however long the job may run.
+# The budget also has a ceiling: the run ends by pushing `engine-release.nix`
+# with GITHUB_TOKEN, which expires after 24 hours.
 echo "a run that waits for the compile slot still has a cold repin's budget"
 
-# The take step's `DOMICILE_COMPILE_SLOT_WAIT`, in seconds, or the script's
-# own default when the workflow sets none.
+# The take step's `DOMICILE_COMPILE_SLOT_WAIT` in seconds, or the script's
+# default when the workflow sets none.
 slot_wait() { # workflow
   commands "$1" |
     sed -n 's/^[[:space:]]*DOMICILE_COMPILE_SLOT_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
@@ -187,8 +144,8 @@ slot_wait() { # workflow
       "$ROOT/.github/scripts/engine-compile-slot.sh" | head -1
 }
 
-# And the wait for a tree before it, which `engine-tree-pool.sh pick` spends
-# when every tree is held: the same budget, so the same sum.
+# The wait for a tree, which `engine-tree-pool.sh pick` spends when every tree
+# is held. It uses the same budget.
 tree_wait() { # workflow
   commands "$1" |
     sed -n 's/^[[:space:]]*DOMICILE_TREE_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
@@ -218,8 +175,8 @@ for name in $both; do
       "a run that waits that long is killed partway through its own compile"
   fi
 
-  # And the latency guard's wait for a quiet machine: what it waits behind is
-  # the same compile, from a run whose tree is warm and has spent minutes.
+  # The latency guard waits for a quiet machine, which may mean waiting out
+  # another run's cold compile.
   quiet="$(commands "$WORKFLOWS/$name" |
     sed -n 's/^[[:space:]]*DOMICILE_RENDER_NODE_QUIET_WAIT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' |
     head -1 | grep . ||
@@ -241,9 +198,7 @@ for name in $both; do
   fi
 done
 
-# THE POSITIVES, because a split that matches nothing on one side asserts
-# nothing on that side: with no both-builder the whole section above is a loop
-# that never runs, and with no release-only workflow the comparison is.
+# Each side must match something, or the loops above assert nothing.
 if [ -n "$both" ]; then
   ok "something builds and checks (${both# })"
 else

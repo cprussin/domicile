@@ -1,33 +1,15 @@
 #!/usr/bin/env bash
-# One closed set, written down in four languages, compared.
+# Checks that the four cursor shape lists agree, in order.
 #
-# A client asks for a cursor and the name crosses two boundaries to reach CSS:
-# the compositor serializes `domicile_protocol::CursorShape`, the browser
-# process parses it against `components/domicile/common/cursor_shape.h`, the
-# engine hands the page a `DomicileCursorShape` declared in WebIDL, and the SDK
-# reads it through `cursorShapeSchema` in `@domicile-desktop/sdk`. Four
-# enumerations of the same set, in Rust, C++, WebIDL and TypeScript, and until
-# this script existed NOTHING COMPARED THEM.
+# A shape name crosses the compositor (`domicile_protocol::CursorShape`), the
+# browser (`components/domicile/common/cursor_shape.h`), WebIDL
+# (`DomicileCursorShape`) and the SDK (`cursorShapeSchema`). Each end refuses
+# names it does not know, so a shape missing from one is silently an arrow.
 #
-# What drift costs is the whole reason the set was closed in the first place.
-# A keyword CSS does not know is not an error anywhere -- `element.style.cursor
-# = "pointr"` is a no-op -- so a shape the compositor can send and the browser
-# cannot parse is an arrow where a hand should be, over one client, with
-# nothing said. Closing the set at each boundary made each end refuse a name it
-# does not know; it did not make the three ends agree about WHICH names those
-# are. A shape added to two of them and forgotten in the third is refused at
-# the boundary that never heard of it, which reads as the client's fault.
+# Order matters too: the mojom enum numbers by position, so a reordering shows
+# the wrong cursor without failing.
 #
-# ORDER, NOT JUST MEMBERSHIP. `cursor_shape.h` says its order matches
-# `domicile_protocol::CursorShape` and `mojom::CursorShape`, and the mojom is
-# an `enum class : int32_t` whose numbering comes from position. A set that
-# agrees on membership and disagrees on order is the worse bug of the two: it
-# does not fail, it silently shows the wrong cursor.
-#
-# BUILDLESS ON PURPOSE. Nothing here compiles anything. The failure this
-# catches would otherwise surface as a ~50 minute engine build on the one
-# runner that can do it, or not at all -- and a session without a Chromium
-# checkout (every Claude web session) cannot run that build at any price.
+# This builds nothing, so it runs without a Chromium checkout.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -43,14 +25,10 @@ done
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Rust: the variants of `pub enum CursorShape`, kebab-cased the way
-# `#[serde(rename_all = "kebab-case")]` does it -- a hyphen before every
-# capital except the first CHARACTER, then lowered. Not "before a capital that
-# follows a lower-case letter", which is the plausible version and is wrong:
-# it leaves `EResize` as `eresize` while serde writes `e-resize`, and the four
-# single-letter compass shapes are exactly the ones it gets wrong. That attribute is read here rather than assumed:
-# if it ever changes, these names are no longer the wire's and this comparison
-# is against the wrong thing.
+# Rust: the variants of `pub enum CursorShape`, kebab-cased as
+# `#[serde(rename_all = "kebab-case")]` does: a hyphen before every capital
+# except the first character, then lowercased. So `EResize` is `e-resize`.
+# Check the attribute, since the wire names depend on it.
 grep -q 'rename_all = "kebab-case"' "$RUST" || {
   echo "  FAIL  $RUST no longer renames CursorShape to kebab-case," >&2
   echo "        so the wire names are not what this script derives." >&2
@@ -62,13 +40,11 @@ awk '/^pub enum CursorShape \{/ { inside = 1; next }
   sed -E 's/(.)([A-Z])/\1-\2/g' |
   tr '[:upper:]' '[:lower:]' >"$WORK/rust"
 
-# C++: the second argument of each X-macro entry, which IS the wire name.
+# C++: the second argument of each X-macro entry is the wire name.
 sed -n 's/^  X([A-Za-z]*, "\([^"]*\)").*/\1/p' "$CPP" >"$WORK/cpp"
 
-# WebIDL: the quoted members of `enum DomicileCursorShape`. The enum's own
-# order carries no meaning to the bindings generator, unlike the three lists
-# either side of it -- it is written in the same order so that the comparison
-# below is one diff rather than a set difference that has to be read.
+# WebIDL: the quoted members of `enum DomicileCursorShape`. The bindings ignore
+# their order, but it matches the others so the comparison is one diff.
 sed -n '/^enum DomicileCursorShape {$/,/^};$/p' "$IDL" |
   sed -n 's/^  "\([^"]*\)",$/\1/p' >"$WORK/idl"
 
@@ -79,10 +55,8 @@ sed -n '/cursorShapeSchema = z.enum(\[/,/\]);/p' "$TS" |
 FAILED=0
 for f in rust cpp idl ts; do
   n="$(wc -l <"$WORK/$f" | tr -d ' ')"
-  # A pattern that stops matching reads as an empty list, and an empty list
-  # compares equal to another empty list. That is this script failing open --
-  # the shape of bug it exists to catch, one level up -- so the count is
-  # asserted before anything is compared.
+  # A pattern that stops matching yields an empty list, which equals any
+  # other empty list. Check the count first.
   if [ "$n" -lt 2 ]; then
     printf '  FAIL  read %s shapes from the %s list, so its pattern no longer matches\n' \
       "$n" "$f"

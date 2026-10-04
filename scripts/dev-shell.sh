@@ -1,32 +1,16 @@
 #!/usr/bin/env bash
-# A shell, running in Domicile, rebuilt as you edit it.
+# Runs a shell in Domicile and reloads it on every rebuild.
 #
 #   ./scripts/dev-shell.sh manganese
 #   bun run --filter @domicile-desktop/manganese start:dev
 #
-# WHAT THIS REPLACED, AND WHY IT HAD TO. `start:dev` used to be `vite`: a dev
-# server, opened in whatever browser you had. That page has no compositor, no
-# clients and no windows — `connectToHost` finds no host and hands the shell a
-# transport that does nothing — so what you were looking at was the chrome with
-# every window in it missing. Useful for a stylesheet and misleading for
-# anything else, and it is not what "run the shell" should mean.
+# Starts the engine, compositor and shell as `nix run .#manganese` does. The
+# shell's vite rebuilds the page on save, and `dev-shell-reload.sh` hands each
+# build to the running desktop with `domicile load-shell`. Windows survive a
+# reload.
 #
-# So dev mode is the desktop now. The engine, the compositor and the shell,
-# exactly as `nix run .#manganese` assembles them — with one difference, and it
-# is there to make an edit cheap: the page is rebuilt on save, by the shell's
-# own vite in watch mode, and the rebuilt module is handed to the desktop that
-# is already running. `domicile load-shell <path>` is what does that and the
-# desktop takes it without stopping, so the windows stay where they are and an
-# edit costs a build rather than a restart. `dev-shell-reload.sh` is the half
-# that waits for a build to finish and runs it; what is here is the two things
-# it needs, which are the module to watch and the socket the desktop answers
-# on. THE DESKTOP IS NOT RESTARTED ON A REBUILD, and never was: what used to
-# restart it was the person at the keyboard, for want of this.
-#
-# Where each piece comes from is the point. The engine is the published one the
-# flake pins, because building Chromium is four hours and a shell author is not
-# doing that. The compositor and the runner come out of *this checkout*, built
-# here, so a change to either is one restart away rather than a release.
+# The engine is the one the flake pins, since building Chromium takes hours.
+# The compositor and runner are built from this checkout.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,16 +24,12 @@ SHELL_DIR="$ROOT/packages/shell-$SHELL_NAME"
   echo "no shell '$SHELL_NAME' — there is no packages/shell-$SHELL_NAME." >&2
   exit 1
 }
-# Where the shell's own vite config puts it: this runs the shell's own
-# build rather than a second one of ours.
+# Output directory of the shell's own vite config.
 PAGE_DIR="$SHELL_DIR/.vite/renderer/main_window"
 
-# THE FIRST BUILD IS NOT THE WATCHER'S. `build:vite` depends on `^prepare` and
-# `^build`, and on a fresh checkout neither has run: `styled-system/` is
-# generated and gitignored, and the workspace packages a shell imports are
-# published from `dist/`. A bare `vite build --watch` in the shell's directory
-# would build a page with no SDK in it, which is a desktop whose shell never
-# joins the compositor.
+# Build through turbo first so `^prepare` and `^build` run: `styled-system/`
+# is generated, and workspace packages are imported from `dist/`. A bare
+# `vite build --watch` on a fresh checkout builds a page without the SDK.
 echo "building $SHELL_NAME"
 (cd "$ROOT" && bun install --frozen-lockfile >/dev/null &&
    CI=1 bun run turbo build:vite --filter="./packages/shell-$SHELL_NAME") || {
@@ -57,7 +37,7 @@ echo "building $SHELL_NAME"
   exit 1
 }
 
-# A directory of this run's own, for the one file this has to write.
+# Holds the socket file.
 WORK="$(mktemp -d)"
 WATCHING=()
 cleanup() {
@@ -68,26 +48,19 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Now the watcher, on the shell alone. Its dependencies were built above and a
-# change to one of them is a restart — this is the loop for working on a shell,
-# not on the SDK underneath it.
+# Watch the shell only. A change to its dependencies needs a restart.
 echo "watching $SHELL_DIR"
 (cd "$SHELL_DIR" && exec bunx vite build --watch) &
 WATCHING+=($!)
 
-# And what each of those builds is for. The loop waits for the socket file
-# below before it does anything, so starting it here — before the binary it
-# calls has been built — is starting it before it can run: by the time a
-# desktop has printed a socket, the `cargo build` further down has long since
-# produced the `domicile` that loop runs.
+# The reload loop waits for the socket file, so it can start before the
+# `cargo build` below produces the `domicile` it runs.
 "$ROOT/scripts/dev-shell-reload.sh" \
   "$ROOT/target/debug/domicile" "$PAGE_DIR/shell.js" "$WORK/sock" &
 WATCHING+=($!)
 
-# The engine: the published one, fetched and pinned by the flake, because the
-# alternative is a four-hour Chromium build. `DOMICILE_ENGINE` overrides it for
-# somebody who has one already — the engine agent's own `out/Agent`, say — and
-# that is the whole of what `nix` is used for here.
+# Use the flake's pinned engine. `DOMICILE_ENGINE` overrides it with a local
+# build, such as `out/Agent`.
 ENGINE="${DOMICILE_ENGINE:-}"
 if [ -z "$ENGINE" ]; then
   command -v nix >/dev/null 2>&1 || {
@@ -103,39 +76,19 @@ if [ -z "$ENGINE" ]; then
   }
 fi
 
-# `domicile` builds nothing — that is the point of it — so the two components
-# that come out of *this checkout* are built here, which is what running a
-# shell from a checkout is for. The engine is the published one either way: a
-# four-hour Chromium build is not a dev loop.
+# `domicile` builds nothing, so build the compositor and runner here.
 echo "building the compositor and the runner"
 cargo build -p domicile-launch --bin domicile \
             -p domicile-compositor --bin domicile-compositor || exit 1
 
-# `DOMICILE_PAGE` names the module, because `domicile`'s argument does and the
-# two are one rule: a directory is refused outright rather than searched for a
-# name the launcher no longer knows. `shell.js` is what the shell's own vite
-# config emits — `@domicile-desktop/component-library/vite-shell` pins the entry name
-# so that something other than the shell can say it — so this is the one place
-# in the dev loop that has to know the convention, and it says so.
+# `DOMICILE_PAGE` must name the module file; a directory is refused.
+# `shell.js` is the entry name that
+# `@domicile-desktop/component-library/vite-shell` pins.
 #
-# NOTHING SEPARATES THIS FROM AN INSTALLED DESKTOP ANY MORE.
-# `DOMICILE_DEV_RELOAD` used to: the bridge read it, served a reload token and
-# wrote a poller into the page. The bridge is gone and the C++ that writes the
-# document has nothing in their place, so the variable switches nothing on and
-# is not set here. What replaced it is a command every desktop takes rather
-# than a mode this one is started in: `domicile load-shell ./path/to/shell.js`
-# — see docs/architecture/THE-DOMICILE-BINARY.md.
-#
-# WHAT IT PRINTS IS READ AS IT GOES PAST, and that is the whole of how the
-# reload loop finds the desktop. `domicile` puts `DOMICILE_SOCK` in the
-# environment of what it spawns, and this script started it rather than the
-# other way around, so nothing here inherits it; the supervisor also prints it,
-# beside the shell and the config it chose, and reading that line is asking the
-# thing that knows instead of keeping a second copy of
-# `control_socket::address` in bash. The path is not written down until the
-# desktop has said it is up, because the socket is bound before the engine
-# starts and a shell loaded onto a desktop with no engine yet is a refusal
-# nobody caused.
+# This script is not a child of `domicile`, so it reads the socket path from
+# the supervisor's output instead of duplicating `control_socket::address`.
+# The path is written only after "domicile is up.", because the socket is
+# bound before the engine starts and an earlier load would be refused.
 echo "starting $SHELL_NAME"
 SOCK=""
 DOMICILE_ENGINE="$ENGINE" \
@@ -148,7 +101,5 @@ DOMICILE_PAGE="$PAGE_DIR/shell.js" \
     ("domicile is up."*) printf '%s\n' "$SOCK" >"$WORK/sock" ;;
   esac
 done
-# The desktop's own status, not the reader's: a desk that would not come up
-# exits non-zero, and a pipeline's last command is the one whose status a shell
-# would otherwise report.
+# Exit with the desktop's status, not the read loop's.
 exit "${PIPESTATUS[0]}"

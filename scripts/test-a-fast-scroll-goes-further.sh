@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Whether a console's two-finger scroll goes through `ScrollAccelerator`.
+# Checks two-finger scrolling on a tty goes through `ScrollAccelerator`.
 #
-# The curve is `src/ui/events/ozone/evdev/domicile/scroll_accelerator.cc` and
-# its cases; patch 0049 is the libinput converter calling it and the build
-# linking it. Either half missing is a scroll that is one to one again, with
-# nothing in any log to say so.
+# The curve lives in `src/ui/events/ozone/evdev/domicile/scroll_accelerator.cc`.
+# A patch makes the libinput converter call it and adds it to the build.
+# Without either, scrolling is silently unaccelerated.
 #
-# NO CHROMIUM TREE. The series and `src/` are the source of truth, so this
-# runs in the shell group on every push.
+# Reads `src/` and the patches, not a Chromium tree, so it runs in the shell
+# group.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,7 +44,7 @@ else
     "no patch adds domicile/scroll_accelerator.cc to ui/events/ozone/evdev/BUILD.gn"
 fi
 
-# Registered, or it does not link and a `--gtest_filter` matching nothing
+# An unregistered test is not linked, and a `--gtest_filter` matching nothing
 # exits zero.
 if in_patches '"//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc"'; then
   ok "the unit test is in ozone_unittests"

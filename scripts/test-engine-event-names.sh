@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# navigator.domicile's event names are the fork's own, not Blink's.
+# Checks that navigator.domicile's event names live in the fork's own list,
+# not Blink's.
 #
-# Blink's core/events/event_type_names.json5 generates a header nearly all of
-# Blink includes, so a name added there recompiles most of Blink: engine run
-# 36179223074 added one and built for 79 minutes at 4.5% compiler-cache hits,
-# holding the one compile slot while every other engine run waited. The names
-# live in modules/domicile/domicile_event_names.h instead, which only that
-# directory includes.
+# Blink's core/events/event_type_names.json5 generates a header most of Blink
+# includes, so adding a name there recompiles most of Blink (79 minutes on
+# engine run 36179223074). The names live in
+# modules/domicile/domicile_event_names.h, which only that directory includes.
 #
-# What this holds, without a build: no patch writes the global list again, the
+# Without a build, this checks that no patch touches the global list, the
 # fork's code names no event through it, and the fork's list, the IDL's
-# `on<name>` handlers and the list the control-arrival guard exercises in a
-# real engine are one set. The guard is what shows each name still fires.
+# `on<name>` handlers and the control-arrival guard's list match. The guard
+# checks that each name fires.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,10 +32,9 @@ sorted() { tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' '; }
 touching="$(grep -l 'event_type_names.json5' "$ENGINE"/patches/*.patch 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')"
 expect "no patch adds to Blink's global event names" "" "$touching"
 
-# Except the platform's own events the fork LISTENS to, which are Blink's to
-# name and add nothing to its list: `resize` on the shell's window is how the
-# engine hears the desktop change size (DomicileHost::ReportGeometry). Named
-# one by one, so a fork event dispatched through Blink's list still fails here.
+# Platform events the fork listens to are Blink's to name: `resize` on the
+# shell's window reports desktop size changes (DomicileHost::ReportGeometry).
+# Listed individually so a fork event dispatched through Blink's list fails.
 LISTENED_TO="kResize"
 global="$(grep -oE 'event_type_names::k[A-Za-z]+' "$DOMICILE"/* 2>/dev/null |
   grep -vE "::($(echo "$LISTENED_TO" | tr ' ' '|'))\$" |
@@ -60,8 +58,7 @@ expect "the IDL declares handlers to compare against" 0 "$?"
 expect "every on<name> in the IDL has a name in the fork's list" "$idl" "$ours"
 expect "and the guard fires every one of them in a real engine" "$idl" "$guard"
 
-# Each name's handler is generated from the list, so a name the IDL declares
-# cannot be left without one; and each dispatch goes through the list.
+# Handlers are generated from the list, so every IDL name has one.
 grep -q 'DOMICILE_EVENT_NAMES(DOMICILE_ATTRIBUTE_EVENT_LISTENER)' "$DOMICILE/domicile_host.h"
 expect "the host's on<name> handlers are generated from the list" 0 "$?"
 grep -q 'DEFINE_ATTRIBUTE_EVENT_LISTENER(' "$DOMICILE/domicile_host.h"

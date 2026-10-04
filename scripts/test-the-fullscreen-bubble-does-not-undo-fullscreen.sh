@@ -1,43 +1,25 @@
 #!/usr/bin/env bash
-# Whether the fullscreen exit bubble is allowed to take the desktop back out of
-# fullscreen 1.5 seconds after it went in.
+# Tests that the fullscreen exit bubble cannot take the desktop out of
+# fullscreen 1.5 seconds after it enters.
 #
-# THE DESKTOP CAME UP FULL SCREEN AND LEFT AGAIN. A tty run on a 2880x1920
-# panel reported a desktop of 2880x1920 and then, 1.37 seconds later, one of
-# 1050x1900 -- Chromium's default app window on that panel, which is the
-# `restored_bounds_` `DrmWindowHost::SetFullscreen` records on the way in. A
-# window that is not EXACTLY the CRTC's rectangle gets no controller out of
-# `ScreenManager::FindWindowAt`, so from that moment nothing was drawn at all.
-#
-# What asks is a watchdog on a window that can never answer it.
 # `ExclusiveAccessBubbleViews::Show` arms `presentation_watchdog_timer_` for
-# 1500ms and stops it in `OnFirstPresentation`; on timeout it calls
-# `ExclusiveAccessManager::ExitExclusiveAccess()`, which for a browser-mode
-# fullscreen is `FullscreenController::ExitFullscreenModeInternal()` and ends
-# in `BrowserView::ProcessFullscreen(false, ...)`. The bubble is its own
-# top-level window -- `SubtleNotificationView::CreatePopupWidget` asks for
-# `ui::ZOrderLevel::kSecuritySurface`, and `GetNativeWidgetTypeForInitParams`
-# in `chrome_views_delegate_linux.cc` answers a security surface with
-# `kDesktopNativeWidgetAura`, always -- so on ozone/drm it is a second window,
-# its rectangle is not the CRTC's, `DrmWindow::SchedulePageFlip` takes its
-# `if (!controller_)` branch and answers `gfx::PresentationFeedback::Failure()`.
-# A failed presentation does not run the successful-presentation callbacks; it
-# keeps them pending (`cc/trees/presentation_time_callback_buffer.cc`). So
-# `OnFirstPresentation` never runs, the watchdog always fires, and the desktop
-# always leaves fullscreen a second and a half after it arrives.
+# 1500ms and stops it in `OnFirstPresentation`. On timeout it exits fullscreen
+# and the window returns to its `restored_bounds_`. A window that is not the
+# CRTC's rectangle gets no controller from `ScreenManager::FindWindowAt`, so
+# nothing is drawn after that.
 #
-# The arm above it in the same function says the same thing about headless, in
-# the same words, down to naming `--start-fullscreen` as what it would revert.
-# This is that arm's twin: a platform where a window that is not the screen is
-# never presented, so nothing may wait on its presentation.
+# The bubble is its own top-level window (a security surface, which is always
+# `kDesktopNativeWidgetAura`). On ozone/drm it is not the CRTC's rectangle, so
+# `DrmWindow::SchedulePageFlip` returns `gfx::PresentationFeedback::Failure()`.
+# A failed presentation leaves the success callbacks pending
+# (`cc/trees/presentation_time_callback_buffer.cc`), so the watchdog always
+# fires. Upstream already skips the watchdog for headless for the same reason.
 #
-# The question belongs to Ozone rather than to the bubble, which is why the
-# assertions come in two halves: the bubble has to ASK, and ozone/drm has to
-# ANSWER. Either alone is a change that compiles and does nothing.
+# The fix has two halves: the bubble asks Ozone whether every window is
+# presented, and ozone/drm answers no. Either alone does nothing.
 #
-# NO CHROMIUM TREE. The series is the source of truth, so this reads the
-# patches -- which is what makes it cheap enough to run in the shell group on
-# every push rather than only when the fork is built.
+# Needs no Chromium tree: it reads the patches, so it runs in the shell group
+# on every push.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,10 +28,9 @@ PATCHES="$ROOT/packages/domicile-engine/patches"
 
 failed=0
 
-# `awk` over one file's hunks rather than `grep` over the series: a patch that
-# says `presents_every_window` in some other file is not this one, and the
-# removal is what pins the addition to the watchdog's own condition rather than
-# to any line in the bubble.
+# Scans one file's hunks, not the whole series: `presents_every_window` in
+# another file does not count. The removal check ties the addition to the
+# watchdog's condition.
 added_in() {
   awk -v want="$2" '
     /^diff --git a\// { in_file = ($0 ~ want) }
@@ -68,8 +49,8 @@ removes_in() {
   ' "$1"/*.patch
 }
 
-# Half one: the bubble asks. The upstream condition is headless and nothing
-# else, so a series that still carries it verbatim has not asked anything.
+# The bubble asks. The upstream condition checks headless only, so a series
+# that keeps it verbatim has not asked.
 if removes_in "$PATCHES" 'exclusive_access_bubble_views[.]cc$' \
   '  if (!headless::IsHeadlessMode()) {'; then
   echo '  ok    the watchdog is no longer armed on the headless answer alone'
@@ -94,8 +75,7 @@ case "$bubble" in
     failed=$((failed + 1)) ;;
 esac
 
-# Dropping the headless arm to make room for the new one would trade one
-# spurious exit for another, and it is the easy way to get this wrong.
+# Dropping the headless arm would bring back the exit for headless runs.
 case "$bubble" in
   (*headless::IsHeadlessMode\(\)*)
     echo '  ok    the headless arm survives beside it' ;;
@@ -106,9 +86,8 @@ case "$bubble" in
     failed=$((failed + 1)) ;;
 esac
 
-# Half two: ozone/drm answers. A property nothing sets is a property that reads
-# as its default, and the default has to be the answer every other platform
-# already gives.
+# ozone/drm answers. An unset property reads as its default, which must match
+# what every other platform gives.
 drm="$(added_in "$PATCHES" 'ozone_platform_drm[.]cc$')"
 
 case "$drm" in

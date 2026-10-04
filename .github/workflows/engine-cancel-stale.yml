@@ -1,53 +1,30 @@
 name: Cancel a pull request's stale queued engine runs
 
-# `crux` has one job slot, and GitHub does not care whether the pull request
-# that queued a run still exists.
+# Cancel a pull request's runs that hold `crux`'s single job slot for nothing.
+# GitHub keeps them queued even after the pull request merges or closes.
 #
-# WHAT THIS IS FOR, measured rather than imagined: on 2026-09-19 the slot spent
-# about an hour building two runs whose pull requests had merged hours earlier
-# -- #460's own pre-merge head and #461's -- while three open pull requests sat
-# behind them in the queue. Neither result could change anything: both branches
-# were already in main, and main's own push runs were queued separately.
+# - On close (merged or abandoned): cancel runs that have not started.
+# - On push (`synchronize`): cancel runs for every commit but the new head.
+#   This includes a started run with no job in progress (queued in engine.yml's
+#   `crux-compile` group, or between its build and checks) and, for
+#   same-repository pull requests, a run in "Build" or "The engine's checks".
+#   A stale run that already holds the machine is ended by engine.yml's "Take
+#   the compile slot" step.
 #
-# A PUSH LEAVES THE SAME WASTE BEHIND. On 2026-09-25 #578 and #579 each had a
-# run queued for a commit they had already pushed past, ahead of the run for
-# the commit that mattered. So on `synchronize` this cancels the branch's
-# waiting runs for every commit but the new head, including a started run
-# with no job running -- its build job queued in engine.yml's `crux-compile`
-# group, or between its build and its checks, where engine.yml's drop-tree
-# job gives back the tree it holds. A stale run that already has the machine
-# is engine.yml's to end when it comes to take the compile slot: see its "Take
-# the compile slot" step.
+# Canceling a build is safe: lld and clang write through a temp file and
+# rename, the next run resumes from the series stamp and out/Release, and
+# `if: always()` steps and the drop-tree job release the tree and the compile
+# slot. Later steps are never canceled, since the engine-release.nix write-back
+# is a push to the branch.
 #
-# AND ITS STARTED ONES, ONCE THEY ARE BUILDING OR CHECKING. Holding the slot, a
-# run never looks back, so a 24h sample found about 5h/day of builds for
-# replaced commits (runs 36190376822, 36201672013, 36208702812, 36217378847),
-# and the new head's run waits behind each in engine.yml's per-ref group. Only
-# on a push, only a same-repository pull request's run, only while its commit
-# is not the head (asked again right before the cancel), and only in "Build"
-# or "The engine's checks". Safe for the tree: lld and clang write through a
-# temp file and rename, so a killed build leaves nothing half-written, the next
-# run resumes incrementally from the series stamp and out/Release, and the
-# `if: always()` drops and drop-tree job still give back the tree and the
-# compile slot. Never later: the write-back of engine-release.nix is itself a
-# push to the branch.
 # The decisions live in .github/scripts/crux-stale-runs.sh and
-# .github/scripts/crux-cancelable-step.sh, where scripts/test-crux-stale-runs.sh
-# feeds them the cases. Close still takes only runs that never started.
+# .github/scripts/crux-cancelable-step.sh, tested by
+# scripts/test-crux-stale-runs.sh.
 #
-# THE RACE IS REAL AND IT IS NARROW, and it is worth writing down rather than
-# discovering. A run this reads as `queued` can be handed a runner in the
-# moment between the listing and the cancel, and the cancel would then land on
-# a job that has started. Two things bound the damage: the status is read again
-# immediately before each cancel, which narrows the window to about a second,
-# and a job that young has not reached `autoninja` -- it is still in
-# `actions/checkout`, and the tree lock it takes a step later is dropped by an
-# `if: always()` step, which GitHub runs on a canceled job too. What is left is
-# a wasted checkout.
-#
-# On the pull request, not on the merge: `pull_request: closed` fires for a
-# merged pull request and for an abandoned one alike, and both leave the same
-# useless runs behind.
+# Race: a queued run can get a runner between the listing and the cancel. The
+# status is read again just before each cancel, and a job that young is still
+# in `actions/checkout`; its tree lock is dropped by an `if: always()` step. The
+# cost is a wasted checkout.
 on:
   pull_request:
     types: [closed, synchronize]
@@ -58,13 +35,12 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  # To list the runs and to cancel them. Nothing else.
+  # To list and cancel runs.
   actions: write
 
 jobs:
   cancel:
-    # Hosted, deliberately: this must never wait for the machine whose queue it
-    # exists to clear.
+    # Hosted, so this never waits for the `crux` queue it clears.
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -85,31 +61,24 @@ jobs:
           api() { curl -sS -f -H "Authorization: Bearer $GH_TOKEN" \
                     -H "Accept: application/vnd.github+json" "$@"; }
 
-          # By branch, so the listing is small and already close to the answer;
-          # the filter decides the rest. 100 is well past the number of runs one
-          # branch accumulates, and a branch with more than that has a problem
-          # this workflow is not going to fix.
+          # Listed by branch so the filter has little to sort. One branch never
+          # has more than 100 runs.
           runs="$(api "$API/actions/runs?branch=$BRANCH&per_page=100")"
 
           stale="$(printf '%s' "$runs" | .github/scripts/crux-stale-runs.sh "$BRANCH" "$KEEP")"
-          # Which is also the whole of what a fork's pull request does here. A
-          # `pull_request` event from a fork carries a read-only token, so the
-          # cancel below would answer 403 -- but a fork never has a crux run to
-          # cancel in the first place, because those need the approval gate
-          # described in engine.yml. So this returns before the token matters.
+          # A fork's pull request always exits here: fork runs need engine.yml's
+          # approval gate, so they never have a crux run, and their read-only
+          # token could not cancel one.
           [ -n "$stale" ] || { echo "nothing of $BRANCH's is waiting for crux"; exit 0; }
 
           [ -n "$KEEP" ] && moved="moved on to $KEEP" || moved="is closed"
           echo "$BRANCH $moved; these of its runs are stale:"
           printf '%s\n' "$stale" | sed 's/^/  run /'
 
-          # BY STATUS CODE, NOT BY SUCCESS OR FAILURE. 409 is the one refusal
-          # that is not a problem -- it means the run resolved itself while
-          # this was deciding, which is the outcome this wanted anyway.
-          # Everything else is: a 403 is a token without `actions: write`, and
-          # a version of this that treated every refusal as "already ended"
-          # would report that as a clean run forever while canceling nothing.
-          # The `if: always()` drops in engine.yml run on a canceled job too.
+          # Check the status code. 409 means the run already ended, which is
+          # fine. Anything else, such as a 403 from a token without
+          # `actions: write`, is an error, so a broken token never reports
+          # success. engine.yml's `if: always()` cleanup runs on canceled jobs.
           cancel() {
             code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
                       -H "Authorization: Bearer $GH_TOKEN" \
@@ -128,24 +97,22 @@ jobs:
           printf '%s\n' "$stale" | while IFS= read -r id; do
             [ -n "$id" ] || continue
 
-            # READ THE STATUS AGAIN, IMMEDIATELY BEFORE CANCELING. The listing
-            # above is a snapshot, and queued to in_progress can happen inside
-            # it; a run that has since been handed the machine gets the started
-            # run's questions below instead.
+            # Read the status again: the run may have started since the
+            # listing. A started run gets the checks below instead.
             run="$(api "$API/actions/runs/$id")"
             now="$(printf '%s' "$run" | jq -r '.status')"
             sha="$(printf '%s' "$run" | jq -r '.head_sha')"
             case "$now" in
               (queued|pending) cancel "$id" ;;
               (in_progress)
-                # A started run only for a push to a branch here: a close keeps
-                # the old rule, and a fork's token could not cancel anyway.
+                # Started runs are canceled only on a push to a same-repository
+                # branch; a fork's token could not cancel them anyway.
                 if [ -z "$KEEP" ] || [ "$SAME_REPO" != true ]; then
                   echo "run $id has started — left alone"
                   continue
                 fi
-                # ITS COMMIT MAY BE THE HEAD AGAIN: a revert push, or this pass
-                # running after a later one. Asked now, not at the event.
+                # Its commit may be the head again (a revert push, or this pass
+                # running after a later one), so ask now.
                 if head="$(.github/scripts/crux-still-head.sh "$BRANCH" "$sha")"; then
                   echo "run $id: $head — left alone"
                   continue

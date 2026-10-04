@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Which end the shell's local-network guard blames, and which answers it calls
-# a pass.
+# Tests the verdict block of `guard-shell-local-network.sh`: which side it
+# blames and what it passes.
 #
-# The unit is the verdict block in `guard-shell-local-network.sh`, run out of
-# the real script so a rewrite that moves it fails here. The control is where
-# it matters: its second leg passes on an ABSENT picture, and only after its
-# first leg found one.
+# The block is read from the real script. The control's second leg passes
+# on an absent picture, but only after its first leg found one.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

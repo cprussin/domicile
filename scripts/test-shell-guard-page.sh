@@ -1,44 +1,25 @@
 #!/usr/bin/env bash
-# What the shell guard will accept as a built shell, and what it tells the
-# bridge it found.
+# Tests what `guard-shell.sh` accepts as a built shell and which switches it
+# passes to the engine.
 #
-# A shell in this workspace is one JavaScript module: `shellBuild` emits
-# `shell.js` and no document, because Domicile writes the document. This guard
-# went on requiring an `index.html` for a day after that stopped being true,
-# and the failure was as cheap to read as it was invisible — "built no
-# index.html", fourteen seconds, all three of its logs empty, on a pull request
-# that had touched none of it.
+# A shell builds to one module, `shell.js`, with no document. `engine.yml`
+# runs only on engine changes, so this test runs the guard's resolution on
+# every push to catch a change in the shell's build output.
 #
-# Nothing caught it because `engine.yml` runs only on
-# `packages/domicile-engine/**`, and the change that made the shells emit a
-# module touched the runner, `test-out-of-tree-shell.sh` and both shells —
-# none of that path. So the two callers that were updated had no way to speak
-# for the third. This test is that: it runs the guard's own resolution, so a
-# shell whose shape changes again fails here, in a check that runs on every
-# push, rather than on whatever engine pull request happens to be next.
-#
-# Both blocks are taken out of the real script rather than copied, as
-# `test-dev-shell.sh` does with `dev-shell.sh`: a copy is a thing that passes
-# while the script it stands for does not.
+# Both blocks are read from the real script, as `test-dev-shell.sh` does with
+# `dev-shell.sh`, so a stale copy cannot pass.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GUARD="$ROOT/packages/domicile-engine/scripts/guard-shell.sh"
-# The real refusal, not a stub: what a guard says is the behavior.
+# The real annotation helpers, since the guard's message is what is tested.
 # shellcheck source=packages/domicile-engine/scripts/lib-annotate.sh
 . "$ROOT/packages/domicile-engine/scripts/lib-annotate.sh"
 
-# The name it looks for, to the `fi` that refuses when it is not there.
+# From the module name to the `fi` that refuses when it is missing.
 RESOLVE="$(awk '/^MODULE="\$PAGE_DIR\/shell.js"$/,/^fi$/' "$GUARD")"
-# The launch, which is the other half: finding the module and then telling the
-# engine about a different one is the same failure as not finding it.
-#
-# It used to slice the bridge's start-up and read `DOMICILE_MODULE`. There is
-# no bridge -- the engine serves the shell over `domicile://` now -- so it
-# slices chrome's command line and reads the switches that say where the shell
-# is. Same rule, and the same failure it exists to catch: a module handed over
-# as a root serves a directory with no module in it, and the desktop comes up
-# blank with nothing in any log to say why.
+# The chrome launch. Handing the engine a different path than the one
+# resolved leaves the desktop blank with nothing in any log.
 LAUNCH="$(awk '/^"\$CHROMIUM\/\$OUT\/chrome" \\$/,/^STARTED\+=\(\$!\)$/' "$GUARD")"
 [ -n "$RESOLVE" ] && [ -n "$LAUNCH" ] || {
   echo "no page resolution in $GUARD — its markers moved. Fix this test with it." >&2
@@ -63,7 +44,6 @@ expect() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# What a built shell is, and what is not one.
 mkdir -p "$WORK/module" "$WORK/document" "$WORK/nothing"
 : >"$WORK/module/shell.js"
 : >"$WORK/document/index.html"
@@ -86,9 +66,8 @@ expect "a module is what a shell in this workspace builds" \
   "module=$WORK/module/shell.js" \
   "$(resolve "$WORK/module")"
 
-# A document is not a shell. Domicile writes the document, so a directory with
-# one and no module is a build that emitted the wrong thing — and it has to be
-# refused rather than served, or the desktop comes up on someone's stray HTML.
+# Domicile writes the document, so a directory with only `index.html` is a
+# wrong build and must be refused.
 expect "a document alone is refused" \
   "refused: guard-shell: simple built no shell.js in $WORK/document" \
   "$(resolve "$WORK/document")"
@@ -97,10 +76,8 @@ expect "an empty directory is refused, in words that name what is missing" \
   "refused: guard-shell: simple built no shell.js in $WORK/nothing" \
   "$(resolve "$WORK/nothing")"
 
-# WHICH ONE THE BRIDGE IS TOLD, which is the half a resolution alone does not
-# cover. The bridge refuses a shell named twice, so these are exclusive: a
-# module handed over as a root serves a directory with no document in it, and
-# the page comes up blank with nothing in any log to say why.
+# The root and module switches. Passing the module as the root serves a
+# directory with no module in it, and the desktop comes up blank.
 launch() { # $1 MODULE, $2 PAGE_DIR
   (
     MODULE="$1"
@@ -112,8 +89,7 @@ launch() { # $1 MODULE, $2 PAGE_DIR
     WIDTH=800
     HEIGHT=600
     STARTED=()
-    # A `chrome` that writes its own arguments where the real one writes its
-    # log, so the launch is exercised without an engine.
+    # A fake `chrome` that writes its arguments to the log.
     CHROMIUM="$WORK"
     OUT="bin"
     mkdir -p "$WORK/bin"
@@ -136,10 +112,8 @@ expect "the module is named relative to that root, not as a path" \
   "--domicile-shell-module=shell.js" \
   "$(printf '%s\n' "$ARGS" | grep '^--domicile-shell-module=')"
 
-# The bare root, because the engine writes the document and serves it there.
-# Asking for a file under it sends the request to the file resolver instead,
-# which looks for something no build emits -- see `spawn.rs`, which had this
-# wrong and produced exactly the blank window this guard exists to catch.
+# The bare root, because the engine serves its generated document there. A
+# file path under it goes to the file resolver, which finds nothing.
 expect "the desktop starts on the document the engine writes" \
   "--app=domicile://shell/" \
   "$(printf '%s\n' "$ARGS" | grep '^--app=')"

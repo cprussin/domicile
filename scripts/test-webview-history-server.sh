@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Does the history guard's fixture serve the three pages the guard reads?
+# Tests that the history guard's fixture serves what the guard assumes.
 #
-# `guard-webview-history.sh` rests on three premises about this server, and the
-# engine guard cannot check any of them: it reads a sequence of page names out
-# of a browser's log, and a fixture that served the wrong path, cached its own
-# answer, or answered `/slow` immediately would produce a plausible sequence
-# that measured nothing. `/slow` is the sharpest of the three — the whole
-# reading of `stop()` is that a navigation which WOULD have landed did not, so
-# a fixture that answers it at once turns the positive run's pass into an
-# accident of timing.
-#
-# So the fixture is asserted here, where it is free rather than thirty minutes
-# on a shared tree: the three paths, the serial that makes one load tell itself
-# apart from the next, the `no-store` that keeps a second visit from being the
-# first one's answer out of the cache, and that `/slow` is actually slow.
+# `guard-webview-history.sh` only reads page names from the browser log, so it
+# cannot tell whether the fixture is right. Checked here: the three paths, a
+# serial that distinguishes loads, `no-store` so a revisit is not served from
+# cache, and that `/slow` is slow. The `stop()` reading depends on `/slow`
+# not answering early.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,8 +26,8 @@ command -v curl >/dev/null || {
   exit 77
 }
 
-# Short, because what is asserted is that the wait exists rather than how long
-# it is. The guard runs with a wait long enough to stop a navigation inside.
+# Short: this only checks that the delay exists. The guard uses a delay long
+# enough to stop a navigation inside it.
 SLOW_SECONDS=2
 
 LOG="$(mktemp)"
@@ -56,8 +48,7 @@ grep -q "serving" "$LOG" 2>/dev/null || {
   cat "$LOG" >&2
   exit 1
 }
-# The port it took, which is the one it says: asked for none in particular, it
-# must name the one it got.
+# Started with port 0, the fixture must print the port it got.
 PORT="$(served_port "$LOG")" || {
   echo "the fixture never said which port it took. It said:" >&2
   cat "$LOG" >&2
@@ -75,9 +66,8 @@ expect() {
   fi
 }
 
-# The serial a page reports, out of the page itself. The guard reads these
-# names from a browser's log; this reads them from the body, which is the same
-# string and one layer earlier.
+# The serial a page reports, read from its body. The guard reads the same
+# string from the browser log.
 serial_of() { # $1 body
   printf '%s' "$1" | sed -n 's/.*serial=\([0-9]*\).*/\1/p' | head -1
 }
@@ -89,41 +79,34 @@ expect "the first page is served" "yes" \
   "$(case "$ONE" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
 expect "the second page is served" "yes" \
   "$(case "$TWO" in *"200 OK"*) echo yes ;; *) echo no ;; esac)"
-# The name the guard's whole sequence is built from. A page that reported the
-# wrong path would read as the other page having loaded, which is the one
-# mistake no verdict downstream could catch.
+# The guard's sequence is built from these names. A wrong path would read as
+# the other page loading, and no later check would catch it.
 expect "the first page says which page it is" "yes" \
   "$(case "$ONE" in *"guest-shown path=/one"*) echo yes ;; *) echo no ;; esac)"
 expect "the second page says which page it is" "yes" \
   "$(case "$TWO" in *"guest-shown path=/two"*) echo yes ;; *) echo no ;; esac)"
-# `pageshow` rather than a line at parse time, because a page restored from the
-# back/forward cache runs no script again and would go unreported — which is
-# precisely the navigation the guard is about.
+# Report on `pageshow`, not at parse time: a page restored from the
+# back/forward cache runs no script again.
 expect "the pages report themselves on pageshow" "yes" \
   "$(case "$ONE" in *pageshow*) echo yes ;; *) echo no ;; esac)"
-# A second visit must be able to tell itself from the first: it is what says a
-# reload fetched something rather than nothing happening at all.
+# A distinct serial shows a reload fetched something.
 expect "a second visit has a serial of its own" "yes" \
   "$(if [ "$(serial_of "$ONE")" != "$(serial_of "$TWO")" ]; then
        echo yes
      else
        echo no
      fi)"
-# Without this a back-navigation is answered out of the HTTP cache, and a
-# fixture whose second answer is the first one's bytes tells the guard nothing
-# it can trust about when a load happened.
+# Without `no-store`, a back-navigation is served from the HTTP cache.
 expect "nothing is cached" "yes" \
   "$(case "$ONE" in *[Cc]ache-[Cc]ontrol:*no-store*) echo yes ;; *) echo no ;; esac)"
 
-# The guard reads "the browser asked for the slow page" out of this log, and
-# reads it as having happened when the request ARRIVED — which for a page the
-# server sits on for twenty seconds is not when it was answered.
+# The guard reads "the browser requested the slow page" from this log, so a
+# request is logged on arrival, not when answered.
 expect "a request is recorded when it arrives" "yes" \
   "$(case "$(cat "$LOG")" in *"asked /one"*) echo yes ;; *) echo no ;; esac)"
 
-# THE ONE THE WHOLE READING OF stop() RESTS ON. Timed rather than read out of
-# the source: a wait that was configured and not honored looks identical from
-# the guard, which only ever sees a page that did not arrive.
+# Timed, not read from the source: a configured delay that is ignored looks
+# the same to the guard as a page that never arrived.
 BEFORE="$(date +%s)"
 curl -sS -o /dev/null "http://127.0.0.1:$PORT/slow"
 ELAPSED=$(($(date +%s) - BEFORE))
@@ -133,8 +116,8 @@ expect "the slow page says which page it is" "yes" \
   "$(case "$(curl -sS "http://127.0.0.1:$PORT/slow")" in
      *"guest-shown path=/slow"*) echo yes ;; *) echo no ;; esac)"
 
-# A browser that hangs up is recorded at once, which is how the guard knows the
-# positive run's slow page can no longer arrive without sitting out the wait.
+# A hang-up is logged at once, so the guard knows the slow page can no longer
+# arrive without waiting out the delay.
 BEFORE="$(date +%s%N)"
 curl -sS -o /dev/null --max-time 0.5 "http://127.0.0.1:$PORT/slow" 2>/dev/null
 for _ in $(seq 1 30); do
@@ -150,8 +133,8 @@ expect "a slow page the browser gave up on is recorded before its wait is over" 
     echo no
   fi)"
 
-# Three pages and no more: a server that answered everything would answer a
-# mistyped path too, and the guard would never learn it had mistyped one.
+# Only three paths: answering everything would hide a mistyped path in the
+# guard.
 expect "anything else is a 404" "yes" \
   "$(case "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")" in
      404) echo yes ;; *) echo no ;; esac)"

@@ -1,30 +1,18 @@
 #!/usr/bin/env bash
-# Which end the shortcuts-inhibitor guard blames, and what it refuses to call
-# a measurement.
+# Tests which side `guard-shortcuts-inhibitor.sh` blames, and what it refuses
+# to count as a measurement.
 #
-# The unit is the verdict block in `guard-shortcuts-inhibitor.sh` — the `if`
-# chain that turns five readings off a `WAYLAND_DEBUG` capture and the run's
-# mode into either a pass or one sentence naming an end. It is worth a test of
-# its own because THE GUARD'S ONLY INSTRUMENT IS A GREP, and a grep over a file
-# that is empty, truncated or never written answers "not there" in exactly the
-# same voice it uses for a request the engine genuinely did not make. A run
-# where `WAYLAND_DEBUG=1` never reached the engine would then read as the
-# positive run's failure and — worse — as the control's pass, which is a
-# control establishing nothing about a guard that is measuring nothing.
+# The guard greps a `WAYLAND_DEBUG` capture. A grep over an empty or missing
+# capture reports "not there", the same as a request the engine did not make.
+# That would fail the positive run and pass the control without measuring
+# anything. The order of the gates prevents this:
 #
-# So the order of the gates is the whole of what separates those, and an
-# ordered chain is a thing that can be got wrong in a way no working engine
-# would ever reveal:
+#   - a capture that is not a wire dump never reads as "the engine did not ask"
+#   - a run with no window measured nothing in either mode, since the request
+#     is made when the toplevel is set up
+#   - the control uses the same gates, since its setup differs by one switch
 #
-#   a capture that is not a wire dump is never read as "the engine did not ask"
-#   a run with no window in it measured nothing, in either mode, because the
-#     request is made where the toplevel is set up
-#   the control's gates are the run's, because its setup is the run's with one
-#     switch taken off
-#
-# The block is run out of the real script rather than copied, so a rewrite that
-# moves it fails here loudly instead of leaving this passing against a version
-# nobody ships.
+# The block is read from the real script, so a moved block fails here.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,10 +22,8 @@ GUARD="$ROOT/packages/domicile-engine/scripts/guard-shortcuts-inhibitor.sh"
   exit 1
 }
 
-# From `FAILURE=""` to the `fi` that closes the decision. Both ends are whole
-# lines at column zero, so this cannot half-match: the nested `fi` in the
-# control's arm is indented, and the block stops before the `if [ -n "$PASSED" ]`
-# below it — a verdict is a value here, not a status.
+# From `FAILURE=""` to the closing `fi` at column zero. The nested `fi` is
+# indented, and the block stops before the `if [ -n "$PASSED" ]` below it.
 BLOCK="$(awk '/^FAILURE=""$/,/^fi$/' "$GUARD")"
 [ -n "$BLOCK" ] || {
   echo "no verdict block in $GUARD — its markers moved. Fix this test with it." >&2
@@ -55,10 +41,7 @@ expect() {
   fi
 }
 
-# A run in which everything the guard wants is true; each case below changes
-# one reading. Written as a baseline plus overrides rather than five positional
-# arguments, because a case that says `SAW_WIRE=0` says what it is testing and
-# a case that says `0 1 1 1 1` does not.
+# A passing run; each case overrides one reading by name.
 readings() { # $1 NEGATIVE, then NAME=value overrides
   SAW_WIRE=1
   SAW_TOPLEVEL=1
@@ -86,9 +69,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
   )
 }
 
-# The failing sentence, for the cases where WHICH end it names is the point. Not
-# the whole wording: sentences are prose and will be reworded, and a test that
-# pinned them would fail for edits that changed no behavior.
+# The failure sentence, for cases that check which side it names. Match
+# words, not the whole sentence, so rewording does not break the test.
 reason() { # $1 NEGATIVE, then NAME=value overrides
   (
     readings "$@"
@@ -107,36 +89,30 @@ blames() { # $1 word, then the args verdict takes
 }
 
 echo "a capture that is not a wire dump is not a measurement"
-# THE VACUITY THIS GUARD IS MOST EXPOSED TO. Every reading below it is a grep,
-# and a grep over a file libwayland never wrote to answers "no" to all of them.
-# Read in the obvious order, that is a positive run reporting the one failure
-# it exists to report — about an engine that may well have asked.
+# Every later reading is a grep, and a grep over an unwritten capture answers
+# "no" to all of them, which would read as the engine not asking.
 expect "no wire is a failure" "fail" "$(verdict 0 SAW_WIRE=0)"
 expect "no wire names WAYLAND_DEBUG" "yes" "$(blames "WAYLAND_DEBUG" 0 SAW_WIRE=0)"
 expect "an empty capture is not read as a request that was not made" "yes" \
   "$(blames "WAYLAND_DEBUG" 0 SAW_WIRE=0 SAW_TOPLEVEL=0 SAW_MANAGER=0 \
        SAW_KEYBOARD=0 ASKED=0)"
-# AND IN THE CONTROL, which is the arm a verdict written as "the control passes
-# when the request is absent" gets wrong: an absence over a capture nobody
-# wrote is the cheapest pass there is.
+# In the control, an absence over an unwritten capture would otherwise pass.
 expect "no wire is a failure in the control too" "fail" \
   "$(verdict 1 SAW_WIRE=0 ASKED=0)"
 
 echo
 echo "a run with nothing in it to ask"
-# The request is made in SetUpShellIntegration, which runs when the toplevel
-# does. No toplevel, no call site — and both modes are then reading an absence
-# that says nothing about the switch.
+# The request is made in SetUpShellIntegration, which runs with the toplevel.
+# Without a toplevel, both modes read an absence that says nothing.
 expect "no toplevel is a failure" "fail" "$(verdict 0 SAW_TOPLEVEL=0)"
 expect "no toplevel names the window" "yes" \
   "$(blames "toplevel" 0 SAW_TOPLEVEL=0)"
 expect "no toplevel is a failure in the control too" "fail" \
   "$(verdict 1 SAW_TOPLEVEL=0 ASKED=0)"
-# The two facts about the HOST, which the engine's own code reads before it
-# asks for anything: a compositor that does not carry the protocol, and a seat
-# that announced no keyboard. Under `under-wayland.sh` the second is the one
-# that moves — sway advertises the capability only while an input device backs
-# it, and this guard's is a virtual keyboard it starts itself.
+# The engine checks two host facts before asking: the compositor offers the
+# protocol, and the seat has a keyboard. Under `under-wayland.sh`, sway
+# advertises a keyboard only while an input device backs it, and the guard's
+# is a virtual keyboard it starts itself.
 expect "a host with no manager is a failure" "fail" "$(verdict 0 SAW_MANAGER=0)"
 expect "a host with no manager names the protocol" "yes" \
   "$(blames "zwp_keyboard_shortcuts_inhibit_manager_v1" 0 SAW_MANAGER=0)"
@@ -162,22 +138,15 @@ expect "a request without the switch names the switch" "yes" \
 
 echo
 echo "what the greps match, against the shape libwayland writes"
-# THE OTHER HALF OF THE GUARD, and the half the verdict block above takes on
-# trust. Five patterns turn a capture into the five readings, and a pattern
-# that matches nothing produces the same zero as a request that was never sent
-# — which is the vacuity this whole guard is built against, one layer below
-# where the block can see it.
+# The patterns that turn a capture into readings. A pattern that matches
+# nothing gives the same zero as an unsent request.
 #
-# AND THE SHAPE IS NOT ONE SHAPE, WHICH COST THIS GUARD ITS FIRST RUN. libwayland
-# used to write `[3223290.760] -> wl_display@1.get_registry(new id wl_registry@2)`
-# and now writes the same message as
+# libwayland writes two formats. Older versions write
+# `[3223290.760] -> wl_display@1.get_registry(new id wl_registry@2)`. Newer
+# versions write
 # `[21:39:43.452307] {Display Queue} <ESC>[34mwl_display<ESC>[35m#1<ESC>[36m.delete_id<ESC>[0m(41)`
-# — a clock rather than a stopwatch, the queue it came off, `#` for `@`, and a
-# color around every token. Engine run 36189695475 met the second and the guard's
-# first gate read `wire=0`: it refused to report anything about the request,
-# correctly, because it could not read the capture at all. Both shapes are
-# fixtures here, and the colored one goes through `normalized` exactly as the
-# guard puts it.
+# with a wall-clock time, the queue name, `#` for `@`, and colors. Both are
+# fixtures here, and colored lines go through the guard's `normalized`.
 PATTERNS="$(grep -E "^[A-Z_]+_ON_THE_WIRE='" "$GUARD")"
 FOUND="$(echo "$PATTERNS" | grep -c .)"
 [ "$FOUND" -eq 5 ] || {
@@ -187,8 +156,7 @@ FOUND="$(echo "$PATTERNS" | grep -c .)"
 }
 eval "$PATTERNS"
 
-# The guard's own normalization, run out of the guard for the reason the verdict
-# block is: a copy here would go on passing against a version nobody ships.
+# The guard's own normalization, read from the guard.
 NORMALIZE="$(awk '/^normalized\(\) \{/,/^\}/' "$GUARD")"
 [ -n "$NORMALIZE" ] || {
   echo "  FAIL  the guard's normalization was read at all" >&2
@@ -197,8 +165,8 @@ NORMALIZE="$(awk '/^normalized\(\) \{/,/^\}/' "$GUARD")"
 }
 eval "$NORMALIZE"
 
-# Every reading the guard takes, taken the way it takes it: the line into a file,
-# the file through `normalized`, the pattern over what comes out.
+# Each reading as the guard takes it: line to file, file through
+# `normalized`, pattern over the output.
 matches() { # $1 pattern, $2 line
   local file
   file="$(mktemp)"
@@ -207,8 +175,7 @@ matches() { # $1 pattern, $2 line
   rm -f "$file"
 }
 
-# One ANSI escape, so the fixtures below read as the log does rather than as a
-# wall of `\033`.
+# One ANSI escape, so the fixtures read like the log.
 E="$(printf '\033')"
 
 REGISTRY_LINE='[3223290.760] -> wl_display@1.get_registry(new id wl_registry@2)'
@@ -218,21 +185,16 @@ KEYBOARD_LINE='[3223291.004] -> wl_seat@14.get_keyboard(new id wl_keyboard@21)'
 TOPLEVEL_LINE='[3223291.120] -> xdg_surface@33.get_toplevel(new id xdg_toplevel@34)'
 REQUEST_LINE='[3223291.311] -> zwp_keyboard_shortcuts_inhibit_manager_v1@23.inhibit_shortcuts(new id zwp_keyboard_shortcuts_inhibitor_v1@41, wl_surface@30, wl_seat@14)'
 ACTIVE_LINE='[3223291.500] zwp_keyboard_shortcuts_inhibitor_v1@41.active()'
-# The engine's own words, in the same file as the wire, because
-# `--enable-logging=stderr` and WAYLAND_DEBUG write to one stream. Patch 0038
-# names the protocol in the line it logs when the host has NOT got it — so a
-# pattern that reads the interface name anywhere reads a missing manager as a
-# present one, and the control then passes over a host that could not have
-# answered the request at all.
+# Engine log lines share the stream with the wire dump. The engine logs the
+# protocol name when the host lacks it, so a pattern matching the name
+# anywhere would read a missing manager as present.
 ENGINE_ERROR_LINE='[1234/5678:ERROR:wayland_toplevel_window.cc(1102)] domicile: the host compositor offers no zwp_keyboard_shortcuts_inhibit_manager_v1, so it keeps its shortcuts and the shell'"'"'s Meta bindings will not arrive'
 
-# THE SHAPE THE ENGINE ON `crux` ACTUALLY WRITES. The delete_id line is verbatim
-# from engine run 36189695475; the rest are the same message shape with the
-# fields that message has. The empty red segment before the interface is where
-# libwayland puts ` -> ` on a request and `discarded ` on a dropped event, and
-# none of the patterns lean on it: `get_registry`, `get_toplevel`,
-# `get_keyboard` and `inhibit_shortcuts` are REQUEST names in their protocols
-# and there is no event by any of those names to confuse them with.
+# The colored format the engine on `crux` writes. The empty red segment is
+# where libwayland puts ` -> ` on a request and `discarded ` on a dropped
+# event; no pattern relies on it, since `get_registry`, `get_toplevel`,
+# `get_keyboard` and `inhibit_shortcuts` are request names with no matching
+# events.
 COLORED_DISPLAY_LINE="$E[32m[21:39:43.452307] $E[33m{Display Queue} $E[31m$E[0m$E[34mwl_display$E[35m#1$E[36m.delete_id$E[0m(41)$E[0m"
 COLORED_GLOBAL_LINE="$E[32m[21:39:43.001234] $E[33m{Display Queue} $E[31m$E[0m$E[34mwl_registry$E[35m#2$E[36m.global$E[0m(31, \"zwp_keyboard_shortcuts_inhibit_manager_v1\", 1)$E[0m"
 COLORED_KEYBOARD_LINE="$E[32m[21:39:43.101112] $E[33m{Default Queue} $E[31m -> $E[0m$E[34mwl_seat$E[35m#14$E[36m.get_keyboard$E[0m(new id wl_keyboard#21)$E[0m"
@@ -253,9 +215,7 @@ expect "the request is read off inhibit_shortcuts" "yes" \
 expect "the inhibitor's own event is not the request, colored either" "no" \
   "$(matches "$REQUEST_ON_THE_WIRE" "$COLORED_ACTIVE_LINE")"
 
-# AND THE OLDER SHAPE, which is what a host with an older libwayland writes and
-# what every account of `WAYLAND_DEBUG` describes. The guard reads a capture, not
-# a version, so both have to answer.
+# The older format must also match.
 expect "the older dump is a dump too" "yes" \
   "$(matches "$DISPLAY_ON_THE_WIRE" "$REGISTRY_LINE")"
 expect "the manager is read off the older registry event too" "yes" \
@@ -266,11 +226,9 @@ expect "the older get_toplevel reads the same" "yes" \
   "$(matches "$TOPLEVEL_ON_THE_WIRE" "$TOPLEVEL_LINE")"
 expect "the older inhibit_shortcuts reads the same" "yes" \
   "$(matches "$REQUEST_ON_THE_WIRE" "$REQUEST_LINE")"
-# WHAT THE CLAIM MUST NOT BE SATISFIED BY. Binding the manager is what every
-# nested chrome does at startup, whatever the switch says, and the inhibitor's
-# own `active` event comes back from the COMPOSITOR — reading either as "the
-# engine asked" would make the control unfailable and the run's pass a
-# statement about the protocol being present rather than about the request.
+# Every nested chrome binds the manager at startup regardless of the switch,
+# and `active` is an event from the compositor. Counting either as the
+# request would make the control unable to fail.
 expect "binding the manager is not the request" "no" \
   "$(matches "$REQUEST_ON_THE_WIRE" "$BIND_LINE")"
 expect "the manager in the registry is not the request" "no" \
