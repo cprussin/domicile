@@ -32,11 +32,11 @@ tree to read it from. Regenerate the series with `scripts/extract.sh`
 once this has been applied on a tree -- `scripts/test-patch-series-chain.sh`
 is what will say so, on the next patch that touches this file.
 ---
- chrome/browser/chrome_browser_interface_binders.cc | 11 +++++++++++
- 1 file changed, 11 insertions(+)
+ chrome/browser/chrome_browser_interface_binders.cc | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index ec672a5d5f..260b967dfc 100644
+index 08c18dd9ea..9050cf36fa 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -47,7 +47,7 @@ index ec672a5d5f..260b967dfc 100644
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -507,7 +508,17 @@ void PopulateChromeFrameBinders(
+@@ -515,7 +516,17 @@ void PopulateChromeFrameBinders(
                  &domicile::BindControlChannel, std::move(receiver),
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),

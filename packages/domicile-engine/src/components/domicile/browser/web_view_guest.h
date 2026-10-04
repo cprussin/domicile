@@ -229,8 +229,8 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // FIND IN PAGE, on the guest's own WebContents -- so it is the guest's
   // FindRequestManager that runs it, every frame in the guest is searched, and
-  // the replies come back to this delegate's FindReply below rather than to
-  // the shell's.
+  // the replies come back to this observer's DidReceiveFindReply below rather
+  // than to the shell's.
   void Find(const std::string& text, bool forward) override;
   void StopFinding(bool keep_selection) override;
   void ListDirectory(const std::string& path,
@@ -422,19 +422,18 @@ class WebViewGuest : public mojom::WebViewGuest,
   void UpdatePreferredSize(content::WebContents* web_contents,
                            const gfx::Size& pref_size) override;
 
+  // content::WebContentsObserver:
+  void WebContentsDestroyed() override;
+
   // What a Find above found, in as many replies as the count takes to settle.
   // A reply to a find that has since been stopped, or replaced by a search for
   // other text, is dropped: it describes a search the element is no longer
   // showing. Chrome's FindTabHelper drops the same ones.
-  void FindReply(content::WebContents* web_contents,
-                 int request_id,
-                 int number_of_matches,
-                 const gfx::Rect& selection_rect,
-                 int active_match_ordinal,
-                 bool final_update) override;
-
-  // content::WebContentsObserver:
-  void WebContentsDestroyed() override;
+  void DidReceiveFindReply(int request_id,
+                           int number_of_matches,
+                           const gfx::Rect& selection_rect,
+                           int active_match_ordinal,
+                           bool final_update) override;
 
   // WHERE A LOCK STOPS BEING A GUESS. This is the call Chrome's own
   // SecurityStateTabHelper is driven by: content fires it when the certificate,
@@ -608,11 +607,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // none. What decides whether a Find is the next match or a new search.
   std::u16string find_text_;
 
-  // The id of the last find request sent, and of the one that began the
-  // search in progress: a reply older than that is about a search the element
-  // has moved on from. Ids count up from 1 for the guest's life, because
-  // content refuses a reply with an id lower than one it already reported.
-  int find_request_id_ = 0;
+  // The id of the find request that began the search in progress: a reply
+  // older than that is about a search the element has moved on from. Content
+  // hands out the ids, counting up for the guest's life.
   int find_session_id_ = 0;
 
   // And the last count sent. Zero and zero, which is no find, for the reason

@@ -23,19 +23,19 @@ while it moves, which it now draws from them through.
 See cc/domicile/display_regions.h; the series is read for this by
 scripts/test-the-desk-does-not-flash-between-densities.sh.
 ---
- cc/layers/picture_layer_impl.cc              |  70 ++++++++++++++++++++--------
- cc/layers/picture_layer_impl.h               |   3 +
- cc/tiles/picture_layer_tiling.cc             |   3 +
- cc/tiles/picture_layer_tiling.h              |   6 ++-
- cc/tiles/tiling_set_raster_queue_required.cc |  76 ++++++++++++++++++++++++------
- cc/tiles/tiling_set_raster_queue_required.h  |  18 ++++++-
+ cc/layers/picture_layer_impl.cc              | 70 +++++++++++++-----
+ cc/layers/picture_layer_impl.h               |  3 +
+ cc/tiles/picture_layer_tiling.cc             |  3 +
+ cc/tiles/picture_layer_tiling.h              |  6 +-
+ cc/tiles/tiling_set_raster_queue_required.cc | 76 ++++++++++++++++----
+ cc/tiles/tiling_set_raster_queue_required.h  | 18 ++++-
  6 files changed, 139 insertions(+), 37 deletions(-)
 
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index a4466e4..2a8c561 100644
+index a4466e4ff7..2a8c56103c 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
-@@ -134,7 +134,8 @@
+@@ -134,7 +134,8 @@ void PictureLayerImpl::CopyPropertiesTo(LayerImpl* base_layer) const {
      DCHECK(!solid_color() || tilings_->num_tilings() == 0);
  
      // The pending tree should have at most a single tiling.
@@ -45,7 +45,7 @@ index a4466e4..2a8c561 100644
  
      layer_impl->set_gpu_raster_max_texture_size(gpu_raster_max_texture_size_);
  
-@@ -1552,15 +1553,33 @@
+@@ -1552,15 +1553,33 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer() {
    }
  }
  
@@ -85,7 +85,7 @@ index a4466e4..2a8c561 100644
  }
  
  void PictureLayerImpl::UpdateDomicileDisplayTilings() {
-@@ -1568,27 +1587,41 @@
+@@ -1568,27 +1587,41 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
        layer_tree_impl()->domicile_display_regions();
    const PictureLayerTiling* high_res =
        tilings_->FindTilingWithResolution(HIGH_RESOLUTION);
@@ -136,7 +136,7 @@ index a4466e4..2a8c561 100644
    }
  
    for (const float ratio : ratios) {
-@@ -1607,9 +1640,8 @@
+@@ -1607,9 +1640,8 @@ void PictureLayerImpl::UpdateDomicileDisplayTilings() {
        tiling = AddTiling(raster);
        tiling->set_resolution(NON_IDEAL_RESOLUTION);
      }
@@ -149,7 +149,7 @@ index a4466e4..2a8c561 100644
  }
  
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index ac2a487..d16dc16 100644
+index ac2a487d67..d16dc16539 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -20,6 +20,7 @@
@@ -160,7 +160,7 @@ index ac2a487..d16dc16 100644
  #include "cc/layers/layer.h"
  #include "cc/layers/tile_based_layer_impl.h"
  #include "cc/layers/tile_size_calculator.h"
-@@ -241,6 +242,8 @@
+@@ -241,6 +242,8 @@ class CC_EXPORT PictureLayerImpl
    void CleanUpTilingsOnActiveLayer();
    // DOMICILE: a tiling for each less dense monitor this layer is shown on.
    // See cc/domicile/display_regions.h.
@@ -170,10 +170,10 @@ index ac2a487..d16dc16 100644
    void UpdateDomicileDisplayTilings();
    float MinimumContentsScale() const;
 diff --git a/cc/tiles/picture_layer_tiling.cc b/cc/tiles/picture_layer_tiling.cc
-index dbd0d30..5302716 100644
+index dbd0d307bd..5302716567 100644
 --- a/cc/tiles/picture_layer_tiling.cc
 +++ b/cc/tiles/picture_layer_tiling.cc
-@@ -143,6 +143,9 @@
+@@ -143,6 +143,9 @@ void PictureLayerTiling::TakeTilesAndPropertiesFrom(
    RemoveTilesInRegion(layer_invalidation, false /* recreate tiles */);
  
    resolution_ = pending_twin->resolution_;
@@ -184,10 +184,10 @@ index dbd0d30..5302716 100644
    while (!pending_twin->tiles_.empty()) {
      auto pending_iter = pending_twin->tiles_.begin();
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index a487d76..7e78f66 100644
+index a487d76016..7e78f66e5e 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
-@@ -304,8 +304,12 @@
+@@ -304,8 +304,12 @@ class CC_EXPORT PictureLayerTiling {
                                     VisibilityChecker is_visible,
                                     bool is_tile_occluded) const {
      if (tree_ == PENDING_TREE) {
@@ -202,7 +202,7 @@ index a487d76..7e78f66 100644
        }
  
 diff --git a/cc/tiles/tiling_set_raster_queue_required.cc b/cc/tiles/tiling_set_raster_queue_required.cc
-index 9620d9f..465c59f 100644
+index 9620d9fd65..465c59ff7d 100644
 --- a/cc/tiles/tiling_set_raster_queue_required.cc
 +++ b/cc/tiles/tiling_set_raster_queue_required.cc
 @@ -7,6 +7,7 @@
@@ -213,7 +213,7 @@ index 9620d9f..465c59f 100644
  
  #include "cc/base/features.h"
  #include "cc/tiles/picture_layer_tiling_set.h"
-@@ -40,35 +41,56 @@
+@@ -40,35 +41,56 @@ TilingSetRasterQueueRequired::Create(PictureLayerTilingSet* tiling_set,
    } else {
      tiling = tiling_set->FindTilingWithResolution(HIGH_RESOLUTION);
    }
@@ -283,7 +283,7 @@ index 9620d9f..465c59f 100644
  }
  
  TilingSetRasterQueueRequired::~TilingSetRasterQueueRequired() = default;
-@@ -80,8 +102,32 @@
+@@ -80,8 +102,32 @@ bool TilingSetRasterQueueRequired::IsEmpty() const {
  void TilingSetRasterQueueRequired::Pop() {
    DCHECK(!IsEmpty());
    ++iterator_;
@@ -319,7 +319,7 @@ index 9620d9f..465c59f 100644
  
  const PrioritizedTile& TilingSetRasterQueueRequired::Top() const {
 diff --git a/cc/tiles/tiling_set_raster_queue_required.h b/cc/tiles/tiling_set_raster_queue_required.h
-index e817720..5b41726 100644
+index e817720787..5b41726b82 100644
 --- a/cc/tiles/tiling_set_raster_queue_required.h
 +++ b/cc/tiles/tiling_set_raster_queue_required.h
 @@ -6,7 +6,9 @@
@@ -332,7 +332,7 @@ index e817720..5b41726 100644
  #include "base/memory/raw_ptr_exclusion.h"
  #include "cc/cc_export.h"
  #include "cc/tiles/picture_layer_tiling_set.h"
-@@ -58,13 +60,25 @@
+@@ -58,13 +60,25 @@ class CC_EXPORT TilingSetRasterQueueRequired {
    };
  
    TilingSetRasterQueueRequired();
@@ -360,6 +360,3 @@ index e817720..5b41726 100644
  };
  
  }  // namespace cc
--- 
-2.43.0
-

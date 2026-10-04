@@ -28,7 +28,7 @@ The test is listed in ozone_unittests rather than evdev's own
  4 files changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 00bc1e7f84..473ab91e15 100644
+index d647ba048c..0b4b70347d 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -49,6 +49,8 @@ component("evdev") {

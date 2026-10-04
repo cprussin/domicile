@@ -12,14 +12,14 @@ once per monitor.
 The binder now names the frame a channel is for, and the guest names the
 frame it is embedded in; the registry tells only that page.
 ---
- chrome/browser/chrome_browser_interface_binders.cc | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ chrome/browser/chrome_browser_interface_binders.cc | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 81758bb1f6..c869fbb43c 100644
+index 3d9daaaeb6..a9bfcfdcce 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -541,7 +541,11 @@ void PopulateChromeFrameBinders(
+@@ -549,7 +549,11 @@ void PopulateChromeFrameBinders(
                      base::BindRepeating(
                          &domicile::InstallExtensionsInto,
                          Profile::FromBrowserContext(frame->GetBrowserContext())

@@ -75,10 +75,10 @@ index b4fd769cc2..af2e4ee07a 100644
      api_provider->EnableCustomElementAllowlist();
    }
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index d2667ba370..23ae6a32ef 100644
+index 8721e43284..9dbfd04983 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1190,6 +1190,10 @@ generated_interface_sources_in_core = [
+@@ -1192,6 +1192,10 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_frame_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_frame_set_element.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_frame_set_element.h",
@@ -90,10 +90,10 @@ index d2667ba370..23ae6a32ef 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index 34a5ac3e0d..cd4431808a 100644
+index 80e1a79463..34f24b01fd 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -457,6 +457,8 @@ static_idl_files_in_core = [
+@@ -458,6 +458,8 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/html_font_element.idl",
    "//third_party/blink/renderer/core/html/html_frame_element.idl",
    "//third_party/blink/renderer/core/html/html_frame_set_element.idl",
@@ -103,10 +103,10 @@ index 34a5ac3e0d..cd4431808a 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-index caba41d602..543ebe24de 100644
+index 54f0ec22b6..f2669e1f5c 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-@@ -1637,11 +1637,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
+@@ -1642,11 +1642,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
      case ElementType::kHTMLIFrameElement:
      case ElementType::kHTMLFencedFrameElement:
      case ElementType::kHTMLPersistentWidgetElement:
@@ -145,7 +145,7 @@ index 1d7cd61e59..df8fce03ec 100644
    "fenced_frame/fence.h",
    "fenced_frame/fenced_frame_config.cc",
 diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5 b/third_party/blink/renderer/core/html/html_attribute_names.json5
-index f686f3b474..a98fc053c9 100644
+index a35afba122..cd3fa15785 100644
 --- a/third_party/blink/renderer/core/html/html_attribute_names.json5
 +++ b/third_party/blink/renderer/core/html/html_attribute_names.json5
 @@ -22,6 +22,7 @@
@@ -210,7 +210,7 @@ index 7baba8715a..aee1a7366a 100644
        name: "xmp",
        interfaceName: "HTMLPreElement",
 diff --git a/third_party/blink/renderer/core/html/resources/html.css b/third_party/blink/renderer/core/html/resources/html.css
-index 7a26c912cc..25a9cbf039 100644
+index 6e230a486e..94058a1001 100644
 --- a/third_party/blink/renderer/core/html/resources/html.css
 +++ b/third_party/blink/renderer/core/html/resources/html.css
 @@ -177,7 +177,7 @@ video, canvas, img {
@@ -222,7 +222,7 @@ index 7a26c912cc..25a9cbf039 100644
     overflow: clip !important;
     overflow-clip-margin: content-box !important;
  }
-@@ -1869,6 +1869,17 @@ iframe {
+@@ -1881,6 +1881,17 @@ iframe {
      border: 2px inset
  }
  
