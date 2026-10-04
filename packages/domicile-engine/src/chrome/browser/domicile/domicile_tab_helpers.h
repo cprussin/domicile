@@ -37,6 +37,13 @@ namespace domicile {
 // Then it adds the guest to its profile's desk -- domicile_desk.h, slice 2 --
 // which is what makes it a tab chrome.tabs can find.
 //
+// EXCEPT AN EXTENSION'S ACTION POPUP: a <webview> with `extensionpopup` (see
+// WebViewGuest::extension_popup). That guest gets the popup view type and
+// none of the rest, as Chrome's toolbar bubble is an ExtensionHost and no tab.
+// An extension that asks whether it is in a tab -- Bitwarden's, which sizes
+// its body only in a popup, and otherwise fills whatever it is given -- gets
+// Chrome's answer.
+//
 // Run by WebViewGuest on each guest it makes, as the GuestCreatedCallback the
 // frame binders hand BindWebViewGuestHost -- here and not in
 // //components/domicile because both helpers are //chrome's.

@@ -96,6 +96,7 @@ class WebViewGuestHost final
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
     std::optional<int> popup_window;
+    bool extension_popup;
     mojo::ReportBadMessageCallback report_bad_message;
   };
 
@@ -103,7 +104,8 @@ class WebViewGuestHost final
   void CreateGuest(const blink::LocalFrameToken& placeholder_frame,
                    mojo::PendingReceiver<mojom::WebViewGuest> guest,
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
-                   std::optional<int32_t> popup_window) override {
+                   std::optional<int32_t> popup_window,
+                   bool extension_popup) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
     if (placeholder == nullptr) {
@@ -118,9 +120,9 @@ class WebViewGuestHost final
       // run that shows nothing.
       LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
                    "arrived; waiting for it.";
-      waiting_ =
-          WaitingRequest{placeholder_frame, std::move(guest), std::move(client),
-                         popup_window, mojo::GetBadMessageCallback()};
+      waiting_ = WaitingRequest{
+          placeholder_frame, std::move(guest), std::move(client),
+          popup_window,      extension_popup,  mojo::GetBadMessageCallback()};
       return;
     }
 
@@ -138,7 +140,7 @@ class WebViewGuestHost final
 
     WebViewGuest::CreateAndAttach(render_frame_host(), *placeholder,
                                   std::move(guest), std::move(client),
-                                  popup_window, created_);
+                                  popup_window, extension_popup, created_);
   }
 
   // content::WebContentsObserver:
@@ -186,7 +188,8 @@ class WebViewGuestHost final
 
     WebViewGuest::CreateAndAttach(
         render_frame_host(), *placeholder, std::move(request.guest),
-        std::move(request.client), request.popup_window, created_);
+        std::move(request.client), request.popup_window,
+        request.extension_popup, created_);
   }
 
   // The frame `placeholder_frame` names, or null if the browser has none.
@@ -406,9 +409,11 @@ void WebViewGuest::CreateAndAttach(
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
     std::optional<int> popup_window,
+    bool extension_popup,
     const GuestCreatedCallback& created) {
-  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
-      owner, std::move(receiver), std::move(client), popup_window));
+  std::unique_ptr<WebViewGuest> guest = base::WrapUnique(
+      new WebViewGuest(owner, std::move(receiver), std::move(client),
+                       popup_window, extension_popup));
 
   // `guest_delegate` is what makes the new WebContents a guest, and content
   // asks it for its owner while constructing -- which is why the delegate is
@@ -500,9 +505,11 @@ WebViewGuest::WebViewGuest(
     content::RenderFrameHost& owner,
     mojo::PendingReceiver<mojom::WebViewGuest> receiver,
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
-    std::optional<int> popup_window)
+    std::optional<int> popup_window,
+    bool extension_popup)
     : owner_rfh_id_(owner.GetGlobalId()),
       popup_window_(popup_window),
+      extension_popup_(extension_popup),
       receiver_(this, std::move(receiver)),
       client_(std::move(client)) {}
 
