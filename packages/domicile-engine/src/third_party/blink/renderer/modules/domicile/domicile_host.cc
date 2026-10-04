@@ -288,6 +288,34 @@ DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
   return window_states_.back();
 }
 
+namespace {
+
+// Enough for every address and focus request a shell could plausibly miss
+// while it loads, and few enough that a page that never listens costs nothing.
+constexpr wtf_size_t kMostHeld = 64;
+
+}  // namespace
+
+void DomicileHost::DispatchOrHold(Event& event) {
+  if (HasEventListeners(event.type())) {
+    DispatchEvent(event);
+  } else if (held_.size() < kMostHeld) {
+    held_.push_back(&event);
+  }
+}
+
+void DomicileHost::DeliverHeld(const AtomicString& event_type) {
+  HeapVector<Member<Event>> deliver;
+  HeapVector<Member<Event>> keep;
+  for (const Member<Event>& event : held_) {
+    (event->type() == event_type ? deliver : keep).push_back(event);
+  }
+  held_ = std::move(keep);
+  for (const Member<Event>& event : deliver) {
+    DispatchEvent(*event);
+  }
+}
+
 void DomicileHost::WindowsChanged() {
   HeapVector<Member<DomicileWindow>> windows;
   windows.reserve(window_states_.size());
@@ -825,7 +853,7 @@ void DomicileHost::AppCursor(const String& app_id,
 
 void DomicileHost::ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut,
                                    base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileShortcutEvent>(
+  DispatchOrHold(*MakeGarbageCollected<DomicileShortcutEvent>(
       domicile_event_names::Shortcut(), shortcut->keycode, shortcut->alt,
       shortcut->ctrl, shortcut->shift, shortcut->meta, Arrival(arrival)));
 }
@@ -1187,13 +1215,13 @@ void DomicileHost::FocusChanged(const String& app_id,
 // page that conflated them would grant every request by drawing it as granted.
 void DomicileHost::FocusRequested(const String& app_id,
                                   base::TimeTicks arrival) {
-  DispatchEvent(*MakeGarbageCollected<DomicileAppEvent>(
+  DispatchOrHold(*MakeGarbageCollected<DomicileAppEvent>(
       domicile_event_names::Focusrequested(), app_id, String(), std::nullopt,
       std::nullopt, Arrival(arrival)));
 }
 
 void DomicileHost::OpenUrl(const String& url) {
-  DispatchEvent(*MakeGarbageCollected<DomicileOpenUrlEvent>(
+  DispatchOrHold(*MakeGarbageCollected<DomicileOpenUrlEvent>(
       domicile_event_names::Openurl(), url));
 }
 
@@ -1227,6 +1255,20 @@ void DomicileHost::AddedEventListener(
     const AtomicString& event_type,
     RegisteredEventListener& registered_listener) {
   EventTarget::AddedEventListener(event_type, registered_listener);
+  // On a task of its own rather than now: the listener is being added inside
+  // the page's own `addEventListener` call, which should return before
+  // anything is dispatched to it.
+  for (const Member<Event>& event : held_) {
+    if (event->type() == event_type) {
+      if (window_) {
+        window_->GetTaskRunner(TaskType::kInternalDefault)
+            ->PostTask(FROM_HERE,
+                       BindOnce(&DomicileHost::DeliverHeld,
+                                WrapWeakPersistent(this), event_type));
+      }
+      break;
+    }
+  }
   // Binding is what opens the inbound direction, so a listener registered
   // before anything has been called has to be what opens it. Ignoring the
   // failure is deliberate: there is no exception channel here, and a document
@@ -1241,6 +1283,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(windows_);
+  visitor->Trace(held_);
   visitor->Trace(last_clipboard_);
   visitor->Trace(last_tray_items_);
   visitor->Trace(last_notifications_);

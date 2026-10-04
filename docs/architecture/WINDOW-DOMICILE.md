@@ -68,9 +68,11 @@ strings today: `size?: { width, height }`, `title`, `minSize?`, `maxSize?`,
 
 ### Moments are events, and the engine holds the first
 
-Some messages have no current value: `focusrequested`, `openurl`, `shortcut`,
-`audiolevels`. The engine queues each type until its first listener is
-attached, then delivers the queue. One rule replaces `DomicileClient.#held`.
+Some messages have no current value: `focusrequested`, `openurl`, `shortcut`.
+The engine queues each type until its first listener is attached, then
+delivers the queue on a task of its own. One rule replaces
+`DomicileClient.#held`. `audiolevels` is not held: it is a meter that flows
+only while something listens, and a stale sample is worth nothing.
 
 ### Requests return promises
 
@@ -151,7 +153,8 @@ Each step ships alone.
 - [x] the rest of the state as attributes: theme, lock, idle, battery, audio,
       extensions, tray, notifications, clipboard, modifiers
       (`guard-desk-state.sh`)
-- [ ] the engine queues moment events until a listener exists
+- [x] the engine queues moment events until a listener exists
+      (`guard-held-moments.sh`)
 - [ ] search and preview return promises
 - [ ] chords resolved by the engine; `shell_config` leaves the page; `bindKeys`
       becomes a pure helper over `grabShortcut` and `shortcut`
