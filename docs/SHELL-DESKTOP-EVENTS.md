@@ -8,12 +8,19 @@ tray icons and notifications. Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md).
 The shell is one page covering the bounding box of every display, in logical
 pixels. Each display is a rectangle in it.
 
+```ts
+domicile.displays; // the current list, or undefined until the first message
+domicile.on("displays", ({ displays }) => {
+  layOut(displays); // DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
+});
+```
+
 - On a tty the engine shows the page on every monitor, rotated and scaled per
   the config. Pointer events are always in page pixels. The shell does nothing
   for rotation or scale.
-- Each display reports `mode` (the panel's unrotated scanout pixels) and
-  `transform`. Both are informational. A 4K panel rotated 90° at scale 1.2 has
-  a 3840×2160 mode and an 1800×3200 box.
+- `modeWidth`×`modeHeight` (the panel's unrotated scanout pixels) and
+  `transform` are informational. A 4K panel rotated 90° at scale 1.2 has a
+  3840×2160 mode and an 1800×3200 box.
 - Config: [SHELL-CONFIG.md](SHELL-CONFIG.md#displays),
   [`transform`](SHELL-CONFIG.md#transform).
 
@@ -43,8 +50,10 @@ can animate the switch:
 In a view transition, call `themeCaptured` inside the update callback and
 return a promise that resolves on `windows_theme`.
 
-`ThemeProvider` in `@domicile-desktop/component-library` does all of this:
-pass `turnWindows` from its `ThemeSource` to `themeCaptured`.
+`ThemeProvider` in `@domicile-desktop/component-library` runs the view
+transition. Implement its `ThemeSource.turnWindows` to call
+`domicile.themeCaptured(theme)` and resolve on `windows_theme` (see
+manganese's `theme/host-theme.ts`).
 
 ## System tray
 

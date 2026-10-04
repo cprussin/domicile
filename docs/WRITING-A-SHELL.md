@@ -275,7 +275,7 @@ ref. The same applies to `<webview>` events.
 
 `domicile.on("focus_requested", ({ app_id }) => …)` is `xdg-activation`: an app
 asking to come forward (for example, a browser asked to open a link). The
-compositor does not grant it. Call `domicile.focusApp(app_id)` to grant it, or
+compositor does not grant it. Call `focusApp(domicile, app_id)` to grant it, or
 ignore it.
 
 ### Where focus is
