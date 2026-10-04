@@ -291,6 +291,10 @@ through.
   default; `programs.domicile.desktops` lists others. The package carries the
   session file, so `services.displayManager.sessionPackages = [manganese]`
   does the same without the module.
+- **A desk with a shell of its own** lists `domicile` itself:
+  `desktops = [domicile.packages.${system}.domicile]` is a `domicile` session
+  running the shell its config names, which the home-manager module's `shell`
+  writes there.
 - **The `domicile` PAM service** that `lock.pam_service = "domicile"` names.
 - **Portal routing.** With `xdg.portal.enable`, Domicile answers `Settings` and
   its `domicile-portals.conf` sends everything else to `xdg-desktop-portal-gtk`,
