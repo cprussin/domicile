@@ -7,7 +7,9 @@ asks the question that reached it.
 **Live:** a site's fraud-detection script (ThreatMetrix) asked from a sandboxed
 frame, and the checked engine aborted and took the desktop with it.
 
-Read at `cffcd2bf5a88`. **Re-read at trunk before filing.**
+Read at `cffcd2bf5a88`. **Possibly fixed upstream:** at `5fb9edc0544d` the
+`DCHECK` is gone, with no opaque check in its place. Patch 0069 still answers
+none for an opaque origin. Re-read at trunk before filing, or drop this.
 
 ---
 

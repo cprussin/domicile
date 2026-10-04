@@ -147,7 +147,7 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  create mode 100644 ui/events/ozone/evdev/input_device_opener.cc
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 20597d0300..00bc1e7f84 100644
+index f5a676fcd6..d647ba048c 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -73,6 +73,7 @@ component("evdev") {

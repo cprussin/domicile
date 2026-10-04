@@ -48,10 +48,10 @@ not yet built or run on hardware.
  5 files changed, 60 insertions(+), 2 deletions(-)
 
 diff --git a/ui/views/BUILD.gn b/ui/views/BUILD.gn
-index 968bd70..1db6172 100644
+index 4b93fb6b10..874a0e1382 100644
 --- a/ui/views/BUILD.gn
 +++ b/ui/views/BUILD.gn
-@@ -942,6 +942,7 @@ component("views") {
+@@ -944,6 +944,7 @@ component("views") {
          "widget/desktop_aura/desktop_screen_position_client.cc",
          "widget/desktop_aura/desktop_window_tree_host.cc",
        ]
@@ -60,7 +60,7 @@ index 968bd70..1db6172 100644
          public += [ "widget/desktop_aura/desktop_window_tree_host_win.h" ]
          sources += [
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
-index 9e25f07..f1880f9 100644
+index 9e25f070df..f1880f9eaa 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 @@ -4,18 +4,25 @@
@@ -113,7 +113,7 @@ index 9e25f07..f1880f9 100644
 +
  }  // namespace views
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index 070dff3..11c0425 100644
+index 070dff3559..11c0425180 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 @@ -23,6 +23,9 @@ class NativeCursorManagerDelegate;
@@ -148,7 +148,7 @@ index 070dff3..11c0425 100644
  
  }  // namespace views
 diff --git a/ui/wm/core/cursor_loader.cc b/ui/wm/core/cursor_loader.cc
-index 13967a2..3439ce6 100644
+index 13967a22d7..3439ce67f8 100644
 --- a/ui/wm/core/cursor_loader.cc
 +++ b/ui/wm/core/cursor_loader.cc
 @@ -100,6 +100,20 @@ void CursorLoader::SetColor(SkColor color) {
@@ -191,7 +191,7 @@ index 13967a2..3439ce6 100644
      return nullptr;
    }
 diff --git a/ui/wm/core/cursor_loader.h b/ui/wm/core/cursor_loader.h
-index 4ab9f71..5f0f637 100644
+index 4ab9f7183e..5f0f6379a5 100644
 --- a/ui/wm/core/cursor_loader.h
 +++ b/ui/wm/core/cursor_loader.h
 @@ -7,6 +7,7 @@

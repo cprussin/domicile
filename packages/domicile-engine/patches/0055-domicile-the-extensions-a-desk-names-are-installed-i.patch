@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
 Date: Mon, 28 Sep 2026 22:00:00 +0000
-Subject: [PATCH] domicile: the extensions a desk names are installed into
- its profile
+Subject: [PATCH] domicile: the extensions a desk names are installed into its
+ profile
 
 The compositor sends the extensions a desk's config names as
 `extensions` on the control socket. The channel stops it in the browser
@@ -23,12 +23,12 @@ WRITTEN BY HAND, AGAINST THE SERIES RATHER THAN IN A CHECKOUT: the
 file each hunk applies to was rebuilt from the pin and the patches
 before it, and both blobs are that file's.
 ---
- chrome/browser/chrome_browser_interface_binders.cc | 13 +++++++++++++
- chrome/browser/prefs/browser_prefs.cc              | 6 ++++++
- 2 files changed, 19 insertions(+)
+ .../browser/chrome_browser_interface_binders.cc   | 15 ++++++++++++++-
+ chrome/browser/prefs/browser_prefs.cc             |  6 ++++++
+ 2 files changed, 20 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 52afd43cca..b465203b7e 100644
+index 6a1ca6a186..fb71a7d67c 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -39,7 +39,7 @@ index 52afd43cca..b465203b7e 100644
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
-@@ -526,7 +527,19 @@ void PopulateChromeFrameBinders(
+@@ -534,7 +535,19 @@ void PopulateChromeFrameBinders(
                  // reason above: NativeTheme belongs to the UI thread.
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
@@ -61,19 +61,19 @@ index 52afd43cca..b465203b7e 100644
  
    // Domicile's engine fork: a <webview> asking for a guest to put behind it.
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index 35b02686a1..c84607a977 100644
+index e87e891e4d..d0f812f626 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -3,6 +3,8 @@
- // found in the LICENSE file.
+@@ -4,6 +4,8 @@
  
  #include "chrome/browser/prefs/browser_prefs.h"
-+
-+#include "chrome/browser/domicile/domicile_extension_installer.h"
  
++#include "chrome/browser/domicile/domicile_extension_installer.h"
++
  #include <array>
  #include <optional>
-@@ -2036,6 +2038,10 @@
+ #include <string>
+@@ -2091,6 +2093,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
    extensions::RegisterSettingsOverriddenUiPrefs(registry);
    ExtensionSettingsOverriddenDialog::RegisterProfilePrefs(registry);
  

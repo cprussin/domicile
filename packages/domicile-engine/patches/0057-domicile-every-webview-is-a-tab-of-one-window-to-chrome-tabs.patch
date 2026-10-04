@@ -61,7 +61,7 @@ index bdd890cc79..a462b484af 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index cee5c3a403..8e1bc6d9c6 100644
+index 61d17e83b6..23f9e21881 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
 @@ -266,6 +266,8 @@ source_set("extensions") {
@@ -74,7 +74,7 @@ index cee5c3a403..8e1bc6d9c6 100644
      "error_console/error_console.h",
      "error_console/error_console_factory.cc",
 diff --git a/chrome/browser/extensions/chrome_extension_function_details.cc b/chrome/browser/extensions/chrome_extension_function_details.cc
-index 9cfacb4358..a65e2cabaf 100644
+index 1e1d95cf28..dfedf25a3c 100644
 --- a/chrome/browser/extensions/chrome_extension_function_details.cc
 +++ b/chrome/browser/extensions/chrome_extension_function_details.cc
 @@ -5,6 +5,7 @@
@@ -100,7 +100,7 @@ index 9cfacb4358..a65e2cabaf 100644
    if (function_->dispatcher()) {
      if (WindowController* window_controller =
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
-index dd919b9675..c7b40dda6f 100644
+index 20c6eaf858..829facdd40 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
 @@ -24,6 +24,7 @@
@@ -135,7 +135,7 @@ index dd919b9675..c7b40dda6f 100644
    // Prerendering tab is not visible and it cannot be in `TabStripModel`, if the
    // tab id exists as a prerendering tab, and the API will returns
    // `api::tabs::TAB_INDEX_NONE` for `out_tab_index` and a valid `WebContents`.
-@@ -1207,6 +1218,8 @@ void ExtensionTabUtil::ForEachTab(
+@@ -1209,6 +1220,8 @@ void ExtensionTabUtil::ForEachTab(
      callback.Run(tab->GetContents());
      return true;
    });
@@ -144,6 +144,3 @@ index dd919b9675..c7b40dda6f 100644
  }
  
  // static
--- 
-2.43.0
-

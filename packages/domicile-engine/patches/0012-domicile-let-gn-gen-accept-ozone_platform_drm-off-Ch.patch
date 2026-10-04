@@ -332,7 +332,7 @@ index 2a1b4e5e0e..4c8e4ea15c 100644
  #include "base/threading/thread_restrictions.h"
  #include "base/time/time.h"
 diff --git a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
-index 3d762d4eb7..74b707976f 100644
+index 425dbdb1a6..d6b36b359d 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
 @@ -11,6 +11,7 @@

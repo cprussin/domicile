@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: domicile CI <ci@domicile.invalid>
 Date: Thu, 1 Oct 2026 00:00:00 +0000
-Subject: [PATCH] domicile: a page in a browser window may show
- notifications
+Subject: [PATCH] domicile: a page in a browser window may show notifications
 
 Chrome asks before a site may notify, and the asking is a permission
 bubble drawn over the page -- on a desktop, over the shell, where there
@@ -19,7 +18,7 @@ serves and the shell draws.
  1 file changed, 12 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index a462b48..85cc7ef 100644
+index a462b484af..85cc7ef78a 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -8,6 +8,10 @@
@@ -48,6 +47,3 @@ index a462b48..85cc7ef 100644
  
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
--- 
-2.43.0
-

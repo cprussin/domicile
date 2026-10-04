@@ -31,7 +31,7 @@ lands on its edge, or a slow hand would never get across.
  4 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 070825a..fc56bbf 100644
+index 070825a50b..fc56bbff53 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -175,6 +175,13 @@ void DrmCursor::OnWindowTurned(gfx::AcceleratedWidget window,
@@ -58,7 +58,7 @@ index 070825a..fc56bbf 100644
      CrossLocked(*crossing);
    } else {
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index c683d4a..742a6c4 100644
+index c683d4aad7..742a6c4b5f 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
 @@ -83,6 +83,11 @@ class DrmCursor : public CursorDelegateEvdev {
@@ -82,7 +82,7 @@ index c683d4a..742a6c4 100644
    const raw_ptr<DrmWindowHostManager> window_manager_
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 96da427..4af83ef 100644
+index 96da42700e..4af83ef648 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -161,6 +161,11 @@ class OzonePlatformDrm : public OzonePlatform {
@@ -98,7 +98,7 @@ index 96da427..4af83ef 100644
  
    // DOMICILE: the desktop's clipboards, which without this the browser does
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index b8d4a46..a99f31a 100644
+index b8d4a462fb..a99f31aeaa 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -21,6 +21,7 @@

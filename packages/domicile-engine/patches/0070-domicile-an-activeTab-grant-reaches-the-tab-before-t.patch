@@ -21,7 +21,7 @@ NotifyGranted is unchanged and sends it again.
  1 file changed, 16 insertions(+)
 
 diff --git a/extensions/browser/permissions/active_tab_permission_granter.cc b/extensions/browser/permissions/active_tab_permission_granter.cc
-index 37bd0fc..80df21b 100644
+index 37bd0fc5f3..80df21bcc2 100644
 --- a/extensions/browser/permissions/active_tab_permission_granter.cc
 +++ b/extensions/browser/permissions/active_tab_permission_granter.cc
 @@ -188,6 +188,22 @@ void ActiveTabPermissionGranter::GrantIfRequested(const Extension* extension) {
@@ -47,6 +47,3 @@ index 37bd0fc..80df21b 100644
      SetCorsOriginAccessList(
          browser_context, *extension,
          base::BindOnce(&ActiveTabPermissionGranter::NotifyGranted,
--- 
-2.43.0
-
