@@ -1,12 +1,12 @@
-// Where a file picker is, and where what is typed in its box takes it.
+// Path handling for the file picker: navigation, typed paths and the path
+// bar.
 //
-// EVERY PATH HERE IS ABSOLUTE. The picker starts in the home the engine tells
-// it — see `DomicileFileChooserEvent.home` — and walks from there, so `~` is
-// only ever something typed or drawn, never something sent.
+// All paths are absolute. `~` is only typed or displayed, never sent; the
+// home comes from `DomicileFileChooserEvent.home`.
 
 import { pathIn } from "./path-in";
 
-/** A step of the path bar: what it says, and where clicking it goes. */
+/** A path bar segment and the directory it links to. */
 export type Crumb = { label: string; path: string };
 
 /** The directory above `directory`, or `undefined` at the root. */
@@ -20,10 +20,10 @@ export const parentOf = (directory: string): string | undefined => {
 };
 
 /**
- * Where the box takes the picker, the way a shell's prompt reads a path:
- * everything up to the last `/` is walked — from the root after a leading `/`,
- * from the home after `~/`, and from `directory` otherwise, with `..` going up
- * — and what follows it narrows the listing. A box with no `/` walks nowhere.
+ * Splits typed text into a directory and a filter, as a shell reads a path.
+ *
+ * Text up to the last `/` is resolved from root (leading `/`), home (`~/`) or
+ * `directory`, with `..` going up. The rest is the filter.
  */
 export const walked = ({
   directory,
@@ -42,7 +42,7 @@ export const walked = ({
   };
 };
 
-/** `path` as it is drawn: under the home, from `~`. */
+/** `path` for display, with the home shown as `~`. */
 export const shownPath = (path: string, home: string): string => {
   if (path === home) {
     return "~";
@@ -52,8 +52,8 @@ export const shownPath = (path: string, home: string): string => {
 };
 
 /**
- * The path bar's steps to `directory`: from the home for anywhere under it,
- * which is where nearly everything picked is, and from the root otherwise.
+ * The path bar segments for `directory`, starting from `~` when under the
+ * home and from `/` otherwise.
  */
 export const crumbsOf = (directory: string, home: string): readonly Crumb[] => {
   const underHome = directory === home || directory.startsWith(`${home}/`);
@@ -68,7 +68,7 @@ export const crumbsOf = (directory: string, home: string): readonly Crumb[] => {
   ];
 };
 
-/** The segments a typed path starts from, before its own are walked. */
+/** The base segments a typed path resolves from. */
 const startOf = (
   path: string,
   directory: string,
@@ -81,7 +81,7 @@ const startOf = (
   }
 };
 
-/** `start` walked by the segments of `path`, `..` going up and never past the root. */
+/** Resolves `path` against `start`; `..` never goes above root. */
 const resolved = (start: readonly string[], path: string): readonly string[] =>
   segments(path.startsWith("~/") ? path.slice(2) : path).reduce<
     readonly string[]

@@ -6,11 +6,7 @@ import { useModifiers } from "./useModifiers";
 
 const HELD = { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false };
 
-/**
- * A stand-in for the client: it takes the handler the hook registers and lets
- * a test say what the host said. Narrower than a `DomicileClient` because the
- * hook uses two of its members.
- */
+/** Fake client that captures the hook's handler so a test can send messages. */
 const client = () => {
   const handlers = new Map<string, (message: never) => void>();
   const domicile = {
@@ -23,7 +19,7 @@ const client = () => {
   } as unknown as DomicileClient;
   return {
     domicile,
-    /** The host saying which modifiers are held. */
+    /** Send a `modifiers` message. */
     says: (held: typeof HELD) => {
       act(() => {
         handlers.get("modifiers")?.(held as never);
@@ -32,10 +28,7 @@ const client = () => {
   };
 };
 
-/**
- * A browser window's page taking the keyboard, which is its `<webview>` being
- * the shell document's `activeElement` — see `BrowserWindow`.
- */
+/** Focus a `<webview>`, as a browser window does (see `BrowserWindow`). */
 const focusBrowserWindow = (): void => {
   const view = document.createElement("webview");
   view.tabIndex = 0;
@@ -58,8 +51,8 @@ describe("useModifiers", () => {
   });
 
   it("takes the host's word while a browser window's page has the keyboard", () => {
-    // The page is a guest with a document of its own, so this page hears none
-    // of its keys: the engine reports what the guest holds instead.
+    // This page gets no key events from the guest, so the engine reports its
+    // modifiers.
     const { domicile, says } = client();
     const { result } = renderHook(() => useModifiers(domicile));
     focusBrowserWindow();
@@ -68,8 +61,7 @@ describe("useModifiers", () => {
   });
 
   it("lets go of everything when the desktop's window loses the keyboard", () => {
-    // A release while the host has the keyboard — Meta+2 switching the host's
-    // workspace — is a keyup this page is never sent.
+    // This page gets no keyup while the host has the keyboard.
     const { domicile } = client();
     const { result } = renderHook(() => useModifiers(domicile));
     act(() => {
@@ -80,8 +72,7 @@ describe("useModifiers", () => {
   });
 
   it("reads what is held off the pointer as well as the keys", () => {
-    // Every pointer event carries the modifiers held when it happened, so a
-    // release that went missing is corrected by the next move of the mouse.
+    // Pointer events carry modifier state, so they correct a missed release.
     const { domicile } = client();
     const { result } = renderHook(() => useModifiers(domicile));
     act(() => {
@@ -92,8 +83,8 @@ describe("useModifiers", () => {
   });
 
   it("does not take it while this page has the keyboard", () => {
-    // The compositor's copy of this page's own keys, which is short every key
-    // pressed while no client held the keyboard — see the hook.
+    // The compositor's state misses keys pressed while no client had the
+    // keyboard (see the hook).
     const { domicile, says } = client();
     const { result } = renderHook(() => useModifiers(domicile));
     act(() => {

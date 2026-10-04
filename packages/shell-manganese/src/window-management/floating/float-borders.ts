@@ -1,6 +1,5 @@
-// Where a floating window's edges can be taken hold of without the desktop's
-// modifier: a ring around its frame, one strip per edge and a square per
-// corner.
+// The resize borders around a floating window, usable without the modifier:
+// one strip per edge and one square per corner.
 
 import { Direction, isForward } from "../direction";
 import type { Rect } from "../rect";
@@ -8,18 +7,15 @@ import { GrabCursor } from "../useGrabCursor";
 import type { Float, Grip } from "./float";
 
 /**
- * How far into the window a border reaches: enough to find without hunting
- * for it, and little enough to leave the client its own edge pixels.
+ * How far a border reaches into the window. Small, so the client keeps its
+ * edge pixels.
  */
 const INSIDE = 4;
 
-/**
- * How far out past the window a border reaches. A float has no gap beside it
- * to split, so this is what makes the edge easy to find.
- */
+/** How far a border reaches outside the window, to make it easy to hit. */
 const OUTSIDE = 6;
 
-/** How big a corner's square is: bigger than a strip is thick, so it is found. */
+/** A corner square's size, larger than a strip's thickness to ease hitting. */
 const CORNER = 16;
 
 /** Every edge and corner, clockwise from the top-left. */
@@ -34,14 +30,14 @@ const GRIPS: readonly Grip[] = [
   { horizontal: Direction.Left, vertical: undefined },
 ];
 
-/** One part of a floating window's ring that dragging resizes it by. */
+/** One resize border of a floating window. */
 export type FloatBorder = {
   cursor: GrabCursor;
   grip: Grip;
   rect: Rect;
 };
 
-/** The ring of borders around a floating window. */
+/** All resize borders of a floating window. */
 export const floatBordersOf = (float: Float): readonly FloatBorder[] =>
   GRIPS.map((grip) => {
     const corner = grip.horizontal !== undefined && grip.vertical !== undefined;
@@ -72,9 +68,8 @@ const cursorOf = ({ horizontal, vertical }: Grip): GrabCursor => {
 };
 
 /**
- * One axis of a border: where the grip has no `side` on it, the frame's whole
- * length between the corners; else a strip, or a `corner`'s square, over that
- * side.
+ * A border's extent on one axis: the length between the corners when the grip
+ * has no `side` on it, otherwise a strip or `corner` square over that side.
  */
 const spanOf = (
   start: number,

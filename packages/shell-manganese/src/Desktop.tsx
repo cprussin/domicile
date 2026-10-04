@@ -38,92 +38,75 @@ import { WindowAction } from "./window-management/window-state";
 
 type Props = {
   domicile: DomicileClient;
-  /** The keys this desktop binds itself, under the config's. */
+  /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
-  /** What goes on every monitor's bar. */
+  /** The layout of every monitor's bar. */
   topBar: TopBarLayout;
 };
 
 /**
- * The desktop: a bar across the top of every monitor, the windows of the
- * workspace each one is showing under it, and the panels over all of it.
+ * The desktop: a bar on every monitor, the windows of each monitor's
+ * workspace, and the panels over them.
  *
- * **ONE PAGE FOR THE DESK.** The page spans every monitor, and renders a
- * {@link Monitor} for each, each in its own region of the page — and one
- * {@link Stage} over all of them, which draws every window once at its place
- * on the page.
- *
- * So the state above the monitors is the desk's and not a screen's: the
- * workspaces span every monitor the way sway's do, a workspace is shown on one
- * screen at a time, and asking for one that is already in view moves the
- * keyboard to the screen showing it rather than taking the work off it.
+ * One page spans every monitor. It renders a {@link Monitor} per display and
+ * one {@link Stage} that draws every window. Workspaces are shared across
+ * monitors, as in sway. See `docs/architecture/ONE-PAGE-FOR-THE-DESK.md`.
  */
 export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
   const displays = useDisplays();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
 
-  // Super is what hands the pointer back to the page, and Shift is what makes
-  // a drag a resize. Both come off this page's own keyboard events — the
-  // desktop is the chrome's window, so the compositor's own answer is these
-  // keystrokes handed back short — and off the engine's word for a browser
-  // window's page, whose keys this page never hears.
+  // Super returns the pointer to the page; Shift turns a drag into a resize.
+  // Read from this page's key events and from the engine's report for browser
+  // windows, whose keys this page never sees.
   const { modifiers, spendShift } = useModifiers(domicile);
 
-  // The launcher's rows are the host's answer to what is in its box: the
-  // compositor keeps an index of the home and searches it, and all that
-  // crosses into this page is what matched. One function for the life of the
-  // client, because a new one would be a new search.
+  // The compositor indexes the home directory and returns matches; the page
+  // has no filesystem. Memoized because a new function would restart the
+  // search.
   const search = useCallback(
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
-  // And the applications installed, which the compositor reads from the
-  // machine's desktop entries for the same reason: a page has no filesystem.
+  // Installed apps, read by the compositor from desktop entries.
   const searchApps = useCallback(
     (query: string) => domicile.searchApps(query),
     [domicile],
   );
-  // Asked while the panel is shut rather than as it opens, so its empty box's
-  // rows are drawn with it instead of landing a moment later and pushing the
-  // rest down.
+  // Fetched while the launcher is closed so its rows render with it rather
+  // than a moment later.
   const opening = useOpeningApps(searchApps, windows.launcherOpen);
-  // And its preview, of the same index, for the same reason.
+  // File previews, from the same index.
   const preview = useCallback(
     (path: string) => domicile.previewFile(path),
     [domicile],
   );
 
-  // Pushed rather than asked for, which is the other shape: a copy is an event
-  // the compositor already hears, so the history is here before the panel is
-  // opened rather than fetched when it is.
+  // Clipboard history is pushed by the compositor, so it is ready before the
+  // panel opens.
   const clipboard = useClipboard(domicile);
 
-  // And the extensions' actions, pushed for the same reason. Once for the desk
-  // rather than once per bar: `on` is a single slot, and the page draws a bar
-  // per monitor.
+  // Subscribed once for the desk, not per bar: `on` has a single slot and
+  // there is a bar per monitor.
   const extensions = useExtensions(domicile);
 
-  // And the system tray's icons, pushed and held once for the desk for the
-  // same reasons.
+  // Tray icons, subscribed once for the desk.
   const tray = useTray(domicile);
-  // And the order the user dragged the tray into, once for the desk so a drag
-  // on one monitor's bar is a drag on every one's.
+  // Tray order is shared so a drag on one bar reorders every bar.
   const trayOrder = useTrayOrder(
     trayEntries(tray, extensions, []).map(({ key }) => key),
   );
 
-  // And the desk's notifications, pushed and held once for the desk for the
-  // tray's reasons. The toasts are this page's: one manager for the life of
-  // the page, because the toaster subscribes to it once.
+  // Notifications, subscribed once for the desk. One toast manager for the
+  // page's life, because the toaster subscribes to it once.
   const [toasts] = useState(createToastManager);
   const notifications = useNotifications(domicile, toasts);
   const { read } = notifications;
   const now = useNow();
-  // The screen the drawer is out on — the one whose bell was pressed — or
-  // `undefined` while it is in. Opening it is reading everything in it, and
-  // takes every toast down: each one is in the drawer, and a deck over the
-  // drawer would be the same notifications twice.
+  // The screen whose bell opened the drawer, or `undefined` when closed.
+  // Opening it marks everything read and closes all toasts, which the drawer
+  // already shows.
   const [notificationsOn, setNotificationsOn] = useState<string | undefined>(
     undefined,
   );
@@ -137,23 +120,18 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
     [read, toasts],
   );
 
-  // And whether the desk is locked, which is pushed for a harder reason: it is
-  // the compositor's state rather than this page's, because the compositor is
-  // what refuses to put a forwarded keystroke into the seat. So there is nothing
-  // here to set — a reload of this page does not open the desk, and this hook is
-  // told where it stands as the page connects.
+  // Lock state belongs to the compositor, which is what blocks input. The page
+  // cannot set it, and reloading the page does not unlock the desk.
   const lock = useLocked(domicile);
 
-  // The screens the desktop has taken up, and what each one shows.
   const screens = useMemo(
     () => stageScreensOf(windows, displays ?? []),
     [displays, windows],
   );
 
-  // And the pointer goes where the keyboard goes, because the pointer is what
-  // moves the keyboard here: focus follows the cursor, so a focus change the
-  // pointer did not make — a key, or a window opening — would be undone by the
-  // next pointer event. `pointer-warp.ts` has the whole of it.
+  // The pointer follows the keyboard. Focus follows the pointer, so otherwise
+  // the next pointer event would undo a keyboard focus change. See
+  // `pointer-warp.ts`.
   const focus = useMemo(
     () => focusOf(screens, windows.focused, windows.activeId),
     [screens, windows.activeId, windows.focused],
@@ -169,40 +147,33 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
     windows: open,
   });
 
-  // The extension whose popup is open, and the bar whose tray it hangs off.
+  // The open extension popup and the bar it belongs to.
   const [opened, setOpened] = useState<
     { extension: string; screen: string } | undefined
   >(undefined);
-  // And forgotten once the tray stops drawing it — its action disabled or its
-  // extension dropped — so an `action.enable()` later does not reopen a panel
-  // nobody clicked. Set during render, React's pattern for state that follows
-  // a prop, so no frame draws the stale answer.
+  // Cleared once the tray stops showing it, so a later `action.enable()` does
+  // not reopen it. Set during render (React's pattern for derived state) so no
+  // frame shows the stale popup.
   const popupOpen = popupShown(extensions, opened?.extension);
   if (opened !== undefined && !popupOpen) {
     setOpened(undefined);
   }
 
-  // The Shift of the chord that floats a window is spent whether or not there
-  // was a window to float, because what it says is about the press rather than
-  // the outcome: the user pressed it to reach the chord, and a Shift the
-  // desktop has already answered is not one held over the window that lands.
-  // Both paths into here — the page's own keydown and the chord the compositor
-  // hands back — go through it.
+  // Shift is spent whether or not a window was floated: the user pressed it
+  // for the chord, so it should not carry over to the next window. Both the
+  // page's keydown and the compositor's forwarded chords come through here.
   const onAction = useCallback(
     (action: WindowAction) => {
       spendShift();
       act(action);
-      // Counted, which is what takes the pointer with the keyboard — see
-      // `usePointerWarp`. In the desktop rather than here, because what
-      // answers it is the monitor the focus lands on. In the same turn, so
-      // the two are one render.
+      // Moves the pointer with the keyboard; see `usePointerWarp`. Dispatched
+      // in the same turn so both land in one render.
       act(WindowAction.KeyPressed());
     },
     [act, spendShift],
   );
 
-  // The binding mode is the desk's: a key on any page enters it, and every
-  // page reads its keys in it.
+  // The binding mode is desk-wide.
   useKeybindings({
     domicile,
     keybindings,
@@ -214,25 +185,19 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
     },
   });
 
-  // The pointer carries the keyboard from one monitor to the next, windows or
-  // none.
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
 
   return (
     <>
       {/*
-        First, and outside every screen: one fixed sheet is the wallpaper, and
-        a positioned sibling that comes first in the document is painted under
-        all of it. It waits for no desktop either — there is no region for it
-        to be moved into — so the handshake happens over a photograph.
+        First, so it paints under everything. It does not wait for the
+        desktop to connect.
       */}
       <Wallpaper />
       {/*
-        Every display the desktop has taken up, which is every display the
-        host described one render later: the desk reaches the state through a
-        reduction, and a monitor drawn before that reduction lands would be a
-        screen with no workspace on it. One frame of a monitor that has just
-        been plugged in, which is a monitor that was dark a moment ago anyway.
+        Every display the desktop has taken up. A new display appears one
+        render after the host reports it, once the reducer gives it a
+        workspace.
       */}
       {screens.map(({ geometry: { name } }) => (
         <Monitor
@@ -262,16 +227,14 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         />
       ))}
       {/*
-        Every window, once for the desk and after every monitor's bar, so a
-        window wins a tie with any bar it is drawn over — see `Stage`. Not on
-        a desk with no screen to draw one on.
+        Every window, once for the desk and after every bar, so a window wins a
+        tie with a bar it overlaps; see `Stage`.
       */}
       {screens.length > 0 && (
         <Stage
           activeId={windows.activeId}
-          // A panel of the desktop's own is a thing to type into that no
-          // window knows about, so for as long as one is up the keyboard
-          // is the page's — see `AppWindow`. An extension's popup is one.
+          // While a desktop panel is open the page keeps the keyboard; see
+          // `AppWindow`. Extension popups count.
           behindPanel={
             windows.launcherOpen ||
             windows.clipboardOpen ||
@@ -297,18 +260,16 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
           onGrab={(id) => {
             act(WindowAction.WindowGrabbed(id));
           }}
-          // Only where the pointer is what did the crossing. A window that
-          // arrives under a hand nobody moved says `pointerover` just as
-          // loudly, and answering that one hands the keyboard — and whatever
-          // `focus parent` had selected — to whichever window the layout
-          // happened to slide past. See `usePointerWarp`.
+          // Only when the pointer actually moved. A window sliding under a
+          // still pointer also fires `pointerover`, and following it would
+          // steal focus. See `usePointerWarp`.
           onHover={(id, at) => {
             if (pointing(at)) {
               act(WindowAction.WindowHovered(id));
             }
           }}
-          // In the page's pixels, which are the desk's: a drag can carry a
-          // float onto another screen — see `floatDragged`.
+          // In page pixels, so a float can be dragged to another screen; see
+          // `floatDragged`.
           onMove={(id, x, y) => {
             act(WindowAction.WindowMoved(id, x, y));
           }}
@@ -321,7 +282,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
           onRename={(id, url) => {
             act(WindowAction.WindowRenamed(id, siteOf(url)));
           }}
-          // Back into the pixels of the screen the float is on.
+          // Converted to the float's screen's pixels.
           onResize={(id, box, on) => {
             act(
               WindowAction.WindowResized(id, {
@@ -334,8 +295,8 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
           onSelect={(id) => {
             act(WindowAction.WindowSelected(id));
           }}
-          // With the screen's own workspace box, which is what the tiling on
-          // it is laid out in and so what a dragged pixel is a share of.
+          // The tiling is laid out in the screen's workspace box, so a dragged
+          // pixel is a share of that.
           onStretch={(id, edge, by, on) => {
             act(WindowAction.WindowStretched(id, edge, by, on.workspace));
           }}
@@ -344,9 +305,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
           windows={windows.windows}
         />
       )}
-      {/*
-        Outside every screen, like the wallpaper.
-      */}
+      {/* Panels cover the whole desktop, not one screen. */}
       <Launcher
         onDismiss={() => {
           act(WindowAction.LauncherDismissed());
@@ -374,7 +333,7 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         search={search}
         searchApps={searchApps}
       />
-      {/* Over the whole desktop, like the launcher and for its reason. */}
+      {/* Over the whole desktop, like the launcher. */}
       <Clipboard
         entries={clipboard}
         onCopy={(entry) => {
@@ -387,9 +346,9 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         screen={windows.focused}
       />
       {/*
-        Over the windows and under every panel: a toast over the launcher
-        would cover what is being typed. Not drawn at all over a locked desk,
-        whose lock screen they would read out to whoever is in front of it.
+        Over the windows and under every panel, so a toast never covers the
+        launcher. Hidden while locked so notifications are not shown on the
+        lock screen.
       */}
       <NotificationToasts
         manager={toasts}
@@ -397,14 +356,13 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         onAction={notifications.invoke}
         shown={!lock.locked}
       />
-      {/* From the bar's far edge, over the whole desktop, like the clipboard. */}
+      {/* Over the whole desktop, like the clipboard. */}
       <NotificationDrawer
         items={notifications.items}
         now={now}
         onAction={notifications.invoke}
         onDismiss={notifications.dismiss}
-        // Opened only by a bell, which says which screen it is on, so all
-        // the drawer itself reports is closing.
+        // Only a bell opens it, so the drawer reports only closing.
         onOpenChange={(open) => {
           if (!open) {
             setNotificationsOn(undefined);
@@ -414,13 +372,11 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
         screen={notificationsOn}
       />
       {/*
-        Last, and over every panel above it: the launcher and the clipboard are
-        `modal`, and a lock screen underneath an open launcher would be a locked
-        desk somebody could still type a path into.
+        Last, over every panel, so the modal launcher and clipboard cannot take
+        input on a locked desk.
 
-        It draws over a desktop that has already stopped listening rather than
-        stopping anything itself, and what takes it away is the compositor saying
-        the desk opened — never this page's own click. See `lock/Lock.tsx`.
+        Input is already blocked by the compositor; only the compositor
+        unlocks. See `lock/Lock.tsx`.
       */}
       <Lock
         checking={lock.checking}
@@ -434,18 +390,13 @@ export const Desktop = ({ domicile, keybindings, topBar }: Props) => {
 };
 
 /**
- * The window the keyboard is in and the box a pointer over it would be in —
- * or the whole of the screen it is on, when there is no window to be in.
+ * The focused window's contents box, or the whole screen when it has no
+ * focused window.
  *
- * The screen's middle is where sway puts the pointer on an output with nothing
- * on it, and a pointer left on the screen the keyboard came from would take it
- * straight back.
- *
- * Its contents rather than its whole frame, and that is the box the question
- * is about: what a `pointerover` moves the focus to is the `<app>` element —
- * see `Stage` — so the region the pointer has to be in to hold the focus is
- * the one the window draws in, not the bar above it. A window a tab is hiding
- * has only that bar, which is where the window is.
+ * The pointer must be inside this box to keep focus: `pointerover` on the
+ * `<app>` element moves focus (see `Stage`), so the bar does not count. A
+ * window hidden behind a tab has only its bar. An empty screen uses its
+ * center, as sway does.
  *
  * `undefined` while the keyboard is on no screen the desktop has taken up.
  */
@@ -469,7 +420,7 @@ const focusOf = (
   }
 };
 
-/** The popup open, once the bar `screen` has closed its own. */
+/** The open popup, after bar `screen` closes its own. */
 const closedOn = (
   opened: { extension: string; screen: string } | undefined,
   screen: string,

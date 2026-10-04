@@ -6,12 +6,8 @@ import { ConnectionSafety } from "../address/connection-safety";
 import { useShownPage } from "./useShownPage";
 
 /**
- * A stand-in for the fork's element: the two properties a chrome reads, and
- * the event that tells it to read them again.
- *
- * `defineProperty` rather than assignment because both are readonly on the real
- * element — where the page is and what the connection under it is worth are the
- * browser process's to say, and nothing in the page writes either.
+ * A fake `<webview>` with page properties and the change event.
+ * `defineProperty` because both are readonly on the real element.
  */
 const guest = () => {
   const element = document.createElement("webview");
@@ -32,12 +28,8 @@ const guest = () => {
 };
 
 describe("useShownPage", () => {
-  // THE PROPERTIES ARE THE STATE AND THE EVENT IS ONLY A NUDGE, which is the
-  // rule every one of these hooks follows — and the one with the most riding
-  // on it here: a chrome that learned the security level only from an event
-  // would have none at all for the page that was already showing when it
-  // mounted, and a browser window that cannot say what its connection is worth
-  // is the whole of what this exists to fix.
+  // The hook must read on mount, or the page already showing would have no
+  // security level.
   it("reads where the view is as it mounts, having heard nothing", () => {
     const view = guest();
     Object.defineProperties(view.element, {
@@ -61,9 +53,8 @@ describe("useShownPage", () => {
     expect(result.current.security).toBe(ConnectionSafety.Warning);
   });
 
-  // WHERE THE PAGE WENT ON ITS OWN, which is the half a shell could never see
-  // before: a link followed inside the guest is a page change and nothing else,
-  // and the shell never sent the window anywhere.
+  // A link followed inside the guest changes the page without the shell
+  // navigating.
   it("follows the page into a link it followed by itself", () => {
     const view = guest();
     const { result } = renderHook(() => useShownPage(view.element));
@@ -90,10 +81,8 @@ describe("useShownPage", () => {
     });
 
     it("does not record the same page twice in a row", () => {
-      // The security of a page can change without the page changing — a
-      // subresource with a bad certificate arriving after the commit is exactly
-      // that — so a visit list keyed on the message rather than on the address
-      // would fill up with one page.
+      // Security can change without navigation, so repeated messages for one
+      // address must not add visits.
       const view = guest();
       const { result } = renderHook(() => useShownPage(view.element));
 
@@ -114,10 +103,8 @@ describe("useShownPage", () => {
     });
   });
 
-  // AN ENGINE THAT CANNOT SAY IS NOT AN ENGINE SAYING "FINE". The properties
-  // do not exist on a `<webview>` older than this contract, so what a chrome
-  // reads is `undefined` — and the one thing it must not do with that is draw
-  // a padlock.
+  // An engine without these properties reads as `undefined`, which must not
+  // draw a padlock.
   it("states nothing for an engine that reports nothing", () => {
     const element = document.createElement("webview");
 

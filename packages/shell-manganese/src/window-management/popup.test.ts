@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { Placement } from "./placement";
 import { popupsOver } from "./popup";
 
-/** A window's placement: its contents at `surface`, stacked at `depth`. */
+/** A window's placement with contents at `surface` and depth `depth`. */
 const placed = (
   id: string,
   surface: Placement["surface"],
@@ -57,9 +57,8 @@ describe("where a popup goes", () => {
   });
 
   it("is nowhere while its window is not on this screen", () => {
-    // A window on another workspace, or on another page of the desk, has no
-    // placement here — and a popup embedded where its window is not would take
-    // the pixels of the one that is.
+    // A window shown on another page has no placement here, so neither do its
+    // popups.
     expect(
       popupsOver(
         [{ appId: "menu", parent: "term", position: [0, 0], size: [1, 1] }],

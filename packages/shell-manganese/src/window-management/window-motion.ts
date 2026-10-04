@@ -1,25 +1,15 @@
-// What a window is doing that the page has to draw over time: arriving,
-// leaving, or nothing at all.
+// The animation state of a window: arriving, leaving or resting.
 //
-// A string union rather than an enum, for the reason `title-focus.ts` is one:
-// these are the keys of a Panda `cva` variant, and the shell writes the answer
-// onto the element as `data-motion` as well — the desktop's own state is worth
-// being able to read in devtools and in a test rather than only off a hashed
-// class name.
+// A string union because the values are Panda `cva` variant keys and are also
+// written to `data-motion`, which devtools and tests can read.
 //
-// **A window arrives for one of two reasons and they do not look alike.** One
-// that has just opened grows out of the middle of its own frame, because that
-// is where it came from. One carried on by a workspace switch slides in from
-// the side the workspace came from, because it was already there — it was on
-// the desktop a moment ago and somewhere else is what it was. Drawing the
-// second like the first is what makes every workspace switch look like ten
-// windows opening at once.
+// A newly opened window grows from its frame's center. A window carried in by a
+// workspace switch slides in from the side that workspace is on, so a switch
+// does not look like many windows opening.
 
 /**
- * Which way the desktop went when the workspace on screen changed.
- *
- * The page's own logical directions rather than left and right: `end` is the
- * way the workspaces are numbered.
+ * The direction of a workspace switch, in logical terms: `end` is the
+ * direction of increasing workspace numbers.
  */
 export type Towards = "end" | "start";
 
@@ -36,35 +26,33 @@ export type WindowMotion =
   | TabFade;
 
 /**
- * The two halves of a tab switch's crossfade: the window revealed fades in
- * over the one it hides — see `tab-switch.ts`.
+ * The two halves of a tab switch crossfade: the revealed window fades in over
+ * the hidden one. See `tab-switch.ts`.
  */
 export type TabFade = "concealing" | "revealing";
 
 /**
- * A float trading places with another in the stack, which is one movement
- * drawn as either of two identical animations — see `nextShuffle`.
+ * A float swapping places in the stack. Two identical animations let the same
+ * move restart; see `nextShuffle`.
  */
 export type Shuffle = "restacking" | "restacking-again";
 
-/** How a window of the workspace being switched to comes on screen. */
+/** The motion of a window on the workspace being switched to. */
 export const arrivalFrom = (towards: Towards): WindowMotion =>
   towards === "end" ? "arriving-from-end" : "arriving-from-start";
 
 /**
- * And how one of the workspace being switched away from goes: the other way,
- * so the two workspaces pass each other rather than piling up on one side.
+ * The motion of a window on the workspace being switched from. It leaves the
+ * opposite way, so the two workspaces pass each other.
  */
 export const departureFor = (towards: Towards): WindowMotion =>
   towards === "end" ? "leaving-to-start" : "leaving-to-end";
 
 /**
- * Whether a window doing this is on its way off the screen.
+ * Whether the window is leaving the screen.
  *
- * What such a window is owed is that nothing about it changes while it goes:
- * it is drawn at the box it had, saying what it said, and it asks for nothing
- * and answers nothing — the keyboard has moved on, and a window the user can
- * still reach is one they can reach for a moment and then not.
+ * A leaving window keeps its box and contents and ignores input, since focus
+ * has moved on.
  */
 export const isLeaving = (motion: WindowMotion): boolean => {
   switch (motion) {
@@ -88,11 +76,10 @@ export const isLeaving = (motion: WindowMotion): boolean => {
 };
 
 /**
- * What a window's bar does while the window does this.
+ * The motion of a window's title bar.
  *
- * Everything but a tab switch, which is the contents' alone: the bar of a
- * window in a tabbed container is its tab, and the tab is on screen before,
- * during and after.
+ * A tab switch only animates contents: in a tabbed container the bar is the
+ * tab, which stays on screen.
  */
 export const barMotion = (motion: WindowMotion): WindowMotion => {
   switch (motion) {

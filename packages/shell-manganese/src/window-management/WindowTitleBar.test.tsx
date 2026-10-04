@@ -6,18 +6,18 @@ import type { Aim } from "./tiled/aim";
 import { Layout } from "./tree/node";
 import { WindowTitleBar } from "./WindowTitleBar";
 
-/** The tab's own container, one bar tall, over the window it shows. */
+/** The tab's box, one bar tall. */
 const TAB = { height: 30, width: 300, x: 0, y: 0 };
 const FRAME = { height: 400, width: 600, x: 0, y: 0 };
 
-/** A tiled window beside the tab's container, which it can be dropped on. */
+/** A tiled window beside the tab's container, to drop it on. */
 const OTHER = { frame: { height: 400, width: 600, x: 600, y: 0 }, id: "b" };
 
 const MIDDLE_BUTTON = 1;
 
 const nothing = () => undefined;
 
-/** A tab of a tabbed container; each case overrides the part it is about. */
+/** A tab of a tabbed container; each case overrides what it tests. */
 const tabProps = {
   besideOpenTab: false,
   depth: 0,

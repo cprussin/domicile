@@ -22,35 +22,32 @@ import type { watchAudioLevels } from "./watch-audio-levels";
 
 type Props = {
   audio: AudioMessage;
-  /** Where every change is asked for, and the meters with it. */
+  /** Where changes are requested and meters read. */
   domicile: DomicileClient;
-  /** How the meters are watched; injected so tests can drive them. */
+  /** How meters are watched; injected for tests. */
   watchLevels?: typeof watchAudioLevels | undefined;
 };
 
-/** A drawer under the sliders, open or shut. */
+/** A drawer under the sliders. */
 type Drawer = "outputs" | "inputs" | "apps" | "cards";
 
 /**
- * The whole of the desk's sound, in the bar's panel — what pavucontrol was
- * for.
+ * The full sound mixer, in the bar's panel; a replacement for pavucontrol.
  *
- * **Two sliders**: the default output and the default microphone, each with
- * its meter and its port, and under each, when there are others, a drawer of
- * them: More outputs, More inputs. The defaults are not in the drawers; their
- * ports are already here.
+ * Two sliders, for the default output and input, each with meter and port.
+ * Under each, a drawer of the other devices.
  *
- * **Apps in a drawer** under those: each app that is playing or recording,
- * with its streams under it, and the cards' profiles in a last one.
+ * Below that, a drawer of apps that are playing or recording, with their
+ * streams, and a last drawer of card profiles.
  *
- * **Every choice is a `Select`** — a port, a profile, where a stream goes.
- * Its list is drawn outside the panel, which the `Popover` keeps as its own.
+ * Every choice is a `Select`. Its list renders outside the panel, and the
+ * `Popover` still treats it as part of the panel.
  *
- * **Only what is on screen is metered.** Recordings have no meter of their
- * own; their input's is beside the microphone's slider or among the others.
+ * Only visible devices are metered. Recording streams have no meter; their
+ * input's meter shows instead.
  *
- * **The outputs' monitors are not inputs here**, as pavucontrol's default
- * leaves them out. They are still somewhere a recording can be moved to.
+ * Output monitors are hidden from the inputs, as in pavucontrol, but remain
+ * targets for moving a recording.
  */
 export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
   const [open, setOpen] = useState<readonly Drawer[]>([]);
@@ -177,19 +174,18 @@ export const Mixer = ({ audio, domicile, watchLevels }: Props) => {
 };
 
 /**
- * The mixer's panel, which every choice's list stays over: across it, so
- * that none runs off its screen onto the next; and the whole height of the
- * window, so that a long one still has room to drop.
+ * The mixer's panel. Choice lists stay within its width, so none spills onto
+ * the next monitor, and within the window's height, so a long one has room.
  */
 const Panel = createContext<HTMLElement | null>(null);
 
-/** A stream, and which way it goes. */
+/** A stream and its direction. */
 type Flow = { stream: AudioStream; direction: Direction };
 
-/** An app, and what it is playing and recording. */
+/** An app and its playback and recording streams. */
 type App = { name: string; flows: readonly Flow[] };
 
-/** The streams under the app each is from, in the order the apps first come. */
+/** Streams grouped by app, in first-seen app order. */
 const byApp = (
   playback: readonly AudioStream[],
   recording: readonly AudioStream[],
@@ -208,10 +204,9 @@ const byApp = (
 };
 
 /**
- * The device the sliders are for: the server's default, or — where it has
- * none of these, as when its default input is an output's monitor or a
- * device that has gone — the first, which is what the server would fall
- * back to.
+ * The device the sliders control: the default, else the first device. The
+ * server falls back the same way when its default is filtered out (a
+ * monitor) or gone.
  */
 const primary = (devices: readonly AudioDevice[]) =>
   devices.find((device) => device.default) ?? devices[0];
@@ -220,12 +215,12 @@ type DefaultProps = {
   device: AudioDevice;
   direction: Direction;
   domicile: DomicileClient;
-  /** What the slider is called: what it is for, rather than which it is. */
+  /** The slider's label: its purpose, not the device name. */
   label: string;
   meter: number | undefined;
 };
 
-/** One of the two sliders, named over it for which device it is, with its port. */
+/** One of the two default sliders, titled with its device, with its port. */
 const Default = ({
   device,
   direction,
@@ -261,7 +256,7 @@ type DevicesProps = {
   levels: ReadonlyMap<string, number>;
 };
 
-/** The devices that are not the default, each of which can be made it. */
+/** The non-default devices, each of which can be made the default. */
 const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
   devices.length > 0 && (
     <ul className={listStyles}>
@@ -303,16 +298,16 @@ const Devices = ({ devices, direction, domicile, levels }: DevicesProps) =>
 type AppsProps = {
   apps: readonly App[];
   domicile: DomicileClient;
-  /** Where a recording can go: every input, monitors and all. */
+  /** Where a recording can go: every input, monitors included. */
   inputs: readonly AudioDevice[];
   levels: ReadonlyMap<string, number>;
-  /** Where a stream that plays can go. */
+  /** Where a playback stream can go. */
   outputs: readonly AudioDevice[];
 };
 
 /**
- * Each app, named, and each of its streams under it: its volume, mute, meter
- * when it plays, and where it plays or records from.
+ * Each app, named, with its streams: volume, mute, meter when playing, and the
+ * device it plays to or records from.
  */
 const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
   <ul className={appsStyles}>
@@ -321,7 +316,7 @@ const Apps = ({ apps, domicile, inputs, levels, outputs }: AppsProps) => (
         <h3 className={appStyles}>{app.name}</h3>
         <ul className={listStyles}>
           {app.flows.map(({ direction, stream }) => {
-            // An app that names its stream after itself has said nothing.
+            // Skip a stream named after its app; the name adds nothing.
             const title =
               stream.title === stream.application ? undefined : stream.title;
             const name =
@@ -403,7 +398,7 @@ type PortProps = {
   domicile: DomicileClient;
 };
 
-/** A device's port, where it has more than one to choose. */
+/** A device's port picker, when it has more than one. */
 const Port = ({ device, domicile }: PortProps) =>
   device.ports.length > 1 && (
     <Choice
@@ -419,17 +414,13 @@ const Port = ({ device, domicile }: PortProps) =>
 type ChoiceProps = {
   label: string;
   options: readonly SelectOption<string>[];
-  /** What is chosen now, as the server last said. */
+  /** The current choice, as the server last reported. */
   value: string | undefined;
-  /** Ask for another; what is chosen changes when the server says so. */
+  /** Request another; the choice changes when the server confirms. */
   onChoose: (value: string) => void;
 };
 
-/**
- * A row's choice: a quiet `Select` after what it is the choice of — its
- * value and a caret, read as more of the line — whose list stays over the
- * panel.
- */
+/** A quiet `Select` inline in a row, with its list kept within the panel. */
 const Choice = ({ label, onChoose, options, value }: ChoiceProps) => {
   const panel = useContext(Panel)?.getBoundingClientRect();
   return (
@@ -456,7 +447,7 @@ const Choice = ({ label, onChoose, options, value }: ChoiceProps) => {
   );
 };
 
-/** A port or a profile as an option, saying so when it cannot be used now. */
+/** A port or profile as an option, marked when unavailable. */
 const option = (
   choice: AudioChoice,
   unusable: string,
@@ -467,14 +458,13 @@ const option = (
   value: choice.name,
 });
 
-// Wide enough that a device's name and its port share a line, as a rule.
+// Wide enough for a device's name and its port to usually share a line.
 const mainStyles = flex({
   direction: "column",
   inlineSize: 96,
 });
 
-// A hairline between the outputs, the inputs, the apps and the cards, so
-// "More outputs" reads as the outputs' and not as a section of its own.
+// A divider between sections, so "More outputs" reads as part of the outputs.
 const groupStyles = flex({
   _first: { paddingBlockStart: 0 },
   _last: { paddingBlockEnd: 0 },
@@ -487,7 +477,7 @@ const groupStyles = flex({
   paddingBlock: 2,
 });
 
-// Under the default, from where its slider starts: past the mute button.
+// Indented to where the default's slider starts, past the mute button.
 const nestedStyles = css({
   paddingInlineStart: 7,
 });
@@ -505,8 +495,8 @@ const rowStyles = flex({
   gap: 0.5,
 });
 
-// A name and its choice on one line where they fit, and the choice on its own
-// line under the name where they do not — so that neither is cut short.
+// The choice wraps under the name when both don't fit, so neither is
+// truncated.
 const headStyles = hstack({
   columnGap: 1.5,
   flexWrap: "wrap",
@@ -521,9 +511,8 @@ const captionStyles = css({
   overflowWrap: "anywhere",
 });
 
-// A caption's line, from where the slider under it starts — past its mute
-// button — in ten pixels, the bar's own size, as the figures beside the
-// sliders are.
+// Aligned with the slider below, past its mute button. Ten pixels, the bar's
+// size, matching the slider figures.
 const captionLineStyles = css({
   fontSize: "0.625rem",
   paddingInlineStart: 8,
@@ -535,8 +524,8 @@ const nameStyles = css({
   overflowWrap: "anywhere",
 });
 
-// A long list scrolls inside the drawer, so the panel stays on screen — down,
-// and never across.
+// Long lists scroll vertically inside the drawer, so the panel stays on
+// screen.
 const appsStyles = flex({
   direction: "column",
   gap: 4,
@@ -548,7 +537,7 @@ const appsStyles = flex({
   padding: 0,
 });
 
-// An app's name close over its streams, which are closer to each other than
+// App names sit close over their streams, which sit closer to each other than
 // to the next app.
 const appEntryStyles = flex({
   direction: "column",
@@ -561,16 +550,15 @@ const appStyles = css({
   margin: 0,
 });
 
-// Straight after its name, or under it where the line is full — never cut
-// short to stay on the line. The name's size, at full strength, as something
-// to press.
+// Never truncated; wraps under the name instead. Full opacity, unlike the
+// caption, since it is clickable.
 const choiceStyles = css({
   flex: "0 0 auto",
   maxInlineSize: "100%",
   minInlineSize: 0,
 });
 
-// The bar's own button, in `currentcolor` — see `Level`.
+// The bar's button style, in `currentcolor`; see `Level`.
 const iconButtonStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, currentcolor 16%, transparent)",

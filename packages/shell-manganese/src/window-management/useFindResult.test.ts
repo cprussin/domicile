@@ -5,9 +5,8 @@ import { act, renderHook } from "@testing-library/react";
 import { useFindResult } from "./useFindResult";
 
 /**
- * A stand-in for the fork's element: the count a chrome reads, and the event
- * that tells it to read it again. `defineProperties` because both are readonly
- * on the real element — what a find found is the browser's answer.
+ * A fake `<webview>` with find properties and the change event.
+ * `defineProperties` because the properties are readonly on the real element.
  */
 const guest = () => {
   const element = document.createElement("webview");

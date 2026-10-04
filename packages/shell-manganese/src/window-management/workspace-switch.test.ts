@@ -36,8 +36,7 @@ describe("towardsOf", () => {
     expect(towardsOf("3", "2")).toBe("start");
   });
 
-  // In the order the desktop names its workspaces rather than the order the
-  // names sort in: `10` is the last of them and `"10" < "9"`.
+  // `10` is the last workspace, but `"10" < "9"`.
   it("orders them the way the desktop does, not the way a string sorts", () => {
     expect(towardsOf("9", "10")).toBe("end");
   });
@@ -65,9 +64,8 @@ describe("switchedTo", () => {
     ).toBeUndefined();
   });
 
-  // Nothing to play means nothing to wait for: a switch is over when
-  // something on screen says its animation has ended, and between two empty
-  // workspaces there is nothing that could say so.
+  // A switch ends when an animation on screen ends, and two empty workspaces
+  // have nothing to animate.
   it("says nothing when neither workspace has anything on it", () => {
     expect(switchedTo(on("1", []), on("2", []))).toBeUndefined();
   });

@@ -1,18 +1,12 @@
-// What a key the config binds asks the desktop to do.
+// Parses the words of a `send-shell <words>` binding into a window action.
 //
-// The compositor's config binds a chord to `send-shell <words>`, and the SDK
-// hands the words here. **They are sway's commands, spelled as sway spells
-// them** wherever sway has the command — `focus left`, `move container to
-// workspace 2`, `layout tabbed` — so a sway user's bindings carry over by
-// copying the line. The few sway has no word for are manganese's own:
-// `lock`, `launcher`, `clipboard` and `resize grow <direction>`.
+// - Commands use sway's syntax where sway has one (`focus left`, `layout
+//   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
+//   `clipboard` and `resize grow <direction>` are manganese's own.
+// - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
+// - An unknown command is a config error, so it returns an `Err`, not a throw.
 //
-// `exec <argv…>` is sway's too, but its words are an argv, run as they are
-// rather than through `sh -c` as sway does: there is no terminal unless a
-// binding names one.
-//
-// A command this desktop does not know is the user's config, not a bug here,
-// so it is an `Err` naming it rather than a throw.
+// See docs/architecture/KEYBINDINGS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
@@ -22,7 +16,7 @@ import { Layout } from "../window-management/tree/node";
 import type { WindowAction as Action } from "../window-management/window-state";
 import { WindowAction, WORKSPACES } from "../window-management/window-state";
 
-/** The four ways a window or the focus can go, by sway's words for them. */
+/** Sway's direction words. */
 const DIRECTIONS: readonly (readonly [word: string, way: Direction])[] = [
   ["left", Direction.Left],
   ["down", Direction.Down],
@@ -30,19 +24,18 @@ const DIRECTIONS: readonly (readonly [word: string, way: Direction])[] = [
   ["right", Direction.Right],
 ];
 
-/** One command: its words, and what they ask for. */
+/** A command's words and its action. */
 type Command = readonly [words: string, action: Action];
 
-/** Every command this desktop knows, by its words. */
+/** Every known command, by its words. */
 const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["kill", WindowAction.WindowKilled()],
-  // Not sway's, which has no lock.
+  // Sway has no lock command.
   ["lock", WindowAction.DeskLocked()],
-  // A toggle, because the same press is what you reach for to open it and to
-  // give up on it. Escape and the backdrop close it too, and those arrive from
-  // the dialog rather than from here — see `launcher/Launcher.tsx`.
+  // A toggle, so the same key opens and closes it. Escape and the backdrop
+  // close it from the dialog (see `launcher/Launcher.tsx`).
   ["launcher", WindowAction.LauncherToggled()],
-  // The clipboard's history, a toggle for the launcher's reason.
+  // Clipboard history; a toggle, like the launcher.
   ["clipboard", WindowAction.ClipboardToggled()],
   ...DIRECTIONS.map(
     ([word, way]): Command => [`focus ${word}`, WindowAction.FocusStepped(way)],
@@ -80,10 +73,7 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ]),
 ]);
 
-/**
- * The action the words after `send-shell` name, or an `Err` saying which
- * words named nothing.
- */
+/** Parse the words after `send-shell`, or `Err` for an unknown command. */
 export const parseCommand = (
   args: readonly string[],
 ): Result<Action, string> => {
@@ -91,13 +81,13 @@ export const parseCommand = (
   return verb === "exec" ? parseExec(argv) : parseNamed(args);
 };
 
-/** `exec`'s argv, which has to name something to run. */
+/** Parse `exec`'s argv, which must not be empty. */
 const parseExec = (argv: readonly string[]): Result<Action, string> =>
   argv.length === 0
     ? Err("manganese: `exec` names nothing to run")
     : Ok(WindowAction.CommandExecuted(argv));
 
-/** One of the commands in {@link COMMANDS}, by its words. */
+/** Look up a command in {@link COMMANDS}. */
 const parseNamed = (args: readonly string[]): Result<Action, string> => {
   const command = args.join(" ");
   const action = COMMANDS.get(command);

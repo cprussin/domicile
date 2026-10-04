@@ -1,5 +1,4 @@
-// What every item on a monitor's bar can read: the bar's own props, handed
-// down through context so an item a user puts on the bar needs none.
+// Context for bar items, so items in a user's layout need no props.
 
 import type { DomicileClient } from "@domicile-desktop/sdk/domicile-client";
 import type { Extension } from "@domicile-desktop/sdk/extension";
@@ -8,24 +7,20 @@ import { createContext, useContext } from "react";
 
 import type { TrayOrder } from "../tray/useTrayOrder";
 
-/** What a monitor's bar knows, and what its items act through. */
+/** What a monitor's bar provides to its items. */
 export type Bar = {
-  /** The workspace on screen, which the bar marks. */
+  /** The workspace on screen. */
   current: string;
   /**
-   * Where the charge and the brightness come from — the bar reads nothing off
-   * the machine — and what an extension's action and a new brightness are
-   * clicked through.
+   * The source of battery and brightness readings, and the target for extension
+   * actions and brightness changes.
    */
   domicile: DomicileClient;
-  /** The extensions with an action, which the tray shows. */
+  /** The extensions with an action, shown in the tray. */
   extensions: readonly Extension[];
-  /** Whether the keyboard is on this screen. */
+  /** Whether this screen has keyboard focus. */
   focused: boolean;
-  /**
-   * The binding mode the keys are read in, which the bar names when it is not
-   * the usual `default`.
-   */
+  /** The current binding mode; the bar shows it unless it is `default`. */
   mode: string;
   /** Open an extension's popup, or close the open one with `undefined`. */
   onOpenExtension: (id: string | undefined) => void;
@@ -36,15 +31,15 @@ export type Bar = {
   onSelectWorkspace: (name: string) => void;
   /** The extension whose popup is open, or `undefined`. */
   openedExtension: string | undefined;
-  /** The monitor this bar is across, which the mixer opens over. */
+  /** The monitor this bar is on, which the mixer opens over. */
   screen: string;
   /** The applications' tray icons. */
   tray: readonly TrayItem[];
-  /** The order the tray is in, and how a drag changes it. */
+  /** The tray order and how to change it by dragging. */
   trayOrder: TrayOrder;
   /** How many notifications arrived since the drawer was last opened. */
   unread: number;
-  /** The workspaces this screen has, which are the ones shown. */
+  /** This screen's workspaces. */
   workspaces: readonly string[];
 };
 
@@ -53,8 +48,7 @@ export const BarContext = createContext<Bar | undefined>(undefined);
 /**
  * The bar this item is on.
  *
- * Throws outside one: an item of the bar's rendered anywhere else has no
- * screen, workspaces or tray to show, and nothing it could draw instead.
+ * Throws outside a bar, since an item has nothing to show without one.
  */
 export const useBar = (): Bar => {
   const bar = useContext(BarContext);

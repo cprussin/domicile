@@ -12,39 +12,34 @@ import { ago } from "./ago";
 
 type Props = {
   notification: Notification;
-  /** The time now, for how long ago it arrived. See `useNow`. */
+  /** The current time, for the relative timestamp. See `useNow`. */
   now: number;
   /**
-   * What the summary is drawn as: its text, unless the card is on a toast,
-   * which wraps it in the part that names the toast to a screen reader.
+   * Renders the summary. Toasts wrap it to label the toast for screen readers.
    */
   summary?: ReactNode | undefined;
-  /** And the body, for the same reason. */
+  /** Renders the body, for the same reason. */
   body?: ReactNode | undefined;
-  /** What the close button is called: dismissing a toast is not clearing one. */
+  /** The close button's label: dismissing a toast differs from clearing it. */
   closeLabel: string;
   /**
-   * One of its actions was pressed — `"default"` for the card itself. The
-   * event is the press's, so a toast can tell a click from the end of a
-   * swipe.
+   * Called when an action is pressed; `"default"` for the card itself. The
+   * event lets a toast tell a click from the end of a swipe.
    */
   onAction: (key: string, event: MouseEvent<HTMLElement>) => void;
   onClose: () => void;
 };
 
 /**
- * What one notification says: who sent it and when, its summary and body, its
- * buttons, and a way to put it away — the same card on a toast and in the
- * drawer, which each draw their own surface under it.
+ * One notification: sender, time, summary, body, actions and a close button.
+ * Shared by toasts and the drawer, which each draw their own surface.
  *
- * **A press anywhere on a card that offers its default action takes it**, which
- * is what a press on a notification does on every desktop. The pointer's
- * press is the card's; the keyboard's is the summary, which is a button for
- * exactly that. A card that offers no default has nothing to press but its
- * buttons, and draws no cursor saying otherwise.
+ * If the notification has a default action, a press anywhere on the card takes
+ * it. The pointer presses the card; the keyboard uses the summary, which is a
+ * button for that. Without a default action, only the buttons respond.
  *
- * The close button waits until the pointer is over the card or the keyboard is
- * in it: on every card at once it is a column of crosses down the drawer.
+ * The close button shows only on hover or focus, to avoid a column of crosses
+ * down the drawer.
  */
 export const NotificationCard = ({
   body,
@@ -94,7 +89,7 @@ export const NotificationCard = ({
           <button
             className={summaryStyles}
             onClick={(event) => {
-              // The card's press, once: not the card's again on the way up.
+              // Stop the press from also reaching the card.
               event.stopPropagation();
               pressed(event);
             }}
@@ -116,7 +111,7 @@ export const NotificationCard = ({
               <Button
                 key={key}
                 onClick={(event) => {
-                  // Its own press and not the card's as well.
+                  // Stop the press from also reaching the card.
                   event.stopPropagation();
                   onAction(key, event);
                 }}
@@ -146,8 +141,8 @@ export const NotificationCard = ({
   );
 };
 
-// The picture beside the words, and the words: a column of its own, so the
-// summary and the body line up under the sender rather than under the picture.
+// The text column, so the summary and body align under the sender, not the
+// image.
 const cardStyles = cva({
   base: grid.raw({
     alignItems: "start",
@@ -167,9 +162,8 @@ const cardStyles = cva({
   },
 });
 
-// An application's own picture is not cut into a circle — it is its icon, and
-// most icons are not round — but its corners are softened to sit with the
-// card's.
+// An app icon keeps its shape, since most icons are not round; only its corners
+// are rounded to match the card.
 const pictureStyles = css({
   blockSize: 8,
   borderRadius: "lg",
@@ -203,8 +197,7 @@ const appNameStyles = css({
   whiteSpace: "nowrap",
 });
 
-// Plain text, button or not: the press it stands for is the card's, and a
-// summary drawn as a button would be a card with a button on it.
+// Styled as plain text even when it is a button, since its press is the card's.
 const summaryStyles = css({
   _focusVisible: {
     outlineOffset: 0.5,
@@ -218,9 +211,7 @@ const summaryStyles = css({
   overflowWrap: "anywhere",
 });
 
-// `pre-line`, because a sender breaks its body into lines — the browser puts
-// a page's words a line under its own — and collapsing them runs two thoughts
-// together.
+// `pre-line` keeps the line breaks senders put in the body.
 const bodyStyles = css({
   color: "muted",
   fontSize: "sm",

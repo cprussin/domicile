@@ -1,12 +1,12 @@
-// What a file picker lists for a directory the engine read.
+// The file picker's rows for a listed directory.
 
 import { ChooserMode } from "./file-request";
 import { pathIn } from "./path-in";
 import { parentOf } from "./walk-path";
 
-/** What a row is, which is what choosing it does. */
+/** A row's kind, which decides what choosing it does. */
 export enum RowKind {
-  /** `..`: the way back up. */
+  /** `..`, the parent directory. */
   Parent,
   Directory,
   File,
@@ -15,30 +15,29 @@ export enum RowKind {
 export type Row = {
   kind: RowKind;
   name: string;
-  /** Absolute: what walking into or choosing the row names. */
+  /** The absolute path. */
   path: string;
 };
 
 type Listed = {
-  /** Extensions the page will take, lower case and dotless; empty is any. */
+  /** Accepted extensions, lowercase and without the dot; empty accepts any. */
   accept: readonly string[];
   directory: string;
-  /** What the engine listed in `directory`: a directory's ends in `/`. */
+  /** The entries in `directory`; subdirectory names end in `/`. */
   entries: readonly string[];
-  /** What is typed in the box, which narrows the listing. */
+  /** The filter text. */
   filter: string;
   mode: ChooserMode;
 };
 
 /**
- * The rows for `directory`: `..` first everywhere but the root, then its
- * directories, then the files the question can take — what the page accepts,
- * to open; none, to choose a folder; and every one, to save, which is a list
- * of names already taken.
+ * The rows for `directory`: `..` (except at root), then directories, then
+ * files. Open modes show accepted files, folder mode shows none, and save
+ * shows all so taken names are visible.
  *
- * The filter narrows each to the names holding it in any case, those starting
- * with it first, so Enter after typing a name takes that name. A name starting
- * with a dot is left out until a dot is typed, a shell's convention.
+ * The filter matches case-insensitively, prefix matches first, so Enter after
+ * typing a name picks it. Dotfiles are hidden until the filter starts with a
+ * dot, as in a shell.
  */
 export const rowsIn = ({
   accept,
@@ -101,9 +100,8 @@ const startsWith = ({ name }: Row, lowered: string): boolean =>
   name.toLowerCase().startsWith(lowered);
 
 /**
- * Whether a file of `lowered` name is one the page will take. At the end of
- * the name and after a dot, so `tar.gz` is `backup.tar.gz` and not
- * `notargz`.
+ * Whether the lowercase file name has an accepted extension. Matches after a
+ * dot, so `tar.gz` matches `backup.tar.gz` but not `notargz`.
  */
 const takes = (accept: readonly string[], lowered: string): boolean =>
   accept.length === 0 ||

@@ -11,7 +11,7 @@ describe("useSettled", () => {
   });
 
   it("holds the last settled value until a new key has stood for the delay", async () => {
-    // A preview per keystroke is a page loaded and thrown away per keystroke.
+    // Avoids loading a preview per keystroke.
     const { rerender, result } = renderHook(
       ({ value }) => useSettled(value, value, 50),
       { initialProps: { value: "a" } },
@@ -26,8 +26,7 @@ describe("useSettled", () => {
   });
 
   it("does not wait again for a new value of the key it is waiting on", async () => {
-    // A choice is a new object on every render, and the panel renders on
-    // every answer the host sends: it is the key that has to stand.
+    // A choice is a new object each render, so settling tracks the key.
     const first = { at: 0 };
     const { rerender, result } = renderHook(
       ({ key, value }) => useSettled(value, key, 50),
@@ -42,8 +41,7 @@ describe("useSettled", () => {
   });
 
   it("is the value as its key has it now, once that key has settled", async () => {
-    // What the host sent again for the same row — its icon found since — is
-    // what is drawn, not the copy the row settled with.
+    // Updates to the settled row (e.g. a newly found icon) show through.
     const { rerender, result } = renderHook(
       ({ key, value }) => useSettled(value, key, 50),
       { initialProps: { key: "a", value: { at: 0 } } },

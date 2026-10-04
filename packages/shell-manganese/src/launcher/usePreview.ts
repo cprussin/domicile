@@ -3,11 +3,9 @@ import type { FilePreviewMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
 /**
- * What the host says `path` holds, asked whenever it changes, and `undefined`
- * until it has answered.
+ * The host's preview of `path`, or `undefined` until it answers.
  *
- * An answer for a path the highlight has already left is dropped: an arrow
- * key is faster than a disk, and the host owes the answers no order.
+ * Answers for a stale path are dropped, since they can arrive out of order.
  */
 export const usePreview = (
   preview: (path: string) => Promise<FilePreviewMessage>,
@@ -32,7 +30,7 @@ export const usePreview = (
     };
   }, [preview, path]);
 
-  // Keyed on the path as well as dropped on it, so the row just left is not
-  // drawn under the one just reached while its own answer is on the way.
+  // Keyed on the path, so the previous row's preview isn't shown while the
+  // new one loads.
   return shown?.path === path ? shown.preview : undefined;
 };

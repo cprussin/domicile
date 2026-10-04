@@ -31,7 +31,7 @@ describe("useTrayOrder", () => {
   });
 
   it("places an icon where it first arrived, so it comes back there", () => {
-    // `b` closed and opened again would otherwise arrive after `c`.
+    // Otherwise `b`, closed and reopened, would come after `c`.
     const { rerender, result } = renderHook(
       ({ shown }) => useTrayOrder(shown),
       { initialProps: { shown: ["a", "b"] } },
@@ -46,8 +46,8 @@ describe("useTrayOrder", () => {
   });
 
   it("follows a move made on another page of the desk", () => {
-    // Each monitor can be a page of its own, and a drag on one bar is a drag
-    // on all of them. The browser tells the others by a `storage` event.
+    // Each monitor can have its own page; a `storage` event tells the others of
+    // a drag.
     const { result } = renderHook(() => useTrayOrder([]));
 
     act(() => {

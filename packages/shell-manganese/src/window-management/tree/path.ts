@@ -1,22 +1,20 @@
-// Where a node is in the tree, and how one is replaced without rebuilding the
+// Paths into the layout tree, and replacing a node without rebuilding the
 // rest.
 //
-// A path is the child indices walked from the root, so the empty path is the
-// root itself. Every operation on the tree is expressed as one: find the node,
-// then rebuild the branch that leads to it. What is off that branch comes back
-// as the same object, which is what keeps the windows the focus moved past
-// from re-rendering.
+// A path is the child indices from the root; the empty path is the root. Only
+// the branch to the node is rebuilt, so untouched subtrees keep their identity
+// and do not re-render.
 
 import type { Container, LayoutNode } from "./node";
 import { NodeKind } from "./node";
 
 export type Path = readonly number[];
 
-/** Where the window `id` is, or `undefined` when it is not in `node`. */
+/** The path to window `id`, or `undefined` if it is not in `node`. */
 export const pathTo = (node: LayoutNode, id: string): Path | undefined => {
   switch (node.kind) {
     case NodeKind.Container: {
-      // The first hit rather than every one: a window is in the tree once.
+      // A window appears only once, so the first hit is enough.
       const found = node.children
         .map((child, index) => {
           const inside = pathTo(child, id);
@@ -32,11 +30,9 @@ export const pathTo = (node: LayoutNode, id: string): Path | undefined => {
 };
 
 /**
- * The node `path` leads to.
+ * The node at `path`.
  *
- * Throws where it leads nowhere: a path is built from the tree it is walked
- * in, so one that does not fit is a wiring fault rather than a window that has
- * closed.
+ * Throws if the path does not fit, since that is a bug, not a closed window.
  */
 export const nodeAt = (root: LayoutNode, path: Path): LayoutNode =>
   path.reduce(
@@ -44,7 +40,7 @@ export const nodeAt = (root: LayoutNode, path: Path): LayoutNode =>
     root,
   );
 
-/** The same tree with the node at `path` put through `into`. */
+/** The tree with the node at `path` replaced by `into(node)`. */
 export const replacedAt = (
   root: LayoutNode,
   path: Path,
@@ -64,21 +60,18 @@ export const replacedAt = (
   }
 };
 
-/** A container `path` runs through, and which of its children it takes. */
+/** A container on a path, and the child index the path takes. */
 export type Ancestor = {
   container: Container;
-  /** The child of it the path goes through. */
+  /** The child index the path goes through. */
   index: number;
-  /** Where the container itself is. */
+  /** The container's own path. */
   path: Path;
 };
 
 /**
- * Every container between the root and `path`, innermost first.
- *
- * Which is the order the keyed commands want it in: `focus right` and `move
- * right` both start at the container the focus is in and work outwards until
- * one of them runs the way they were asked to go.
+ * Every container between the root and `path`, innermost first, the order
+ * directional `focus` and `move` walk them in.
  */
 export const ancestorsOf = (
   root: LayoutNode,

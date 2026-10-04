@@ -1,23 +1,19 @@
 import type { FoundAppsMessage } from "@domicile-desktop/sdk/host-message";
 import { useEffect, useState } from "react";
 
-/** What a search for applications offers: the applications and bookmarks. */
+/** Applications and bookmarks found for a query. */
 export type FoundApps = Pick<FoundAppsMessage, "apps" | "bookmarks">;
 
 /**
- * The applications and bookmarks the host found for `query`, asked for
- * whenever it changes.
+ * The applications and bookmarks the host found for `query`, re-queried on
+ * every change.
  *
- * `useFound`'s shape without its asking again: the host reads the desktop
- * entries afresh for every question, so there is no half-built answer to
- * wait out. An answer to a query the box no longer says is dropped, for
- * `useFound`'s reason.
+ * Like `useFound` but without polling, since the host reads desktop entries
+ * fresh each time. Stale answers are dropped.
  *
- * **The empty box is never asked.** Its answer is `opening`, found by the
- * desk before the launcher opened — see `useOpeningApps` — so the rows a
- * launcher opens onto are drawn with it rather than a round trip later,
- * pushing everything below them down as they land. It is also what is drawn
- * until the first thing typed is answered.
+ * The empty query is never sent. It uses `opening` (see `useOpeningApps`),
+ * fetched before the launcher opened, so the first rows don't shift in late.
+ * `opening` is also shown until the first typed query is answered.
  */
 export const useFoundApps = (
   searchApps: (query: string) => Promise<FoundAppsMessage>,

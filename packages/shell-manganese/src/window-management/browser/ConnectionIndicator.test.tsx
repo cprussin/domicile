@@ -37,9 +37,8 @@ describe("ConnectionIndicator", () => {
       expect(indicator()).toHaveAccessibleName("Connection is not secure");
     });
 
-    // THE ONE THE OLD INDICATOR COULD NOT DRAW AT ALL. A scheme test reads an
-    // expired certificate, a name mismatch and active mixed content as
-    // `https://` and puts a padlock on every one of them.
+    // An `https://` URL can still be dangerous, e.g. with an expired
+    // certificate.
     it("names a connection the browser found dangerous", () => {
       render(
         <ConnectionIndicator

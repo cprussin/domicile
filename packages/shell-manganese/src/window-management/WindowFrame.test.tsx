@@ -13,9 +13,8 @@ const noReach = () => {
 
 describe("WindowFrame", () => {
   it("reports where the pointer crossed into any part of the window", () => {
-    // The place is the whole of what says whether the pointer went to the
-    // window or the window came to the pointer — see `usePointerWarp` — so it
-    // is the event's, whichever part of the window heard it.
+    // `usePointerWarp` needs the position to tell a pointer move from a
+    // window appearing under the pointer.
     const crossed: (readonly [number, number])[] = [];
     render(
       <WindowFrame
@@ -38,8 +37,8 @@ describe("WindowFrame", () => {
   });
 
   it("reports a press on any part of the window", () => {
-    // Every press, including one in the window already being worked in:
-    // focus follows the cursor, so a press is what raises a window.
+    // Even in the active window: focus follows the cursor, but only a press
+    // raises a window.
     const reached: string[] = [];
     render(
       <WindowFrame
@@ -59,8 +58,7 @@ describe("WindowFrame", () => {
   });
 
   it("slides its parts the width of the screen it is on", () => {
-    // A workspace switch moves a screenful, and the window's own screen is
-    // the one whose width that is.
+    // A workspace switch slides by the width of the window's screen.
     render(
       <WindowFrame onHover={noHover} onReach={noReach} width={1280}>
         <button type="button">part</button>

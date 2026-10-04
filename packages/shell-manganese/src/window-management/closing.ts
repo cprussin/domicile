@@ -1,64 +1,46 @@
-// A window that has closed and is still on screen, on its way out.
+// Closed windows kept on screen while their exit animation plays.
 //
-// Closing is the one thing a window does that the state cannot draw. Every
-// other change ends with the desktop as it now is — a window moves, a window
-// resizes, and there it is at the new rectangle — while a window that closes
-// is gone from the list, from its workspace and from the layout in the same
-// reduction, so there is nothing left for a stylesheet to animate. What plays
-// out instead is a record of what the window was, held here until it has
-// finished leaving.
-//
-// Not in `window-state.ts` for exactly that reason. The state is what the
-// desktop *is*, and a window in the middle of closing is not one of the
-// windows the desktop has: it is on no workspace, it holds no keyboard, and
-// nothing the user does reaches it.
+// A closed window leaves the state in one reduction, so nothing remains to
+// animate. This module keeps a snapshot of it until the animation ends. It
+// lives outside `window-state.ts` because a closing window is no longer part
+// of the desktop.
 
 import type { Placement } from "./placement";
 import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
 import type { ShellWindow } from "./window";
 
-/** A window that has closed, with everything it takes to go on drawing it. */
+/** A closed window, with what is needed to keep drawing it. */
 export type Closing = {
   /**
-   * Where it was in the list of windows.
+   * Its index in the window list.
    *
-   * So that it goes on being drawn there rather than moved to the end while it
-   * leaves: React keeps an element across a re-order by moving it in the
-   * document, and a `<webview>` moved in the document reloads the page inside
-   * it — which is a browser window going blank for the whole of its own
-   * closing animation.
+   * Keeps it in place while it leaves: moving a `<webview>` in the document
+   * reloads its page, which would blank the window during the animation.
    */
   at: number;
   /**
-   * Whether the keyboard was in it.
+   * Whether it had keyboard focus.
    *
-   * Frozen, because closing a window moves the keyboard to whatever is left:
-   * a bar drawn from the desktop as it now is would lose its fill half way
-   * through the window's own departure, which is the window changing while the
-   * user watches it go.
+   * Frozen at close, since focus moves on at once and the bar would otherwise
+   * change color mid-animation.
    */
   focused: boolean;
   /**
-   * The box it had, which is where it plays out — raised to {@link LEAVING}.
+   * Its last placement, raised to {@link LEAVING}.
    *
-   * Raised because its neighbors are easing into that box while it shrinks
-   * away inside it: left at the depth it had they would cover it before it had
-   * gone, two elements at one `z-index` being decided by the order they come
-   * in the document.
+   * Raised so the neighbors easing into its space do not cover it before it
+   * has gone.
    */
   placement: Placement;
   window: ShellWindow;
 };
 
 /**
- * The windows that were open a moment ago and are not open now, each with the
- * box it had while it still was.
+ * The windows in `before` that have since closed, with their last placement.
  *
- * A window that closed while it was not on screen is not among them — one on
- * another workspace, or behind another window's tab. There is no rectangle to
- * play it out at, and the one it had last is a rectangle something else is
- * using now.
+ * Skips windows that were not on screen, such as those on another workspace or
+ * behind a tab: they have no rectangle to animate in.
  */
 export const departed = (
   before: Shown,
@@ -75,13 +57,11 @@ export const departed = (
             focused: before.activeId === window.id,
             placement: {
               ...placement,
-              // Only the tab of a window a tab was hiding: raised, its
-              // contents would be drawn over the window the tab is showing.
+              // A hidden tab's contents, once raised, would cover the shown
+              // tab's window.
               behind: undefined,
               depth: LEAVING,
-              // A tab closes up about its own middle, where the tabs beside
-              // it close over it — not about the middle of the whole window,
-              // somewhere down in contents that only fade.
+              // A tab collapses about its own middle, not the window's.
               frame:
                 placement.tabbed === undefined
                   ? placement.frame
@@ -93,11 +73,9 @@ export const departed = (
   });
 
 /**
- * The windows to draw: the open ones, with the closing ones back in the places
- * they had.
+ * The open windows with the closing ones reinserted at their old indices.
  *
- * In ascending order of where they belong, so that two windows closing at once
- * land either side of each other rather than both at the earlier index.
+ * Inserts in ascending index order so simultaneous closes keep their order.
  */
 export const withClosing = (
   windows: readonly ShellWindow[],

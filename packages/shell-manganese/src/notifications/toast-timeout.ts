@@ -1,21 +1,20 @@
 import type { Notification } from "@domicile-desktop/sdk/notification";
 
-/** How long a toast stays up when its sender left it to the desk. */
+/** How long a toast stays up when the sender does not specify. */
 const LEFT_TO_THE_DESK_MS = { low: 4000, normal: 6000 } as const;
 
-/** Shorter than this is gone before it is read. */
+/** The shortest toast timeout, so it can be read. */
 const SHORTEST_MS = 2000;
 
-/** Longer than this is a window nobody opened. */
+/** The longest toast timeout, so it does not linger. */
 const LONGEST_MS = 30_000;
 
 /**
- * How long `notification`'s toast stays up, in milliseconds: `0` for until it
- * is dismissed.
+ * How long `notification`'s toast stays up, in milliseconds; `0` means until
+ * dismissed.
  *
- * Only the toast: a notification stays in the drawer until it is cleared, so
- * this is how long it interrupts rather than how long it lives. A critical one
- * interrupts until somebody answers it, whatever its sender asked.
+ * This only limits the toast; the notification stays in the drawer. Critical
+ * notifications stay up until answered, whatever the sender asked.
  */
 export const toastTimeout = (notification: Notification): number => {
   if (notification.urgency === "critical" || notification.timeoutMs === 0) {

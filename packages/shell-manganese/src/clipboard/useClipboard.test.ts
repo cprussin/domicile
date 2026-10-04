@@ -6,12 +6,8 @@ import { act, renderHook } from "@testing-library/react";
 import { useClipboard } from "./useClipboard";
 
 /**
- * A stand-in for the client: it takes the one handler this hook registers and
- * lets a test say what the compositor said.
- *
- * Narrower than a `DomicileClient` because the hook uses one member of it, and
- * a double that implemented the other fifteen would be claiming a seam that
- * size.
+ * A minimal client: it captures the hook's one handler and lets a test emit
+ * messages. Narrower than `DomicileClient` because the hook uses one member.
  */
 const client = () => {
   let handler: ((message: HostMessageOf<"clipboard">) => void) | undefined;
@@ -36,9 +32,7 @@ const client = () => {
 
 describe("useClipboard", () => {
   it("has nothing until the compositor has said something", () => {
-    // Which is a moment rather than a state worth drawing: a desktop that has
-    // just started has copied nothing, and the panel's own empty line is what
-    // says so.
+    // Normal after startup; the panel shows its own empty line.
     const host = client();
 
     const { result } = renderHook(() => useClipboard(host.domicile));
@@ -47,9 +41,7 @@ describe("useClipboard", () => {
   });
 
   it("is what was last said, whole", () => {
-    // The whole history every time rather than a delta: a copy re-orders the
-    // list as often as it adds to it, so the last message is the answer and
-    // the one before it is not part of it.
+    // Each message is the full history, since a copy can reorder the list.
     const host = client();
     const { result } = renderHook(() => useClipboard(host.domicile));
 
@@ -66,9 +58,8 @@ describe("useClipboard", () => {
   });
 
   it("takes an emptied history as an answer", () => {
-    // Not "nothing was said": the compositor sends a history with no rows in
-    // it, and a panel that read that as "not told yet" would go on drawing
-    // rows that are gone.
+    // An empty history is a real answer; treating it as "not yet told" would
+    // keep showing removed rows.
     const host = client();
     const { result } = renderHook(() => useClipboard(host.domicile));
 

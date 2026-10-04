@@ -11,10 +11,8 @@ describe("typedAddress", () => {
     });
 
     it("takes a scheme that carries no authority too", () => {
-      // `about:blank` is an address a person types on purpose and no
-      // authority follows the colon, so the `//` a network scheme has is not
-      // what says this is an address. The named set is what says it: a bare
-      // `note:` is a word with a colon after it and goes to a search.
+      // No `//` follows the colon, so the named list of bare schemes decides.
+      // A bare `note:` is a search.
       expect(typedAddress("about:blank")).toStrictEqual(
         TypedAddress.Site("about:blank"),
       );
@@ -24,9 +22,7 @@ describe("typedAddress", () => {
     });
 
     it("loads a bare host over https", () => {
-      // What a person types when they mean a site: no scheme, because nobody
-      // types a scheme. https rather than http, because an address bar should
-      // not make the insecure guess on the user's behalf.
+      // No scheme typed; https, not http, to avoid the insecure guess.
       expect(typedAddress("news.ycombinator.com")).toStrictEqual(
         TypedAddress.Site("https://news.ycombinator.com"),
       );
@@ -62,9 +58,7 @@ describe("typedAddress", () => {
     });
 
     it("searches rather than loading when a dot is inside a sentence", () => {
-      // A sentence with a full stop in it is not a hostname, and the TLD list
-      // is what tells them apart: `end.Then` ends in nothing anybody
-      // registers.
+      // The TLD list tells a sentence from a host: `end.Then` is not a TLD.
       expect(typedAddress("the sentence ends. Then another")).toStrictEqual(
         TypedAddress.Search(
           "the sentence ends. Then another",
@@ -84,9 +78,7 @@ describe("typedAddress", () => {
   });
 
   it("answers nothing for a query with nothing in it", () => {
-    // Enter on an empty box is a keystroke nobody meant as a command, and
-    // every way of answering it — a search for the empty string, a reload of
-    // the home page — is worse than not answering.
+    // Enter on an empty box does nothing; any answer would be worse.
     expect(typedAddress("   ")).toBeUndefined();
   });
 });

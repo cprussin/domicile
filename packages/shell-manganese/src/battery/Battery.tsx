@@ -7,34 +7,28 @@ import { css, cva } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { watchBattery } from "./watch-battery";
 
-/** A tenth left is a warning rather than a reading. */
+/** At or below this percentage the readout turns red. */
 const DANGEROUS_PERCENT = 10;
 
-/** And a twentieth is one that has waited long enough to be looked at. */
+/** At or below this percentage the readout also flashes. */
 const FLASHING_PERCENT = 5;
 
 type Props = {
-  /** Where the charge comes from: the host, over the control channel. */
+  /** The host that reports the charge. */
   domicile: DomicileClient;
-  /** How it is watched; injected so tests can drive a battery of their own. */
+  /** Injectable so tests can drive their own battery. */
   watch?: typeof watchBattery | undefined;
 };
 
 /**
- * The charge, at the far end of the top bar: a bolt whenever AC is in, the
- * meter, and the percentage in figures.
+ * The battery readout at the end of the top bar: a bolt while on AC, a meter,
+ * and the percentage.
  *
- * Three readings of one number rather than a choice between them. The meter is
- * the one that is read at a glance and the only one that is wrong by less than
- * a percent — its fill is the level itself — and the figures are what a
- * decision about a lead is made on. The bolt is the plug: a full battery and a
- * machine on AC look the same on a meter, and they are not the same thing.
+ * The bolt matters because a full battery and a machine on AC look the same on
+ * the meter.
  *
- * Nothing is drawn until the host has said a charge, which is a moment rather
- * than a state worth marking — and is also how a machine with no battery
- * looks, because the compositor sends nothing for one. A bar that flashed an
- * empty meter in either case would be saying something false, which is the
- * whole failure this readout was rebuilt to stop making.
+ * Draws nothing until the host reports a charge. Machines without a battery
+ * get no report, so they show nothing rather than a false empty meter.
  */
 export const Battery = ({ domicile, watch = watchBattery }: Props) => {
   const [reading, setReading] = useState<BatteryMessage | undefined>(undefined);
@@ -44,7 +38,7 @@ export const Battery = ({ domicile, watch = watchBattery }: Props) => {
   return reading === undefined ? undefined : <Meter reading={reading} />;
 };
 
-/** The reading itself, once there is one. */
+/** The readout once there is a reading. */
 const Meter = ({ reading }: { reading: BatteryMessage }) => {
   const percent = Math.round(reading.charge * 100);
   return (
@@ -67,10 +61,7 @@ const Meter = ({ reading }: { reading: BatteryMessage }) => {
         className={caseStyles}
         role="meter"
       >
-        {/*
-          The one length in here that is not a token, because it is not a
-          decision: the fill IS the charge, so the number is the reading.
-        */}
+        {/* Not a token: the fill width is the charge itself. */}
         <div className={fillStyles} style={{ inlineSize: `${percent}%` }} />
       </div>
       <span className={percentStyles}>{percent}%</span>
@@ -79,24 +70,17 @@ const Meter = ({ reading }: { reading: BatteryMessage }) => {
 };
 
 /**
- * The whole readout goes to danger together, and flashes together: the case,
- * the fill, the bolt and the figures are all `currentcolor` and all inside
- * this, so `color` here is the only place red is said and the animation is one
- * animation rather than four in step.
+ * Every part of the readout uses `currentcolor`, so setting `color` here turns
+ * it all red, and one animation flashes it all.
  */
 const rootStyles = cva({
   base: hstack.raw({ gap: 1 }),
   variants: {
     charge: {
-      // A tenth left, which the whole readout says rather than the meter
-      // alone: a red bar beside white figures reads as a half-finished
-      // thought.
+      // The whole readout turns red, not just the meter.
       dangerous: { color: "danger" },
-      // The charge as it usually is, which is the bar's own white.
       fine: {},
-      // A battery with minutes left, which asks to be noticed rather than
-      // read. It stays red as well: a flash that was the whole signal would
-      // say nothing in the half of every turn it is at rest.
+      // Stays red while flashing, so it still warns between flashes.
       flashing: {
         animationDuration: "{durations.pulse}",
         animationIterationCount: "infinite",
@@ -107,12 +91,9 @@ const rootStyles = cva({
   },
 });
 
-// Drawn in `currentcolor` throughout, which is whatever the readout above has
-// set `color` to — the bar's white, or `danger`. A meter is boxes rather than
-// type, so naming a color here would leave it behind when the figures beside
-// it went red.
+// Drawn in `currentcolor` so it follows the readout's color.
 const caseStyles = css({
-  // The terminal nub, which is what makes a rounded box a battery.
+  // The terminal nub.
   _after: {
     backgroundColor: "currentcolor",
     blockSize: 1,
@@ -129,8 +110,7 @@ const caseStyles = css({
   border: "1px solid currentcolor",
   borderRadius: "xs",
   inlineSize: 5.5,
-  // The nub is out beyond the box, so without this the gap after it is the
-  // gap the nub is standing in and the figures run into the battery.
+  // Leaves room for the nub, which sits outside the box.
   marginInlineEnd: 0.5,
   padding: 0.25,
   position: "relative",
@@ -142,23 +122,18 @@ const fillStyles = css({
 });
 
 const percentStyles = css({
-  // Ten pixels, the bar's own size, which no font-size token is — the scale
-  // steps from 8px to 12px.
+  // 10px to match the bar; the font-size scale jumps from 8px to 12px.
   fontSize: "0.625rem",
-  // A charge that changes must not change the width of the bar's end with it.
+  // Fixed-width digits so the bar's width does not change with the charge.
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });
 
 /**
- * Which of the three the readout is in.
+ * The readout's state.
  *
- * Off the *percentage* rather than off the level behind it, so the color and
- * the figures cannot disagree: a tenth and a bit reads as `10%`, and a readout
- * saying ten while looking comfortable would be two answers to one question.
- *
- * Always `fine` with the lead in: a battery on AC is filling rather than
- * running out, so there is nothing to warn about.
+ * Based on the rounded percentage so the color matches the figures shown.
+ * Always `fine` while charging.
  */
 const chargeOf = (percent: number, charging: boolean) => {
   if (charging || percent > DANGEROUS_PERCENT) {

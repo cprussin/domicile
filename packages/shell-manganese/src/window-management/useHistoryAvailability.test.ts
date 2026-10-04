@@ -7,12 +7,8 @@ import { useHistoryAvailability } from "./useHistoryAvailability";
 const NOWHERE = { canGoBack: false, canGoForward: false };
 
 /**
- * A stand-in for the fork's element: the two properties a chrome reads, and
- * the event that tells it to read them again.
- *
- * `defineProperties` rather than assignment because they are readonly on the
- * real element — where the guest's history can reach is the browser process's
- * to say, and nothing in the page writes it.
+ * A fake `<webview>` with history properties and the change event.
+ * `defineProperties` because the properties are readonly on the real element.
  */
 const guest = () => {
   const element = document.createElement("webview");
@@ -32,10 +28,8 @@ const guest = () => {
 };
 
 describe("useHistoryAvailability", () => {
-  // THE PROPERTIES ARE THE STATE AND THE EVENT IS ONLY A NUDGE. A chrome that
-  // learned where the history reaches from the event alone would know nothing
-  // about a guest that committed its page before this hook's first effect ran,
-  // and would go on saying so until the user navigated again.
+  // The hook must read on mount: a guest may commit its page before the first
+  // effect runs, and that event is missed.
   it("reads what the view can do as it mounts, having heard nothing", () => {
     const view = guest();
     view.goes(true, true);

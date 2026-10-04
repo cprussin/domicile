@@ -26,7 +26,7 @@ const AT: Float = {
   y: 80,
 };
 
-/** A 1920 by 1080 screen: room for a float at its own size. */
+/** A 1920 by 1080 screen, large enough for a float at its own size. */
 const SCREEN = { height: 1080, width: 1920 };
 
 describe("floatFor", () => {
@@ -37,8 +37,8 @@ describe("floatFor", () => {
   });
 
   it("cascades each window past the ones already out", () => {
-    // Not on top of them: a window that opened exactly over the last one looks
-    // like the last one moved, and there is nothing to grab to find out.
+    // A window opened exactly over the last would look like the last one
+    // moved.
     const first = floatFor(LayoutNode.Window("w1"), 0, SCREEN);
     const second = floatFor(LayoutNode.Window("w2"), 1, SCREEN);
     expect(second.x).toBeGreaterThan(first.x);
@@ -46,8 +46,8 @@ describe("floatFor", () => {
   });
 
   it("cascades by the count rather than by where the last one ended up", () => {
-    // Dragging a window into the corner must not put the next one off the
-    // screen, so the count is what says how many are already out.
+    // So a window dragged into the corner does not push the next one off
+    // screen.
     expect(floatFor(LayoutNode.Window("w3"), 2, SCREEN)).toStrictEqual({
       ...floatFor(LayoutNode.Window("other"), 2, SCREEN),
       root: LayoutNode.Window("w3"),
@@ -118,14 +118,14 @@ describe("sizedTo", () => {
   });
 
   it("will not let a window be dragged narrower than its own grab", () => {
-    // The corner a resize is driven from is inside the window, so a window
-    // that can be made smaller than the grab can be made impossible to grab.
+    // The resize corner is inside the window, so a smaller window could not
+    // be grabbed.
     expect(sizedTo(AT, 1, 500).width).toBeGreaterThan(1);
   });
 
   it("will not let a window be dragged shorter than its own title bar", () => {
-    // The bar comes out of the height, so a window shorter than its bar would
-    // have a surface of nothing and a frame with nothing left to grab.
+    // The bar is part of the height, so a shorter window would have no
+    // surface.
     expect(sizedTo(AT, 800, 1).height).toBeGreaterThan(TITLE_BAR);
   });
 
@@ -160,8 +160,8 @@ describe("stretched", () => {
   });
 
   it("holds the far edges still where the dragged ones have to stop", () => {
-    // Too small on one axis and off the desktop on the other: either way the
-    // edge not taken hold of must not be the one that gives.
+    // Whether clamped by minimum size or by the desktop edge, the opposite
+    // edge stays put.
     const squashed = stretched(AT, TOP_LEFT, AT.width, -AT.y - 50);
     expect(squashed.x + squashed.width).toBe(AT.x + AT.width);
     expect(squashed.width).toBeLessThan(AT.width);

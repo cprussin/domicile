@@ -1,8 +1,7 @@
-// What a key of manganese's can do, as a binding names it, and the keys a
-// desktop gets without binding any.
+// Typed builders for manganese's commands, and the default keybindings.
 //
-// Each is the `send-shell` words `command.ts` reads, built rather than typed,
-// so a binding in a shell's props is checked where it is written.
+// Each builder produces the `send-shell` words `command.ts` parses, so a
+// binding in a shell's options is type-checked where it is written.
 
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type {
@@ -10,52 +9,52 @@ import type {
   ShellKeybindings,
 } from "@domicile-desktop/sdk/own-keybindings";
 
-/** A way a window or the focus can go. */
+/** A direction. */
 export type Way = "left" | "down" | "up" | "right";
 
-/** A command for manganese, as the words after `send-shell`. */
+/** A manganese command, as the words after `send-shell`. */
 const command = (...words: readonly string[]) => KeyAction.SendShell(words);
 
-/** Run `argv`, as sway's `exec` does but without a shell around it. */
+/** Run `argv` directly, without a shell. */
 export const exec = (...argv: readonly string[]) => command("exec", ...argv);
-/** Close the window being worked in. */
+/** Close the focused window. */
 export const kill = () => command("kill");
 /** Lock the desk. */
 export const lock = () => command("lock");
-/** Open the launcher, or put it away. */
+/** Toggle the launcher. */
 export const launcher = () => command("launcher");
-/** Open the clipboard's history, or put it away. */
+/** Toggle the clipboard history. */
 export const clipboard = () => command("clipboard");
-/** Move the focus, or point the commands at the container around it. */
+/** Move the focus, or focus the parent or child container. */
 export const focus = (to: Way | "parent" | "child" | "mode_toggle") =>
   command("focus", to);
-/** Move the window, or hide it in the scratchpad. */
+/** Move the window, or send it to the scratchpad. */
 export const move = (to: Way | "scratchpad") => command("move", to);
-/** Send the window to a workspace, `1` to `10`, and stay. */
+/** Send the window to workspace `1` to `10` without following it. */
 export const moveToWorkspace = (name: string) =>
   command("move", "container", "to", "workspace", name);
 /** Go to a workspace, `1` to `10`. */
 export const workspace = (name: string) => command("workspace", name);
-/** Wrap the focus in a container of one. */
+/** Wrap the focused window in a new container. */
 export const split = (axis: "h" | "v") => command("split", axis);
-/** Lay out the container the focus is in. */
+/** Set the layout of the focused container. */
 export const layout = (as: "stacking" | "tabbed" | "toggle split") =>
   command("layout", ...as.split(" "));
-/** Fill the screen, or every screen with `global`, with the window. */
+/** Toggle fullscreen, across every screen with `global`. */
 export const fullscreen = (global = false) =>
   global
     ? command("fullscreen", "toggle", "global")
     : command("fullscreen", "toggle");
-/** Take the window out of the tiling, or put it back. */
+/** Toggle floating. */
 export const floating = () => command("floating", "toggle");
-/** Bring the last window hidden in the scratchpad back. */
+/** Show the last scratchpad window. */
 export const scratchpad = () => command("scratchpad", "show");
-/** Grow the window that way; the neighbor gives way. */
+/** Grow the window in a direction, shrinking its neighbor. */
 export const grow = (way: Way) => command("resize", "grow", way);
-/** Read the keys in another binding mode. */
+/** Enter a binding mode. */
 export const mode = (name: string) => KeyAction.Mode(name);
 
-/** The vim keys and the arrows, by the way each goes. */
+/** Vim keys and arrow keys, by direction. */
 const WAYS: readonly (readonly [Way, readonly string[]])[] = [
   ["left", ["h", "Left"]],
   ["down", ["j", "Down"]],
@@ -63,7 +62,7 @@ const WAYS: readonly (readonly [Way, readonly string[]])[] = [
   ["right", ["l", "Right"]],
 ];
 
-/** `each` for every way's two keys, as `Meta+<key>` with `held` too. */
+/** Bind `Meta+<held><key>` to `each` for every direction key. */
 const everyWay = (
   held: string,
   each: (way: Way) => KeyAction,
@@ -74,7 +73,7 @@ const everyWay = (
     ),
   );
 
-/** Workspaces 1 to 10, on the digits 1 to 0, as `Meta+<digit>` with `held`. */
+/** Bind `Meta+<held><digit>` to `each` for workspaces 1 to 10 (keys 1 to 0). */
 const everyWorkspace = (
   held: string,
   each: (name: string) => KeyAction,
@@ -87,8 +86,8 @@ const everyWorkspace = (
   );
 
 /**
- * Mode `default`, as a desktop gets it: sway's keys, on Meta. Spread it into a
- * table of your own to keep it and change a key.
+ * Default bindings for mode `default`: sway's, on Meta. Spread into your own
+ * table to override individual keys.
  */
 export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+a": focus("parent"),
@@ -116,7 +115,7 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   ...everyWorkspace("Shift+", moveToWorkspace),
 };
 
-/** The modes a desktop gets: `resize`, which `Meta+r` enters. */
+/** Default extra modes: `resize`, entered with `Meta+r`. */
 export const DEFAULT_MODES: NonNullable<ShellKeybindings["modes"]> = {
   resize: {
     "Meta+Escape": mode("default"),

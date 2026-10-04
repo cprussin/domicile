@@ -47,22 +47,21 @@ import { RowKind, rowsIn } from "./rows";
 import { ListingState, useListing } from "./useListing";
 import { crumbsOf, parentOf, shownPath, walked } from "./walk-path";
 
-/** What the box is for, as its accessible name. */
+/** The filter box's accessible name. */
 const PROMPT = "Filter or go to a path";
 
-/** What the box says while it is empty: what typing in it does. */
+/** The filter box's placeholder, listing the path shortcuts. */
 const PLACEHOLDER = "Filter, or type a path:  /  root   ~  home   ..  up";
 
-/** How big a row's glyph, and the box's, is drawn. */
+/** The icon size for rows and the filter box. */
 const ICON_SIZE = 16;
 
-/** How big a placeholder's glyph is drawn: the size of an absence. */
+/** The icon size for empty-state placeholders. */
 const PLACEHOLDER_ICON_SIZE = 40;
 
 /**
- * The folders a home has by convention, in the order a file manager lists
- * them, and the glyph each is drawn with. The sidebar shows the ones this
- * home has.
+ * The standard home folders and their icons, in file manager order. The
+ * sidebar shows those that exist.
  */
 const STANDARD_PLACES: readonly (readonly [string, typeof FolderIcon])[] = [
   ["Desktop", DesktopIcon],
@@ -75,58 +74,44 @@ const STANDARD_PLACES: readonly (readonly [string, typeof FolderIcon])[] = [
 
 type Props = {
   /**
-   * The box, which is where the window's keyboard goes while the picker is
-   * up — see `BrowserWindow`.
+   * The filter box, which takes the window's keyboard focus while the picker
+   * is open. See `BrowserWindow`.
    */
   ref?: Ref<HTMLInputElement> | undefined;
-  /** What the page is waiting on, and how to answer it. */
+  /** The page's file request and how to answer it. */
   request: FileRequest;
 };
 
-/** A place in the sidebar: where it goes, and how it is drawn. */
+/** A sidebar entry. */
 type Place = { glyph: typeof FolderIcon; label: string; path: string };
 
 /**
- * A file picker for the page in a browser window, drawn over that page.
+ * A file picker for a browser page, drawn over that page only, so other
+ * windows and the address bar stay usable.
  *
- * **A FILE SELECTOR, AND THE WHOLE FILESYSTEM.** It opens in the home and
- * walks the tree from there, one directory at a time, each listed by the
- * browser as it is reached: nothing is indexed. `..` heads every directory but
- * the root, the path bar jumps back to any directory on the way, and the
- * sidebar to the places everybody keeps things.
+ * Starts in the home directory and lists one directory at a time; nothing is
+ * indexed. Typing filters; a `/` walks the path like a shell (see `walked`).
+ * A click or arrow key selects a file; Enter, a double click or the button
+ * chooses it. Clicking a directory enters it.
  *
- * **THE BOX IS A PATH.** What is typed narrows the directory listed; a `/`
- * walks — `Scratch/` into Scratch, `../` up, a leading `/` to the root, `~/`
- * home — the way a shell's prompt reads a path. See `walked`.
- *
- * **SELECTING IS NOT CHOOSING.** A click, or the arrows, select a file, and
- * the chip in the footer says which; Enter, a double click or the button
- * chooses it. A directory is somewhere to go, so a click on one goes there.
- *
- * **OVER THE PAGE, NOT THE DESKTOP.** The question is the page's, and a page
- * waiting on a picker is a window that cannot go on until it is answered —
- * every other window can. So it covers the page it belongs to and nothing
- * else, and the address bar above it still works.
- *
- * The keys: the arrows move, Enter opens, Backspace in an empty box goes up,
- * Ctrl+Enter chooses whatever is selected, Escape cancels — and where several
- * files are asked for, Tab marks a file and moves on, fzf's way.
+ * Keys: arrows move, Enter opens, Backspace in an empty box goes up,
+ * Ctrl+Enter confirms, Escape cancels, and Tab marks a file in multi-select,
+ * as in fzf.
  */
 export const FilePicker = ({ ref, request }: Props) => {
   const titleId = useId();
   const listId = useId();
   const [directory, setDirectory] = useState(request.home);
   const [query, setQuery] = useState("");
-  // Where the arrows or a click have taken the highlight, or `undefined` for
-  // a directory just reached — which starts on its first row below `..`.
+  // The highlighted row, or `undefined` for the default: the first row below
+  // `..`.
   const [stepped, setStepped] = useState<number | undefined>(undefined);
-  // The files marked for a choice of several, by path, in the order marked.
+  // Marked file paths for multi-select, in marking order.
   const [marks, setMarks] = useState<readonly string[]>([]);
   const [name, setName] = useState(request.suggestedName);
 
   const listing = useListing(request.list, directory);
-  // The home, listed for the sidebar: which of the places everybody keeps
-  // things this one has.
+  // Lists the home directory to find which standard folders exist.
   const homeListing = useListing(request.list, request.home);
   const rows = rowsIn({
     accept: request.accept,
@@ -158,8 +143,8 @@ export const FilePicker = ({ ref, request }: Props) => {
     }
   };
 
-  // Enter on a row, or a double click: a directory is gone into, and a file
-  // is chosen — or, for a save, named.
+  // Enter or double click: enters a directory, or chooses a file (or names
+  // it, when saving).
   const open = (row: Row) => {
     switch (row.kind) {
       case RowKind.Parent:
@@ -192,9 +177,8 @@ export const FilePicker = ({ ref, request }: Props) => {
     }
   };
 
-  // A single click: a directory is gone into, which is what the `..` and the
-  // folders are for under a pointer; a file is selected, and marked or named
-  // where the question is one of those.
+  // A single click: enters a directory, or selects a file and marks or names
+  // it as the mode requires.
   const pick = (row: Row, at: number) => {
     if (row.kind === RowKind.File) {
       setStepped(at);
@@ -208,7 +192,7 @@ export const FilePicker = ({ ref, request }: Props) => {
     }
   };
 
-  // Ctrl+Enter, from either field: choose what the selection chip says.
+  // Ctrl+Enter in either field confirms the current selection.
   const confirmOnChord = (event: KeyboardEvent) => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
@@ -217,7 +201,7 @@ export const FilePicker = ({ ref, request }: Props) => {
   };
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape is what puts a dialog away wherever in it the focus is — the box, the name, a button — so it is the dialog's key, not one control's
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape closes the dialog wherever focus is inside it
     <dialog
       aria-labelledby={titleId}
       className={scrimStyles}
@@ -367,7 +351,7 @@ export const FilePicker = ({ ref, request }: Props) => {
             prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
             ref={ref}
             role="combobox"
-            // File names are not prose — see the launcher's box.
+            // File names are not prose.
             spellCheck={false}
             value={query}
           />
@@ -386,14 +370,12 @@ export const FilePicker = ({ ref, request }: Props) => {
               {rows.map((row, at) => {
                 const marked = marks.includes(row.path);
                 return (
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox above owns the keyboard for these rows, which is the whole point of `aria-activedescendant`
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox handles the keyboard via `aria-activedescendant`
                   <div
-                    // The name, and not the kind beside it: the kind is
-                    // what the row looks like, the name is what it is.
+                    // Excludes the kind column.
                     aria-label={row.name}
-                    // Marked, for a choice of several — the highlight is
-                    // only where Tab would mark next. Highlighted, for a
-                    // choice of one.
+                    // In multi-select, the marks are the selection; the
+                    // highlight is only the cursor.
                     aria-selected={multiple ? marked : at === highlighted}
                     className={rowStyles}
                     data-highlighted={at === highlighted ? "" : undefined}
@@ -409,8 +391,7 @@ export const FilePicker = ({ ref, request }: Props) => {
                         openFile(row);
                       }
                     }}
-                    // A press on a row does not take the focus out of the
-                    // field that was being typed in.
+                    // Keeps focus in the filter box.
                     onMouseDown={(event) => {
                       event.preventDefault();
                     }}
@@ -486,7 +467,7 @@ export const FilePicker = ({ ref, request }: Props) => {
   );
 };
 
-/** The glyph in the sidebar's tile: what the page is asking for. */
+/** The sidebar icon for the request mode. */
 const ModeGlyph = ({ mode }: { mode: ChooserMode }) => {
   switch (mode) {
     case ChooserMode.Open: {
@@ -504,7 +485,7 @@ const ModeGlyph = ({ mode }: { mode: ChooserMode }) => {
   }
 };
 
-/** The path bar's first step: home, or the root. */
+/** The icon for the path bar's first crumb: home or root. */
 const CrumbGlyph = ({ label }: { label: string }) =>
   label === "~" ? (
     <HouseIcon size={14} weight="fill" />
@@ -513,9 +494,8 @@ const CrumbGlyph = ({ label }: { label: string }) =>
   );
 
 /**
- * The glyph a row starts with: a mark, or what the row is. Filled where the
- * highlight is, because an outline glyph is mostly the ground it is drawn on,
- * and a lit row takes that ground's contrast with it — see the launcher.
+ * A row's icon: a check if marked, else its kind. Filled when highlighted,
+ * since an outline icon loses contrast on the highlight, as in the launcher.
  */
 const RowGlyph = ({
   highlighted,
@@ -551,10 +531,8 @@ const RowGlyph = ({
 };
 
 /**
- * What the list says when it has no rows of its own to show: a folder that
- * cannot be read, one with nothing in it, or a filter nothing matches. Not
- * while the browser is still reading one — that is a moment, and a message
- * that flashed through it would be noise.
+ * The empty-state message for an unreadable folder, an empty folder or a
+ * filter with no matches. Shows nothing while loading, to avoid a flash.
  */
 const Emptiness = ({
   listing,
@@ -623,7 +601,7 @@ const Placeholder = ({
   </div>
 );
 
-/** The chip that says what the button would choose. */
+/** The footer chip showing what the confirm button would choose. */
 const Selection = ({
   answer,
   home,
@@ -673,8 +651,8 @@ const Selection = ({
 };
 
 /**
- * A path as the selection says it: the folder dimmed and giving way first, so
- * the name — what was picked — is the part that is always read.
+ * A selected path, with the folder dimmed and truncated first so the file
+ * name stays visible.
  */
 const SelectedPath = ({ path }: { path: string }) => {
   const cut = path.lastIndexOf("/") + 1;
@@ -686,7 +664,7 @@ const SelectedPath = ({ path }: { path: string }) => {
   );
 };
 
-/** The keys the picker answers to, at the foot of the sidebar. */
+/** The key help at the foot of the sidebar. */
 const Keys = ({ mode }: { mode: ChooserMode }) => (
   <dl className={keysStyles}>
     <Key keys={["↑", "↓"]} what="Move" />
@@ -711,10 +689,7 @@ const Key = ({ keys, what }: { keys: readonly string[]; what: string }) => (
   </div>
 );
 
-/**
- * The sidebar's places: home, the standard folders this home has, and the
- * root.
- */
+/** The sidebar entries: home, the standard folders present, and root. */
 const placesOf = (
   home: string,
   entries: readonly string[],
@@ -726,15 +701,14 @@ const placesOf = (
   { glyph: HardDrivesIcon, label: "Computer", path: "/" },
 ];
 
-/** Where a directory's highlight starts: its first row below `..`. */
+/** The default highlight: the first row below `..`. */
 const firstOf = (rows: readonly Row[]): number =>
   rows[0]?.kind === RowKind.Parent && rows.length > 1 ? 1 : 0;
 
 /**
- * What the picker would answer now, or `undefined` while it has nothing to
- * answer with: no file selected, or a save with no name. A folder is the one
- * the picker is in; several files are the ones marked, or the selected one
- * when none is.
+ * The paths the picker would return now, or `undefined` if nothing valid is
+ * selected. A folder request returns the current directory; multi-select
+ * returns the marks, or the highlighted file if none.
  */
 const answerOf = ({
   current,
@@ -766,13 +740,13 @@ const answerOf = ({
   }
 };
 
-/** `marks` with `path` marked if it was not, and unmarked if it was. */
+/** `marks` with `path` toggled. */
 const toggled = (marks: readonly string[], path: string): readonly string[] =>
   marks.includes(path)
     ? marks.filter((marked) => marked !== path)
     : [...marks, path];
 
-/** What the Kind column says for a row. */
+/** The Kind column text for a row. */
 const describe = (row: Row): string => {
   switch (row.kind) {
     case RowKind.Parent: {
@@ -816,7 +790,7 @@ const glyphOf = (kind: FileKind): typeof FileIcon => {
   }
 };
 
-/** What `data-tone` says a row's tile is colored as. */
+/** A row's `data-tone`, which sets its tile color. */
 const toneOf = (row: Row): string => {
   switch (row.kind) {
     case RowKind.Parent: {
@@ -909,14 +883,13 @@ const confirmOf = (mode: ChooserMode): string => {
   }
 };
 
-/** A row's own id, which is what `aria-activedescendant` points at. */
+/** A row's id, for `aria-activedescendant`. */
 const rowId = (listId: string, at: number): string =>
   `${listId}-${at.toString()}`;
 
-// The whole page, dimmed and blurred, and nothing of it reachable: the page is
-// waiting on this, and a press that went through to it would be a page
-// answering its own question. The library's glass scrim — see `ModalDialog` —
-// fading in. A `dialog` of the browser's, so its own box is reset to this one.
+// Covers the page so it cannot be clicked while it waits for an answer. Uses
+// the library's glass scrim (see `ModalDialog`) and resets the native
+// `dialog` box.
 const scrimStyles = css({
   _starting: { opacity: 0 },
   backdropFilter: "blur({spacing.2.5}) saturate(140%)",
@@ -937,11 +910,8 @@ const scrimStyles = css({
   transition: "opacity {durations.normal} {easings.out}",
 });
 
-// A pane of the library's glass — see `ModalDialog`'s glass surface — rising
-// into place as it opens: the page behind it comes through blurred and a shade
-// richer, and the top edge carries the line of light a pane catches. Two
-// columns, a file manager's: the places, and the folder; the footer across
-// both.
+// The library's glass surface (see `ModalDialog`). Two columns, sidebar and
+// folder, with the footer across both.
 const panelStyles = grid({
   _before: {
     background:
@@ -957,14 +927,12 @@ const panelStyles = grid({
     opacity: 0,
     transform: "translateY({spacing.4}) scale(0.96)",
   },
-  // The controls on it are part of the pane rather than cards sitting on it.
   "& :has(> [data-control])": {
     backgroundColor:
       "color-mix(in oklab, {colors.background} 45%, transparent)",
   },
   backdropFilter: "blur({spacing.6}) saturate(180%)",
-  // More of the card than `ModalDialog`'s glass lets through: this one is
-  // read row by row, over whatever page asked.
+  // More opaque than `ModalDialog`'s glass, for readable rows over any page.
   backgroundColor: "color-mix(in oklab, {colors.card} 86%, transparent)",
   blockSize: "min(86vh, {spacing.180})",
   border: "1px solid color-mix(in oklab, {colors.foreground} 14%, transparent)",
@@ -981,8 +949,6 @@ const panelStyles = grid({
     "opacity {durations.normal} {easings.out}, transform {durations.slow} {easings.outBack}",
 });
 
-// The places, on a ground a shade apart from the folder's, with the light
-// falling from its top corner.
 const sidebarStyles = flex({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
   backgroundImage:
@@ -1001,7 +967,6 @@ const brandStyles = hstack({
   gap: 3,
 });
 
-// The mode's glyph on a tile of the accent, lit from above.
 const brandTileStyles = css({
   backgroundImage:
     "linear-gradient(160deg, color-mix(in oklab, {colors.accent} 80%, {colors.foreground}), {colors.accent} 60%, color-mix(in oklab, {colors.accent} 70%, {colors.background}))",
@@ -1034,8 +999,6 @@ const subtitleStyles = css({
   fontSize: "xs",
 });
 
-// Each place a row the width of the sidebar, the one the picker is in lit in
-// the accent.
 const placesStyles = flex({
   "& > button": {
     gap: 2.5,
@@ -1069,8 +1032,6 @@ const mainStyles = flex({
   padding: 5,
 });
 
-// The steps to here as a pill, each one somewhere to go back to, the last the
-// one the picker is in.
 const pathBarStyles = flex({
   "& [aria-current=location]": { color: "foreground", fontWeight: "semibold" },
   alignItems: "center",
@@ -1095,8 +1056,6 @@ const crumbSeparatorStyles = css({
   marginInline: 0.5,
 });
 
-// The folder, filling what the pane has left. A ground a shade off the
-// pane's, so the room it keeps reads as a place waiting for rows.
 const resultsStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.background} 30%, transparent)",
   border: "1px solid color-mix(in oklab, {colors.foreground} 7%, transparent)",
@@ -1112,7 +1071,6 @@ const resultsStyles = css({
   scrollPaddingBlockStart: 9,
 });
 
-// The columns' names, staying put as the rows scroll under them.
 const columnsStyles = grid({
   backdropFilter: "blur({spacing.3})",
   backgroundColor: "color-mix(in oklab, {colors.card} 70%, transparent)",
@@ -1126,8 +1084,7 @@ const columnsStyles = grid({
   marginBlockEnd: 1,
   marginInline: -1.5,
   paddingBlock: 2,
-  // The rows' own insets, so each name sits under its column's: the list's
-  // padding and the row's, and the tile and the gap after it.
+  // Matches the rows' insets so headers align with their columns.
   paddingInlineEnd: 3.5,
   paddingInlineStart: 13.5,
   position: "sticky",
@@ -1141,30 +1098,22 @@ const listStyles = flex({
 });
 
 const rowStyles = grid({
-  // THE TILE'S COLOR SAYS WHAT A FILE IS before its name is read: folders in
-  // the accent, documents a quieter shade of it, PDFs in red, archives in
-  // amber, code in green — the semantic colors, mixed. Mixed in OKLCH where
-  // two hues meet, because OKLab's straight line between them runs through
-  // gray.
+  // The tile color shows the file kind. Tones that blend two hues mix in
+  // OKLCH, since OKLab mixing passes through gray.
   "& [data-row-tile]": {
     backgroundColor: "color-mix(in oklab, var(--tone) 16%, transparent)",
     borderColor: "color-mix(in oklab, var(--tone) 26%, transparent)",
     color: "var(--tone)",
   },
-  // The selected row in the desktop's accent, as the launcher draws its own:
-  // a wash that fades across the row.
   "&[data-highlighted]": {
     backgroundImage:
       "linear-gradient(to right, color-mix(in oklab, {colors.accent} 30%, transparent), color-mix(in oklab, {colors.accent} 8%, transparent))",
   },
-  // Its tile lit in the accent, whatever the file's own color, as the
-  // launcher lights a reached row's.
   "&[data-highlighted] [data-row-tile]": {
     backgroundColor: "color-mix(in oklab, {colors.accent} 28%, transparent)",
     borderColor: "color-mix(in oklab, {colors.accent} 45%, transparent)",
     color: "accent",
   },
-  // A mark is a choice already made: the tile says so in solid accent.
   "&[data-marked] [data-row-tile]": {
     backgroundColor: "accent",
     borderColor: "accent",
@@ -1200,8 +1149,6 @@ const rowStyles = grid({
   userSelect: "none",
 });
 
-// The glyph sits in a tile of its own, as the launcher's does: every row gets
-// the same shoulder to start at, and the tile carries the file's color.
 const rowTileStyles = css({
   blockSize: 7,
   border: "1px solid transparent",
@@ -1229,8 +1176,6 @@ const rowKindStyles = css({
   whiteSpace: "nowrap",
 });
 
-// A large glyph in the middle of the folder, quiet enough to read as an
-// absence, over what it is and what to do about it.
 const placeholderStyles = vstack({
   color: "muted",
   gap: 1.5,
@@ -1261,8 +1206,6 @@ const placeholderNoteStyles = css({
   fontSize: "sm",
 });
 
-// Across both columns, on its own ground: what will be chosen, and the
-// buttons that choose it.
 const footerStyles = hstack({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 3%, transparent)",
   borderBlockStart:
@@ -1274,8 +1217,7 @@ const footerStyles = hstack({
   paddingInline: 5,
 });
 
-// What the button would choose, as a chip: the answer, said before it is
-// given. Nothing chosen yet is said plainly, without the chip.
+// Drawn as a chip only when there is a selection.
 const selectionStyles = hstack({
   "&[data-empty]": {
     backgroundColor: "transparent",
@@ -1317,7 +1259,7 @@ const selectionPathStyles = css({
   whiteSpace: "nowrap",
 });
 
-// The folder gives way first, its ellipsis at its own end.
+// Truncates before the file name does.
 const selectionFolderStyles = css({
   color: "muted",
   flexShrink: 1,
@@ -1344,8 +1286,6 @@ const actionsStyles = hstack({
   gap: 2,
 });
 
-// The keys, at the foot of the sidebar, each a line: what to press, then what
-// it does.
 const keysStyles = flex({
   color: "muted",
   direction: "column",

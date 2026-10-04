@@ -1,21 +1,15 @@
-// What the clock says, as one string.
+// The clock's text.
 //
-// Its own module because it is the one part of a clock that can be asserted on
-// without a render, and because the format is a decision rather than a default:
-// `toLocaleString` gives a locale's idea of a date, which is a different number
-// of characters every hour and a different order in every locale — not
-// something to put in the middle of a bar and expect to stay put.
+// A fixed format instead of `toLocaleString`, whose length and order vary by
+// locale and would shift the centered bar.
 
 /**
- * The locale the day is named in.
- *
- * Fixed rather than the desktop's, because the rest of the reading is not a
- * locale's format either: an ISO date beside a day named in whatever language
- * the machine happens to be set to is neither one convention nor the other.
+ * The locale for the weekday name. Fixed to match the fixed ISO date beside
+ * it.
  */
 const LOCALE = "en-US";
 
-/** How wide every number in the reading is written. */
+/** The width of each zero-padded number. */
 const DIGITS = 2;
 
 /** The local date and time, as `Wednesday 2026-09-16 20:53:40`. */
@@ -25,9 +19,8 @@ export const reading = (now: Date): string =>
 const day = (now: Date): string =>
   now.toLocaleDateString(LOCALE, { weekday: "long" });
 
-// Built out of the local fields rather than out of `toISOString`, which is UTC:
-// a desktop in London reads yesterday's date for the first hour of every
-// summer morning.
+// Built from local fields, not `toISOString`, which is UTC and would show the
+// wrong date near midnight.
 const date = (now: Date): string =>
   [
     now.getFullYear().toString(),

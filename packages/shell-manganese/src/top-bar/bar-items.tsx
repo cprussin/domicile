@@ -1,5 +1,5 @@
-// The items manganese's bar is made of, each reading the bar it is on rather
-// than taking props, so a user's layout names them and nothing else.
+// The items of manganese's bar. Each reads its bar from context, so a layout
+// only names them.
 
 import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
 
@@ -14,18 +14,15 @@ import { Volume } from "../volume/Volume";
 import { useBar } from "./bar-context";
 import { Workspaces } from "./Workspaces";
 
-/**
- * The launcher's button: the panel `mod+Space` opens, for a hand already on
- * the pointer.
- */
+/** The launcher button: opens the panel `mod+Space` opens. */
 export const BarLauncher = () => {
   const { onOpenLauncher } = useBar();
   return <LauncherButton onOpen={onOpenLauncher} />;
 };
 
 /**
- * The tray: each icon an application's StatusNotifierItem or an extension's
- * toolbar button, in one row in the order the user dragged them into.
+ * The tray: application StatusNotifierItems and extension buttons, in one row,
+ * in the user's order.
  */
 export const BarTray = () => {
   const {
@@ -49,7 +46,7 @@ export const BarTray = () => {
   );
 };
 
-/** The workspaces this screen has, the one on screen marked. */
+/** This screen's workspaces, with the visible one marked. */
 export const BarWorkspaces = () => {
   const { current, focused, onSelectWorkspace, workspaces } = useBar();
   return (
@@ -62,13 +59,10 @@ export const BarWorkspaces = () => {
   );
 };
 
-/** The date and the time, down to the second. */
+/** The date and time, to the second. */
 export const BarClock = () => <Clock />;
 
-/**
- * The binding mode the keys are read in, named only when it is not the usual
- * `default`.
- */
+/** The current binding mode, shown only when it is not `default`. */
 export const BarMode = () => {
   const { mode } = useBar();
   return mode === "default" ? undefined : (
@@ -77,38 +71,36 @@ export const BarMode = () => {
 };
 
 /**
- * The theme toggle. Two positions rather than three: this bar *is* the
- * system, so there is nothing above it for a `system` to follow.
+ * The theme toggle. Light or dark only: the compositor owns the desktop theme,
+ * so there is no system setting above it to follow.
  */
 export const BarThemeSelector = () => <ThemeSwitch />;
 
-/** The speaker, whose panel holds the whole mixer. */
+/** The volume control, whose panel holds the mixer. */
 export const BarVolume = () => {
   const { domicile } = useBar();
   return <Volume domicile={domicile} />;
 };
 
-/** The screen's brightness. */
+/** The screen brightness. */
 export const BarBrightness = () => {
   const { domicile } = useBar();
   return <Brightness domicile={domicile} />;
 };
 
-/** The charge. */
+/** The battery charge. */
 export const BarBattery = () => {
   const { domicile } = useBar();
   return <Battery domicile={domicile} />;
 };
 
-/** The bell, which opens the drawer of notifications. */
+/** The bell, which opens the notification drawer. */
 export const BarNotifications = () => {
   const { onOpenNotifications, unread } = useBar();
   return <NotificationBell onOpen={onOpenNotifications} unread={unread} />;
 };
 
-// Not a color of its own: the bar's text is white over a photograph, and
-// what marks this out is that it is a word in capitals where the rest of the
-// bar is numbers and a clock.
+// Uses capitals rather than a color, since the bar's text is always white.
 const modeStyles = css({
   fontSize: "0.625rem",
   textTransform: "uppercase",

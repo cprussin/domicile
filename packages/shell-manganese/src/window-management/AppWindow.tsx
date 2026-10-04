@@ -30,104 +30,76 @@ import {
 
 type Props = {
   /**
-   * Whether a panel of the desktop's own is up over the windows.
-   *
-   * Which is a thing to type into that no click reached and no client knows
-   * about, so the seat is the page's for as long as it is there — see the
-   * effect that answers this.
+   * Whether a shell panel (such as the launcher) is open over the windows.
+   * The page takes the keyboard while it is.
    */
   behindPanel: boolean;
   /**
-   * Whether the pointer goes through this window to the page behind it.
+   * Whether the pointer passes through this window to the page.
    *
-   * What lets the shell drag a window at all: the pointer over a client's
-   * surface belongs to the client, so the shell has to be given it back
-   * before it can be told where the window is being dragged to.
+   * Needed for drags: the client owns the pointer over its surface, so the
+   * shell cannot track a drag over it otherwise.
    */
   clickThrough: boolean;
-  /** Whether the user has hold of this window, which makes it see-through. */
+  /** Whether the user is dragging this window. */
   dragging: boolean;
-  /** The host's name for the client this window shows. */
+  /** The host's id for this window's client. */
   appId: string;
   /**
-   * The cursor the client has asked for, or `undefined` while it has asked for
-   * none — which leaves the pointer whatever the page's own styling says.
+   * The cursor the client requested. `undefined` uses the page's cursor.
    */
   cursor: CursorShape | undefined;
-  /** How it stacks: the window's own `z-index`, which the SDK reports. */
+  /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
-  /** The channel the keyboard is asked for over. */
+  /** Used to request keyboard focus. */
   domicile: DomicileClient;
   /**
-   * The whole box this window's bar and contents span, which both of them turn
-   * about — see {@link scaledAbout}. `undefined` for a window that is not on
-   * screen, exactly as {@link Props.rect} is.
+   * The box spanning the title bar and contents; the transform origin (see
+   * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
    */
   frame: Rect | undefined;
-  /** Whether the user is working in this window, so it takes the keyboard. */
+  /** Whether the shell considers this window focused. */
   focused: boolean;
-  /**
-   * Whether this window fills the screen, which squares its corners and drops
-   * its edge: the screen's own are the only ones it has.
-   */
+  /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
   /**
-   * Whether the compositor says this window is the one it is typing into.
+   * Whether the compositor gives this window keyboard focus.
    *
-   * Not the same fact as {@link Props.focused}, which is the shell's own, and
-   * the difference is the whole reason this is a prop: the two come apart
-   * whenever something takes the keyboard without the shell saying so.
+   * Can differ from {@link Props.focused} when something else takes the
+   * keyboard; the focus effect uses this to reclaim it.
    */
   hasKeyboard: boolean;
   /**
-   * What this window is doing that the page has to draw over time: arriving,
-   * leaving, or nothing at all.
+   * The window's current animation, if any.
    *
-   * A window that is leaving is drawn and nothing else. It asks for no
-   * keyboard, takes no pointer and is nothing a keyboard can reach, because
-   * what it is showing is where the window was rather than a window.
+   * A leaving window is drawn only: it requests no keyboard, takes no pointer
+   * and is inert.
    */
   motion: WindowMotion;
   /**
-   * Called when it has played that motion all the way out.
-   *
-   * Which is how the desktop knows a window it has closed can be taken off the
-   * page. Rather than a timer: how long the motion takes is the stylesheet's,
-   * and a duration written in the shell as well is a second copy of it to keep
-   * in step.
+   * Called when the motion's animation ends, so a closed window can be
+   * removed. Uses the animation event so the duration lives only in CSS.
    */
   onMotionEnded: () => void;
   /**
-   * Where the window's contents go, or `undefined` when it is not on screen
-   * at all — on another workspace, or inside a container behind a tab.
+   * The contents' box, or `undefined` when off screen (another workspace, or
+   * behind a tab).
    */
   rect: Rect | undefined;
-  /**
-   * The shuffle it is playing while it trades places with another float in
-   * the stack — see `shuffledBy` — or `undefined` while it is not.
-   */
+  /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
 };
 
 /**
- * A Wayland client's window: one `<app>`, which is the whole point of
- * Domicile — the client's live pixels are a real element that takes ordinary
- * CSS. Hiding is what takes it off the screen: a hidden element has no box, so
- * the SDK reports it to the host as no longer composited.
+ * A Wayland client's window, rendered as an `<app>` element.
  *
- * The element is the engine's rather than the SDK's, so what this component
- * writes onto it is ordinary DOM: an attribute for which window, a class and a
- * style for where and how it is drawn, and `cursor` among the style because
- * that is what a cursor always was.
+ * Hiding the element takes the window off screen: it has no box, so the SDK
+ * tells the host it is no longer composited.
  *
- * Two things are not props, and for the same reason — `<app>` has no hyphen in
- * its name, so React treats the tag as an ordinary HTML element rather than as a
- * custom element, and neither a property it does not recognize nor an `on…`
- * listener for an event it has never heard of is written at all. So the focus
- * request is bound with `addEventListener` — the way `BrowserWindow` binds
- * `<webview>`'s events, for the same reason — and the keyboard is asked for in
- * an effect. The keyboard could not have been a property anyway: a client is a
- * surface, with nowhere for the browser to put focus.
+ * `<app>` has no hyphen, so React treats it as a plain HTML element and drops
+ * unknown properties and `on…` listeners. Focus events are therefore bound
+ * with `addEventListener` (as `BrowserWindow` does for `<webview>`), and
+ * keyboard focus is requested in an effect.
  */
 export const AppWindow = ({
   appId,
@@ -146,48 +118,25 @@ export const AppWindow = ({
   rect,
   restack,
 }: Props) => {
-  // A window the desktop no longer has is being drawn and nothing else.
+  // A closed window that is still animating out.
   const leaving = isLeaving(motion);
-  // `null` rather than `undefined` because that is what React's ref API hands a
-  // callback ref on unmount.
+  // `null` because React passes `null` to a callback ref on unmount.
   const [element, setElement] = useState<HTMLAppElement | null>(null);
 
-  // Only that way round, which is why this is not `focused ? … : …`. Which
-  // client holds the keyboard is one seat's answer and something is always in
-  // it: "this window has it" is an instruction the compositor can carry out, and
-  // "this window does not" is not one — so rendering `false` says nothing.
+  // Keeps the compositor's keyboard focus in line with the shell's.
   //
-  // Said again whenever the compositor answers with somewhere else, which is
-  // what `hasKeyboard` is for. The shell's idea of the active window and the
-  // seat come apart on their own: a press on the top bar, on the wallpaper, on
-  // anything of the chrome's hands the keyboard back to the page, and the
-  // window being worked in has not changed — so nothing else the shell watches
-  // moves, and before this the divergence was permanent. The desktop went on
-  // drawing a window as focused that every keystroke was missing.
-  //
-  // It cannot loop. A `focusApp` the compositor carries out comes back as the
-  // `focus_changed` that makes this false, and one it refuses moves neither
-  // this nor `focused`, so the effect is not run again either way.
-  //
-  // And not for a window that is leaving. Its bar goes on saying the keyboard
-  // was in it — that is what stops a window changing while the user watches it
-  // go — but the keyboard itself has moved on to whatever is left, and asking
-  // again would take it back off the window the user is now working in.
-  //
-  // AND IT WAITS WHILE A PANEL OF THE DESKTOP'S OWN IS OVER IT. The launcher
-  // is drawn by the page and the keyboard is the compositor's, so a client
-  // left holding the seat goes on receiving every keystroke while the user
-  // types into a box on top of it: the box fills with nothing and the window
-  // underneath takes the letters. The clause above is what would undo any
-  // attempt to fix that elsewhere — it asks for the seat back the moment the
-  // compositor says the keyboard has moved — so this is the same rule with
-  // the panel in it rather than a second rule fighting it.
-  //
-  // The give-back is the same line read the other way. When the panel goes
-  // down the seat is still the page's and the window is still the one being
-  // worked in, so the clause below runs and puts it back — without waiting
-  // for the pointer to cross the window, which under focus-follows-cursor
-  // might be the next thing the user does or might be minutes away.
+  // - Never sends an "unfocus" for an unfocused window; the keyboard always
+  //   belongs to someone.
+  // - Re-requests whenever `hasKeyboard` goes false, since clicking chrome
+  //   (top bar, wallpaper) moves the keyboard to the page without changing the
+  //   shell's focused window.
+  // - Cannot loop: a granted `focusApp` sets `hasKeyboard`, and a refused one
+  //   changes no dependency.
+  // - Skips a leaving window, whose keyboard has moved to the next window.
+  // - While a shell panel is open, takes the keyboard for the page. Otherwise
+  //   the client under the launcher would receive its keystrokes. When the
+  //   panel closes, the second branch returns focus without waiting for the
+  //   pointer to move.
   useEffect(() => {
     if (behindPanel) {
       if (hasKeyboard) {
@@ -198,12 +147,8 @@ export const AppWindow = ({
     }
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
-  // A click on a client's window asks for the keyboard, and the SDK grants it
-  // unless something answers first. This answers first, and unconditionally:
-  // which window the user is working in is one fact with one owner, and the
-  // press that asked is the frame's to report — see `WindowFrame`. `focused`
-  // above is what carries the decision back to the same element a render
-  // later.
+  // Cancels the SDK's default focus-on-click. The shell owns focus:
+  // `WindowFrame` reports the press and `focused` drives the effect above.
   useEffect(() => {
     if (element === null) {
       return undefined;
@@ -218,15 +163,13 @@ export const AppWindow = ({
     }
   }, [element]);
 
-  // And the other direction. The SDK gives the keyboard back to the page for a
-  // press that lands off every `<app>`, which a float's own title bar and grab
-  // sheet do — so without this, taking hold of a window to move it took the
-  // keyboard off it. Nothing in the press says which window a `<div>` belongs
-  // to, which is why the chrome says so on itself and this reads it back.
+  // The SDK gives the keyboard to the page for a press off every `<app>`.
+  // Cancels that for presses on this window's own chrome (title bar, grab
+  // sheet), found by its `data-window` attribute, so dragging a window keeps
+  // its keyboard.
   //
-  // The nearest marked ancestor rather than a selector built from the id: an
-  // app id is a client's to choose, and one with a quote in it would be a
-  // selector that throws in the middle of a press.
+  // Compares the attribute rather than building a selector from the id,
+  // since a client-chosen id with a quote would make the selector throw.
   useEffect(() => {
     if (element === null) {
       return undefined;
@@ -260,31 +203,25 @@ export const AppWindow = ({
         !fullscreen && bottomCornerStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
-        // A dragged window is written at a new box on every pointer move, so
-        // it takes the box it is given rather than easing towards it. Its
-        // colors go on easing either way — see `settlingStyles`.
+        // A dragged window gets a new box on every pointer move, so it skips
+        // easing. Colors still ease; see `settlingStyles`.
         dragging && draggingStyles,
         settlingStyles({ dragging }),
       )}
-      // What it is doing, as an attribute as well as an animation: the
-      // desktop's own state is worth being able to read off the element.
+      // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
       hidden={rect === undefined}
-      // Nothing a keyboard can reach, for as long as it is only being drawn.
+      // A leaving window is unreachable by keyboard.
       inert={leaving}
-      // Its own rather than one of the chrome's on its way up the document:
-      // a window is told it has finished when *it* has.
+      // Ignores animations bubbling up from descendants.
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) {
           onMotionEnded();
         }
       }}
       ref={setElement}
-      // Inline because the box is a runtime number and Panda reads literals;
-      // `window-styles` owns everything static. The cursor is inline for a
-      // different reason: it is a value a client sends, so no build-time rule
-      // could name it. `undefined` on either leaves the window unplaced and
-      // hidden, with the page's own cursor over it.
+      // Inline because the box and the cursor are runtime values that Panda
+      // cannot extract at build time.
       style={{
         cursor,
         ...(rect === undefined || frame === undefined
@@ -299,5 +236,5 @@ export const AppWindow = ({
   );
 };
 
-// The bar carries the edge above it, and the surface meets it flush.
+// The title bar draws the top edge, so the surface meets it flush.
 const appStyles = css({ borderBlockStartWidth: 0 });

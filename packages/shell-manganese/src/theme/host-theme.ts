@@ -5,54 +5,44 @@ import type { ThemeMessage } from "@domicile-desktop/sdk/host-message";
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 
 /**
- * How long a site in a browser window is given to repaint once the engine has
- * been told the windows' theme. Its renderer hears the change beside this
- * page, and repaints on its next frame or two; nothing reports when it has.
+ * How long to wait for sites in browser windows to repaint after the engine
+ * learns the windows' theme. They repaint within a frame or two, but nothing
+ * reports when.
  */
 const SITES_REPAINT_WITHIN_MS = 100;
 
 /**
- * The desktop's theme, as the component library wants to be told about it.
+ * Adapts the host's theme to the component library's theme source, as
+ * `host-displays.ts` does for displays.
  *
- * The other half of the adapter `host-displays.ts` is: the design system has
- * no protocol dependency and the control channel has no idea what a provider
- * is, so the shell — which has both — is where they meet.
+ * `setTheme` requests the change and does not apply it. The compositor applies
+ * it to every chrome and to the settings portal that GTK, Qt and Electron
+ * clients read, so the shell and the windows change together.
  *
- * **`setTheme` asks and does not apply**, which is the shape of the whole
- * feature. The compositor is what answers, to every chrome on the desk rather
- * than to the one that clicked, and it is also what hands the same value to the
- * settings portal the desk's GTK, Qt and Electron clients read their color
- * scheme from. A shell that painted itself on the click would be the one
- * monitor that had changed, on a desk whose windows had not.
- *
- * Built once per client and not per render. `DomicileClient.on` is a single
- * slot and `ThemeProvider` re-registers whenever its source's identity changes,
- * so a source rebuilt each render would re-register each render.
+ * Build once per client, not per render: `DomicileClient.on` is a single slot
+ * and `ThemeProvider` re-registers whenever the source's identity changes.
  */
 export const hostTheme = (domicile: DomicileClient): ThemeSource => {
   const turning: (() => void)[] = [];
-  // Registered now rather than when a wipe asks, because the handshake states
-  // the windows' theme too and the client replays what it holds to the first
-  // handler: registered late, that replay would read as the answer to a
-  // capture it came long before. Any answer settles every wipe waiting, since
-  // a newer turnover replaces an older one and only the newer is answered.
+  // Registered up front because the client replays the handshake's windows'
+  // theme to the first handler; registering later would mistake that replay for
+  // an answer. Any answer settles every waiting wipe, since only the newest
+  // request is answered.
   domicile.on("windows_theme", () => {
     for (const settle of turning.splice(0)) {
-      // The sites in browser windows are drawn by this engine, which is told
-      // with the same message and repaints them a frame or two later.
+      // Sites in browser windows are drawn by this engine, which receives the
+      // same message and repaints them a frame or two later.
       setTimeout(settle, SITES_REPAINT_WITHIN_MS);
     }
   });
   return {
     onTheme: (handler) => {
-      // Held, for `hostDisplays`'s reason: `off` is given the handler the client
-      // actually registered rather than the caller's, so a teardown removes one
-      // only if it is still the registered one.
+      // Keep the wrapped handler, because `off` only removes the handler if it
+      // is still the registered one (as in `hostDisplays`).
       //
-      // And this is the one place the desk's theme arrives, which is why the
-      // remembering is here rather than beside the entry point's pre-paint
-      // apply: `on` is a single slot per message type, so a second registration
-      // for `theme` would displace the provider's.
+      // The theme is remembered here because this is the only place it arrives:
+      // `on` is one slot per message type, so a second `theme` registration
+      // would replace the provider's.
       const registered = ({ theme }: ThemeMessage) => {
         rememberTheme(theme);
         handler(theme);
@@ -66,13 +56,10 @@ export const hostTheme = (domicile: DomicileClient): ThemeSource => {
       domicile.setTheme(theme);
     },
     /**
-     * The guess, not the answer — see `remembered-theme.ts`. There is no
-     * `domicile.theme` to read: unlike the desktop, which is an attribute on the
-     * host because a component may mount long after it was described, the theme
-     * is a message, and the client replays the one it is holding to the first
-     * handler that registers. So the truth arrives through `onTheme` a
-     * microtask into the provider's first effect, and this is what the page
-     * paints in until it does.
+     * The remembered guess; see `remembered-theme.ts`. The theme is a message,
+     * not a host attribute, so there is nothing to read synchronously. The real
+     * theme arrives through `onTheme` just after the provider's first effect,
+     * and the page paints with this until then.
      */
     get theme() {
       return rememberedTheme();

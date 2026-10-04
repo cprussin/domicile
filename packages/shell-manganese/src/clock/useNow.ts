@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
-/** The wall clock; injected so tests can hold it still. */
+/** The wall clock; injectable so tests can freeze it. */
 export const wallClock = (): Date => new Date();
 
-/** A reading is good for a second, so the clock is read every second. */
+/** The clock shows seconds, so it updates every second. */
 const TICK_INTERVAL_MS = 1000;
 
-/** The time, read again every second for as long as the caller is mounted. */
+/** The current time, updated every second while mounted. */
 export const useNow = (now: typeof wallClock = wallClock): Date => {
   const [time, setTime] = useState(() => now());
 

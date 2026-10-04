@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { viewportDisplays } from "./viewport-displays";
 
-/** A window of a size, whose resize listeners can be turned. */
+/** A window stub whose size and resize listeners the test controls. */
 class FakeWindow {
   devicePixelRatio = 1;
   innerHeight = 800;
@@ -14,16 +14,14 @@ class FakeWindow {
     this.#resized = listener;
   }
 
-  // Only if it is still the registered one, the way a real target removes a
-  // listener: a teardown that cleared whatever it found would silence a
-  // handler that displaced it.
+  // Remove the listener only if it is still registered, as a real target does.
   removeEventListener(_event: "resize", listener: () => void): void {
     if (this.#resized === listener) {
       this.#resized = undefined;
     }
   }
 
-  /** The window changing size, which is the desktop changing size. */
+  /** Resize the window, which resizes the desktop. */
   resizeTo(width: number, height: number): void {
     this.innerWidth = width;
     this.innerHeight = height;
@@ -49,9 +47,8 @@ describe("viewportDisplays", () => {
   });
 
   it("reads the window when it is asked, not when it was built", () => {
-    // The provider reads this when it mounts, which is not when the shell
-    // wired it up — a size copied at construction is the size before the
-    // first layout.
+    // The provider reads this on mount, after construction; a size copied at
+    // construction would predate the first layout.
     const view = new FakeWindow();
     const source = sourceOver(view);
 
@@ -61,8 +58,7 @@ describe("viewportDisplays", () => {
   });
 
   it("describes the desktop again when the window changes size", () => {
-    // The desktop *is* the window here, so a window that changed is a desktop
-    // that changed — the same thing the compositor re-describes for.
+    // Here the desktop is the window, so a resize changes the desktop.
     const view = new FakeWindow();
     const described: (readonly number[])[] = [];
     sourceOver(view).onDisplays((displays) => {
@@ -75,8 +71,8 @@ describe("viewportDisplays", () => {
   });
 
   it("stops listening when the provider tears it down", () => {
-    // The source outlives the provider, so a teardown that left the listener
-    // on would set state on a tree that is gone.
+    // The source outlives the provider; a leftover listener would update an
+    // unmounted tree.
     const view = new FakeWindow();
     const stop = sourceOver(view).onDisplays(() => undefined);
 

@@ -1,19 +1,15 @@
 // The desktop as the page last drew it.
 //
-// Nothing announces that a window has closed or that a workspace has been
-// switched away from: the reduction that does either does it everywhere at
-// once, and what is left is the state as it now is. So the only place those
-// facts survive is the difference between two renders, and this is the half of
-// that difference the page has to keep. `closing.ts` and `workspace-switch.ts`
-// are what read it.
+// No event reports a close or a workspace switch, so `closing.ts` and
+// `workspace-switch.ts` detect them by comparing this with the next render.
 
 import type { PlacedTab, Placement } from "./placement";
 import type { ShellWindow } from "./window";
 
 export type Shown = {
-  /** The window the keyboard was in. */
+  /** The focused window. */
   activeId: string | undefined;
-  /** The workspace that was on screen. */
+  /** The workspace on screen. */
   current: string;
   placements: readonly Placement[];
   tabs: readonly PlacedTab[];

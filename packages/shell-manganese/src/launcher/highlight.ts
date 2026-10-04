@@ -1,32 +1,26 @@
-// A text file's front as the launcher's preview draws it: cut into lines, and
-// each line into runs of what a grammar says the text is.
+// Syntax highlighting for the text preview: splits text into lines of scoped
+// runs.
 //
-// Runs rather than the grammar's own tree, because the pane draws a line at a
-// time — the gutter numbers them — and a tree's spans cross lines. What a run
-// *is* is a word (`keyword`, `string`, `comment`), and what that word looks
-// like is the pane's to say in the desktop's own colors, so a light desk and a
-// dark one are the same highlighting.
+// Flat runs per line rather than a tree, because the preview draws (and
+// numbers) one line at a time and tree spans cross lines. Scopes are names
+// like `keyword` or `comment`; `TextPreview` maps them to desktop colors.
 
 import { common, createLowlight } from "lowlight";
 
 import { org } from "./org";
 
-/** A piece of a line, and what a grammar says it is, if it says anything. */
+/** A run of text and its scope, if any. */
 export type Run = { scope: string | undefined; text: string };
 
-/** The grammars a preview knows: `highlight.js`'s common set, and Org. */
+/** Known grammars: `highlight.js`'s common set, plus Org. */
 const lowlight = createLowlight({ ...common, org });
 
-/**
- * The names `highlight.js`'s plain-text grammar goes by. Plain text is not a
- * language: it has nothing to light.
- */
+/** Names of `highlight.js`'s plain-text grammar, which highlights nothing. */
 const PLAIN = new Set(["plaintext", "text", "txt"]);
 
 /**
- * The grammar `path` is written in, by its extension or, with none, by its
- * name — or `undefined` for one no grammar is for. The name is the one the
- * grammar was found by, which is what `highlight` takes.
+ * The grammar name for `path`, by extension or else by file name, or
+ * `undefined` if none matches. Pass the result to `highlight`.
  */
 export const languageOf = (path: string): string | undefined => {
   const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
@@ -36,9 +30,8 @@ export const languageOf = (path: string): string | undefined => {
 };
 
 /**
- * `text` in `language` as lines of runs, or as plain runs with none. A file
- * that ends in a newline ends its last line with it rather than opening one
- * more.
+ * Split `text` into lines of runs, highlighted in `language` if given. A
+ * trailing newline does not add an empty last line.
  */
 export const highlight = (
   language: string | undefined,
@@ -52,7 +45,7 @@ export const highlight = (
 
 type Node = ReturnType<typeof lowlight.highlight>["children"][number];
 
-/** A grammar's tree, flattened, each run taking the scope nearest it. */
+/** Flatten a syntax tree into runs, each with its innermost scope. */
 const runsOf = (nodes: readonly Node[], scope: string | undefined): Run[] =>
   nodes.flatMap((node) => {
     switch (node.type) {
@@ -72,7 +65,7 @@ const runsOf = (nodes: readonly Node[], scope: string | undefined): Run[] =>
     }
   });
 
-/** `hljs-title` of `["hljs-title", "function_"]`, as `title`. */
+/** The scope of a class list, e.g. `title` for `["hljs-title", "function_"]`. */
 const scopeOf = (className: unknown): string | undefined => {
   const first = Array.isArray(className) ? className[0] : undefined;
   return typeof first === "string" && first.startsWith("hljs-")
@@ -80,10 +73,7 @@ const scopeOf = (className: unknown): string | undefined => {
     : undefined;
 };
 
-/**
- * Runs cut at every newline, a run the cut left empty dropped. A loop, because
- * a line is built up a run at a time and handed on at each newline.
- */
+/** Split runs into lines at each newline, dropping empty runs. */
 const linesOf = (runs: readonly Run[]): Run[][] => {
   const lines: Run[][] = [];
   let line: Run[] = [];

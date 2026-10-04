@@ -1,7 +1,7 @@
-// What the launcher does once a row has been chosen: run an application, open
-// a file, or browse to a URL. Which rows there are is `choices.ts`'s to decide.
+// The action for a chosen launcher row: run an app, open a file, or browse to
+// a URL. `choices.ts` builds the rows.
 
-/** Which of the three things the launcher can do with a query. */
+/** The kind of launch. */
 export enum LaunchKind {
   Ran,
   Opened,
@@ -14,12 +14,11 @@ export const Launch = {
   /**
    * Open `path` with the user's default application.
    *
-   * Relative to the home directory, the way the host names what it offers, or
-   * absolute for a path outside it. `open-command.ts` is what turns the two
-   * into one command.
+   * Relative to home (as the host reports paths) or absolute. See
+   * `open-command.ts`.
    */
   Opened: (path: string) => ({ kind: LaunchKind.Opened as const, path }),
-  /** Run `command`, the argv a desktop entry names, as the host parsed it. */
+  /** Run a desktop entry's argv, as the host parsed it. */
   Ran: (command: readonly string[]) => ({
     command,
     kind: LaunchKind.Ran as const,

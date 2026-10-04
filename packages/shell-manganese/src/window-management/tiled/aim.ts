@@ -1,5 +1,5 @@
-// Where on the desktop a tiled window's drag is pointed: sway's `tiling_drag`
-// drop zones, and which corner a drag on a tiled window resizes from.
+// Drop zones for dragging a tiled window, as in sway's `tiling_drag`, and the
+// corner a tiled resize drags.
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
@@ -10,12 +10,12 @@ export type Target = {
   id: string;
 };
 
-/** What letting go here would do, and where to draw it. */
+/** What a drop here would do, and where to draw it. */
 export type Aim = {
-  /** Which edge of the target, or `undefined` for its middle — a swap. */
+  /** The target's edge, or `undefined` for its middle, which swaps. */
   edge: Direction | undefined;
   id: string;
-  /** Where the dragged window would go: half of the target, or all of it. */
+  /** Where the dragged window would go: half the target, or all of it. */
   rect: Rect;
 };
 
@@ -26,15 +26,14 @@ export type Corner = {
 };
 
 /**
- * How near an edge the pointer has to be for a drop to go beside the window
- * rather than trade places with it, as a share of its shorter side — sway's.
+ * How near an edge a drop goes beside the target instead of swapping, as a
+ * share of its shorter side. Matches sway.
  */
 const EDGE_ZONE = 0.3;
 
 /**
- * What a drag of the window `dragged` would do if it were let go of at `x`,
- * `y`, or `undefined` where the answer is nothing: over no window, or over the
- * one being dragged.
+ * What dropping `dragged` at `x`, `y` would do, or `undefined` over no window
+ * or over itself.
  */
 export const aimAt = (
   targets: readonly Target[],
@@ -56,8 +55,8 @@ export const aimAt = (
 };
 
 /**
- * The corner a resize taken hold of at `x`, `y` drives: the one of the
- * quarter of the window the pointer is in, which is sway's.
+ * The corner a resize from `x`, `y` drags: the one in the pointer's quarter,
+ * as in sway.
  */
 export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
   horizontal: x > frame.x + frame.width / 2 ? Direction.Right : Direction.Left,

@@ -28,101 +28,67 @@ const MIDDLE_BUTTON = 1;
 
 type Props = {
   /**
-   * Whether this is a tab its tabbed container is not showing, which draws a
-   * line under it: the edge along the top of the window the strip opens onto,
-   * run under every tab.
+   * Whether this is a hidden tab, which draws a line under it to continue the
+   * top edge of the shown window.
    */
   besideOpenTab?: boolean;
-  /** How it stacks: the depth of the window it names. */
+  /** The stacking depth of the window it names. */
   depth: number;
   /**
-   * Whether the user has hold of the window this bar names.
-   *
-   * A window is two elements — this and the contents under it — and both are
-   * written at a new box on every move of a drag. So both take that box
-   * outright: a bar that eased towards each one instead would trail the
-   * pointer that is holding it, and pull away from the window it names.
+   * Whether the window is being dragged. Disables easing so the bar keeps up
+   * with the pointer and its contents.
    */
   dragging: boolean;
-  /** What this bar says about the keyboard — see `title-focus.ts`. */
+  /** The bar's focus state. See `title-focus.ts`. */
   focus: TitleFocus;
   /**
-   * The whole box of the window this bar names, which both halves of that
-   * window turn about — see {@link scaledAbout}. It is this bar's own box for
-   * a tab, which is the whole of what such a window has on screen.
+   * The window's whole box, which bar and contents both scale about. See
+   * {@link scaledAbout}. For a tab, this is the tab's own box.
    */
   frame: Rect;
   /**
-   * Whether the window this bar names already has the screen, which is what
-   * the same button offers to give back.
-   *
-   * The bar is drawn over a fullscreen window rather than hidden under it —
-   * see `placement.ts` — so this is the one control on the desktop that would
-   * otherwise lie about what pressing it does. And it squares the bar's
-   * corners and drops its edge, which are the screen's.
+   * Whether the window is fullscreen. Switches the button to "Restore" and
+   * drops the bar's rounded corners and edge.
    */
   fullscreen: boolean;
   /**
-   * What the window this bar names is doing, which the bar does with it: the
-   * two are separate elements, and a frame whose halves moved differently
-   * would come apart while the user watched.
+   * The window's motion. The bar plays it too, so bar and contents move as
+   * one.
    */
   motion: WindowMotion;
-  /** Close the window this bar belongs to — what the X does. */
+  /** Closes the window. */
   onClose: () => void;
-  /**
-   * Fill the screen with the window this bar belongs to, or give the screen
-   * back when it already has it: `fullscreen`, which is what `mod+f` is bound
-   * to and what the maximize button does.
-   */
+  /** Toggles fullscreen, like `mod+f`. */
   onFullscreen: () => void;
-  /** Called when it has played that motion all the way out. */
+  /** Called when `motion` finishes. */
   onMotionEnded: () => void;
   onContextMenu?: ((event: { preventDefault: () => void }) => void) | undefined;
-  /**
-   * A middle click on the bar, which closes a tab the way a browser's does —
-   * or `undefined` for a bar it does nothing to.
-   */
+  /** A middle click, which closes a tab as in a browser. */
   onMiddleClick?: (() => void) | undefined;
-  /**
-   * A press on the bar: how a drag of it starts, for a window that can be
-   * dragged by it, and the user reaching for the window a tab names.
-   */
+  /** A press on the bar, which starts a drag or selects a tab's window. */
   onPointerDown?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
   rect: Rect;
   /**
-   * The shuffle the window it names is playing while it trades places with another float in
-   * the stack — see `shuffledBy` — or `undefined` while it is not.
+   * The restack animation while the window trades places with another float.
+   * See `shuffledBy`.
    */
   restack?: Restack | undefined;
   /**
-   * Which way the tabs this bar is one of run, which is the way it closes up
-   * — see `collapsedAlong` — or `undefined` for a bar of a window's own.
+   * The direction of the tab strip, which a closing tab collapses along. See
+   * `collapsedAlong`. `undefined` for a window's own bar.
    */
   tabbed?: TabLayout | undefined;
   title: string;
-  /** The window this bar names, which the SDK asks about on a press. */
+  /** The window this bar names, which the SDK reads on a press. */
   window: string;
 };
 
 /**
- * A window's title bar: what it is called, and the way out of it.
+ * A window's title bar or container tab, with its title and controls.
  *
- * **Every window has one, floating or not.** A tiled window's bar is the strip
- * across the top of its frame; a window in a tabbed or stacking container has
- * its tab instead, which is the same component at a different rectangle. The
- * bar comes *out* of the window's box rather than being added to it, so a
- * window dragged to a size is that size, bar included.
- *
- * Page pixels at the depth of the window they name, so the bar of a window
- * behind another is drawn under the window in front — which is what a bar
- * painted over the whole page could not be.
- *
- * **And the press on the bar is the bar's**, because the page is what
- * hit-tests it: the `<app>` under it never hears one, so nothing about the
- * window below is focused or raised by it. That is the browser's own
- * hit-testing rather than a rectangle the compositor was told about, which is
- * why it sees corner radius, transforms and stacking.
+ * The bar is part of the window's box, not added to it. It is drawn at the
+ * window's depth so windows in front cover it. The page hit-tests it, so
+ * presses on it never reach the `<app>` below.
  */
 export const TitleBar = ({
   besideOpenTab = false,
@@ -144,8 +110,8 @@ export const TitleBar = ({
   title,
   window,
 }: Props) => (
-  // biome-ignore lint/a11y/noStaticElementInteractions: a title bar is not a control and is not being made into one — the press says the user reached for the window it names, which is what raises a window in any desktop, and the two buttons inside it are what a keyboard reaches
-  // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason: what it reports is which window the user is working in
+  // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
+  // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
   <div
     className={cx(
       barStyles({
@@ -153,29 +119,21 @@ export const TitleBar = ({
         focus,
         tab: tabbed !== undefined,
       }),
-      // Neither a line nor rounded corners around the screen's own edge.
       !fullscreen && edgeStyles,
       !fullscreen && topCornerStyles,
       movingStyles({ motion }),
-      // The window this names has gone, and what is drawn is where it was.
       isLeaving(motion) && clickThroughStyles,
       settlingStyles({ dragging }),
     )}
-    // Which of the three this is, as an attribute as well as a color: the
-    // desktop's own state is worth being able to read off the element, in
-    // devtools and in a test, rather than only off a hashed class name.
+    // Exposed as attributes so devtools and tests can read the state.
     data-focus={focus}
-    // What it is doing, as an attribute as well as an animation: the desktop's
-    // own state is worth being able to read off the element.
     data-motion={motion}
-    // The window this bar belongs to: a press on it lands off every `<app>`,
-    // and left unanswered that is the chrome taking the keyboard off the
-    // window the user has just taken hold of. See `AppWindow`.
+    // A press here lands outside every `<app>`, so the window is named for
+    // the focus handling in `AppWindow`.
     data-window={window}
-    // Nothing a keyboard can reach, for as long as it is only being drawn: the
-    // X on a window that has closed is a control that does nothing.
+    // A closed window's buttons would do nothing.
     inert={isLeaving(motion)}
-    // Its own rather than the Close button's on its way up the document.
+    // Ignore animations bubbling up from the buttons.
     onAnimationEnd={(event) => {
       if (event.target === event.currentTarget) {
         onMotionEnded();
@@ -197,10 +155,8 @@ export const TitleBar = ({
   >
     <span className={titleStyles}>{title}</span>
     {/*
-      The press that drives one of these must not also take hold of the
-      window: the pointer capture a drag takes retargets everything after the
-      press, and the click that follows would be the bar's rather than the
-      button's.
+      A press on a button must not start a drag: drag pointer capture would
+      retarget the click to the bar.
     */}
     <span
       className={controlStyles}
@@ -228,24 +184,14 @@ export const TitleBar = ({
 );
 
 /**
- * sway's three client colors, and the `leaf` this desktop adds, in the one
- * place a window says which it is.
+ * Bar colors for sway's three client states plus `leaf`.
  *
- * **What finds the window at a glance is every other window receding** — see
- * `Scrim`. The bar only has to agree with it, and to go on saying where the
- * keyboard is once `focus parent` has raised a whole group: the card, and a
- * heavier face. The card is the address bar's ground, so the focused bar reads
- * as the top of the window it names; every other bar sinks below it to the
- * page's own ground.
+ * The scrim on other windows is the main focus indicator (see `Scrim`), so
+ * the bar only adds the card background and a heavier weight. No state uses
+ * an accent edge.
  *
- * No state draws its edge in the accent. A line around the window the
- * keyboard is in was the indicator before the scrim, and two indicators
- * saying the same thing is one too many.
- *
- * Every state names every one of its colors rather than overriding one of
- * them. Two rules setting `background-color` on one element are decided by the
- * order Panda happens to emit them in, which is not a thing to make a
- * desktop's focus indicator depend on.
+ * Each state sets all its colors instead of overriding one: two rules on one
+ * property would depend on Panda's emit order.
  */
 const barStyles = cva({
   base: hstack.raw({
@@ -253,15 +199,13 @@ const barStyles = cva({
     gap: 1.5,
     justify: "space-between",
     overflow: "hidden",
-    // A bar thirty pixels tall with an eleven pixel name on it: what the text
-    // needs to clear the rounded corner, and no more.
+    // Just enough for the title to clear the rounded corner.
     paddingInlineEnd: 0.5,
     paddingInlineStart: 2,
     position: "absolute",
   }),
-  // A tab whose window is hidden is a thing to click, so the pointer lifts it
-  // halfway to the card an open tab sits on — short of it, so it is not taken
-  // for the open one.
+  // Hovering a hidden tab lightens it halfway to the card, so it is not
+  // mistaken for the open tab.
   compoundVariants: [
     {
       css: {
@@ -276,12 +220,8 @@ const barStyles = cva({
     },
   ],
   variants: {
-    // The line under the bar, which only a tab its container is not showing
-    // has: there the strip meets the top of the window the open tab names.
-    // Every other bar has none — the frame's line is one line, the bar
-    // carrying the top and the sides down to where the window picks them up —
-    // but still takes its room, or opening a tab would move its contents down
-    // by it.
+    // Only hidden tabs show the bottom line. Other bars keep a transparent
+    // one so opening a tab does not shift its contents.
     besideOpenTab: {
       false: { borderBlockEndColor: "transparent" },
       true: { borderBlockEndColor: "borderStrong" },
@@ -290,36 +230,32 @@ const barStyles = cva({
       focused: {
         backgroundColor: "card",
         color: "foreground",
-        // Set in a heavier face as well, which is the half of standing out
-        // that survives a user who cannot tell one ground from another.
+        // Weight as well as color, for users who cannot tell the colors
+        // apart.
         fontWeight: "medium",
       },
-      // The window the keyboard is in, while `focus parent` has the commands
-      // pointed at a group around it: every bar of the group is raised to the
-      // card, so this one is washed with the accent to stay apart from them.
+      // The focused window inside a `focus parent` selection. The group's
+      // bars use the card, so this one mixes in the accent.
       leaf: {
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 45%, {colors.card})",
         color: "foreground",
         fontWeight: "medium",
       },
-      // And every other bar recedes rather than competing: the window under it
-      // is what the user is looking at.
       resting: {
         backgroundColor: "background",
         color: "muted",
         fontWeight: "normal",
       },
-      // A container's open tab with the keyboard somewhere else, or a bar of
-      // the group `focus parent` selected: raised to the card and set in the
-      // heavier face.
+      // An unfocused container's open tab, or a bar in the `focus parent`
+      // selection.
       selected: {
         backgroundColor: "card",
         color: "foreground",
         fontWeight: "medium",
       },
     },
-    // Whether this bar is a container's tab rather than a window's own.
+    // Read only by `compoundVariants`.
     tab: {
       false: {},
       true: {},
@@ -328,25 +264,19 @@ const barStyles = cva({
 });
 
 /**
- * Rounded at the top and square at the bottom, because the bottom of a frame
- * is the window's contents, which round their own — see `bottomCornerStyles`.
- * A radius on the underside of this would cut a notch out of the seam between
- * the two rather than rounding anything. Not on a window filling the screen,
- * whose corners are the screen's.
+ * Rounds only the top corners. The contents round the bottom ones (see
+ * `bottomCornerStyles`); a radius here would notch the seam.
  */
 const topCornerStyles = css({
   borderStartEndRadius: "lg",
   borderStartStartRadius: "lg",
 });
 
-// The two of them touching, which is what reads as one group at the end of a
-// bar thirty pixels tall: each is already an icon in its own padded box.
+// No gap: each button is already padded, and together they read as a group.
 const controlStyles = hstack({ gap: 0 });
 
 const titleStyles = css({
-  // The config's `fonts.size = 11.0`, which is between two tokens on the
-  // scale; a rem rather than a px literal, the way every other off-scale
-  // length here is written.
+  // The config's `fonts.size = 11.0`, which has no scale token.
   fontSize: "0.6875rem",
   overflow: "hidden",
   textOverflow: "ellipsis",

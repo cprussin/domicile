@@ -1,12 +1,8 @@
-// A tabbed or stacking container showing a different child.
+// Detects a tabbed or stacking container switching its shown child, so the
+// page can crossfade.
 //
-// Both windows are in the same box the whole time: the one hidden is drawn
-// under the one shown — see `Frame.behind` — so switching is the two trading
-// depths between two frames. What the page draws instead is a crossfade, the
-// one revealed fading in over the one it hides.
-//
-// Like a raise, nothing announces it, so it is read off the difference
-// between two renders.
+// A hidden tab is drawn under the shown one (see `Frame.behind`), so a switch
+// is just a depth swap. No event announces it, so this compares two renders.
 
 import type { Placement } from "./placement";
 import { TILED } from "./placement";
@@ -15,23 +11,20 @@ import type { Shown } from "./shown";
 
 /** The windows a tab switch has swapped, by id. */
 export type TabSwitch = {
-  /** Shown a moment ago and behind a tab now. */
+  /** Shown before, hidden now. */
   concealed: readonly string[];
-  /** Behind a tab a moment ago and shown now. */
+  /** Hidden before, shown now. */
   revealed: readonly string[];
 };
 
 /**
- * The windows the tabs have swapped since `before`.
+ * The windows tabs swapped since `before`.
  *
- * In pairs: one hidden and one shown in the same box. A window shown with
- * nothing hidden in its place was uncovered by a tab closing, whose contents
- * fade off it — and a window hidden with nothing shown was covered by one
- * opening, which grows in over it.
+ * Only pairs count: one hidden and one shown in the same box. An unpaired
+ * change is a tab opening or closing, which has its own animation.
  *
- * Only tiled ones, because the crossfade holds the pair at the tiled depths
- * while it plays — see `windowRevealing` — and nothing on a workspace switch,
- * which slides the whole screenful.
+ * Tiled windows only, since the crossfade holds the pair at tiled depths (see
+ * `windowRevealing`). Workspace switches are skipped.
  */
 export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
   const concealed = swapped(before, shown, isShown, isHidden);
@@ -52,7 +45,7 @@ export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
     : { concealed: [], revealed: [] };
 };
 
-/** The windows that were `was` before and are `now` now, as they are now. */
+/** Current placements of windows that matched `was` before and `now` now. */
 const swapped = (
   before: Shown,
   shown: Shown,

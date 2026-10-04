@@ -10,7 +10,7 @@ import type { WindowAction as Action } from "../window-management/window-state";
 import { WindowAction } from "../window-management/window-state";
 import { useKeybindings } from "./useKeybindings";
 
-/** Meta and the key `keycode`, and nothing else held. */
+/** A shortcut of Meta plus `keycode`. */
 const meta = (keycode: number): ShortcutMessage => ({
   altKey: false,
   ctrlKey: false,
@@ -19,13 +19,13 @@ const meta = (keycode: number): ShortcutMessage => ({
   shiftKey: false,
 });
 
-// Evdev codes, which is all a binding names a key by.
+// Evdev key codes.
 const SPACE = 57;
 const L = 38;
 const R = 19;
 const X = 45;
 
-/** A few of manganese's bindings, as a desktop binds them. */
+/** A sample of manganese's bindings. */
 const KEYS: ShellKeybindings = {
   keybindings: {
     "Meta+l": KeyAction.SendShell(["focus", "right"]),
@@ -38,7 +38,7 @@ const KEYS: ShellKeybindings = {
   },
 };
 
-/** The keyboard those keys are on, as the compositor describes it. */
+/** Keymap for those keys, as the compositor sends it. */
 const KEYBOARD = {
   keys: new Map([
     ["l", L],
@@ -48,10 +48,7 @@ const KEYBOARD = {
   ]),
 };
 
-/**
- * A stand-in for the client: it takes the handlers the SDK registers and lets
- * a test say what the host said.
- */
+/** Fake client that captures the SDK's handlers so a test can send messages. */
 const client = () => {
   const handlers = new Map<string, (message: never) => void>();
   const domicile = {
@@ -73,7 +70,7 @@ const client = () => {
   };
 };
 
-/** The hook over a client that has been sent {@link KEYBOARD}. */
+/** Render the hook with a client that has received {@link KEYBOARD}. */
 const bound = (launcherOpen = false) => {
   const { domicile, says } = client();
   const acted: Action[] = [];
@@ -113,8 +110,7 @@ describe("useKeybindings", () => {
   });
 
   it("answers only the launcher's own key while it is up", () => {
-    // The panel is modal: a window focused behind it is the desktop reacting
-    // to keys somebody pressed at the panel.
+    // The launcher is modal, so keys must not act on windows behind it.
     const { acted, says } = bound(true);
 
     says("shortcut", meta(L));
@@ -141,7 +137,7 @@ describe("useKeybindings", () => {
   });
 
   it("reads the keys in the mode the desktop is in", () => {
-    // Which another page of the desk may have entered.
+    // Another page may have entered the mode.
     const { acted, modes, rerender, says } = bound();
 
     rerender({ mode: "resize" });

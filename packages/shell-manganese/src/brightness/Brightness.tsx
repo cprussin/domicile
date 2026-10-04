@@ -10,31 +10,26 @@ import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { watchBrightness } from "./watch-brightness";
 
-/** How far one notch of the wheel over the icon moves the brightness. */
+/** How far one wheel notch over the icon moves the brightness. */
 const WHEEL_STEP = 0.05;
 
 type Props = {
-  /** Where the level comes from and where a new one is asked for. */
+  /** The host that reports the level and sets new ones. */
   domicile: DomicileClient;
-  /** How it is watched; injected so tests can drive a backlight of their own. */
+  /** Injectable so tests can drive their own backlight. */
   watch?: typeof watchBrightness | undefined;
 };
 
 /**
- * The screen's brightness, on the bar: a sun drawn brighter as the screen is,
- * which opens a slider in a pill hung off the bar — and which the wheel turns
- * without opening anything.
+ * The brightness control on the bar: a sun icon that reflects the level,
+ * opens a slider, and responds to the wheel.
  *
- * **The slider follows the desk, not its own drag.** A move asks the
- * compositor, which asks logind, and what comes back is the level every chrome
- * is told — the same one-path arrangement the theme toggle has. While a drag
- * is under way the slider holds where the pointer is, because the answers to
- * the drag's own earlier requests arrive behind it; once it is let go the next
- * reading is the truth again, a brightness key's included.
+ * Changes go through the compositor to logind, and the slider shows the level
+ * the host reports back, as the theme toggle does. During a drag it holds the
+ * pointer's value, since replies to earlier requests arrive late.
  *
- * Nothing is drawn until the host has said a level, which on a desktop with
- * no backlight — an external monitor — is never: no slider rather than one
- * that moves nothing.
+ * Draws nothing until the host reports a level, so a desktop with no backlight
+ * (such as an external monitor) shows no slider.
  */
 export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
   const [reading, setReading] = useState<number | undefined>(undefined);
@@ -104,10 +99,9 @@ export const Brightness = ({ domicile, watch = watchBrightness }: Props) => {
   }
 };
 
-// THE BAR'S BUTTON, AND NOT THE LIBRARY'S. `Button`'s ghost letters itself in
-// `muted`, which over a photograph is gray on whatever the picture is; this
-// bar is lettered white, and this takes the bar's color the way the
-// notification bell and the theme toggle do.
+// Not the library's `Button`: its ghost variant uses `muted` text, which is
+// unreadable over the wallpaper. This uses the bar's white, like the bell and
+// theme toggle.
 const triggerStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",
@@ -131,8 +125,7 @@ const rowStyles = hstack({
   inlineSize: 60,
 });
 
-// Ten pixels, the bar's own size, which no font-size token is — see the
-// battery's figures, which this sits beside in spirit.
+// 10px to match the bar and the battery figures; no font-size token fits.
 const percentStyles = css({
   fontSize: "0.625rem",
   fontVariantNumeric: "tabular-nums",
@@ -140,7 +133,7 @@ const percentStyles = css({
   textAlign: "end",
 });
 
-/** How bright the sun on the bar is drawn: three steps of one icon. */
+/** The sun icon's three brightness steps. */
 type Intensity = "dim" | "half" | "full";
 
 const intensityOf = (level: number): Intensity => {
@@ -153,10 +146,7 @@ const intensityOf = (level: number): Intensity => {
   }
 };
 
-/**
- * A plain sun whose weight follows the level — dotted when dim, rayed, then
- * filled — so the bar says roughly how bright the screen is without a figure.
- */
+/** A sun whose style follows the level: dotted, rayed, then filled. */
 const Sun = ({ level }: { level: number }) => {
   switch (intensityOf(level)) {
     case "dim":
@@ -168,7 +158,7 @@ const Sun = ({ level }: { level: number }) => {
   }
 };
 
-/** A notch of the wheel from `level`, rounded to the percent and kept in range. */
+/** One wheel notch from `level`, rounded to a percent and clamped to 0–1. */
 const stepped = (level: number, event: WheelEvent) => {
   const step = event.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP;
   return Math.min(1, Math.max(0, Math.round((level + step) * 100) / 100));

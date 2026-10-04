@@ -1,11 +1,9 @@
-// A rectangle of the desktop, and the two ways this shell cuts one up.
+// Desktop rectangles, split into title bar and contents.
 //
-// The desktop's own coordinates throughout — the page spans every display, so
-// the viewport *is* the desktop and a window at 0 is at its corner. Nothing
-// here is a style: these are the runtime numbers a window is placed at, which
-// is why they are plain pixels rather than tokens.
+// The page spans every display, so these are desktop pixels. They are runtime
+// values, not style tokens.
 
-/** Where something is and how big, in the desktop's pixels. */
+/** A position and size in desktop pixels. */
 export type Rect = {
   height: number;
   width: number;
@@ -14,12 +12,9 @@ export type Rect = {
 };
 
 /**
- * How tall a window's title bar is.
+ * The title bar height.
  *
- * It comes out of the window's rectangle rather than being added to it: a
- * window's box is the whole frame, so a window dragged to a size is that size,
- * bar included, and a resize does not have to reason about a frame that grows
- * with it.
+ * The bar is inside the window's box, so a window's size includes its bar.
  */
 export const TITLE_BAR = 30;
 
@@ -27,11 +22,9 @@ export const TITLE_BAR = 30;
 export const barOf = (rect: Rect): Rect => ({ ...rect, height: TITLE_BAR });
 
 /**
- * What is left of `rect` under its title bar.
+ * The part of `rect` below its title bar.
  *
- * Never shorter than nothing: every rectangle a window is given is taller than
- * its own bar, and a negative height would reach the compositor as a window
- * turned inside out.
+ * Clamped at 0 height, since a negative height would break the compositor.
  */
 export const surfaceOf = (rect: Rect): Rect => ({
   ...rect,

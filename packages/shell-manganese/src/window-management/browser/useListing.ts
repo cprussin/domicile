@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-/** Where a listing the picker asked for has got to. */
+/** The status of a directory listing. */
 export enum ListingState {
   Loading,
   Listed,
@@ -8,23 +8,23 @@ export enum ListingState {
 }
 
 export const Listing = {
-  /** What the engine listed: a directory's name ends in `/`. */
+  /** The listed entries; subdirectory names end in `/`. */
   Listed: (entries: readonly string[]) => ({
     entries,
     state: ListingState.Listed as const,
   }),
   Loading: () => ({ state: ListingState.Loading as const }),
-  /** Not a directory the browser can read — not there, or not ours. */
+  /** The directory is missing or not readable. */
   Unreadable: () => ({ state: ListingState.Unreadable as const }),
 };
 
 export type Listing = ReturnType<(typeof Listing)[keyof typeof Listing]>;
 
 /**
- * What is in `directory`, asked for whenever it changes.
+ * Lists `directory` whenever it changes.
  *
- * An answer for a directory the picker has left is dropped: walking moves
- * faster than the engine lists, and the engine owes the answers no order.
+ * Drops results for a directory the picker has already left, since listings
+ * can resolve out of order.
  */
 export const useListing = (
   list: (path: string) => Promise<readonly string[]>,
@@ -50,7 +50,7 @@ export const useListing = (
             setListing(Listing.Unreadable());
           }
         } else {
-          // biome-ignore lint/suspicious/noConsole: surfacing a listing the engine failed for a reason other than the directory
+          // biome-ignore lint/suspicious/noConsole: reports an unexpected listing failure
           console.error("The browser could not list a directory", error);
         }
       });

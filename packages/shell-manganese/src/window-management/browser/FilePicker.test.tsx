@@ -8,8 +8,8 @@ import { ChooserMode } from "./file-request";
 const HOME = "/home/someone";
 
 /**
- * The filesystem the engine lists, by absolute path. A directory's name ends
- * in `/`, and a path missing here is one the browser cannot read.
+ * A fake filesystem by absolute path. Directory names end in `/`; missing
+ * paths are unreadable.
  */
 const FILESYSTEM = new Map<string, readonly string[]>([
   ["/", ["home/", "tmp/"]],
@@ -29,12 +29,12 @@ const list = (path: string): Promise<readonly string[]> => {
     : Promise.resolve(entries);
 };
 
-/** The answer a picker gave: the paths chosen, or `undefined` for a cancel. */
+/** The chosen paths, or `undefined` on cancel. */
 type Answer = readonly string[] | undefined;
 
 /**
- * A picker up for `mode`, and the answer it gives — which the test awaits
- * after driving it, so a picker that never answers times out.
+ * Renders a picker for `mode` and returns its answer. A picker that never
+ * answers makes the test time out.
  */
 const picker = (
   mode: ChooserMode,
@@ -61,11 +61,7 @@ const picker = (
 const box = (): HTMLElement =>
   screen.getByRole("combobox", { name: "Filter or go to a path" });
 
-/**
- * The rows' names, once the engine has listed the directory the picker is
- * in. A row's name is its accessible name; what kind of file it is, it says
- * beside that.
- */
+/** The rows' accessible names, once the current directory is listed. */
 const rows = async (): Promise<readonly string[]> => {
   await act(() => Promise.resolve());
   return screen
@@ -76,7 +72,7 @@ const rows = async (): Promise<readonly string[]> => {
 const places = (): HTMLElement =>
   screen.getByRole("navigation", { name: "Places" });
 
-/** Where the picker is, as its path bar says it. */
+/** The current directory, as the path bar shows it. */
 const where = (): readonly string[] =>
   within(screen.getByRole("navigation", { name: "Path" }))
     .getAllByRole("button")
@@ -179,8 +175,7 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
-    // The sidebar a file manager has: the home, the folders in it everybody
-    // has — the ones this home has, anyway — and the root.
+    // Home, the standard folders that exist, and root.
     it("goes to a place in the sidebar", async () => {
       const answered = picker(ChooserMode.Open);
       await rows();
@@ -260,7 +255,7 @@ describe("FilePicker", () => {
       expect(await answered).toStrictEqual([`${HOME}/notes.txt`]);
     });
 
-    // A click picks a file out, and says which; it does not answer for it.
+    // A click selects a file but does not choose it.
     it("selects a file that is clicked, and says which", async () => {
       const answered = picker(ChooserMode.Open);
       await rows();
@@ -299,8 +294,8 @@ describe("FilePicker", () => {
     });
   });
 
-  // fzf's keys: Tab marks a file and moves on, and Enter takes every mark —
-  // wherever in the tree each was made.
+  // As in fzf: Tab marks and moves on; Enter returns every mark, from any
+  // directory.
   describe("opening several files", () => {
     it("chooses every file marked, across directories", async () => {
       const answered = picker(ChooserMode.OpenMultiple);

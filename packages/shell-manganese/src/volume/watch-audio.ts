@@ -4,12 +4,11 @@ import type { AudioMessage } from "@domicile-desktop/sdk/host-message";
 import { watchShared } from "../host/watch-shared";
 
 /**
- * Watch the desk's sound: `onAudio` is called with every device, stream and
- * card as soon as the host has said them and again whenever any of them moves
- * — a key, another mixer, or this shell's own sliders — and what comes back
- * stops it. A desk with no sound server never calls it.
+ * Calls `onAudio` with all devices, streams and cards on the first host report
+ * and on every change. Returns an unsubscribe function.
  *
- * Shared with every other bar on the page — see `watchShared`.
+ * `onAudio` is never called without a sound server. The subscription is shared
+ * across bars; see `watchShared`.
  */
 export const watchAudio = (
   domicile: DomicileClient,

@@ -12,9 +12,8 @@ import userEvent from "@testing-library/user-event";
 import { Brightness } from "./Brightness";
 
 /**
- * A backlight the test holds the wire to: `watch` stands in for the host's,
- * `report` is the compositor saying a level, and `asked` is every level the
- * shell asked the desk for.
+ * A test-controlled backlight: `watch` replaces the host listener, `report`
+ * sends a level, and `asked` records every level the shell requested.
  */
 const heldBacklight = () => {
   const listeners: ((level: number) => void)[] = [];

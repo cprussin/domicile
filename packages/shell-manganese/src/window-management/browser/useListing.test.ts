@@ -4,8 +4,8 @@ import { act, renderHook } from "@testing-library/react";
 import { Listing, useListing } from "./useListing";
 
 describe("useListing", () => {
-  // Each `list` is made once, outside the hook's render: a new one is a new
-  // question, which is how the picker's is used.
+  // Each `list` is created outside render, since a new one re-runs the
+  // listing.
   it("is what the engine listed for the directory browsed", async () => {
     const list = (path: string) => Promise.resolve([`${path}-a`]);
     const { result } = renderHook(() => useListing(list, "/mnt"));
@@ -15,8 +15,7 @@ describe("useListing", () => {
     expect(result.current).toStrictEqual(Listing.Listed(["/mnt-a"]));
   });
 
-  // A directory the browser cannot read is said so, rather than drawn as an
-  // empty one.
+  // Distinct from an empty directory.
   it("is unreadable when the engine refuses", async () => {
     const list = () =>
       Promise.reject(new DOMException("no", "NotReadableError"));
@@ -26,8 +25,7 @@ describe("useListing", () => {
     expect(result.current).toStrictEqual(Listing.Unreadable());
   });
 
-  // Typing moves the box faster than the engine answers; an answer for a
-  // directory the box has left is dropped.
+  // Typing can outpace the engine, so stale results are dropped.
   it("drops an answer for a directory no longer browsed", async () => {
     const answers = new Map<string, (entries: readonly string[]) => void>();
     const list = (path: string) =>

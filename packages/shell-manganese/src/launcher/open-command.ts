@@ -1,35 +1,22 @@
-// What the launcher asks the compositor to run for a file.
+// The command the launcher asks the compositor to run to open a file.
 //
-// # Why there is a shell in here
-//
-// `$HOME` exists in the process the compositor spawns and nowhere this page
-// can reach: a shell served over `domicile://` has an origin, not an
-// environment, and the host answers `search_files` in paths relative to a home
-// directory it never names. So it is read where it is, by the one thing in
-// this path that can read it.
-//
-// Which application opens the file is `xdg-open`'s to decide, from the user's
-// MIME associations, rather than this page's. `exec` keeps the `sh` from
-// sitting above it as a parent; what `xdg-open` itself starts is its business.
-//
-// # Why the path is an argument
-//
-// A path is user text and this is a shell script. A file called `; rm -rf ~`
-// interpolated into the script would be a command; as `$1` it is a filename
-// with a semicolon in it. The quoting around `$1` is what keeps it one word.
+// - It runs through `sh` because the host returns paths relative to `$HOME`,
+//   and the page has no environment to read `$HOME` from.
+// - `xdg-open` picks the application from the user's MIME associations.
+//   `exec` replaces `sh` rather than leaving it as a parent.
+// - The path is passed as quoted `$1`, never interpolated, so a file name like
+//   `; rm -rf ~` can't inject a command.
 
 /**
- * The script `$HOME` is read by.
+ * The shell script that resolves the path and opens it.
  *
- * The `case` is the only branch: a path the host offered is relative to the
- * home directory and an absolute one is already where it says. Deciding that
- * here rather than in the page is deliberate — the page does not know what
- * `$HOME` is, which is exactly why the protocol answers in relative paths.
+ * Prefixes `$HOME` to relative paths and leaves absolute ones as they are. The
+ * script decides because the page doesn't know `$HOME`.
  */
 const SCRIPT =
   'case $1 in /*) exec xdg-open "$1" ;; *) exec xdg-open "$HOME/$1" ;; esac';
 
-/** `$0` for the script, which is what a diagnostic from `sh` is prefixed with. */
+/** `$0` for the script, which prefixes `sh` error messages. */
 const NAME = "domicile-launcher";
 
 /** The argv that opens `path` with the user's default application. */

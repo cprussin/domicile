@@ -10,33 +10,32 @@ import { css } from "../../../styled-system/css";
 import { hstack } from "../../../styled-system/patterns";
 import type { FindResult } from "../useFindResult";
 
-/** What the box is called, and what the bar around it is. */
+/** The accessible name of the bar and its box. */
 const NAME = "Find in page";
 
 type Props = {
-  /** What the find has found so far — the browser's count. */
+  /** The browser's match count. */
   found: FindResult;
-  /** End the find. */
+  /** Ends the find. */
   onClose: () => void;
   /**
-   * Find `text` in the page: the next match, or the one before when
-   * `backward`. `""` is the box emptied, which ends the find.
+   * Finds the next match of `text`, or the previous one when `backward`.
+   * `""` ends the find.
    */
   onFind: (text: string, backward: boolean) => void;
   /**
-   * The box, which is where the window's keyboard goes while the bar is up —
-   * see `BrowserWindow`.
+   * The search box, which takes the window's keyboard focus while the bar is
+   * open. See `BrowserWindow`.
    */
   ref?: Ref<HTMLInputElement> | undefined;
 };
 
 /**
- * A browser window's find bar, over the top of its page.
+ * A browser window's find bar, drawn over its page.
  *
- * Chrome's, because it is the one the user knows: it finds as the user types,
- * Enter steps to the next match and Shift+Enter to the one before, and Escape
- * puts it away. The count is the browser's — every frame in the page, a
- * cross-site one included — so it is read rather than worked out here.
+ * Behaves like Chrome's: finds as you type, Enter and Shift+Enter step through
+ * matches, Escape closes. The count comes from the browser, since it covers
+ * cross-site frames.
  */
 export const FindBar = ({ found, onClose, onFind, ref }: Props) => {
   const [text, setText] = useState("");
@@ -52,8 +51,8 @@ export const FindBar = ({ found, onClose, onFind, ref }: Props) => {
         break;
       }
       case "Escape": {
-        // Not the box's own: a search box empties itself on Escape, which
-        // would be a find ended and started over on the way to being closed.
+        // Stops the search input's default clear-on-Escape, which would end
+        // and restart the find before closing.
         event.preventDefault();
         onClose();
         break;
@@ -124,9 +123,8 @@ export const FindBar = ({ found, onClose, onFind, ref }: Props) => {
   );
 };
 
-// Over the page's top inline-end corner, where Chrome puts its own, and drawn
-// the way the zoom indicator hanging from the address bar is: a card lifted
-// off the page rather than a strip of the chrome.
+// In the page's top inline-end corner, as in Chrome, styled like the zoom
+// indicator.
 const barStyles = hstack({
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -139,8 +137,7 @@ const barStyles = hstack({
   position: "absolute",
 });
 
-// Figures that do not change width, so the box does not shift as the count
-// settles a frame at a time.
+// Fixed-width digits, so the bar does not shift as the count updates.
 const countStyles = css({
   color: "muted",
   fontSize: "xs",

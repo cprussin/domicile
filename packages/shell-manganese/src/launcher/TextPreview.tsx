@@ -4,22 +4,20 @@ import { css } from "../../styled-system/css";
 import { highlight, languageOf } from "./highlight";
 
 /**
- * The front of a text file, each line numbered and lit by what a grammar
- * says each piece of it is — or plain, for a file no grammar is for.
+ * The start of a text file with line numbers and syntax highlighting, or plain
+ * when no grammar matches.
  *
- * What each piece looks like is said here in the desktop's own colors rather
- * than a highlighting theme's, so one set of rules reads on a light desk and a
- * dark one alike: the tokens flip, and the highlighting follows.
+ * Uses the desktop's semantic colors rather than a highlighting theme, so it
+ * works in light and dark mode.
  */
 export const TextPreview = ({ path, text }: { path: string; text: string }) => {
   const lines = useMemo(() => highlight(languageOf(path), text), [path, text]);
   return (
     <pre className={codeStyles}>
       {lines.map((runs, line) => (
-        // The line's number as its key, because that is what it is.
+        // Line numbers are stable keys.
         <span className={lineStyles} key={line}>
-          {/* A newline for a line with nothing on it, which would otherwise
-              be a block with no height and no line at all. */}
+          {/* A newline keeps an empty line from collapsing to zero height. */}
           {runs.length === 0
             ? "\n"
             : runs.map((run, at) => (
@@ -33,12 +31,10 @@ export const TextPreview = ({ path, text }: { path: string; text: string }) => {
   );
 };
 
-// Six hues is what the desktop has — its accent, its three statuses, its
-// foreground and a quieter one — so a grammar's dozens of words come down to
-// what a reader tells apart at a glance: what the language says, what the
-// program says, what it computes with, and what nobody runs. Org's own words
-// follow Emacs's faces: a headline's level in a hue of its own, what is to do
-// in red and what is done in green, and a done headline quieted.
+// The desktop has six hues (accent, three statuses, foreground and muted), so
+// token scopes map to a few groups: keywords, literals, names, and comments.
+// Org scopes follow Emacs's faces: a hue per headline level, TODO in red, DONE
+// in green, and done headlines muted.
 const codeStyles = css({
   "& [data-scope=addition]": { color: "success" },
   "& [data-scope=attr], & [data-scope=attribute], & [data-scope=property], & [data-scope=variable], & [data-scope=template-variable], & [data-scope=params], & [data-scope=table]":
@@ -91,10 +87,8 @@ const codeStyles = css({
   wordBreak: "break-all",
 });
 
-// A line with its number in a gutter of its own: the number counted by the
-// stylesheet, so it is never text a copy would pick up, and set in the line's
-// start padding, so a line that wraps comes back to the code's edge rather
-// than under the number.
+// The line number is a CSS counter, so copying text skips it. It sits in the
+// start padding, so wrapped lines align with the code, not the number.
 const lineStyles = css({
   _before: {
     color: "color-mix(in oklab, {colors.muted} 60%, transparent)",

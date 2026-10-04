@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { ConnectionSafety } from "../../address/connection-safety";
 import { AddressBar } from "./AddressBar";
 
-/** The props every case here shares; each overrides the one it is about. */
+/** Shared props; each case overrides what it tests. */
 const BAR = {
   address: "https://example.com",
   canGoBack: false,
@@ -38,10 +38,7 @@ describe("AddressBar", () => {
     expect(address()).toHaveValue("https://example.com");
   });
 
-  // ONE BUTTON IN ONE PLACE, which is what every browser does with these two:
-  // a page is either arriving or it is not, so a stop that is live while a
-  // reload is live offers the user a choice that never exists — and two
-  // buttons that are each dead half the time cost the width of both.
+  // One button for Reload and Stop, since only one applies at a time.
   describe("the reload button", () => {
     it("reloads the page while nothing is arriving", async () => {
       const calls: string[] = [];
@@ -79,9 +76,7 @@ describe("AddressBar", () => {
     });
   });
 
-  // A CONTROL THAT WOULD DO NOTHING SAYS SO BEFORE IT IS PRESSED: `goBack()`
-  // on a history with nothing behind it is a no-op in the browser process, so
-  // a live-looking button is the window offering something it cannot do.
+  // A button that would do nothing is disabled.
   describe("the history controls", () => {
     it("grays out what the history cannot reach", () => {
       render(<AddressBar {...BAR} />);
@@ -131,9 +126,6 @@ describe("AddressBar", () => {
       expect(sent).toStrictEqual(["https://docs.example.com"]);
     });
 
-    // WHAT A BROWSER DOES WITH WORDS. A line that is not an address is a
-    // search, and an address bar that loaded `https://how tall is a giraffe`
-    // instead is one the user learns not to type into.
     it("searches for a line that is not an address", async () => {
       const sent: string[] = [];
       render(
@@ -204,9 +196,8 @@ describe("AddressBar", () => {
     expect(address()).toHaveValue("https://docs.example.com");
   });
 
-  // THE INDICATOR IS GIVEN THE VERDICT, NOT THE ADDRESS TO GUESS FROM. An
-  // `https://` whose certificate did not validate is dangerous, and a bar that
-  // read the scheme would put a padlock on it.
+  // The indicator uses the browser's security state, not the URL scheme: an
+  // `https://` page with an invalid certificate is not secure.
   it("carries the browser's verdict on the page it is showing", () => {
     render(
       <AddressBar
@@ -245,8 +236,6 @@ describe("AddressBar", () => {
       expect(calls).toStrictEqual(["in", "out", "reset"]);
     });
 
-    // A CONTROL THAT WOULD DO NOTHING SAYS SO, the way Back does with nowhere
-    // to go back to.
     it("grays out what would do nothing at 100%", () => {
       render(<AddressBar {...BAR} zoom={1} />);
 
@@ -277,9 +266,8 @@ describe("AddressBar", () => {
       expect(screen.getByRole("status")).toHaveTextContent("150%");
     });
 
-    // ITS OWN ANIMATION ENDING IS WHAT PUTS IT AWAY, rather than a timer
-    // beside the stylesheet's duration: how long it shows is the
-    // stylesheet's, and a second copy of it here would drift.
+    // Hidden on `animationend`, not a timer, so the duration lives only in
+    // the stylesheet.
     it("goes away when it has faded out, and comes back for the next zoom", () => {
       const { rerender } = render(
         <AddressBar {...BAR} zoom={1.1} zoomsAnnounced={1} />,

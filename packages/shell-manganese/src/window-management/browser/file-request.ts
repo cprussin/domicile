@@ -1,16 +1,13 @@
-// What a page is waiting on when it needs a file picked, read off the engine's
-// event.
+// A page's file chooser request, parsed from the engine's event.
 //
-// THE MODE IS PARSED HERE AND NOWHERE ELSE. The engine and this shell ship
-// apart, so the word the event carries is external data — see
-// `WEBVIEW_FILE_CHOOSER_MODES` — and a picker drawn for a mode it misread
-// answers a question nobody asked: a folder where the page wanted one file, or
-// a path to read where it wanted one to write.
+// The engine ships separately, so its mode string is external data (see
+// `WEBVIEW_FILE_CHOOSER_MODES`). It is parsed only here, and unknown modes
+// throw rather than show the wrong picker.
 
 import { WEBVIEW_FILE_CHOOSER_MODES } from "@domicile-desktop/sdk/webview-element";
 import { z } from "zod";
 
-/** What the page asks for — see `WEBVIEW_FILE_CHOOSER_MODES`. */
+/** The kind of file chooser. See `WEBVIEW_FILE_CHOOSER_MODES`. */
 export enum ChooserMode {
   Open,
   OpenMultiple,
@@ -19,8 +16,8 @@ export enum ChooserMode {
 }
 
 /**
- * The engine's word for a mode, mapped to this shell's. Throws on one it
- * cannot name, which an engine newer than this shell can send.
+ * Maps the engine's mode string to a {@link ChooserMode}. Throws on an unknown
+ * mode, which a newer engine could send.
  */
 const modeSchema = z.enum(WEBVIEW_FILE_CHOOSER_MODES).transform((mode) => {
   switch (mode) {
@@ -40,25 +37,24 @@ const modeSchema = z.enum(WEBVIEW_FILE_CHOOSER_MODES).transform((mode) => {
 });
 
 /**
- * A page waiting for a file: what it asks for, and the two ways to answer.
+ * A pending file chooser request and its callbacks.
  *
- * The picker answers with absolute paths, starting from `home`. See
- * `DomicileFileChooserEvent`.
+ * Answers are absolute paths. See `DomicileFileChooserEvent`.
  */
 export type FileRequest = {
-  /** Extensions the page will take, lower case and dotless; empty is any. */
+  /** Accepted extensions, lowercase and without the dot; empty accepts any. */
   accept: readonly string[];
   cancel: () => void;
   choose: (paths: readonly string[]) => void;
-  /** The absolute home directory: where the picker starts. */
+  /** The absolute home directory, where the picker starts. */
   home: string;
   /**
-   * What is in the directory at `path`, a directory's ending in `/`. Rejects
-   * for one the browser cannot read.
+   * Lists the directory at `path`; subdirectory names end in `/`. Rejects if
+   * it is unreadable.
    */
   list: (path: string) => Promise<readonly string[]>;
   mode: ChooserMode;
-  /** The name the page suggests for a save; `""` otherwise. */
+  /** The suggested file name for a save; `""` otherwise. */
   suggestedName: string;
 };
 

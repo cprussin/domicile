@@ -6,10 +6,9 @@ import { ChooserMode } from "./file-request";
 import { useFileRequest } from "./useFileRequest";
 
 /**
- * The engine asking the view for a file, with every answer it is given kept
- * in order. Built rather than constructed, because the event's own type is the
- * fork's and no DOM these tests run on has it. Cancelable, because taking it is
- * `preventDefault()`.
+ * A fake engine file chooser event, recording its answers in order. Built by
+ * hand because the test DOM lacks the engine's event type; cancelable because
+ * claiming it is `preventDefault()`.
  */
 const asks = (
   view: HTMLElement,
@@ -39,8 +38,7 @@ const asks = (
 };
 
 describe("useFileRequest", () => {
-  // One nobody takes, the engine cancels as the dispatch returns: this is the
-  // shell saying it will answer.
+  // The engine cancels unclaimed requests when dispatch returns.
   it("takes the page's question", () => {
     const view = document.createElement("webview");
     const { result } = renderHook(() => useFileRequest(view));
@@ -79,8 +77,7 @@ describe("useFileRequest", () => {
     expect(result.current).toBeUndefined();
   });
 
-  // A page can only wait on one picker it can see, and the newer question is
-  // the one the user just caused.
+  // Only one picker can show, and the newest request is the relevant one.
   it("cancels the question it was holding when another arrives", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];
@@ -93,7 +90,7 @@ describe("useFileRequest", () => {
     expect(result.current?.mode).toBe(ChooserMode.Save);
   });
 
-  // A page left waiting on a window that is gone waits forever.
+  // Otherwise the page would wait forever.
   it("cancels the question it was holding when it goes", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];

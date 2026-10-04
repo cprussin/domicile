@@ -1,19 +1,11 @@
-// Every change the desktop can undergo, as one pure reduction.
+// The desktop's window state and the pure reducer that updates it.
 //
-// The shell owns three things: which windows exist, which workspace each of
-// them is on, and which binding mode the keys are read in. They move together — a window
-// that opens lands on the workspace being looked at, a window sent to the
-// scratchpad leaves every workspace — so they are one state, reduced in one
-// place, with no DOM or domicile client in sight. `useWindows` is what feeds
-// host events and keystrokes into it.
+// Windows, workspaces, screens and the binding mode change together, so they
+// share one state. `useWindows` feeds host events and keystrokes into it.
 //
-// **The actions are sway's commands.** `keyboard/command.ts` reads the words a
-// key the config binds sends — `send-shell focus left` — into one of the
-// constructors below, so the desktop's vocabulary is the one the user's config
-// is written in: `focus left`, `move container to workspace 2`, `layout
-// tabbed`. What a command *means* is the workspace's or
-// the tree's to say, and almost every arm of the reduction is one call into
-// `workspace.ts`.
+// Most actions are sway commands parsed by `keyboard/command.ts`, and most
+// reducer arms delegate to `workspace.ts`. See
+// `packages/shell-manganese/docs/WINDOW-MANAGEMENT.md`.
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 
@@ -69,12 +61,10 @@ import {
 } from "./workspace";
 
 /**
- * The workspaces, by the names the config's keys name them with.
+ * The workspace names the config binds keys to.
  *
- * All ten exist from the start rather than being made as they are reached.
- * sway creates and destroys them on demand, which is a difference the user can
- * see in exactly one place — the bar — and the bar shows the ones that have
- * something on them, so the two agree where it counts.
+ * All ten always exist, unlike sway's. The bar only lists non-empty ones, so
+ * the user sees the same thing.
  */
 export const WORKSPACES: readonly string[] = [
   "1",
@@ -90,129 +80,101 @@ export const WORKSPACES: readonly string[] = [
 ];
 
 /**
- * What a screen of the desk is called before the host has described one.
+ * The screen name used before the host describes any screens.
  *
- * No display is named the empty string — the compositor's are `drm-<id>` and
- * a config's are the user's own words — so a `<Screen name="">` draws
- * nowhere, which is exactly right: this is where the desktop is while nobody
- * can see it. A window can open in the handshake's worth of time before the
- * first description, and it has to be somewhere.
+ * No real display has this name, so nothing draws it. It gives windows that
+ * open before the first description somewhere to live.
  */
 export const UNDESCRIBED_SCREEN = "";
 
-/** Where {@link UNDESCRIBED_SCREEN} is, which is nowhere. */
+/** The empty box for {@link UNDESCRIBED_SCREEN}. */
 const NOWHERE: Rect = { height: 0, width: 0, x: 0, y: 0 };
 
 /** One screen of the desk, and the workspace it is showing. */
 export type DeskScreen = PlacedScreen & {
-  /** The workspace drawn on it. No two screens show the same one. */
+  /** The workspace shown on it. No two screens show the same one. */
   current: string;
 };
 
 export type WindowState = {
-  /** How many browser windows have been opened, ever — the id counter. */
+  /** Count of browser windows ever opened; the id counter. */
   browsersOpened: number;
   /**
-   * The screens of the desk, in the desk's own order, and what each shows.
+   * The desk's screens, in order, and the workspace each shows. Never empty
+   * (see {@link UNDESCRIBED_SCREEN}).
    *
-   * **THE WORKSPACES SPAN THE DESK AND THE SCREENS DIVIDE IT**, which is
-   * sway's arrangement: a workspace is somewhere the user's work lives, a
-   * screen is a view onto one of them, and asking for a workspace that is
-   * already in view moves the keyboard rather than the work. Never empty —
-   * see {@link UNDESCRIBED_SCREEN}.
-   *
-   * No two screens show the same workspace, and that is not a detail: one
-   * workspace on two screens is one window embedded twice, and the second
-   * embedding takes the first's pixels away.
+   * As in sway, selecting a workspace already on screen moves the keyboard
+   * there. No two screens may show the same workspace: embedding a window
+   * twice takes the first embedding's pixels away.
    */
   screens: readonly DeskScreen[];
   /**
-   * The screen the keyboard is on: where a window opens, and what the keyed
-   * commands act on.
+   * The screen with the keyboard, where windows open and keyed commands act.
    */
   focused: string;
   /**
-   * The screen each workspace belongs to, which is the one whose bar lists it.
+   * The screen each workspace belongs to, whose bar lists it.
    *
-   * sway's outputs: a workspace is on one screen, whether or not that screen
-   * is showing it, and asking for it shows it there rather than here. A
-   * workspace on screen belongs to the screen showing it; a hidden one to the
-   * screen it was last on, or to the screen the keyboard is on once that one
-   * is gone. An empty one nobody is showing belongs nowhere — sway destroys
-   * it — so the next time it is asked for it comes to the keyboard.
+   * As with sway's outputs, selecting a workspace shows it on its home
+   * screen. A hidden workspace keeps its last screen, or moves to the focused
+   * screen if that one is gone. An empty hidden workspace has no home, so it
+   * opens on the focused screen next time.
    */
   homes: Readonly<Partial<Record<string, string>>>;
   /**
-   * The floating window the user has hold of, or `undefined` when none is.
+   * The floating window being dragged, or `undefined`.
    *
-   * Here rather than in the component that reads the pointer because it is
-   * what makes the window see-through while it moves, and because a drag
-   * outlives the modifier that started it: letting go of the modifier half
-   * way through one must not drop the window.
+   * Kept here because it styles the window, and because releasing the
+   * modifier mid-drag must not drop it.
    */
   draggingId: string | undefined;
   /**
-   * The app that holds the keyboard, or `undefined` when the chrome does.
+   * The app with compositor keyboard focus, or `undefined` when the chrome
+   * has it.
    *
-   * Not the same as the window being worked in: that is the shell's own idea
-   * and this is the compositor's. They agree while the shell is the only
-   * thing moving focus, and part company the moment a click does — which is
-   * what this exists to follow.
+   * Can differ from the shell's focused window, for example after a click.
    */
   focusedId: string | undefined;
   /**
-   * Whether the launcher's panel is up.
+   * Whether the launcher is open.
    *
-   * Here rather than in the component that draws it because it is a desktop
-   * state and not a widget's: the key that opens it is a command like every
-   * other key's, and what closes it is usually something else being
-   * launched. A panel that owned its own `useState` would need the keys to
-   * reach into it and every launch to remember to close it.
+   * Kept here because key commands open it and launches close it.
    */
   launcherOpen: boolean;
   /**
-   * Whether the clipboard's history is up.
-   *
-   * Desktop state for {@link WindowState.launcherOpen}'s reason: the key that
-   * opens it is a command like every other key's, and a panel that owned its
-   * own `useState` would need the keys to reach into it.
+   * Whether the clipboard history is open. Kept here because key commands
+   * open it.
    */
   clipboardOpen: boolean;
   /**
-   * The binding mode the keys are read in: `default`, or one the config
-   * declares — `resize` in the sample.
+   * The binding mode: `default`, or one the config declares such as `resize`.
    *
-   * Desk state rather than a page's, because a key that enters a mode can
-   * land on one monitor's page and the next key on another's. The SDK keeps
-   * the mode the keys are read in; this is what every page tells it.
+   * Shared across the desk because consecutive keys can land on different
+   * monitors' pages. Each page passes it to the SDK.
    */
   mode: string;
   /**
-   * The workspace the current one was reached from, which the same key goes
-   * back to (`workspaceAutoBackAndForth`).
+   * The previously shown workspace, for `workspaceAutoBackAndForth`.
    */
   previous: string | undefined;
   /**
-   * The popups — menus, tooltips — clients have open over their windows,
-   * oldest first. Not windows: see `popup.ts`.
+   * Client popups such as menus and tooltips, oldest first. See `popup.ts`.
    */
   popups: readonly Popup[];
   /**
-   * How many commands a key has run.
+   * How many commands keys have run.
    *
-   * A key is what takes the pointer with the keyboard (`usePointerWarp`), and
-   * the monitor that moves the pointer is the one the keyboard went to. Counted
-   * rather than flagged so a monitor can tell a press it has not answered from
-   * one it has.
+   * `usePointerWarp` moves the pointer after each one. A counter lets each
+   * monitor tell new presses from ones it has handled.
    */
   pressed: number;
-  /** The windows in the scratchpad, the most recently hidden last. */
+  /** The scratchpad windows, most recently hidden last. */
   scratchpad: readonly string[];
   windows: readonly ShellWindow[];
   workspaces: readonly Workspace[];
 };
 
-/** A desktop with nothing open: what the chrome starts from. */
+/** The initial state: no windows open. */
 export const NO_WINDOWS: WindowState = {
   browsersOpened: 0,
   clipboardOpen: false,
@@ -232,15 +194,13 @@ export const NO_WINDOWS: WindowState = {
 };
 
 /**
- * The workspace `screen` is showing. Throws for a screen the desk does not
- * have — every caller has one from {@link WindowState.screens} or from the
- * desk the host described, and a screen that is not there is a wiring bug
- * rather than an empty region.
+ * The workspace `screen` is showing. Throws for an unknown screen, which is a
+ * wiring bug.
  */
 export const workspaceOn = (state: WindowState, screen: string): Workspace =>
   workspaceNamed(state, currentOn(state, screen));
 
-/** The workspace the keyboard is in, which the keyed commands act on. */
+/** The workspace with the keyboard, which keyed commands act on. */
 export const workspaceHere = (state: WindowState): Workspace =>
   workspaceOn(state, state.focused);
 
@@ -248,15 +208,15 @@ export const workspaceHere = (state: WindowState): Workspace =>
 export const currentOn = (state: WindowState, screen: string): string =>
   screenNamed(state, screen).current;
 
-/** The workspace on the screen the keyboard is on. */
+/** The workspace on the focused screen. */
 export const currentHere = (state: WindowState): string =>
   currentOn(state, state.focused);
 
-/** Where the screen the keyboard is on is, on the desk. */
+/** The focused screen's box on the desk. */
 const screenHere = (state: WindowState): Rect =>
   screenNamed(state, state.focused).box;
 
-/** The screen called `name`. Throws for one the desk does not have. */
+/** The screen called `name`. Throws for an unknown screen. */
 const screenNamed = (state: WindowState, name: string): DeskScreen => {
   const found = state.screens.find((screen) => screen.name === name);
   if (found === undefined) {
@@ -280,7 +240,7 @@ export const workspacesOn = (
 ): readonly string[] =>
   WORKSPACES.filter((name) => state.homes[name] === screen);
 
-/** The workspace of this name. Throws for a name the desktop does not have. */
+/** The workspace called `name`. Throws for an unknown name. */
 export const workspaceNamed = (state: WindowState, name: string): Workspace => {
   const workspace = state.workspaces.find((found) => found.name === name);
   if (workspace === undefined) {
@@ -297,7 +257,7 @@ export const workspaceHolding = (
 ): Workspace | undefined =>
   state.workspaces.find((workspace) => holds(workspace, id));
 
-/** The window the user is working in, or `undefined` on an empty workspace. */
+/** The focused window, or `undefined` on an empty workspace. */
 export const activeIdOf = (state: WindowState): string | undefined =>
   focusedOn(workspaceHere(state));
 
@@ -382,11 +342,8 @@ export const WindowAction = {
   }),
 
   /**
-   * The user picked an application in the launcher, whose `command` the
-   * compositor runs.
-   *
-   * Nothing in the state moves but the panel, for
-   * {@link WindowAction.FileOpened}'s reason.
+   * The user picked an application in the launcher. The compositor runs
+   * `command`; the reducer only closes the launcher.
    */
   AppLaunched: (command: readonly string[]) => ({
     command,
@@ -408,12 +365,10 @@ export const WindowAction = {
   }),
 
   /**
-   * The client said what its window is called, or unset it.
+   * The client set or cleared its window title.
    *
-   * Separate from {@link WindowAction.AppAppeared} because a toplevel is
-   * announced when the client creates it, which is before `set_title` — and
-   * because it happens again whenever the name changes, which for a terminal
-   * is every command it runs.
+   * Separate from {@link WindowAction.AppAppeared} because `set_title` comes
+   * after creation and repeats on every change.
    */
   AppTitled: (appId: string, title: string | undefined) => ({
     appId,
@@ -421,7 +376,7 @@ export const WindowAction = {
     title,
   }),
 
-  /** The user asked for a browser window, pointed at `src`. */
+  /** The user opened a browser window at `src`. */
   BrowserOpened: (src: string) => ({
     kind: WindowActionKind.BrowserOpened as const,
     src,
@@ -431,33 +386,27 @@ export const WindowAction = {
   ChildFocused: () => ({ kind: WindowActionKind.ChildFocused as const }),
 
   /**
-   * The clipboard's history was closed without anything being chosen —
-   * Escape, a click on the backdrop, or the row that was chosen closing it.
+   * The clipboard history closed itself: Escape, a backdrop click, or a row
+   * being chosen.
    *
-   * Separate from {@link WindowAction.ClipboardToggled} for
-   * {@link WindowAction.LauncherDismissed}'s reason: it comes from the panel
-   * rather than from a key, and a toggle here would re-open it on the way out.
+   * Not a toggle, which could reopen the panel as it closes.
    */
   ClipboardDismissed: () => ({
     kind: WindowActionKind.ClipboardDismissed as const,
   }),
 
   /**
-   * `mod+shift+v`, which is the clipboard's key in both directions.
-   *
-   * One binding for the launcher's reason: the press that reaches the panel is
-   * the press that gives up on it.
+   * `mod+shift+v`, which opens and closes the clipboard history.
    */
   ClipboardToggled: () => ({
     kind: WindowActionKind.ClipboardToggled as const,
   }),
 
   /**
-   * `exec <argv…>`: run `argv`, which the compositor spawns.
+   * `exec <argv…>`: the compositor spawns `argv`.
    *
-   * Nothing in the state moves: the window arrives as an announcement from
-   * the host like any other client's. It is an action so that every command
-   * a key can send is one of them.
+   * Changes no state; the new window arrives as a host announcement. It is an
+   * action so every key command is one.
    */
   CommandExecuted: (argv: readonly string[]) => ({
     argv,
@@ -471,23 +420,19 @@ export const WindowAction = {
   }),
 
   /**
-   * The user asked for the desk to be locked, which the compositor does.
+   * The user asked the compositor to lock the desk.
    *
-   * Nothing in the state moves: the lock screen goes up when the host says the
-   * desk is locked, like any other `locked` message.
+   * Changes no state; the lock screen follows the host's `locked` message.
    */
   DeskLocked: () => ({ kind: WindowActionKind.DeskLocked as const }),
 
   /**
-   * The user picked a file in the launcher, which the compositor opens with
-   * their default application.
+   * The user picked a file in the launcher; the compositor opens it with the
+   * default application.
    *
-   * Nothing in the state moves but the panel: that application is a Wayland
-   * client and its window arrives as an announcement from the host, exactly as
-   * {@link WindowAction.CommandExecuted}'s does. `path` is relative to the
-   * home directory, or absolute for a file outside it — see
-   * `launcher/open-command.ts`, which resolves the difference in the one
-   * process that can.
+   * Only closes the launcher; the app's window arrives from the host. `path`
+   * is relative to the home directory or absolute (see
+   * `launcher/open-command.ts`).
    */
   FileOpened: (path: string) => ({
     kind: WindowActionKind.FileOpened as const,
@@ -498,11 +443,9 @@ export const WindowAction = {
   FloatToggled: () => ({ kind: WindowActionKind.FloatToggled as const }),
 
   /**
-   * The compositor moved the keyboard, by whatever route.
+   * The compositor moved keyboard focus. `undefined` means the chrome has it.
    *
-   * `undefined` means the chrome holds it. This arrives for focus the shell
-   * asked for *and* for focus it did not — a click on a window, or a focused
-   * client going away — which is the whole reason it is a message.
+   * Also reports focus changes the shell did not request, such as clicks.
    */
   FocusChanged: (appId: string | undefined) => ({
     appId,
@@ -510,12 +453,9 @@ export const WindowAction = {
   }),
 
   /**
-   * A client asked for the keyboard. Nothing has moved yet.
-   *
-   * The compositor forwards the request over `xdg-activation` and leaves the
-   * seat where it is, so what happens next is this shell's policy rather than
-   * the desktop's. Manganese grants it, and goes to the workspace the window
-   * is on to do it.
+   * A client requested focus over `xdg-activation`. The compositor leaves the
+   * decision to the shell; Manganese grants it and switches to the window's
+   * workspace.
    */
   FocusRequested: (appId: string) => ({
     appId,
@@ -528,35 +468,28 @@ export const WindowAction = {
     kind: WindowActionKind.FocusStepped as const,
   }),
 
-  /** `fullscreen` — or `fullscreen toggle global`, across every screen. */
+  /** `fullscreen`, or `fullscreen toggle global` across every screen. */
   FullscreenToggled: (global: boolean) => ({
     global,
     kind: WindowActionKind.FullscreenToggled as const,
   }),
 
   /**
-   * A key ran the command handed over with this. See
-   * {@link WindowState.pressed}.
+   * A key ran a command. See {@link WindowState.pressed}.
    */
   KeyPressed: () => ({ kind: WindowActionKind.KeyPressed as const }),
 
   /**
-   * The launcher was closed without launching anything — Escape, or a click
-   * on the backdrop.
+   * The launcher closed itself without launching: Escape or a backdrop click.
    *
-   * Separate from {@link WindowAction.LauncherToggled} because it comes from
-   * the dialog rather than from a key, and the dialog reports its own
-   * closing: a toggle here would re-open the panel on the way out of it.
+   * Not a toggle, which could reopen the panel as it closes.
    */
   LauncherDismissed: () => ({
     kind: WindowActionKind.LauncherDismissed as const,
   }),
 
   /**
-   * `mod+space`, which is the launcher's key in both directions.
-   *
-   * One binding rather than two, because the same press is what a person
-   * reaches for to open the panel and to give up on it.
+   * `mod+space`, which opens and closes the launcher.
    */
   LauncherToggled: () => ({ kind: WindowActionKind.LauncherToggled as const }),
 
@@ -567,15 +500,14 @@ export const WindowAction = {
   }),
 
   /**
-   * A key entered a binding mode — `mode resize`, and the `mode default` that
-   * leaves it — on whichever page heard it.
+   * A key changed the binding mode, such as `mode resize` or `mode default`.
    */
   ModeSet: (mode: string) => ({
     kind: WindowActionKind.ModeSet as const,
     mode,
   }),
 
-  /** `focus mode_toggle`: between the floating windows and the tiled ones. */
+  /** `focus mode_toggle`: switch focus between floating and tiled windows. */
   ModeSwapped: () => ({ kind: WindowActionKind.ModeSwapped as const }),
 
   /** `focus parent`. */
@@ -588,8 +520,8 @@ export const WindowAction = {
   }),
 
   /**
-   * An extension asked for a window of its own — `chrome.windows.create` with
-   * a popup — and the browser window the user was in passed it on.
+   * An extension called `chrome.windows.create` for a popup, relayed by the
+   * focused browser window.
    */
   PopupWindowOpened: (request: PopupWindowRequest) => ({
     kind: WindowActionKind.PopupWindowOpened as const,
@@ -600,10 +532,8 @@ export const WindowAction = {
   ScratchpadShown: () => ({ kind: WindowActionKind.ScratchpadShown as const }),
 
   /**
-   * The pointer moved on a screen, which is what puts the keyboard there:
-   * focus follows the cursor from one monitor to the next, whether or not
-   * there is a window under it — see {@link WindowAction.WindowHovered} for
-   * the window it is over.
+   * The pointer moved on a screen, which focuses it even with no window under
+   * the pointer. See {@link WindowAction.WindowHovered} for windows.
    */
   ScreenHovered: (name: string) => ({
     kind: WindowActionKind.ScreenHovered as const,
@@ -611,13 +541,11 @@ export const WindowAction = {
   }),
 
   /**
-   * The host described the desk: these screens, in this order.
+   * The host described the desk's screens, in order.
    *
-   * The desk is hardware and the workspaces are the user's work, so this only
-   * ever says where the work can be seen. A screen that was already there
-   * keeps what it was showing, a monitor that replaced one takes over what it
-   * was showing, and a monitor that is new to the desk gets a workspace
-   * nobody else is on.
+   * Only changes which workspaces are visible. Existing screens keep their
+   * workspace, a replacement monitor takes over its predecessor's, and a new
+   * monitor gets an unused one.
    */
   ScreensDescribed: (screens: readonly PlacedScreen[]) => ({
     kind: WindowActionKind.ScreensDescribed as const,
@@ -633,15 +561,14 @@ export const WindowAction = {
     kind: WindowActionKind.WindowClosed as const,
   }),
 
-  /** The user let go of the window they had hold of. */
+  /** The user released the window being dragged. */
   WindowDropped: () => ({ kind: WindowActionKind.WindowDropped as const }),
 
   /**
-   * The user let go of a tiled window they were dragging over another: onto
-   * `target`'s `edge`, or its middle where that is `undefined`.
+   * The user dropped a tiled window on `target`'s `edge`, or its middle when
+   * `edge` is `undefined`.
    *
-   * Beside {@link WindowAction.WindowDropped} rather than instead of it: that
-   * one ends the drag, whether or not it ended over anything.
+   * Sent alongside {@link WindowAction.WindowDropped}, which ends the drag.
    */
   WindowDroppedOn: (
     id: string,
@@ -655,19 +582,11 @@ export const WindowAction = {
   }),
 
   /**
-   * The user asked for a window to fill the screen, from the button on its
-   * own title bar.
+   * The user pressed the fullscreen button on window `id`'s title bar.
    *
-   * `fullscreen` on a named window rather than on the one being worked in,
-   * which is the difference between this and
-   * {@link WindowAction.FullscreenToggled} — the same difference
-   * {@link WindowAction.WindowClosed} has from `kill`. A bar belongs to one
-   * window, so a button on it says which.
-   *
-   * Never global: `fullscreen toggle global` spreads a window across every
-   * screen, and a button that did that on the press a user expected to
-   * maximize would move the window to a monitor they were not looking at.
-   * The chord is still there for it.
+   * Unlike {@link WindowAction.FullscreenToggled}, it targets a named window.
+   * Never global, so the button cannot spread a window onto screens the user
+   * is not looking at.
    */
   WindowFullscreened: (id: string) => ({
     id,
@@ -675,42 +594,37 @@ export const WindowAction = {
   }),
 
   /**
-   * The user took hold of a floating window to move or resize it.
-   *
-   * Which of the two it will be is not recorded: the shell is told where the
-   * window ends up, not what the pointer is doing, so a move and a resize are
-   * the same drag as far as this is concerned.
+   * The user started dragging a floating window to move or resize it. Both
+   * are the same drag here.
    */
   WindowGrabbed: (id: string) => ({
     id,
     kind: WindowActionKind.WindowGrabbed as const,
   }),
 
-  /** `resize grow` / `resize shrink`, which is what resize mode's keys do. */
+  /** `resize grow` / `resize shrink`, as bound in resize mode. */
   WindowGrown: (direction: Direction) => ({
     direction,
     kind: WindowActionKind.WindowGrown as const,
   }),
 
   /**
-   * The pointer moved into a window, which is what makes it the window the
-   * user is working in: focus follows the cursor here. A hidden tab is its
-   * container's open tab — see `pointedOn`.
+   * The pointer entered a window, which focuses it. A hidden tab counts as
+   * its container's open tab (see `pointedOn`).
    *
-   * Not the same as reaching for one, which is what a click is — see
-   * {@link WindowAction.WindowSelected}.
+   * Clicks are {@link WindowAction.WindowSelected}.
    */
   WindowHovered: (id: string) => ({
     id,
     kind: WindowActionKind.WindowHovered as const,
   }),
 
-  /** `kill`: close the window being worked in. */
+  /** `kill`: close the focused window. */
   WindowKilled: () => ({ kind: WindowActionKind.WindowKilled as const }),
 
   /**
-   * The user dragged a floating window to a new corner of the desktop: `x`,
-   * `y` in the page's pixels, which are the desk's — see `floatDragged`.
+   * The user dragged a floating window to `x`, `y` in desk pixels (see
+   * `floatDragged`).
    */
   WindowMoved: (id: string, x: number, y: number) => ({
     id,
@@ -719,7 +633,7 @@ export const WindowAction = {
     y,
   }),
 
-  /** A browser window's page navigated, so its title says somewhere new. */
+  /** A browser window navigated, changing its title. */
   WindowRenamed: (id: string, title: string) => ({
     id,
     kind: WindowActionKind.WindowRenamed as const,
@@ -727,8 +641,7 @@ export const WindowAction = {
   }),
 
   /**
-   * The user dragged a floating window's corner to a new size — and, from the
-   * top or the left, to a new place.
+   * The user resized a floating window by a corner, which can also move it.
    */
   WindowResized: (id: string, box: Rect) => ({
     box,
@@ -736,7 +649,7 @@ export const WindowAction = {
     kind: WindowActionKind.WindowResized as const,
   }),
 
-  /** The user reached for a window — a click in it, or on its title bar. */
+  /** The user clicked in a window or on its title bar. */
   WindowSelected: (id: string) => ({
     id,
     kind: WindowActionKind.WindowSelected as const,
@@ -760,12 +673,11 @@ export const WindowAction = {
   }),
 
   /**
-   * The user dragged a tiled window's `edge` `by` pixels, rightwards or
-   * downwards where positive.
+   * The user dragged a tiled window's `edge` `by` pixels (positive is right
+   * or down).
    *
-   * With the box the workspace is laid out in, which only the monitor
-   * showing it knows: the tree holds shares rather than lengths, and what a
-   * pixel is a share of is a question about the screen.
+   * `area` is the workspace's layout box, needed to convert pixels to the
+   * tree's shares. Only the showing monitor knows it.
    */
   WindowStretched: (id: string, edge: Direction, by: number, area: Rect) => ({
     area,
@@ -800,8 +712,7 @@ const reduceAction = (
       return openApp(state, action.appId, action.title);
     }
     case WindowActionKind.AppClosed: {
-      // A popup, or a window: the ids are one space, and a popup's is never
-      // a window's.
+      // Popups and windows share one id space without overlap.
       return state.popups.some(({ appId }) => appId === action.appId)
         ? {
             ...state,
@@ -828,9 +739,7 @@ const reduceAction = (
       }));
     }
     case WindowActionKind.AppTitled: {
-      // The same fallback the window opened with. A client that named its
-      // window nothing — `set_title("")`, which the SDK reads as no name —
-      // gets the app id, exactly as one that has not named it yet does.
+      // Same fallback as on open; the SDK reads `set_title("")` as no title.
       return renameWindow(
         state,
         appWindowId(action.appId),
@@ -856,9 +765,7 @@ const reduceAction = (
     }
     case WindowActionKind.AppLaunched:
     case WindowActionKind.FileOpened: {
-      // The compositor spawns it and the host announces the window it opens,
-      // the same way a terminal's arrives. The panel goes, because the panel
-      // is how the file or application was asked for.
+      // The host announces the new window. Only the launcher closes here.
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.FloatToggled: {
@@ -869,10 +776,8 @@ const reduceAction = (
     case WindowActionKind.FocusChanged: {
       const focusedId =
         action.appId === undefined ? undefined : appWindowId(action.appId);
-      // The same object when it did not move, so React bails out rather than
-      // re-rendering every window. The host only sends this on a change, but
-      // a chrome that has just connected is told the current holder too, and
-      // that one usually says what the shell already knew.
+      // Return the same object when unchanged so React skips re-rendering.
+      // A newly connected chrome is told the current holder, usually a no-op.
       return focusedId === state.focusedId
         ? state
         : followFocus({ ...state, focusedId }, focusedId);
@@ -952,10 +857,8 @@ const reduceAction = (
       );
     }
     case WindowActionKind.WindowFullscreened: {
-      // Reached first, because `fullscreenToggled` is `mod+f` — it acts on the
-      // window the workspace has the focus in, and the window this names is
-      // the one whose bar was pressed. Pressing a bar is reaching for its
-      // window anyway, so the two are one press.
+      // Focus the window first: `fullscreenToggled` acts on the focused
+      // window, and pressing a bar focuses its window anyway.
       return onWorkspaceWith(
         reachWindow(state, action.id),
         action.id,
@@ -963,8 +866,7 @@ const reduceAction = (
       );
     }
     case WindowActionKind.WindowGrabbed: {
-      // Taking hold of a window brings it to the front, the same way clicking
-      // one does — which is what a grab is.
+      // A grab focuses and raises the window, like a click.
       return { ...reachWindow(state, action.id), draggingId: action.id };
     }
     case WindowActionKind.WindowGrown: {
@@ -1027,8 +929,7 @@ const reduceAction = (
   }
 };
 
-// The workspace on screen, put through `into`. Most of the keyed commands are
-// exactly this: they act on what the user is looking at.
+// Applies `into` to the focused screen's workspace, as most commands do.
 const onCurrent = (
   state: WindowState,
   into: (workspace: Workspace) => Workspace,
@@ -1045,9 +946,8 @@ const onWorkspace = (
   ),
 });
 
-// The workspace the window `id` is on, put through `into`. A window the
-// desktop has no workspace for — one in the scratchpad, or one whose close has
-// already been reduced — leaves the state as it is.
+// Applies `into` to the workspace holding `id`. No-op for a window on no
+// workspace, such as a scratchpad or already closed one.
 const onWorkspaceWith = (
   state: WindowState,
   id: string,
@@ -1060,10 +960,8 @@ const onWorkspaceWith = (
 };
 
 /**
- * `focus <direction>`: through the workspace on screen, and on to the screen
- * that way once there is nowhere left to go on this one — before wrapping
- * round, which is sway's order. A screen with nothing on it is still a screen
- * to go to: it is where the next window opens.
+ * `focus <direction>`: within the current workspace, then on to the next
+ * screen before wrapping, as in sway. Empty screens are valid targets.
  */
 const stepFocus = (state: WindowState, direction: Direction): WindowState => {
   const beyond = screenToward(state.screens, state.focused, direction);
@@ -1078,8 +976,7 @@ const stepFocus = (state: WindowState, direction: Direction): WindowState => {
   }
 };
 
-// A client the shell already has a window for is the host re-announcing it,
-// not a second window: the portal is keyed by app id.
+// Ignores a re-announcement of a known client; portals are keyed by app id.
 const openApp = (
   state: WindowState,
   appId: string,
@@ -1091,10 +988,7 @@ const openApp = (
     : state;
 };
 
-// The launcher shuts here as well as on `FileOpened` and `AppLaunched`,
-// because those are the answers it has and a panel left up over its own
-// answer is one the user has to dismiss after every URL they type. Harmless on the bar's `+`,
-// where it is already shut.
+// Also closes the launcher, since opening a URL is one of its results.
 const openBrowser = (state: WindowState, src: string): WindowState => {
   const browsersOpened = state.browsersOpened + 1;
   return openWindow(
@@ -1103,10 +997,8 @@ const openBrowser = (state: WindowState, src: string): WindowState => {
   );
 };
 
-// An extension's window floats, where every other window opening tiles: it is
-// a dialog the extension sized for its own page, and a tile is whatever the
-// layout has left, which is no size that page was drawn for. sway floats a client's dialog for the same reason.
-// The launcher is left as it is: nothing in it asked.
+// Extension popups float at their requested size, as sway floats dialogs; a
+// tile would ignore the size the page was designed for.
 const openPopupWindow = (
   state: WindowState,
   request: PopupWindowRequest,
@@ -1126,31 +1018,25 @@ const openPopupWindow = (
   );
 };
 
-// A window that opens lands tiled on the workspace being looked at and takes
-// the keyboard, which is what sway does with a client it has not been told
-// anything else about.
+// New windows tile on the current workspace and take focus, as in sway.
 const openWindow = (state: WindowState, window: ShellWindow): WindowState =>
   onCurrent({ ...state, windows: [...state.windows, window] }, (workspace) =>
     opened(workspace, window.id),
   );
 
 /**
- * `kill` on one window: the shell's own go at once, and a client's is asked.
+ * `kill` on one window: browser windows close at once; clients are asked.
  *
- * A client's window is the client's to end — the compositor sends its toplevel
- * a close and an editor with unsaved work is entitled to stay — so nothing
- * moves here and the window leaves on the `app_closed` that follows. The ask
- * itself is `useWindows`'s, because the state cannot make it.
+ * A client may refuse, for example with unsaved work, so its window stays
+ * until `app_closed`. `useWindows` sends the request.
  */
 const killWindow = (state: WindowState, id: string): WindowState => {
   const window = windowOf(state, id);
   return window?.kind === WindowKind.Browser ? closeWindow(state, id) : state;
 };
 
-// A window gone from everywhere it could be: the list, whichever workspace had
-// it, and the scratchpad. A close for a window the shell never opened is the
-// host draining events for a portal already torn down, which leaves the state
-// as it is.
+// Removes a window from the list, its workspace and the scratchpad. Unknown
+// ids are a no-op, since the host may drain events for a torn-down portal.
 const closeWindow = (state: WindowState, id: string): WindowState => ({
   ...state,
   draggingId: state.draggingId === id ? undefined : state.draggingId,
@@ -1161,13 +1047,9 @@ const closeWindow = (state: WindowState, id: string): WindowState => ({
   ),
 });
 
-// The compositor moving the keyboard onto a window is the user working in it,
-// so the shell follows — and goes to the workspace the window is on, because
-// a seat pointed at a window nobody can see is a desktop typing into thin air.
-//
-// Focus that landed on the chrome, or on a window the shell has not been told
-// about yet, leaves the window being worked in where it was: there is nothing
-// better to point at, and `undefined` would be worse than stale.
+// Follows compositor focus to its window and that window's workspace, so the
+// user can see where they are typing. Focus on the chrome or an unknown
+// window keeps the current focus, since a stale value beats `undefined`.
 const followFocus = (
   state: WindowState,
   focusedId: string | undefined,
@@ -1177,12 +1059,10 @@ const followFocus = (
     : reachWindow(state, focusedId);
 
 /**
- * The user reached a window: it takes the keyboard, and comes to the front if
- * it floats.
+ * Focuses a window, raising it if it floats, and shows its workspace.
  *
- * The workspace it is on comes with it. Picking a window that is not on screen
- * is something only a client's own ask can do — `xdg-activation`, which this
- * shell grants — and going there is what makes granting it mean anything.
+ * Only `xdg-activation` can reach an off-screen window, and switching to its
+ * workspace is what makes granting that request visible.
  */
 const reachWindow = (state: WindowState, id: string): WindowState => {
   const workspace = workspaceHolding(state, id);
@@ -1192,17 +1072,9 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
     const found = reached(workspace, id);
     const shown = showWorkspace(state, workspace.name);
     if (found === workspace && shown === state) {
-      // A reach that moved nothing gives back the state it was given, object
-      // and all — which is what `AppWindow` says it relies on for the press
-      // it reports in the window the user is already in. Rebuilt anyway, the
-      // desktop re-renders on every click in the window being worked in.
-      //
-      // Only a tiled window comes back the same, because only the tiling has
-      // a focus that can already be where it is being put: a float is raised
-      // as well as focused, and a raise is a new order of the stack. And only
-      // a window on the screen the keyboard is already on — reaching one on
-      // another monitor takes the keyboard there, which is a desktop that
-      // changed.
+      // Return the same object when nothing changed. `AppWindow` relies on
+      // this to avoid re-rendering the desktop on every click in the focused
+      // window. Floats never hit this branch, since reaching one raises it.
       return state;
     } else {
       return onWorkspace(shown, workspace.name, () => found);
@@ -1211,24 +1083,17 @@ const reachWindow = (state: WindowState, id: string): WindowState => {
 };
 
 /**
- * The workspace `name` in view with the keyboard in it.
+ * Shows workspace `name` and focuses its screen.
  *
- * **TWO ANSWERS, AND WHICH ONE IT IS, IS WHETHER A SCREEN ALREADY HAS IT.**
- * Work the user can already see is reached by moving the keyboard to the
- * screen showing it, which is sway's answer and the only one that keeps a
- * workspace in one place: taking it here would leave the monitor it came from
- * showing nothing and put two screens on one workspace. Work nobody is
- * showing goes back on its own screen — see {@link WindowState.homes} — and
- * the keyboard with it; a workspace with no screen comes to the keyboard's.
+ * As in sway, a workspace already on screen is reached by moving the keyboard
+ * there, so no two screens show it. A hidden one opens on its home screen
+ * (see {@link WindowState.homes}), or the focused screen if it has none.
  */
 const showWorkspace = (state: WindowState, name: string): WindowState => {
   const shown = screenShowing(state, name);
   const home = state.homes[name] ?? state.focused;
   if (shown === state.focused) {
-    // Already in view with the keyboard in it, which is every reach into the
-    // window the user is already working in. The state it was given, object
-    // and all: `reachWindow` hands that straight back, and `AppWindow` says
-    // in as many words that it relies on it.
+    // Same object, which `reachWindow` passes on for `AppWindow`.
     return state;
   } else if (shown === undefined) {
     return {
@@ -1244,19 +1109,11 @@ const showWorkspace = (state: WindowState, name: string): WindowState => {
   }
 };
 
-// The window under the pointer is the window the keyboard is in, which is the
-// whole of this shell's focus policy — and a float the pointer crosses into
-// comes to the front, as a click would bring it. Here rather than left to the
-// compositor: a client's window used to come up only because the focus this
-// moves came back from the host as a reach, and a browser window, which names
-// no client, never did.
+// Focus follows the pointer, and hovering a float raises it like a click.
+// Done here because the compositor does not know about browser windows.
 const pointAtWindow = (state: WindowState, id: string): WindowState => {
-  // THE WINDOW'S OWN SCREEN, NOT THE ONE THE KEYBOARD IS ON. A pointer that
-  // crossed onto another monitor's window takes the keys with it, which is the
-  // whole of how a desk of several is worked. A window on a workspace no
-  // screen is showing is not one a pointer can be over: it has no box to
-  // point at, and reaching it would be a focus on something the user cannot
-  // see.
+  // Focus moves to the window's own screen. A window on a hidden workspace
+  // cannot be under the pointer, so it is ignored.
   const workspace = workspaceHolding(state, id);
   const screen =
     workspace === undefined ? undefined : screenShowing(state, workspace.name);
@@ -1267,36 +1124,31 @@ const pointAtWindow = (state: WindowState, id: string): WindowState => {
   }
 };
 
-// The pointer arriving in `id`, which is showing on `screen`.
+// Focuses `id`, shown on `screen`, when the pointer enters it.
 const pointAtShown = (
   state: WindowState,
   workspace: Workspace,
   screen: string,
   id: string,
 ): WindowState =>
-  // The same object for a pointer that never left: a window says this again
-  // for every part of it that is an element of its own — a browser window's
-  // address bar, its page — and none of those is the user reaching anywhere.
+  // Same object when already focused: each element in a window (such as a
+  // browser's address bar and page) reports the hover again.
   focusedOn(workspace) === id && state.focused === screen
     ? state
     : onWorkspace({ ...state, focused: screen }, workspace.name, (found) =>
         reached(found, id),
       );
 
-// The screen under the pointer is the screen the keyboard is on. The same
-// object for a screen that already has it, because this is said on every move
-// of the hand; and for one the desk has not taken up yet, which is a monitor
-// plugged in that the pointer reached before the desk was told of it.
+// Focuses the screen under the pointer. Same object when it is already
+// focused (this fires on every move) or not yet described by the host.
 const pointAtScreen = (state: WindowState, name: string): WindowState =>
   state.focused === name ||
   !state.screens.some((screen) => screen.name === name)
     ? state
     : { ...state, focused: name };
 
-// A fact the client reported about its own window, written onto the shell's
-// record of it. A message naming a client the shell has no window for leaves
-// the list as it is, the same way a close for one does: the host drains its
-// events for a portal that has already been torn down here.
+// Updates a client's window record. Unknown clients are a no-op, since the
+// host may drain events for a torn-down portal.
 const reshapeApp = (
   state: WindowState,
   appId: string,
@@ -1321,25 +1173,16 @@ const renameWindow = (
   ),
 });
 
-// `workspace <name>`, with the config's `workspaceAutoBackAndForth`: naming
-// the workspace already on screen goes back to the one before it.
 /**
- * The desk the host described: one screen per display, in its order.
+ * Applies the host's screen list, one screen per display, in order.
  *
- * **THE WORK STAYS WHERE IT WAS, WHICH IS WHAT MAKES A HOTPLUG SURVIVABLE.**
- * Every plug and unplug re-describes the whole desk, so this runs constantly
- * and almost always has nothing to change: a screen that was already there
- * goes on showing what it was showing. A display that is new takes over from
- * a screen that has just gone — a dock swapped for another names every
- * monitor differently, and the user's work is not the dock's to move — and
- * failing that shows the lowest-numbered workspace nobody else is on. Two
- * screens never show one workspace: a workspace drawn twice is a window
- * embedded twice, and the second embedding takes the first's pixels.
+ * Runs on every hotplug, so workspaces must stay put. An existing screen
+ * keeps its workspace. A new display takes over a removed screen's workspace
+ * (a different dock renames every monitor), else the lowest unused one. No
+ * two screens show one workspace.
  *
- * A desk of no screens keeps one screen nobody has named, for the reason
- * {@link UNDESCRIBED_SCREEN} gives: the windows are still open and there is
- * nowhere to draw them, which is a different thing from there being no
- * windows.
+ * With no displays, keeps one {@link UNDESCRIBED_SCREEN} so open windows
+ * still have a workspace.
  */
 const describeScreens = (
   state: WindowState,
@@ -1350,9 +1193,7 @@ const describeScreens = (
       ? [{ box: NOWHERE, name: UNDESCRIBED_SCREEN }]
       : described;
   const names = kept.map(({ name }) => name);
-  // The screens that are not in the new desk, in order: what a display new to
-  // the desk takes over from. Read before anything is placed, because a name
-  // that is in both is not a screen anybody replaces.
+  // Workspaces of removed screens, in order, for new displays to inherit.
   const replaced = state.screens
     .filter((screen) => !names.includes(screen.name))
     .map(({ current }) => current);
@@ -1370,7 +1211,7 @@ const describeScreens = (
   };
 };
 
-/** What one screen of a freshly described desk shows. */
+/** The workspace a screen shows after the desk is re-described. */
 const showing = (
   state: WindowState,
   placed: readonly DeskScreen[],
@@ -1390,18 +1231,14 @@ const showing = (
   } else if (inherited !== undefined) {
     return inherited;
   } else if (free === undefined) {
-    // More monitors than workspaces, which is ten of them. Nothing is a
-    // better answer than a screen showing what another screen shows, and a
-    // shell that threw here would take the desk down for owning a monitor
-    // too many -- so the desk is the ten it can draw and this screen shows
-    // the last of them.
+    // More than ten monitors. Showing a workspace twice is not allowed.
     throw new Error(`shell: no workspace left for screen ${name}`);
   } else {
     return free;
   }
 };
 
-/** The screen the keyboard is on, once the desk is these screens. */
+/** The focused screen among `screens`: `focused` if present, else the first. */
 const focusedAmong = (
   screens: readonly DeskScreen[],
   focused: string,
@@ -1414,6 +1251,8 @@ const focusedAmong = (
   }
 };
 
+// `workspace <name>`. With `workspaceAutoBackAndForth`, naming the current
+// workspace goes back to the previous one.
 const selectWorkspace = (state: WindowState, name: string): WindowState => {
   if (name !== currentHere(state)) {
     return showWorkspace(state, name);
@@ -1425,19 +1264,12 @@ const selectWorkspace = (state: WindowState, name: string): WindowState => {
 };
 
 /**
- * A floating window dragged to `x`, `y` in the page's pixels, and handed to
- * the screen its middle is now over — sway's `floating_fix_coordinates`.
+ * Moves a dragged float to `x`, `y` in desk pixels, and onto the screen its
+ * center is now over, like sway's `floating_fix_coordinates`.
  *
- * One page spans the desk, so the page's pixels are the desk's and a screen's
- * box is where it is on the page. A float is in the pixels of the screen
- * showing its workspace, and that screen's box is what converts.
- *
- * A middle over no screen at all — the gap an L of monitors leaves — keeps
- * the screen it has.
- *
- * A window on a workspace no screen is showing is not one a pointer can have
- * hold of, so a move that names one — a drag the keyboard switched the
- * workspace out from under — moves nothing.
+ * Float coordinates are relative to their screen's box. A center over no
+ * screen keeps the current one. A float on a hidden workspace (switched away
+ * mid-drag) does not move.
  */
 const floatDragged = (
   state: WindowState,
@@ -1461,8 +1293,7 @@ const floatDragged = (
     } else {
       const there = boxOf(state, onto);
       const arrived = movedTo(moved, x - there.x, y - there.y);
-      // The keyboard comes too: the pointer is already over there, and the
-      // window the user has hold of is the one they are working in.
+      // Focus follows, since the pointer is already on that screen.
       return onWorkspace(
         onWorkspace({ ...state, focused: onto }, workspace.name, (found) =>
           floatLifted(found, id),
@@ -1474,7 +1305,7 @@ const floatDragged = (
   }
 };
 
-/** Where the screen `name` is on the desk. */
+/** The box of screen `name` on the desk. */
 const boxOf = (state: WindowState, name: string): Rect => {
   const screen = state.screens.find((found) => found.name === name);
   if (screen === undefined) {
@@ -1484,7 +1315,7 @@ const boxOf = (state: WindowState, name: string): Rect => {
   }
 };
 
-/** The box the window `id` floats in. Throws for a window that is tiled. */
+/** The float holding `id`. Throws for a tiled window. */
 const floatHeld = (workspace: Workspace, id: string): Float => {
   const float = floatOn(workspace, id);
   if (float === undefined) {
@@ -1494,16 +1325,15 @@ const floatHeld = (workspace: Workspace, id: string): Float => {
   }
 };
 
-/** The middle of a float on the screen at `box`, in the desk's pixels. */
+/** The center of a float on the screen at `box`, in desk pixels. */
 const middleOf = (float: Float, box: Rect): readonly [number, number] => [
   box.x + float.x + float.width / 2,
   box.y + float.y + float.height / 2,
 ];
 
 /**
- * The screen at `point`, or `undefined` off every one. Left and top edges and
- * not right and bottom, as `screenUnder`, so the column two screens share is
- * the one that starts there.
+ * The screen at `point`, or `undefined`. Edges are half-open like
+ * `screenUnder`, so a shared edge belongs to the screen that starts there.
  */
 const screenAt = (
   state: WindowState,
@@ -1517,8 +1347,8 @@ const screenAt = (
       y < box.y + box.height,
   )?.name;
 
-// `move container to workspace <name>`: the window goes and the user stays,
-// which is sway's default. It lands tiled there however it was laid out here.
+// `move container to workspace <name>`: the window moves and focus stays, as
+// in sway. It always arrives tiled.
 const sendToWorkspace = (state: WindowState, name: string): WindowState => {
   const id = activeIdOf(state);
   if (id === undefined || name === currentHere(state)) {
@@ -1532,8 +1362,8 @@ const sendToWorkspace = (state: WindowState, name: string): WindowState => {
   }
 };
 
-// `move scratchpad`: off every workspace, and out of the way. The window is
-// still open — it is a window with nowhere on screen to be.
+// `move scratchpad`: removes the focused window from its workspace without
+// closing it.
 const hideInScratchpad = (state: WindowState): WindowState => {
   const id = activeIdOf(state);
   if (id === undefined) {
@@ -1547,12 +1377,8 @@ const hideInScratchpad = (state: WindowState): WindowState => {
 };
 
 /**
- * `scratchpad show`: the last window hidden, floating over this workspace —
- * or the one already up, hidden again.
- *
- * Which of the two it is, is the question the float's own `scratchpad` flag
- * answers: sway's `scratchpad show` cycles a window out and back, and the
- * window being worked in is the one it acts on.
+ * `scratchpad show`: hides the focused scratchpad float, or else shows the
+ * most recently hidden window as a float, as sway cycles them.
  */
 const showScratchpad = (state: WindowState): WindowState => {
   const workspace = workspaceHere(state);
@@ -1575,9 +1401,8 @@ const showScratchpad = (state: WindowState): WindowState => {
 };
 
 /**
- * The state with {@link WindowState.homes} brought up to date with what the
- * reduction did to the screens and the workspaces — the same object when
- * nothing moved, which the reductions that hand back their own state rely on.
+ * Updates {@link WindowState.homes} after a reduction. Returns the same object
+ * when nothing changed, which no-op reductions rely on.
  */
 const rehomed = (state: WindowState): WindowState => {
   const homes = Object.fromEntries(
@@ -1591,7 +1416,7 @@ const rehomed = (state: WindowState): WindowState => {
     : { ...state, homes };
 };
 
-/** The screen `workspace` belongs to now, or `undefined` for none. */
+/** The screen `workspace` now belongs to, or `undefined` for none. */
 const homeOf = (
   state: WindowState,
   workspace: Workspace,
@@ -1613,13 +1438,12 @@ const homeOf = (
 };
 
 /**
- * `after`, with every floating window held to what its client will draw —
- * see `limitedTo`. After every action rather than in each that moves a float,
- * because a client can say its limits after it was floated, and every way a
- * float is sized would otherwise have to remember to ask.
+ * Clamps each single-window float to its client's size limits (see
+ * `limitedTo`).
  *
- * A window alone in its box only: a floating group's box is shared out among
- * its windows, so no one client's limits are the box's.
+ * Runs after every action because a client can report limits after it
+ * floats. Floating groups are skipped, since no one client's limits apply to
+ * the shared box.
  */
 const limited = (before: WindowState, after: WindowState): WindowState => {
   const workspaces = after.workspaces.map((workspace) =>
@@ -1657,7 +1481,7 @@ const limitedFloats = (
     : { ...workspace, floats };
 };
 
-/** Where the float `id` was before the action, if it was floating then. */
+/** The float holding `id` before the action, if any. */
 const floatBefore = (state: WindowState, id: string) =>
   state.workspaces
     .flatMap(({ floats }) => floats)

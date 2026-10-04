@@ -23,14 +23,14 @@ describe("screenUnder", () => {
   });
 
   it("puts a pointer on the seam on the screen that starts there", () => {
-    // A rectangle is its left and top edges and not its right and bottom
-    // ones, or the column the two screens share would be both of them.
+    // A rectangle includes its left and top edges only, so a shared edge
+    // belongs to one screen.
     expect(screenUnder([LEFT, RIGHT], [1920, 0])).toBe("right");
   });
 
   it("names nothing for a pointer off every screen", () => {
-    // Below the shorter monitor of the two, which a page that is the whole
-    // desktop still has pixels in.
+    // Below the shorter monitor: the page spans the desktop's bounding box, so
+    // this spot exists but is on no screen.
     expect(screenUnder([LEFT, RIGHT], [2000, 1050])).toBeUndefined();
   });
 });

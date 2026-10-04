@@ -1,15 +1,9 @@
-// Two floating windows trading places in the stack.
+// Detects floating windows that swapped stacking order, so the page can
+// animate the swap.
 //
-// The stack is a `z-index` — see `placedAt` — and a raise is a step of one,
-// which the page draws between two frames: the window underneath is simply
-// not underneath any more, and nothing says which of the two moved. What does
-// is a shuffle, the way two cards are: the pair part, trade places in the
-// stack while they are apart, and come back together the other way up. The
-// one raised is seen to come out from under the other and go over it.
-//
-// Like a close or a workspace switch, nothing announces a raise — the
-// reduction that does it leaves the depths as they now are — so it is read off
-// the difference between two renders.
+// A `z-index` change alone shows no motion, so the two windows briefly move
+// apart, swap depth, and move back. No event announces a raise, so this
+// compares two renders.
 
 import type { Placement } from "./placement";
 import { LEAVING, TILED } from "./placement";
@@ -17,32 +11,30 @@ import type { Rect } from "./rect";
 import type { Shown } from "./shown";
 
 /**
- * How far each of the two parts from the other, in the desktop's pixels.
+ * How far each window moves apart, in desktop pixels.
  *
- * Far enough that the edge of the one underneath is seen to come out past the
- * other and go back over it; no further, because the whole of a window going
- * somewhere and coming back reads as a window being thrown about.
+ * Enough to show the lower edge passing the other, small enough not to look
+ * like the window was thrown.
  */
 export const SHUFFLE = 48;
 
 /** A window trading places in the stack with one it overlaps. */
 export type Restack = {
-  /** Which way it parts from the other, and how far. */
+  /** The offset it moves away from the other window. */
   away: { x: number; y: number };
-  /** The depth it had, which it keeps until the two are apart. */
+  /** The old depth, kept until the windows are apart. */
   from: number;
   id: string;
-  /** And the depth it has now, which it takes at the furthest point. */
+  /** The new depth, taken at the furthest point. */
   to: number;
 };
 
 /**
- * The floating windows that have come over, or gone under, one they overlap
- * since `before`, and which way each parts from the window it passed.
+ * Floating windows that swapped order with an overlapping float since
+ * `before`, and which way each moves apart.
  *
- * Only between floats. Tiled windows share a depth and never trade places, and
- * a window taking the screen or giving it back is already a movement of its
- * own. Nothing on a workspace switch either, which slides the whole screenful.
+ * Tiled windows share a depth. Fullscreen changes and workspace switches have
+ * their own animations, so they are skipped.
  */
 export const restacked = (before: Shown, shown: Shown): readonly Restack[] =>
   before.current === shown.current
@@ -70,8 +62,7 @@ export const restacked = (before: Shown, shown: Shown): readonly Restack[] =>
     : [];
 
 /**
- * The first window `placement` has changed places with in the stack and
- * overlaps, which is the one it parts from — or `undefined` for none.
+ * The first overlapping window that swapped order with `placement`, if any.
  */
 const passedBy = (
   before: Shown,
@@ -93,10 +84,11 @@ const passedBy = (
   });
 
 /**
- * {@link SHUFFLE} straight away from the middle of `other`, in whole pixels.
+ * An offset of {@link SHUFFLE} away from the center of `other`, in whole
+ * pixels.
  *
- * Two windows sharing a middle have no side to part towards, so they part
- * along the row: the one going over to the start, the other to the end.
+ * Windows with the same center part horizontally: the one going over to the
+ * left, the other to the right.
  */
 const awayFrom = (
   rect: Rect,
@@ -115,10 +107,10 @@ const awayFrom = (
       };
 };
 
-/** Over the tiling and under a window on its way out: a float. */
+/** Whether `depth` is a float's: above the tiling, below `LEAVING`. */
 const isFloating = (depth: number): boolean => depth > TILED && depth < LEAVING;
 
-/** Whether the two share any of the screen. */
+/** Whether the two rects overlap. */
 const overlaps = (one: Rect, other: Rect): boolean =>
   one.x < other.x + other.width &&
   other.x < one.x + one.width &&

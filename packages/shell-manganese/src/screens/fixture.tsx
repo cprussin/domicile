@@ -1,12 +1,12 @@
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import type { PropsWithChildren } from "react";
 
-/** The one screen of {@link OnOneScreen}'s desk. */
+/** The single screen in {@link OnOneScreen}. */
 export const SCREEN = "only";
 
 /**
- * A desk of one screen, for a test of a panel that opens on a screen: a
- * `render` wrapper.
+ * A `render` wrapper with a one-screen desktop, for testing panels that open on
+ * a screen.
  */
 export const OnOneScreen = ({ children }: PropsWithChildren) => (
   <DisplayProvider

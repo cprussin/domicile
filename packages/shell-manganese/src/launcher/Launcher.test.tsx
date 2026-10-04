@@ -26,7 +26,7 @@ import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
 const FILES = ["Notes/2026/april.org", "Notes/today.org", "src/", "todo.txt"];
 
-/** An application the machine has installed, as the host would describe it. */
+/** An installed application, as the host describes it. */
 const EDITOR: DesktopEntry = {
   command: ["gedit", "--new-window"],
   comment: "Edit text files",
@@ -46,17 +46,14 @@ const PAINT: DesktopEntry = {
   preview: undefined,
 };
 
-/** A bookmark the desk offers. */
+/** A bookmark. */
 const MAIL: Bookmark = {
   icon: undefined,
   name: "Mail",
   url: "https://mail.example.com",
 };
 
-/**
- * The host's search over the applications `apps` and the bookmarks
- * `bookmarks`, by every word of a name.
- */
+/** Fake host search over `apps` and `bookmarks`, matching every word. */
 const searchingApps =
   (apps: readonly DesktopEntry[], bookmarks: readonly Bookmark[]) =>
   (query: string) => {
@@ -74,8 +71,8 @@ const searchingApps =
   };
 
 /**
- * The host's search over a home of `files`, sending at most two hundred of
- * what matched the way the compositor does — every word, any order, any case.
+ * Fake host search over `files`, returning at most 200 matches like the
+ * compositor: every word, any order, any case.
  */
 const searching =
   (files: readonly string[], indexing: boolean) => (query: string) => {
@@ -94,10 +91,10 @@ const searching =
     });
   };
 
-/** Every path the panel asked the host to preview, in order. */
+/** Paths the panel asked to preview, in order. */
 const previewed: string[] = [];
 
-/** What the host says each path holds: its own name, as text. */
+/** Fake host preview: each path's text is its own name. */
 const previewing = (path: string) => {
   previewed.push(path);
   return Promise.resolve({
@@ -106,7 +103,7 @@ const previewing = (path: string) => {
   });
 };
 
-/** What the home the tests run over has in each path. */
+/** The test home's files. */
 const holding = (path: string): FilePreview => {
   if (path === "src") {
     return FilePreview.Directory(["domicile/", "README.md"]);
@@ -132,14 +129,11 @@ const holding = (path: string): FilePreview => {
 };
 
 /**
- * The panel open over a home with those files in it, recording what it
- * launched.
+ * Render the open panel over those files, recording launches.
  *
- * Held with `using`, which takes the panel down as the test's last statement
- * returns. The shared `afterEach` cleanup comes too late: the panel always has
- * something in flight — the host's answer, the highlight settling into a
- * preview — and a timer that comes due between a test and its `afterEach`
- * updates the panel outside `act`.
+ * Use with `using`, so the panel unmounts when the test returns. `afterEach`
+ * is too late: a pending timer could fire in between and update the panel
+ * outside `act`.
  */
 const launcher = (
   files: readonly string[] = FILES,
@@ -175,25 +169,24 @@ const launcher = (
       }),
     dismissed,
     launched,
-    /** The rows, as they read, once the host has answered what the box says. */
+    /** The rows' text, once the host has answered the current query. */
     rows: async () =>
       (await screen.findAllByRole("option")).map((row) => row.textContent),
     user: userEvent.setup(),
   };
 };
 
-/** What `icon` draws, without the `<svg>` around it that sizes it. */
+/** The inner markup of `icon`, without its sizing `<svg>`. */
 const glyphOf = (icon: ReactElement): string =>
   new DOMParser().parseFromString(renderToStaticMarkup(icon), "image/svg+xml")
     .documentElement.innerHTML;
 
-/** The pane showing what the highlighted row is. */
+/** The preview pane. */
 loadEmittedStylesheet(document);
 
 const previewPane = () => screen.getByRole("region", { name: "Preview" });
 
-// Icons learned from bookmarks' pages are written down for the next panel; each
-// test starts on a machine that has learned none.
+// Learned bookmark icons persist, so clear them before each test.
 beforeEach(() => {
   globalThis.localStorage.clear();
 });
@@ -224,13 +217,8 @@ describe("Launcher", () => {
   });
 
   it("offers what the host found, each name under the directory it is in", async () => {
-    // A path is read from its end: the name is what was typed part of and the
-    // directories above it are only there to tell two files of that name
-    // apart, so a row is the two of them apart rather than one line of text
-    // handed to `text-overflow` — the directory a small line over the name,
-    // which leaves the row's width to the preview beside it. Nothing
-    // separates them in `textContent` because what separates them on screen
-    // is the row's own lines.
+    // Directory and name are separate lines, so `textContent` has no
+    // separator.
     using panel = launcher();
 
     expect(await panel.rows()).toStrictEqual([
@@ -254,9 +242,8 @@ describe("Launcher", () => {
   });
 
   it("emboldens the letters typed without widening them", async () => {
-    // A heavier weight is a wider letter, so a bold match would push the rest
-    // of its row along with every key pressed. A stroke around each letter
-    // thickens it and leaves its width alone.
+    // A stroke, not font weight, so matches don't widen letters and shift the
+    // row.
     using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
@@ -265,8 +252,7 @@ describe("Launcher", () => {
       .getAllByText("Notes", { selector: "mark" })
       .map((element) => globalThis.getComputedStyle(element))
       .map((style) => ({
-        // The stroke itself is not something happy-dom computes; the order
-        // it is painted in, under each letter, is.
+        // happy-dom doesn't compute the stroke, only its paint order.
         paintOrder: style.getPropertyValue("paint-order"),
         weight: style.fontWeight,
       }));
@@ -278,8 +264,7 @@ describe("Launcher", () => {
   });
 
   it("offers a URL above the file it names, and a search below both", async () => {
-    // A URL typed whole is a URL meant, so it is on top — but the file of the
-    // same name and a search for the words are both still one arrow away.
+    // The URL ranks first; the same-named file and the search follow.
     using panel = launcher(["example.com"]);
 
     await panel.user.type(panel.box(), "example.com");
@@ -392,9 +377,8 @@ describe("Launcher", () => {
   });
 
   describe("a bookmark's icon learned from its own page", () => {
-    // Signed in, a site names the icon it keeps for people signed in, which no
-    // anonymous lookup sees: the preview is the user's browser, so it is what
-    // a bookmark's icon is learned from.
+    // The preview loads with the user's sign-in, so it can find icons an
+    // anonymous lookup can't.
     const LEARNED = "https://cdn.example.com/mail-31.ico";
 
     it("is learned from the page the preview shows", async () => {
@@ -416,8 +400,8 @@ describe("Launcher", () => {
     });
 
     it("is not learned from a page of another site", async () => {
-      // Signed out, the page is the sign-in page, whose icon is not the app's;
-      // a link followed in the preview is not the bookmark's site either.
+      // A sign-in redirect or followed link is another origin, so its icon is
+      // ignored.
       using panel = launcher([], false, [], [MAIL]);
 
       await panel.user.type(panel.box(), "mail");
@@ -472,8 +456,7 @@ describe("Launcher", () => {
   });
 
   it("draws a picture as itself, without the frame a glyph's tile has", async () => {
-    // A site's or an application's icon is its own shape; a frame round it is
-    // a box drawn round somebody else's logo.
+    // Logos have their own shape, so they get no frame.
     using panel = launcher([], false, [PAINT]);
 
     await panel.user.type(panel.box(), "paint");
@@ -482,7 +465,7 @@ describe("Launcher", () => {
     if (picture === null || picture === undefined) {
       throw new Error("the row drew no picture");
     } else {
-      // `data-row-tile` is the framed tile, which a reached row recolors.
+      // `data-row-tile` marks the framed glyph tile.
       expect(picture.hasAttribute("data-row-tile")).toBe(false);
     }
   });
@@ -571,9 +554,7 @@ describe("Launcher", () => {
   });
 
   it("edits the first match on Enter, which is what typing a name is for", async () => {
-    // The whole reason the list is ranked at all: a person types enough of a
-    // name to see it at the top and presses Enter without ever looking at the
-    // keyboard again.
+    // Ranking lets users type part of a name and press Enter.
     using panel = launcher();
 
     await panel.user.type(panel.box(), "today");
@@ -604,8 +585,7 @@ describe("Launcher", () => {
   });
 
   it("moves the highlight to the row the pointer is over", async () => {
-    // One highlight rather than a hover beside it: the row the pointer is on
-    // is the row Enter takes.
+    // The pointer moves the highlight, so Enter takes the hovered row.
     using panel = launcher();
     await panel.rows();
 
@@ -648,8 +628,7 @@ describe("Launcher", () => {
   });
 
   it("counts how much of the home is still answering", async () => {
-    // The one number that says whether another letter is worth typing, in the
-    // field doing the narrowing.
+    // The match count shows in the box.
     using panel = launcher();
 
     await panel.user.type(panel.box(), "notes");
@@ -705,8 +684,7 @@ describe("Launcher", () => {
     });
 
     it("waits for the typing to settle before it asks", async () => {
-      // Every keystroke moves the highlight, and a preview per keystroke is a
-      // file read, or a page loaded, and thrown away per keystroke.
+      // Avoids a preview load per keystroke.
       using panel = launcher();
 
       await panel.user.type(panel.box(), "today");
@@ -716,8 +694,7 @@ describe("Launcher", () => {
     });
 
     it("shows the highlighted image as itself, served from home", async () => {
-      // The engine draws what the host cannot send: `domicile://home/` is the
-      // home, to the shell's own document only.
+      // The engine serves home at `domicile://home/`, to the shell only.
       using panel = launcher(["Pictures/cat.png"]);
 
       await panel.user.type(panel.box(), "cat");
@@ -728,8 +705,7 @@ describe("Launcher", () => {
     });
 
     it("shows the highlighted PDF bare, without the viewer's toolbar or sidebar", async () => {
-      // A preview is a glance at the page, and the viewer's chrome is most of
-      // a pane this size.
+      // The PDF viewer's toolbar and sidebar would fill the small pane.
       using panel = launcher(["Scratch/DS11_Complete.pdf"]);
 
       await panel.user.type(panel.box(), "DS11");
@@ -742,8 +718,7 @@ describe("Launcher", () => {
     });
 
     it("lights a file's code by what each piece of it is", async () => {
-      // A word for what the text is, and the pane's own colors for the word,
-      // so a light desk and a dark one both read.
+      // Scopes map to the pane's colors, so it works in light and dark mode.
       using panel = launcher(["src/main.ts"]);
 
       await panel.user.type(panel.box(), "main");
@@ -846,8 +821,7 @@ describe("Launcher", () => {
     });
 
     it("shows a video as a still from a way into it, not playing", async () => {
-      // The first frame of most videos is black, and a preview that starts
-      // playing is not a preview.
+      // A still, not playing, and not the often-black first frame.
       using panel = launcher(["Videos/clip.mp4"]);
 
       await panel.user.type(panel.box(), "clip");
@@ -874,8 +848,7 @@ describe("Launcher", () => {
     });
 
     it("says so for a directory with nothing in it", async () => {
-      // An empty list is an answer, and a blank pane would read as one still
-      // on its way.
+      // A blank pane would look like it is still loading.
       using panel = launcher(["empty/"]);
 
       await panel.user.type(panel.box(), "empty");
@@ -963,7 +936,7 @@ describe("Launcher", () => {
     });
 
     it("says what to do while there is no row to highlight", async () => {
-      // The pane is never blank, because a blank pane reads as a broken one.
+      // A blank pane would look broken.
       using _panel = launcher([]);
 
       expect(
@@ -983,8 +956,7 @@ describe("Launcher", () => {
     });
 
     it("keeps the last preview until the highlight settles on another row", async () => {
-      // A preview, then the next one: not the next row's name in between, which
-      // is a flash of a pane that says less than the one it replaced.
+      // The old preview stays until the next settles, with no flash between.
       using panel = launcher();
 
       await panel.user.type(panel.box(), "notes");
@@ -1002,8 +974,7 @@ describe("Launcher", () => {
     });
 
     it("names a file the engine could not draw after all", async () => {
-      // An extension is a guess: a `.png` that is not one is an image that
-      // fails to load, and a pane showing a broken image is a blank pane.
+      // The extension is a guess; a failed image shows the placeholder.
       using panel = launcher(["Pictures/cat.png"]);
 
       await panel.user.type(panel.box(), "cat");
@@ -1016,9 +987,7 @@ describe("Launcher", () => {
   });
 
   it("brings the row the arrow keys reached into view", async () => {
-    // A home is longer than the list is tall, so a walk that scrolled nothing
-    // would leave the highlight below the fold — the keyboard moving
-    // something the user cannot see.
+    // The highlight must stay visible as the keyboard moves it.
     const scrolled: (string | null)[] = [];
     const scrollIntoView = spyOn(
       Element.prototype,
@@ -1036,10 +1005,7 @@ describe("Launcher", () => {
   });
 
   it("says so while the desktop is still working out what there is", async () => {
-    // WITHOUT THIS THE PANEL LIES BY OMISSION. A list that is a third of a
-    // home looks exactly like a home with a third as much in it, so a person
-    // who types the name of a file the walk has not reached is told they do
-    // not have it — and the evidence that they are wrong is nowhere on screen.
+    // Without the notice, partial results look complete.
     using _panel = launcher(["src"], true);
 
     expect(await screen.findByRole("status")).toHaveTextContent(
@@ -1048,8 +1014,7 @@ describe("Launcher", () => {
   });
 
   it("says so under the last row, not under the panel", async () => {
-    // It is about the rows, so it sits where the rows run out: the end of the
-    // list is where a person looking for a file that is not there yet looks.
+    // The notice sits after the last row.
     using panel = launcher(["src", "Notes/today.org"], true);
     await panel.rows();
 
@@ -1064,8 +1029,7 @@ describe("Launcher", () => {
   });
 
   it("says nothing about an index that is not being built", async () => {
-    // Which is every launcher after the first seconds of a session. A notice
-    // that stayed up would be a panel that never stops apologizing.
+    // No notice when the index is complete.
     using panel = launcher();
     await panel.rows();
 
@@ -1073,11 +1037,8 @@ describe("Launcher", () => {
   });
 
   it("opens a path that is typed whole, index or no index", async () => {
-    // The escape hatch that makes a half-built index usable rather than
-    // merely honest: a leading `~/` or `/` cannot be a hostname or a search
-    // anybody meant, so it needs no list to be confident about — and a person
-    // who knows where their file is should never have to wait for a walk to
-    // agree with them.
+    // A path-like query (`~/`, `/`) needs no index, so it works while
+    // indexing.
     using panel = launcher([], true);
 
     await panel.user.type(panel.box(), "~/Scratch{Enter}");
@@ -1086,11 +1047,7 @@ describe("Launcher", () => {
   });
 
   it("draws what the host sent and counts everything it matched", async () => {
-    // A HOME IS A HUNDRED THOUSAND PATHS. The host sends the front of what
-    // matched rather than all of it — the rows past it are not rows anybody
-    // scrolls to, what narrows the list is typing — and the counter beside the
-    // box says how many there really are, so the front is never mistaken for
-    // the answer.
+    // The host sends only the first matches; the count shows the total.
     const home = Array.from({ length: 500 }, (_, at) => `file-${String(at)}`);
     using panel = launcher(home);
 
@@ -1099,8 +1056,7 @@ describe("Launcher", () => {
   });
 
   it("keeps the arrow keys inside the rows it drew", async () => {
-    // Clamped rather than wrapped, at both ends: an Up press past the top of
-    // two hundred rows that jumped to the bottom would lose the user's place.
+    // Clamped, not wrapped, so the user doesn't lose their place.
     using panel = launcher();
 
     await panel.rows();
@@ -1114,7 +1070,7 @@ describe("Launcher", () => {
   });
 
   it("walks the rows with ctrl+n and ctrl+p as well as the arrow keys", async () => {
-    // The Emacs and readline walk, for hands that never leave the home row.
+    // Emacs/readline navigation keys.
     using panel = launcher();
 
     await panel.rows();
@@ -1148,10 +1104,7 @@ describe("Launcher", () => {
   });
 
   it("says it was dismissed when Escape closes it", async () => {
-    // The panel does not close itself: what is open is desktop state, so the
-    // dialog reports the press and the desktop decides. A panel that closed
-    // itself would be a second copy of that state, and the two would part
-    // company the first time `mod+space` was pressed over a closed one.
+    // The desktop owns open state, so the panel only reports the dismissal.
     using panel = launcher();
 
     await panel.user.keyboard("{Escape}");

@@ -1,38 +1,25 @@
-// How a window's title bar is drawn: which of three things it says about the
-// keyboard.
+// The focus state a title bar shows.
 //
-// sway's three client colors, and for its reason. `focused` is the window the
-// keyboard is in, and there is exactly one of those on a desktop. `unfocused`
-// is every other window. The one in between is what a tab needs: a tabbed or
-// stacking container shows one of its children whether or not the keyboard is
-// anywhere inside it, so the tab that is open in a container nobody is working
-// in has to be marked as open without claiming the keyboard — sway calls it
-// `focused_inactive`, and without it two bars on one screen would look like
-// the focused window.
+// Follows sway's client colors:
+// - `focused`: has the keyboard.
+// - `selected` (sway `focused_inactive`): an open tab of an unfocused
+//   container, or an unfocused window in the `focus parent` selection.
+// - `resting` (sway `unfocused`): everything else.
+// - `leaf`: the focused window inside a `focus parent` selection (not in sway).
 //
-// And a fourth, `leaf`, which sway does not have: `focus parent` points the
-// commands at a whole group, every window of it is raised together, and the
-// one the keyboard is still in needs something more to stand apart from them.
-//
-// A string union rather than an enum because these are the keys of a Panda
-// `cva` variant, which is where they are read.
+// A string union, not an enum, because these are Panda `cva` variant keys.
 
 export type TitleFocus = "focused" | "leaf" | "resting" | "selected";
 
 type Marks = {
-  /** Whether this is the window the user is working in. */
+  /** Whether this window has keyboard focus. */
   hasKeyboard: boolean;
   /**
-   * Whether it names a window on screen inside the container `focus parent`
-   * selected — which a tab its container is hiding does not, whatever group
-   * it is in.
+   * Whether it is a visible window inside the container `focus parent`
+   * selected. Hidden tabs never are.
    */
   inSelection: boolean;
-  /**
-   * Whether the container this bar belongs to is showing it — a tabbed or
-   * stacking container's open tab. A window's own bar has no such question:
-   * either the keyboard is in the window or it is not.
-   */
+  /** Whether it is the open tab of a tabbed or stacking container. */
   shownByContainer: boolean;
 };
 

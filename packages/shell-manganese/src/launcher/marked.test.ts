@@ -26,9 +26,7 @@ describe("marked", () => {
   });
 
   it("joins words that matched over the same letters", () => {
-    // `fzf --exact` asks that every word appear, not that they appear apart —
-    // so `note notes` is a query that matches, and two runs meeting in the
-    // middle of a name would draw a seam nothing put there.
+    // Overlapping words both match, and their runs merge so no seam shows.
     expect(marked("notes.org", "note notes")).toStrictEqual([
       { matched: true, text: "notes" },
       { matched: false, text: ".org" },

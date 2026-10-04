@@ -8,16 +8,13 @@ import type { Float } from "./float";
 import { rectOf, stretched } from "./float";
 
 /**
- * A drag in progress: everything about it that was settled when the window was
- * taken hold of.
+ * A drag in progress, fixed when it started.
  *
- * The callbacks are latched here with the box for one reason rather than two:
- * they are what this drag does, and a drag is what it was when it started.
- * Keeping them here is also what lets a drag go on with nothing rendered at
- * all, so no part of it depends on a render having happened.
+ * Holds the callbacks too, so the drag keeps working after its element
+ * unmounts.
  */
 type Drag = {
-  /** The window's box when it was taken hold of, which the delta is from. */
+  /** The box when the drag started; the pointer delta applies to it. */
   box: Float;
   /** The corner being dragged, or `undefined` for a move. */
   corner: Corner | undefined;
@@ -27,85 +24,55 @@ type Drag = {
   onResize: (box: Rect) => void;
 };
 
-/**
- * The secondary button, which resizes whatever it takes hold of.
- *
- * The other way to a resize, and the one that needs no second modifier held:
- * whatever handed the pointer to the shell, the right button means a corner
- * rather than the whole window.
- */
+/** The secondary button, which resizes without a second modifier. */
 const SECONDARY_BUTTON = 2;
 
 export type FloatDrag = {
   /**
-   * Whether a drag is running, and the corner it is resizing from, or
-   * `undefined` for a move.
+   * The running drag, if any, with the corner it resizes from (`undefined`
+   * for a move).
    */
   drag: { corner: Corner | undefined } | undefined;
-  /**
-   * Swallow the menu the secondary button would otherwise open.
-   *
-   * The right button is a resize here, and a context menu over the window
-   * being resized is the browser answering a press the desktop has taken.
-   */
+  /** Suppresses the context menu, since the right button resizes. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 };
 
 type Options = {
   /**
-   * The window taken hold of, or `undefined` for a tiled window's bar: that
-   * bar calls this too, so its element is the same one before and after the
-   * window floats — see `WindowTitleBar` — and it must never be pressed into
-   * a drag.
+   * The window to drag, or `undefined` for a tiled window's title bar.
+   *
+   * The bar uses this hook too, so its element survives floating (see
+   * `WindowTitleBar`). A press with `undefined` throws.
    */
   float: Float | undefined;
   onDrop: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
-  /** The whole box, since a corner at the top or the left moves it too. */
+  /** The whole box, since dragging a top or left corner moves it too. */
   onResize: (box: Rect) => void;
   /**
-   * Whether taking hold now would resize the window rather than move it.
+   * Whether a drag started now resizes instead of moves.
    *
-   * Read when the drag starts and then kept: letting go of Shift half way
-   * through a resize must not turn it into a move, with the window jumping to
-   * wherever the pointer has got to.
+   * Read once at the start, so releasing Shift mid-resize does not turn it
+   * into a move and make the window jump.
    */
   resizes: boolean;
 };
 
 /**
- * Turning pointer events into where a floating window ends up.
+ * Moves or resizes a floating window by pointer drag, from either the Meta
+ * sheet or the title bar.
  *
- * Shared because a window has two things to drag it by and they are the same
- * drag: the sheet that catches a Meta+drag anywhere over it, and the title bar
- * that catches an ordinary one. What differs is where the pointer is allowed
- * to land, which is a matter of which element carries the press.
+ * Only the press uses the element. Moves and the release are read from
+ * `window`, because the pointer often leaves the element, and pointer capture
+ * is lost when raising the window moves its element in the document. A drag
+ * that never sees its release leaves the window stuck to the pointer.
  *
- * **Only the press is the element's. The rest of the drag is the window's.**
- * A drag that reads its moves off the element it started on ends wherever that
- * element stops receiving them, and the pointer leaves it constantly: over the
- * window in front, over the top bar, off the edge of the screen.
- * `setPointerCapture` is the usual answer and is still set below, but it is
- * not one to rely on here — a browser releases capture when the capturing
- * element is moved in the document, and taking hold of a window raises it.
- * Listening on `window` is what makes the release arrive from wherever it
- * happens, and a drag that cannot be ended leaves its window see-through,
- * click-through, and following the pointer for ever.
- *
- * **AND THE ELEMENT MAY GO WHILE THE HAND HOLDS ON.** A window dragged onto
- * the next monitor is drawn by that monitor's `Stage` from then on, and the
- * element pressed on this one is taken out of the document — but the drag goes
- * on, in the page's pixels (see `floatDragged`). So the listeners belong to
- * the drag rather than to the
- * component: added by the press, in the handler itself, and taken off by the
- * release. In the handler rather than an effect for a second reason: an
- * effect runs after the commit, and a release that beat it — a click — would
- * be the release that never arrived.
- *
- * The state beside it is only what to draw, and a `Stage` that has stopped
- * drawing the element has nothing to draw it on.
+ * The listeners belong to the drag, not the component: a window dragged onto
+ * another screen unmounts the pressed element (see `floatDragged`). They are
+ * added in the press handler, not an effect, so a fast click's release is not
+ * missed before the effect runs.
  */
 export const useFloatDrag = ({
   float,
@@ -115,8 +82,8 @@ export const useFloatDrag = ({
   onResize,
   resizes,
 }: Options): FloatDrag => {
-  // How to stop following the drag that is running, without dropping it: a
-  // second press while one is — another button — takes over from the first.
+  // Stops the running drag without dropping it, so a second press (another
+  // button) can take over.
   const running = useRef<(() => void) | undefined>(undefined);
   const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
     undefined,
@@ -131,9 +98,8 @@ export const useFloatDrag = ({
       if (float === undefined) {
         throw new Error("float drag: no floating window to take hold of");
       } else {
-        // Still captured, which costs nothing beside the listeners above and
-        // covers the one thing they cannot see: a pointer that has moved over a
-        // browsing context of its own, where the events are that document's.
+        // Capture as well, for a pointer over another browsing context, whose
+        // events `window` does not see.
         event.currentTarget.setPointerCapture(event.pointerId);
         const corner =
           resizes || event.button === SECONDARY_BUTTON
@@ -162,14 +128,11 @@ export const useFloatDrag = ({
 };
 
 /**
- * Follow `drag` until the pointer lets go: every move of it moves or resizes
- * the window, and the release or a cancel drops it and stops listening, then
- * says so with `ended`. Returns how to stop listening without dropping.
+ * Applies pointer moves to `drag` until a release or cancel drops it and calls
+ * `ended`. Returns a function that stops listening without dropping.
  *
- * Only the first of a release and a cancel drops it — a browser that ends a
- * gesture itself sends the cancel after the release, and dropping a window
- * twice raises whatever ended up under it — because the first takes both
- * listeners off.
+ * Only the first of release and cancel drops, since a browser can send both
+ * and a second drop would raise whatever is underneath.
  */
 const follow = (drag: Drag, ended: () => void): (() => void) => {
   const moved = (event: PointerEvent) => {

@@ -1,6 +1,5 @@
-// The cursor over a window the desktop's modifier has taken hold of: the
-// diagonal of the corner a resize drives, or a move. And the cursors over a
-// floating window's borders — see `floating/float-borders.ts`.
+// Cursors for modifier grabs (a move, or a resize from a corner) and for
+// floating window borders (see `floating/float-borders.ts`).
 
 import { useState } from "react";
 
@@ -22,22 +21,20 @@ export enum GrabCursor {
 }
 
 type Options = {
-  /** The drag running, if any, and the corner it resizes from. */
+  /** The active drag, if any, and the corner it resizes from. */
   drag: { corner: Corner | undefined } | undefined;
-  /** The window's whole box, whose quarters say which corner a resize drives. */
+  /** The window's frame; the quadrant under the pointer picks the corner. */
   frame: Rect;
-  /** Whether taking hold now would resize the window rather than move it. */
+  /** Whether a grab now would resize rather than move. */
   resizes: boolean;
 };
 
 /**
- * Which cursor a grab sheet shows: before a drag, the corner of the quarter
- * the pointer is over; during one, the corner it took hold of — the window
- * moves under the pointer as it resizes, so where the pointer is by then says
- * nothing about which corner is being dragged.
+ * The cursor a grab sheet shows.
  *
- * The hovered cursor is kept rather than the corner, so a pointer that moves
- * within one quarter renders nothing.
+ * Before a drag it follows the hovered quadrant. During a drag it stays on the
+ * grabbed corner, since the window moves under the pointer. State holds the
+ * cursor, not the corner, so moves within one quadrant do not re-render.
  */
 export const useGrabCursor = ({
   drag,
@@ -47,8 +44,8 @@ export const useGrabCursor = ({
   cursor: GrabCursor;
   onPointerMove: (event: { clientX: number; clientY: number }) => void;
 } => {
-  // Bottom-right until the pointer has moved: a sheet mounted under a still
-  // pointer has not been told where it is.
+  // Bottom-right by default: a sheet mounted under a still pointer has no
+  // position yet.
   const [hovered, setHovered] = useState(GrabCursor.ResizeNwse);
   return {
     cursor: cursorFor(drag, resizes, hovered),

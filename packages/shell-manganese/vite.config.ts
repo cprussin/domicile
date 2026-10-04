@@ -3,20 +3,14 @@ import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// The chrome itself, built as a module rather than from a document.
+// Builds the shell as a module. Domicile writes the document and serves this
+// directory, so there is no `index.html` and the CSS ships in the bundle. See
+// `@domicile-desktop/component-library/vite-shell` for the reasons.
 //
-// Domicile writes the document and serves this directory, so there is no
-// `index.html` here and the stylesheet travels inside the bundle. All three of
-// those decisions are `shellBuild`'s — see
-// `@domicile-desktop/component-library/vite-shell` for why each one.
+// Bundling the CSS prevents a theme flash: a `<link>` would let the browser
+// paint before `ThemeProvider` runs.
 //
-// The CSS moving into the module is what ends this shell's theme flash: a
-// `<link>` is render-blocking and a module script is deferred, so with one the
-// browser painted before `ThemeProvider` had run. There is nothing to paint
-// first now.
-//
-// `base: "./"` so the emitted URLs are relative to the document Domicile
-// writes rather than to a server root.
+// `base: "./"` makes emitted URLs relative to the document Domicile writes.
 const shell = shellBuild({ entry: "src/index.tsx" });
 
 export default defineConfig({
@@ -24,12 +18,10 @@ export default defineConfig({
   build: { ...shell.build, outDir: ".vite/renderer/main_window" },
   css: {
     postcss: {
-      // @pandacss/dev bundles its own postcss while the catalog (and Vite) use
-      // a different postcss version, so the PluginCreator types don't unify
-      // across the two instances. Cast through never to *erase* the type: a
-      // plain `@ts-expect-error` only suppresses the local assignment, leaving
-      // the incompatible type to blow up the deep `UserConfig` comparison
-      // (TS2321, excessive stack depth). The shapes are identical at runtime.
+      // @pandacss/dev bundles a different postcss version than Vite, so the
+      // plugin types don't match. Casting to `never` erases the type;
+      // `@ts-expect-error` would leave it to fail the `UserConfig` comparison
+      // with TS2321. The runtime shapes are identical.
       plugins: [pandacssPostcssPlugin as never],
     },
   },

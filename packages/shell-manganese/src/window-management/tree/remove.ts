@@ -1,4 +1,4 @@
-// A window leaving the tree, and what the layout around it collapses into.
+// Removing a window from the tree and collapsing the containers around it.
 
 import type { Container, LayoutNode } from "./node";
 import {
@@ -13,15 +13,11 @@ import type { Tiling } from "./tiling";
 import { focusChainOf, NOTHING_TILED } from "./tiling";
 
 /**
- * The tree without the window `id`.
+ * The tiling without the window `id`.
  *
- * A container left holding one node is flattened into that node, and one left
- * holding nothing goes the way its child did — up to and including the root,
- * which is how a workspace empties.
- *
- * The same tiling comes back for a window it never held: the host drains its
- * events for windows this tree never had, and a close that names one of those
- * is not its business.
+ * A container left with one child is replaced by that child, and an empty one
+ * is removed, up to the root. Returns `tiling` unchanged for an unknown `id`,
+ * since the host also reports closes for windows this tree never held.
  */
 export const removed = (tiling: Tiling, id: string): Tiling => {
   const { root } = tiling;
@@ -32,25 +28,21 @@ export const removed = (tiling: Tiling, id: string): Tiling => {
 };
 
 /**
- * The tree without the node at `path` — a window, or a whole container, which
- * is what `floating toggle` takes out when `focus parent` selected one.
+ * The tiling without the node at `path`, which may be a container (as when
+ * `floating toggle` follows `focus parent`).
  */
 export const removedAt = (root: LayoutNode, path: Path): Tiling => {
   const kept = withoutAt(root, path);
   return kept === undefined
     ? NOTHING_TILED
-    : // On a window rather than on whatever container the focus was pointed
-      // at: the shape that container named may not be there any more.
+    : // Focus a window: the focused container may no longer exist.
       { depth: focusChainOf(kept).length, root: kept };
 };
 
 /**
- * `node` with the descendant at `path` taken out, or `undefined` when nothing
- * of `node` is left once it has gone.
+ * `node` without the descendant at `path`, or `undefined` when nothing is left.
  *
- * Exported because moving a window is taking it out and putting it back
- * somewhere else, and where it comes *from* collapses exactly the way a close
- * makes it collapse.
+ * Exported for moves, whose source collapses the same way as a close.
  */
 export const withoutAt = (
   node: LayoutNode,
@@ -70,8 +62,8 @@ export const withoutAt = (
 };
 
 /**
- * The container with its child `index` gone: flattened into what is left when
- * that is one node, and gone itself when it is none.
+ * The container without child `index`, replaced by its only remaining child,
+ * or `undefined` if none remain.
  */
 const collapsed = (
   container: Container,
@@ -94,13 +86,10 @@ const collapsed = (
 };
 
 /**
- * Which child the focus lands on once the one at `removed` is gone.
+ * The focused index after child `removed` is gone.
  *
- * In a split, the next window along, which is the same index once the list
- * has closed up, and the one before it where there is no next. In a tab
- * stack it is the other way round: the tab before, and the next only when the
- * first tab closed. A focus that was somewhere else entirely follows its own
- * child.
+ * Closing the focused child focuses the next one in a split and the previous
+ * one in a tab stack, falling back to the other side at the ends.
  */
 const focusAfter = (
   { focused, layout }: Container,

@@ -1,12 +1,8 @@
-// The tree as rectangles: where every visible window's frame is, and where
-// the tabs of a tabbed or stacking container are.
+// Lays out the tree as rectangles: each visible window's frame, and the tabs
+// of tabbed and stacking containers.
 //
-// This is the whole of the layout as far as the page is concerned. A window is
-// a box the shell writes as `position: fixed`, so laying the desktop out is
-// arithmetic here rather than flow in the document — which is what lets a
-// window's frame be one element and its surface another, and what lets the
-// compositor be told where a client's buffer goes by measuring the element the
-// numbers below placed.
+// Windows are `position: fixed` boxes, so the whole layout is computed here
+// instead of by document flow.
 
 import type { Rect } from "../rect";
 import { barOf, surfaceOf, TITLE_BAR } from "../rect";
@@ -16,69 +12,59 @@ import type { Path } from "./path";
 import type { Tiling } from "./tiling";
 import { focusedWindowIn, focusPathOf } from "./tiling";
 
-/** Where one window is: its title bar, and its contents under it. */
+/** One window's title bar and contents. */
 export type Frame = {
-  /** The bar that names it — its own, or its tab in the container it is in. */
+  /** Its title bar, or its tab in a tabbed or stacking container. */
   bar: Rect;
   /**
-   * Where a window a tabbed or stacking container is not showing is drawn
-   * instead: under the one it is showing, in the same box. `undefined` for a
-   * window with a `surface`.
+   * For a hidden tab, the box it is drawn in, under the shown one.
+   * `undefined` when `surface` is set.
    *
-   * Drawn rather than taken off the screen, so that it is already on screen
-   * the moment its tab is. A window revealed from nothing takes a frame or two
-   * to be drawn, and the desktop shows through for as long as it does —
-   * around a window growing in over it, or under one shrinking away off it.
+   * Hidden tabs stay drawn so a switch shows them at once. A window drawn
+   * from nothing takes a frame or two, and the desktop would show through.
    */
   behind: Rect | undefined;
   id: string;
   /**
-   * The window the open tab of its tabbed container is named after, for a tab
-   * that is not the open one: what it draws the line under it in the color
-   * of, so the edge along the top of the window the strip opens onto runs
-   * under every tab. `undefined` for every other bar, a stack's included,
-   * whose bars each sit on the next one's edge.
+   * For an inactive tab in a tabbed container, the window the open tab is
+   * named after. The tab draws its bottom line in that window's color, so the
+   * open window's top edge runs under every tab. `undefined` otherwise,
+   * including in stacks.
    */
   openTab: string | undefined;
   /**
-   * Whether it is inside the container `focus parent` selected: the windows
-   * the commands now act on, which the desktop lights together.
+   * Whether it is in the container `focus parent` selected, which is
+   * highlighted as a group.
    */
   selected: boolean;
-  /**
-   * Where its contents go, or `undefined` for a window a tabbed or stacking
-   * container is not currently showing: the tab is on screen and the window
-   * behind it is not.
-   */
+  /** Where its contents go, or `undefined` for a hidden tab. */
   surface: Rect | undefined;
   /**
-   * The layout of the container its bar is one of the tabs of, which is which
-   * way those tabs run: across for a tabbed one, down for a stack.
+   * The layout of the container whose tab this bar is: tabbed or stacking.
    *
-   * `undefined` for a window whose bar is its own, and for a container's only
-   * tab: closing that closes the container with it, which is a window going
-   * rather than a tab.
+   * `undefined` for a plain title bar and for a container's only tab, since
+   * closing that closes the container too.
    */
   tabbed: TabLayout | undefined;
 };
 
-/** The layouts that give each child a tab rather than a share of the area. */
+/** The layouts that give each child a tab instead of a share of the area. */
 export type TabLayout = Layout.Stacking | Layout.Tabbed;
 
-/** A tab standing for a whole container, named after the window inside it. */
+/** A tab for a nested container, named after a window inside it. */
 export type Tab = {
-  /** Whether this is the child its container is showing. */
+  /** Whether its container is showing this child. */
   active: boolean;
-  /** The window the container last had the focus in, which is what names it. */
+  /** The container's last-focused window, which names the tab. */
   id: string;
-  /** The window its container's open tab is named after — see `Frame.openTab`. */
+  /** The window its container's open tab is named after. See `Frame.openTab`. */
   openTab: string | undefined;
   rect: Rect;
   /** Whether it is inside the container `focus parent` selected. */
   selected: boolean;
 };
 
-/** Everything a workspace's tiling puts on screen. */
+/** The frames and tabs a workspace's tiling puts on screen. */
 export type Tiled = {
   frames: readonly Frame[];
   tabs: readonly Tab[];
@@ -89,9 +75,7 @@ const NOTHING: Tiled = { frames: [], tabs: [] };
 /**
  * The tiling laid out over `area`, with `gap` between neighbors.
  *
- * The gap is the caller's because it is a policy rather than a measurement:
- * the desktop's config asks for twenty pixels between windows and none at all
- * when there is only one of them (`gaps.smartGaps`).
+ * The caller picks the gap, since it is config policy. See `gaps.ts`.
  */
 export const framesOf = (tiling: Tiling, area: Rect, gap: number): Tiled => {
   const { root } = tiling;
@@ -101,12 +85,10 @@ export const framesOf = (tiling: Tiling, area: Rect, gap: number): Tiled => {
 };
 
 /**
- * The box the node at `path` is laid out in, by the same arithmetic
- * {@link framesOf} places it with.
+ * The box the node at `path` gets, computed as {@link framesOf} does.
  *
- * What a drag on a window's edge is measured against: the tree holds shares
- * of a container rather than lengths, so a pointer's pixels become a share by
- * how big that container is on screen.
+ * Edge drags use it to turn pixels into shares, since the tree stores shares,
+ * not lengths.
  */
 export const areaOf = (
   root: LayoutNode,
@@ -130,13 +112,11 @@ export const areaOf = (
 };
 
 /**
- * One node laid out in `area`, and everything inside it.
+ * One node and its descendants laid out in `area`.
  *
- * `pointed` is where the commands are, from this node down — the rest of the
- * focus path, or `undefined` for a node they are not pointed inside — and
- * `selected` is whether this node is inside the container `focus parent`
- * selected. Both are carried through the same walk the rectangles come out of
- * rather than worked out in a second one.
+ * `pointed` is the rest of the focus path below this node, or `undefined` if
+ * the focus is not inside it. `selected` is whether the node is inside the
+ * container `focus parent` selected.
  */
 const placed = (
   node: LayoutNode,
@@ -163,8 +143,7 @@ const placed = (
       };
     }
     case NodeKind.Container: {
-      // The path ending here is this container being the one selected: a
-      // window is where it ends when nothing is, and a window is not a group.
+      // A focus path ending at a container means `focus parent` selected it.
       const inside = selected || pointed?.length === 0;
       switch (node.layout) {
         case Layout.SplitH:
@@ -209,15 +188,13 @@ const childArea = (
   }
 };
 
-/** Where the commands are pointed from the child at `at` down, if they are. */
+/** The rest of the focus path below child `at`, if it runs through it. */
 const within = (pointed: Path | undefined, at: number): Path | undefined =>
   pointed === undefined || pointed[0] !== at ? undefined : pointed.slice(1);
 
 /**
- * The part of `area` the child at `at` gets.
- *
- * Each child's share of what is left once the gaps between them are taken
- * out, laid along the container's own axis.
+ * The part of `area` child `at` gets: its share of the space left after the
+ * gaps, along the container's axis.
  */
 const sliceOf = (
   container: Container,
@@ -249,14 +226,11 @@ const sliceOf = (
 };
 
 /**
- * A tabbed or stacking container: a title per child along the top, and the
- * one it has the focus in filling what is left.
+ * Lays out a tabbed or stacking container: a title per child, and the shown
+ * child filling the rest.
  *
- * A window that is a direct child has its tab *as* its title bar — one bar
- * rather than two — so it is placed here rather than recursed into. A
- * container child gets a tab of its own instead, named after the window it
- * last had the focus in, and is laid out inside the contents area when it is
- * the one being shown.
+ * A window child's tab is its title bar. A container child gets a {@link Tab}
+ * named after its last-focused window, and is laid out only when shown.
  */
 const titled = (
   container: Container,
@@ -311,11 +285,10 @@ const titled = (
   );
 };
 
-/** How far apart neighboring tabs are. */
+/** The gap between neighboring tabs. */
 const TAB_GAP = 4;
 
-// Tabs divide the top of the area between them, a little apart; a stack gives
-// each child a full-width bar of its own, one under the other.
+// Tabs share the top row; a stack gives each child a full-width bar.
 const titleOf = (container: Container, area: Rect, at: number): Rect => {
   if (container.layout === Layout.Stacking) {
     return { ...barOf(area), y: area.y + TITLE_BAR * at };
@@ -326,8 +299,7 @@ const titleOf = (container: Container, area: Rect, at: number): Rect => {
   }
 };
 
-// What is left under the titles, which is one bar's worth for a tabbed
-// container and one per child for a stack.
+// The area under the titles: one bar for tabbed, one per child for stacking.
 const contentsOf = (container: Container, area: Rect): Rect => {
   const bars =
     container.layout === Layout.Stacking ? container.children.length : 1;

@@ -2,18 +2,12 @@ import { WEBVIEW_LOADING_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-elem
 import { useEffect, useState } from "react";
 
 /**
- * Whether the page inside a `<webview>` is still arriving, kept current.
+ * Whether a `<webview>`'s page is loading.
  *
- * **The element is the state and the event is only a nudge**, the same way
- * `useHistoryAvailability` is: the engine pushes nothing with
- * `domicile-loading-change`, and what changed is readable on the element. This
- * reads it once as it mounts and again every time the view says so. The mount
- * read is the half that cannot be dropped — a React shell registers its
- * listeners in its first effect flush, so a window whose guest began loading
- * before then would sit looking settled over a page that had not arrived.
- *
- * `null` rather than `undefined` for the missing view because that is what
- * React's ref API hands a callback ref, which is where the element comes from.
+ * `domicile-loading-change` carries no data, so this reads `loading` on mount
+ * and on each event. The mount read is required: an event fired before the
+ * first effect runs is missed. Takes `null` because the element comes from a
+ * callback ref.
  */
 export const useLoading = (view: HTMLWebViewElement | null): boolean => {
   const [loading, setLoading] = useState(false);

@@ -26,7 +26,7 @@ const blocker: Extension = {
   title: "Blocker: on for this site",
 };
 
-/** And one whose click is `action.onClicked`, with a badge set. */
+/** An extension whose click fires `action.onClicked`, with a badge set. */
 const counter: Extension = {
   badgeColor: "#d93025ff",
   badgeText: "12",
@@ -38,7 +38,7 @@ const counter: Extension = {
   title: "Counter",
 };
 
-/** A client that keeps every extension the tray activated, in order. */
+/** A client that records every extension the tray activated, in order. */
 const recordingDomicile = (activated: string[]): DomicileClient =>
   ({
     activateExtension: (id: string) => {
@@ -49,8 +49,8 @@ const recordingDomicile = (activated: string[]): DomicileClient =>
 const NO_DOMICILE = recordingDomicile([]);
 
 /**
- * The popup's view, which is portaled out of the tray to the body, once the
- * popover has placed it — base-ui positions it a tick after it mounts.
+ * The popup's view, portaled to the body, once base-ui has positioned it (a
+ * tick after mount).
  */
 const popupView = (): Promise<HTMLWebViewElement> =>
   waitFor(() => {
@@ -62,10 +62,7 @@ const popupView = (): Promise<HTMLWebViewElement> =>
     }
   });
 
-/**
- * The action with `opened` open, resolving with what it next asks `opened` to
- * become.
- */
+/** The action with `opened` open; resolves with the next `opened` requested. */
 const trayAsking = (
   extension: Extension,
   opened: string | undefined,
@@ -172,7 +169,7 @@ describe("ExtensionAction", () => {
       const view = await popupView();
       const before = [view.style.inlineSize, view.style.blockSize];
 
-      // The engine's answer, which the element holds and the event announces.
+      // The engine's reply, held by the element and announced by the event.
       Object.defineProperties(view, {
         contentHeight: { configurable: true, value: 170 },
         contentWidth: { configurable: true, value: 230 },
@@ -201,10 +198,9 @@ describe("ExtensionAction", () => {
     });
 
     it("activates an extension as it opens its popup, and not as it closes it", async () => {
-      // The activation is Chrome's toolbar click: it grants the extension
-      // `activeTab` on the focused browser window, which the popup's first
-      // `scripting.executeScript` needs. The engine dispatches no
-      // `action.onClicked` for an action with a popup.
+      // Activation mimics Chrome's toolbar click: it grants `activeTab` on the
+      // focused browser window, which the popup's `scripting.executeScript`
+      // needs. The engine sends no `action.onClicked` when there is a popup.
       const activated: string[] = [];
       const { rerender } = render(
         <ExtensionAction

@@ -5,17 +5,11 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 
 /**
- * What the page says when the host describes a desktop with no screens.
+ * A message for when the host reports a desktop with no screens.
  *
- * `undefined` and `[]` are different things, and this is what makes the
- * difference visible: not having been told yet is a moment, and a host that
- * says it has no screens is a host the chrome has nowhere to draw on. Without
- * this the two look identical from the outside — a blank window.
- *
- * Rendered outside the screens, and unconditionally: it is a sibling of the
- * chrome rather than an alternative to it. Not fatal either — a description is
- * not a promise about the next one, and a host that gains a screen describes
- * the desktop again.
+ * Without it, "not described yet" (`undefined`) and "no screens" (`[]`) both
+ * show a blank window. Rendered beside the chrome, not instead of it, and not
+ * fatal: a host that gains a screen describes the desktop again.
  */
 export const NoScreens = () => {
   const displays = useDisplays();
@@ -32,7 +26,7 @@ export const NoScreens = () => {
   ) : undefined;
 };
 
-// The whole page, since there is no screen to put this on either.
+// Covers the whole page, since there is no screen to put it on.
 const sheetStyles = flex({
   align: "center",
   inset: 0,

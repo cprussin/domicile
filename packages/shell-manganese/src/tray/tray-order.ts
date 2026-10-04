@@ -1,10 +1,9 @@
 /**
- * `items` in the order the user put them in: those `order` remembers where it
- * has them, and the rest after, in the order they arrived.
+ * `items` in the user's order: those `order` places first, the rest after in
+ * arrival order.
  *
- * `order` may name items that are not here — an application that was closed,
- * an extension that was turned off. They take no place now and keep theirs for
- * when they come back.
+ * `order` may name absent items, such as closed applications. They keep their
+ * place for when they return.
  */
 export const arrange = <T>(
   items: readonly T[],
@@ -22,9 +21,8 @@ export const arrange = <T>(
 };
 
 /**
- * `order` with every one of the `shown` keys it had never placed placed after
- * the rest, as they arrived — so an icon comes back where it first appeared
- * rather than after whatever arrived while it was gone.
+ * `order` with any unplaced `shown` keys appended in arrival order, so an icon
+ * returns where it first appeared.
  */
 export const place = (
   order: readonly string[],
@@ -35,13 +33,12 @@ export const place = (
 ];
 
 /**
- * `order` with `dragged` moved to where `target` is: after it when it was
- * dragged rightward, before it when leftward — so the item under the pointer
- * is always the one that makes way.
+ * `order` with `dragged` moved to `target`'s place: after it when dragged
+ * right, before it when dragged left, so the item under the pointer makes way.
  *
- * `shown` is the keys on the bar, in the order they are drawn. Any of them the
- * order had never placed are placed first, where they are drawn, so the move
- * is a move among what the user sees. What is not shown keeps its place.
+ * `shown` is the keys on the bar, in drawn order. Unplaced ones are placed
+ * first, where they are drawn, so the move matches what the user sees. Hidden
+ * keys keep their place.
  */
 export const moveTo = (
   order: readonly string[],

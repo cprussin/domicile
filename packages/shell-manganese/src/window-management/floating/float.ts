@@ -1,14 +1,8 @@
-// A window that is floating rather than tiled: where it sits on the desktop,
-// and how big.
+// Floating boxes: where a floating window sits on the desktop, and how big.
 //
-// Its own module rather than a field on `ShellWindow` because floating is not
-// a kind of window — any window can be floated and put back, and a client's
-// portal is the same portal either way. What changes is where the shell lays
-// it out, which is exactly what this describes.
-//
-// **What floats is a node, not a window.** sway floats whatever `focus parent`
-// selected, so a float holds a tree of its own — one window, most of the time
-// — laid out inside its box the way the tiling lays out a workspace.
+// A float holds a node, not a window. Like sway, it floats whatever
+// `focus parent` selected, so its box has a tree of its own, laid out like a
+// workspace. See packages/shell-manganese/docs/WINDOW-MANAGEMENT.md.
 
 import type { Direction } from "../direction";
 import { Axis, axisOf, isForward } from "../direction";
@@ -21,21 +15,17 @@ import { focusChainOf } from "../tree/tiling";
 import type { SizeLimit } from "../window";
 
 /**
- * Where a floating window sits, in the desktop's own pixels.
+ * A floating box, in desktop pixels.
  *
- * A {@link Tiling} of its own as well, so the tree commands reach inside a
- * floating group the way they reach inside the tiling.
+ * It is also a {@link Tiling}, so tree commands work inside a floating group.
  */
 export type Float = {
-  /** How far down its own tree the commands are pointed — see `Tiling`. */
+  /** How far down its tree the commands point. See `Tiling`. */
   depth: number;
   height: number;
-  /** What floats in the box: a window, or a group of them. */
+  /** The window or group in the box. */
   root: LayoutNode;
-  /**
-   * Whether it is up from the scratchpad, so `scratchpad show` hides it again
-   * rather than fetching the next one.
-   */
+  /** Whether it came from the scratchpad, so `scratchpad show` hides it. */
   scratchpad: boolean;
   width: number;
   x: number;
@@ -43,26 +33,22 @@ export type Float = {
 };
 
 /**
- * The edges a resize drags: a corner's two, or one edge's one with the other
- * axis `undefined`. A `Corner` is one of these.
+ * The edges a resize drags: two for a corner, or one with the other axis
+ * `undefined`.
  */
 export type Grip = {
   horizontal: Direction | undefined;
   vertical: Direction | undefined;
 };
 
-/**
- * How big a window is when it first leaves the tiling, on a screen with room
- * for it — see {@link floatFor}.
- */
+/** The size of a newly floated window, when the screen has room. */
 const OPENS_AT = { height: 800, width: 1280 };
 
 /**
  * How far each float is offset from the one before it.
  *
- * A cascade rather than a stack: a window that opened exactly on top of the
- * last one looks like the last one moved, and there is nothing to grab to find
- * out otherwise.
+ * Without the offset, a new float exactly covers the last one and looks like
+ * it moved.
  */
 const CASCADE = 36;
 
@@ -73,15 +59,12 @@ const ORIGIN = 48;
 export const FLOAT_STEP = 10;
 
 /**
- * A box for a window leaving the tiling, cascaded past the `floating` boxes
- * already out there.
+ * A box for a window leaving the tiling, cascaded past `floating` existing
+ * floats.
  *
- * The count rather than the last box's corner: dragging a window into the
- * corner must not put the next one off the screen, and the count is what says
- * how many are already out regardless of where the user has since put them.
- *
- * No bigger than fits on `screen` with {@link ORIGIN} to spare on each side,
- * so the first float on a small screen is wholly on it.
+ * Cascades by count, not from the last box, so a float dragged into a corner
+ * does not push the next one off screen. Fits on `screen` with {@link ORIGIN}
+ * to spare on each side.
  */
 export const floatFor = (
   root: LayoutNode,
@@ -99,9 +82,8 @@ export const floatFor = (
 });
 
 /**
- * A box for a window that asked for a size of its own — an extension's
- * `chrome.windows.create` — cascaded as {@link floatFor}'s are. An axis asked
- * for as 0 is one it did not ask about, and opens at a float's own size.
+ * A cascaded box for a window that asked for a size, such as from an
+ * extension's `chrome.windows.create`. A 0 axis gets the default size.
  */
 export const floatAskedFor = (
   root: LayoutNode,
@@ -119,10 +101,10 @@ export const floatAskedFor = (
 };
 
 /**
- * The same box with its tree changed by `into` — the same object when nothing
- * changed, so the pointer crossing a window re-renders nothing. Throws when
- * that leaves the box empty: none of the commands that reach in here take a
- * window out.
+ * The box with its tree changed by `into`.
+ *
+ * Returns the same object when nothing changed, to avoid re-renders. Throws if
+ * the box ends up empty; no command used here removes a window.
  */
 export const retiled = (
   float: Float,
@@ -143,25 +125,21 @@ export const floatHolds = (float: Float, id: string): boolean =>
   windowsIn(float.root).includes(id);
 
 /**
- * The smallest a window can be dragged down to.
+ * The smallest size a resize allows.
  *
- * Not a taste: the corner a resize is driven from is inside the window, so a
- * window that can be made smaller than the grab is one that can be made
- * impossible to grab again. Taller than {@link TITLE_BAR} for the same reason
- * twice over — the bar comes out of this height, so a window that could be
- * dragged shorter than its own bar would have a surface of nothing and a frame
- * with nothing left to grab.
+ * Resize grips sit inside the window, so a smaller window could become
+ * impossible to grab. The height includes {@link TITLE_BAR}, so it must exceed
+ * it.
  */
 const SMALLEST = { height: 120, width: 240 };
 
 /**
- * The same box, sized to what its client will draw: its contents no smaller
- * than `min` and no larger than `max`, with the bar on top.
+ * The box with its contents clamped to the client's `min` and `max` size,
+ * plus the title bar.
  *
- * A box outside them gets a frame that does not fill it — cut off at the
- * box's edge, or stretched across it. An edge the box had `before` stays
- * where it was, so a window dragged in from the left stops at its smallest
- * rather than sliding right.
+ * Without this, the client's frame would not fill the box. An edge unchanged
+ * since `before` stays put, so a window resized from the left stops at its
+ * smallest instead of sliding right.
  */
 export const limitedTo = (
   float: Float,
@@ -195,7 +173,7 @@ export const limitedTo = (
       };
 };
 
-/** The same box, moved — off any edge of the desktop, if that is where it went. */
+/** The box moved to `x`, `y`, even off the desktop. */
 export const movedTo = (float: Float, x: number, y: number): Float => ({
   ...float,
   x,
@@ -203,13 +181,13 @@ export const movedTo = (float: Float, x: number, y: number): Float => ({
 });
 
 /**
- * The same box in the page's pixels rather than those of the screen at
- * `screen`: the page spans the desk, and has the screen somewhere on it.
+ * The box in page pixels instead of `screen` pixels. The page spans every
+ * screen.
  */
 export const onScreen = (float: Float, screen: Rect): Float =>
   movedTo(float, float.x + screen.x, float.y + screen.y);
 
-/** The same box, resized, never below what is left to grab. */
+/** The box resized, never below {@link SMALLEST}. */
 export const sizedTo = (
   float: Float,
   width: number,
@@ -221,13 +199,11 @@ export const sizedTo = (
 });
 
 /**
- * The same box with its `grip` dragged `dx`, `dy`: the edges it holds move and
- * the ones across from them stay put. An axis the grip has no side on does not
- * move at all.
+ * The box with the edges in `grip` dragged by `dx`, `dy`. Opposite edges stay
+ * put.
  *
- * Stopped where {@link sizedTo} and {@link movedTo} would stop it, but by the
- * dragged edge: a window dragged from the left to its smallest must not start
- * sliding right instead.
+ * Clamps at the dragged edge, so a window resized from the left to its
+ * smallest does not slide right.
  */
 export const stretched = (
   float: Float,
@@ -262,7 +238,7 @@ export const stretched = (
   };
 };
 
-/** The same box, shifted one step `direction` — what a keyed `move` does. */
+/** The box shifted one step in `direction`, for a keyed `move`. */
 export const shifted = (float: Float, direction: Direction): Float => {
   const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
   return axisOf(direction) === Axis.Horizontal
@@ -270,7 +246,7 @@ export const shifted = (float: Float, direction: Direction): Float => {
     : movedTo(float, float.x, float.y + step);
 };
 
-/** The same box, one step bigger or smaller — what resize mode does. */
+/** The box one step bigger or smaller, for resize mode. */
 export const grown = (float: Float, direction: Direction): Float => {
   const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
   return axisOf(direction) === Axis.Horizontal
@@ -278,7 +254,7 @@ export const grown = (float: Float, direction: Direction): Float => {
     : sizedTo(float, float.width, float.height + step);
 };
 
-/** The whole frame — the bar and the window's contents under it. */
+/** The whole frame: the title bar and the contents under it. */
 export const rectOf = ({ height, width, x, y }: Float): Rect => ({
   height,
   width,
@@ -287,8 +263,8 @@ export const rectOf = ({ height, width, x, y }: Float): Rect => ({
 });
 
 /**
- * One axis of {@link floatFor}: `size`, cut down to what fits in `room` with
- * {@link ORIGIN} to spare on each side, but never below `smallest`.
+ * One axis of {@link floatFor}: `size`, shrunk to fit `room` with
+ * {@link ORIGIN} on each side, but never below `smallest`.
  */
 const fitted = (size: number, room: number, smallest: number): number =>
   Math.max(smallest, Math.min(size, room - 2 * ORIGIN));
@@ -297,8 +273,8 @@ const fitted = (size: number, room: number, smallest: number): number =>
 type Span = { size: number; start: number };
 
 /**
- * One axis of {@link stretched}: its far edge dragged `by` if `atEnd`, else
- * its near one, which stops at the desktop's edge.
+ * One axis of {@link stretched}: drags the far edge if `atEnd`, else the near
+ * edge, which stops at the desktop's edge.
  */
 const spanStretched = (
   { size, start }: Span,
@@ -314,8 +290,8 @@ const spanStretched = (
 };
 
 /**
- * One axis of {@link limitedTo}: the size held between `min` and `max`, from
- * the far edge where only the near one moved since `before`.
+ * One axis of {@link limitedTo}: clamps the size between `min` and `max`,
+ * anchored at the far edge if only the near edge moved since `before`.
  */
 const spanLimited = (
   { size, start }: Span,
