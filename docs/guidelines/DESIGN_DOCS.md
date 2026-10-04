@@ -6,27 +6,16 @@ the index. This guideline governs the writing; those docs carry no authority.
 
 ## Principles
 
-These are the rule. A doc that follows them is good regardless of shape.
+Follow [WRITING.md](WRITING.md). On top of it:
 
-1. **Lead with the answer.** Proposal and why, up front. No ramp-up, no
-   history, no suspense.
+1. **Lead with the proposal and why.** No ramp-up or suspense.
 2. **Document the design, not the journey.** Describe what you landed on.
-   Mention an alternative only when rejecting it is necessary to explain the
-   choice.
-3. **Say it once.** Don't restate an idea across sections, or narrate in prose
-   what a table or code block already shows.
-4. **Show, don't describe.** Use real type names, field names, file paths, and
-   example I/O. Reach for a table, list, or code block to convey a shape,
-   mapping, or comparison.
-5. **Every sentence earns its place.** Cut filler and hedging — "it's worth
-   noting," "in order to," "arguably," "essentially." One claim per heading.
-6. **Decisions, not musings.** State trade-offs as choices: "A over B because
-   Z." An "Open questions" section lists only genuinely unresolved decisions,
-   each with a recommendation.
-7. **Don't restate code or READMEs.** Cite or link instead.
-8. **Cut RFC ceremony.** No status banners, audience headers, changelogs, or
+3. **Decisions, not musings.** State trade-offs as choices: "A over B because
+   Z." An "Open questions" section lists only unresolved decisions, each with a
+   recommendation.
+4. **Don't restate code or READMEs.** Cite or link instead.
+5. **Cut RFC ceremony.** No status banners, audience headers, changelogs, or
    "appendix: citations."
-9. **The doc obeys its own rule.** Be the example of the style.
 
 ## Recommended structure
 
