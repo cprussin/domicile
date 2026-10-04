@@ -28,9 +28,8 @@ export type TopBarLayout = {
 /**
  * Manganese's own bar.
  *
- * **The launcher's button is first, at the far start**, a little apart from
- * the tray so it does not read as one of the tray's icons. **The tray is left
- * of the workspaces.** **The bell is last, at the far end**, because the
+ * **The launcher's button is first, at the far start**, right against the
+ * tray. **The tray is left of the workspaces.** **The bell is last, at the far end**, because the
  * drawer it opens slides out from that edge: the control and what it opens are
  * on the same side of the screen.
  */

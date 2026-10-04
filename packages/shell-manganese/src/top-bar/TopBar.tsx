@@ -28,10 +28,10 @@ type Props = Bar & {
  * clock, the volume, the brightness and the charge — and why each is where it
  * is follows.
  *
- * **The launcher's button is first, at the far start**, a little apart from
- * the tray so it does not read as one of the tray's icons. It is the panel
- * `mod+Space` opens, for a hand already on the pointer. The terminal has no
- * button: it is whatever key the config binds to its `exec`.
+ * **The launcher's button is first, at the far start**, right against the
+ * tray. It is the panel `mod+Space` opens, for a hand already on the pointer.
+ * The terminal has no button: it is whatever key the config binds to its
+ * `exec`.
  *
  * **The tray is left of the workspaces**, and it launches nothing of the
  * desktop's: each icon is an application's StatusNotifierItem or an
