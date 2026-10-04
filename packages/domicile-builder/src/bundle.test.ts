@@ -10,7 +10,8 @@ const DOMICILE = path.resolve(import.meta.dir, "..", "..", "..");
 
 describe("bundle", () => {
   // The one test that builds: a user's entry outside any project, importing
-  // manganese and React from Domicile and nothing installed of its own.
+  // manganese and React from Domicile and nothing installed of its own, into
+  // a directory whose parent does not exist yet, as a fresh cache's does not.
   it("builds an entry against Domicile's manganese into a module with its `Shell` and its styles", async () => {
     const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
     const entry = path.join(desk, "domicile.tsx");
@@ -23,9 +24,10 @@ describe("bundle", () => {
          });`,
     );
 
-    await bundle(entry, path.join(desk, "out"), DOMICILE, [entry]);
+    const out = path.join(desk, "shells", "out");
+    await bundle(entry, out, DOMICILE, [entry]);
 
-    const built = readFileSync(path.join(desk, "out", "shell.js"), "utf8");
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
     expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
     expect(built).toContain("mail 3/12");
     expect(built).toContain("@layer utilities");
