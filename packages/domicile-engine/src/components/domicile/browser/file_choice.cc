@@ -32,9 +32,9 @@ std::optional<std::vector<std::string>> DirectoryEntries(
     return std::nullopt;
   }
   std::vector<std::string> entries;
-  // Not SHOW_SYM_LINKS, so a link is what it points at: a link to a directory
-  // is one to walk into. STOP_ENUMERATION, so a directory that cannot be read
-  // says so rather than listing as empty.
+  // Without SHOW_SYM_LINKS, links resolve to their targets, so a link to a
+  // directory lists as a directory. STOP_ENUMERATION reports an unreadable
+  // directory as an error instead of an empty listing.
   base::FileEnumerator walk(
       directory, /*recursive=*/false,
       base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES,

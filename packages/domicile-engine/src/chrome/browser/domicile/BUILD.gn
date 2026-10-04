@@ -1,19 +1,13 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# The socket a running engine answers commands about its shell on, and the
-# addresses it hands that shell to open.
+# The fork's browser-side code that needs //chrome: the command socket, the
+# desk, browser windows, extensions, file dialogs and pointer warps.
 #
-# A target of its own rather than sources on //chrome/browser:browser, because
-# that target has none any more -- "Do NOT add sources here; new code belongs
-# in a dedicated, properly-scoped target" -- and because the whole of the fork
-# in this directory is then one added dependency in a file Chromium owns.
-#
-# //chrome and not //components/domicile for one reason: carrying a
-# `load_shell` out navigates the shell's window, and finding that window is
-# //chrome/browser/ui's GlobalBrowserCollection. Everything about this that
-# does not need a window is next door in //components/domicile:command_protocol,
-# which is what has the tests.
+# A separate target because //chrome/browser:browser accepts no new sources,
+# and it keeps the fork to one added dependency in a Chromium-owned file.
+# It lives in //chrome because it needs browser windows, profiles and aura
+# hosts. Code that does not is in //components/domicile, with the tests.
 source_set("domicile") {
   sources = [
     "domicile_browser_windows.cc",
@@ -56,12 +50,9 @@ source_set("domicile") {
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
-    # `screenshot`: the shell page's surface read back by viz, as a PNG.
+    # `screenshot`: reads the shell page's surface back as a PNG.
     "//components/viz/common",
-    # The extensions a desk's config names, installed into a profile: the
-    # ExtensionService, the pending and unpacked installers, and the profile
-    # pref holding what was installed. //chrome for the same reason as the
-    # rest of this directory -- a Profile is nothing below it.
+    # Installs the extensions the desk's config names into the profile.
     "//chrome/browser/extensions",
     "//chrome/browser/profiles:profile",
     "//chrome/common:constants",
@@ -70,11 +61,7 @@ source_set("domicile") {
     "//extensions/browser",
     "//extensions/common",
     "//extensions/common:mojom",
-    # The shell's tray: the actions of the extensions above, read out of
-    # ExtensionActionManager and heard changing through ExtensionActionDispatcher
-    # (both in //chrome/browser/extensions and //extensions/browser, named
-    # above), spelled for the page by :extension_tray_entry, and an icon
-    # encoded to a PNG.
+    # The shell's tray: extension actions and their icons as PNGs.
     "//components/domicile:extension_tray_entry",
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
@@ -83,45 +70,32 @@ source_set("domicile") {
     "//ui/gfx",
     "//ui/gfx/codec",
     "//url",
-    # And a <webview>'s guest made a tab: SessionTabHelper through Chrome's own
-    # factory, which is //chrome/browser/sessions, and extensions::TabHelper,
-    # which is //chrome/browser/extensions above.
+    # Tab helpers for <webview> guests (SessionTabHelper).
     "//chrome/browser/sessions",
-    # And every guest a tab of the desk's one window, to chrome.tabs: the
-    # decisions in :desk_tabs, the guest the desk asks the shell through, the
-    # tab's id and window id (SessionTabHelper, in //components/sessions),
-    # the generated chrome.tabs and chrome.windows types, and the window's
-    # show state.
+    # Guests as tabs of the desk's one window for chrome.tabs and
+    # chrome.windows.
     "//chrome/common/extensions/api",
     "//components/domicile:desk_tabs",
     "//components/domicile:web_view_guest",
     "//components/sessions",
     "//components/sessions:session_id",
-    # And every file dialog a question to the shell: Chromium's dialog factory
-    # replaced, the guest it asks, and the dialog's types as a picker's
-    # extensions.
+    # File dialogs, answered by the shell.
     "//components/domicile:file_choice",
     "//ui/shell_dialogs",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
-    # And a tab's zoom, as blink's factors and range.
+    # Tab zoom factors and range.
     "//third_party/blink/public/common",
     "//ui/base/mojom:ui_base_types",
     "//ui/gfx/geometry",
-    # The window a page's view is in, and the host that owns its cursor. Here
-    # and not in //components/domicile for the reason the whole of this
-    # directory is here: a cursor is moved through an aura WindowTreeHost, and
-    # nothing below //chrome/browser has one.
+    # Pointer warps move the cursor through an aura WindowTreeHost.
     "//ui/aura",
     "//ui/base",
     "//ui/display",
-    # `gfx::NativeView`, which is the handle a frame's view is and the one
-    # `display::Screen::GetDisplayNearestView` takes. `//ui/gfx` is the wrong
-    # label for it and `ui/gfx/native_widget_types.h` is the wrong header --
-    # both were true of a Chromium older than this pin, and the build said so.
+    # `gfx::NativeView`, which `display::Screen::GetDisplayNearestView` takes.
     "//ui/gfx:native_ui_types",
-    # One page for the desk: its geometry, and a window on every other display
-    # whose layers show the page's (docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
+    # One page for the desk: its geometry, and a presenter window per extra
+    # display (docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
     "//components/domicile:desk_geometry",
     "//ui/compositor",
     "//ui/ozone",

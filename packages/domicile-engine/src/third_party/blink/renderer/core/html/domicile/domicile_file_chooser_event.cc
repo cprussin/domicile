@@ -17,25 +17,23 @@ namespace blink {
 
 namespace {
 
-// The four `mode`s, spelled the way packages/chrome-sdk/src/webview-element.ts
-// spells them.
+// Must match the modes in packages/chrome-sdk/src/webview-element.ts.
 constexpr char kOpen[] = "open";
 constexpr char kOpenMultiple[] = "open-multiple";
 constexpr char kOpenFolder[] = "open-folder";
 constexpr char kSave[] = "save";
 
-// A path that climbs with `..`, which the browser refuses as a bad message --
-// see ResolvedPath in components/domicile/browser/file_choice.h -- so it is
-// refused here first, as the TypeError a shell can read. Anything else is a
-// path: absolute, or relative to the home.
+// The browser kills the renderer for a path containing `..` (see ResolvedPath
+// in components/domicile/browser/file_choice.h). Checking here first turns that
+// into a TypeError the shell can handle.
 bool Climbs(const String& path) {
   return path.Split('/').Contains(String(".."));
 }
 
 constexpr char kClimbs[] = "A path must not climb with `..`.";
 
-// The browser's listing, or its refusal: not a directory, not one it can read,
-// or no chooser waiting -- which is this one answered while it was asked.
+// No entries means the path is not a readable directory, or the chooser was
+// answered while the listing was in flight.
 void Listed(ScriptPromiseResolver<IDLSequence<IDLString>>* resolver,
             const std::optional<Vector<String>>& entries) {
   if (!entries.has_value()) {
@@ -48,9 +46,8 @@ void Listed(ScriptPromiseResolver<IDLSequence<IDLString>>* resolver,
 
 }  // namespace
 
-// BUBBLES, so a chrome hears it on the window it drew, like every other event
-// the element dispatches. CANCELABLE, because `preventDefault()` is how a
-// shell says it is answering -- see the header.
+// Bubbles like the element's other events. Cancelable because
+// `preventDefault()` claims the chooser (see the header).
 DomicileFileChooserEvent::DomicileFileChooserEvent(
     const AtomicString& type,
     domicile::mojom::blink::WebViewFileChooserMode mode,
@@ -69,8 +66,7 @@ DomicileFileChooserEvent::DomicileFileChooserEvent(
 
 DomicileFileChooserEvent::~DomicileFileChooserEvent() = default;
 
-// No default arm, so a mode added to the mojom stops this build rather than
-// reaching a shell as a word it has never heard.
+// No default case, so a new mojom mode fails the build.
 String DomicileFileChooserEvent::mode() const {
   switch (mode_) {
     case domicile::mojom::blink::WebViewFileChooserMode::kOpen:

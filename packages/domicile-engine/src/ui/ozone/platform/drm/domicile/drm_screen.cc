@@ -26,12 +26,9 @@ namespace ui {
 
 namespace {
 
-// What `layout` says about the connector `id`, or nothing where it is silent.
+// Returns the layout entry for connector `id`, or null if it has none.
 //
-// Duplicated from drm_modeset.cc rather than shared, for the reason
-// SnapshotBuilder is duplicated between the two suites: two callers in one
-// directory is the wrong trade for a header, and if a third arrives that is
-// when it moves.
+// Duplicated in drm_modeset.cc. Two callers do not justify a shared header.
 const DomicileDisplayLayout* WantedFor(
     const std::vector<DomicileDisplayLayout>& layout,
     int64_t id) {
@@ -43,14 +40,10 @@ const DomicileDisplayLayout* WantedFor(
   return nullptr;
 }
 
-// The layout's turn, as display::Display counts it.
+// Converts the layout's transform to a display::Display rotation.
 //
-// THE TWO COUNT OPPOSITE WAYS. The layout's is `wl_output.transform`'s, the
-// turn what is drawn takes to come out upright, which counts
-// counterclockwise; display::Display::Rotation counts clockwise. So the two
-// quarter turns swap and the half turn is its own opposite -- and a monitor
-// read with them the same way round comes up upside down, which is how the
-// page-side version of this once shipped.
+// The layout counts rotation counterclockwise (`wl_output.transform`);
+// display::Display counts clockwise. So the quarter turns swap.
 display::Display::Rotation RotationOf(DomicileDisplayLayout::Transform turn) {
   switch (turn) {
     case DomicileDisplayLayout::Transform::kNormal:
@@ -64,22 +57,20 @@ display::Display::Rotation RotationOf(DomicileDisplayLayout::Transform turn) {
   }
 }
 
-// The turn and the scale the compositor asked this display's window to be
-// drawn at. See `DisplaysFromSnapshots` in the header for why the bounds stay
-// the CRTC's.
+// Applies the layout's rotation and scale to `screen`. Bounds stay in CRTC
+// pixels; see `DisplaysFromSnapshots`.
 void TurnAndScale(display::Display& screen,
                   const DomicileDisplayLayout& wanted) {
-  // Captured before the scale is set: `GetSizeInPixel` answers bounds times
-  // scale until it is told otherwise, and the bounds here already are pixels.
+  // Read before setting the scale: `GetSizeInPixel` returns bounds times
+  // scale until set explicitly, and these bounds are already pixels.
   const gfx::Size pixels = screen.bounds().size();
   screen.set_rotation(RotationOf(wanted.transform));
   screen.set_device_scale_factor(static_cast<float>(wanted.scale));
   screen.set_size_in_pixels(pixels);
 }
 
-// The size a snapshot takes on the desktop: its native mode, or the
-// displayless bounds for a connector that reported none. See
-// `DisplayFromSnapshot` for why a modeless connector still takes room.
+// Returns the snapshot's native mode size, or the displayless bounds if it
+// has no mode.
 gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
   const display::DisplayMode* native_mode = snapshot.native_mode();
   return native_mode ? native_mode->size() : kDisplaylessBounds;
@@ -89,51 +80,28 @@ gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
 
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
                                      const gfx::Point& origin) {
-  // A connector with no native mode is connected but unreadable, and a display
-  // with empty bounds is one no window can be placed on -- so it gets the same
-  // bounds a machine with nothing plugged in gets, rather than nothing.
+  // A connector with no native mode gets the displayless bounds, since no
+  // window can be placed on empty bounds.
   const display::DisplayMode* native_mode = snapshot.native_mode();
   const gfx::Size size = SizeOf(snapshot);
-  // Not named `display`: that is the namespace half of this function's own
-  // names are in, and a local by that name makes `display::kInchInMm` below
-  // fail to compile.
+  // Not named `display`: that would shadow the `display::` namespace used
+  // below.
   display::Display screen(snapshot.display_id(), gfx::Rect(origin, size));
 
-  // THE PANEL LEAVES HERE OR IT DOES NOT LEAVE AT ALL. This display::Display is
-  // everything the browser process ever learns about a snapshot: the display
-  // list a producer is told reaches it as display::Screen::Get()->
-  // GetAllDisplays(), which is this list, and the DisplaySnapshot itself is
-  // inside //ui/ozone/platform/drm where //content cannot see it. So a number
-  // not set below is one that does not exist anywhere the compositor can be
-  // told it from.
+  // This is the only place the panel's data reaches display::Display, which
+  // is all the browser process learns about a snapshot.
   //
-  // The rate is straightforward: display_frequency() is Hz and is what every
-  // other platform's screen reports a mode with (screen_win.cc:296,
-  // screen_mac.mm:192, display_manager.cc:2469).
+  // display::Display has no physical size, so store it as DPI.
+  // components/domicile/browser/display_list.cc converts it back. See
+  // docs/DISPLAYS.md#physical-size-and-refresh.
   //
-  // THE MILLIMETERS LEAVE AS A DENSITY BECAUSE THERE IS NO FIELD FOR THEM.
-  // display::Display carries no physical size -- ManagedDisplayInfo does, and
-  // it is //ui/display/manager, 478 lines of ChromeOS product surface this fork
-  // deliberately does not port -- and set_pixels_per_inch is the one field
-  // whose value IS the panel's size, expressed per axis so both millimeter
-  // figures survive. components/domicile/browser/display_list.cc divides it
-  // back out by the same kInchInMm, and its test asserts this panel's numbers
-  // from the other end.
-  //
-  // Both are set on the way IN and DisplayList::UpdateDisplay copies neither,
-  // so a display the list already has keeps what it was added with. That is
-  // safe for exactly the reason the id is: display_id() is derived from the
-  // EDID, so an id the list already holds is the same panel -- and a panel's
-  // millimeters and its native mode are the two things about it that cannot
-  // change while it stays plugged in. What DOES change on a hotplug is the
-  // origin, and bounds is copied.
+  // DisplayList::UpdateDisplay copies neither field. That is safe because the
+  // id comes from the EDID, so the same id is the same panel.
   if (native_mode) {
     screen.set_display_frequency(native_mode->refresh_rate());
   }
-  // Zero millimeters is a connector saying it has no physical size -- a
-  // projector, a virtual output -- and a density divided out of it would be
-  // whatever the mode is over nothing. Left at display::Display's own zero,
-  // which is what "nobody said" is there too.
+  // Zero millimeters means no physical size (a projector, a virtual output).
+  // Leave the density unset rather than divide by zero.
   const gfx::Size millimeters = DisplayPhysicalSizeMm(snapshot);
   if (native_mode && !millimeters.IsEmpty()) {
     screen.set_pixels_per_inch(
@@ -142,17 +110,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
             millimeters.height());
   }
 
-  // THE PANEL'S NAME LEAVES HERE OR IT DOES NOT LEAVE AT ALL, for the same
-  // reason the millimeters above do: this display::Display is everything the
-  // browser process ever learns about a snapshot, and the DisplaySnapshot
-  // itself is inside //ui/ozone/platform/drm where //content cannot see it.
-  // `label` is the field display::Display has for exactly this -- "a
-  // user-friendly label, determined by the platform" -- and nothing on this
-  // platform was setting it.
-  //
-  // Set only when there is something to say. An empty label is what every
-  // display already has, and a display list where three monitors are all named
-  // "" is worse than one where they are named by id: it looks like an answer.
+  // Set only when non-empty, so an unnamed display keeps the default label.
   const std::string name = DisplayNameFromSnapshot(snapshot);
   if (!name.empty()) {
     screen.set_label(name);
@@ -168,12 +126,8 @@ std::string DisplayNameFromSnapshot(const display::DisplaySnapshot& snapshot) {
   const std::string make =
       display::EdidParser::ManufacturerIdToString(manufacturer_id);
 
-  // Three accessors and a join, and every decision in it is next door in
-  // edid_name.cc -- which has no Chromium types in it and can therefore be
-  // compiled and run outside a Chromium tree. That is the whole reason it is a
-  // separate file: this one cannot be, and the parts of this worth testing are
-  // the off-by-one in the descriptor walk and the four ways a name can be
-  // partly missing.
+  // The logic lives in edid_name.cc, which has no Chromium types so it can
+  // be tested outside a Chromium tree.
   return DisplayNameFrom(IsPnpId(make) ? make : std::string(),
                          snapshot.display_name(),
                          SerialNumberFromEdid(snapshot.edid()));
@@ -212,9 +166,8 @@ std::vector<gfx::Point> OriginsForLayout(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
-  // The right edge of everything the layout placed, which is where the rest
-  // start. Zero where it placed nothing, so an empty layout is a row from the
-  // desk's own corner.
+  // Unplaced connectors start at the right edge of everything the layout
+  // placed, or at zero if it placed nothing.
   int next_x = 0;
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     const DomicileDisplayLayout* wanted =
@@ -255,11 +208,8 @@ size_t PrimaryIndexForLayout(
     }
     ++index;
   }
-  // A layout that lights nothing, which the compositor refuses to write: a
-  // profile disabling every display it names leaves no desktop to put a window
-  // on and is rejected where the config is parsed. Answered with the first
-  // display rather than with nothing, because a list has to have a primary and
-  // `GetPrimaryDisplay` CHECKs that it does.
+  // The config parser rejects a layout that lights nothing. Return the first
+  // display anyway: `GetPrimaryDisplay` CHECKs that a primary exists.
   return 0u;
 }
 
@@ -272,28 +222,17 @@ void DrmScreen::OnDisplaysChanged(
     const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
-  // A hotplug arrives as the whole list rather than as a delta, so what is
-  // absent from it has been unplugged. DisplayList notifies its observers from
-  // AddOrUpdateDisplay and RemoveDisplay, which is the whole of the hotplug
-  // path -- there is no observer code of its own here.
+  // A hotplug sends the whole list, so a display missing from it was
+  // unplugged. DisplayList notifies observers itself.
   const std::vector<display::Display> displays =
       DisplaysFromSnapshots(snapshots, layout);
 
-  // Not always the first snapshot: a profile that turns the laptop panel off
-  // is the ordinary case on a full desk, and a primary that is dark is a
-  // browser drawing onto a screen nobody can see. See `PrimaryIndexForLayout`.
+  // Not always the first snapshot: a profile may turn the laptop panel off.
   const size_t primary = PrimaryIndexForLayout(snapshots, layout);
 
-  // THE PRIMARY GOES IN FIRST, and it is `DisplayList` that says so:
-  // `AddDisplay` reads "the first display must be primary" and DCHECKs it,
-  // and this build is `dcheck_always_on`. Filling the list in snapshot order
-  // with the primary somewhere in the middle crashed the browser on the first
-  // reading -- not on a hotplug, where the list is no longer empty, which is
-  // exactly the kind of difference a test catches and a desk does not.
-  //
-  // It is also the order this list is documented to arrive in: the display
-  // event's mojom says "the whole list, primary first", which before now was
-  // true by accident because the primary was always snapshot zero.
+  // Add the primary first: DisplayList::AddDisplay DCHECKs it, and this
+  // build has `dcheck_always_on`. The display event's mojom also promises
+  // primary first.
   base::flat_set<int64_t> still_here;
   display_list_.AddOrUpdateDisplay(displays[primary],
                                    display::DisplayList::Type::PRIMARY);
@@ -308,8 +247,7 @@ void DrmScreen::OnDisplaysChanged(
     ++index;
   }
 
-  // Collected before removing rather than removed while iterating: RemoveDisplay
-  // erases from the vector this would be walking.
+  // Collect first: RemoveDisplay erases from the vector being iterated.
   std::vector<int64_t> unplugged;
   for (const display::Display& display : display_list_.displays()) {
     if (!still_here.contains(display.id())) {
@@ -320,9 +258,8 @@ void DrmScreen::OnDisplaysChanged(
     display_list_.RemoveDisplay(id);
   }
 
-  // A DISPLAY TURNED UNDER A WINDOW THAT STAYED PUT. A reloaded profile that
-  // stands a monitor on its side moves no window, so nothing else tells the
-  // pointer over it to travel the new way round.
+  // A profile reload can rotate a display without moving its window, so
+  // nothing else updates the pointer's rotation on it.
   for (const display::Display& display : display_list_.displays()) {
     DrmWindowHost* window =
         window_manager_->GetWindowAt(display.bounds().CenterPoint());
@@ -337,10 +274,8 @@ const std::vector<display::Display>& DrmScreen::GetAllDisplays() const {
 }
 
 display::Display DrmScreen::GetPrimaryDisplay() const {
-  // DisplaysFromSnapshots answers with the displayless display rather than
-  // with nothing, so a screen that has been told about its displays -- even
-  // that there are none -- always has a primary. One that has not been told
-  // yet is a bug in the caller, and this is where it surfaces.
+  // DisplaysFromSnapshots always returns a display, so this fails only if
+  // called before OnDisplaysChanged.
   const auto primary = display_list_.GetPrimaryDisplayIterator();
   CHECK(primary != display_list_.displays().end());
   return *primary;
@@ -348,8 +283,8 @@ display::Display DrmScreen::GetPrimaryDisplay() const {
 
 display::Display DrmScreen::GetDisplayForAcceleratedWidget(
     gfx::AcceleratedWidget widget) const {
-  // Asked first because GetWindow() is NOTREACHED() on a widget the manager
-  // does not hold, and this is handed widgets belonging to other screens.
+  // GetWindow() is NOTREACHED() on unknown widgets, and callers pass widgets
+  // from other screens.
   if (!window_manager_->HasWindow(widget)) {
     return GetPrimaryDisplay();
   }
@@ -358,10 +293,8 @@ display::Display DrmScreen::GetDisplayForAcceleratedWidget(
 }
 
 gfx::Point DrmScreen::GetCursorScreenPoint() const {
-  // aura synthesizes a mouse move here after a window changes or the cursor is
-  // warped, so the answer is where the window that hears the pointer would
-  // put an event: the desk's host, wherever on the desk the pointer is.
-  // A cursor no window hears yet has nowhere to be.
+  // aura synthesizes a mouse move from this, so return where the window
+  // receiving pointer events (usually the desk's host) would see it.
   const std::optional<PointerHeard> heard = cursor_->Heard();
   if (!heard.has_value() || !window_manager_->HasWindow(heard->window)) {
     return gfx::Point();
@@ -372,10 +305,8 @@ gfx::Point DrmScreen::GetCursorScreenPoint() const {
 
 gfx::AcceleratedWidget DrmScreen::GetAcceleratedWidgetAtScreenPoint(
     const gfx::Point& point_in_dip) const {
-  // GetWindowAt() matches on GetBoundsInPixels(), and the point is in the
-  // screen's coordinates. Those are pixels on this platform even where a
-  // display has a scale: its bounds are the CRTC's -- `DisplaysFromSnapshots`
-  // says why -- and the scale only reaches what is drawn inside a window.
+  // Screen coordinates are pixels here even on a scaled display, since
+  // display bounds are CRTC pixels. See `DisplaysFromSnapshots`.
   const DrmWindowHost* window = window_manager_->GetWindowAt(point_in_dip);
   return window ? window->GetAcceleratedWidget() : gfx::kNullAcceleratedWidget;
 }
@@ -395,25 +326,15 @@ display::Display DrmScreen::GetDisplayMatching(
 }
 
 bool DrmScreen::IsScreenSaverActive() const {
-  // Nothing else is holding this screen. PlatformScreen's own default answers
-  // false too, but it answers with NOTIMPLEMENTED_LOG_ONCE() on the way, which
-  // is a line in every startup log saying a question was not answered -- and
-  // this one is.
-  //
-  // WaylandScreen has a window-system to ask and still assumes false, because
-  // idle_inhibitor says whether the saver is prevented rather than whether it
-  // is running. On a tty there is no window-system to ask: Domicile is the
-  // compositor, so blanking is the shell's decision and no other client can
-  // have taken the screen out from under it.
+  // Overridden to avoid PlatformScreen's NOTIMPLEMENTED log. Domicile is the
+  // compositor, so no other client can run a screen saver; blanking is the
+  // shell's decision.
   return false;
 }
 
 base::TimeDelta DrmScreen::CalculateIdleTime() const {
-  // Zero is "not idle", and it is the honest answer rather than a stub. Idle
-  // is measured from the last input event; input arrives over evdev and
-  // belongs to the compositor, which has it and this screen does not. When the
-  // shell wants an idle timer it will have one on its own side, and this would
-  // report from there rather than from a protocol that does not exist here.
+  // Input goes to the compositor over evdev, so this screen cannot measure
+  // idle time. Zero means "not idle".
   return base::Seconds(0);
 }
 

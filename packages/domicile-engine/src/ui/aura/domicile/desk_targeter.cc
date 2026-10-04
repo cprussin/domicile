@@ -18,7 +18,7 @@
 namespace aura {
 namespace {
 
-// Whether the root's targeter is a DeskTargeter. A property rather than a
+// Marks a root whose targeter is a DeskTargeter. A property, not a
 // dynamic_cast, because Chromium builds without RTTI.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kHasDeskTargeterKey, false)
 
@@ -44,8 +44,8 @@ class DeskTargeter : public WindowTargeter, public WindowObserver {
                                       ui::Event* event) override {
     ui::EventTarget* target = WindowTargeter::FindTargetForEvent(root, event);
     Window* window = static_cast<Window*>(root);
-    // Only the root's own leftovers: this is also asked about every window
-    // below the root that has no targeter of its own.
+    // Only redirect events the root would keep. This also runs for every
+    // descendant window that has no targeter of its own.
     if ((target != nullptr && target != window) || window->parent() ||
         page_ == nullptr || !event->IsLocatedEvent() ||
         !window->Contains(page_)) {
@@ -57,8 +57,7 @@ class DeskTargeter : public WindowTargeter, public WindowObserver {
              .has_value()) {
       return target;
     }
-    // Through ui::EventTarget, where it is public: aura::Window's override is
-    // private.
+    // Call through ui::EventTarget: aura::Window's override is private.
     static_cast<ui::EventTarget*>(window)->ConvertEventToTarget(page_, located);
     return WindowTargeter::FindTargetForEvent(page_, event);
   }
@@ -90,9 +89,9 @@ void TargetDeskPage(Window* root, Window* page) {
     static_cast<DeskTargeter*>(root->targeter())->SetPage(page);
     return;
   }
-  // A root with a targeter of somebody else's is left to it: the desk's host
-  // is a browser window, whose root has none, and the dispatcher's default
-  // is a plain WindowTargeter -- which this is, before anything past the edge.
+  // Leave a root with another targeter alone. The desk's host is a browser
+  // window, whose root has none, and the dispatcher's default is a plain
+  // WindowTargeter, which DeskTargeter extends.
   if (page == nullptr || root->targeter() != nullptr) {
     return;
   }

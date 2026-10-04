@@ -1,23 +1,20 @@
-// The shell guard-webview-active-tab.sh drives: one browser window, focused,
+// Shell module for guard-webview-active-tab.sh: one browser window, focused,
 // and a click on the fixture's action in the tray.
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
-// own log:
+// Console lines (the engine writes them to its log):
 //
 //   GUARD listening        the desktop was handed to Shell and a listener is
-//                          registered -- the harness working
+//                          registered (harness check)
 //   GUARD tray id=…        the fixture's row arrived, badged: it is installed
 //                          and its onClicked listener is registered
 //   GUARD focused          the window finished loading its page and this
 //                          focused it
 //   GUARD activated id=…   this clicked the fixture's action, `?activate=1`
 //
-// THE CLAIM IS NOT HERE. It is a color in the window, read by the guard's
-// probe: the fixture's onClicked paints the tab it is handed, and only a page
-// the click granted it activeTab on can be painted.
+// The guard's probe reads the color the extension paints. Only a tab the click
+// granted activeTab can be painted.
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Domicile's document calls `Shell` once the module has loaded.
 
 export const Shell = (_root, desktop) => {
   const say = (what) => {
@@ -25,8 +22,8 @@ export const Shell = (_root, desktop) => {
   };
 
   /**
-   * A query parameter this cannot run without. A default would turn a guard
-   * invoked wrongly into a measurement of something nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured guard
+   * fails instead of measuring something else.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -49,13 +46,14 @@ export const Shell = (_root, desktop) => {
   const expected = required(parameters, "expect");
   const activate = required(parameters, "activate") === "1";
 
-  // How long after the focus the action is clicked: the element tells the
-  // browser it was focused over one pipe, and the click goes over another.
+  // Delay between focusing and clicking: focus and the click reach the browser
+  // over different pipes, so they can arrive out of order.
   const SETTLE_MS = 1000;
 
   const view = document.createElement("webview");
 
-  // Inset on the witness, in whole percentages, as guard-webview-content-script.js.
+  // Inset on the witness, in whole percentages, as in
+  // guard-webview-content-script.js.
   view.style.position = "absolute";
   view.style.left = "10%";
   view.style.top = "10%";
@@ -81,13 +79,8 @@ export const Shell = (_root, desktop) => {
 
   const src = required(parameters, "src");
 
-  // FOCUSED ONCE THE PAGE HAS ARRIVED, not on the first page change: activeTab
-  // grants the page the tab is showing when the click lands, and one that has
-  // not committed is not that page. `view.url === src` is not arrival -- `url` is
-  // the guest's visible entry, which can be a pending one, and `loading` also
-  // falls for a load that stopped short of a commit. So the page says it arrived:
-  // the server's still page moves itself to `#ready` once it has loaded, a
-  // same-document commit no uncommitted page can make.
+  // Focus only once the page reports `#ready`. activeTab grants the committed
+  // page, and `view.url`/`loading` can reflect a pending or aborted load.
   const focusOnceArrived = () => {
     if (!focused && view.url === `${src}#ready` && !view.loading) {
       focused = true;
@@ -114,7 +107,8 @@ export const Shell = (_root, desktop) => {
   });
   say("listening");
 
-  // `src` last: it is what asks for a guest, and the element needs a frame first.
+  // Set `src` last: it requests the guest, and the element needs a frame
+  // first.
   document.body.append(view);
   view.setAttribute("src", src);
 };

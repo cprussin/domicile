@@ -15,9 +15,8 @@
 
 namespace domicile {
 
-// What a running engine can be told about the shell it serves, and what it
-// answers. One JSON object per line, a request in and a reply out, and the
-// connection is over.
+// The command protocol: requests a running engine accepts about the shell it
+// serves. Each connection carries one JSON request line and one reply line.
 //
 //   {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 //   -> {"type":"loaded"}
@@ -31,76 +30,52 @@ namespace domicile {
 //   -> {"type":"captured"}
 //   -> {"type":"refused","why":"..."}
 //
-// Newline-delimited JSON because that is already the framing in this system --
-// the compositor serves the host protocol in it, the engine speaks it back,
-// and the supervisor's own control socket answers it -- and a second framing
-// would be a second thing to get right for no gain.
-//
-// This half is pure on purpose: a line of somebody else's bytes in, a line of
-// ours out, and the one thing in between is injected. Getting those bytes on
-// and off a socket is chrome/browser/domicile/domicile_command_socket.cc's,
-// and is the part that cannot be tested with a string.
+// This file only parses and answers lines; the actions are injected so it can
+// be tested with strings. chrome/browser/domicile/domicile_command_socket.cc
+// owns the socket.
 
-// THE VERSION, AND WHY THIS CONTRACT HAS ONE WHEN THE OTHER TWO DO NOT.
-// `DATA.md` says to version a contract when producer and consumer can be on
-// different releases at the same time. This one can: the supervisor and the
-// engine are separately published deploy units -- `engine-release.nix` pins an
-// engine built from an older commit than main, and moving to a newer one is
-// its own reviewed commit -- so a desktop routinely runs a supervisor and an
-// engine from different revisions. The host<->chrome protocol is pinned at 1
-// for the opposite reason and the supervisor's own control socket carries no
-// number at all, because both of those have two ends in one binary.
+// The command protocol version.
 //
-// It goes in the request rather than in a path, because the socket is named by
-// the supervisor and bound by the engine -- there is no path to put it in --
-// and every connection is exactly one request, so there is no handshake to
-// negotiate it in either. The refusal is the check: an engine that does not
-// speak the version it was sent says so, by name, on the socket the command
-// came in on.
+// The supervisor and the engine ship separately (`engine-release.nix` pins the
+// engine), so the two ends can run different revisions. Each request carries
+// the version because there is no handshake. An engine that does not speak it
+// refuses the request and names both versions.
 inline constexpr int kCommandVersion = 1;
 
-// Carrying a believed `load_shell` out: serve this shell from now on, and put
-// it on the screen. Answers whether there was a shell window to put it in --
-// which is the one way applying a well-formed command can fail, and the reason
-// this is a `bool` rather than nothing.
+// Carries out `load_shell`: serves this shell and shows it. Returns false if
+// there is no shell window to load it into.
 using LoadShell =
     base::FunctionRef<bool(const base::FilePath& root,
                            const std::string& module)>;
 
-// Carries out a believed `open_url`: opens a browser window at `url`. Returns
-// whether a shell existed to own the window, for LoadShell's reason. The shell
-// places the window.
+// Carries out `open_url`: opens a browser window at `url`. Returns false if
+// there is no shell to own the window.
 using OpenUrl = base::FunctionRef<bool(const GURL& url)>;
 
 // How a screenshot ended: written, or why not.
 using ScreenshotDone =
     base::OnceCallback<void(base::expected<void, std::string>)>;
 
-// Carrying a believed `screenshot` out: write a PNG of the desk to `file`.
-// Answers through `done` because the display compositor reads the desk back
-// after this returns.
+// Carries out `screenshot`: writes a PNG of the desk to `file`. Answers through
+// `done` because the display compositor reads the desk back asynchronously.
 using Screenshot =
     base::FunctionRef<void(const base::FilePath& file, ScreenshotDone done)>;
 
-// The reply line, with its trailing newline: the bytes to write.
+// Receives the reply line, including its trailing newline.
 using CommandReply = base::OnceCallback<void(std::string)>;
 
-// Answer one request line, without its newline. `reply` runs once: before
-// this returns for every command but `screenshot`, and when `screenshot`'s
-// `done` runs for that one.
+// Answers one request line (without its newline). `reply` runs once:
+// before this returns, except for `screenshot`, where it runs from `done`.
 void AnswerCommand(std::string_view line,
                    LoadShell load_shell,
                    OpenUrl open_url,
                    Screenshot screenshot,
                    CommandReply reply);
 
-// The reply for a request this engine will not carry out, given the reason a
-// person should read.
+// Returns the refusal reply line for `why`.
 //
-// Public because the socket refuses on its own account as well: a peer that
-// holds a connection open without ever ending a line is refused before there
-// is a line to answer, and the refusal it gets should be the same shape as
-// every other one.
+// Public so the socket can refuse a peer that never ends a line with the same
+// reply shape.
 std::string RefusedCommand(std::string_view why);
 
 }  // namespace domicile

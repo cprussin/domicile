@@ -44,21 +44,16 @@ namespace {
 // Must match components/domicile/spike/solid_color_submitter.cc.
 constexpr char kSocketSwitch[] = "domicile-broker-socket";
 
-// Integer, not string, and that is not a style choice. Under ipcz an invitation
-// attachment is indexed by the first four bytes of its name read as a
-// little-endian integer, and any name that is not exactly 4 or 8 bytes long
-// lands on index 0 (mojo/core/ipcz_driver/invitation.cc, GetAttachmentIndex).
-// So two string-named pipes on one invitation collide, and the second attach
-// fails with MOJO_RESULT_ALREADY_EXISTS. Small integers, and at most
-// Invitation::kMaxAttachments (7) of them.
+// Integers, not strings: ipcz indexes an invitation attachment by the first
+// four bytes of its name, and maps any name not 4 or 8 bytes long to index 0
+// (mojo/core/ipcz_driver/invitation.cc, GetAttachmentIndex), so two string
+// names collide. At most Invitation::kMaxAttachments (7).
 constexpr uint64_t kBrokerPipeName = 0;
 constexpr uint64_t kProbePipeName = 1;
 
-// How an imported dmabuf reaches a GPU, and the reason the exo::Buffer port
-// lives in the browser: components/exo/buffer.cc:95 does exactly this, and
-// aura::Env exists in no other process. Null when there is no GPU — every
-// --disable-gpu run, and every --ozone-platform=headless one, where a dmabuf
-// could not be imported anyway.
+// The GPU interface that imports dmabufs, as components/exo/buffer.cc does.
+// Lives in the browser because only it has aura::Env. Null without a GPU
+// (--disable-gpu, --ozone-platform=headless).
 gpu::SharedImageInterface* GetSharedImageInterface() {
   ui::ContextFactory* context_factory =
       aura::Env::GetInstance()->context_factory();
@@ -73,39 +68,29 @@ gpu::SharedImageInterface* GetSharedImageInterface() {
   return context_provider->SharedImageInterface();
 }
 
-// The ozone platform on which the browser's displays ARE the machine's, rather
-// than some other compositor's. Only there does a producer want them: a
-// Domicile running nested is a window inside somebody else's session, and its
-// desktop is that window rather than the host's monitors.
+// The ozone platform whose displays are the machine's monitors. On any other
+// platform Domicile runs nested, and its desktop is a window in another
+// session.
 constexpr char kScanoutPlatform[] = "drm";
 
-// Must match ui/ozone/public/ozone_switches.cc. Spelled out rather than
-// included for the same reason kSocketSwitch above is: content/browser reads a
-// command line it does not own, and //ui/ozone is not a dependency this file is
-// worth adding to that target for one string.
+// Must match ui/ozone/public/ozone_switches.cc. Copied to avoid a dependency
+// for one string.
 constexpr char kOzonePlatformSwitch[] = "ozone-platform";
 
-// Keeps the broker's display list level with the screen's.
+// Forwards the screen's display list to the broker.
 //
-// A display::DisplayObserver rather than anything of Domicile's own: on the
-// DRM platform DrmScreen drives its DisplayList from the same snapshots the
-// modeset driver configures the CRTCs from, and DisplayList notifies from
-// AddOrUpdateDisplay and RemoveDisplay -- so a hotplug is already an
-// observation and needs no second route.
+// On DRM, DrmScreen builds its DisplayList from the same snapshots that
+// configure the CRTCs, so a hotplug already reaches this observer.
 //
-// Every notification re-reads the whole list rather than applying the delta it
-// was handed. The list is small, the producer is told the whole list anyway,
-// and a delta applied to a copy is a second copy to keep honest.
+// Each notification re-reads the whole list: it is small, and the producer
+// receives the whole list anyway.
 class DomicileDisplayWatcher : public display::DisplayObserver {
  public:
   explicit DomicileDisplayWatcher(domicile::FrameSinkBroker* broker)
       : broker_(broker) {
-    // The one ordering this depends on, stated rather than assumed.
-    // BrowserMainRunnerImpl::Initialize runs InitializeToolkit() -- which is
-    // where the parts build the screen -- before CreateStartupTasks(), and
-    // PostCreateThreadsImpl() is where this is reached from. A null screen
-    // means that stopped being true, and is worth a named crash rather than
-    // the one a null deref gives.
+    // BrowserMainRunnerImpl::Initialize builds the screen in
+    // InitializeToolkit() before CreateStartupTasks(), which leads here. Crash
+    // with a message if that order changes.
     CHECK(display::Screen::Get())
         << "domicile: no screen to read the displays off";
     display::Screen::Get()->AddObserver(this);
@@ -136,20 +121,9 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
   const raw_ptr<domicile::FrameSinkBroker> broker_;
 };
 
-// The producer's answer about the connectors, on its way to the platform that
-// owns them.
-//
-// Here rather than in //components/domicile/browser for the reason the two
-// getters above are there: the only route to a CRTC is //ui/ozone, and that
-// target deliberately depends on neither that nor //content. Every ozone
-// platform but DRM implements this as nothing, because every other one is a
-// window inside somebody else's session.
-// Which clipboard, in the two vocabularies this file has to hold at once.
-//
-// A function each way rather than a cast, for the reason every other
-// translation here is written out: the two enumerations are somebody else's to
-// reorder, and a copy that arrived on the wrong one of two clipboards would be
-// a paste that quietly produces what a person only brushed past.
+// Maps the mojom clipboard to ui's. A switch rather than a cast, because the
+// owners of either enum may reorder it, and a copy on the wrong clipboard
+// would paste unexpected text.
 ui::ClipboardBuffer BufferOf(domicile::mojom::Clipboard clipboard) {
   switch (clipboard) {
     case domicile::mojom::Clipboard::kCopy:
@@ -159,10 +133,8 @@ ui::ClipboardBuffer BufferOf(domicile::mojom::Clipboard clipboard) {
   }
 }
 
-// The other way. `std::nullopt` is a buffer this desktop has no clipboard for
-// -- `kDrag` is one, on the platforms that have it -- which is dropped rather
-// than folded onto one of the two: a drag is not a copy, and a producer told
-// it was would put it on the seat.
+// The reverse. Returns `std::nullopt` for buffers with no desktop clipboard,
+// such as `kDrag`, since a drag is not a copy.
 std::optional<domicile::mojom::Clipboard> ClipboardOf(
     ui::ClipboardBuffer buffer) {
   switch (buffer) {
@@ -175,9 +147,7 @@ std::optional<domicile::mojom::Clipboard> ClipboardOf(
   }
 }
 
-// The producer's turn, in ozone's words. The same four names in the same
-// order, and a switch rather than a cast so that a fifth is a compile error
-// here rather than a monitor turned the wrong way.
+// A switch rather than a cast, so a new transform is a compile error here.
 ui::DomicileDisplayLayout::Transform TransformOf(
     domicile::mojom::DisplayTransform transform) {
   switch (transform) {
@@ -192,6 +162,9 @@ ui::DomicileDisplayLayout::Transform TransformOf(
   }
 }
 
+// Applies the producer's display layout. Every ozone platform but DRM ignores
+// it, and //components/domicile/browser cannot depend on //ui/ozone, so this
+// lives here.
 void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   std::vector<ui::DomicileDisplayLayout> wanted;
   wanted.reserve(layout.size());
@@ -204,8 +177,8 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
                       .desk = display->desk});
   }
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
-  // And to whoever lays out the one page a desk is. After the modeset is
-  // asked for, so a page moved onto a display finds it lit.
+  // Update the desk after requesting the modeset, so a page moved onto a
+  // display finds it lit.
   std::vector<DomicileDeskDisplay> lit;
   for (const ui::DomicileDisplayLayout& display : wanted) {
     if (display.enabled) {
@@ -217,14 +190,10 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   DomicileDeskLaidOut(std::move(lit));
 }
 
-// The producer's word about a clipboard, on its way to the one this process
-// pastes out of.
+// Sets the clipboard this process pastes from.
 //
-// Here rather than in //components/domicile/browser for the reason the getters
-// above are there: the clipboard the browser reads is ui::OzonePlatform's, and
-// that target deliberately depends on neither //ui/ozone nor //content. Every
-// ozone platform but DRM implements this as nothing, because every other one
-// is a window inside somebody else's session and reads that session's
+// Lives here because //components/domicile/browser cannot depend on //ui/ozone.
+// Every platform but DRM ignores it: a nested run uses the host session's
 // clipboard.
 void SetClipboard(domicile::mojom::Clipboard clipboard,
                   const std::string& text) {
@@ -232,13 +201,11 @@ void SetClipboard(domicile::mojom::Clipboard clipboard,
                                                          text);
 }
 
-// The browser's frame sink broker and the socket a producer reaches it over.
+// The browser's frame sink broker and the socket producers reach it over.
 //
-// The socket path is the access control, and it is the whole of it. Holding a
-// FrameSinkBroker pipe is unrestricted authority to allocate frame sinks in
-// viz, so whoever can open the path can do that and nobody else can: the
-// invitation is not something a renderer can be handed, and what a renderer
-// does get — ExternalSurfaceProvider — cannot allocate anything.
+// The socket path is the only access control. A FrameSinkBroker pipe can
+// allocate any frame sink in viz. Renderers cannot get the invitation, and the
+// ExternalSurfaceProvider they do get cannot allocate.
 class DomicileBrowserService {
  public:
   DomicileBrowserService()
@@ -248,18 +215,16 @@ class DomicileBrowserService {
                 base::BindRepeating(&SetDisplayLayout),
                 base::BindRepeating(&SetClipboard)),
         provider_(&broker_) {
-    // Registered whatever platform this is, because a copy made in a page has
-    // to reach the producer on all of them: what differs is where a copy made
-    // ELSEWHERE lands, and that is `SetClipboard`'s half. Unretained is the
-    // lifetime this object already has -- a NoDestructor on the UI thread.
+    // Registered on every platform so copies made in a page reach the producer.
+    // `SetClipboard` handles copies made outside. Unretained is safe: this is a
+    // NoDestructor on the UI thread.
     ui::OzonePlatform::GetInstance()->SetDomicileCopiedCallback(
         base::BindRepeating(&DomicileBrowserService::Copied,
                             base::Unretained(this)));
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
-    // Watched on the platform that scans out and nowhere else. A nested run's
-    // screen is the HOST's monitors, and a producer told about those would
-    // take its desktop away from the window that defines it.
+    // Only on DRM. A nested run's screen is the host's monitors, which are not
+    // the producer's desktop.
     if (command_line.GetSwitchValueASCII(kOzonePlatformSwitch) ==
         kScanoutPlatform) {
       displays_ = std::make_unique<DomicileDisplayWatcher>(&broker_);
@@ -281,8 +246,7 @@ class DomicileBrowserService {
   }
 
  private:
-  // Something was copied in this browser, on its way to the producer that is
-  // the desktop's clipboard.
+  // Forwards a copy made in this browser to the producer.
   void Copied(ui::ClipboardBuffer buffer, const std::string& text) {
     std::optional<domicile::mojom::Clipboard> clipboard = ClipboardOf(buffer);
     if (clipboard.has_value()) {
@@ -290,11 +254,10 @@ class DomicileBrowserService {
     }
   }
 
-  // Binding the socket is a mkdir and a bind, and this is the UI thread. So it
-  // is posted, wherever it is called from.
+  // Binding the socket does blocking I/O, so it runs off the UI thread.
   //
-  // Nothing waits for the result. A producer connects whenever the socket turns
-  // up, and a page that embedded first is already waiting in the broker.
+  // Nothing waits for the result. A producer connects once the socket exists,
+  // and a page that embeds first waits in the broker.
   void Listen(const std::string& socket_path) {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock()},
@@ -313,10 +276,9 @@ class DomicileBrowserService {
 
   void SendInvitation(const std::string& socket_path,
                       mojo::PlatformChannelServerEndpoint endpoint) {
-    // Loudly, rather than logging and carrying on. --domicile-broker-socket is
-    // explicit: somebody asked for a socket at this path, and a browser that
-    // quietly does not have one looks from the outside exactly like a page that
-    // never asked to embed, which is the wrong thing to go and debug.
+    // Crash rather than log: the switch asked for a socket, and a browser
+    // without one looks like a page that never embedded, which misleads
+    // debugging.
     CHECK(endpoint.is_valid())
         << "domicile: could not listen on " << socket_path;
 
@@ -327,13 +289,13 @@ class DomicileBrowserService {
         mojo::PendingReceiver<domicile::mojom::SpikeProbe>(
             invitation.AttachMessagePipe(kProbePipeName)));
 
-    // A real invitation, not mojo::IsolatedConnection: the broker's whole job
-    // is forwarding the producer's CompositorFrameSink receiver on to the viz
-    // process, and an isolated connection cannot carry a handle that far. See
-    // ENGINE-FORK.md, "How the producer reaches the broker".
+    // An invitation, not mojo::IsolatedConnection, because the broker forwards
+    // the producer's CompositorFrameSink receiver to the viz process and an
+    // isolated connection cannot carry that handle. See
+    // docs/architecture/ENGINE-FORK.md#how-the-producer-reaches-the-broker.
     //
-    // The producer is not a child process, so there is no process handle to
-    // give. On POSIX that costs nothing.
+    // The producer is not a child process, so there is no process handle. POSIX
+    // does not need one.
     mojo::OutgoingInvitation::Send(std::move(invitation),
                                    base::kNullProcessHandle,
                                    std::move(endpoint));
@@ -342,7 +304,7 @@ class DomicileBrowserService {
 
   domicile::FrameSinkBroker broker_;
   domicile::ExternalSurfaceProvider provider_;
-  // Null off the scanout platform, which is every nested run.
+  // Null off DRM.
   std::unique_ptr<DomicileDisplayWatcher> displays_;
 };
 
@@ -355,9 +317,7 @@ DomicileBrowserService& GetDomicileBrowserService() {
 }  // namespace
 
 void StartDomicileFrameSinkBroker() {
-  // Constructing it is what opens the socket, and the constructor is the one
-  // that checks for the switch — so a browser that was not given a path does
-  // nothing here beyond building an object that binds nothing.
+  // Constructing the service opens the socket if the switch is set.
   GetDomicileBrowserService();
 }
 

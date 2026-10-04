@@ -17,7 +17,7 @@ namespace {
 
 using ui::NativeTheme;
 
-// The override is process-wide, so each test puts back what it found.
+// The override is process-wide, so each test clears it.
 class CursorColorSchemeTest : public testing::Test {
  protected:
   ~CursorColorSchemeTest() override {
@@ -63,8 +63,7 @@ TEST_F(CursorColorSchemeTest, ThePointerTurnsWithTheDesk) {
 }
 
 TEST_F(CursorColorSchemeTest, AnUpdateThatKeepsTheSchemeRecolorsNothing) {
-  // A theme update is also contrast, forced colors and the rest; each one
-  // recolored would throw away every cursor the loader has made.
+  // Recoloring discards cached cursors, so non-scheme updates are ignored.
   NativeTheme::SetPreferredColorSchemeOverride(
       NativeTheme::PreferredColorScheme::kDark);
   CursorColorScheme scheme(NativeTheme::GetInstanceForNativeUi(), Record());

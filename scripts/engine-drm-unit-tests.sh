@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The DRM platform's own gtest cases in ozone_unittests, and the two evdev
+# Runs the DRM platform's gtest cases in ozone_unittests, plus the two evdev
 # suites linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
 # scripts/test-a-fast-scroll-goes-further.sh and
 # scripts/test-a-mouse-goes-through-libinput.sh).
@@ -7,35 +7,21 @@
 #   ./scripts/engine-drm-unit-tests.sh        # the suites this fork wrote
 #   ./scripts/engine-drm-unit-tests.sh all    # and upstream's, on the probe
 #
-# THE FLOORS BELOW WERE WRITTEN TWICE AND THE COPIES HAD PARTED, which is the
-# whole argument for this file existing. `engine.yml` carried one list and
-# `engine-drm-probe.yml` another; they disagreed on `DrmScreenTest` — 26
-# against 18 — and the probe's had no `DrmEdidSerialTest` at all. Both were
-# right the day they were written. Neither could be run outside CI, so nothing
-# but CI could notice. The numbers here are the newer list's, which is the one
-# that has been kept up with the cases that landed.
+# Shared by engine.yml and engine-drm-probe.yml so the floors live in one
+# place.
 #
-# ONE FLOOR PER SUITE. A floor over the total would let one suite's cases pay
-# for another's disappearance, and `--gtest_filter` matching nothing exits 0,
-# so a suite that stopped linking is otherwise a silent pass. Each is a floor
-# rather than an equality, so adding a case does not fail the job.
-#
-# These ran nowhere a pull request could see until recently, and that was not
-# an oversight: the dev build named only wayland and headless, so DrmScreenTest
-# and DrmModesetTest were not in any binary it produced and could not be.
-# `ozone_platform_drm = true` changed that, and a test that runs on demand is a
-# test that runs after the change that broke it has already landed.
+# One floor per suite: `--gtest_filter` matching nothing exits 0, so a suite
+# that stopped linking would otherwise pass. Floors, not exact counts, so
+# adding a case does not fail.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-# Everything, or only ours. The probe runs the whole suite because `DrmScreen`
-# is reached through `OzonePlatformDrm` and upstream's own cases over that
-# platform are what would catch us breaking it from underneath; the dev build
-# runs ours because the rest is upstream's business and this is the cheap one.
-# The two jobs ask different questions.
+# `all` also runs upstream's cases, which catch the fork breaking
+# `OzonePlatformDrm`; the probe uses it. The default runs only the fork's
+# suites, which is cheaper.
 WHOLE_SUITE="${1:-ours}"
 case "$WHOLE_SUITE" in
   (ours|all) ;;

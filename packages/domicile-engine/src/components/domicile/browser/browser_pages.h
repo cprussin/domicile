@@ -8,19 +8,15 @@ class GURL;
 
 namespace domicile {
 
-// Whether `url` is a page Chrome serves itself: chrome:// and
+// Whether `url` is a page Chrome serves itself: chrome:// or
 // chrome-untrusted://.
 //
-// NONE OF THEM MEANS ANYTHING ON A DESK. Each is Chrome's own UI for Chrome's
-// own window -- its history, its downloads, its settings -- and a desk has no
-// such window. Worse, they assume one: HistoryUI looks its tab up
-// unconditionally, and opened in a <webview>, whose guest is in no tab strip,
-// it took the browser process down. So a <webview> is refused them; see
+// These pages expect a Chrome browser window. Some crash the browser process
+// in a <webview>: HistoryUI looks up its tab, and a guest has none. See
 // BrowserPageThrottle.
 //
-// A PAGE, NOT A RESOURCE. chrome://resources is loaded by the PDF viewer, an
-// extension's page, and that is a subresource rather than a navigation, so
-// nothing asks this about it.
+// Only navigations are checked. Subresources such as chrome://resources, which
+// the PDF viewer loads, are unaffected.
 bool IsBrowserPage(const GURL& url);
 
 }  // namespace domicile

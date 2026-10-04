@@ -1,21 +1,20 @@
-// The shell guard-extension-installer.sh drives: one <webview>, showing one
-// page, on the witness color -- guard-webview-content-script.js with two
-// differences, both because the extension arrives while the page is up.
+// The shell module guard-extension-installer.sh loads: one <webview> on the
+// witness color, like guard-webview-content-script.js.
 //
-// It binds the control channel, because the list the installer is handed
-// arrives on it, and registering a listener is what binds it (see
-// DomicileHost::AddedEventListener). And it reloads the <webview> every
-// second, because a content script runs in a page loaded AFTER its extension
-// is installed, and the install is asynchronous: nothing tells this page when
-// it is done, so it asks again until the guard has its answer.
+// It differs in two ways because the extension installs while the page is up:
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// - It registers a listener to bind the control channel, which carries the
+//   extension list (see DomicileHost::AddedEventListener).
+// - It reloads the <webview> every second, because a content script runs only
+//   in pages loaded after its extension installs, and nothing signals when the
+//   asynchronous install finishes.
+//
+// The engine's document calls `Shell` once the module loads.
 
 export const Shell = (_root, desktop) => {
   /**
-   * A query parameter this cannot run without. A default would turn a guard
-   * invoked wrongly into a measurement of something nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured guard
+   * fails instead of measuring the wrong thing.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -43,7 +42,7 @@ export const Shell = (_root, desktop) => {
   const parameters = new URLSearchParams(location.search);
   const view = document.createElement("webview");
 
-  // Inset on the witness, in whole percentages, as guard-webview-content-script.js.
+  // Inset on the witness, as in guard-webview-content-script.js.
   view.style.position = "absolute";
   view.style.left = "10%";
   view.style.top = "10%";
@@ -53,7 +52,7 @@ export const Shell = (_root, desktop) => {
 
   document.body.style.background = `#${required(parameters, "witness")}`;
 
-  // `src` last: it is what asks for a guest, and the element needs a frame first.
+  // Set `src` after attaching: it requests a guest, which needs a frame.
   document.body.append(view);
   view.setAttribute("src", required(parameters, "src"));
   setInterval(() => {

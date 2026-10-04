@@ -8,8 +8,8 @@
 namespace aura {
 namespace {
 
-// A 1920x1280 host window whose page is the desk: 5520x3200, with the host
-// monitor's corner 1920 down from the page's.
+// A 1920x1280 host window showing a 5520x3200 desk page, whose corner is
+// 1920 above the host monitor's.
 constexpr gfx::Size kRoot(1920, 1280);
 constexpr gfx::Rect kPage(0, -1920, 5520, 3200);
 
@@ -18,8 +18,7 @@ TEST(DomicileDeskTargeterTest, APointerOnTheHostIsLeftToAura) {
 }
 
 TEST(DomicileDeskTargeterTest, APointerOnAnotherMonitorIsThePages) {
-  // To the right of the host, on the next monitor: the page has it, where the
-  // page is, though no window between the root and the page reaches that far.
+  // On the monitor right of the host, outside the root's bounds.
   EXPECT_EQ(DeskPagePoint(kRoot, kPage, gfx::PointF(3000, -1000)),
             gfx::PointF(3000, 920));
 }

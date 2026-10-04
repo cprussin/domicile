@@ -19,14 +19,14 @@ TEST(DeskTabsTest, TheActiveTabIsTheOneThatLastHadFocus) {
   tabs.Focus(3);
   tabs.Focus(1);
   EXPECT_EQ(tabs.Active(), 1);
-  // And the order is creation's, whatever the focus did.
+  // Index order is creation order, regardless of focus.
   EXPECT_EQ(tabs.InCreationOrder(), (std::vector<int>{1, 2, 3}));
   EXPECT_EQ(tabs.IndexOf(3), 2);
 }
 
 TEST(DeskTabsTest, BeforeAnyFocusTheFirstMadeIsActive) {
-  // A tab nobody has focused yet goes behind every tab somebody has, so the
-  // shell's first window is active until the user works in another.
+  // Unfocused tabs sort behind focused ones, so the first window stays active
+  // until another is focused.
   DeskTabs tabs;
   EXPECT_EQ(tabs.Active(), std::nullopt);
   tabs.Add(1);
@@ -53,8 +53,7 @@ TEST(DeskTabsTest, ClosingTheActiveTabActivatesTheOneFocusedBeforeIt) {
 }
 
 TEST(DeskTabsTest, AnExtensionPageNeverTakesTheActiveTab) {
-  // A popup is in a <webview> too, and a popup that made itself the active tab
-  // would answer its own tabs.query with itself.
+  // Otherwise a popup's tabs.query would return the popup itself.
   EXPECT_TRUE(TakesActiveOnFocus("https"));
   EXPECT_TRUE(TakesActiveOnFocus("file"));
   EXPECT_FALSE(TakesActiveOnFocus("chrome-extension"));
@@ -82,10 +81,9 @@ DeskWindowCreate APopup() {
 
 TEST(DeskTabsTest, APopupWindowAtOneAddressIsOpened) {
   // Bitwarden's sign-in: windows.create({type: "popup", url, width, height,
-  // focused}). The size is the shell's to honor, so it decides nothing here.
+  // focused}). The shell handles the size.
   EXPECT_TRUE(DeskOpensWindow(APopup()));
-  // `panel` is Chrome's deprecated spelling of a popup, which Chrome opens as
-  // one.
+  // Chrome opens the deprecated `panel` as a popup.
   DeskWindowCreate panel = APopup();
   panel.type = "panel";
   EXPECT_TRUE(DeskOpensWindow(panel));
@@ -95,9 +93,7 @@ TEST(DeskTabsTest, APopupWindowAtOneAddressIsOpened) {
 }
 
 TEST(DeskTabsTest, AWindowThatIsNotAPopupAtOneAddressIsRefused) {
-  // A normal window is the shell's browser window, which tabs.create already
-  // asks for; and a window with no address, two, a tab moved into it, an
-  // opener or an incognito profile is one the shell has no way to make.
+  // tabs.create covers normal windows. The shell cannot create the rest.
   DeskWindowCreate normal = APopup();
   normal.type = "normal";
   EXPECT_FALSE(DeskOpensWindow(normal));
@@ -125,8 +121,8 @@ TEST(DeskTabsTest, AWindowThatIsNotAPopupAtOneAddressIsRefused) {
 }
 
 TEST(DeskTabsTest, ZeroZoomsToTheDefaultAndOutOfRangeIsRefused) {
-  // tabs.setZoom's 0 is the default, as in Chrome. Outside the range the
-  // <webview> element holds its own setZoom to is refused, not stored.
+  // 0 means the default, as in Chrome. Values outside <webview>'s zoom range
+  // are refused.
   EXPECT_EQ(DeskZoomFactor(1.5, 1.25, 0.25, 5.0), 1.5);
   EXPECT_EQ(DeskZoomFactor(0, 1.25, 0.25, 5.0), 1.25);
   EXPECT_EQ(DeskZoomFactor(-1, 1.25, 0.25, 5.0), 1.25);
@@ -137,8 +133,8 @@ TEST(DeskTabsTest, ZeroZoomsToTheDefaultAndOutOfRangeIsRefused) {
 }
 
 TEST(DeskTabsTest, OnlyAutomaticPerOriginZoomIsTaken) {
-  // A guest's zoom is HostZoomMap's, per site: Chrome's automatic, per-origin
-  // mode. "" is a field left out, which defaults to it.
+  // Guests zoom per site through HostZoomMap. "" means omitted, which
+  // defaults to that mode.
   EXPECT_TRUE(DeskTakesZoomSettings("", ""));
   EXPECT_TRUE(DeskTakesZoomSettings("automatic", ""));
   EXPECT_TRUE(DeskTakesZoomSettings("", "per-origin"));
@@ -161,8 +157,7 @@ DeskTabFacts Facts() {
                       .in_last_focused_window = true};
 }
 
-// The one tab of a popup window an extension opened, seen from somewhere
-// other than that window.
+// The single tab of an extension's popup window, queried from outside it.
 DeskTabFacts PopupFacts() {
   return DeskTabFacts{.active = true,
                       .index = 0,
@@ -180,8 +175,7 @@ TEST(DeskTabsTest, AnEmptyQueryMatchesEveryTab) {
 }
 
 TEST(DeskTabsTest, ThePopupQueryMatchesTheActiveTabOnly) {
-  // tabs.query({active: true, currentWindow: true}), which is most popups'
-  // first line.
+  // tabs.query({active: true, currentWindow: true}), the common popup query.
   DeskTabQuery query;
   query.active = true;
   query.current_window = true;
@@ -196,8 +190,8 @@ TEST(DeskTabsTest, ThePopupQueryMatchesTheActiveTabOnly) {
 }
 
 TEST(DeskTabsTest, APopupWindowsTabIsNotTheDesksActiveTab) {
-  // Its own window's active tab, which a query from the desk does not ask
-  // about: the page the popup was opened over is still the answer.
+  // It is active only in its own window. From the desk, the page under the
+  // popup stays the active tab.
   DeskTabQuery query;
   query.active = true;
   query.current_window = true;
@@ -241,8 +235,7 @@ TEST(DeskTabsTest, AWindowTypeIsTheTabsWindows) {
 }
 
 TEST(DeskTabsTest, WhatADeskTabNeverIsMatchesNothing) {
-  // No pin, no group, no split, no discard: asking for one finds none, and
-  // asking for their absence finds every tab.
+  // Desk tabs are never pinned, grouped, split or discarded.
   DeskTabQuery pinned;
   pinned.pinned = true;
   EXPECT_FALSE(DeskTabMatches(pinned, Facts()));

@@ -1,42 +1,20 @@
-// The shell guard-webview-routed-link.sh drives: one browser window, whose page
-// holds a single ordinary link.
+// The shell module guard-webview-routed-link.sh loads: one browser window whose
+// page holds a single link.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it, so a guard
-// that shipped its own HTML would be running a configuration the product does
-// not have. See ShellURLLoaderFactory::ShellDocument. It has to be a
-// domicile:// document for a further reason: the browser binds WebViewGuestHost
-// only for the shell's origin, so a <webview> anywhere else cannot ask for a
-// guest at all.
-//
-// WHAT THIS PAGE REPORTS, AND WHY IT IS EXACTLY TWO THINGS.
-//
-// A PRESS LANDING IN ITS OWN CHROME, which is the reading that makes every
-// absence below a measurement: a run where no click reaches this browser at
-// all looks exactly like a run where one did and nothing came of it.
-// `guard-webview-click.sh` is where that lesson was paid for.
-//
-// The subject is a middle click on an ordinary link: a gesture asking for the
-// link in a second window, which a page cannot open. It reaches
-// `WebContentsDelegate::OpenURLFromTab` on the guest, which opens a desk
-// browser window at the address instead of letting content open one. The
-// window in the desk's list is half the claim, and its address shows the
-// right link opened.
-//
-// This page does not draw the second window. `guard-webview-new-window.js`
-// does that for `target="_blank"`. This guard asks whether the delegate was
-// asked and answered: the engine's log and the list cover both halves. The log
-// line tells the two paths apart, because `ReportNewWindow` is shared and the
-// list alone cannot.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// - A shell is a module the engine loads into its own document (see
+//   ShellURLLoaderFactory::ShellDocument), so the guard ships a module, not
+//   HTML.
+// - It must be served from domicile:// because the browser binds
+//   WebViewGuestHost only for the shell's origin.
+// - It logs presses on its own strip, so a missing reading later means
+//   something: without a press here, the click never reached this browser.
+// - It logs the desk's browser-window list. A middle click on the link should
+//   add a window at the link's address.
 
 export const Shell = (_root, desktop) => {
   /**
-   * A query parameter this cannot run without. Missing means the guard invoked
-   * this wrongly, and a default would turn that into a measurement of something
-   * nobody asked for.
+   * Reads a required query parameter. Throws when missing: a default would
+   * measure a setup the guard did not ask for.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -53,9 +31,7 @@ export const Shell = (_root, desktop) => {
 
   const parameters = new URLSearchParams(location.search);
 
-  // The shell's own half of the window, above the element and the height the
-  // guard clicks into for its first press. A plain <div>: nothing here takes
-  // focus or navigates.
+  // The shell's strip above the <webview>. The guard's first press lands here.
   const stripHeight = `${required(parameters, "strip")}px`;
   const strip = document.createElement("div");
   strip.style.position = "absolute";
@@ -65,12 +41,9 @@ export const Shell = (_root, desktop) => {
   strip.style.blockSize = stripHeight;
   strip.style.background = "#204060";
 
-  // The window's page. Sized rather than stretched between insets, which is the
-  // mistake the click guard already paid for: a <webview> is a replaced element,
-  // and an absolutely positioned replaced element with `auto` size takes its
-  // INTRINSIC size between two insets — 300x150, in the corner — leaving most of
-  // the window under nothing at all and the guard clicking the page instead of
-  // the guest.
+  // The browser window's page. Sized explicitly: a <webview> is a replaced
+  // element, so with `auto` size between two insets it takes its intrinsic
+  // 300x150 and the guard's press misses it.
   const view = document.createElement("webview");
   view.style.position = "absolute";
   view.style.insetBlockStart = stripHeight;
@@ -79,15 +52,13 @@ export const Shell = (_root, desktop) => {
   view.style.blockSize = `calc(100% - ${stripHeight})`;
   view.style.border = "0";
 
-  // The harness's own reading: a press that landed in this document.
+  // Shows the harness can deliver a press to this document.
   document.addEventListener("mousedown", (event) => {
     say(`chrome-mousedown target=${event.target.localName}`);
   });
 
-  // The claim's other half: a browser window for the link in the desk's list.
-  // The address is logged on the same line, so a window at another page
-  // cannot pass; the guard greps for the fixture's /opened. This page's own
-  // <webview> is the shell's page, so it is in no list.
+  // Logs each browser window in the desk's list with its address, so a window
+  // at the wrong page cannot pass.
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
@@ -101,9 +72,9 @@ export const Shell = (_root, desktop) => {
     }
   });
 
-  // Where this window went, which a middle click must not change. Read from the
-  // element, not the page: /opened also loads in the browser's new window, so
-  // the page's own line cannot say which window it is in.
+  // A middle click must not navigate this guest. Read from the element because
+  // /opened also loads in the new window, so the page's own log cannot tell
+  // the two apart.
   view.addEventListener("domicile-page-change", () => {
     say(`first-page url=${view.url}`);
   });
@@ -111,9 +82,8 @@ export const Shell = (_root, desktop) => {
   document.body.style.margin = "0";
   document.body.append(strip);
 
-  // Last, and this is the order that matters: `src` is what makes a <webview>
-  // ask for a guest, and setting it before the element is in the document would
-  // ask before there is a frame to attach one to.
+  // Set `src` after the element is in the document. `src` makes the <webview>
+  // ask for a guest, and before insertion there is no frame to attach it to.
   document.body.append(view);
   view.setAttribute("src", required(parameters, "src"));
 

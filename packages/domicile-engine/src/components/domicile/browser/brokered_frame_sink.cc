@@ -24,24 +24,19 @@
 namespace domicile {
 namespace {
 
-// What a window is: sampled by the display compositor, and nothing more.
+// Window buffers are only sampled by the display compositor.
 //
-// Not SCANOUT, which is what would let viz promote the quad to an overlay. A
-// SharedImage may only claim it if the buffer behind it was allocated for it,
-// and on a render node with no KMS behind it gbm refuses that — measured on
-// crux, where the NVIDIA backend gives out GBM_BO_USE_LINEAR buffers and
-// nothing more. Claiming it anyway produces a SharedImage that is created and
-// then never drawn. Overlay promotion is phase 3's, with a real display.
+// Not SCANOUT: a SharedImage may claim it only if the buffer was allocated for
+// scanout, and gbm on a render node without KMS refuses that (seen on crux's
+// NVIDIA backend). A SharedImage that claims it anyway is never drawn.
 constexpr gpu::SharedImageUsageSet kWindowUsage =
     gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
 
-// The client's DRM format, as viz names the same bytes.
+// Maps a DRM fourcc to the matching viz format.
 //
-// A dmabuf says its layout in a fourcc and a SharedImage says it in a
-// SharedImageFormat, and getting the two out of step does not fail — it draws
-// the window with its channels permuted. DRM names a pixel from the most
-// significant byte down and viz names it in memory order, which is why
-// ARGB8888 is BGRA_8888 here.
+// A mismatch does not fail; it draws the window with permuted channels. DRM
+// names channels from the most significant byte and viz in memory order, so
+// ARGB8888 is BGRA_8888.
 std::optional<viz::SharedImageFormat> FormatFromFourcc(uint32_t fourcc) {
   switch (fourcc) {
     case 0x34325241:  // DRM_FORMAT_ARGB8888
@@ -80,8 +75,7 @@ BrokeredFrameSink::BrokeredFrameSink(
       get_shared_image_interface_(std::move(get_shared_image_interface)) {
   host_frame_sink_manager_->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
-  // What the producer calls this window, so that a viz trace names the app
-  // rather than the mechanism.
+  // Names the app in viz traces.
   host_frame_sink_manager_->SetFrameSinkDebugLabel(
       frame_sink_id_, app_id_.empty() ? "BrokeredFrameSink" : app_id_);
 }
@@ -97,16 +91,14 @@ BrokeredFrameSink::~BrokeredFrameSink() {
 void BrokeredFrameSink::CreateCompositorFrameSink(
     mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
     mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver) {
-  // A producer that brought its own ends gets them forwarded and is viz's
-  // client from here; the browser is out of its frame path entirely.
+  // The producer submits its own frames; the browser is not in the path.
   if (client && receiver) {
     host_frame_sink_manager_->CreateCompositorFrameSink(
         frame_sink_id_, std::move(receiver), std::move(client));
     return;
   }
 
-  // Otherwise the browser is the client, because it is the one that will be
-  // assembling the frames.
+  // Otherwise the browser builds the frames, so it is the client.
   host_frame_sink_manager_->CreateCompositorFrameSink(
       frame_sink_id_, sink_.BindNewPipeAndPassReceiver(),
       client_receiver_.BindNewPipeAndPassRemote());
@@ -116,19 +108,15 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
                               const viz::LocalSurfaceId& local_surface_id,
                               const gfx::Size& size,
                               double scale) {
-  // Late, and dropped rather than passed on. Several <app> elements showing
-  // one window share its allocator but ask over pipes of their own, so an
-  // older id can land after a newer one. A producer told to submit to it would
-  // be refused by viz as a decrease, and viz answers a decrease by closing the
-  // sink -- which freezes the window for good. The newer embed already said
-  // everything this one would.
+  // Drop a late, older id. Several <app> elements for one window share an
+  // allocator but use separate pipes, so ids can arrive out of order. Viz
+  // closes a sink that submits to an older id, freezing the window.
   if (local_surface_id_.is_valid() &&
       local_surface_id_.IsNewerThan(local_surface_id)) {
     return;
   }
 
-  // A page that navigates or reloads embeds again under a different frame
-  // sink, so the old edge has to go before the new one is added.
+  // A navigation or reload re-embeds under a new parent, so drop the old edge.
   if (parent_frame_sink_id_.is_valid()) {
     host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
         parent_frame_sink_id_, frame_sink_id_);
@@ -140,8 +128,7 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   local_surface_id_ = local_surface_id;
   size_ = size;
 
-  // Only worth asking for when the browser is the one being asked: a producer
-  // holding its own sink calls SetNeedsBeginFrame itself.
+  // A producer holding its own sink calls SetNeedsBeginFrame itself.
   if (sink_) {
     sink_->SetNeedsBeginFrame(true);
   }
@@ -173,9 +160,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     return 0;
   }
 
-  // The whole of the exo::Buffer port. Everything else that file does — texture
-  // caching, release fences, protected content, YUV — is either viz's job on
-  // this side of the seam or not phase 1's.
+  // The part of exo::Buffer this needs. Its caching, fences, protected content
+  // and YUV handling are viz's job or not yet supported.
   scoped_refptr<gpu::ClientSharedImage> shared_image = sii->CreateSharedImage(
       {*format, size, gfx::ColorSpace::CreateSRGB(), kWindowUsage,
        "DomicileWindow"},
@@ -193,10 +179,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
   buffer.resource.id = next_resource_id_;
   next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
 
-  // Whether anything outside the browser can name this SharedImage is the
-  // question "Whether the producer can submit its own frames" asks. Exported
-  // unconditionally, because the answer is the same either way and the cost is
-  // a mailbox and a sync token.
+  // Exported unconditionally; it costs only a mailbox and a sync token. See
+  // ENGINE-FORK.md#buffer-import.
   *exported = shared_image->Export();
   buffer.shared_image = std::move(shared_image);
 
@@ -236,8 +220,8 @@ bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
                      /*layer_id=*/0u,
                      /*fast_rounded_corner=*/false);
 
-  // The quad the whole design is for: the client's own buffer, as a texture viz
-  // can promote to an overlay rather than copy.
+  // The client's buffer as a texture, which viz can promote to an overlay
+  // instead of copying.
   viz::TextureDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
   quad->SetNew(quad_state, rect, rect,
@@ -282,8 +266,7 @@ void BrokeredFrameSink::ReleaseReturnedResources(
     if (iter == resource_to_buffer_.end()) {
       continue;
     }
-    // wl_buffer.release. The producer may draw into that dmabuf again, and not
-    // one moment sooner.
+    // wl_buffer.release: the producer may now reuse the dmabuf.
     observer_->OnBufferReleased(iter->second);
   }
 }
@@ -316,9 +299,8 @@ void BrokeredFrameSink::OnCompositorFrameTransitionDirectiveProcessed(
 void BrokeredFrameSink::OnSurfaceEvicted(
     const viz::LocalSurfaceId& local_surface_id) {}
 
-// The producer's LocalSurfaceIds come from the embedder, which allocates them,
-// so the browser has nothing to learn from activation. Registration asks for
-// ReportFirstSurfaceActivation::kNo and these are never called.
+// Unused: the embedder allocates the LocalSurfaceIds, and registration passes
+// ReportFirstSurfaceActivation::kNo.
 void BrokeredFrameSink::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {}
 

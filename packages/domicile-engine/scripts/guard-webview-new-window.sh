@@ -1,67 +1,39 @@
 #!/usr/bin/env bash
-# A link with target="_blank" inside a browser window, and the second window it
-# has to produce.
+# Checks a target="_blank" link inside a browser window opens a second window
+# the shell draws.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-new-window.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, exactly as guard-webview-click.sh
-# runs: nothing here is measured in pixels, so `--ozone-platform=headless` with
-# software compositing is the whole of the environment.
+# Runs headless with software compositing, like guard-webview-click.sh, since
+# nothing is measured in pixels.
 #
-# Why: the page in a browser window is a guest with no SiteInstance of its
-# own. That keeps the user logged in, and content CHECKs it in
-# `WebContentsImpl::CreateNewWindow`, so `WebViewGuest` refuses the window
-# content would make. It opens a desk browser window at the address instead
+# A browser window's page is a guest with no SiteInstance of its own, which
+# keeps the user logged in, but content CHECKs for one in
+# `WebContentsImpl::CreateNewWindow`. So `WebViewGuest` refuses content's window
+# and opens a desk browser window at the address instead
 # (src/components/domicile/mojom/browser_windows.mojom). The shell sees it in
-# `browserwindowschanged` and draws it where its layout puts it.
+# `browserwindowschanged` and draws it.
 #
-# WHAT IT ASSERTS, in order, because each answer is only worth anything if the
-# one before it holds:
+# Asserts, in order, since each reading depends on the one before:
 #
-#   the shell page ran               or nothing here was ever set up
-#   a press reached the shell's      the harness can deliver a click to this
-#     document                        document at all. Without it, an absence
-#                                     below is not a measurement
-#   there is a page in the window    that a guest was made, attached, navigated
-#   the press landed in the guest    measured in the window's own page: the hit
-#                                     test crossed into it rather than stopping
-#                                     at the element
-#   a window was opened              the claim's first half: the refusal
-#                                     opened a browser window that reached
-#                                     the shell
-#   at the address the link named    the address survived the trip, rather than
-#                                     an empty or a stale one arriving
-#   a second view was made           the shell acted on it — this guard's own
-#                                     page, and the step that separates "told"
-#                                     from "drawn"
-#   the page it names then loaded    the claim's other half, which no earlier
-#                                     step can fake: the window's page loaded
-#                                     and attached to the second element, so
-#                                     the user sees the linked page
+#   - the shell page ran
+#   - a press reached the shell's document, so the harness can deliver clicks
+#   - a page loaded in the window
+#   - the press landed in the guest page, not just on the element
+#   - a browser window was opened and reached the shell
+#   - at the address the link named
+#   - the shell created a second view for it
+#   - that view's page loaded, so the user sees the linked page
 #
-# The last two readings exist because a listed window is not a window on
-# screen. A guard that stopped at `new-window url=…` would pass a desktop that
-# shows the user nothing. The list and the second page are different claims,
-# in different processes.
+# The last two are required because a listed window is not a window on screen.
+# Unit tests cannot cover this: happy-dom has no guest or browser process to
+# refuse a window.
 #
-# A unit test cannot make this claim. The shell's tests hand the desktop a list
-# and assert it draws each window, which passes whether or not anything real
-# sends one. happy-dom has no guest and no browser process to refuse a window.
-# Only a real engine shows whether `target="_blank"` opens a window.
-#
-# HOW IT CAN FAIL, which is the part a guard is worth nothing without.
-# NEGATIVE=1 clicks the OTHER half of the same page: an ordinary link, in the
-# same guest, followed by the same kind of press. It must ask for no window and
-# must navigate where it points — which separates "a `target="_blank"` asks for
-# a window" from "this element announces one for any click, any navigation, or
-# the attach itself", the second of which would pass the positive run while
-# measuring nothing about the link.
-#
-# NOT A CLICK ON THE SHELL'S OWN STRIP, which is the click guard's control and
-# too weak here: a press that reaches no guest at all would leave the element
-# silent for reasons that have nothing to do with windows. The control has to
-# land in the page, on a link, and differ from the subject in one attribute.
+# NEGATIVE=1 runs the negative control: it clicks an ordinary link in the same
+# guest. It must open no window and must navigate in place, so a window opened
+# for any click, navigation or attach cannot pass the positive run. A click on
+# the shell's strip would be too weak a control, since it reaches no guest.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -78,7 +50,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 clicks the ordinary link instead of the `_blank` one. See header.
+# NEGATIVE=1 clicks the ordinary link instead of the `_blank` one.
 NEGATIVE="${NEGATIVE:-0}"
 
 OUT="${OUT:-out/Domicile}"
@@ -87,36 +59,27 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-new-window-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# The shell's own half of the window, in CSS pixels down from the top, and the
-# three press points derived from it rather than written down — so the strip,
-# the window and the two links cannot drift apart.
+# The shell's strip height in CSS pixels. The press points derive from it so
+# the strip and links stay aligned.
 #
-# NOT `STRIP`, WHICH IS A PROGRAM. This runs inside `nix develop .#full`, and
-# that shell exports the toolchain's own names — CC, LD, AR, STRIP.
-# `${STRIP:-64}` in such a shell keeps `strip`, and the arithmetic below then
-# dereferences it as a variable and dies under `set -u`, four hours into a job
-# on the shared tree. `scripts/test-webview-guard-startup.sh` starts every guard
-# here in that environment so the next one fails on this machine instead.
+# Not named `STRIP`: `nix develop .#full` exports STRIP=strip, which breaks the
+# arithmetic below under `set -u`. `scripts/test-webview-guard-startup.sh`
+# starts every guard in that environment to catch this.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
 CHROME_Y=$((STRIP_HEIGHT / 2))
-# The middle of the guest's top half, which the fixture fills with the
-# `target="_blank"` link, and the middle of its bottom half, which the ordinary
-# one fills. Quarters of what is left under the strip, so neither point is
-# within a rounding error of the seam between them.
+# The middle of the guest's top half (the `target="_blank"` link) and bottom
+# half (the ordinary link), well clear of the seam between them.
 WINDOW_X=$((WIDTH / 2))
 BLANK_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 4))
 SAME_Y=$((STRIP_HEIGHT + 3 * (HEIGHT - STRIP_HEIGHT) / 4))
 
-# How long the shell is given to load, ask for a guest, have one attached and
-# navigated. Generous, because every one of those is asynchronous and this
-# machine is shared.
+# Time for the shell to load and get a guest attached and navigated. Generous
+# because every step is asynchronous and the machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# A run and its own negative control are two measurements, so they get two sets
-# of logs. Sharing one file means the control's output overwrites the run's and
-# the diagnostics print whichever went last — which, when the two disagree, is
-# exactly the pair worth reading side by side.
+# Separate logs for the run and its negative control, so the diagnostics show
+# both.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-new-window$WHICH-engine.log}"
@@ -143,9 +106,7 @@ command -v python3 >/dev/null || {
 
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Waits for `$2` to appear in `$3`, for `$1` quarter-seconds. Every gate in this
-# script is a line in a log, because every one of them is something a page or a
-# browser says rather than a file it creates.
+# Waits for `$2` to appear in `$3`, for `$1` quarter-seconds.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF "$2" "$3" 2>/dev/null && return 0
@@ -154,9 +115,8 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The pages: the one in the window, and the two its links lead to. Their own
-#    server rather than a real site, for the reason the framing guard has one:
-#    `crux` reaches no arbitrary host.
+# 1. The page in the window and the two its links lead to. Served locally
+#    because `crux` cannot reach arbitrary hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-new-window-server.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
@@ -175,13 +135,11 @@ SITE="http://127.0.0.1:$PORT"
 echo "serving a page with a target=_blank link at $SITE/opener"
 
 # 2. The engine, on a domicile:// document, because the browser binds
-#    WebViewGuestHost for that origin and no other. `--app` for the reason
-#    `domicile` uses it and every guard here repeats: the guard runs the
-#    configuration the product runs, or it is guarding something else.
+#    WebViewGuestHost only for that origin. `--app` matches `domicile`'s
+#    configuration.
 #
-#    `--remote-debugging-port` is how the click gets in. There is no pointer on
-#    this machine; see guard_webview_devtools.py for why the path it takes is
-#    the one the platform's own press would take.
+#    Clicks arrive over `--remote-debugging-port`, since there is no pointer.
+#    guard_webview_devtools.py explains why they are hit-tested like real ones.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -216,20 +174,16 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
 }
 echo "the shell is up, with a <webview> under a ${STRIP_HEIGHT}px strip"
 
-# 3. There has to be a page in the window before a click in it means anything.
+# 3. Wait for a page in the window before clicking it.
 wait_for_line "$TRIES" "GUARD opener-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
 
-# A press is routed by hit test, and a hit test is answered from the compositor
-# frames the widgets have submitted. The line above says the guest's page ran,
-# which is not the same as its first frame having reached the browser — so a
-# settle, rather than clicking at the moment the page spoke.
+# Hit testing uses the widgets' submitted compositor frames. The page running
+# does not mean its first frame reached the browser, so wait.
 sleep 3
 
-# 4. THE BEFORE. A press on the shell's own strip, which this document must
-#    report — and which is what turns the absences below into measurements: a
-#    run where no click reaches this page at all reads exactly like a run where
-#    one did and nothing was asked for.
+# 4. A press on the shell's strip, which this document must report. Without
+#    it, "no click arrived" reads the same as "the link opened nothing".
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
   >"$CLICK_LOG" 2>&1 ||
@@ -238,10 +192,8 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first click" >&2
 
-# 5. THE CLICK THIS GUARD IS ABOUT: the `target="_blank"` link in the top half
-#    of the page — or, in the control run, the ordinary link in the bottom half.
-#    One press either way, in the same guest, differing in which link is under
-#    it.
+# 5. The click under test: the `target="_blank"` link in the top half, or the
+#    ordinary link in the bottom half for the negative control.
 LINK_Y="$BLANK_Y"
 [ "$NEGATIVE" = "1" ] && LINK_Y="$SAME_Y"
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
@@ -249,14 +201,10 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   >>"$CLICK_LOG" 2>&1 ||
   echo "the click into the window could not be driven; see $CLICK_LOG" >&2
 
-# The press is answered before it is handled: `Input.dispatchMouseEvent` comes
-# back when the event has been forwarded, and what this reads is what the pages
-# logged afterward. Long enough for a whole second window: the open, the list,
-# the shell's element, the attach, and an http page arriving in it.
+# `Input.dispatchMouseEvent` returns once the event is forwarded, before it is
+# handled. Allow time for the second window to open, attach and load.
 #
-# A fixed wait rather than a poll on the line that must appear, because the
-# control's readings are ABSENCES, and an absence cannot be waited for — it can
-# only be given time.
+# A fixed wait, not a poll, because the negative control checks for absences.
 sleep 10
 
 saw() { # $1 pattern
@@ -268,24 +216,18 @@ SAW_PAGE=$(saw "GUARD opener-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
 SAW_ASKED=$(saw "GUARD new-window url=")
-# The address and the ask as one string: a window at the wrong address shows
-# the wrong page, which is a defect that reads
-# like a pass everywhere else in this script.
+# Matches the address too: a window at the wrong address would otherwise pass.
 SAW_ADDRESS=$(saw "GUARD new-window url=$SITE/opened")
 SAW_SECOND=$(saw "GUARD second-view")
-# Read the element, not the page: the window's page loads whether or not
+# Reads the element, not the page: the window's page loads whether or not
 # anything draws it, so `opened-loaded` alone would pass an empty second view.
-# The element reports its page on attach.
 SAW_OPENED=$(saw "GUARD second-page url=$SITE/opened")
-# The control's own positive reading: the ordinary link was followed, in the
-# window it was clicked in. Read in the claim's run too, where it means the
-# press landed on the wrong link.
+# The ordinary link was followed in place. Expected in the negative control;
+# in the claim's run it means the press hit the wrong link.
 SAW_STAYED=$(saw "GUARD stayed-loaded")
-# AND THE BROWSER'S OWN LINE, which is the reading no listener in a page can
-# give. It is written by WebViewGuest::CreateCustomWebContents, so it separates
-# "the renderer never asked the browser for a window" from "it asked, the
-# browser refused it as it must, and nothing came back to the page" — two
-# faults in two processes that look identical from the shell's document.
+# Logged by WebViewGuest::CreateCustomWebContents. Separates "the renderer
+# never asked for a window" from "the browser refused it and nothing reached
+# the page", which look the same from the shell's document.
 SAW_REFUSED=$(saw "domicile: a <webview> refused to open a window for")
 
 echo
@@ -295,16 +237,10 @@ echo "the browser process said: refused=$SAW_REFUSED"
 echo "the pages in the windows saw: press=$SAW_GUEST opened=$SAW_OPENED stayed=$SAW_STAYED"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Ten
-# readings and two modes make more answers than a person reading an annotation
-# can be expected to reconstruct, and most of the failures read alike and mean
-# different things — so they are decided here, in a block
-# `scripts/test-webview-new-window-guard.sh` runs directly, rather than inferred
-# from a grep by whoever opens the job.
+# Picks which side to blame. `scripts/test-webview-new-window-guard.sh` runs
+# this block directly.
 #
-# The order is the order the readings depend on each other in: a run where the
-# page never ran has established nothing, and a run where no press landed in the
-# guest is not a run about what a link in it does.
+# Ordered by dependency: each arm assumes the readings before it held.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

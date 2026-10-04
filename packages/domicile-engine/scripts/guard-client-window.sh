@@ -1,37 +1,27 @@
 #!/usr/bin/env bash
-# Phase 1's deliverable: a real Wayland client's window on the page, and the
-# color it drew coming back out of the display compositor.
+# Checks that a real Wayland client's window reaches the page in the color it
+# drew.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-client-window.sh /build/chromium/src
 #
-# From Domicile's full shell, not Chromium's: `engineRuntimeLibs` in flake.nix
-# puts Chromium's runtime libraries beside the GL stack, and this needs both —
-# the GL stack or no client can hand the compositor a dmabuf at all, Chromium's
-# or libdomicile_engine.so will not load.
+# Run from Domicile's full shell: it has both the GL stack (for client
+# dmabufs) and Chromium's runtime libraries (for libdomicile_engine.so).
 #
-# Every pixel check before this one was the weak form — "the buffer's own zeroed
-# content rather than the fallback" — because no harness had a GL context to
-# draw known content with. A real client does. kitty is a real GL client and its
-# background color is settable, so the assertion here is the strong one: the
-# color the client drew.
+# kitty draws a known background color, so the guard asserts that exact color.
 #
-# FOUR PROCESSES, AND THE ORDER MATTERS.
+# Processes, started in this order:
 #
-#   sway        the nested compositor the engine runs under, because
-#               --ozone-platform=headless cannot import a dmabuf. Provided by
-#               under-wayland.sh, which this runs inside
-#   chrome      the forked engine, on a page whose <canvas> embeds, listening
-#               on --domicile-broker-socket
-#   compositor  domicile-compositor with --engine-socket pointing at that
-#               socket. It is the producer now, so it holds the browser's
-#               invitation and nothing else can
-#   kitty       a GL client of the compositor, drawing one known color
+#   sway        nested compositor from under-wayland.sh; headless Ozone cannot
+#               import a dmabuf
+#   chrome      the engine on an embedding page, listening on
+#               --domicile-broker-socket
+#   compositor  domicile-compositor, the producer on that socket
+#   kitty       a GL client of the compositor, drawing one color
 #
-# The compositor is the only process that can ask what viz drew — one producer
-# per socket — so it logs the pixel and this greps for it. That log line is
-# throwaway with the rest of the spike.
+# Only the producer can read back what viz drew, so the compositor logs the
+# pixel and this greps for it.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -48,21 +38,15 @@ fi
 
 ROOT="$(cd "$SCRIPTS/../../.." && pwd)"
 
-# What the client draws and what the page must therefore show. Not the page's
-# background and not a color any other spike producer submits.
+# The client's color. Differs from the page background and other producers.
 COLOR="${COLOR:-3366CC}"
-# The app id the client announces, which the page must ask for by name: the
-# broker dispatches embeds on it so that two windows are two surfaces.
+# The page embeds by app id, so it must match the client's.
 CLIENT_APP_ID="${CLIENT_APP_ID:-app-1}"
-# NEGATIVE=1 runs the same thing with no client at all. Nothing draws, so the
-# page keeps its fallback and the assertion must fail — a green run with no
-# control is not evidence.
+# NEGATIVE=1 starts no client, so the assertion must fail.
 NEGATIVE="${NEGATIVE:-0}"
 
-# How long the client is given. Longer than everything that can happen before
-# and during the poll, because the probe runs on the submit path: a client
-# reaped mid-poll stops the measurement, and the guard would then report that
-# nothing ever drew.
+# Client lifetime in seconds. Must outlast the poll: the probe runs on the
+# submit path, so a client killed mid-poll reads as "nothing drew".
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
@@ -74,24 +58,14 @@ COMPOSITOR="$ROOT/target/debug/domicile-compositor"
 ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
-# Collected rather than three variables, because two of the three may never be
-# set — a run that fails early, and the negative control, which starts no
-# client — and `kill ""` is an error rather than a no-op.
+# An array, since some processes may never start and `kill ""` is an error.
 STARTED=()
-# Kept rather than discarded: when the page shows its own background instead of
-# the client's color, the compositor's log is the only place that says which
-# app id it brokered — and that is now the thing an embed is dispatched on.
-# A run and its own negative control are two different measurements, so they
-# get two different files. Sharing one meant the control's logs overwrote the
-# run's and the diagnostics printed whichever went last — which, when the two
-# disagree, is exactly the pair worth reading side by side.
+# Keep both logs for diagnosis: the compositor's says which app id it brokered,
+# and the engine's has the page's console lines. The negative control gets its
+# own files so it does not overwrite the run's.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window$WHICH-compositor.log}"
-# The browser's own log, which used to be thrown away with the tempfile. It is
-# where the page's console lines are — which app was embedded, at which
-# SurfaceId, and which was refused — and a run where the page showed the wrong
-# window cannot be told apart from one where a client never drew without them.
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window$WHICH-engine.log}"
 cleanup() {
   cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
@@ -104,8 +78,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Into the checkout before anything is looked for: OUT is relative to it, the
-# way build.sh and spike.sh treat it.
+# OUT is relative to the checkout.
 cd "$CHROMIUM" || {
   annotate "guard-client-window: $CHROMIUM is not a directory this can enter"
   exit 1
@@ -123,9 +96,7 @@ cd "$CHROMIUM" || {
   annotate "guard-client-window: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
-# kitty lives in the Domicile full dev shell, not in Chromium's toolchain shell
-# — and this runs inside the latter. Fetched the way under-wayland.sh fetches
-# sway, so the check does not depend on which shell it was started from.
+# kitty is not in Chromium's toolchain shell, so fetch it with nix if missing.
 if command -v kitty >/dev/null; then
   KITTY=(kitty)
 elif command -v nix >/dev/null; then
@@ -137,8 +108,8 @@ fi
 
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# The engine, on the page that embeds. GPU because a dmabuf import needs one,
-# and wayland because headless ozone has no CreateNativePixmapFromHandle.
+# Wayland with GPU: headless Ozone has no CreateNativePixmapFromHandle, and a
+# dmabuf import needs a GPU.
 "$OUT/chrome" \
   --ozone-platform=wayland \
   --no-sandbox --password-store=basic --no-first-run \
@@ -159,9 +130,8 @@ for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done
 }
 echo "the engine is listening on $BROKER"
 
-# The compositor, as the producer. libdomicile_engine.so is dlopened by name.
-# DOMICILE_SPIKE_CENTER asks it for the `engine drew` lines polled below; they
-# are off by default because each is a readback on the submit path.
+# libdomicile_engine.so is dlopened by name. DOMICILE_SPIKE_CENTER enables the
+# `engine drew` lines polled below; each is a readback on the submit path.
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-client-window.sock"
 rm -f "$COMP_SOCK" "$COMP_SOCK.session"
@@ -176,31 +146,10 @@ DOMICILE_SPIKE_CENTER=1 \
 COMP=$!
 STARTED+=("$COMP")
 
-# WAIT FOR THE COMPOSITOR, AND ONLY FOR THE COMPOSITOR. This used to wait for
-# `brokered a frame sink`, which `surface_for` in engine_session.rs logs when a
-# WAYLAND CLIENT COMMITS A FRAME -- and the client is started below, after this.
-# So the grep could not match however long it ran: every run of this guard,
-# green ones included, spent the whole 120 half-second looks here. It is in the
-# measurements, once anyone read them for this rather than for the poll --
-# lib-control-budget.sh has the whole step at ~1m05 of which the draw poll was
-# ~5s. And the minute was not the worst of it: a client that starts a minute
-# late is what put spike-page.html's embed deadline out of reach by
-# construction, so a passing run also printed a console line that reads as the
-# reason it failed.
-#
-# guard-two-windows.sh has the right shape: start_client, then await_broker. A
-# frame sink is a fact about a client, so it can only be waited for once there
-# is one.
-#
-# `chrome protocol socket up` is a fact about the COMPOSITOR: main.rs logs it
-# from `bind_chrome_socket`, on the main thread, where a failed bind ends the
-# run -- and the wayland socket a client dials was opened above it. So it is
-# reachable with nothing else running, which is the whole of what was wrong.
-#
-# 120 looks at half a second, which is what the unsatisfiable wait cost and is
-# kept: patience is free now that it can end early, and a slow machine still
-# gets its minute. scripts/test-the-client-window-guard-waits-for-the-compositor.sh
-# is what holds this together.
+# Wait for the compositor only. `chrome protocol socket up` is logged after the
+# Wayland socket opens and needs no client. Do not wait for a frame sink here:
+# that needs a client, which starts below.
+# scripts/test-the-client-window-guard-waits-for-the-compositor.sh checks this.
 COMPOSITOR_LOOKS="${COMPOSITOR_LOOKS:-120}"
 
 UP=0
@@ -215,10 +164,8 @@ if ! kill -0 $COMP 2>/dev/null; then
   tail -20 "$COMP_LOG" >&2
   exit 1
 fi
-# A running compositor that never got that far is a third thing, and it has to
-# be said rather than fallen through: starting a client against a compositor
-# whose sockets are not up measures the harness, and the guard would report
-# that the seam is broken.
+# Starting a client before the sockets are up would test the harness, not the
+# engine.
 if [ "$UP" != "1" ]; then
   annotate_from "guard-client-window: the compositor is running and never bound its chrome socket" "$COMP_LOG"
   echo "the compositor is running and never bound its chrome socket. It said:" >&2
@@ -235,18 +182,9 @@ if [ "$NEGATIVE" = "1" ]; then
   echo "negative control: no client, so nothing draws"
 else
   echo "driving kitty, drawing #$COLOR"
-  # Prints, rather than sitting idle. The probe runs on the submit
-  # path — it is called when a client commits a frame the engine
-  # takes — so a client that stops drawing stops the measurement
-  # dead, and a guard waiting for a box to hold still would then be
-  # measuring the client's idleness. kitty redraws for its cursor
-  # blink and gives up on that after about fifteen seconds; a
-  # character every fifth of a second keeps it committing for as
-  # long as the guard is watching.
-  #
-  # The dots are foreground pixels and the box is the background
-  # color's extent, so they cost nothing the measurement cares
-  # about.
+  # Keep kitty committing frames: the probe runs on the submit path, and
+  # kitty stops redrawing its cursor blink after about 15 seconds. The dots
+  # are foreground pixels and do not affect the background color.
   NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
     "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
           -o "background=#$COLOR" \
@@ -255,60 +193,20 @@ else
   STARTED+=($!)
 fi
 
-# The compositor logs what viz drew each time it submits.
+# Poll the compositor's `engine drew` lines.
 #
-# HOW LONG TO WATCH IS NOT THE SAME QUESTION FOR THE TWO RUNS. The guard stops
-# the moment the client's color appears and almost never spends its budget;
-# measured on engine run 35496858205, the poll took ~5s of a 1m05 step. The
-# control cannot stop early -- with no client, nothing ever commits a frame and
-# the probe below runs on the submit path, so not one `engine drew` line is
-# written at all -- so it spends the whole thing every time, which is why it was
-# measured at 2m04.
+# The guard stops as soon as the client's color appears. The negative control
+# never sees a draw, so it waits a multiple of the guard's measured time
+# instead of the full budget. See lib-control-budget.sh.
 #
-# So the control waits a multiple of what the guard just measured instead. The
-# two are consecutive steps of one job against one build, so that number is a
-# better statement of "long enough for it to have shown up" than a constant
-# chosen for the worst machine. With no measurement to hand -- a control run on
-# its own -- it is the full budget. See lib-control-budget.sh.
-#
-# THE BUDGET WAS 60 AND THAT IS WHAT WENT RED ON `main`. `crux` runs two jobs
-# at once and both draw on the one render node; the card is locked only around
-# the steps that time something, because a pixel guard beside another client
-# "asks whether a color landed, and a second client on the card makes that
-# slower rather than wrong" (engine.yml). That holds exactly as long as this
-# number outlasts the slowdown. The Chromium tree pool (#485) took an engine
-# run from ~4h of compiling to ~11m that is mostly guards, so the two jobs'
-# pixel phases now overlap almost every time both fire on one commit -- and
-# `Pinned engine` runs 183 and 185 each gave up here at 60s beside a fully
-# overlapping engine run. Run 183's was `Engine` run 504 on the same commit,
-# which was green: the same guard, against the same series, on the same card,
-# passed on the slot that was not the one giving up.
-#
-# 240 is ~48x the quiet-machine measurement and four times what a busy card ate
-# through. It is free on a healthy run for the reason above: the loop breaks the
-# moment the client's color is there. What bounds it is `CLIENT_LIVES_FOR` --
-# the probe runs on the submit path, so the poll has to end while there is still
-# a client committing frames for it to read.
+# 240 seconds covers a render node shared with another job on `crux`, which
+# can slow a draw several times over. It costs nothing on a healthy run.
+# CLIENT_LIVES_FOR must exceed it.
 LOOKS="${LOOKS:-240}"
 [ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
 
-# WHAT IT WAITS FOR IS WHAT IT ASSERTS, and for a while it was not. This loop
-# used to stop on ANY draw while the assertion below it is about the CLIENT'S,
-# and `spike-page.html` paints its own indigo before the client's buffer
-# reaches the page -- so the compositor's log of a losing run read
-#
-#   02:08:13.925  engine drew #FFFFFFFF
-#   02:08:14.205  engine drew #FF3F51B5      <- the page's own indigo
-#
-# the loop stopped one second in on a color that was never going to be the
-# client's, and the guard reported "the page is showing #FF3F51B5, which is not
-# the client's #3366CC" against a diff that does not touch this seam. That is
-# engine run 35678250589, and it reddened PR #479. Whether the guard passed came
-# down to whether the client's frame landed before the FIRST look, and all the
-# patience above was unreachable because the loop had already exited.
-#
-# `DRAWN` still carries the LAST draw whatever it was, because the sentence
-# after a timeout is "the page is showing X" and X is the whole diagnostic.
+# Wait for the client's color, not any draw: spike-page.html paints its own
+# indigo first. `DRAWN` keeps the last draw for the timeout message.
 DRAWN=""
 WAITED=0
 for _ in $(seq 1 "$LOOKS"); do
@@ -318,12 +216,8 @@ for _ in $(seq 1 "$LOOKS"); do
   WAITED=$((WAITED + 1))
 done
 
-# Only what the GUARD measured, and only when it saw THE THING IT WAS WAITING
-# FOR: a run that timed out measured its own patience rather than the system's,
-# and the control must not inherit that as though it were a reading. It is the
-# client's color rather than `-n` for the same reason the loop is -- a run that
-# spent 240s watching the page's own indigo is a timeout, and noting its 240
-# would hand the control the largest number it can hold.
+# Record the wait only when the guard saw the client's color. A timeout is not
+# a measurement and would give the control its largest budget.
 if [ "$NEGATIVE" != "1" ] && [ "${DRAWN#FF}" = "$COLOR" ]; then
   budget_note client-window "$WAITED"
 fi
@@ -339,9 +233,8 @@ if [ -z "$DRAWN" ]; then
 fi
 
 echo "the engine drew #$DRAWN; the client drew #$COLOR"
-# kitty's background is opaque, so the alpha is FF and the low 24 bits are the
-# color. Compared as a string because the color is exact: a client's own
-# buffer is not resampled on the way to the page.
+# kitty's background is opaque (alpha FF). The client's buffer is not
+# resampled, so compare the color exactly.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then
     annotate "guard-client-window negative control: something drew when nothing should have"

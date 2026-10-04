@@ -1,20 +1,16 @@
 # Copyright 2026 Connor Prussin
 # SPDX-License-Identifier: MIT
 
-# libdomicile_engine.so: the seam between domicile-compositor and the browser.
-#
-# Step 2 established that a mojom-generated Rust crate cannot reach a cargo
-# build, and that the bridge is therefore a GN-built library behind a C ABI.
-# This is that library. See docs/architecture/ENGINE-FORK.md in the Domicile
-# repository, "The seam: a C ABI, and what crosses it".
+# libdomicile_engine.so: the C ABI library between domicile-compositor and the
+# browser. It is built with GN because cargo cannot build mojom bindings. See
+# docs/architecture/ENGINE-FORK.md#the-c-abi in the Domicile repository.
 #
 # Nothing in `chrome` depends on it; build it by name:
 #
 #   autoninja -C out/Domicile domicile_engine
 
-# The part with logic in it, split out so it can be tested without a browser to
-# connect to: what the library has to tell the compositor, and the fd it says
-# it on.
+# The library's event queue to the compositor, split out so it can be tested
+# without a browser.
 source_set("event_queue") {
   sources = [
     "engine_event_queue.cc",
@@ -24,9 +20,7 @@ source_set("event_queue") {
   public_deps = [ "//base" ]
 }
 
-# Which part of a client's buffer fills its window: the window geometry a
-# client that draws its own shadow states, as the texture coordinates a quad
-# samples by.
+# Converts a client's window geometry to texture coordinates.
 source_set("surface_crop") {
   sources = [
     "surface_crop.cc",
@@ -52,8 +46,7 @@ source_set("surface_crop_unit_tests") {
   ]
 }
 
-# Whether a client's buffer is blended over the page or drawn opaque, by its
-# pixel format.
+# Decides from the pixel format whether a client's buffer is blended or opaque.
 source_set("surface_alpha") {
   sources = [
     "surface_alpha.cc",
@@ -112,26 +105,23 @@ shared_library("domicile_engine") {
   ]
 }
 
-# THROWAWAY. What the library has to be able to do, asserted from C — which is
-# also the compiler checking that the header is the C ABI it claims to be.
+# Throwaway smoke test written in C, which also checks that the header is valid
+# C.
 executable("engine_smoke") {
   output_name = "domicile_engine_smoke"
 
   sources = [ "engine_smoke.c" ]
 
-  # The raw_ptr plugin reads `void* user_data` in the C ABI's callback struct
-  # and asks for a raw_ptr<T>, which is a C++ type that cannot appear in a C
-  # header. Dropped here rather than by adding this directory to
-  # build/config/raw_ptr_plugin_config.yaml, because that is a file Chromium
-  # owns and this is a file we own.
+  # The raw_ptr plugin wants raw_ptr<T> for `void* user_data` in the C ABI,
+  # but a C header cannot use it. Disabled here rather than in Chromium's
+  # build/config/raw_ptr_plugin_config.yaml to avoid patching that file.
   configs -= [ "//build/config/clang:find_bad_constructs" ]
 
   deps = [ ":domicile_engine" ]
 }
 
-# Is a color on the browser's page? The instrument guard-webview-framing.sh
-# reads its answer from, and the only pixel assertion in this series that needs
-# no Wayland client: the colors it looks for are a page's own, not a client's.
+# Checks whether a color appears on the browser's page. Used by
+# guard-webview-framing.sh; needs no Wayland client.
 executable("engine_color_probe") {
   output_name = "domicile_color_probe"
 
@@ -143,8 +133,8 @@ executable("engine_color_probe") {
   ]
 }
 
-# THROWAWAY. Phase 1's last assertion: a real dmabuf, allocated by something
-# that is not Chromium, reaching the screen through a page.
+# Throwaway smoke test: a dmabuf allocated outside Chromium reaches the screen
+# through a page.
 executable("engine_dmabuf_smoke") {
   output_name = "domicile_engine_dmabuf_smoke"
 

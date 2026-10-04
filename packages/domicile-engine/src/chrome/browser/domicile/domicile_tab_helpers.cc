@@ -16,10 +16,8 @@
 namespace domicile {
 
 void AttachTabHelpers(content::WebContents& guest) {
-  // AN EXTENSION'S ACTION POPUP IS NO TAB, as Chrome's toolbar bubble is none:
-  // the popup view type, and nothing else here. With no SessionTabHelper it
-  // has no tab id, so tabs.getCurrent() answers nothing; and in no window, so
-  // it never becomes the active tab whose page the popup is about.
+  // An action popup is not a tab, as in Chrome. Without a SessionTabHelper,
+  // tabs.getCurrent() returns nothing and it never becomes the active tab.
   WebViewGuest* web_view = WebViewGuest::FromWebContents(&guest);
   CHECK(web_view);
   if (web_view->extension_popup()) {
@@ -28,28 +26,21 @@ void AttachTabHelpers(content::WebContents& guest) {
     return;
   }
 
-  // Chrome's own factory rather than SessionTabHelper::CreateForWebContents,
-  // because the factory is also what tells the ExtensionWebContentsObserver to
-  // follow the tab's window id. It hands the helper the profile's
-  // SessionService too, and that records nothing for a guest: the service
-  // tracks only the windows of Browsers it was told about
-  // (SessionServiceBase::ShouldTrackChangesToWindow), and a guest's window id
-  // is none of them. A desk that restored its browser windows from Chrome's
-  // session would be a different feature, and the shell's.
+  // Use Chrome's factory because it also makes ExtensionWebContentsObserver
+  // track the tab's window id. The SessionService it attaches records nothing
+  // for guests (SessionServiceBase::ShouldTrackChangesToWindow).
   CreateSessionServiceTabHelper(&guest);
 
-  // A tab's view type, as Chrome's tab_helpers.cc gives every tab before its
-  // extensions::TabHelper. Without it a guest is kInvalid, and
-  // runtime.getContexts -- which Bitwarden's popup calls on opening -- switches
-  // on the view type of each of the extension's frames and NOTREACHEDs on it,
-  // taking the browser down.
+  // Set the view type before extensions::TabHelper, as Chrome's
+  // tab_helpers.cc does. A kInvalid view type crashes runtime.getContexts
+  // (called by Bitwarden's popup) on a NOTREACHED.
   if (extensions::GetViewType(&guest) ==
       extensions::mojom::ViewType::kInvalid) {
     extensions::SetViewType(&guest, extensions::mojom::ViewType::kTabContents);
   }
   extensions::TabHelper::CreateForWebContents(&guest);
 
-  // And a tab of the desk's one window, now that it has an id to be one by.
+  // Needs the tab id assigned above.
   AddToDesk(guest);
 
   // So this guest can become a DevTools window.

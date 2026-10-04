@@ -17,45 +17,20 @@
 namespace blink {
 namespace {
 
-// One external surface per app, shared by every element that names that app.
+// One allocator per app id, shared by every element that names that app.
 //
-// Sharing within an app is what lets a page put several <app> elements side by
-// side against a single producer, which is how the CSS measurement compares
-// each property against an ordinary element beside it. Not sharing *across*
-// apps is what a desktop is: a shell has many windows and each element shows
-// the one it names.
+// Per app because viz keys SurfaceAllocationGroup on the embed_token alone and
+// refuses one token across frame sinks ("Cannot reuse embed token across frame
+// sinks"). A shared allocator would leave every window after the first without
+// a surface. Per app also keeps a kReconfigure for one window from changing the
+// surface ids of the others.
 //
-// Keying it is not a nicety. A LocalSurfaceId carries an embed_token, and viz
-// keys SurfaceAllocationGroup on that token alone — SurfaceManager's
-// GetOrCreateAllocationGroupForSurfaceId refuses a second FrameSinkId under a
-// token another sink already owns, "Cannot reuse embed token across frame
-// sinks", and the surface is never created. One allocator for the whole
-// renderer gives every app the same token, so the second window's surface does
-// not exist and the element embedding it resolves through the first window's
-// allocation group instead: two <app> elements, both showing window one. That
-// is what guard-two-windows.sh measured.
+// Entries are never removed. If the compositor restarts, it reuses app ids and
+// the browser brokers new FrameSinkIds, which hit the same refusal for the
+// page's lifetime. See docs/architecture/ENGINE-FORK.md#open-questions.
 //
-// The second reason is resizing. kReconfigure bumps the parent sequence
-// number, and one allocator would bump it for every app at once — resizing one
-// window would hand every other window's producer a surface id it was never
-// told about.
-//
-// What does not change is who allocates: the embedder, because the embed_token
-// is the capability the producer needs in order to submit at all.
-//
-// NOT INVALIDATED, and that is a live limitation rather than an oversight. A
-// compositor that restarts under a running browser mints `app-1` again from a
-// counter that starts over, and the browser brokers it a *new* FrameSinkId
-// while this map still holds the old app's token — which is the same refusal
-// as above, permanently, for as long as the page lives. Nothing today notices
-// a producer going away on this side of the seam. It wants the browser to say
-// so; see the open questions in docs/architecture/ENGINE-FORK.md.
-//
-// `std::map` rather than the `base::flat_map` the rest of this fork uses, and
-// the difference is load-bearing: this hands back a reference into the
-// container and a flat_map is a sorted vector, so the next app to turn up
-// would move the allocator out from under a caller still holding one. Do not
-// "tidy" it into a flat_map.
+// `std::map` rather than `base::flat_map`: callers hold references into the
+// map, and a flat_map insert would invalidate them.
 viz::ParentLocalSurfaceIdAllocator& AllocatorForApp(const String& app_id) {
   static base::NoDestructor<
       std::map<std::string, viz::ParentLocalSurfaceIdAllocator>>
@@ -81,9 +56,8 @@ void ExternalSurfaceEmbedder::Embed(
         provider_.BindNewPipeAndPassReceiver());
   }
 
-  // Resolved before the round trip rather than after it: this half of the
-  // SurfaceId is ours, and the browser needs it in order to hand it to the
-  // producer, which cannot invent one.
+  // Allocate before the round trip: the browser passes this half of the
+  // SurfaceId to the producer, which cannot create one.
   viz::ParentLocalSurfaceIdAllocator& allocator = AllocatorForApp(app_id);
   if (allocation == Allocation::kReconfigure ||
       !allocator.HasValidLocalSurfaceId()) {
@@ -92,11 +66,8 @@ void ExternalSurfaceEmbedder::Embed(
   const viz::LocalSurfaceId local_surface_id =
       allocator.GetCurrentLocalSurfaceId();
 
-  // THROWAWAY, with the rest of the spike. Which surface each element asked
-  // for and which one it got are the two facts a page showing the wrong
-  // window turns on, and until this line existed neither was written down
-  // anywhere: the browser knows the FrameSinkId and the page knows the
-  // element, and only here are both in one place.
+  // Temporary spike logging: pairs the requested app with the allocated
+  // surface, the two facts needed to debug a page showing the wrong window.
   LOG(INFO) << "domicile: embedding \"" << app_id.Utf8() << "\" at "
             << local_surface_id.ToString() << " under "
             << parent_frame_sink_id.ToString() << ", " << size.ToString();

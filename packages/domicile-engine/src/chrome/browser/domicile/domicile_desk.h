@@ -15,56 +15,47 @@ class WebContents;
 
 namespace domicile {
 
-// A desk to chrome.tabs: every <webview> a tab, and the whole desktop one
-// chrome.windows window. docs/architecture/EXTENSIONS.md's slice 2.
+// Exposes the desk to chrome.tabs and chrome.windows: each <webview> guest is
+// a tab, and the desktop is one window. See
+// docs/architecture/EXTENSIONS.md#tabs.
 //
-//   Tab         a WebViewGuest, by the id SessionTabHelper gave it
-//   Window      one DomicileWindowController per profile, registered in
-//               WindowControllerList. Its tabs are the live guests, in
+//   Tab         a WebViewGuest, by its SessionTabHelper id
+//   Window      one DomicileWindowController per profile, in
+//               WindowControllerList; its tabs are the live guests in
 //               creation order
-//   Active tab  the guest whose element last took focus -- see
-//               //components/domicile:desk_tabs for the rule
-//   Popup       a window an extension opened with windows.create, owned by
-//               the desk's: another DomicileWindowController, of type
-//               `popup`, whose one tab is the browser window opened for it
+//   Active tab  the guest whose element last took focus
+//               (//components/domicile:desk_tabs)
+//   Popup       a windows.create window: another DomicileWindowController of
+//               type `popup`, whose one tab is a browser window
 //               (domicile_browser_windows.h)
 //
-// HOW CHROME FINDS THEM. Its lookups walk browser windows' tab strips, which a
-// guest is in none of. Four of them ask this desk through
-// //chrome/browser/extensions/domicile_desk_hooks.h, one line each, added by
-// the patch series: ExtensionTabUtil::GetTabById, CreateTabObject and
-// ForEachTab, and ChromeExtensionFunctionDetails::GetCurrentWindowController.
-//
-// WHAT IS NOT A LOOKUP IS NOT PATCHED. chrome.tabs.query, update, create,
-// remove and the zoom four, and chrome.windows.get*, update, create and
-// remove, are this desk's own ExtensionFunctions, registered over Chrome's
-// under the same names -- see domicile_desk_functions.h -- and so are the
-// refusals. Tab events come from the guests' own lifecycle, dispatched through
-// the profile's EventRouter exactly as TabsEventRouter dispatches them, rather
-// than from a tab strip; windows.onCreated and onRemoved come from the desk's
-// popup windows, which WindowsEventRouter skips for having no Browser.
+// Chrome's tab lookups walk tab strips, which guests are not in. Four of them
+// call this desk through //chrome/browser/extensions/domicile_desk_hooks.h:
+// ExtensionTabUtil::GetTabById, CreateTabObject and ForEachTab, and
+// ChromeExtensionFunctionDetails::GetCurrentWindowController. The API
+// functions are replaced instead (domicile_desk_functions.h). The desk
+// dispatches tab and popup-window events itself, since Chrome's event routers
+// only see Browser windows.
 
-// Install the desk: the lookups' hooks, the functions over Chrome's, and
-// `profile`'s window. Once per profile, from ChromeBrowserMainParts::
-// PostProfileInit; the process-wide half is done the first time only.
+// Installs the lookup hooks and function overrides once per process, and
+// creates `profile`'s window. Called per profile from
+// ChromeBrowserMainParts::PostProfileInit.
 void StartDesk(Profile* profile);
 
-// Make `guest` a tab of its profile's desk: of the popup window its element
-// named, or of the desk's own window. Run by AttachTabHelpers, after the
-// helpers that give it its id.
+// Adds `guest` as a tab of the popup window its element names, or else of the
+// desk's window. Must run after the tab helpers that assign its id.
 void AddToDesk(content::WebContents& guest);
 
-// Hear the active tab change in a profile's desk.
+// Observes a profile desk's active tab.
 class DeskObserver : public base::CheckedObserver {
  public:
   virtual void OnActiveTabChanged() = 0;
 };
 
-// The desk's active tab in `context`, or null: a profile with no desk, or a
-// desk with no tabs.
+// The desk's active tab in `context`, or null if there is no desk or no tab.
 content::WebContents* ActiveDeskTab(content::BrowserContext* context);
 
-// Observe `context`'s desk. False, and nothing observed, where it has none.
+// Observes `context`'s desk. Returns false if it has none.
 bool AddDeskObserver(content::BrowserContext* context, DeskObserver* observer);
 void RemoveDeskObserver(content::BrowserContext* context,
                         DeskObserver* observer);

@@ -9,11 +9,10 @@
 
 namespace ui {
 
-// A wheel's clicks, as libinput counts them, in the 120ths of a notch a
-// `MouseWheelEvent` carries.
+// Converts libinput wheel clicks to `MouseWheelEvent` units (120 per notch).
 //
-// libinput's sign is the reverse of Chromium's: a click down is +1 there and
-// -120 here. `clicks` is libinput's discrete value, whole clicks only.
+// Takes libinput's discrete values, whole clicks only. libinput's sign is the
+// reverse of Chromium's: a click down is +1 there and -120 here.
 COMPONENT_EXPORT(EVDEV)
 gfx::Vector2d WheelTicks(double horizontal_clicks, double vertical_clicks);
 

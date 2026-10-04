@@ -1,27 +1,14 @@
 #!/usr/bin/env bash
-# Which depot_tools, answered in one place.
+# Print the path of a bootstrapped depot_tools.
 #
 #   export PATH="$(.github/scripts/engine-depot-tools.sh /build/chromium/src):$PATH"
 #
-# `gn`, `autoninja` and `gclient` are depot_tools', not the nix shell's. An
-# interactive user has them from their shell config; a systemd service has no
-# shell config — the same reason the engine workflows have to supply NIX_PATH
-# and a git identity.
+# `gn`, `autoninja` and `gclient` come from depot_tools, which the systemd
+# runner does not have on PATH.
 #
-# WHICH ONE IS NOT A MATTER OF TASTE. A checkout has a vendored copy at
-# third_party/depot_tools, and it is a plain git clone: `autoninja` there exits
-# with "python3_bin_reldir.txt not found. need to initialize depot_tools",
-# because the bootstrap that fetches its own python has never run in it. The
-# standalone one is what a person set this machine up with and what the first
-# four-hour build used.
-#
-# So this picks the one that is bootstrapped rather than the one that sounds
-# right — `python3_bin_reldir.txt` is what the bootstrap leaves behind, so it
-# is the question asked directly.
-#
-# This was written four times: once in each of the three scripts that build in
-# that tree, and a fourth was about to go into the sync. That is what this file
-# is instead.
+# The checkout's third_party/depot_tools is often not bootstrapped, and its
+# `autoninja` then fails. The bootstrap writes `python3_bin_reldir.txt`, so
+# pick the first candidate that has it.
 set -euo pipefail
 
 CHROMIUM="${1:?usage: engine-depot-tools.sh <chromium/src>}"

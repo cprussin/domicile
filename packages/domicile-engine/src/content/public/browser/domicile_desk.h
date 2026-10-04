@@ -25,11 +25,10 @@ namespace content {
 
 class WebContents;
 
-// One lit display, where the compositor's profile put it on the desk.
+// A lit display and its place on the desk, from the compositor's profile.
 //
-// See docs/architecture/ONE-PAGE-FOR-THE-DESK.md: with --domicile-one-page the
-// shell is one page over the whole desk, and //chrome/browser/domicile lays
-// that page out from these.
+// With --domicile-one-page, //chrome/browser/domicile lays out the single desk
+// page from these. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 struct DomicileDeskDisplay {
   int64_t id = 0;
   // In the desk's logical pixels.
@@ -40,35 +39,33 @@ struct DomicileDeskDisplay {
                          const DomicileDeskDisplay&) = default;
 };
 
-// The lit displays, as the compositor last stated its layout. Empty until it
-// has, and on every platform but DRM.
+// Returns the lit displays from the compositor's last layout. Empty before
+// the first layout, and on platforms other than DRM.
 CONTENT_EXPORT std::vector<DomicileDeskDisplay> GetDomicileDesk();
 
-// Runs `changed` every time the compositor states a layout that differs from
-// the last. On the UI thread.
+// Runs `changed` on the UI thread whenever the compositor's layout changes.
 CONTENT_EXPORT base::CallbackListSubscription AddDomicileDeskObserver(
     base::RepeatingClosure changed);
 
-// What every page in `contents` is told about its screen, in place of the
-// display its window is on; `std::nullopt` stops. The page spanning the desk
-// is on no one display, and is laid out at the desk's scale, not its host's.
+// Overrides the screen info every page in `contents` sees; `std::nullopt`
+// clears it. The desk page spans several displays, so it lays out at the
+// desk's scale instead of its host display's.
 CONTENT_EXPORT void SetDomicileDeskScreenInfos(
     WebContents* contents,
     std::optional<display::ScreenInfos> infos);
 
-// Where a window lays out its contents instead of its client area: the page a
-// desk is, which is bigger than the window and offset so the window shows its
-// own display's part. In the window's DIPs; `std::nullopt` stops. Read by
-// chrome's browser view layout, which is not the caller's to reach.
+// Sets the bounds, in the window's DIPs, where `window` lays out the desk page
+// instead of its client area; `std::nullopt` clears them. The page is larger
+// than the window and offset so the window shows its own display's part.
+// Chrome's browser view layout reads this.
 CONTENT_EXPORT void SetDomicileDeskPageBounds(gfx::NativeWindow window,
                                               std::optional<gfx::Rect> bounds);
 CONTENT_EXPORT std::optional<gfx::Rect> GetDomicileDeskPageBounds(
     gfx::NativeWindow window);
 
-// The page a desk is, shown in another window's layers: a mirror of the
-// page's surface layer, which viz draws there at that window's scale. The
-// page's frame sink stays a child of the host's compositor alone, so the page
-// ticks at the host display's BeginFrames.
+// Shows the desk page in another window by mirroring its surface layer, which
+// viz draws at that window's scale. The page's frame sink stays parented only
+// to the host's compositor, so it ticks at the host display's BeginFrames.
 class CONTENT_EXPORT DomicileDeskMirror {
  public:
   virtual ~DomicileDeskMirror() = default;
@@ -76,12 +73,12 @@ class CONTENT_EXPORT DomicileDeskMirror {
   // Owned by this; the caller parents and places it.
   virtual ui::Layer* layer() = 0;
 
-  // Whether this still mirrors `page`'s current view. A new renderer is a new
-  // view, and the old one's mirror shows nothing.
+  // Whether this still mirrors `page`'s current view. A new renderer creates a
+  // new view, which an old mirror does not show.
   virtual bool Mirrors(WebContents* page) const = 0;
 };
 
-// `nullptr` for a page with no view yet.
+// Mirrors `page`, or returns `nullptr` if it has no view yet.
 CONTENT_EXPORT std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(
     WebContents* page);
 

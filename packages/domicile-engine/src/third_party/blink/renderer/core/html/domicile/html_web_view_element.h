@@ -21,33 +21,17 @@ class DomicileContextMenuEvent;
 class DomicileFileChooserEvent;
 class ExceptionState;
 
-// <webview> — web content in a browsing context of its own.
+// <webview>: a browser page embedded in a shell, driven by `src`, goBack(),
+// goForward(), stop() and reload(). Defined by the fork because a custom
+// element's name needs a hyphen.
 //
-// The tag exists because Domicile's shells are written against it: a browser
-// shell puts the page it is browsing in a <webview>, and drives it from an
-// address bar with src, goBack(), goForward(), stop() and reload(). It cannot
-// be a custom element for the same reason <app> cannot -- a custom element's
-// name must contain a hyphen -- so the fork defines it, which is also how
-// Electron's <webview> came to exist.
+// The element owns a placeholder frame that stays on about:blank. `src` goes
+// to the browser over WebViewGuestHost, which attaches a guest WebContents to
+// that frame. A guest's main frame passes X-Frame-Options and CSP
+// frame-ancestors; see components/domicile/browser/web_view_guest.h.
 //
-// It is still a frame owner, and the nested browsing context it creates is
-// still Chromium's -- but that context is NOT where the page goes. The frame
-// stays on about:blank and becomes the attach point for a guest: `src` is sent
-// to the browser over WebViewGuestHost, which creates a WebContents and
-// attaches it there with AttachInnerWebContents.
-//
-// WHY, in one sentence: a frame owner is a frame, so as a frame this element
-// was refused by every site that sends X-Frame-Options or CSP frame-ancestors
-// -- the one thing Electron's guest-view <webview> bought that this did not.
-// A guest's main frame is a main frame and has no ancestor to check. It also
-// gets history that survives a process change and storage that is not
-// partitioned as a third party's. See components/domicile/browser/
-// web_view_guest.h.
-//
-// KNOWN GAP: `srcdoc` is not intercepted, so setting it still navigates the
-// placeholder frame out from under the guest. A <webview> has no srcdoc in its
-// IDL and nothing in this repository sets one; intercepting it would be a
-// branch no guard covers.
+// Known gap: `srcdoc` is not intercepted, so setting it would navigate the
+// placeholder frame. The IDL has no srcdoc and nothing sets it.
 class CORE_EXPORT HTMLWebViewElement final
     : public HTMLFrameElementBase,
       public domicile::mojom::blink::WebViewGuestClient {
@@ -57,141 +41,81 @@ class CORE_EXPORT HTMLWebViewElement final
   explicit HTMLWebViewElement(Document&);
   ~HTMLWebViewElement() override;
 
-  // Which element this is, for `DynamicTo` and `IsA`. NOT boilerplate, and
-  // nothing in a build says so if it is missing: `DowncastTraits<HTMLWebViewElement>`
-  // is generated as a comparison against this value, and HTMLElement's base
-  // answers `kHTMLElement` for anything that does not override it. So an
-  // element without this parses, lays out and reflects its attributes exactly
-  // as it should, and every cast back to its own class returns null. See
-  // node.h -- "every HTMLElement must override this" -- and
-  // scripts/test-fork-elements-know-their-type.sh, which is what now says so.
+  // Required for `DynamicTo` and `IsA`: without it every downcast returns null
+  // and nothing else fails. See node.h and
+  // scripts/test-fork-elements-know-their-type.sh.
   ElementType GetElementType() const final {
     return ElementType::kHTMLWebViewElement;
   }
 
-  // The navigation surface a chrome's address bar drives. Each is the
-  // corresponding operation on the GUEST's own history, sent to the browser
-  // over the same pipe `src` goes down.
+  // Address bar controls. They act on the guest's history in the browser, not
+  // on the placeholder frame's.
   //
-  // NOT THE PLACEHOLDER'S History, which is what these used to reach and why
-  // all four did nothing: this element is a frame owner, so it has a nested
-  // browsing context -- but that context is the attach point, it has been on
-  // about:blank since it was made, and the attach swapped it out. The page a
-  // user sees is a WebContents in the browser process and its history is a
-  // NavigationController there.
-  //
-  // NOTHING IS THROWN AND NOTHING IS RETURNED. `History::back()` raises when
-  // the frame is detached and when a sandboxed document may not navigate its
-  // top; neither has a counterpart here -- there is one pipe, it is bound for
-  // the element's whole life, and a browser that has torn the guest down has
-  // closed it. A back with nowhere to go is not an error either: the browser's
-  // controller answers it by not navigating, which is what an address bar
-  // whose buttons cannot yet be grayed out asks for constantly.
+  // They never throw: the pipe lives as long as the element, and going back
+  // with no history is a no-op.
   void goBack();
   void goForward();
   void stop();
   void reload();
 
-  // WHETHER EITHER OF THE FIRST TWO WOULD DO ANYTHING, so an address bar can
-  // gray out a button that would not.
+  // Whether goBack() and goForward() would navigate, for graying out buttons.
   //
-  // A PROPERTY, NOT AN EVENT'S PAYLOAD, and that is the decision this pair
-  // records. A shell renders from state: it is handed a moment and asked what
-  // the window looks like now, and the answer has to be readable at that
-  // moment rather than have been announced at some earlier one. An availability
-  // that existed only in an event would be gone for a chrome that mounted after
-  // the guest's first commit -- a React shell registers its listeners in its
-  // first effect flush, which is after the element is in the document -- and
-  // its Back button would stay wrong until the user navigated again. So the
-  // value is here, always, and `domicile-history-change` only says to read it
-  // again.
-  //
-  // NOT A CONTENT ATTRIBUTE either, which is the other shape a chrome could
-  // read: a content attribute is the author's, it serializes into innerHTML,
-  // and a shell or a devtools user writing one would make the DOM say something
-  // the browser never did.
-  //
-  // AND NOT A SYNCHRONOUS ASK, which is the shape that would need no pushing at
-  // all: the answer is a NavigationController's in the browser process, so
-  // reading it on demand means a blocking round trip out of a renderer inside a
-  // property read. The browser pushes instead -- see WebViewGuestClient in
-  // components/domicile/mojom/web_view_guest.mojom -- and this is where it
-  // lands.
+  // Properties, so a shell that mounts late can read the current state;
+  // `domicile-history-change` only signals a change. Not content attributes,
+  // which authors could overwrite. The browser pushes the values (see
+  // WebViewGuestClient in components/domicile/mojom/web_view_guest.mojom) so
+  // reading them never blocks.
   bool canGoBack() const { return can_go_back_; }
   bool canGoForward() const { return can_go_forward_; }
 
-  // WHETHER A PAGE IS STILL ARRIVING, so an address bar can say so.
-  //
-  // A PROPERTY FOR THE REASON THE PAIR ABOVE ARE, and the case for it is if
-  // anything sharper here: a load is a span rather than an instant, so a
-  // chrome that mounts in the middle of one is the ordinary case and not a
-  // race. A state carried only by `domicile-loading-change` would leave that
-  // window looking settled over a page that had not arrived, and it would go
-  // on looking settled until the next navigation.
-  //
-  // NOT `WebContents::IsLoading()` EITHER, which is the answer this is
-  // sometimes mistaken for: the browser reports `should_show_loading_ui`
-  // alongside it, which is false for a same-document navigation, and what
-  // arrives here is the pair already resolved -- "a browser would be showing
-  // a spinner". See WebViewGuest::ReportLoading.
+  // Whether a browser would show a loading spinner. A property, like
+  // canGoBack. Combines `IsLoading()` with `should_show_loading_ui`, so
+  // same-document navigations do not count. See WebViewGuest::ReportLoading.
   bool loading() const { return loading_; }
 
-  // WHERE THE PAGE IS, AND WHAT THE BROWSER SAYS ABOUT REACHING IT.
+  // The page's current URL and security level, for an address bar. Both come
+  // from the same navigation entry in one message, so they always match.
+  // Properties, like canGoBack.
   //
-  // THE PAIR THAT MAKES THIS A BROWSER. Until they existed a shell could show
-  // only `src` -- where it had *sent* the element -- so a link followed inside
-  // the page left the chrome displaying an address the user had left, and any
-  // lock drawn beside it described a page that was no longer there. Both are
-  // the browser's answer about the guest's visible entry, and they arrive in
-  // one message from one read of one entry so that they cannot come apart.
-  //
-  // PROPERTIES FOR THE REASON `canGoBack` IS ONE, and with more riding on it: a
-  // chrome renders from state, and a security level that existed only in an
-  // event would be missing for exactly the chrome that mounted mid-load -- which
-  // would leave it drawing nothing, or worse, drawing the last page's lock.
-  //
-  // EMPTY MEANS THE BROWSER HAS NOT SAID, and a chrome must not read it as
-  // anything else. It is what a guest showing its initial entry reports, and
-  // what an engine older than this contract reports by having no property here
-  // at all. `security` is never "insecure by default": nothing is claimed until
-  // the browser claims it.
+  // Empty means the browser has not reported yet (the initial entry). Do not
+  // read it as any security level.
   const String& url() const { return url_; }
   const String& security() const { return security_; }
 
   double zoom() const { return zoom_; }
 
-  // The icon the page names for itself, or empty for one that names none --
-  // see FaviconChanged in components/domicile/mojom/web_view_guest.mojom.
+  // The page's icon, or empty. See FaviconChanged in
+  // components/domicile/mojom/web_view_guest.mojom.
   const String& favicon() const { return favicon_; }
   void setZoom(double factor, ExceptionState&);
 
-  // Find in the page, which is the guest's: the browser searches it and
-  // FindChanged below is the answer.
+  // Find in page. The browser searches the guest; results arrive in
+  // FindChanged.
   void find(const String& text, bool backward);
   void stopFinding();
   int32_t findMatches() const { return find_matches_; }
   int32_t findActiveMatch() const { return find_active_match_; }
 
-  // The size the page's content wants: ContentSizeChanged below.
+  // The content's preferred size, from ContentSizeChanged.
   int32_t contentWidth() const { return content_width_; }
   int32_t contentHeight() const { return content_height_; }
 
-  // DevTools on the guest's page. See WebViewGuest.Inspect.
+  // Opens DevTools on the guest's page. See WebViewGuest.Inspect.
   void inspect();
 
-  // Do `action` for `menu`. Throws InvalidStateError if a newer menu has
+  // Runs `action` for `menu`. Throws InvalidStateError if a newer menu has
   // replaced it. See domicile_context_menu_event.h.
   void RunContextMenuAction(
       const DomicileContextMenuEvent& menu,
       domicile::mojom::blink::WebViewContextMenuAction action,
       ExceptionState&);
 
-  // A file chooser this element dispatched has been answered, so it stops
-  // holding the event. See `waiting_choosers_`.
+  // Releases a dispatched file chooser event once answered. See
+  // `waiting_choosers_`.
   void FileChooserAnswered(DomicileFileChooserEvent&);
 
-  // Ask the browser what is in the directory at `path`, for a file chooser
-  // this element dispatched. See WebViewGuest.ListDirectory.
+  // Asks the browser to list `path` for an open file chooser. See
+  // WebViewGuest.ListDirectory.
   void ListDirectory(
       const String& path,
       domicile::mojom::blink::WebViewGuest::ListDirectoryCallback listed);
@@ -200,74 +124,43 @@ class CORE_EXPORT HTMLWebViewElement final
 
  private:
   /**
-   * Say, in an event, that this element has been focused.
+   * Dispatches an event when this element gains focus, so the shell can raise
+   * the window.
    *
-   * WHY AN EVENT OF ITS OWN, RATHER THAN THE FOCUS EVENT THAT WOULD NORMALLY
-   * FOLLOW. Document::SetFocusedElement dispatches `focus` and `focusin` only
-   * while the page is focused -- "if page lost focus, event will be dispatched
-   * on page focus, don't duplicate" -- and a guest taking focus is exactly the
-   * moment the embedder's page has lost it: WebContentsImpl::
-   * SetFocusedFrameTree sends the old tree's widget SetPageFocus(false) BEFORE
-   * FocusOuterFrameTrees tells this renderer anything. So the element becomes
-   * document.activeElement and not one event is dispatched, which is a shell
-   * being told nothing at all in the case it most needs telling: a click in a
-   * browser window's page, which is what raises the window.
+   * A guest taking focus unfocuses the embedder's page first
+   * (WebContentsImpl::SetFocusedFrameTree), and Document::SetFocusedElement
+   * skips `focus` and `focusin` on an unfocused page. Without this, a click in
+   * a browser window would produce no event. guard-webview-click.sh checks
+   * this.
    *
-   * Measured rather than reasoned. guard-webview-click.sh drove a real press
-   * into a guest and read `activeElement=webview hasFocus=false` out of the
-   * embedder's document with no event of any kind beside it.
-   *
-   * The focus events are sent now too -- see DispatchSuppressedFocus -- and
-   * this stays beside them because it fires on every focus the element takes,
-   * by whichever route, which is what a shell raises windows on.
-   *
-   * HUNG OFF SetFocused RATHER THAN OFF THE FOCUS CONTROLLER'S CALL, and that
-   * is the same measurement read a second time. Document::SetFocusedElement
-   * calls SetFocused on whatever it focuses, unconditionally, so an element
-   * that is activeElement has had this run -- whichever route the focus came
-   * by. A call from the patched branch would fire only if that branch is the
-   * route, which is an inference and not a reading.
-   *
-   * Patch 0011 moves HTMLFrameElementBase::SetFocused out of that class's
-   * private section for this: a subclass may override a private virtual, and
-   * may not call one, and the base's own work -- handing the content frame the
-   * focus -- still has to happen.
+   * Overrides SetFocused because Document::SetFocusedElement always calls it,
+   * whatever route focus took. Patch 0011 makes the base's SetFocused callable
+   * from a subclass.
    */
   void SetFocused(bool received,
                   mojom::blink::FocusType,
                   BlurEventBehavior) override;
 
   /**
-   * The dispatch itself, and it is synchronous. Two earlier shapes deferred it
-   * -- a ScopedEventQueue, then a posted task -- to keep a handler out of focus
-   * bookkeeping that is halfway through, and neither event ever arrived
-   * (engine runs 186 and 192). Document::SetFocusedElement expects this: its
-   * own comment beside the SetFocused call is "Element::setFocused for frames
-   * can dispatch events", and the branch under it handles a handler that moved
-   * focus again. It also writes two lines to the engine log around the
-   * dispatch, which is how a run says whether this ran at all.
+   * Dispatches the focus event synchronously. Deferring it (by queue or task)
+   * loses the event. Document::SetFocusedElement allows frames to dispatch
+   * events from SetFocused. Logs before and after for diagnosis.
    */
   void DispatchGuestFocus();
 
   /**
-   * The `focus` and `focusin` Document::SetFocusedElement held back, sent
-   * while the embedder's page is unfocused -- which a guest taking focus
-   * always leaves it -- and not otherwise, since a focused page has already
-   * had them from Document.
+   * Dispatches the `focus` and `focusin` that Document::SetFocusedElement
+   * skipped because the embedder's page is unfocused. Only then: a focused
+   * page already got them.
    *
-   * Upstream holds them for the page's return ("if page lost focus, event
-   * will be dispatched on page focus, don't duplicate"), which is right for a
-   * page whose window went to the back and wrong here: the embedder's page
-   * lost focus to its OWN element's guest, so a shell's focus-out dismissal,
-   * a focus trap and React's onFocus all go on believing focus is wherever it
-   * was. The other half is already there: the element focus left had its
-   * `blur` and `focusout` when the page lost focus, in
+   * Upstream defers them until the page regains focus, but here the page lost
+   * focus to its own guest, so focus-out handlers and React's onFocus would
+   * see stale focus. The matching `blur` and `focusout` already fired in
    * FocusController::FocusHasChanged.
    *
-   * Dispatched directly rather than through Element::DispatchFocusInEvent,
-   * which queues on a ScopedEventQueue when one is open -- the shape of the
-   * first deferral that never arrived. guard-webview-click.sh reads the
-   * `focusin` out of a real click.
+   * Dispatched directly, not via Element::DispatchFocusInEvent, which may
+   * queue on a ScopedEventQueue and lose the event. guard-webview-click.sh
+   * checks this.
    */
   void DispatchSuppressedFocus(mojom::blink::FocusType);
 
@@ -277,25 +170,20 @@ class CORE_EXPORT HTMLWebViewElement final
   // placeholder frame. Everything else does.
   void ParseAttribute(const AttributeModificationParams&) override;
 
-  // The base creates the placeholder frame here, on about:blank, because
-  // ParseAttribute kept `src` from it. That frame is what the guest attaches
-  // to, so this is the first moment there is anything to ask for.
+  // The base creates the about:blank placeholder frame here, so this is the
+  // earliest point to request a guest.
   void DidNotifySubtreeInsertionsToDocument() override;
 
-  // Ask the browser for a guest for the placeholder frame. Does nothing when
-  // there is already one, or when there is no placeholder to name yet.
+  // Requests a guest for the placeholder frame. Does nothing if there already
+  // is one or there is no placeholder yet.
   void RequestGuest();
 
-  // Send the current `src` to the guest. Safe before the attach finishes: the
-  // browser holds the guest's WebContents from the moment it is created, and a
-  // navigation started before it is attached is one content brings up with it.
+  // Sends the current `src` to the guest. Safe before the attach finishes.
   void NavigateGuest();
 
-  // kIframe rather than a value of its own. Everything that switches on the
-  // owner type -- process allocation, the frame tree the browser keeps, devtools
-  // -- wants to treat this exactly as it treats an <iframe>, and adding a case
-  // to a mojom enum shared with //content would put the fork in every one of
-  // those switches for no behavior it wants to differ.
+  // kIframe, not a new value: everything that switches on owner type should
+  // treat this like an <iframe>, and a new value in this //content enum would
+  // touch every such switch.
   FrameOwnerElementType OwnerType() const final {
     return FrameOwnerElementType::kIframe;
   }
@@ -304,26 +192,16 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // domicile::mojom::blink::WebViewGuestClient:
   //
-  // The browser saying what the guest's history can do now. It arrives when it
-  // CHANGES and not otherwise, so there is no case in which this stores what it
-  // already held -- and the event below is therefore never dispatched for a
-  // change that is not one.
+  // The browser sends these only on change, so each dispatches its event
+  // unconditionally.
   void HistoryChanged(bool can_go_back, bool can_go_forward) override;
-
-  // And the browser saying whether a page is on its way. It arrives when it
-  // CHANGES, so the event below is never dispatched for a change that is not
-  // one.
   void LoadingChanged(bool is_loading) override;
-
-  // And the browser saying where the page now is and what it says about the
-  // connection behind it. It arrives when either CHANGES, so the event below is
-  // never dispatched for a change that is not one.
   void PageChanged(const KURL& url,
                    domicile::mojom::blink::WebViewSecurity security) override;
 
-  // A chord the guest's page left alone, dispatched here as a KeyboardEvent a
-  // chrome handles the way it handles a key pressed in its own document. See
-  // UnhandledKeyDown in components/domicile/mojom/web_view_guest.mojom.
+  // Dispatches a chord the page did not handle as a KeyboardEvent on this
+  // element. See UnhandledKeyDown in
+  // components/domicile/mojom/web_view_guest.mojom.
   void UnhandledKeyDown(const String& key,
                         const String& code,
                         bool alt_key,
@@ -338,17 +216,12 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void FaviconChanged(const KURL& icon) override;
 
-  // The browser saying what a find has found. It arrives when it CHANGES, so
-  // the event below is never dispatched for a change that is not one.
+  // Sent only on change, like HistoryChanged.
   void FindChanged(int32_t matches, int32_t active_match) override;
-
-  // The browser saying how big the page's content is. It arrives when it
-  // CHANGES, like FindChanged.
   void ContentSizeChanged(int32_t width, int32_t height) override;
 
-  // The page needs a file picked, and the shell is asked in a
-  // `domicile-file-chooser` event it answers. One no listener takes with
-  // `preventDefault()` is canceled here as soon as the dispatch returns. See
+  // Dispatches `domicile-file-chooser` for the shell to answer. If no listener
+  // calls `preventDefault()`, the chooser is canceled after dispatch. See
   // domicile_file_chooser_event.h.
   void FileChooserRequested(
       domicile::mojom::blink::WebViewFileChooserMode mode,
@@ -357,92 +230,59 @@ class CORE_EXPORT HTMLWebViewElement final
       const String& home,
       FileChooserRequestedCallback callback) override;
 
-  // The page asked for a context menu. Dispatched as `domicile-context-menu`.
-  // See domicile_context_menu_event.h.
+  // Dispatches `domicile-context-menu`. See domicile_context_menu_event.h.
   void ContextMenuRequested(
       domicile::mojom::blink::WebViewContextMenuPtr menu) override;
 
-  // And the browser saying the page inside called window.close(), which its
-  // renderer allowed. Dispatched as `domicile-close`: the browser closes
-  // nothing, and the shell removes this element. Only for an element with no
-  // `window`; the browser closes browser windows. An event, so nothing is
-  // stored.
+  // Dispatches `domicile-close` when the page called window.close(); the shell
+  // removes the element. Only for elements without `window`, since the browser
+  // closes browser windows itself.
   void CloseRequested() override;
 
-  // And an extension asking for this browser window to be the one in front.
-  // Dispatched as `domicile-focus-request`: which window is in front is the
-  // shell's, so the browser raises nothing. An event, like CloseRequested.
+  // Dispatches `domicile-focus-request` when an extension asks to raise this
+  // window. The shell decides window order.
   void FocusRequested() override;
 
-  // The `window` attribute, for CreateGuest. A null String (mojom's absent
-  // `string?`) for an element showing its own page.
+  // The `window` attribute for CreateGuest, or a null String if absent.
   String BrowserWindow() const;
 
-  // The pipe the guest was asked for on, kept for as long as this element
-  // lives. Not a one-shot: the request can reach the browser before the
-  // placeholder frame does, and the browser holds it on this pipe until the
-  // frame arrives -- so closing it would drop the request. See
-  // WebViewGuestHost in components/domicile/browser/web_view_guest.cc.
+  // Kept open for the element's life: the browser may hold the request on
+  // this pipe until the placeholder frame arrives. See WebViewGuestHost in
+  // components/domicile/browser/web_view_guest.cc.
   HeapMojoRemote<domicile::mojom::blink::WebViewGuestHost> host_;
 
-  // The guest, for as long as this element lives. Bound once, and not
-  // rebuilt on a later `src`: the placeholder frame is destroyed by the
-  // attach, so there would be nothing left to name in a second request.
+  // Bound once. A later `src` reuses it, since the attach destroys the
+  // placeholder frame a second request would need.
   HeapMojoRemote<domicile::mojom::blink::WebViewGuest> guest_;
 
-  // The other direction, handed over in the same CreateGuest that asks for the
-  // guest -- so the browser can never have a history to report and nowhere to
-  // report it to.
+  // Passed in CreateGuest, so the browser always has somewhere to report.
   HeapMojoReceiver<domicile::mojom::blink::WebViewGuestClient,
                    HTMLWebViewElement>
       client_receiver_;
 
-  // What the browser last said. False both until it says otherwise, which is
-  // not a guess: a guest that has been nowhere has no entry behind it and none
-  // ahead, so the browser's first answer for a fresh guest is this one and it
-  // does not spend a message saying so.
+  // The browser's last reports. Defaults match a fresh guest, for which the
+  // browser sends nothing. `security_` is empty, not "neutral", until the
+  // browser reports one.
   bool can_go_back_ = false;
   bool can_go_forward_ = false;
-
-  // And whether a page is arriving. False until the browser says otherwise,
-  // which is not a guess either: a guest that has not been sent anywhere is
-  // fetching nothing, so the browser does not spend a message saying so.
   bool loading_ = false;
-
-  // And where the page is, with what the browser says about reaching it. Both
-  // empty until the browser says otherwise, and empty is a statement: it is a
-  // guest still showing the initial entry, which is not an address and not a
-  // connection anybody has judged. A default of "neutral" here would be this
-  // element answering a question the browser has not been asked yet.
   String url_;
   String security_;
-
-  // 100% until the browser says otherwise, which is what a fresh guest is.
   double zoom_ = 1.0;
-
-  // Empty until the browser names an icon, which a page that has not parsed
-  // its head yet has not.
   String favicon_;
-
-  // No find, until the browser says one found something.
   int32_t find_matches_ = 0;
   int32_t find_active_match_ = 0;
-
-  // No size, until the browser says the page has laid out.
   int32_t content_width_ = 0;
   int32_t content_height_ = 0;
 
-  // The newest context menu dispatched, the only one the browser acts on. 0
-  // before the first.
+  // The newest context menu dispatched; the browser acts only on it. 0 before
+  // the first.
   int32_t context_menu_id_ = 0;
 
-  // Every file chooser a shell took and has not answered yet.
+  // File chooser events the shell has not answered yet.
   //
-  // HELD HERE SO THE GARBAGE COLLECTOR CANNOT ANSWER FOR THE SHELL. A shell
-  // takes the event and keeps it while the user picks; if nothing else held
-  // it, collecting it would destroy the browser's reply callback unrun, and
-  // the page would wait forever for a file. The event leaves this set when it
-  // is answered.
+  // Held so garbage collection cannot destroy the browser's reply callback
+  // unrun, which would leave the page waiting forever.
   HeapHashSet<Member<DomicileFileChooserEvent>> waiting_choosers_;
 };
 

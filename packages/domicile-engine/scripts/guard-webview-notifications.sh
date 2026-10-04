@@ -1,33 +1,27 @@
 #!/usr/bin/env bash
-# A page in a browser window that may show notifications, and nothing asking
-# whether it may.
+# Checks that a page in a browser window is granted notifications without a
+# prompt (patch 0068). See packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-notifications.sh /build/chromium/src
 #
-# WHY THIS EXISTS. Chrome asks before a site may notify, and the asking is a
-# permission bubble drawn over the page -- on a desktop, over the shell, with
-# no browser window for it to belong to. Left at "ask", every site's
-# Notification.requestPermission() went unanswered and its notifications were
-# lost. Patch 0068 sets the profile's default to allow; this asserts a page in
-# a <webview> reads it.
+# Chromium asks with a permission bubble, which has no browser window to attach
+# to on this desktop, so requests go unanswered. Patch 0068 makes the profile
+# default allow.
 #
-# Headless and software-composited, like guard-webview-framing.sh. Where a
-# notification GOES -- org.freedesktop.Notifications, which the compositor
-# serves -- is not this guard's: there is no bus here, and the server is the
-# compositor's, tested there.
+# Runs headless with software compositing. Delivery to
+# org.freedesktop.Notifications is the compositor's and is tested there.
 #
-# WHAT IT ASSERTS. That the page's flat color is on the shell's page: it paints
-# it only when navigator.permissions says notifications are "granted".
+# Passes when the page's color appears: the page paints it only if
+# navigator.permissions reports notifications as "granted".
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control, two runs of the same shell:
+# NEGATIVE=1 is the control, two runs:
 #
-#   1. the page painting the color without asking. It MUST show: this is the
-#      run that says the harness can see a guest's color at all.
-#   2. the page asking about geolocation, which nothing granted. It MUST show
-#      nothing: a permission the desk left alone reads as not granted, so the
-#      claim's color is the default this patch set, and not a page that paints
-#      whatever it is told.
+#   1. The page paints the color without asking. It must show, so the probe can
+#      see a guest's color.
+#   2. The page asks about geolocation, which is not granted. It must not show,
+#      so the positive run reflects the default and not a page that always
+#      paints.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -48,8 +42,8 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The granted page's color, and the shell's around it. Neither is any other
-# guard's, and neither is a browser background.
+# The granted page's color and the shell's background. Both are distinct from
+# other guards' colors and from browser backgrounds.
 COLOR="${COLOR:-6B3FA0}"
 WITNESS="${WITNESS:-3A5A40}"
 
@@ -86,15 +80,13 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-# One browser, one shell, one answer: the probe's status. Every run gets the
-# same switches and a fresh profile, so the runs differ in the page's question
-# and nothing else -- a profile left over would be a setting left over.
+# Runs one engine and returns the probe's status. Each run gets a fresh
+# profile, so no setting carries over between runs.
 measure() { # $1 which run, $2 the permission the page asks about
   local which="$1" permission="$2"
   local engine_log="/tmp/domicile-webview-notifications-$which-engine.log"
   local probe_log="/tmp/domicile-webview-notifications-$which-probe.log"
-  # Unescaped inside the shell's own query, which is safe because it carries
-  # no `&`: URLSearchParams reads everything after `src=` as the address.
+  # Not escaped in the shell's query. Safe because it contains no `&`.
   local page="$PAGES/asks?permission=$permission"
   LAST_ENGINE_LOG="$engine_log"
 
@@ -160,8 +152,8 @@ PORT="$(served_port "$SERVER_LOG")" || {
 PAGES="http://127.0.0.1:$PORT"
 echo "the page at $PAGES"
 
-# 2. The runs. The control's order is the experiment: the second leg's absence
-#    is a reading only because the first leg's presence came first.
+# 2. The runs. The control's first leg must run first: it shows the probe can
+#    see the color, so the second leg's absence is a real result.
 if [ "$NEGATIVE" = "1" ]; then
   LEG_STARTED="$(date +%s)"
   measure unasked none
@@ -182,8 +174,8 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. Run directly by
-# `scripts/test-webview-notifications-guard.sh`.
+# The verdict. `scripts/test-webview-notifications-guard.sh` runs this block
+# directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

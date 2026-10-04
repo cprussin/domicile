@@ -14,18 +14,14 @@ namespace {
 
 using Turn = mojom::DisplayTransform;
 
-// THE POINT OF THIS FILE IS THE THIRD TEST, and the first two are what make its
-// failure readable. The compositor's `DisplayTransform` (domicile_protocol),
-// the config's `Transform`, this header's list and `mojom::DisplayTransform`
-// are four spellings of one closed set, and nothing but a test makes them
-// agree. A turn that loses its wire name does not fail a build: it lands a
-// monitor on its side face-up, with nothing said.
+// `domicile_protocol::DisplayTransform`, `domicile_config::Transform`, this
+// header's list and `mojom::DisplayTransform` must name the same set. Only a
+// test checks that: a missing wire name does not fail the build, it silently
+// draws a monitor at the wrong rotation.
 
 TEST(DisplayTransformTest, AWireNameBecomesTheTurnItNames) {
-  // All four, because there are only four and each is a separate chance to
-  // mistype a hyphen. `rotate-90` and `rotate-270` are the pair that matter --
-  // they are the two quarter turns, and swapping them is a desktop drawn
-  // upside down rather than an error.
+  // Swapping `rotate-90` and `rotate-270` would draw the desktop upside down
+  // without an error.
   EXPECT_EQ(DisplayTransformFromWire<Turn>("normal"), Turn::kNormal);
   EXPECT_EQ(DisplayTransformFromWire<Turn>("rotate-90"), Turn::kRotate90);
   EXPECT_EQ(DisplayTransformFromWire<Turn>("rotate-180"), Turn::kRotate180);
@@ -33,10 +29,8 @@ TEST(DisplayTransformTest, AWireNameBecomesTheTurnItNames) {
 }
 
 TEST(DisplayTransformTest, AnythingElseIsRefusedRatherThanGuessedAt) {
-  // `rotate270` is serde's own kebab-case spelling of `Rotate270`, which is
-  // why the Rust side writes each name out by hand -- it is the near miss this
-  // list is most likely to meet. The rest are the degrees on their own, the
-  // empty string, and a case that is not the wire's.
+  // `rotate270` is serde's default kebab-case name for `Rotate270`, so it is
+  // the most likely near miss.
   EXPECT_EQ(DisplayTransformFromWire<Turn>("rotate270"), std::nullopt);
   EXPECT_EQ(DisplayTransformFromWire<Turn>("270"), std::nullopt);
   EXPECT_EQ(DisplayTransformFromWire<Turn>(""), std::nullopt);
@@ -45,12 +39,9 @@ TEST(DisplayTransformTest, AnythingElseIsRefusedRatherThanGuessedAt) {
 }
 
 TEST(DisplayTransformTest, EveryTurnHasExactlyOneWireNameAndRoundTrips) {
-  // Built from the same list the codec is, so this cannot check the list
-  // against itself: what it checks is the list against
-  // `mojom::DisplayTransform`, whose `kMaxValue` is generated from the mojom
-  // rather than from here. A variant added to the mojom and not to the list
-  // fails on the count; one whose name does not come back fails on the round
-  // trip.
+  // Checks the list against `mojom::DisplayTransform`'s generated `kMaxValue`.
+  // A mojom variant missing from the list fails the count; a wrong name fails
+  // the round trip.
   std::vector<Turn> named;
 #define DOMICILE_DISPLAY_TRANSFORM_CASE(turn, wire)                       \
   EXPECT_EQ(DisplayTransformToWire(Turn::turn), std::string_view(wire));  \

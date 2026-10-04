@@ -25,9 +25,8 @@
 namespace ui {
 namespace {
 
-// A `stat` that answers whatever the case wants. Injected rather than made:
-// a unit test cannot `mknod` a character device, and a test that ran only as
-// root would not run.
+// A fake `stat` returning `mode` and `rdev`, since tests cannot `mknod`
+// without root.
 StatCall StatAnswering(mode_t mode, dev_t rdev) {
   return base::BindRepeating(
       [](mode_t node_mode, dev_t node_rdev, const base::FilePath&,
@@ -45,23 +44,21 @@ StatCall StatRefusing() {
       [](const base::FilePath&, struct stat*) { return -1; });
 }
 
-// A real descriptor to stand in for the one a `ResumeDevice` carries.
-// `/dev/zero` rather than `/dev/null` because a byte read off it says the
-// descriptor that came out the far end is this one and not some other.
+// A real descriptor standing in for a `ResumeDevice` one. `/dev/zero`, not
+// `/dev/null`, so a successful read proves it is still open.
 base::ScopedFD OpenZero() {
   base::ScopedFD fd(open("/dev/zero", O_RDONLY | O_CLOEXEC));
   CHECK(fd.is_valid());
   return fd;
 }
 
-// Reads one byte, and answers how many came back: 1 from `/dev/zero`, -1 from
-// a descriptor that is not open.
+// Reads one byte: returns 1 from `/dev/zero`, -1 from a closed descriptor.
 ssize_t ReadOneByte(int descriptor) {
   char byte = 0;
   return read(descriptor, &byte, 1);
 }
 
-// One (id, path) the factory was asked to close and open again.
+// One (id, path) the factory was asked to reopen.
 struct Reopened {
   int id = 0;
   std::string path;
@@ -69,8 +66,8 @@ struct Reopened {
   friend bool operator==(const Reopened&, const Reopened&) = default;
 };
 
-// Stands in for `Session.ReleaseDevice`: records every device it was asked
-// about, in order, and refuses the ones it was told to refuse.
+// Fake `Session.ReleaseDevice`: records calls in order and fails for devices
+// passed to `Refuse`.
 class RecordedRelease {
  public:
   ReleaseDeviceCall Bind() {
@@ -104,39 +101,31 @@ constexpr char kKeyboardPath[] = "/dev/input/event0";
 constexpr char kMousePath[] = "/dev/input/event1";
 constexpr char kTouchpadPath[] = "/dev/input/event2";
 
-// Stands in for `InputDeviceFactoryEvdev` closing a device and opening it
-// again, and for the `OpenDeviceFd` that open runs. It does what the factory
-// does -- reach back into the opener while the call that asked for the reopen
-// is still on the stack -- so that a case exercises the re-entrancy as well
-// as the call.
+// Fake factory reopen plus the `OpenDeviceFd` it runs. Like the real one, it
+// re-enters `DrmTakenDevices` synchronously, so tests cover re-entrancy.
 //
-// A path is only taken again once `Knows` has said which device number the
-// node carries, because that is what a real open stats out of it; a case that
-// says nothing gets the detach half and no take, which is what a device whose
-// node has gone looks like.
+// A path is re-taken only after `Knows` gives its device number; otherwise
+// the reopen only detaches, as for a removed node.
 class RecordedReopen {
  public:
   ReopenDeviceCall Bind() {
     return base::BindRepeating(&RecordedReopen::Run, base::Unretained(this));
   }
 
-  // Set once the devices object exists, the way the real factory hands itself
-  // to the opener it already owns.
+  // Set after construction, as the real factory registers with its opener.
   void Watch(DrmTakenDevices* devices) { devices_ = devices; }
 
-  // What `NumberOfDevice` would answer for this path.
+  // Sets what `NumberOfDevice` returns for `path`.
   void Knows(const std::string& path, DeviceNumber number) {
     numbers_[path] = number;
   }
 
-  // Whether the session is the one in front of the user, which is what
-  // decides the liveness `TakeDevice`'s reply reports.
+  // Whether the session is active, which sets the liveness of new takes.
   void SessionIsActive(bool active) { active_ = active; }
 
   const std::vector<Reopened>& calls() const { return calls_; }
 
-  // The descriptor the reopened device was given, as the factory would have
-  // handed it to a new converter.
+  // The descriptor the last reopen consumed.
   int descriptor() const { return consumed_.get(); }
 
  private:
@@ -153,9 +142,8 @@ class RecordedReopen {
       return;
     }
 
-    // WHAT `OpenDeviceFd` DOES WHEN NOTHING IS PARKED: a device the session
-    // still holds cannot be taken again, so it is given back first, and the
-    // liveness comes out of the reply rather than out of hope.
+    // As `OpenDeviceFd` does with nothing parked: release first, since a held
+    // device cannot be re-taken, then take with the reply's liveness.
     devices_->GiveBack(number->second);
     devices_->Take(number->second, id, path,
                    active_ ? DeviceLiveness::kLive : DeviceLiveness::kRevoked);
@@ -169,10 +157,8 @@ class RecordedReopen {
 };
 
 TEST(DrmInputDevicesTest, TheNumberIsTheOneStatReportsForTheNode) {
-  // `makedev(13, 64)` is `/dev/input/event0` on every Linux: 13 is the input
-  // major and evdev nodes start at minor 64. logind is addressed by these two
-  // numbers and not by the path, so getting them out of the node is the whole
-  // of the lookup.
+  // `makedev(13, 64)` is `/dev/input/event0`: input major 13, evdev minors
+  // from 64.
   const std::optional<DeviceNumber> number =
       NumberOfDevice(base::FilePath(kKeyboardPath),
                      StatAnswering(S_IFCHR | 0600, makedev(13, 64)));
@@ -182,11 +168,7 @@ TEST(DrmInputDevicesTest, TheNumberIsTheOneStatReportsForTheNode) {
 }
 
 TEST(DrmInputDevicesTest, APathThatIsNotACharacterDeviceHasNoNumber) {
-  // NOT A PEDANTRY. `TakeDevice` is addressed by (major, minor) with no
-  // notion of which node they came from, and block devices carry the same
-  // numbers in a different space -- so handing logind the numbers of a
-  // regular file or a directory asks it for a device that is not the one on
-  // the path, if it is anything at all.
+  // Other file types' numbers would name a different device to logind.
   EXPECT_FALSE(NumberOfDevice(base::FilePath("/dev/input"),
                               StatAnswering(S_IFDIR | 0755, 0))
                    .has_value());
@@ -196,9 +178,7 @@ TEST(DrmInputDevicesTest, APathThatIsNotACharacterDeviceHasNoNumber) {
 }
 
 TEST(DrmInputDevicesTest, APathThatCannotBeStattedHasNoNumber) {
-  // A node udev announced and the kernel removed between the announcement and
-  // the open. Ordinary, and the answer is that there is no device here rather
-  // than a number made up from an uninitialized `struct stat`.
+  // For example, a node removed between udev's announcement and the open.
   EXPECT_FALSE(
       NumberOfDevice(base::FilePath(kKeyboardPath), StatRefusing()).has_value());
 }
@@ -215,22 +195,13 @@ TEST(DrmInputDevicesTest, AResumedDeviceIsOpenedAgainWithTheDescriptorLogindSent
 
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
 
-  // CLOSED AND OPENED AGAIN, NOT PATCHED UP IN PLACE. logind `EVIOCREVOKE`s
-  // the descriptor it paused, so the converter's next read is `ENODEV` and it
-  // answers that by stopping its watch -- and no `dup2` can re-arm that, since
-  // the kernel drops an epoll registration when the description behind the
-  // number is closed. `InputDeviceFactoryEvdev::AttachInputDevice` is the only
-  // caller of `Start()`, so going back through the factory is the way back.
+  // Reopened through the factory, the only way to restart a stopped
+  // converter.
   EXPECT_EQ(reopen.calls(),
             std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath}}));
 
-  // ...on the SAME id, because it is the same device coming back, and minting
-  // a new one would present it to everything downstream as a different one.
-  //
-  // AND THE REOPEN GETS LOGIND'S DESCRIPTOR, which is not a nicety:
-  // `TakeDevice` for a device the session already holds is refused, so the one
-  // the signal carried is the only one there will be. A byte read off it says
-  // so -- `/dev/zero` answers one, and a closed descriptor answers -1.
+  // Same id, so downstream sees the same device. The reopen gets logind's
+  // descriptor, since `TakeDevice` refuses a held device.
   EXPECT_EQ(ReadOneByte(reopen.descriptor()), 1);
 }
 
@@ -245,10 +216,8 @@ TEST(DrmInputDevicesTest, OnlyAPauseWaitsToBeCompleted) {
   devices.Take(kMouse, kMouseId, base::FilePath(kMousePath),
                DeviceLiveness::kLive);
 
-  // logind blocks the console switch until every `PauseDevice` of type
-  // "pause" has been answered with `PauseDeviceComplete`, and gives up only
-  // after its own timeout. "force" and "gone" are it telling us what it has
-  // already done, and answering those is not part of the protocol.
+  // logind waits for `PauseDeviceComplete` only after "pause". "force" and
+  // "gone" report what it already did.
   EXPECT_EQ(devices.Pause(kKeyboard, "pause"), PauseAnswer::kCompleteIt);
   EXPECT_EQ(devices.Pause(kMouse, "gone"), PauseAnswer::kNothingToSay);
 }
@@ -263,11 +232,8 @@ TEST(DrmInputDevicesTest, AForcePauseTakesTheDeviceBackThroughTheFactory) {
                DeviceLiveness::kLive);
   EXPECT_EQ(devices.Pause(kKeyboard, "force"), PauseAnswer::kDeviceIsRevoked);
 
-  // "force" is logind saying what it has ALREADY done: `session_device_stop`
-  // has `EVIOCREVOKE`d this descriptor before the signal was sent, and no ack
-  // is expected. Treating it as a no-op leaves a converter watching a
-  // descriptor whose every read is `ENODEV` -- the keyboard and the trackpad
-  // dying in the same instant, with nothing in the log.
+  // The descriptor is already revoked, so the dead converter must be
+  // replaced.
   EXPECT_EQ(reopen.calls(),
             std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath}}));
 }
@@ -278,10 +244,7 @@ TEST(DrmInputDevicesTest, APauseForADeviceNeverTakenIsStillCompleted) {
   DrmTakenDevices devices(release.Bind(), reopen.Bind());
   reopen.Watch(&devices);
 
-  // logind only pauses what it handed over, so arriving here is an invariant
-  // violation and says so in the log. It is still answered: staying silent
-  // would leave the console wedged for logind's timeout, which is a worse
-  // outcome than a wrong answer about a device nobody holds.
+  // Answered anyway, or the console switch waits for logind's timeout.
   EXPECT_EQ(devices.Pause(kKeyboard, "pause"), PauseAnswer::kCompleteIt);
 }
 
@@ -299,8 +262,7 @@ TEST(DrmInputDevicesTest, ADeviceThatIsGoneIsNotReleasedAfterwards) {
   EXPECT_EQ(devices.Pause(kMouse, "gone"), PauseAnswer::kNothingToSay);
   EXPECT_TRUE(devices.Release());
 
-  // "gone" is the device unplugged. Releasing it would name a device logind
-  // no longer has, and udev's own removal is what takes the converter down.
+  // An unplugged device is no longer logind's to release.
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
 
@@ -310,9 +272,7 @@ TEST(DrmInputDevicesTest, AResumeForADeviceNeverTakenReopensNothing) {
   DrmTakenDevices devices(release.Bind(), reopen.Bind());
   reopen.Watch(&devices);
 
-  // There is no path or id to reopen under, and asking the factory to open a
-  // device this session was never given is how a desktop ends up with a
-  // converter on a descriptor nobody owns.
+  // No id or path to reopen under, and the descriptor is not ours.
   EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
   EXPECT_TRUE(reopen.calls().empty());
 }
@@ -326,11 +286,8 @@ TEST(DrmInputDevicesTest, AResumeForADeviceStillLiveIsTakenAnyway) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
 
-  // NOT AN ERROR. logind resumes every device on session activation whether
-  // or not it paused that one first, and the descriptor it sends is the
-  // authoritative one -- so refusing it here would leave the converter on a
-  // descriptor logind has stopped backing, and logging it would be a false
-  // alarm on every console switch back.
+  // logind resumes every device on activation, paused or not, and its
+  // descriptor wins.
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
   EXPECT_EQ(reopen.calls(),
             std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath}}));
@@ -345,15 +302,11 @@ TEST(DrmInputDevicesTest, OnlyAReopenAfterAResumeHasADescriptorWaiting) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
 
-  // AN ORDINARY OPEN HAS NOTHING WAITING, and that is what sends it to
-  // `TakeDevice`. A first plug-in and a hotplug both arrive this way.
+  // A first open or hotplug finds nothing parked and uses `TakeDevice`.
   EXPECT_FALSE(devices.Resumed(base::FilePath(kKeyboardPath)).is_valid());
 
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
-  // ONCE, AND ONCE ONLY. `TakeDevice` for a device the session already holds
-  // is refused, so the resume's descriptor is the only one there will be --
-  // and a second open of the same path, months later on a real hotplug, must
-  // go to logind rather than be handed a descriptor from a console switch.
+  // Handed over once, so a later hotplug of the path goes to logind.
   EXPECT_FALSE(devices.Resumed(base::FilePath(kKeyboardPath)).is_valid());
 }
 
@@ -368,11 +321,8 @@ TEST(DrmInputDevicesTest, AForcePausedDeviceIsStillOwedBackToLogind) {
   EXPECT_EQ(devices.Pause(kKeyboard, "force"), PauseAnswer::kDeviceIsRevoked);
   EXPECT_TRUE(devices.Release());
 
-  // "force" REVOKES THE DESCRIPTOR AND KEEPS THE DEVICE, which is what makes
-  // it different from "gone". `session_device_stop` does not touch
-  // `s->devices`, so logind still has this session down as the holder and
-  // still wants it back on the way out -- and a session that forgot it here
-  // would strand the device for whoever logs in next.
+  // Unlike "gone", "force" leaves this session holding the device, so it
+  // must still be released.
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
 
@@ -392,31 +342,24 @@ TEST(DrmInputDevicesTest, ASessionComingBackTakesEveryRevokedDeviceAgain) {
   devices.Take(kTouchpad, kTouchpadId, base::FilePath(kTouchpadPath),
                DeviceLiveness::kLive);
 
-  // The console goes away. The take each force pause asks for lands while
-  // this session is still in the background, so logind hands back a
-  // descriptor it has already revoked and both devices stay dead.
+  // Console switched away: the force pauses' re-takes happen while inactive,
+  // so both come back revoked.
   reopen.SessionIsActive(false);
   EXPECT_EQ(devices.Pause(kKeyboard, "force"), PauseAnswer::kDeviceIsRevoked);
   EXPECT_EQ(devices.Pause(kTouchpad, "force"), PauseAnswer::kDeviceIsRevoked);
 
-  // And it comes back with no `ResumeDevice` behind it, which is the case
-  // that cost a reboot: `session_device_resume_all` runs only from
-  // `seat_set_active`, while `session_leave_vt` force-pauses on the kernel's
-  // release signal, so a relinquish with no seat transition behind it leaves
-  // every descriptor revoked and no resume ever comes.
+  // Session active again with no `ResumeDevice`, which logind may never send.
   reopen.SessionIsActive(true);
   EXPECT_EQ(devices.Reclaim(), 2u);
 
-  // The mouse was never revoked, so it is not given back and taken again for
-  // nothing -- a live converter would be stopped and rebuilt on every
-  // activation.
+  // The live mouse is left alone.
   EXPECT_EQ(reopen.calls(),
             std::vector<Reopened>({Reopened{kKeyboardId, kKeyboardPath},
                                    Reopened{kTouchpadId, kTouchpadPath},
                                    Reopened{kKeyboardId, kKeyboardPath},
                                    Reopened{kTouchpadId, kTouchpadPath}}));
 
-  // ...and all three are live now, so a second activation asks for nothing.
+  // All three are live now.
   EXPECT_EQ(devices.Reclaim(), 0u);
 }
 
@@ -427,12 +370,8 @@ TEST(DrmInputDevicesTest, ADeviceTakenWhileTheSessionIsNotInFrontIsNotLive) {
   reopen.Watch(&devices);
   reopen.Knows(kKeyboardPath, kKeyboard);
 
-  // THE STARTUP HALF OF THE SAME GAP. `TakeDevice` answers `(h fd, b
-  // inactive)`, and `session_device_new` revokes the descriptor before
-  // returning it when the session is not the one in front of the user -- so a
-  // scan that runs during that moment gets a set of dead descriptors and
-  // nothing ever says so. Recorded as revoked, the next activation is what
-  // fixes it.
+  // `TakeDevice` returns a revoked descriptor to an inactive session. The
+  // next activation reclaims it.
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kRevoked);
 
@@ -453,10 +392,7 @@ TEST(DrmInputDevicesTest, AResumeMakesARevokedDeviceLiveAgain) {
   EXPECT_EQ(devices.Pause(kKeyboard, "force"), PauseAnswer::kDeviceIsRevoked);
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
 
-  // logind's polite half still happens on a seat that has no VTs, and the
-  // descriptor a `ResumeDevice` carries is a live one -- so the activation
-  // that follows it must not give the device back and take it again for
-  // nothing.
+  // A resumed descriptor is live, so activation leaves it alone.
   EXPECT_EQ(devices.Reclaim(), 0u);
 }
 
@@ -469,20 +405,16 @@ TEST(DrmInputDevicesTest, GivingADeviceBackIsWhatLetsItBeTakenAgain) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
 
-  // THE ONLY WAY BACK TO A LIVE DESCRIPTOR WHEN NO RESUME IS COMING.
-  // `TakeDevice` for a device the session still holds is refused with
-  // `Device is taken` (systemd `logind-session-dbus.c`), so a revoked
-  // descriptor can be replaced only by giving the device back first.
+  // `TakeDevice` refuses a held device ("Device is taken"), so a revoked one
+  // must be released first.
   EXPECT_TRUE(devices.GiveBack(kKeyboard));
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 
-  // ...and it is not held any more, so the release on the way out must not
-  // name it a second time.
+  // No longer held, so shutdown doesn't release it again.
   EXPECT_TRUE(devices.Release());
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 
-  // An ordinary open holds nothing yet, and asking logind to take back a
-  // device it never handed over is a message about a device nobody has.
+  // Nothing to release for a device never taken.
   EXPECT_FALSE(devices.GiveBack(kMouse));
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
@@ -501,8 +433,7 @@ TEST(DrmInputDevicesTest, ReleasesEveryDeviceItTookInOrder) {
                DeviceLiveness::kLive);
 
   EXPECT_TRUE(devices.Release());
-  // Ordered by device number rather than by the order they were taken, so a
-  // failure is reported against the same device every time.
+  // Ordered by device number, so failures report consistently.
   EXPECT_EQ(release.calls(),
             std::vector<DeviceNumber>({kKeyboard, kMouse, kTouchpad}));
 }
@@ -522,9 +453,7 @@ TEST(DrmInputDevicesTest, ADeviceThatRefusesTheReleaseDoesNotStrandTheRest) {
   release.Refuse(kMouse);
 
   EXPECT_FALSE(devices.Release());
-  // NOT A SHORT CIRCUIT. Stopping at the refusal would leave the touchpad
-  // held by a session that is on its way out, and logind hands a device back
-  // to the next session only once every holder has let go of it.
+  // Continues past a failure, so the touchpad isn't stranded.
   EXPECT_EQ(release.calls(),
             std::vector<DeviceNumber>({kKeyboard, kMouse, kTouchpad}));
 }
@@ -540,18 +469,13 @@ TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
 
   EXPECT_TRUE(devices.Release());
   EXPECT_TRUE(devices.Release());
-  // The destructor releases too, and a shutdown that releases explicitly is
-  // the ordinary path -- so the second pass has to name nothing rather than
-  // hand logind a device this session no longer holds.
+  // The destructor releases too, so a second pass must release nothing.
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
 
-// READ OFF A REAL CONSOLE SWITCH BACK. The activation's `PropertiesChanged`
-// was read first, so `Reclaim` gave every revoked device back and took it
-// again, live -- and only then were the activation's `ResumeDevice`s read.
-// Each carried a descriptor for the `SessionDevice` that release had just
-// freed, so reopening on it closed the live converter and failed on `ENODEV`,
-// thirteen times.
+// On activation, `Reclaim` can re-take devices before logind's resumes are
+// read. Those resumes carry descriptors the release revoked, so reopening on
+// them would replace a live converter with a dead one.
 TEST(DrmInputDevicesTest, AResumeSentBeforeTheDeviceWasGivenBackIsDropped) {
   RecordedRelease release;
   RecordedReopen reopen;
@@ -564,7 +488,7 @@ TEST(DrmInputDevicesTest, AResumeSentBeforeTheDeviceWasGivenBackIsDropped) {
   ASSERT_EQ(devices.Reclaim(), 1u);
   ASSERT_EQ(reopen.calls().size(), 1u);
 
-  // The release's "gone" has not arrived, so this resume was sent before it.
+  // The release's "gone" hasn't arrived, so this resume predates it.
   EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
   EXPECT_EQ(reopen.calls().size(), 1u)
       << "reopening would close the converter Reclaim just built";
@@ -582,14 +506,12 @@ TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kRevoked);
   EXPECT_TRUE(devices.GiveBack(kKeyboard));
-  // logind's answer to that release, so the resume after it is a current one.
+  // The release's echo, so the next resume is current.
   EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
 
-  // A resume does not just hand a descriptor over, it says logind is holding
-  // this device for this session again -- so the shutdown owes it back. A
-  // resume that parked the descriptor without recording the hold would strand
-  // the device with a session that has exited.
+  // A resume means logind holds the device for us again, so shutdown must
+  // release it.
   EXPECT_TRUE(devices.Release());
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard, kKeyboard}));
 }
@@ -604,28 +526,14 @@ TEST(DrmInputDevicesTest, AResumeForAGoneDeviceIsStillRefused) {
                DeviceLiveness::kLive);
   EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
 
-  // THE ONE PAUSE THAT MEANS THE NODE IS NOT COMING BACK, so it is the one
-  // that forgets the name as well as the hold. Everything else that empties
-  // the held table is a step on the way to taking the device again, and a
-  // resume in that window is answered rather than refused.
+  // A real unplug forgets the name too, so a later resume is refused.
   EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
   EXPECT_TRUE(reopen.calls().empty());
 }
 
-// THE ONE THAT COST A DESKTOP ITS KEYBOARD, READ OFF A REAL CONSOLE SWITCH.
-// A force pause reopens the device, the reopen gives it back and takes it
-// again, and logind answers the `ReleaseDevice` half by telling this session
-// the device is "gone" -- because from logind's side it is: the
-// `SessionDevice` this session asked it to free really has been freed. That
-// signal arrives AFTER the `TakeDevice` that replaced it, so it names a
-// device this session is holding on a newer take, and forgetting the name
-// there is the desktop losing every input device for the rest of the run.
-//
-// Measured: thirteen devices force-paused at 21:31:25.68, thirteen "gone"
-// pauses in the 141 microseconds after it, `reclaimed 0 of 0` on the way
-// back, and thirteen `logind resumed device N, which this session never
-// took` -- keyboard and trackpad among them, with no way left to leave the
-// console.
+// A force pause's reopen releases and re-takes the device, and logind answers
+// the release with "gone" after the re-take. Treating that as an unplug would
+// lose all input after a console switch.
 TEST(DrmInputDevicesTest, AGoneThatEchoesOurOwnReleaseIsNotTheNodeGoingAway) {
   RecordedRelease release;
   RecordedReopen reopen;
@@ -640,19 +548,15 @@ TEST(DrmInputDevicesTest, AGoneThatEchoesOurOwnReleaseIsNotTheNodeGoingAway) {
             PauseAnswer::kDeviceIsRevoked);
   ASSERT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 
-  // logind's answer to that release, arriving after the take that replaced
-  // the device it names.
+  // The release's echo, arriving after the re-take.
   EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
 
-  // The device is still this session's, so the activation's resume lands.
+  // The device is still ours, so the activation's resume is accepted.
   EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
   EXPECT_EQ(reopen.calls().back(), (Reopened{kKeyboardId, kKeyboardPath}));
 }
 
-// AND THE SESSION STILL OWES IT BACK. A "gone" that was only the echo of a
-// release changes nothing about the hold, so the device is one `Reclaim` can
-// find and one the shutdown has to give back -- which is what tells this
-// apart from a node that really went away.
+// An echoed "gone" leaves the device held, so `Reclaim` still finds it.
 TEST(DrmInputDevicesTest, ADeviceWhoseGoneWasAnEchoIsStillHeld) {
   RecordedRelease release;
   RecordedReopen reopen;
@@ -670,10 +574,7 @@ TEST(DrmInputDevicesTest, ADeviceWhoseGoneWasAnEchoIsStillHeld) {
       << "the force pause left it revoked, so the activation must ask again";
 }
 
-// ONE ECHO PER RELEASE AND NOT ONE FOREVER, which is the half that would put
-// the original bug back the moment a node really was unplugged. The second
-// "gone" is nobody's echo: there was one release and it has been accounted
-// for, so this one is the node going away and the name goes with it.
+// Each release expects one echo. A further "gone" is a real unplug.
 TEST(DrmInputDevicesTest, OnlyOneGoneIsAnsweredForEachReleaseAsked) {
   RecordedRelease release;
   RecordedReopen reopen;

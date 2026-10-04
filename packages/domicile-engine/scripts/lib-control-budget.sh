@@ -1,107 +1,51 @@
 #!/usr/bin/env bash
-# How long a control waits for the thing that must not happen.
+# Sets how long a control waits for an event that must not happen.
 #
 #   . "$SCRIPTS/lib-control-budget.sh"
 #   budget_note client-window 4      # the guard saw its signal after 4s
-#   budget_for client-window 60      # what its control should wait instead
+#   budget_for client-window 60      # how long its control should wait
 #
-# A guard and its control are the same run with one thing changed, and they
-# cost very different amounts for a structural reason: the guard stops the
-# moment it sees what it is looking for, and the control cannot stop until it
-# has given up. So the control pays its whole timeout every single time.
-# Measured on engine run 35496858205, on crux: 1m07 for the client-window guard
-# against 2m04 for its control, 12s for the shell guard against 1m41 for its
-# control, and 10m08 across the ten steps of the five pairs.
+# A guard stops when it sees its signal; its control must wait out the full
+# timeout. The guard and control run back to back on the same build and
+# machine, so the guard's time is a good measure of how long the control must
+# watch. A multiple of it scales with machine speed, unlike a fixed constant.
 #
-# THE NUMBER TO WAIT IS THE GUARD'S OWN. Those two run back to back, in one
-# job, against one build, on one machine — so how long the guard took to see
-# its signal is the best available statement of how long the control has to
-# watch before an absence means anything. The guard writes it down here and
-# the control reads it.
+# Each rule below prevents a control from stopping too early, and has a case
+# in `scripts/test-control-budget.sh`:
 #
-# This is not "a shorter constant". A constant has to be chosen for the slowest
-# machine the guard will ever run on, and the control then pays that number on
-# every machine. A multiple of the guard's own measurement rises when the
-# machine is slow, which is the case the constant was picked to survive, and
-# falls when it is not.
-#
-# EVERY WAY THIS CAN BE WRONG IS A CONTROL THAT STOPS WATCHING TOO EARLY, so
-# each of them has a rule and `scripts/test-control-budget.sh` has a case:
-#
-#   - no note, no change: a control run on its own — by a person, or in a job
-#     where the guard failed before it measured anything — waits exactly what
-#     it waited before this file existed;
-#   - never longer than the full budget, so this can only make a control
-#     cheaper than the number somebody chose, never more patient than it;
-#   - a floor, because a guard that answered in 200ms does not license a
-#     control that watches for 800ms;
-#   - and the note has to be recent. These runners are not ephemeral and /tmp
-#     outlives a job, so a number from an earlier build is not a measurement of
-#     this one and is ignored.
+#   - no note: the control waits its full budget (e.g. run alone, or the
+#     guard failed);
+#   - never longer than the full budget;
+#   - a floor, so a 200ms guard does not give an 800ms control;
+#   - the note must be recent: runners are not ephemeral, so /tmp can hold a
+#     note from an earlier job.
 
-# WHERE THE NOTE GOES, AND WHY IT IS NOT $TMPDIR. A guard and its control run
-# inside `nix develop .#full --command`, and there are callers where each of
-# them is its OWN invocation of it: `pinned-engine.yml` and
-# `engine-release.yml` each run one guard that way, and so does a person
-# running one by hand. The rc script `nix develop` writes ends in
-#
-#   export NIX_BUILD_TOP="$(mktemp -d -t nix-shell.XXXXXX)"
-#   export TMPDIR="$NIX_BUILD_TOP"      # and TMP, TEMP, TEMPDIR
-#
-# -- src/nix/develop.cc, makeRcScript -- so every invocation of it makes a
-# directory of its own and the guard's $TMPDIR is never the control's. The
-# first version of this file put the note under $TMPDIR, which wrote it where
-# nothing would ever read it: both shell controls spent their full 90 polls on
-# engine runs 35492633677 and 35529548154, exactly as they had before this
-# existed. Only the framing guard's saving was real, and only because its
-# control writes the note and reads it inside one process.
-#
-# /tmp is what two steps of one job do share. It is the runner unit's own --
-# PrivateTmp is per-service and the service outlives every job it runs -- which
-# is already how the guards hand their compositor and engine logs to
-# `.github/scripts/engine-diagnostics.sh` a step later. Same channel, two lines
-# instead of a log. What being per-unit rather than per-job costs is a note
-# from the last job sitting there, and the staleness check below is what that
-# is for; `engine.yml` empties the directory at the top of a run as well.
-#
-# AND IT STAYS PINNED EVEN THOUGH THE ENGINE GROUP NO LONGER NEEDS IT TO BE.
-# `engine.yml` runs its twenty checks as one `./scripts/check.sh engine` inside
-# one `nix develop`, and `scripts/lib/engine-guard.sh` runs each guard and its
-# control back to back in that one process tree -- so for that job the two now
-# share a $TMPDIR as well as a /tmp, and either location would carry the note.
-# That is not a reason to move it back. The other callers above are still one
-# invocation per guard, and a note under $TMPDIR would be unreadable for them
-# exactly as it was for every caller before: silently, by spending the full
-# budget, which is the defect two engine runs could not tell from having nothing
-# to read.
+# The note lives in /tmp, not $TMPDIR. Each `nix develop` invocation sets a
+# fresh $TMPDIR (src/nix/develop.cc, makeRcScript), and some callers
+# (`pinned-engine.yml`, `engine-release.yml`, manual runs) start the guard and
+# control in separate invocations. /tmp is shared by all steps of a job on the
+# runner. `engine.yml` empties this directory at the start of a run, and the
+# age check below rejects notes from earlier jobs.
 DOMICILE_CONTROL_BUDGET_DIR="${DOMICILE_CONTROL_BUDGET_DIR:-/tmp/domicile-control-budgets}"
 
-# What a control is allowed to infer from the guard's measurement.
+# Control budget = guard time x MULTIPLE, at least FLOOR seconds.
 DOMICILE_CONTROL_BUDGET_MULTIPLE="${DOMICILE_CONTROL_BUDGET_MULTIPLE:-4}"
 DOMICILE_CONTROL_BUDGET_FLOOR="${DOMICILE_CONTROL_BUDGET_FLOOR:-10}"
-# Beyond this, a note is from another job. Ten minutes is longer than any
-# guard-and-control pair in engine.yml and far shorter than the gap between
-# runs on a machine with one of these queues in front of it.
+# Notes older than this are from another job. Ten minutes exceeds any
+# guard-and-control pair in engine.yml and is shorter than the gap between
+# jobs.
 DOMICILE_CONTROL_BUDGET_MAX_AGE="${DOMICILE_CONTROL_BUDGET_MAX_AGE:-600}"
 
-# EVERY ANSWER SAYS WHICH ONE IT WAS, on stderr, because the number on stdout
-# is the whole of what the caller reads and a fallback that says nothing is how
-# this went wrong. Two engine runs carried a control that spent its full budget
-# because its note was written into a directory the next step did not have, and
-# nothing in either job's log distinguished that from a control that had
-# nothing to be told. One line per answer, in the step that made it.
+# Logs each decision to stderr, so a silent fallback to the full budget is
+# visible in the step log.
 budget_said() { printf 'control budget: %s\n' "$*" >&2; }
 
-# The guard saw its signal after $2 seconds. Called on the path that SUCCEEDS,
-# because that is the only path whose timing says anything: a guard that timed
-# out measured its own patience rather than the system's.
-# Two lines: the measurement, then the clock when it was taken. The timestamp
-# is IN the file rather than read off its mtime, because reading an mtime means
-# `find -newermt` or `stat`, and what is on that runner's PATH is not something
-# to assume -- the sibling change to engine-series-stamp.sh cost a red pull
-# request to `cmp: command not found`, diffutils not being installed there.
-# `date` and `printf` are coreutils, which everything on that machine already
-# depends on.
+# Records that the guard saw its signal after $2 seconds. Call only on
+# success: a timed-out guard measured its timeout, not the system.
+#
+# The file holds the seconds, then the time written. The timestamp is in the
+# file, not the mtime, so this needs only `date` and `printf`; the runner's
+# PATH may lack `stat` and `find` variants.
 budget_note() { # $1 name, $2 seconds
   local file="$DOMICILE_CONTROL_BUDGET_DIR/$1"
   mkdir -p "$DOMICILE_CONTROL_BUDGET_DIR" 2>/dev/null || {
@@ -117,9 +61,8 @@ budget_note() { # $1 name, $2 seconds
   budget_said "$1: the guard took ${2}s, written down in $file"
 }
 
-# What the control should wait, in seconds, given that $2 is what it used to.
-# Prints a number and never fails: a budget this cannot compute is the full
-# one, which is the behavior of every version of these guards before it.
+# Prints how many seconds the control should wait, given full budget $2.
+# Never fails: any problem falls back to the full budget.
 budget_for() { # $1 name, $2 full budget in seconds
   local file noted written now budget
   file="$DOMICILE_CONTROL_BUDGET_DIR/$1"
@@ -134,9 +77,8 @@ budget_for() { # $1 name, $2 full budget in seconds
   noted="$(sed -n '1p' "$file" 2>/dev/null)"
   written="$(sed -n '2p' "$file" 2>/dev/null)"
 
-  # Anything unreadable is not a measurement. Both fields are checked before
-  # either is used, so a truncated file -- a note from a run that died between
-  # the two lines -- lands on the full budget rather than on half a reading.
+  # Validate both fields before using either, so a truncated note falls back
+  # to the full budget.
   case "$noted" in
     (''|*[!0-9]*)
       budget_said "$1: the note at $file reads '$noted' rather than a number," \
@@ -152,10 +94,8 @@ budget_for() { # $1 name, $2 full budget in seconds
       return 0 ;;
   esac
 
-  # Recent enough to be about this build. These runners are not ephemeral and
-  # /tmp outlives a job, so a number from an earlier one is not a measurement
-  # of this one. A clock that has gone backwards makes this negative, which is
-  # not recent either and falls through to the full budget.
+  # Reject notes from earlier jobs. A clock that went backwards gives a
+  # negative age, which is also rejected.
   now="$(date +%s)"
   case "$now" in
     (''|*[!0-9]*)

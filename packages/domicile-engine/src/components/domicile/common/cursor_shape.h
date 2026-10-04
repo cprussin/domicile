@@ -9,37 +9,24 @@
 
 #include "base/notreached.h"
 
-// The cursors a client can ask for, and the one place a wire name becomes one.
+// The cursors a client can request, and the codec from wire names to shapes.
 //
-// `wp_cursor_shape_v1`'s shapes, named as the CSS `cursor` keyword the chrome
-// assigns, plus `none` for a client that hides the cursor. The same closed set
-// as `domicile_protocol::CursorShape` on the compositor's side and
-// `cursorShapeSchema` in `@domicile/chrome-sdk` on the page's.
+// The shapes of `wp_cursor_shape_v1`, named by their CSS `cursor` keyword,
+// plus `none` for a hidden cursor. The same set as
+// `domicile_protocol::CursorShape` in the compositor and `cursorShapeSchema`
+// in `@domicile/chrome-sdk`.
 //
-// WHY THIS IS A LIST AND NOT A `std::string`. It arrives as JSON over the
-// compositor's socket and used to be copied straight through: browser to mojo
-// to `DomicileAppEvent.cursor` to the page, with nothing on the way asking
-// whether it named anything. A keyword CSS does not know is not an error
-// anywhere -- `element.style.cursor = "pointr"` is a no-op -- so the symptom of
-// a name gone wrong is an arrow where a hand should be, over one client, with
-// nothing said. `DISCRIMINATED_UNIONS.md` is the rule: the memory format is an
-// enum, and a wire string becomes one in an explicit codec at the boundary.
-// This is that codec, and `ControlChannel::DispatchLine` is that boundary.
+// An enum rather than a string, because CSS silently ignores an unknown
+// cursor keyword. Per docs/guidelines/DISCRIMINATED_UNIONS.md, the wire string
+// is decoded here, at the boundary in `ControlChannel::DispatchLine`.
 //
-// AN X-MACRO RATHER THAN TWO SWITCH STATEMENTS, because there are two of them
-// and they must not be able to disagree. The browser turns a wire name into a
-// shape; Blink turns a shape back into the string the page reads off the
-// event. Both are generated from the list below, so a shape that gains a name
-// in one direction cannot lack one in the other. The templates are what let
-// the same list serve `domicile::mojom::CursorShape` and its `-blink` variant,
-// which are two C++ types with one set of enumerators.
+// An X-macro generates both directions (browser decode, Blink encode) from one
+// list so they cannot disagree. The templates let the list serve both
+// `domicile::mojom::CursorShape` and its `-blink` variant.
 //
-// `cursor_shape_unittest.cc` checks the list against the mojom's own
-// `kMaxValue`, which is the one number here that this file cannot get wrong.
+// `cursor_shape_unittest.cc` checks the list against the mojom's `kMaxValue`.
 
-// The closed set. Order matches `domicile_protocol::CursorShape` and
-// `mojom::CursorShape`; the wire names are what the compositor serializes and
-// what CSS reads.
+// Order matches `domicile_protocol::CursorShape` and `mojom::CursorShape`.
 #define DOMICILE_CURSOR_SHAPES(X) \
   X(kNone, "none")                \
   X(kDefault, "default")          \
@@ -79,12 +66,11 @@
 
 namespace domicile {
 
-// The shape a wire name names, or nothing if it names none of them.
+// The shape for a wire name, or `std::nullopt` if unknown.
 //
-// `std::nullopt` rather than a fallback to `kDefault`: a compositor that sent a
-// name this build does not know is a disagreement worth a line in the log, and
-// substituting an arrow for it is how the original defect looked from the
-// page. The caller decides, and `DispatchLine` drops the message and says so.
+// No fallback to `kDefault`: an unknown name means the compositor and this
+// build disagree, which the caller should log. `DispatchLine` drops the
+// message.
 template <typename CursorShapeEnum>
 inline std::optional<CursorShapeEnum> CursorShapeFromWire(
     std::string_view name) {
@@ -97,8 +83,8 @@ inline std::optional<CursorShapeEnum> CursorShapeFromWire(
   return std::nullopt;
 }
 
-// The wire name of a shape. Total, unlike the other direction: every value of
-// the enum is in the list, which is what the unit test asserts.
+// The wire name of a shape. Every enum value is in the list, as the unit test
+// asserts.
 template <typename CursorShapeEnum>
 inline std::string_view CursorShapeToWire(CursorShapeEnum shape) {
   switch (shape) {
@@ -108,11 +94,8 @@ inline std::string_view CursorShapeToWire(CursorShapeEnum shape) {
     DOMICILE_CURSOR_SHAPES(DOMICILE_CURSOR_SHAPE_TO_WIRE)
 #undef DOMICILE_CURSOR_SHAPE_TO_WIRE
   }
-  // NOT a fallback to an arrow, which is the defect this file exists to stop
-  // arriving silently. An `enum class : int32_t` can hold a value no case
-  // names, but this one cannot get here holding one: mojo checks an enum on
-  // deserialization and rejects the message, so a value reaching this line came
-  // from a cast in this repository and is a bug rather than a peer's doing.
+  // No fallback to an arrow. Mojo rejects out-of-range enums on
+  // deserialization, so reaching here means a bad cast in this repository.
   NOTREACHED();
 }
 

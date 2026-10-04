@@ -12,19 +12,13 @@
 namespace domicile {
 
 bool ApplyKeymap(ui::KeyboardLayoutEngine* engine, std::string_view keymap) {
-  // THE WHOLE STRING, which is where this caller differs from the Wayland one.
-  // There the keymap arrives as a file the client mapped and the size counts a
-  // trailing NUL, so WaylandKeyboard::OnKeymap strnlen()s it back off before
-  // handing it over. Here it arrives as a JSON string with no NUL in it, and
-  // xkb_keymap_new_from_buffer takes the length it is given -- so the length is
-  // the string's own.
+  // Pass the full length. Unlike WaylandKeyboard::OnKeymap, which strips a
+  // trailing NUL, this keymap comes from a JSON string with no NUL.
   const bool applied =
       engine->SetCurrentLayoutFromBuffer(keymap.data(), keymap.size());
   if (!applied) {
-    // Said, and nothing put in its place. What the engine keeps is whatever it
-    // had, which on this platform is the null xkb state that answers every
-    // printable key with nothing -- and a browser quietly going on with that
-    // is the failure this message exists to end rather than one to absorb.
+    // No fallback: the engine keeps its previous state, which is usually the
+    // null state that decodes printable keys to nothing.
     LOG(ERROR) << "domicile: xkb refused the keymap the compositor sent ("
                << keymap.size()
                << " bytes). Keys will not carry the layout that was "

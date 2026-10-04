@@ -1,37 +1,14 @@
 #!/usr/bin/env python3
-"""Three pages for a guest to have a history of, served on loopback.
-
-`guard-webview-history.sh` drives `goBack()`, `goForward()`, `stop()` and
-`reload()` at a `<webview>` and reads which page the guest ended up showing.
-That needs pages that say which they are, and CI has no route to any: `crux`
-reaches no arbitrary host, and a guard whose subject could change under it
-fails for reasons nobody chose. So the guard brings its own.
+"""Serves /one, /two and /slow for guard-webview-history.sh.
 
   /one    where the window starts
-  /two    where it goes next, so there is a history to move in
-  /slow   answered only after --slow-seconds, which is what gives stop()
-          something to cancel -- or never, if the browser hangs up first
+  /two    where it goes next
+  /slow   answers after --slow-seconds, or never if the browser hangs up
 
-Each page says one line to the console, which the engine writes to its own log
-and the guard reads as its whole measurement:
-
-  GUARD guest-shown path=/one serial=3 persisted=false
-
-ON `pageshow` RATHER THAN AT PARSE TIME, and that is the difference between
-measuring this and measuring nothing: a page restored from the back/forward
-cache does not run its script again, so a `console.log` in the body would go
-unreported for exactly the navigation the guard exists to assert. `pageshow`
-fires for a fresh load and for a restore alike, and says which it was.
-
-THE SERIAL IS PER RESPONSE, so a page can tell one visit from the next. It is
-what makes `reload()` readable at all: a reload of the page already showing is
-otherwise indistinguishable from nothing happening, and a bfcache restore
-carries the serial it was cached with while a reload cannot.
-
-`no-store` for the reason the framing fixture sends it, twice over here: a
-back-navigation answered out of the HTTP cache would report the serial it
-reported the first time, and a guard reading serials would be reading its own
-past.
+- Pages log `GUARD guest-shown path=… serial=… persisted=…` on `pageshow`, so
+  a bfcache restore is reported too.
+- The serial is per response, so a reload is distinguishable from no change
+  and from a bfcache restore.
 """
 
 import argparse
@@ -40,10 +17,8 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# The three paths this serves, which are also the names
-# `guard-webview-history.js` navigates to and the strings the guard's verdict
-# compares. Named rather than "/" so a request that arrives by accident is a
-# 404 rather than one of the pages the verdict is about.
+# guard-webview-history.js navigates to these paths and the guard compares
+# them. Not "/", so a stray request gets a 404.
 FAST_PATHS = ("/one", "/two")
 SLOW_PATH = "/slow"
 
@@ -76,31 +51,22 @@ PAGE = """<!doctype html>
 class HasAHistory(BaseHTTPRequestHandler):
     """Answers the three paths, and everything else with a 404."""
 
-    # Set by main(), because BaseHTTPRequestHandler is instantiated per request
-    # and there is nowhere else to put them.
+    # Set by main(): BaseHTTPRequestHandler is instantiated per request.
     slow_seconds = 0.0
-    # A lock because ThreadingHTTPServer answers `/slow` on a thread of its own
-    # and the guard navigates elsewhere while it sleeps.
+    # Guards `served`: ThreadingHTTPServer handles /slow on its own thread
+    # while other requests arrive.
     lock = threading.Lock()
     served = 0
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
-        # WHEN IT WAS ASKED FOR, not when it was answered, and that is one of
-        # the guard's readings rather than a log line: BaseHTTPRequestHandler
-        # logs a request as it sends the response, which for SLOW_PATH is after
-        # the wait and after the browser may have given up. "The element never
-        # started the navigation" and "stop() canceled it" read identically
-        # from the browser's log, and this is what separates them.
+        # Logged on arrival, not on response: BaseHTTPRequestHandler logs
+        # after the wait. Tells "stop() canceled it" from "never started".
         sys.stderr.write("asked %s\n" % self.path)
 
         if self.path == SLOW_PATH:
-            # Before a single header, which is the whole point: a navigation
-            # with no response yet is a navigation `stop()` can cancel, and one
-            # that has committed is not.
-            #
-            # Readable early means the browser hung up (a GET sends nothing
-            # more), so the page can never arrive. Said at once, so the guard
-            # need not sit out the wait to know it.
+            # Before any header: stop() can cancel only an uncommitted
+            # navigation. A readable socket means the browser hung up; log it
+            # now.
             hung_up, _, _ = select.select(
                 [self.connection], [], [], self.slow_seconds
             )
@@ -119,17 +85,14 @@ class HasAHistory(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        # So a back-navigation is a load and not a replay of the first one's
-        # bytes, serial and all.
+        # So a back-navigation reloads rather than replaying cached bytes.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps -- and one of its readings: whether
-        # the slow page was ever REQUESTED is what tells "stop() canceled the
-        # navigation" apart from "the element never started one", which read
-        # identically from the browser's log.
+        # Logged so the guard can tell "stop() canceled /slow" from "never
+        # requested".
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -150,11 +113,9 @@ def main():
     arguments = parser.parse_args()
 
     HasAHistory.slow_seconds = arguments.slow_seconds
-    # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
-    # reaching a guard's fixture.
+    # Loopback only: nothing off this machine should reach a test fixture.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), HasAHistory)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer.
+    # Flushed before serve_forever, because guards wait on this line.
     print(
         "serving /one /two /slow on 127.0.0.1:%d, %s after %gs"
         % (server.server_address[1], SLOW_PATH, arguments.slow_seconds),

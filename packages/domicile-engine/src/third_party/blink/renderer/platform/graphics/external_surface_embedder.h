@@ -18,23 +18,16 @@
 
 namespace blink {
 
-// Resolves the SurfaceId of a surface the browser brokered to a producer that
-// is not a renderer, so a layer in this page can embed it.
+// Resolves the SurfaceId of a surface the browser brokered to a non-renderer
+// producer, so a layer in this page can embed it.
 //
-// The two halves of that SurfaceId come from opposite sides, and neither side
-// could supply the other's. The FrameSinkId is the browser's, because a
-// brokered id is in the browser's own namespace — client id 0 — and every entry
-// point of blink.mojom.EmbeddedFrameSinkProvider rejects a FrameSinkId whose
-// client id is not this renderer's. So the renderer's ordinary allocation path
-// cannot name one, and the id arrives from the browser the way RemoteFrame's
-// does. The LocalSurfaceId is this page's, because the page is the embedder:
-// the embed_token in it is the capability the producer needs in order to
-// submit, and bumping its parent_sequence_number is how an embedder resizes a
-// producer.
+// The FrameSinkId comes from the browser: it is in the browser's namespace
+// (client id 0), which blink.mojom.EmbeddedFrameSinkProvider rejects from a
+// renderer. The LocalSurfaceId comes from this page, as the embedder: its
+// embed_token lets the producer submit, and bumping its parent sequence number
+// resizes the producer.
 //
-// This does not embed anything itself. It hands back a SurfaceId, and what a
-// caller does with it — cc::SurfaceLayer::SetSurfaceId, by way of
-// SurfaceLayerBridge — is the caller's business.
+// Callers embed the result, e.g. via SurfaceLayerBridge.
 class PLATFORM_EXPORT ExternalSurfaceEmbedder {
  public:
   // Null if the connection to the browser dropped before a producer turned up.
@@ -43,21 +36,12 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
   // Which LocalSurfaceId to embed at.
   enum class Allocation {
-    // Whichever one this app is already showing, allocating it if there is
-    // none yet. So several elements naming one app embed one surface and all
-    // of them show that producer, which is what lets the CSS measurement put
-    // eight <app> elements on one page against one producer. Elements naming
-    // different apps get different surfaces, because they are different
-    // windows — and because viz refuses two frame sinks under one embed
-    // token outright, so sharing one across apps does not make several
-    // elements show one producer, it makes the second app's surface not
-    // exist. The allocator this resolves against is per app id; see the .cc.
+    // The app's current LocalSurfaceId, allocating one if none exists.
+    // Elements naming the same app share one surface; see the .cc for why
+    // allocation is per app.
     kAdopt,
-    // A new one, bumping parent_sequence_number. The embedder's box changed
-    // and the producer has to render at the new size: this is the embedder
-    // half of xdg_toplevel.configure, and it is the writer split
-    // LocalSurfaceId is built around — the parent sequence number is the
-    // embedder's to increment, the child's is the producer's.
+    // A new one with a bumped parent sequence number, so the producer
+    // renders at the embedder's new size.
     kReconfigure,
   };
 
@@ -68,23 +52,15 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
 
   ~ExternalSurfaceEmbedder();
 
-  // Resolves a LocalSurfaceId per `allocation` and asks the browser which
-  // FrameSinkId to pair it with. `parent_frame_sink_id` is this page's own, so
-  // that the producer ends up under it in the frame sink hierarchy and
-  // BeginFrames reach it. `size` is how much of the surface the caller will
-  // show, and is what the producer is told to render at.
+  // Resolves a LocalSurfaceId per `allocation` and asks the browser for the
+  // FrameSinkId of `app_id`'s producer. `parent_frame_sink_id` is this page's,
+  // so the producer joins its frame sink hierarchy and gets BeginFrames.
+  // `size` is the size the producer renders at, and `scale` is the page's
+  // device pixels per CSS pixel, which the producer uses to recover logical
+  // size.
   //
-  // `app_id` names which window's surface to embed — a desktop is several of
-  // them and each canvas gets its own.
-  //
-  // The browser holds the reply until a producer has been brokered a sink *for
-  // that app*, because an <app> element exists before the window behind it
-  // does. So this may take arbitrarily long, and if that producer never
-  // connects it never runs.
-  //
-  // `scale` is how many of `size`'s pixels the page draws one CSS pixel with
-  // -- its layout zoom factor -- which is how the producer gets the box back
-  // into the logical pixels it configures a client in.
+  // The browser replies only once a producer for that app exists, since an
+  // <app> element can exist before its window. The callback may never run.
   void Embed(const String& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const gfx::Size& size,

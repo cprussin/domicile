@@ -46,9 +46,7 @@ TEST(EngineEventQueueTest, PushingWakesThePollingThreadAndCarriesTheEvent) {
   EXPECT_EQ(drained[0].scale, 1.5);
 }
 
-// The one event carrying a variable-length payload, and the only reason this
-// queue holds anything but scalars. A list flattened to the first display, or
-// to a count with no records, is a desktop the size of one monitor.
+// The display list is the only variable-length payload.
 TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EngineEventQueue queue;
 
@@ -72,23 +70,18 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   ASSERT_EQ(drained[0].displays.size(), 2u);
   EXPECT_EQ(drained[0].displays[0].id, 7);
   EXPECT_EQ(drained[0].displays[0].width, 2880);
-  // The panel, which the queue holds for the same reason it holds the mode:
-  // what a wl_output states about a screen is what has to arrive whole.
   EXPECT_EQ(drained[0].displays[0].physical_width_mm, 597);
   EXPECT_EQ(drained[0].displays[0].physical_height_mm, 336);
   EXPECT_EQ(drained[0].displays[0].refresh_mhz, 59997);
-  // The panel's own name, which the queue owns the characters of: what
-  // crosses the C ABI is a pointer into this string, so a queue that dropped
-  // it would hand the compositor a dangling one.
+  // The C ABI points into this string, so the queue must keep it.
   EXPECT_EQ(drained[0].displays[0].name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(drained[0].displays[1].name, "");
   EXPECT_EQ(drained[0].displays[1].id, 9);
   EXPECT_EQ(drained[0].displays[1].x, 2880);
 }
 
-// The compositor dispatches once per wakeup, so a burst has to arrive whole
-// rather than one per poll — otherwise a frame callback sits in the queue until
-// something unrelated wakes the loop again.
+// The compositor dispatches once per wakeup, so a drain must return every
+// queued event or the rest wait for an unrelated wakeup.
 TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {
   EngineEventQueue queue;
 
@@ -101,8 +94,7 @@ TEST(EngineEventQueueTest, DrainTakesEverythingQueuedAndThenSleeps) {
   EXPECT_TRUE(queue.Drain().empty());
 }
 
-// A drain that races a push must not swallow it: the compositor would wait for
-// a wakeup that had already been spent.
+// A push after a drain must still wake the poller.
 TEST(EngineEventQueueTest, AnEventPushedAfterADrainStillWakesThePoller) {
   EngineEventQueue queue;
 
@@ -115,8 +107,7 @@ TEST(EngineEventQueueTest, AnEventPushedAfterADrainStillWakesThePoller) {
   ASSERT_EQ(queue.Drain().size(), 1u);
 }
 
-// Pushes come off mojo's thread and drains off the compositor's; nothing in
-// between is allowed to lose one.
+// Pushes from one thread and drains from another must not lose events.
 class Pusher : public base::DelegateSimpleThread::Delegate {
  public:
   Pusher(EngineEventQueue* queue, int count) : queue_(queue), count_(count) {}

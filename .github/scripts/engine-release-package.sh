@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# Collect a runnable engine out of a build directory.
+# Package a runnable engine from a build directory.
 #
 #   .github/scripts/engine-release-package.sh /build/chromium/src out/Release /build/engine-release
 #
 # Writes <stage>/<name>.tar.zst and its .sha256, and sets `tarball` on
 # $GITHUB_OUTPUT when there is one.
 #
-# TWO LISTS, AND THE SPLIT IS THE POINT. A missing file in a Chromium runtime
-# tree does not fail at startup; it fails later and specifically — no text, no
-# GPU, a blank window — and it fails on the user's machine rather than here.
-# So everything this cannot run without is REQUIRED and its absence stops the
-# release, and everything whose presence depends on the build arguments is
-# OPTIONAL and is copied when it is there.
-#
-# Being wrong about which list something belongs in is caught downstream: the
-# workflow unpacks this tarball and runs the pixel guard against it. That is
-# the check that a packaged tree actually works, and it is why the lists below
-# are allowed to be a judgment rather than a proof.
+# A missing runtime file fails late on the user's machine, not at startup. So
+# REQUIRED files stop the release if absent, and OPTIONAL files, which depend
+# on build arguments, are copied when present. The workflow then runs the
+# pixel guard against the unpacked tarball.
 set -euo pipefail
 
 CHROMIUM="${1:-}"
@@ -31,8 +24,7 @@ fi
 BUILD="$CHROMIUM/$OUT"
 [ -d "$BUILD" ] || { echo "no build directory at $BUILD" >&2; exit 1; }
 
-# Without any one of these the engine does not start, or starts and cannot draw
-# a character.
+# The engine cannot start or draw text without these.
 REQUIRED=(
   chrome
   icudtl.dat
@@ -41,16 +33,14 @@ REQUIRED=(
   libdomicile_engine.so
 )
 
-# Present or absent depending on the build arguments and the platform, and
-# every one of them is something the browser degrades without rather than dies
-# without.
+# Depend on build arguments; the browser degrades without them.
 #
-#   chrome_200_percent.pak    only built when it is; HiDPI art
-#   v8_context_snapshot.bin   whichever of these two the v8 arguments produced
+#   chrome_200_percent.pak    HiDPI art
+#   v8_context_snapshot.bin   one of these two, depending on the v8 arguments
 #   snapshot_blob.bin
-#   chrome_crashpad_handler   no crash reports without it, which is survivable
-#   libEGL/libGLESv2          ANGLE. Absent when the GL implementation is not it
-#   libvulkan/libvk_swiftshader/vk_swiftshader_icd.json  the software fallback
+#   chrome_crashpad_handler   crash reports
+#   libEGL/libGLESv2          ANGLE
+#   libvulkan/libvk_swiftshader/vk_swiftshader_icd.json  software rendering
 OPTIONAL=(
   chrome_200_percent.pak
   v8_context_snapshot.bin
@@ -66,15 +56,9 @@ OPTIONAL=(
 REV="$(git rev-parse --short HEAD)"
 PIN="$(grep -v '^#' "$(dirname "$0")/../../packages/domicile-engine/CHROMIUM_PIN" | tr -d '[:space:]')"
 
-# NAMED AFTER THE SERIES, NOT AFTER THE COMMIT, and the tag this ends up under
-# is named the same way for the same reason -- see engine-release-publish.sh,
-# where the argument is written out. The short form here is the twelve
-# characters that tag carries, so a downloaded file and the release it came
-# from can be matched by eye.
-#
-# `engine-series-stamp.sh` is what decides it, rather than a second hash
-# computed here: the tag, the filename and the checkout's own "do I need to
-# rebuild" question all have to mean the same thing by construction.
+# Named after the series, like the release tag (see engine-release-publish.sh),
+# using the same twelve characters. engine-series-stamp.sh computes it so the
+# tag, filename and rebuild check always agree.
 IDENTITY="$("$(dirname "$0")/engine-series-stamp.sh" identity)"
 NAME="domicile-engine-s${IDENTITY:0:12}-linux-x64"
 
@@ -98,16 +82,15 @@ for file in "${OPTIONAL[@]}"; do
   [ -e "$BUILD/$file" ] && cp -a "$BUILD/$file" "$STAGE/$NAME/"
 done
 
-# The translated strings. A tree without them starts and shows no text at all,
-# so it is required — as a directory, which the loop above cannot express.
+# Required: without locales the browser shows no text. A directory, so not in
+# REQUIRED.
 [ -d "$BUILD/locales" ] || {
   echo "::error::the build produced no locales/; the browser would start with no text" >&2
   exit 1
 }
 cp -a "$BUILD/locales" "$STAGE/$NAME/"
 
-# What this is, next to the thing itself, because a tarball that has been
-# downloaded twice is a tarball whose provenance is a guess.
+# Record provenance inside the tarball.
 cat > "$STAGE/$NAME/PROVENANCE" <<PROV
 domicile engine, built on crux
 series identity: $IDENTITY
@@ -121,8 +104,7 @@ directory has to be on its LD_LIBRARY_PATH.
 PROV
 
 cd "$STAGE"
-# zstd over gzip because this is a few hundred megabytes of mostly-binary and
-# the runner has zstd in its PATH for exactly this.
+# zstd compresses this mostly binary payload better than gzip.
 tar --zstd -cf "$NAME.tar.zst" "$NAME"
 sha256sum "$NAME.tar.zst" > "$NAME.tar.zst.sha256"
 rm -rf "$STAGE/$NAME"

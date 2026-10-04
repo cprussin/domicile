@@ -14,10 +14,9 @@
 
 namespace domicile::spike {
 
-// THROWAWAY, with the rest of the spike. The rule that turns a picture of the
-// browser's window into step 4's verdicts, separated from the process that
-// takes the picture so that the rule itself can be tested — every "pass" in
-// ENGINE-FORK.md's measurement is this code's opinion.
+// Spike only: the pixel comparison behind the CSS parity verdicts in
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#css-parity. Kept apart from the
+// capture so it can be unit tested.
 
 // The browser's window as viz drew it: row-major SkColor (ARGB).
 class WindowCapture {
@@ -35,13 +34,10 @@ class WindowCapture {
   SkColor At(int x, int y) const;
   bool Contains(const gfx::Rect& rect) const;
 
-  // Where the page starts inside the window: the first row that is
-  // `background` all the way across, or -1 if there is none.
+  // The first row that is `background` all the way across, or -1 if none.
   //
-  // The page is laid out with a margin of nothing but background above its
-  // first cell, and no browser chrome is that color across a whole row, so
-  // this locates the viewport without the page having to report anything and
-  // without the caller having to know how tall the window's own furniture is.
+  // Finds the top of the page: the page has a background margin above its
+  // first cell, and no browser chrome row is entirely that color.
   int FindViewportTop(SkColor background, int tolerance) const;
 
  private:
@@ -53,11 +49,9 @@ class WindowCapture {
 struct RectDiff {
   int compared = 0;
   int mismatched = 0;
-  // Mismatching pixels that are not on the boundary of a mismatching region.
-  // This is the whole verdict: a composited surface resamples its edges where
-  // an ordinary element rasterizes them, exactly as a hardware-composited
-  // <video> does, so a one-or-two-pixel outline is parity and a filled region
-  // is not.
+  // Mismatching pixels not on the boundary of a mismatching region. A
+  // composited surface resamples its edges, so an outline of mismatches is
+  // still parity and only interior mismatches fail.
   int interior_mismatched = 0;
   int worst_delta = 0;
 };

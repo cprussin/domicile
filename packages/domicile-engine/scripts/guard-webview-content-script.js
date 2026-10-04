@@ -1,14 +1,10 @@
-// The shell guard-webview-content-script.sh drives: one <webview>, showing one
-// page, on the witness color. A domicile:// document because the browser binds
-// WebViewGuestHost for the shell's origin only.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Shell for guard-webview-content-script.sh: one <webview> on a witness color.
+// Loaded on a domicile:// page, the only origin WebViewGuestHost is bound for.
+// Domicile calls `Shell` once the module loads.
 
 export const Shell = () => {
   /**
-   * A query parameter this cannot run without. A default would turn a guard
-   * invoked wrongly into a measurement of something nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured run fails.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -22,9 +18,8 @@ export const Shell = () => {
   const parameters = new URLSearchParams(location.search);
   const view = document.createElement("webview");
 
-  // Inset, so the witness stays visible around it, and in whole percentages of a
-  // window the harness sized, so the flat color lands on integer pixels. As
-  // guard-webview-framing.js does, for the same reasons.
+  // Inset so the witness color shows around it, in whole percentages so edges
+  // land on integer pixels.
   view.style.position = "absolute";
   view.style.left = "10%";
   view.style.top = "10%";
@@ -34,7 +29,7 @@ export const Shell = () => {
 
   document.body.style.background = `#${required(parameters, "witness")}`;
 
-  // `src` last: it is what asks for a guest, and the element needs a frame first.
+  // Set `src` after attaching: it requests the guest, which needs a frame.
   document.body.append(view);
   view.setAttribute("src", required(parameters, "src"));
 };

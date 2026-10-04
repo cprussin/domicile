@@ -1,83 +1,46 @@
-// The shell guard-webview-history.sh drives: one browser window, sent to two
-// pages, and then driven with the four controls a chrome's address bar has.
+// Shell for guard-webview-history.sh: one browser window navigated to two
+// pages, then driven with goBack, goForward, reload and stop.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it, so a guard
-// that shipped its own HTML would be running a configuration the product does
-// not have. See ShellURLLoaderFactory::ShellDocument. It has to be a
-// domicile:// document for the reason the other two <webview> guards do: the
-// browser binds WebViewGuestHost only for the shell's origin, so a <webview>
-// anywhere else cannot ask for a guest at all.
+// A module, because the engine writes the shell document and loads one module
+// (see ShellURLLoaderFactory::ShellDocument). Loaded on a domicile:// page, the
+// only origin WebViewGuestHost is bound for.
 //
-// ?drive= IS THE EXPERIMENT, and it is not the ?kind= the other two guards
-// use. An <iframe> in the element's place would be no control here: it has no
-// goBack() at all, so the run would end on a TypeError rather than on a
-// reading. What this guard's control removes is the CALLS — the same element,
-// the same guest, the same navigations, and nothing driven at it. Then the
-// third page appearing is a page that moved on its own, which is the one
-// confound the positive run cannot see from the inside, and the slow page
-// arriving is what makes the positive run's not arriving a measurement of
-// stop() rather than of a fixture nobody asked.
+// ?drive=history makes the calls. ?drive=none is the control: same element and
+// navigations, no calls. It shows that pages do not move on their own and that
+// `/slow` does arrive when stop() is not called. (An <iframe> is no control: it
+// has no goBack().)
 //
-// EACH STEP WAITS FOR WHAT IT NEEDS — the element's `url` and `loading` —
-// bounded by a timeout the guard passes in. A step that never happens sits out
-// its bound and is read as it stands, which is the fixed schedule this was, so
-// a broken engine gets the readings it always got. What is asserted is still
-// the ORDER of the pages the guest showed rather than when each arrived.
+// Each step waits for the element's `url` and `loading`, up to a timeout from
+// the guard, then logs what it sees. The guard asserts the order of pages
+// shown, not their timing.
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to
-// its own log:
+// Logs to the console, which the engine writes to its log:
 //
-//   GUARD driving mode=…       the module ran and which run this is. Without
-//                              it, a silent log is a shell that never started
-//   GUARD navigating path=…    what the HARNESS did, so the guest's own lines
-//                              can be read against what it was asked for
-//   GUARD calling …            a control was driven, in the positive run only
-//   GUARD history-state …      what the element says back and forward can do,
-//                              at one point in the schedule, and how many
-//                              changes it had announced by then
-//   GUARD loading-state …      whether the element says a page is still
-//                              arriving, at one point in the schedule, and how
-//                              many changes it had announced by then
-//   GUARD done                 the schedule finished, so the readings below
-//                              are complete rather than caught mid-run
+//   GUARD driving mode=…       the module ran, and which run this is
+//   GUARD navigating path=…    the harness navigated
+//   GUARD calling …            a call under test (positive run only)
+//   GUARD history-state …      canGoBack/canGoForward and change events so far
+//   GUARD page-state …         path, security and URL
+//   GUARD favicon-state …      the favicon's path
+//   GUARD loading-state …      `loading` and change events so far
+//   GUARD done                 the schedule finished
 //
-// The pages themselves say `GUARD guest-shown path=…`, from the fixture
-// server; the sequence of those lines, and the four `history-state` and three
-// `loading-state` readings beside it, are the whole verdict.
+// The pages log `GUARD guest-shown path=…`; see the fixture server.
 //
-// WHY `loading` IS READ HERE AND NOT IN A GUARD OF ITS OWN. Its claim needs a
-// page that is settled and a page that is still on its way, in one run, on one
-// element — and this guard already builds both: `/two` has finished
-// arriving, and `/slow` is a navigation the fixture holds open for longer than
-// the step that follows it. A second guard would be a second copy of that
-// fixture and that schedule for one property.
+// `loading` is checked here because this run already has a settled page and a
+// pending one (`/slow`). It needs no control: an element stuck on either value
+// fails one of the two readings.
 //
-// AND WHY THE CONTROL SAYS LESS ABOUT IT than about the four calls. `loading`
-// separates inside a single run: an element answering `true` to everything
-// fails the settled reading and one answering `false` to everything fails the
-// pending one, so neither needs a second run to be caught. What the control
-// adds is that the pending reading is the fixture's doing rather than the four
-// calls'.
+// Listeners are added late on purpose. `canGoBack`/`canGoForward` are
+// properties so a shell that mounts late (a React shell adds listeners after
+// the first page commits) can still read them. The `two-pages` reading is
+// taken with no listener attached to prove that.
 //
-// WHEN THIS STARTS LISTENING, AND WHY NOT AT THE TOP. `canGoBack` and
-// `canGoForward` are properties rather than the payload of an event, because a
-// chrome renders from state and a shell that mounts late hears nothing — a
-// React shell registers its listeners in its first effect flush, which is after
-// the element is in the document and after the guest's first page has
-// committed. The reading at `two-pages` is what says that design works: it is
-// taken with NO listener on the element, so `events=0` beside it, and it is
-// still the browser's answer. The listener goes on straight after it, so the
-// rest of the run also says the event exists for a shell to re-render on.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Domicile calls `Shell` once the module loads.
 
 export const Shell = () => {
   /**
-   * A query parameter this cannot run without. Missing means the guard invoked
-   * this wrongly, and a default would turn that into a measurement of something
-   * nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured run fails.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -89,8 +52,7 @@ export const Shell = () => {
   };
 
   /**
-   * A number of milliseconds out of the query. Loud rather than NaN, which would
-   * schedule every step at once and report a sequence about nothing.
+   * Reads a required millisecond query parameter. Throws rather than return NaN.
    */
   const requiredMilliseconds = (parameters, name) => {
     const value = Number(required(parameters, name));
@@ -101,7 +63,7 @@ export const Shell = () => {
     }
   };
 
-  /** Whether this run drives the controls, or is the control that drives none. */
+  /** Whether this run makes the calls, or is the control. */
   const drivesControls = (mode) => {
     switch (mode) {
       case "history": {
@@ -125,19 +87,18 @@ export const Shell = () => {
   const parameters = new URLSearchParams(location.search);
   const base = required(parameters, "src");
   const drives = drivesControls(required(parameters, "drive"));
-  // The bound on the first page, which has to be asked for, attached and
-  // navigated, and on the last, which the control waits out the fixture for.
+  // Timeout for the first page to attach and navigate, and for the last step,
+  // where the control waits out the fixture.
   const settle = requiredMilliseconds(parameters, "settle");
-  // The bound on each step in between.
+  // Timeout for each step in between.
   const step = requiredMilliseconds(parameters, "step");
-  // How long the control watches a step it does not drive: an absence has no
-  // event to wait for.
+  // How long the control watches each step, since an absence has no event.
   const quiet = requiredMilliseconds(parameters, "quiet");
-  // How long `/slow` is pending before stop(), so its request is at the fixture.
+  // How long `/slow` is pending before stop(), so its request reaches the
+  // fixture.
   const hold = requiredMilliseconds(parameters, "hold");
 
-  // Polled rather than listened for: `two-pages` must be read with no listener on
-  // the element at all.
+  // Polled, not listened for: `two-pages` must be read with no listener.
   const POLL_MS = 50;
 
   const view = document.createElement("webview");
@@ -152,9 +113,8 @@ export const Shell = () => {
     view.setAttribute("src", `${base}${path}`);
   };
 
-  // The four under test. In the control they are not called at all — see the
-  // header — and the line says so, so that a log with no `calling` in it is a
-  // control rather than a positive run that lost its schedule.
+  // Makes a call under test, or in the control logs that it did not, so a
+  // control is distinguishable from a positive run that stalled.
   const call = (name, drive) => {
     if (drives) {
       say(`calling ${name}`);
@@ -164,18 +124,14 @@ export const Shell = () => {
     }
   };
 
-  // Every history change the element has announced. A count rather than the
-  // values it carried: the event says "read them again" and carries nothing, so
-  // what there is to report about it is that it happened.
+  // Counts `domicile-history-change` events; the event carries no data.
   let announced = 0;
 
-  // And every loading change, counted separately for the same reason and kept
-  // apart from the history ones because they answer different questions: a run
-  // can move a guest's history without a load a browser would spin for, and can
-  // load without the history changing at all.
+  // Counts `domicile-loading-change` events separately: history and loading
+  // change independently.
   let loadingAnnounced = 0;
 
-  // Start hearing them. Called ONCE, and deliberately late — see the header.
+  // Called once, late on purpose; see the header.
   const listen = () => {
     view.addEventListener("domicile-history-change", () => {
       announced += 1;
@@ -185,9 +141,7 @@ export const Shell = () => {
     });
   };
 
-  // What the element says at one point in the schedule. Read off the element
-  // rather than remembered from an event, which is the property this guard
-  // exists to assert.
+  // Logs the element's history state, read from its properties.
   const readState = (at) => {
     say(
       `history-state at=${at} can=${view.canGoBack}/${view.canGoForward}` +
@@ -195,15 +149,9 @@ export const Shell = () => {
     );
   };
 
-  // WHERE THE ELEMENT SAYS THE PAGE IS, and what the browser says about the
-  // connection behind it. A LINE OF ITS OWN rather than two more fields on
-  // `history-state`, because the guard parses that line with a sed anchored at
-  // both ends — appending to it would break the readings that already work,
-  // which is the wrong way to add a measurement.
-  //
-  // THE PATH AS WELL AS THE ADDRESS. The address is what a person reading the
-  // log wants; the path is what the guard compares, for the reason the page
-  // sequence is compared by path — the port is the fixture's and changes per run.
+  // Logs the element's URL and security state. A separate line because the
+  // guard parses `history-state` with an anchored sed. The guard compares the
+  // path, since the port changes per run.
   const readPage = (at) => {
     say(
       `page-state at=${at} path=${pathShown()} security=${view.security}` +
@@ -211,8 +159,8 @@ export const Shell = () => {
     );
   };
 
-  // And the icon the page links, by path, for the reason the address is read by
-  // path. Read at `two-pages` only: the guest is on /two in both runs there.
+  // Logs the favicon's path. Read at `two-pages` only, where both runs are on
+  // /two.
   const readFavicon = (at) => {
     const icon = view.favicon ?? "";
     say(
@@ -220,18 +168,14 @@ export const Shell = () => {
     );
   };
 
-  // An element that has reported nothing has no address to take a path out of,
-  // and `new URL("")` throws — which would end the run on a TypeError and turn
-  // "the element said nothing" into "the harness broke".
+  // The guest's path, or "" before the element reports a URL (`new URL("")`
+  // throws).
   const pathShown = () => {
     const url = view.url ?? "";
     return url === "" ? "" : new URL(url).pathname;
   };
 
-  // And whether it says a page is on its way, read the same way and at points
-  // chosen for what the guest is doing rather than for what was driven at it:
-  // one where a page has finished arriving, one where a navigation the fixture
-  // is holding open has been pending for a HOLD.
+  // Logs `loading`. Read once settled and once while `/slow` is pending.
   const readLoading = (at) => {
     say(
       `loading-state at=${at} loading=${view.loading}` +
@@ -258,9 +202,8 @@ export const Shell = () => {
       setTimeout(resolve, ms);
     });
 
-  // Loads seen starting, polled like everything else here. The address alone
-  // cannot say a page arrived: the engine shows a navigation's address before
-  // its load starts.
+  // Counts load starts. The URL alone is not enough: the engine shows a
+  // navigation's URL before its load starts.
   let loadsSeen = 0;
   let wasLoading = false;
   setInterval(() => {
@@ -270,26 +213,23 @@ export const Shell = () => {
     wasLoading = view.loading;
   }, POLL_MS / 5);
 
-  // The guest has loaded `path` since this was made, so its pageshow has been
-  // said. A load too quick to be seen costs the step its bound, not the reading.
+  // Predicate: the guest has loaded `path` since this call. A load too quick to
+  // see only costs the step its timeout.
   const arrived = (path) => {
     const since = loadsSeen;
     return () => loadsSeen > since && pathShown() === path && !view.loading;
   };
 
-  // The bound on a step one of the four drives. In the control nothing is driven,
-  // so the step is watched for `quiet` and then read as it stands.
+  // Per-step timeout: `step` when driving, `quiet` in the control.
   const driven = drives ? step : quiet;
 
-  // The schedule, in order: each reading is taken once the step before it has
-  // landed, and before the next step drives anything.
+  // The schedule. Each reading is taken after its step settles and before the
+  // next step starts.
   //
-  // `/slow` and then stop() is the last pair for a reason — a canceled
-  // navigation leaves the guest showing whatever it showed before, so anything
-  // driven after it would be read against a page that never changed.
+  // `/slow` and stop() come last: a canceled navigation leaves the previous
+  // page, so later steps would read an unchanged page.
   const run = async () => {
-    // `src` last: it is what makes a <webview> ask for a guest, and before the
-    // element is in the document there is no frame to attach one to.
+    // Attach before navigating: `src` requests the guest, which needs a frame.
     say(`driving mode=${drives ? "history" : "none"}`);
     document.body.append(view);
     const one = arrived("/one");
@@ -302,12 +242,11 @@ export const Shell = () => {
     navigate("/two");
     await until(two, step);
 
-    // BEFORE `listen()`, and that order is the measurement: this is the value an
-    // element reports having never had a listener on it.
+    // Read before `listen()`, to check the state without any listener.
     readState("two-pages");
     readPage("two-pages");
-    // The icon is reported once the page's head is parsed, which can be a moment
-    // after the page shows: waited for, up to a step, rather than raced.
+    // The favicon is reported once the head is parsed, which may be after the
+    // page shows.
     await until(() => (view.favicon ?? "").endsWith("/two.png"), step);
     readFavicon("two-pages");
     listen();
@@ -323,20 +262,19 @@ export const Shell = () => {
 
     readState("after-forward");
     readPage("after-forward");
-    // A reload starts and finishes a load on the same address: two changes.
+    // A reload starts and finishes a load: two changes.
     const loads = loadingAnnounced;
     call("reload", (v) => v.reload());
     await until(() => loadingAnnounced >= loads + 2 && !view.loading, driven);
 
-    // The settled half of the loading claim: the reload has finished.
+    // The reload has finished, so `loading` should be false.
     readLoading("settled");
     navigate("/slow");
     await until(() => view.loading, step);
-    // Inherently timed: nothing here says when the request reaches the fixture.
+    // Timed: nothing signals when the request reaches the fixture.
     await pause(hold);
 
-    // And the pending half: the fixture is still holding `/slow`. BEFORE the
-    // stop, which is the only order in which there is a load left to report.
+    // The fixture is still holding `/slow`, so `loading` should be true.
     readLoading("pending");
     call("stop", (v) => v.stop());
     await until(() => !view.loading, settle);

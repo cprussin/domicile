@@ -17,12 +17,8 @@ namespace {
 TEST(DrmCursorFactoryTest, EveryOrdinaryCursorIsAnsweredWithNothing) {
   DrmCursorFactory factory;
 
-  // NOTHING IS WHAT SENDS `CursorLoader` TO THE BITMAPS. It asks the platform
-  // first and returns any non-null answer as the cursor, so the arrow art in
-  // `ui_lottie_resources` is reached only past a null from here. The base
-  // class answers a typed, bitmapless cursor instead, and a CRTC handed one
-  // of those is handed `drmModeSetCursor(..., 0, 0, 0)`, which turns the
-  // cursor plane off.
+  // Null makes `CursorLoader` load the art from `ui_lottie_resources`. The
+  // base's bitmapless cursor would turn the cursor plane off.
   for (const mojom::CursorType type : {
            mojom::CursorType::kPointer,
            mojom::CursorType::kHand,
@@ -38,11 +34,8 @@ TEST(DrmCursorFactoryTest, EveryOrdinaryCursorIsAnsweredWithNothing) {
 TEST(DrmCursorFactoryTest, TheInvisibleCursorIsStillAnObjectWithAType) {
   DrmCursorFactory factory;
 
-  // `CursorLoader` routes `kNone` through the platform whatever
-  // `use_platform_cursors_` says, and `DrmCursor::SendCursorShowLocked` reads
-  // `type() == kNone` as "hide". Answering nothing here would send the loader
-  // to assets that have no art for an invisible cursor and fall back to the
-  // pointer -- an arrow drawn exactly where something asked for no cursor.
+  // `CursorLoader` always asks the platform for `kNone`, and `DrmCursor`
+  // hides the cursor on that type. Null would show an arrow instead.
   const scoped_refptr<PlatformCursor> none =
       factory.GetDefaultCursor(mojom::CursorType::kNone);
 
@@ -55,21 +48,15 @@ TEST(DrmCursorFactoryTest, TheInvisibleCursorIsStillAnObjectWithAType) {
 TEST(DrmCursorFactoryTest, TheScaledOverloadAnswersTheSameWay) {
   DrmCursorFactory concrete;
 
-  // HELD AS THE BASE, BECAUSE THAT IS HOW `CursorLoader` HOLDS IT
-  // (`factory_` is a `CursorFactory*`) and because the two-argument overload
-  // is the one it calls. `CursorFactory` forwards that to the one-argument
-  // one unless a backend replaces it; this class replaces only the one, so
-  // the forward is what carries the whole change -- and an override of the
-  // other would silently undo it.
+  // Held as the base and called with a scale, as `CursorLoader` does. This
+  // relies on the base forwarding to the one-argument override.
   CursorFactory& factory = concrete;
 
   EXPECT_EQ(factory.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f),
             nullptr);
   EXPECT_NE(factory.GetDefaultCursor(mojom::CursorType::kNone, 2.0f), nullptr);
 
-  // And the same through the derived type, which is a different question:
-  // declaring one overload hides the rest, so this line does not compile
-  // without the `using` in the header.
+  // Through the derived type, this compiles only with the header's `using`.
   EXPECT_EQ(concrete.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f),
             nullptr);
 }
@@ -77,9 +64,8 @@ TEST(DrmCursorFactoryTest, TheScaledOverloadAnswersTheSameWay) {
 TEST(DrmCursorFactoryTest, AnImageCursorIsStillMade) {
   DrmCursorFactory factory;
 
-  // The image path is untouched, and has to be: a client's own cursor over an
-  // `<app>` and every CSS `cursor` a shell sets arrive as bitmaps rather than
-  // as types, and they never go through `GetDefaultCursor` at all.
+  // Image cursors still work: app cursors and CSS `cursor` values arrive as
+  // bitmaps and bypass `GetDefaultCursor`.
   SkBitmap bitmap;
   bitmap.allocN32Pixels(4, 4);
   bitmap.eraseColor(SK_ColorRED);

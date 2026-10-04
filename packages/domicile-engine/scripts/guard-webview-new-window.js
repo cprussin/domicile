@@ -1,59 +1,44 @@
-// The shell guard-webview-new-window.sh drives: one browser window, and
-// whatever second one its page asks for.
+// The shell module guard-webview-new-window.sh loads: one browser window, and
+// any second window its page opens.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it, so a guard
-// that shipped its own HTML would be running a configuration the product does
-// not have. See ShellURLLoaderFactory::ShellDocument. It has to be a
-// domicile:// document for a further reason: the browser binds WebViewGuestHost
-// only for the shell's origin, so a <webview> anywhere else cannot ask for a
-// guest at all.
+// It must be a domicile:// document: the browser binds WebViewGuestHost only
+// for the shell's origin. See ShellURLLoaderFactory::ShellDocument.
 //
-// What it tests: a link with `target="_blank"` inside a browser window. The
-// page is a guest, which has no SiteInstance of its own. That keeps the user
-// logged in, and content CHECKs it in `WebContentsImpl::CreateNewWindow`, so
-// the browser refuses the window content would make. It opens a desk browser
-// window at that address instead. The shell gets `browserwindowschanged` with
-// an undrawn window in `browserWindows`, and draws it in a second `<webview>`
-// naming the window.
+// Tests a `target="_blank"` link inside a browser window. A guest has no
+// SiteInstance of its own, which keeps the user logged in, but content CHECKs
+// for one in `WebContentsImpl::CreateNewWindow`. So the browser refuses
+// content's window and opens a desk browser window at that address instead.
+// The shell gets `browserwindowschanged` with an undrawn window in
+// `browserWindows`, and draws it in a second `<webview>` naming the window.
 //
-// The second view is required. A window in the list is not a window on screen,
-// so a run that only read the list would pass a desktop that shows the user
-// nothing. The page in the second element logging that it ran is the one
-// reading no earlier step can fake.
+// The guard requires the second view, since a window in the list is not on
+// screen. The second element's page logging that it ran cannot be faked by an
+// earlier step.
 //
-// THE STRIP IS NOT DECORATION. It is the shell's own half of the window — an
-// address bar, in the desktop this stands for — and it is what the guard clicks
-// to establish that a press driven at this browser reaches this document at
-// all. Without that reading, "the link asked for nothing" and "no click was
-// delivered anywhere" are the same run. `guard-webview-click.sh` is where that
-// lesson was paid for.
+// The strip stands in for the shell's address bar. The guard clicks it to
+// prove clicks reach this document, so "the link opened nothing" is
+// distinguishable from "no click was delivered".
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
-// own log:
+// Console output, which the engine writes to its log:
 //
 //   GUARD shell-loaded          this module ran and the window is set up
-//   GUARD chrome-mousedown      a press reached the SHELL's document, which is
-//                               the harness working rather than a finding
-//   GUARD new-window url=…      the claim: an undrawn browser window, and its
-//                               address, appeared in the desk's list
-//   GUARD second-view           a second <webview> naming it was made: the
-//                               shell acted, not just received the list
-//   GUARD second-page url=…     the second <webview> shows that page, so the
-//                               window's page was attached to it
+//   GUARD chrome-mousedown      a press reached the shell's document (harness
+//                               check)
+//   GUARD new-window url=…      an undrawn browser window appeared in the
+//                               desk's list, with its address
+//   GUARD second-view           the shell created a second <webview> for it
+//   GUARD second-page url=…     the second <webview> shows that page
 //
-// The page in the window says `GUARD opener-loaded` and `GUARD guest-mousedown`
-// for itself, and the page the new window lands on says `GUARD opened-loaded`;
-// see guard-webview-new-window-server.py.
+// The window's page logs `GUARD opener-loaded` and `GUARD guest-mousedown`, and
+// the new window's page logs `GUARD opened-loaded`; see
+// guard-webview-new-window-server.py.
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// The engine's document calls `Shell` once the module loads.
 
 export const Shell = (_root, desktop) => {
   /**
-   * A query parameter this cannot run without. Missing means the guard invoked
-   * this wrongly, and a default would turn that into a measurement of something
-   * nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured guard
+   * fails instead of measuring the wrong thing.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -70,9 +55,8 @@ export const Shell = (_root, desktop) => {
 
   const parameters = new URLSearchParams(location.search);
 
-  // The shell's own half of the window, above the element. A plain <div>:
-  // nothing here takes focus or navigates, so anything this document reports
-  // about a window came from the element below it.
+  // The shell's strip above the element. A plain <div> that never takes focus
+  // or navigates, so window events here come from the element below.
   const stripHeight = `${required(parameters, "strip")}px`;
   const strip = document.createElement("div");
   strip.style.position = "absolute";
@@ -83,13 +67,10 @@ export const Shell = (_root, desktop) => {
   strip.style.background = "#204060";
 
   /**
-   * A browser window's view: the element, sized to the window below the strip.
+   * Creates a <webview> filling the window below the strip.
    *
-   * Sized rather than stretched between insets, which is the mistake the click
-   * guard already paid for: a <webview> is a replaced element, and an absolutely
-   * positioned replaced element with `auto` size takes its INTRINSIC size between
-   * two insets — 300x150, in the corner — leaving most of the window under
-   * nothing at all and the guard clicking the page instead of the guest.
+   * Sets an explicit size: a <webview> is a replaced element, so with `auto`
+   * size between insets it takes its intrinsic 300x150 and clicks miss it.
    */
   const viewFilling = () => {
     const view = document.createElement("webview");
@@ -102,9 +83,8 @@ export const Shell = (_root, desktop) => {
     return view;
   };
 
-  // The claim: a browser window the desk opened, not this page. This
-  // document's own `<webview src>` is in no list, so every listed window is one
-  // a page asked for.
+  // This document's own `<webview src>` is in no list, so every listed window
+  // is one a page opened.
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
@@ -119,15 +99,13 @@ export const Shell = (_root, desktop) => {
         drawn.add(window.id);
         say(`new-window url=${window.url}`);
 
-        // Draw the window in a second element, stacked over the first: the
-        // guard measures that the page arrives, not where the box is. `window`
-        // is set before the element enters the document, when it asks for
-        // its page.
+        // Draw the window in a second element over the first; the guard checks
+        // the page arrives, not its position. Set `window` before attaching,
+        // since the element requests its page on attach.
         const opened = viewFilling();
         opened.setAttribute("window", window.id);
-        // Read what the element shows, not the page's own line: the window's
-        // page loads whether or not anything draws it. The element learns its
-        // page on attach.
+        // Report what the element shows: the window's page loads whether or
+        // not anything draws it.
         opened.addEventListener("domicile-page-change", () => {
           say(`second-page url=${opened.url}`);
         });
@@ -137,8 +115,8 @@ export const Shell = (_root, desktop) => {
     }
   });
 
-  // The harness's own reading: a press that landed in this document, which is
-  // what makes every absence below a measurement.
+  // Proves presses reach this document, so a missing reading elsewhere means
+  // something.
   document.addEventListener("mousedown", (event) => {
     say(`chrome-mousedown target=${event.target.localName}`);
   });
@@ -146,9 +124,7 @@ export const Shell = (_root, desktop) => {
   document.body.style.margin = "0";
   document.body.append(strip);
 
-  // Last, and this is the order that matters: `src` is what makes a <webview>
-  // ask for a guest, and setting it before the element is in the document would
-  // ask before there is a frame to attach one to.
+  // Set `src` after attaching: it requests a guest, which needs a frame.
   const view = viewFilling();
   document.body.append(view);
   view.setAttribute("src", required(parameters, "src"));

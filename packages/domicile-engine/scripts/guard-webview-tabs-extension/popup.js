@@ -1,20 +1,17 @@
-// The first line of most popups, and what guard-webview-tabs.sh is about:
-// which tab is the active one in the current window. Then that tab zoomed,
-// and its zoom read back.
+// Popup for guard-webview-tabs.sh. It queries the active tab in the current
+// window, zooms that tab, and reads the zoom back.
 //
-// THE ANSWER IS WRITTEN INTO THIS PAGE'S OWN ADDRESS, `?active=<url>&zoom=<f>`,
-// because the address is what the shell can read: the <webview> reports every
-// page it shows as `domicile-page-change`. One tab names its url; anything else
-// names how many there were, `count-<n>`, so "no tab" is an answer and not
-// silence. `zoom` is what tabs.getZoom read after tabs.setZoom, to two places.
+// The result goes into this page's own address, `?active=<url>&zoom=<f>`,
+// because the shell sees each page the <webview> shows via
+// `domicile-page-change`. `active` is the tab's url when exactly one tab
+// matched, else `count-<n>`, so an empty result still reports.
 //
-// `tabs` is asked for in the manifest, without which the url is scrubbed.
+// The manifest requests the `tabs` permission; without it the url is blank.
 //
-// Off `globalThis` because `chrome` is an extension's global, which the linter
-// this repository runs over every script does not know.
+// Read off `globalThis` because the linter does not know the `chrome` global.
 const { tabs } = globalThis.chrome;
 
-// What the tab is zoomed to. The guard reads it as "1.50".
+// The guard expects this as "1.50".
 const ZOOM = 1.5;
 
 const answer = (found) =>
@@ -26,8 +23,8 @@ const say = (active, zoom) => {
 };
 
 /**
- * The one tab found zoomed, and its zoom as tabs.getZoom reads it back. A
- * failure says so the same way the query's does: `error-<message>`.
+ * Zooms `tab` and returns the zoom tabs.getZoom reads back, or
+ * `error-<message>` on failure.
  */
 const zoomed = (tab) =>
   tabs
@@ -38,11 +35,10 @@ const zoomed = (tab) =>
       (error) => `error-${error.message}`,
     );
 
-// Only a query that found one tab has a tab to zoom.
 const zoomAnswer = (found) =>
   found.length === 1 ? zoomed(found[0]) : Promise.resolve("no-tab");
 
-// A query that failed says so the same way: `error-<message>`.
+// Run only on first load; the reload from `say` carries `?active=`.
 if (!new URLSearchParams(location.search).has("active")) {
   tabs.query({ active: true, currentWindow: true }).then(
     (found) =>

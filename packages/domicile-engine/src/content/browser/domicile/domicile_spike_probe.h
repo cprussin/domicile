@@ -9,11 +9,10 @@
 
 namespace content {
 
-// THROWAWAY. The spike's proof: see components/domicile/spike/mojom.
+// Binds the spike's test probe. See components/domicile/spike/mojom.
 //
-// The producer holds the other end and compares what viz drew with what it
-// submitted. Nothing in the design needs this, and nothing but the spike binds
-// it.
+// Temporary and used only by the spike. The producer holds the other end and
+// compares what viz drew with what it submitted.
 void BindDomicileSpikeProbe(
     mojo::PendingReceiver<domicile::mojom::SpikeProbe> receiver);
 

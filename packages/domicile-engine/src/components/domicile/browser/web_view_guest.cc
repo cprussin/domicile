@@ -72,11 +72,11 @@
 namespace domicile {
 namespace {
 
-// Why a CreateGuest is a bad message, whether it waited or not.
+// Bad-message reason for a CreateGuest naming another document's frame.
 constexpr char kNotItsOwnFrame[] =
     "domicile: a <webview> may only ask for a guest for its own frame.";
 
-// Why a second CreateGuest waiting on one pipe is a bad message.
+// Bad-message reason for a second waiting CreateGuest on one pipe.
 constexpr char kOneGuest[] =
     "domicile: a <webview> may only ask for one guest.";
 
@@ -90,7 +90,7 @@ BrowserWindowHost& Host() {
   return *g_browser_window_host;
 }
 
-// Where SetInspect keeps the callback.
+// Storage for SetInspect's callback.
 InspectCallback& InspectSlot() {
   static base::NoDestructor<InspectCallback> inspect;
   return *inspect;
@@ -103,24 +103,15 @@ const InspectCallback& Inspector() {
   return InspectSlot();
 }
 
-// The interface a <webview> asks for a guest over, for one document.
+// Serves WebViewGuestHost for one document.
 //
-// A DocumentService rather than a self-owned receiver, because everything it
-// does is relative to the document that asked: the frame it is handed has to be
-// that document's own child, and a document that navigates away has no claim on
-// the guests the previous one made.
+// A DocumentService because requests are scoped to the asking document: the
+// placeholder must be its child, and a navigation ends its claim.
 //
-// AND A WebContentsObserver, because the placeholder can arrive after the
-// request for it. The element sends CreateGuest over the browser interface
-// broker, a pipe of its own, while the frame it names is announced over the
-// frame's channel -- so under load the request wins and the frame is not there
-// yet. That is the order, not a fault in it, and the request waits for the
-// frame rather than being dropped: dropping it was a <webview> that showed
-// nothing, which is how concurrent guards found it.
-//
-// The request also waits for the frame's about:blank commit, which follows the
-// frame on the same channel and loses the same race.
-// PlaceholderStage::kCommitting says what attaching before it does.
+// Also a WebContentsObserver because CreateGuest (sent over the browser
+// interface broker) can arrive before the placeholder frame or its
+// about:blank commit (sent over the frame's channel). The request waits for
+// both instead of being dropped. See PlaceholderStage::kCommitting.
 class WebViewGuestHost final
     : public content::DocumentService<mojom::WebViewGuestHost>,
       public content::WebContentsObserver {
@@ -133,11 +124,10 @@ class WebViewGuestHost final
         created_(std::move(created)) {}
 
  private:
-  // A CreateGuest whose placeholder the browser has not seen yet.
+  // A CreateGuest whose placeholder is not ready yet.
   //
-  // WITH THE CALLBACK FOR REFUSING IT, which can only be taken while the
-  // message is being dispatched: whether the frame is this document's child is
-  // not known until the frame exists, which is after the dispatch is over.
+  // Holds the bad-message callback. It can only be taken during dispatch, and
+  // the parent check runs later, once the frame exists.
   struct WaitingRequest {
     blink::LocalFrameToken placeholder_frame;
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
@@ -155,13 +145,10 @@ class WebViewGuestHost final
                    bool extension_popup) override {
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
-    // A lie, and the only one available here: a document claiming a guest for
-    // a frame that is not its own child could put a page it does not own
-    // inside somebody else's element.
+    // A document may only claim a guest for its own child frame.
     //
-    // DocumentService's own version rather than mojo::ReportBadMessage, which
-    // its header asks for: it resets the receiver before deleting, so a reply
-    // callback does not have to be run with made-up arguments first.
+    // Uses DocumentService's ReportBadMessageAndDeleteThis, as its header
+    // asks, which resets the receiver before deleting.
     if (placeholder != nullptr &&
         placeholder->GetParent() != &render_frame_host()) {
       ReportBadMessageAndDeleteThis(kNotItsOwnFrame);
@@ -173,15 +160,12 @@ class WebViewGuestHost final
     switch (StageOf(placeholder != nullptr, committed)) {
       case PlaceholderStage::kAbsent:
       case PlaceholderStage::kCommitting:
-        // ONE REQUEST WAITS PER PIPE, which is the cap on what a renderer can
-        // make this hold: the element sends one CreateGuest on a pipe of its
-        // own.
+        // At most one request waits per pipe; the element sends only one.
         if (waiting_.has_value()) {
           ReportBadMessageAndDeleteThis(kOneGuest);
           return;
         }
-        // The line that tells a guest that waited from one that did not, in a
-        // run that shows nothing.
+        // Distinguishes a waiting guest in logs.
         LOG(INFO) << "domicile: a <webview> asked for a guest before its frame "
                      "or its frame's first page arrived; waiting for it.";
         waiting_ = WaitingRequest{
@@ -198,18 +182,14 @@ class WebViewGuestHost final
 
   // content::WebContentsObserver:
   //
-  // POSTED RATHER THAN RUN HERE. This is called from inside
-  // FrameTree::AddFrame, before content has finished adding the frame, and
-  // creating a guest and preparing the frame for it from there is re-entry the
-  // ordinary path never makes. A task later is when a CreateGuest that lost no
-  // race is read.
+  // The retry is posted because this runs inside FrameTree::AddFrame, before
+  // the frame is fully added.
   void RenderFrameCreated(content::RenderFrameHost* frame) override {
     RetryIfWaitingFor(*frame);
   }
 
-  // The placeholder's about:blank commit, which a request that found the frame
-  // still committing waits for. Posted for RenderFrameCreated's reason: this is
-  // called from inside Navigator::DidNavigate.
+  // Retries on the placeholder's about:blank commit. Posted because this runs
+  // inside Navigator::DidNavigate.
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override {
     if (navigation_handle->HasCommitted()) {
@@ -235,19 +215,15 @@ class WebViewGuestHost final
     content::RenderFrameHost* placeholder =
         FindPlaceholder(request.placeholder_frame);
 
-    // Gone between arriving and this task -- the <webview> was removed from
-    // the document. A race, not a lie, so the pipe is dropped and the
-    // element's remote learns it: killing the shell over its own timing would
-    // be the fork's bug and not the shell's.
+    // The <webview> was removed meanwhile. This is a race, not a bad message,
+    // so just drop the pipes.
     if (placeholder == nullptr) {
       LOG(WARNING) << "domicile: the frame a <webview> asked a guest for is "
                       "already gone.";
       return;
     }
 
-    // The same refusal as CreateGuest's, through the callback taken while the
-    // request was dispatched: ReportBadMessageAndDeleteThis can only be called
-    // during one.
+    // Same check as CreateGuest, using the callback saved during dispatch.
     if (placeholder->GetParent() != &render_frame_host()) {
       std::move(request.report_bad_message).Run(kNotItsOwnFrame);
       ResetAndDeleteThis();
@@ -259,8 +235,8 @@ class WebViewGuestHost final
       case PlaceholderStage::kAbsent:
         NOTREACHED();
       case PlaceholderStage::kCommitting:
-        // The frame has arrived and its commit has not: wait again, for
-        // DidFinishNavigation. With CreateGuest's cap on what waits.
+        // The frame exists but has not committed; wait for
+        // DidFinishNavigation.
         if (waiting_.has_value()) {
           std::move(request.report_bad_message).Run(kOneGuest);
           ResetAndDeleteThis();
@@ -279,9 +255,8 @@ class WebViewGuestHost final
   // new page owned by this document (an extension's action popup when
   // `extension_popup` is set).
   //
-  // An unknown `window` is expected: the shell names windows from the last
-  // list, and a window can close before the shell hears. The pipes drop and
-  // the log says why.
+  // An unknown `window` is expected: it may close before the shell hears. The
+  // pipes drop and a warning is logged.
   void Give(content::RenderFrameHost& placeholder,
             mojo::PendingReceiver<mojom::WebViewGuest> guest,
             mojo::PendingRemote<mojom::WebViewGuestClient> client,
@@ -306,9 +281,8 @@ class WebViewGuestHost final
 
   // The frame `placeholder_frame` names, or null if the browser has none.
   //
-  // Same process as the asking document, always: the placeholder is the frame
-  // the owner element created and never navigated, so it is still the local
-  // about:blank frame its parent made.
+  // The placeholder is never navigated, so it is always in the asking
+  // document's process.
   content::RenderFrameHost* FindPlaceholder(
       const blink::LocalFrameToken& placeholder_frame) {
     return content::RenderFrameHost::FromFrameToken(
@@ -316,8 +290,7 @@ class WebViewGuestHost final
             render_frame_host().GetProcess()->GetID(), placeholder_frame));
   }
 
-  // Held for as long as the element's pipe is open, which is why it cannot
-  // leak: the element keeps this pipe for its own life. See
+  // Lives no longer than the element's pipe. See
   // HTMLWebViewElement::RequestGuest.
   std::optional<WaitingRequest> waiting_;
 
@@ -327,18 +300,11 @@ class WebViewGuestHost final
   base::WeakPtrFactory<WebViewGuestHost> weak_factory_{this};
 };
 
-// Chromium's answer for a page, as the one this fork puts on the wire.
+// Maps Chromium's security level to the wire enum.
 //
-// AN EXPLICIT SWITCH WITH NO DEFAULT ARM, which is the whole reason this is a
-// function rather than a cast. `security_state::SecurityLevel` is Chromium's
-// and its numbering has already changed once -- three members are commented
-// out at our pin -- so a `static_cast` would turn a renumbering upstream into a
-// browser window drawing the wrong lock, silently. Without a default, a level
-// Chromium adds stops the fork's build instead.
-//
-// SECURITY_LEVEL_COUNT is not a level. It is the enum's bound, it is never
-// returned by GetSecurityLevel, and it is here because leaving it out is what
-// would reintroduce the default arm.
+// A switch with no default, not a cast, so an upstream renumbering or new
+// level breaks the build. SECURITY_LEVEL_COUNT is the enum bound, listed only
+// to keep the switch exhaustive.
 mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
   switch (level) {
     case security_state::NONE:
@@ -354,18 +320,15 @@ mojom::WebViewSecurity AsWebViewSecurity(security_state::SecurityLevel level) {
   }
 }
 
-// How long an edit from a context menu waits for the page to get the focus
-// back: 25 tries 20 ms apart. See WebViewGuest::EditWhenFocused.
+// How long a context menu edit waits for the page to regain focus: 25 tries
+// 20 ms apart. See WebViewGuest::EditWhenFocused.
 constexpr int kEditTries = 25;
 constexpr base::TimeDelta kEditRetry = base::Milliseconds(20);
 
-// What a guest's WebContents carries it under, so that FromWebContents can find
-// it from a WebContents and nothing else.
+// User data key linking a guest's WebContents to it, for FromWebContents.
 constexpr char kGuestUserDataKey[] = "domicile_web_view_guest";
 
-// A weak pointer rather than the guest itself: the guest is not the
-// WebContents' to own. Both go together in WebContentsDestroyed anyway, so
-// this never outlives what it points at by more than that call.
+// Holds a weak pointer because the WebContents does not own the guest.
 class GuestLink : public base::SupportsUserData::Data {
  public:
   explicit GuestLink(base::WeakPtr<WebViewGuest> guest)
@@ -377,8 +340,8 @@ class GuestLink : public base::SupportsUserData::Data {
   base::WeakPtr<WebViewGuest> guest_;
 };
 
-// Blink's five modes as the four a picker draws. See WebViewFileChooserMode in
-// the mojom. No default arm, so a mode Blink adds stops this build.
+// Maps Blink's five modes to the picker's four. See WebViewFileChooserMode in
+// the mojom. No default, so a new Blink mode breaks the build.
 mojom::WebViewFileChooserMode AsWebViewFileChooserMode(
     blink::mojom::FileChooserParams::Mode mode) {
   switch (mode) {
@@ -394,9 +357,8 @@ mojom::WebViewFileChooserMode AsWebViewFileChooserMode(
   }
 }
 
-// The absolute paths a shell's answer names, or nothing for an answer that is
-// not one to `mode` -- which the element refuses before sending, so nothing
-// here is an answer a shell gave.
+// Resolves the shell's answer to absolute paths, or nothing if it does not fit
+// `mode`. The element validates first, so a mismatch is a bad message.
 std::optional<std::vector<base::FilePath>> ChosenPaths(
     mojom::WebViewFileChooserMode mode,
     const std::vector<std::string>& paths) {
@@ -430,8 +392,8 @@ std::vector<blink::mojom::FileChooserFileInfoPtr> AsFileInfos(
   return files;
 }
 
-// Every file under `folder`, which is what a folder upload hands the page.
-// Blocking, so it runs on the thread pool.
+// Lists every file under `folder` for a folder upload. Blocking; run on the
+// thread pool.
 std::vector<base::FilePath> FilesUnder(const base::FilePath& folder) {
   std::vector<base::FilePath> files;
   base::FileEnumerator walk(folder, /*recursive=*/true,
@@ -449,11 +411,10 @@ void FolderRead(scoped_refptr<content::FileSelectListener> listener,
                          blink::mojom::FileChooserParams::Mode::kUploadFolder);
 }
 
-// The shell's answer to a page's `<input type="file">`, handed to content.
+// Passes the shell's answer for `<input type="file">` to content.
 //
-// A FREE FUNCTION AND NOT A METHOD, because the listener must hear an answer
-// whatever happens to the guest: content expects every listener to be told
-// exactly once, and a callback bound to a guest that has gone would drop it.
+// A free function, not a method, because content requires every listener to
+// be answered once, even after the guest is gone.
 void FilesChosen(scoped_refptr<content::FileSelectListener> listener,
                  blink::mojom::FileChooserParams::Mode mode,
                  const std::optional<std::vector<std::string>>& paths) {
@@ -480,7 +441,7 @@ void FilesChosen(scoped_refptr<content::FileSelectListener> listener,
   listener->FileSelected(AsFileInfos(*chosen), base::FilePath(), mode);
 }
 
-// The shell's answer to "where does this download go?", handed to //chrome.
+// Passes the shell's download location to //chrome.
 void DownloadPathChosen(
     base::OnceCallback<void(std::optional<base::FilePath>)> chosen,
     const std::optional<std::vector<std::string>>& paths) {
@@ -499,8 +460,8 @@ void DownloadPathChosen(
   std::move(chosen).Run(resolved->front());
 }
 
-// The shell's answer to a dialog the browser would have drawn, handed back to
-// the dialog. See WebViewGuest::ChooseFiles.
+// Passes the shell's answer back to a browser dialog. See
+// WebViewGuest::ChooseFiles.
 void DialogFilesChosen(
     mojom::WebViewFileChooserMode mode,
     base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)> chosen,
@@ -533,11 +494,9 @@ void WebViewGuest::CreateAndAttach(
       owner.GetBrowserContext(), /*initially_hidden=*/false, created);
 
 
-  // Asynchronous, and the API says why: the placeholder is about to be swapped
-  // out, so every beforeunload handler under it has to answer first, and a
-  // cross-process placeholder has to be replaced by a same-process one. What
-  // comes back is the frame that is safe to swap, which may not be the frame
-  // handed in.
+  // Asynchronous: beforeunload handlers must run first, and a cross-process
+  // placeholder is replaced. The callback gets the frame that is safe to
+  // swap, which may differ from `placeholder`.
   placeholder.PrepareForInnerWebContentsAttach(
       base::BindOnce(&WebViewGuest::Attach, std::move(guest)));
 }
@@ -545,17 +504,14 @@ void WebViewGuest::CreateAndAttach(
 // static
 void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
                           content::RenderFrameHost* outer_contents_frame) {
-  // Null is a refusal: a beforeunload handler kept the frame, or the frame was
-  // detached while this was in flight. Returning destroys `guest`, and with it
-  // the WebContents it still owns.
+  // Null if beforeunload refused or the frame was detached. Returning destroys
+  // `guest` and its WebContents.
   if (outer_contents_frame == nullptr) {
     return;
   }
 
-  // The frame's own WebContents rather than the owner this was built with:
-  // AttachInnerWebContents CHECKs that they are the same, and a shell that
-  // navigated while the attach was in flight has a new document -- and so a new
-  // RenderFrameHost -- behind the id this object holds.
+  // Use the frame's WebContents, which AttachInnerWebContents CHECKs. The
+  // owner document may have navigated during the attach.
   content::WebContents* owner =
       content::WebContents::FromRenderFrameHost(outer_contents_frame);
   CHECK(owner);
@@ -563,25 +519,19 @@ void WebViewGuest::Attach(std::unique_ptr<WebViewGuest> guest,
   std::unique_ptr<content::WebContents> contents =
       std::move(guest->owned_guest_contents_);
 
-  // From here the guest is scoped to the guest page's lifetime, exactly as
-  // GuestViewBase does it: the outer WebContents takes the inner one, and this
-  // object self-destructs in WebContentsDestroyed.
+  // As in GuestViewBase, the outer WebContents takes the inner one and this
+  // object deletes itself in WebContentsDestroyed.
   guest->self_owned_ = true;
   guest.release();
 
-  // `is_full_page` is false, and it is not a detail. It means "give the inner
-  // WebContents focus", and it CHECKs that the outer WebContents has exactly
-  // one inner one -- which a shell with two browser windows open does not.
-  // Focus is the shell's to move -- `BrowserWindow.tsx` calls `view.focus()`
-  // when a browser window becomes the one the user is working in -- and this
-  // flag is not how.
+  // `is_full_page` true would focus the guest and CHECK that the outer
+  // WebContents has only one inner one, which fails with two browser windows.
+  // The shell moves focus itself with `view.focus()`.
   owner->AttachInnerWebContents(std::move(contents), outer_contents_frame,
                                 /*is_full_page=*/false);
 
-  // The one line that says the guest exists, and it earns its place: a
-  // <webview> showing nothing has four possible causes and only this tells
-  // three of them from the fourth. `domicile:` is the prefix
-  // engine-diagnostics.sh greps the browser's log for.
+  // Helps diagnose a blank <webview>. engine-diagnostics.sh greps for the
+  // `domicile:` prefix.
   LOG(INFO) << "domicile: attached a guest to a <webview>.";
 }
 
@@ -593,8 +543,8 @@ std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest =
       base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
-  // Hidden, like a background tab, until an element shows it. Content
-  // throttles it until AttachWindowTo makes it visible.
+  // Hidden (and throttled) like a background tab until AttachWindowTo shows
+  // it.
   guest->owned_guest_contents_ = guest->MakeContents(
       shell.GetBrowserContext(), /*initially_hidden=*/true, created);
   LOG(INFO) << "domicile: opened browser window " << window_id << ".";
@@ -605,12 +555,11 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
     content::BrowserContext* context,
     bool initially_hidden,
     const GuestCreatedCallback& created) {
-  // `guest_delegate` is what makes the new WebContents a guest, and content
-  // asks it for its owner while constructing -- which is why the delegate is
-  // built first and knows its owner from its constructor.
+  // `guest_delegate` makes this a guest. Content asks it for the owner during
+  // construction, so the owner is set in this object's constructor.
   //
-  // No SiteInstance and no StoragePartitionConfig: the guest belongs in the
-  // default partition, where the user's cookies are. See the class comment.
+  // No SiteInstance or StoragePartitionConfig: the guest uses the default
+  // partition with the user's cookies. See the class comment.
   content::WebContents::CreateParams params(context);
   params.guest_delegate = this;
   params.initially_hidden = initially_hidden;
@@ -624,12 +573,12 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   Observe(guest_contents_);
   guest_contents_->SetDelegate(this);
 
-  // The embedder's helpers, now: after the delegate, which some of them ask
-  // for, and before the first navigation, which some of them record.
+  // After SetDelegate, which some helpers need, and before the first
+  // navigation, which some record.
   created.Run(*guest_contents_);
 
-  // Unretained because the subscription is a member: it is dropped with this
-  // object, and before that with the WebContents -- see WebContentsDestroyed.
+  // Unretained is safe: the subscription is a member, reset in
+  // WebContentsDestroyed.
   zoom_subscription_ =
       content::HostZoomMap::GetForWebContents(guest_contents_)
           ->AddZoomLevelChangedCallback(base::BindRepeating(
@@ -648,9 +597,7 @@ void WebViewGuest::AttachToElement(
     mojo::PendingRemote<mojom::WebViewGuestClient> client) {
   CHECK(!window_id_.empty());
 
-  // One frame at a time. A shell that draws a window twice (on two monitors'
-  // pages, or a new element before the old one leaves the document) gets it
-  // in the first only.
+  // A window shows in one frame at a time; a second element shows nothing.
   if (attaching_ || guest_contents_->GetOuterWebContents() != nullptr) {
     LOG(WARNING) << "domicile: a <webview> named browser window " << window_id_
                  << ", which another <webview> is already showing; it shows "
@@ -658,8 +605,7 @@ void WebViewGuest::AttachToElement(
     return;
   }
 
-  // Bind the new element's pipes; any earlier binding was an element that has
-  // gone. Its disconnect signals when this element goes.
+  // Replace any binding from an element that has gone.
   owner_rfh_id_ = owner.GetGlobalId();
   receiver_.reset();
   receiver_.Bind(std::move(receiver));
@@ -669,8 +615,7 @@ void WebViewGuest::AttachToElement(
       base::BindOnce(&WebViewGuest::ElementGone, base::Unretained(this)));
 
   attaching_ = true;
-  // Same preparation as CreateAndAttach, for its reason: the given frame may
-  // not be safe to swap.
+  // As in CreateAndAttach, the given frame may not be safe to swap.
   placeholder.PrepareForInnerWebContentsAttach(base::BindOnce(
       &WebViewGuest::AttachWindowTo, weak_factory_.GetWeakPtr()));
 }
@@ -678,8 +623,7 @@ void WebViewGuest::AttachToElement(
 void WebViewGuest::AttachWindowTo(
     content::RenderFrameHost* outer_contents_frame) {
   attaching_ = false;
-  // Refused, as in Attach: a beforeunload handler kept the frame, or the frame
-  // went meanwhile. The window survives, and an element can ask again.
+  // Refused, as in Attach. The window survives and an element can ask again.
   if (outer_contents_frame == nullptr) {
     ElementGone();
     return;
@@ -690,11 +634,9 @@ void WebViewGuest::AttachWindowTo(
   CHECK(owner);
   owner_contents_ = owner->GetWeakPtr();
 
-  // Attached unowned: the outer WebContents shows the page without owning it.
-  // When the frame goes (a reload, an element removed), content detaches the
-  // page and keeps it alive (WebContentsTreeNode::OnFrameTreeNodeDestroyed).
-  // The fork's patch enabling kAttachUnownedInnerWebContents provides the
-  // feature and the pass key.
+  // Unowned, so when the frame goes content detaches the page and keeps it
+  // alive (WebContentsTreeNode::OnFrameTreeNodeDestroyed). The fork's patch
+  // for kAttachUnownedInnerWebContents provides this API.
   owner->AttachUnownedInnerWebContents(
       content::UnownedInnerWebContentsClient::GetPassKey(), guest_contents_,
       outer_contents_frame);
@@ -711,7 +653,7 @@ void WebViewGuest::AttachWindowTo(
 void WebViewGuest::ElementGone() {
   receiver_.reset();
   Unclient();
-  // A find belongs to the element, and its find bar went with it.
+  // The find bar belonged to the element.
   find_text_.clear();
   guest_contents_->WasHidden();
   LOG(INFO) << "domicile: browser window " << window_id_
@@ -735,8 +677,8 @@ void WebViewGuest::ReportEverything() {
   ReportHistory();
   ReportPage();
   ReportLoading(guest_contents_->ShouldShowLoadingUI());
-  // Not through ReportZoom, which also notifies chrome.tabs: the zoom is
-  // unchanged, only the listener is new.
+  // Bypasses ReportZoom, which would also notify chrome.tabs of an unchanged
+  // zoom.
   if (!blink::ZoomValuesEqual(reported_zoom_, 1.0)) {
     client_->ZoomChanged(reported_zoom_);
   }
@@ -768,13 +710,12 @@ WebViewGuest::WebViewGuest(content::WebContents& shell,
       window_id_(window_id),
       owner_contents_(shell.GetWeakPtr()),
       receiver_(this) {
-  // No element yet: see Unclient.
+  // No element yet; see Unclient.
   Unclient();
 }
 
-// A browser window's WebContents is destroyed first, while every member still
-// exists for the observer and delegate calls content makes during teardown.
-// Member order would destroy it last, into a half-destroyed delegate.
+// Destroys a browser window's WebContents first, while members still exist for
+// content's teardown callbacks. Member order would destroy it last.
 WebViewGuest::~WebViewGuest() {
   owned_guest_contents_.reset();
 }
@@ -801,15 +742,13 @@ WebViewGuest* WebViewGuest::FromWebContents(content::WebContents* contents) {
 void WebViewGuest::ChooseDownloadPath(
     const base::FilePath& suggested_path,
     base::OnceCallback<void(std::optional<base::FilePath>)> chosen) {
-  // Before the ask, so the line means "the shell was asked" whether or not it
-  // answers. The download guard greps for it.
+  // Logged before asking; the download guard greps for it.
   LOG(INFO) << "domicile: a <webview>'s download asked the shell where to go.";
 
-  // No accept list: a download can be saved under any name the user likes,
-  // and the suggestion already carries the one the site gave it.
+  // No accept list: a download may be saved under any name.
   //
-  // WRAPPED so that a pipe closing unanswered -- the element removed, the shell
-  // reloaded -- still tells //chrome, which holds the download waiting.
+  // Wrapped so a pipe closing unanswered still answers //chrome, which holds
+  // the download until then.
   client_->FileChooserRequested(
       mojom::WebViewFileChooserMode::kSave, {},
       suggested_path.BaseName().AsUTF8Unsafe(),
@@ -825,8 +764,7 @@ void WebViewGuest::ChooseFiles(
     const base::FilePath& suggested_path,
     base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
         chosen) {
-  // WRAPPED, for the reason ChooseDownloadPath's ask is: the dialog's caller
-  // holds its question open until it hears something.
+  // Wrapped, as in ChooseDownloadPath: the dialog waits for an answer.
   client_->FileChooserRequested(
       mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
       base::GetHomeDir().AsUTF8Unsafe(),
@@ -836,22 +774,15 @@ void WebViewGuest::ChooseFiles(
 }
 
 void WebViewGuest::Navigate(const GURL& url) {
-  // A CHECK rather than a guard: this object is destroyed with the guest's
-  // WebContents, so there is no moment at which the pipe is open and the
-  // WebContents is gone.
-  //
-  // Before the attach as well as after, and that is why the element needs no
-  // callback to wait on: a guest still waiting for its placeholder navigates
-  // all the same, because content brings the browser side of a guest up during
-  // the attach whether or not it has been anywhere.
+  // This object is destroyed with the guest's WebContents, so guest_contents_
+  // is never null here.
+  // Navigating before the attach finishes is safe: content brings the guest
+  // up during the attach.
   CHECK(guest_contents_);
 
-  // ONE REFUSAL, AND IT IS NOT FOR THE SHELL'S SAKE. Only the shell's
-  // document reaches this, and it already holds `Spawn` -- but the addresses it
-  // hands over are often a page's (`target="_blank"`) or an extension's
-  // (`tabs.update`), and a guest on domicile:// would be a second shell for
-  // them. Refused the way content refuses a page an address it may not ask
-  // for: the guest shows about:blank#blocked, so an address bar names it.
+  // The URL often comes from a page (`target="_blank"`) or an extension
+  // (`tabs.update`), and a guest on domicile:// would give it shell access.
+  // Show about:blank#blocked, as content does, so the address bar explains.
   const bool may_show = MayShowInWebView(url);
   if (!may_show) {
     LOG(WARNING) << "domicile: a <webview> may not show "
@@ -864,16 +795,10 @@ void WebViewGuest::Navigate(const GURL& url) {
 }
 
 void WebViewGuest::GoBack() {
-  // The same CHECK Navigate makes, and for the same reason: this object is
-  // destroyed with the guest's WebContents, so there is no moment at which the
-  // pipe is open and the WebContents is gone.
   CHECK(guest_contents_);
 
-  // NOT GUARDED WITH CanGoBack(), which would be a guard on a condition the
-  // callee already answers: GoBack returns without navigating when there is
-  // nowhere to go. An address bar whose buttons cannot yet be grayed out
-  // presses this with an empty history as a matter of course, so a back with
-  // nowhere to go is the ordinary case rather than a bad message.
+  // GoBack does nothing with no history, which is a normal case, not a bad
+  // message.
   guest_contents_->GetController().GoBack();
 }
 
@@ -884,20 +809,15 @@ void WebViewGuest::GoForward() {
 
 void WebViewGuest::Stop() {
   CHECK(guest_contents_);
-  // The WebContents rather than its controller, which has no Stop: a pending
-  // navigation is the WebContents', and canceling it is what an address bar's
-  // stop button means.
+  // NavigationController has no Stop; the WebContents cancels the load.
   guest_contents_->Stop();
 }
 
 void WebViewGuest::Reload() {
   CHECK(guest_contents_);
-  // `check_for_repost` true, which is what a browser passes in production. It
-  // reaches this delegate's ShowRepostFormWarningDialog, which is content's
-  // do-nothing default -- so reloading a POST result currently does nothing
-  // rather than silently reposting. That is the guest's "refuses everything an
-  // embedder is asked for" gap, and reposting without asking would be the
-  // worse half of it to close by accident.
+  // With `check_for_repost`, reloading a POST result calls content's no-op
+  // ShowRepostFormWarningDialog, so it does nothing instead of reposting
+  // without asking.
   guest_contents_->GetController().Reload(content::ReloadType::NORMAL,
                                           /*check_for_repost=*/true);
 }
@@ -905,8 +825,7 @@ void WebViewGuest::Reload() {
 void WebViewGuest::SetZoom(double factor) {
   CHECK(guest_contents_);
 
-  // The element throws a RangeError for this before sending it, so a factor
-  // out of range here is a renderer that is not running the element's code.
+  // The element throws a RangeError first, so this is a bad message.
   if (!(factor >= blink::kMinimumBrowserZoomFactor &&
         factor <= blink::kMaximumBrowserZoomFactor)) {
     receiver_.ReportBadMessage(
@@ -920,16 +839,16 @@ void WebViewGuest::Find(const std::string& text, bool forward) {
   CHECK(guest_contents_);
 
   const std::u16string search = base::UTF8ToUTF16(text);
-  // The element sends StopFinding for an empty string, as it throws for a
-  // SetZoom out of range, and content NOTREACHEDs on one.
+  // The element sends StopFinding instead, and content NOTREACHEDs on empty
+  // text.
   if (search.empty()) {
     receiver_.ReportBadMessage(
         "domicile: a <webview> asked to find nothing in its page.");
     return;
   }
 
-  // Chrome's find bar's rule: the text it is already searching for is a step
-  // to the next match, and anything else starts over.
+  // As in Chrome's find bar: the same text moves to the next match, new text
+  // starts over.
   const bool new_session = search != find_text_;
   if (new_session) {
     find_text_ = search;
@@ -938,8 +857,7 @@ void WebViewGuest::Find(const std::string& text, bool forward) {
   auto options = blink::mojom::FindOptions::New();
   options->forward = forward;
   options->new_session = new_session;
-  // Not skipped: the delay is content's own mitigation for a search typed a
-  // letter at a time, which is exactly how a find bar sends one.
+  // Keep content's delay, which debounces typing in a find bar.
   guest_contents_->Find(find_text_, std::move(options), /*skip_delay=*/false,
                         [this, new_session](int request_id) {
                           if (new_session) {
@@ -960,16 +878,15 @@ void WebViewGuest::ListDirectory(const std::string& path,
                                  ListDirectoryCallback callback) {
   const std::optional<base::FilePath> directory =
       ResolvedPath(base::GetHomeDir(), path);
-  // The element throws a TypeError for this before sending it, as it does for
-  // a SetZoom out of range.
+  // The element throws a TypeError first, so this is a bad message.
   if (!directory.has_value()) {
     std::move(callback).Run(std::nullopt);
     receiver_.ReportBadMessage(
         "domicile: a <webview> asked to list a path that climbs with `..`.");
     return;
   }
-  // Not a bad message: an answer and a listing travel on different pipes, so a
-  // listing asked for just before the answer can arrive just after it.
+  // Not a bad message: the listing and the answer use different pipes, so a
+  // listing can arrive just after the answer.
   if (open_choosers_ == 0) {
     std::move(callback).Run(std::nullopt);
     return;
@@ -990,21 +907,17 @@ void WebViewGuest::ZoomTo(double factor) {
   CHECK(factor >= blink::kMinimumBrowserZoomFactor &&
         factor <= blink::kMaximumBrowserZoomFactor);
 
-  // The site's zoom rather than this window's, which is Chrome's rule and what
-  // HostZoomMap::SetZoomLevel does for a WebContents with no temporary level.
+  // Sets the site's zoom, not this window's, as Chrome does.
   content::HostZoomMap::SetZoomLevel(guest_contents_,
                                      blink::ZoomFactorToZoomLevel(factor));
 
-  // HostZoomMap has already said so through the subscription, for a site that
-  // has an address. This is the answer for one that does not -- an error page,
-  // a guest that has not committed -- and the comparison makes it free when
-  // the answer was already sent.
+  // The subscription already reported this for pages with a host. This covers
+  // error pages and uncommitted guests; ReportZoom skips duplicates.
   ReportZoom();
 }
 
 content::WebContents* WebViewGuest::GetOwnerWebContents() {
-  // A browser window's owner is the shell's WebContents, whatever document it
-  // holds. See MakeWindow.
+  // A browser window's owner is the shell's WebContents. See MakeWindow.
   if (!window_id_.empty()) {
     return owner_contents_.get();
   }
@@ -1014,8 +927,7 @@ content::WebContents* WebViewGuest::GetOwnerWebContents() {
 }
 
 content::RenderFrameHost* WebViewGuest::GetProspectiveOuterDocument() {
-  // Its prospective document is the shell's current one; a reload replaces
-  // the one it was opened under.
+  // The shell's current document, which a reload replaces.
   if (!window_id_.empty()) {
     return owner_contents_ ? owner_contents_->GetPrimaryMainFrame() : nullptr;
   }
@@ -1038,19 +950,12 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
       (modifiers & blink::WebInputEvent::kMetaKey) != 0,
   };
 
-  // EVERY EVENT, including the releases and the ones no chord matches. A
-  // modifier is a state the shell holds rather than a keystroke it answers --
-  // Alt hands the pointer back to the page, Shift makes the drag a resize --
-  // and the registry drops the ones that changed nothing, so this is a compare
-  // and not a message. Doing it before the match, so that a chord's own Alt is
-  // reported rather than swallowed with the key.
+  // Every event, including releases: the shell tracks modifier state (Alt to
+  // drag, Shift to resize). The registry drops unchanged states. Done before
+  // matching so a chord's own modifiers are still reported.
   ShortcutRegistry::Get().SetModifiers(held);
 
-  // Presses only, which is what the control protocol carries: a release
-  // changes nothing and would arrive as a second event for one keystroke.
-  //
-  // And not an auto-repeat, which is the page's own reading of the same rule --
-  // a held key repeats tens of times a second and only the first of them acts.
+  // Chords match on the first press only: no releases or auto-repeats.
   const bool pressed =
       event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
       event.GetType() == blink::WebInputEvent::Type::kKeyDown;
@@ -1058,22 +963,19 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
     return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
-  // Evdev, because that is the numbering the control protocol speaks and the
-  // one the shell claimed its chords in. Zero is a key with no evdev code at
-  // all, which no claim can name.
+  // Chords are claimed in evdev codes. Zero means no evdev code, which no
+  // chord can name.
   const int evdev = ui::KeycodeConverter::DomCodeToEvdevCode(
       static_cast<ui::DomCode>(event.dom_code));
   if (evdev == 0) {
     return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
-  // HANDLED rather than NOT_HANDLED, and that is the half that makes a claim a
-  // claim: the guest's page never sees the key, so a site that binds Alt+Tab
-  // for itself cannot take the desktop's chord away from the user.
+  // A matched chord is HANDLED so the page never sees it and cannot override a
+  // desktop shortcut.
   //
-  // And told to the page this `<webview>` is in, rather than to every page of
-  // the desk: each monitor is a page with a channel of its own, and a chord
-  // told to all of them was run once per monitor.
+  // Delivered only to the page containing this `<webview>`. Each monitor has
+  // its own page, so broadcasting would run the chord once per monitor.
   return ShortcutRegistry::Get().Press(
              Chord{static_cast<uint32_t>(evdev), held.alt, held.ctrl,
                    held.shift, held.meta},
@@ -1088,9 +990,8 @@ bool WebViewGuest::HandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
   const int modifiers = event.GetModifiers();
 
-  // Presses, as PreHandleKeyboardEvent counts them, and auto-repeats among
-  // them: Ctrl held on the plus key zooms the whole way in Chrome, one step a
-  // repeat, and `repeat` on the event is how a shell tells them apart.
+  // Includes auto-repeats (e.g. holding Ctrl+Plus zooms repeatedly); the event
+  // carries `repeat` so the shell can tell them apart.
   const bool pressed =
       event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
       event.GetType() == blink::WebInputEvent::Type::kKeyDown;
@@ -1121,8 +1022,8 @@ bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   CHECK(guest_contents_);
-  // The guest's main frame view is the element's box. It exists: a frame of
-  // this page just asked for a menu.
+  // The guest's main frame view is the element's box. It exists because a
+  // frame in this page just asked for a menu.
   content::RenderWidgetHostView* page =
       guest_contents_->GetPrimaryMainFrame()->GetView();
   CHECK(page);
@@ -1134,7 +1035,7 @@ bool WebViewGuest::HandleContextMenu(
   context_menu_frame_ = render_frame_host.GetGlobalId();
   context_menu_params_ = params;
 
-  // The line the context menu guard greps for.
+  // The context menu guard greps for this line.
   LOG(INFO) << "domicile: a <webview>'s page asked for a context menu; "
                "asking the shell to draw it.";
   client_->ContextMenuRequested(
@@ -1147,13 +1048,13 @@ void WebViewGuest::RunContextMenuAction(
     mojom::WebViewContextMenuAction action) {
   CHECK(guest_contents_);
 
-  // The element refuses ids it was never sent, so this one is not from it.
+  // The element only sends ids it received, so this is a bad message.
   if (menu <= 0 || menu > context_menu_id_) {
     receiver_.ReportBadMessage(
         "domicile: a <webview> answered a context menu it was never sent.");
     return;
   }
-  // A race: the shell acted on a menu while a newer one was on its way.
+  // A race: a newer menu was sent before the shell acted.
   if (menu != context_menu_id_) {
     LOG(INFO) << "domicile: a <webview>'s context menu was replaced before "
                  "the shell acted on it; dropping the action.";
@@ -1202,14 +1103,14 @@ void WebViewGuest::RunContextMenuAction(
     case mojom::WebViewContextMenuAction::kSelectAll:
       EditWhenFocused(&content::WebContents::SelectAll, kEditTries);
       return;
-    // Unfiltered, as Chrome copies it.
+    // Chrome also copies the unfiltered URL.
     case mojom::WebViewContextMenuAction::kCopyLinkAddress:
       CopyAddress(params.unfiltered_link_url);
       return;
     case mojom::WebViewContextMenuAction::kSaveLinkAs:
       SaveFrom(*frame, params.link_url, params, /*is_subresource=*/true);
       return;
-    // The frame maps the menu's root point back to its own coordinates. See
+    // The frame maps the root point to its own coordinates. See
     // RenderFrameHostImpl::TransformRootPointForContextMenuAction.
     case mojom::WebViewContextMenuAction::kCopyImage:
       frame->CopyImageAt(params.x, params.y);
@@ -1217,8 +1118,8 @@ void WebViewGuest::RunContextMenuAction(
     case mojom::WebViewContextMenuAction::kCopyMediaAddress:
       CopyAddress(params.src_url);
       return;
-    // As Chrome's ExecSaveAs: the renderer saves a canvas, or an image whose
-    // address was too large to send. Anything else is downloaded again.
+    // As in Chrome's ExecSaveAs: the renderer saves a canvas, or an image whose
+    // URL was too large to send. Anything else is downloaded again.
     case mojom::WebViewContextMenuAction::kSaveMediaAs:
       if (params.media_type == blink::mojom::ContextMenuDataMediaType::kCanvas ||
           !params.src_url.is_valid()) {
@@ -1236,8 +1137,8 @@ void WebViewGuest::RunContextMenuAction(
 
 void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
   CHECK(guest_contents_);
-  // Null while the focused frame tree is not this guest's. An edit sent then
-  // would go to the shell.
+  // Null while focus is outside this guest, when an edit would go to the
+  // shell.
   if (guest_contents_->GetFocusedFrame() != nullptr) {
     (guest_contents_.get()->*command)();
     return;
@@ -1268,8 +1169,7 @@ void WebViewGuest::SaveFrom(content::RenderFrameHost& frame,
                             const GURL& url,
                             const content::ContextMenuParams& params,
                             bool is_subresource) {
-  // Chrome's referrer and Accept header for the same save, for sites that
-  // check them.
+  // Match Chrome's referrer and Accept header, which some sites check.
   net::HttpRequestHeaders headers;
   if (params.media_type == blink::mojom::ContextMenuDataMediaType::kImage) {
     headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
@@ -1287,17 +1187,14 @@ void WebViewGuest::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
-  // The line that tells a picker the shell never drew from a question that
-  // never left the browser. The upload guard greps for it.
+  // Logged before asking; the upload guard greps for it.
   LOG(INFO) << "domicile: a <webview>'s page asked for a file; asking the "
                "shell.";
 
-  // `default_file_name` is empty for every mode but a save -- Blink clears it
-  // -- so it is the suggestion as it stands.
+  // Blink clears `default_file_name` except for saves.
   //
-  // WRAPPED, for the reason ChooseDownloadPath's ask is: content holds the
-  // page's chooser open until the listener hears something, and a pipe that
-  // closes unanswered has to be a cancel rather than a page that never hears.
+  // Wrapped, as in ChooseDownloadPath, so an unanswered pipe cancels the
+  // chooser instead of leaving the page waiting.
   client_->FileChooserRequested(
       AsWebViewFileChooserMode(params.mode),
       AcceptedExtensions(params.accept_types),
@@ -1332,13 +1229,10 @@ void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
   ReportHistory();
-  // The address as well as the history, from the same call: content reports
-  // INVALIDATE_TYPE_URL through here, and the flags are not read for the
-  // reason the header gives -- what decides whether anything moved is the
-  // comparison inside, not a flag meaning "some browser UI is stale".
+  // URL changes also arrive here. See the header for why the flags are
+  // ignored.
   ReportPage();
-  // And the zoom, which is the site's: a page that moved to a site zoomed
-  // differently has changed zoom without anybody setting it.
+  // Zoom is per site, so navigation can change it.
   ReportZoom();
 }
 
@@ -1352,18 +1246,13 @@ void WebViewGuest::LoadingStateChanged(content::WebContents* source,
 }
 
 void WebViewGuest::ReportHistory() {
-  // The same CHECK the four controls make: this object is destroyed with the
-  // guest's WebContents, and content does not call a delegate of a WebContents
-  // it has already destroyed.
   CHECK(guest_contents_);
 
   content::NavigationController& history = guest_contents_->GetController();
   const bool can_go_back = history.CanGoBack();
   const bool can_go_forward = history.CanGoForward();
 
-  // A CHANGE, not a notification. See the header: this call is also how a
-  // title and a favicon arrive, and a chrome that re-rendered its address bar
-  // for a favicon would be re-rendering it for every page it loads.
+  // Report only changes; title and favicon updates also call this.
   if (can_go_back != reported_can_go_back_ ||
       can_go_forward != reported_can_go_forward_) {
     reported_can_go_back_ = can_go_back;
@@ -1373,23 +1262,14 @@ void WebViewGuest::ReportHistory() {
 }
 
 void WebViewGuest::ReportPage() {
-  // The same CHECK ReportHistory makes, and for the same reason: content does
-  // not call a delegate of a WebContents it has already destroyed.
   CHECK(guest_contents_);
 
-  // ONE ENTRY, READ ONCE, FOR BOTH HALVES. `GetVisibleSecurityState` reads
-  // `GetVisibleEntry()` itself, so taking the address from the same call is
-  // what keeps the lock and the address describing one page -- see the header.
-  // It is never null for a live WebContents at this pin: content always has an
-  // entry, and content_utils.cc dereferences it without a check for that
-  // reason.
+  // `GetVisibleSecurityState` also reads the visible entry, so the address and
+  // the level describe the same page. Never null for a live WebContents.
   content::NavigationEntry* entry =
       guest_contents_->GetController().GetVisibleEntry();
 
-  // THE VIRTUAL URL, WHICH IS WHAT A BROWSER SHOWS. `view-source:` and the
-  // other rewrites live in the virtual URL; the real one is what was fetched.
-  // A chrome shown the real one would disagree with every other browser about
-  // what page the user is looking at.
+  // The virtual URL is what browsers display (e.g. `view-source:` rewrites).
   const GURL url = entry->GetVirtualURL();
 
   const std::unique_ptr<security_state::VisibleSecurityState> state =
@@ -1397,11 +1277,7 @@ void WebViewGuest::ReportPage() {
   const mojom::WebViewSecurity security =
       AsWebViewSecurity(security_state::GetSecurityLevel(*state));
 
-  // A CHANGE, not a notification, exactly as the two reports above are. Both
-  // hooks that reach here fire for things the other one is about -- a cert
-  // arriving is not a navigation and a navigation is not a cert -- so without
-  // this the element would get a message and the shell's page a DOM event for
-  // every commit, every title and every favicon.
+  // Report only changes; both callers fire for unrelated updates too.
   if (url != reported_url_ || security != reported_security_) {
     reported_url_ = url;
     reported_security_ = security;
@@ -1410,22 +1286,14 @@ void WebViewGuest::ReportPage() {
 }
 
 void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
-  // The same CHECK ReportHistory makes, and for the same reason: content does
-  // not call a delegate of a WebContents it has already destroyed.
   CHECK(guest_contents_);
 
-  // BOTH HALVES, which is how Chrome's own browser window reads this pair:
-  // `should_show_loading_ui` says whether a load of this kind is one a browser
-  // spins for -- false for a same-document navigation -- and `IsLoading()`
-  // says whether one is happening at all. A spinner driven by the flag alone
-  // would keep turning after the page arrived, because the call that says a
-  // load finished carries the same flag as the call that said it started.
+  // As in Chrome: the flag says whether this kind of load shows a spinner, and
+  // IsLoading() says whether a load is in progress. The flag alone stays set
+  // after the load finishes.
   const bool loading = guest_contents_->IsLoading() && should_show_loading_ui;
 
-  // A CHANGE, not a notification, exactly as ReportHistory is: this call
-  // arrives for navigations that start no load a browser would show, and a
-  // chrome that re-rendered its address bar for each of them would be
-  // re-rendering it for nothing.
+  // Report only changes.
   if (loading != reported_loading_) {
     reported_loading_ = loading;
     client_->LoadingChanged(loading);
@@ -1434,16 +1302,14 @@ void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
 
 namespace {
 
-// The size an icon is when its link does not say: a touch icon is Apple's 180
-// pixels, and anything else a tab's 16.
+// The assumed size of an icon whose link gives none: 180 px for a touch icon,
+// 16 px otherwise.
 int AssumedSize(const blink::mojom::FaviconURL& icon) {
   return icon.icon_type == blink::mojom::FaviconIconType::kFavicon ? 16 : 180;
 }
 
-// The icon of `candidates` a launcher draws best: a drawing first, because it
-// is every size at once, then the biggest. The page's first of two alike.
-// The same rule the compositor's own lookup ranks a page's links by -- see
-// `domicile_host::favicons`.
+// Picks the best icon for a launcher: SVG first, then the largest, then the
+// first. Matches the compositor's ranking in `domicile_host::favicons`.
 GURL BestFavicon(const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   const blink::mojom::FaviconURL* best = nullptr;
   bool best_drawn = false;
@@ -1479,8 +1345,7 @@ void WebViewGuest::DidUpdateFaviconURL(
     content::RenderFrameHost* render_frame_host,
     const std::vector<blink::mojom::FaviconURLPtr>& candidates,
     blink::mojom::FaviconUpdateReason reason) {
-  // A CHANGE, not a notification, as every report here is: the renderer
-  // reports the list again when a script touches any link in the head.
+  // Report only changes; scripts touching any head link trigger this.
   const GURL icon = BestFavicon(candidates);
   if (icon != reported_favicon_) {
     reported_favicon_ = icon;
@@ -1498,14 +1363,9 @@ void WebViewGuest::PrimaryPageChanged(content::Page& page) {
 }
 
 void WebViewGuest::ReportZoom() {
-  // GetZoomFactor makes the same CHECK ReportHistory makes, and for the same
-  // reason.
   const double zoom = GetZoomFactor();
 
-  // ZoomValuesEqual rather than `!=`, because a factor has been through a
-  // logarithm and back by the time it is read here: 1/3 set is not exactly
-  // 1/3 read, and a message for the difference would be a DOM event for
-  // nothing.
+  // ZoomValuesEqual, not `!=`: the factor round-trips through a logarithm.
   if (!blink::ZoomValuesEqual(zoom, reported_zoom_)) {
     const double was = reported_zoom_;
     reported_zoom_ = zoom;
@@ -1519,12 +1379,11 @@ void WebViewGuest::DidReceiveFindReply(int request_id,
                                        const gfx::Rect& selection_rect,
                                        int active_match_ordinal,
                                        bool final_update) {
-  // A find stopped, or one replaced by a search for other text: what this
-  // counts is not what the element is showing.
+  // Drop replies to a stopped or replaced search.
   if (find_text_.empty() || request_id < find_session_id_) {
     return;
   }
-  // -1 is content's "no change" in either field, so the last answer stands.
+  // -1 means "no change" in either field.
   ReportFind(
       number_of_matches == -1 ? reported_find_matches_ : number_of_matches,
       active_match_ordinal == -1 ? reported_find_active_match_
@@ -1566,16 +1425,12 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
     const blink::mojom::WindowFeatures& window_features,
     const content::StoragePartitionConfig& partition_config,
     content::SessionStorageNamespaceHandle* session_storage_namespace) {
-  // NOT THE WINDOW, WHICH THIS CANNOT MAKE: a guest with no SiteInstance of its
-  // own is what keeps the user logged in -- see the class comment -- and
-  // content CHECKs that pair in WebContentsImpl::CreateNewWindow. So the window
-  // is refused, exactly as it was before this message existed, and the address
-  // goes to the element. What opens a window is the shell.
+  // Content cannot create this window for a guest without its own
+  // SiteInstance (see the class comment), so refuse it and open a browser
+  // window at the address instead.
   //
-  // `disposition` and `window_features` are not carried, and that is the same
-  // decision the class makes about everything else an embedder is asked: a
-  // Domicile shell has one shape of browser window and lays it out itself, so a
-  // popup's requested size is an answer to a question its desktop does not ask.
+  // `disposition` and `window_features` are dropped: the shell lays out
+  // browser windows itself.
   ReportNewWindow(target_url);
   return nullptr;
 }
@@ -1585,30 +1440,17 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
     const content::OpenURLParams& params,
     base::OnceCallback<void(content::NavigationHandle&)>
         navigation_handle_callback) {
-  // The same CHECK the four controls make: this object is destroyed with the
-  // guest's WebContents, so there is no moment at which content can call this
-  // delegate and the WebContents be gone.
   CHECK(guest_contents_);
 
-  // `guest_contents_` RATHER THAN `source`, which is the same object here and
-  // says less: this delegate is set on one WebContents and only that one can
-  // reach it, so naming the guest says which page is being navigated where the
-  // parameter only says "whoever called".
+  // `source` is always `guest_contents_`, the only WebContents this delegates
+  // for.
   switch (params.disposition) {
     case WindowOpenDisposition::CURRENT_TAB: {
-      // THE PAGE THE FRAME COULD NOT REACH, reached. LoadURLParams carries the
-      // referrer, the transition, the POST body and the initiator origin across
-      // from what the renderer asked for, which is what keeps this a
-      // continuation of the navigation rather than a fresh one at the same
-      // address.
+      // LoadURLParams(params) keeps the referrer, transition, POST body and
+      // initiator, so this continues the renderer's navigation.
       //
-      // Said BEFORE the load rather than after, so the line means "the browser
-      // was asked" and nothing more: whether the page then arrives is the other
-      // half of the claim and is read from the page itself.
-      // `guard-webview-routed-link.sh` greps for this, and it is what tells a
-      // navigation this delegate routed from one Blink retargeted inside a
-      // single process -- which moves the window just the same and measures
-      // nothing.
+      // Logged before loading. `guard-webview-routed-link.sh` greps for this
+      // to tell a routed navigation from one Blink handled in-process.
       LOG(INFO) << "domicile: a <webview> followed a link its page could not "
                    "follow itself, to "
                 << params.url.possibly_invalid_spec();
@@ -1617,10 +1459,8 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
           guest_contents_->GetController().LoadURLWithParams(
               content::NavigationController::LoadURLParams(params));
 
-      // The callback is content's way of handing the caller the navigation it
-      // just asked for, and a null handle is an ordinary answer rather than a
-      // failure: a navigation the controller refused -- an unsupported scheme,
-      // a URL a renderer may not ask for -- never starts one.
+      // The handle is null if the controller refused the navigation, which is
+      // not an error.
       if (navigation_handle_callback && navigation) {
         std::move(navigation_handle_callback).Run(*navigation);
       }
@@ -1631,20 +1471,11 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
     case WindowOpenDisposition::NEW_BACKGROUND_TAB:
     case WindowOpenDisposition::NEW_POPUP:
     case WindowOpenDisposition::NEW_WINDOW: {
-      // A SECOND WINDOW, WHICH IS THE SHELL'S, and the same answer
-      // CreateCustomWebContents gives -- this is the other door into it. A
-      // middle click and a Ctrl click arrive here rather than there, so a
-      // desktop that answered only one of the two would open a window for a
-      // `target="_blank"` and do nothing for the same link middle-clicked.
+      // Same as CreateCustomWebContents; middle and Ctrl clicks arrive here
+      // instead.
       //
-      // SAID HERE RATHER THAN LEFT TO ReportNewWindow, because that function is
-      // shared and its line therefore cannot say WHICH door was used. The two
-      // are a different fault when either breaks -- one is CreateNewWindow, the
-      // other this delegate -- and a log that conflates them is a log that
-      // cannot tell a working override from an override that is never called.
-      // `guard-webview-routed-link.sh` greps for this line for exactly that
-      // reason; the run that established the need for it read only the shared
-      // line and could not tell the two apart.
+      // Logged here, not in the shared ReportNewWindow, so
+      // `guard-webview-routed-link.sh` can tell which path ran.
       LOG(INFO) << "domicile: a <webview> routed a second-window gesture its "
                    "page could not perform itself, to "
                 << params.url.possibly_invalid_spec();
@@ -1654,16 +1485,12 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
     }
 
     default: {
-      // EVERYTHING ELSE IS REFUSED AND SAID OUT LOUD. Saving to disk, a
-      // singleton tab, a switch to a tab that exists, an off-the-record window:
-      // each is a piece of browser UI this desktop does not have, and a silent
-      // return here is exactly the failure this whole override exists to undo.
+      // Other dispositions (save to disk, singleton tab, off-the-record, ...)
+      // need browser UI the desktop lacks. Refuse with a warning, not
+      // silently.
       //
-      // A `default` rather than an arm each, deliberately: this is a
-      // //ui/base enum shared with all of Chromium, and a value added upstream
-      // would turn an exhaustive switch into a build failure on a rebase for a
-      // case the fork has no opinion about. The ones this desktop answers are
-      // written out above; the rest are one sentence.
+      // A `default` so new upstream values in this shared //ui/base enum do
+      // not break the build.
       LOG(WARNING) << "domicile: a <webview> refused a navigation to "
                    << params.url.possibly_invalid_spec()
                    << " asked for with a disposition a browser window has no "
@@ -1675,21 +1502,16 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
 }
 
 void WebViewGuest::ReportNewWindow(const GURL& target_url) {
-  // AN ADDRESS OR NOTHING, and the invalid case is the one to say out loud: a
-  // `window.open()` with no url asks for a handle to write a document into,
-  // which is precisely what a window the shell navigates to cannot be. Sending
-  // it anyway would open a browser window at nothing, in answer to a script
-  // that is about to write into a handle it did not get.
+  // A `window.open()` with no URL wants a handle to write into, which a
+  // browser window cannot provide. Refuse it instead of opening a blank one.
   if (!target_url.is_valid()) {
     LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
                     "address to open; refused, and no window is opened.";
     return;
   }
 
-  // A warning rather than an info, because a refusal is still what happened:
-  // what the user gets is a browser window opened at this address, not the
-  // window the page asked for. A run where the two differ -- an opener that was
-  // needed, a POST that became a GET -- starts here.
+  // A warning because the page did not get the window it asked for (no
+  // opener, no POST body).
   LOG(WARNING) << "domicile: a <webview> refused to open a window for "
                << target_url.possibly_invalid_spec()
                << "; a browser window was opened at it instead.";
@@ -1748,8 +1570,8 @@ void WebViewGuest::RequestPopupWindow(int window_id,
                                       const GURL& url,
                                       int width,
                                       int height) {
-  // guard-webview-popup-window.sh reads this to tell "no window was asked
-  // for" from "one was asked for and nothing opened".
+  // guard-webview-popup-window.sh reads this to tell "never asked" from
+  // "asked but nothing opened".
   LOG(INFO) << "domicile: an extension asked for popup window " << window_id
             << "; a browser window was opened for it.";
   Host().OpenPopupWindow(*guest_contents_->GetBrowserContext(), window_id, url,
@@ -1782,8 +1604,7 @@ void BindWebViewGuestHost(
     content::RenderFrameHost* frame,
     mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
     GuestCreatedCallback created) {
-  // Owns itself and goes with the document. `new` with no matching delete is
-  // what DocumentService is.
+  // A DocumentService deletes itself with the document.
   new WebViewGuestHost(*frame, std::move(receiver), std::move(created));
 }
 

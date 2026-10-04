@@ -1,47 +1,21 @@
 #!/usr/bin/env python3
-"""The pages guard-webview-routed-link.sh middle-clicks its way through.
+"""Serves the pages guard-webview-routed-link.sh middle-clicks through.
 
-WHAT IS BEING BUILT HERE IS ONE ORDINARY LINK, and the plainness is the point.
-The gesture under test is a MIDDLE CLICK, which asks for the link in a second
-window -- and a page cannot open one, so the browser has to. That request
-arrives at `WebContentsDelegate::OpenURLFromTab` with a new-window disposition,
-and content's default implementation returns null and does nothing. Nothing
-about the link has to be special for that: no target, no frame, no second
-origin. The BUTTON is the whole experiment.
+The link is ordinary on purpose: the mouse button is what is under test. A
+middle click asks for the link in a new window, which reaches
+`WebContentsDelegate::OpenURLFromTab` with a new-window disposition. Content's
+default implementation returns null and does nothing.
 
-  /page     the page in the browser window, and the only page here with
-            anything to press: one link, filling the whole viewport, to
-            /opened. Full-bleed because the guard works its press point out
-            from the window's size, and a target covering the page cannot be
-            missed by a rounding error. Says `GUARD page-loaded` when it runs
-            and `GUARD page-mousedown` for a press, which is how a run says the
-            click reached the guest at all.
+  /page     one link to /opened, filling the viewport so the guard's computed
+            click point cannot miss. Logs `GUARD page-loaded`, and
+            `GUARD page-mousedown` for each press, which shows the click
+            reached the guest.
+  /opened   the link's target. The middle-click run must not load it: the
+            shell opens that window, and the guard reads the shell's event
+            instead. The control left-clicks the same link, so it must load
+            in place, which shows the press hit the link.
 
-  /opened   what the link names. Which run this appears in is the measurement
-            rather than a detail:
-
-              the CLAIM's run     middle-clicks, so this must NOT load. The
-                                  window it was asked for is the shell's to
-                                  open, and the guard reads the shell's event
-                                  for the address instead
-              the CONTROL's run   left-clicks the same point on the same link,
-                                  so this MUST load, in the guest, in place --
-                                  which is what says the press landed on a link
-                                  at all and the control's silence is a
-                                  measurement rather than a miss
-
-A PREVIOUS VERSION OF THIS FILE SERVED FOUR PAGES UNDER TWO HOSTNAMES, framing
-`b.test` inside `a.test` so that a `target="_top"` link would cross a process
-boundary. Engine run 35487254436 showed that gesture never reaches a delegate
-at this pin -- the frame was genuinely remote, the top page arrived, and the
-engine's line never appeared -- so Chromium performs it inside
-`Navigator::NavigateFromFrameProxy` without asking anyone. The fixture lost the
-second host, the frame and two pages with it. guard-webview-routed-link.sh's
-header carries the full account.
-
-Served over HTTP rather than as `data:` URLs for the reason
-guard-webview-framing-server.py serves its own subject: `crux` reaches no
-arbitrary host, and a fixture the guard brings with it cannot change under it.
+Served over HTTP because `crux` cannot reach arbitrary hosts.
 """
 
 import argparse
@@ -51,9 +25,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PAGE = "/page"
 OPENED = "/opened"
 
-# The page in the window: one link and nothing else. `position: fixed` with a
-# full inset rather than flow layout, so where the link is does not depend on a
-# font or a default margin.
+# One link, fixed to the full viewport, so its position does not depend on
+# fonts or margins.
 PAGE_HTML = """<!doctype html>
 <html lang="en">
   <head>
@@ -90,10 +63,8 @@ PAGE_HTML = """<!doctype html>
 </html>
 """
 
-# What the link names. It says which frame it is in for the same reason the
-# `_top` fixture's arrival pages did: a page that loaded SOMEWHERE is not the
-# same measurement as a page that replaced the guest's own document, and only
-# the page can say which happened to it.
+# The link's target. It logs whether it is the top frame, to tell a load that
+# replaced the guest's document from one in some other frame.
 OPENED_HTML = """<!doctype html>
 <html lang="en">
   <head>
@@ -129,17 +100,14 @@ class OneLink(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
-        # So a second run cannot be answered by the first run's page out of the
-        # HTTP cache, which would make a failure depend on run order.
+        # So a run is never served a cached page from an earlier run.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(encoded)
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps: WHICH pages were asked for is a
-        # reading of its own. /opened being fetched at all separates the
-        # control's run from the claim's, and in the claim's run a fetch of it
-        # is the finding rather than the noise.
+        # To stderr, which the guard keeps: a fetch of /opened is expected in
+        # the control and a failure in the middle-click run.
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -153,11 +121,9 @@ def main():
     )
     arguments = parser.parse_args()
 
-    # 127.0.0.1, not 0.0.0.0: nothing outside this machine has any business
-    # reaching a guard's fixture.
+    # Loopback only: nothing outside this machine should reach the fixture.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), OneLink)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer.
+    # Flushed before serve_forever, since the guard waits for this line.
     print("serving %s on 127.0.0.1:%d" % (PAGE, server.server_address[1]), flush=True)
     server.serve_forever()
 

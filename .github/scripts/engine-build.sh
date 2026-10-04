@@ -4,21 +4,15 @@
 #   NIX_SHELL_RUN=".../engine-build.sh /build/chromium/src /tmp/ran" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# A FILE, NOT A STRING. This began as a command composed in the workflow and
-# handed through NIX_SHELL_RUN, which meant its quoting was interpreted by the
-# workflow's shell, then by chromium-env-run, then by the `bash -c` underneath
-# — and a message containing a semicolon came out the far end as
-# `looked: command not found`. Three layers of quoting is two too many. A path
-# to a script survives all of them unaltered.
+# A script rather than an inline command, because NIX_SHELL_RUN re-quotes its
+# contents through three shells.
 set -euo pipefail
 
 CHROMIUM="${1:?usage: engine-build.sh <chromium/src> <sentinel>}"
 SENTINEL="${2:?usage: engine-build.sh <chromium/src> <sentinel>}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# `gn` and `autoninja` are depot_tools', not the nix shell's, and which
-# depot_tools is not a matter of taste — engine-depot-tools.sh is the answer
-# and the reasons, in the one place the four scripts that need it share.
+# `gn` and `autoninja` come from depot_tools; engine-depot-tools.sh picks which.
 TOOLS="$("$HERE/engine-depot-tools.sh" "$CHROMIUM")" || exit 127
 echo "depot_tools: $TOOLS"
 export PATH="$TOOLS:$PATH"
@@ -29,27 +23,20 @@ if [ -n "${DOMICILE_CC_WRAPPER:-}" ]; then
     "$DOMICILE_CC_WRAPPER would not zero its statistics, so they span builds."
 fi
 
-# One build, the one that ships: out/Release with DCHECKs, plus what the checks
-# load. `domicile_engine` because the compositor dlopens it; the test binaries
-# and probes because the checks run them.
+# The release build, plus the test binaries and probes the checks run.
 "$HERE/engine-release-build.sh" "$CHROMIUM" "${OUT_RELEASE:-out/Release}" \
   domicile_unittests ozone_unittests domicile_css_parity domicile_color_probe \
   domicile_solid_color_submitter
 
-# The proof that this ran at all. Chromium's shell has swallowed an exit status
-# more than once in this workflow's short life, so the step that called this
-# checks for the file rather than believing the code.
+# Chromium's shell can lose the exit status, so the caller checks for this file.
 touch "$SENTINEL"
 
-# WHETHER THE CACHE WAS CONSULTED, in the log rather than inferred from how
-# long the step took. The unset case matters most: any layer between the
-# systemd unit and the compiler can drop the variable without saying so, and a
-# run that lost it builds uncached and would otherwise say nothing.
+# Log whether the cache was used. Any layer between the systemd unit and the
+# compiler can drop DOMICILE_CC_WRAPPER silently.
 #
-# Plain prose, not `::warning::`: engine-build-in-shell.sh echoes this log
-# through `sed 's/^/  | /'`, so the runner never parses a workflow command.
-# A failed report is caught rather than thrown, because the step's verdict is
-# the sentinel -- throwing would only drop the lines after it.
+# Plain text, not `::warning::`: engine-build-in-shell.sh prefixes this log, so
+# the runner would not parse a workflow command. Errors are not fatal because
+# the sentinel decides the step's result.
 if [ -n "${DOMICILE_CC_WRAPPER:-}" ]; then
   "$DOMICILE_CC_WRAPPER" --show-stats -v | sed 's/^/  ccache /' || {
     echo "  ccache $DOMICILE_CC_WRAPPER built, then would not report its" \

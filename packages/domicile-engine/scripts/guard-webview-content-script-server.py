@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""The page guard-webview-content-script.sh looks for a content script's mark on.
+"""Serves a flat-colored page at `/page` for content script guards.
 
-One path, `/page`: a document in one flat color, and nothing else, so every
-pixel of it is either that color or the extension's mark over it. Served from
-127.0.0.1, which is what the fixture extension's content script matches.
+Served from 127.0.0.1, which the fixture extension's content script matches.
 
-It reloads itself every second. A content script reaches only documents that
-load after its extension has, and an extension loading at startup races the
-first page: under a busy runner the page won, and a leg that was sharp alone
-read "unmarked" forever. Reloading turns that race into a delay.
+The page reloads every second. A content script only runs on documents loaded
+after its extension, and the extension can load after the first page.
 
-`--still` serves it without the reload, for a guard whose mark is painted once
-into the page that is up -- guard-webview-active-tab.sh's -- and which a reload
-would wipe. That page says it is up, once it has loaded, by moving itself to
-`#ready` with a same-document commit: the shell's <webview> shows that address
-only for a page that committed, where its `url` alone can be a pending one.
+`--still` disables the reload, for guards whose mark a reload would erase
+(guard-webview-active-tab.sh). The page then moves to `#ready` once loaded, so
+the guard waits for a committed page rather than a pending `url`.
 """
 
 import argparse
@@ -71,7 +65,7 @@ class OnePage(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            # So no leg is answered out of another's HTTP cache.
+            # So one run is not served from another's HTTP cache.
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
@@ -79,8 +73,7 @@ class OnePage(BaseHTTPRequestHandler):
             self.send_error(404, "this server has one page and that is not it")
 
     def log_message(self, fmt, *args):
-        # To stderr, which the guard keeps: whether the page was requested at
-        # all tells "the guest never asked" from "it loaded, unmarked".
+        # Logged so a failure shows whether the guest requested the page.
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
 
@@ -109,8 +102,8 @@ def main():
     OnePage.refresh = "" if arguments.still else REFRESH
     OnePage.ready = READY if arguments.still else ""
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), OnePage)
-    # Before serve_forever, so a guard waiting on this line is not waiting on a
-    # buffer. lib-ports.sh's served_port reads the port off it.
+    # Flushed before serve_forever: guards wait on this line, and lib-ports.sh's
+    # served_port reads the port from it.
     print("serving %s on 127.0.0.1:%d" % (PAGE_PATH, server.server_address[1]), flush=True)
     server.serve_forever()
 

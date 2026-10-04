@@ -1,26 +1,23 @@
-// The shell guard-webview-browser-page.sh drives: one browser window, an
-// ordinary page in it, and then the address under test in the same window.
+// Shell module for guard-webview-browser-page.sh: one browser window that loads
+// an ordinary page, then the address under test.
 //
-// A module rather than a page, for the reason every shell guard's is: the
-// engine writes the document and loads exactly one module into it. And a
-// domicile:// document, because the browser binds WebViewGuestHost for that
-// origin and no other.
+// It is a module because the engine writes the shell's document and loads one
+// module into it. It is a domicile:// document because the browser binds
+// WebViewGuestHost only for that origin.
 //
-// AN ORDINARY PAGE FIRST, AND THEN `then`. The first page is what says a guest
-// was made, attached and navigated -- its `guest-loaded` line, out of
-// guard-webview-guest-page.py -- so a run that never got that far is told
-// apart from one whose second address was refused. `then` is chrome://history
-// in the run and the same page under another host in the control.
+// The ordinary page's `guest-loaded` line (from guard-webview-guest-page.py)
+// shows a guest was made and navigated, so a run that failed earlier is not
+// read as a refusal. `then` is chrome://history in the run and the same page
+// under another host in the control.
 //
-// WHAT THIS PAGE SAYS, to the console, which the engine writes to its own log:
+// Console lines (the engine writes them to its log):
 //
-//   GUARD then url=…   the second address was handed to the window. Diagnostics:
-//                      the readings are the guest page's and the browser's
+//   GUARD then url=…   the second address was handed to the window.
+//                      Diagnostic only
 
 /**
- * A query parameter this cannot run without. Missing means the guard invoked
- * this wrongly, and a default would turn that into a measurement of something
- * nobody asked for.
+ * Reads a required query parameter. No default, so a misconfigured guard
+ * fails instead of measuring something else.
  */
 const required = (parameters, name) => {
   const value = parameters.get(name);
@@ -46,8 +43,8 @@ view.style.inlineSize = "100%";
 view.style.blockSize = "100%";
 view.style.border = "0";
 
-// Once, when the first page has finished arriving. Read off the element rather
-// than taken from the event, which carries nothing.
+// Navigate once the first page finishes loading. The event carries no data,
+// so read the element.
 let handedOn = false;
 view.addEventListener("domicile-loading-change", () => {
   if (!handedOn && !view.loading && (view.url ?? "") !== "") {
@@ -57,7 +54,7 @@ view.addEventListener("domicile-loading-change", () => {
   }
 });
 
-// `src` last: it is what makes a <webview> ask for a guest, and before the
-// element is in the document there is no frame to attach one to.
+// Set `src` last: it requests a guest, which needs the element in the
+// document.
 document.body.append(view);
 view.setAttribute("src", first);

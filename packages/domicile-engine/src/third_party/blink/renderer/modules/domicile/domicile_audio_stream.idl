@@ -8,21 +8,20 @@
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileAudioStream {
-  // What the mixer's requests on DomicileHost name it by.
+  // The id DomicileHost's mixer methods take.
   readonly attribute DOMString id;
 
-  // Who is playing or recording it, as the application named itself.
+  // The application playing or recording it, as it named itself.
   readonly attribute DOMString application;
 
-  // What it is -- a song, a call -- or empty where the application said
-  // nothing.
+  // What it is (a song, a call), or empty if the application did not say.
   readonly attribute DOMString title;
 
   readonly attribute double volume;
 
   readonly attribute boolean muted;
 
-  // The DomicileAudioDevice.id it goes to, or empty for one the next event
-  // settles.
+  // The DomicileAudioDevice.id it goes to, or empty until the next event sets
+  // it.
   readonly attribute DOMString device;
 };

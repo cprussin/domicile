@@ -3,65 +3,50 @@
 
 // One screen of the desktop.
 //
-// An interface rather than a dictionary because WebIDL will not have a
-// dictionary as the type of an attribute, and this is read off
-// `DomicileHost.displays` rather than handed over in a call.
+// An interface because WebIDL does not allow a dictionary as an attribute type.
 //
-// Integers, unlike the sizes elsewhere on this channel. Those come from a
-// layout box, where a CSS pixel is fractional; a display comes from the
-// desktop's configuration, which names whole ones.
+// Sizes are integers because the desktop config uses whole pixels. Other sizes
+// on this channel come from layout boxes and are fractional.
 
 [
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileDisplay {
-  // What a shell names this screen. The compositor's own name for it, from the
-  // config -- `left`, `right` -- or `domicile-0` when Domicile is following a
-  // window rather than driving displays.
+  // The compositor's name for this screen from the config, such as `left`.
+  // `domicile-0` when Domicile runs in a window instead of driving displays.
   readonly attribute DOMString name;
 
-  // The top-left corner, in the desktop's coordinate space, whose origin is
-  // the top-left of the displays' bounding box. Signed: the config may put a
-  // display anywhere, and a screen left of the origin has a negative x.
+  // The top-left corner in desktop coordinates. The origin is the top-left of
+  // the displays' bounding box. Signed because the config can place a display
+  // left of or above the origin.
   readonly attribute long x;
   readonly attribute long y;
 
-  // Logical -- the CSS pixels a shell lays out in, the same units everything
-  // else here is in. NOT the `wl_output` mode, which is this times `scale`.
+  // The logical size, in the CSS pixels a shell lays out in.
   readonly attribute unsigned long width;
   readonly attribute unsigned long height;
 
-  // The scale advertised to *clients* on this screen: what a window drawn on
-  // it renders at. Not the shell's own `devicePixelRatio` -- the shell is one
-  // page at one density however many screens it spans -- so multiplying the
-  // sizes above by this gives a client's buffer, not anything to lay out with.
+  // The scale advertised to Wayland clients on this screen. This is not the
+  // shell's `devicePixelRatio`: the shell is one page at one density across
+  // all screens.
   readonly attribute unsigned long scale;
 
-  // The pixels the panel scans out, un-turned. The one geometry here that is
-  // not logical, and NOT a second spelling of the size above: a monitor on its
-  // side scans out exactly as it did lying down, so a portrait 4K panel is a
-  // 3840x2160 mode and an 1800x3200 box. Neither follows from the other --
-  // `scale` is the integer wl_output one, so 1800 times 2 is not 2160.
+  // The panel's mode in physical pixels, before rotation. A portrait 4K
+  // panel has a 3840x2160 mode and an 1800x3200 logical size. The mode does
+  // not follow from the size because `scale` is an integer.
   //
-  // Zero where the compositor said nothing, which is a desktop that has no
-  // notion of modes rather than a panel with no pixels.
+  // Zero when the desktop has no modes, such as when running in a window.
   readonly attribute unsigned long modeWidth;
   readonly attribute unsigned long modeHeight;
 
-  // Which way up the monitor is bolted to the desk: `normal`, `rotate-90`,
-  // `rotate-180` or `rotate-270`, the four wl_output rotations spelled the way
-  // the config file writes them.
+  // The monitor's rotation: `normal`, `rotate-90`, `rotate-180` or
+  // `rotate-270`, as the config file spells them.
   //
-  // NAMED FOR THE TURN THE CONTENT TAKES, not the one the panel did. That is
-  // the wl_output convention: an output rotated a quarter turn counterclockwise
-  // needs what is drawn on it turned a quarter turn clockwise to come out
-  // upright, and `rotate-90` is that clockwise turn. A shell applies it as
-  // written.
+  // Follows the wl_output convention: the name is the clockwise turn applied
+  // to content, not the panel's turn. A shell applies it as written.
   //
-  // A DOMString rather than an enum because an enum attribute would be a
-  // second IDL file and a second entry in Chromium's own
-  // `bindings/idl_in_modules.gni`, which the fork carries as a patch. The set
-  // is closed all the same and a name outside it never reaches here: the
-  // browser parses it into four cases and anything else is `normal`.
+  // A DOMString because an enum would need another IDL file and another patched
+  // entry in `bindings/idl_in_modules.gni`. The browser maps any other name to
+  // `normal`.
   readonly attribute DOMString transform;
 };

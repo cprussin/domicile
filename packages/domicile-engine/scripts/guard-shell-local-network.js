@@ -1,17 +1,9 @@
-// The shell guard-shell-local-network.sh drives: one <img> from a server on
-// this machine, which is what a launcher's favicon for a bookmark on
-// localhost is.
-//
-// A module rather than a page, because that is what a shell is here: the
-// engine writes the document and loads one module into it. The control is not
-// here: it shows the same picture from an ordinary http page, served by
-// guard-shell-local-network-server.py.
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// Shell module for guard-shell-local-network.sh: one <img> from a local
+// server, like a launcher favicon for a bookmark on localhost. The control
+// page is served by guard-shell-local-network-server.py.
 
 export const Shell = () => {
-  /** A query parameter this cannot run without. */
+  /** Reads a required query parameter. */
   const required = (parameters, name) => {
     const value = parameters.get(name);
     if (value === null) {
@@ -24,9 +16,8 @@ export const Shell = () => {
   const parameters = new URLSearchParams(location.search);
   const picture = document.createElement("img");
 
-  // Inset, so the witness color stays visible around it, and in whole
-  // percentages, so the flat color lands on integer pixels. The control's page
-  // insets its <img> by the same numbers.
+  // Inset so the witness shows around it. Whole percentages keep the color on
+  // integer pixels. Matches the control page's inset.
   picture.alt = "";
   picture.style.position = "absolute";
   picture.style.left = "10%";

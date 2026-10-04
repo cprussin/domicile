@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One job at a time on this machine's render node, so a timed guard is timing
-# the engine and not the other runner.
+# A machine-wide lock for timed guards, so they measure the engine and not
+# other jobs.
 #
 #   .github/scripts/engine-render-node-lock.sh take <owner>
 #   .github/scripts/engine-render-node-lock.sh quiet <owner>
@@ -8,48 +8,18 @@
 #   .github/scripts/engine-render-node-lock.sh drop <owner>
 #   .github/scripts/engine-render-node-lock.sh wanted <owner>
 #
-# `quiet` is `take` for a guard that times something, and `noisy` is how a
-# compile or a guard says it is loading the machine; see them below.
+# `quiet` is `take` for a guard that times something. `noisy` wraps a compile
+# or guard that loads the machine.
 #
-# THE CARD ALONE WAS NOT ENOUGH. Main run 36226737213 held it and its latency
-# guard read floor 44.61 ms, commit to pixel 49.04 ms and an unanswered round;
-# PR #598's run read 38.80 ms against a 33.33 ms bar. Both ran while run
-# 36228817911 compiled Chromium on the other runner; quiet runs read 19-29 ms.
-# A compile never touches the card, so the lock must cover the machine.
+# `crux` runs two CI jobs at once. A Chromium compile on one runner skews
+# `guard-latency.sh` on the other even without touching the GPU, so the lock
+# covers the whole machine. It is taken only around timed steps and
+# `pinned-engine.yml`'s guard; pixel comparisons do not need it.
 #
-# WHY THIS EXISTS NOW AND DID NOT BEFORE. `crux` had one job slot, and one slot
-# is a lock over everything the machine has -- the card included. It has two
-# now (cprussin/dotfiles: config/machines/crux/domicile-ci.nix), because the
-# job that runs on every pull request never opens the Chromium tree and was
-# spending hours in front of it: 1m51s of work behind 3h01m of queue, measured
-# 2026-09-19. Splitting the queue gave back those hours and gave away the one
-# thing the single slot was quietly providing.
-#
-# MOST GUARDS DO NOT CARE, AND ONE DOES. A pixel comparison asks whether a
-# color landed; a second job on the card makes it slower and does not make it
-# wrong. `guard-latency.sh` asks what a keystroke costs to reach a pixel, over
-# sixty rounds, and a concurrent job is indistinguishable from the regression
-# it exists to catch. So this is not taken around every guard -- that would put
-# the two runners back into one queue and undo the change that created it. It
-# is taken around the steps that time something, and `pinned-engine.yml`'s
-# guard, which is the only thing on the other runner that can perturb them.
-#
-# IT WAITS, WHERE THE TREE LOCK REFUSES, AND THE DIFFERENCE IS THE SLOT COUNT.
-# `engine-tree-lock.sh` refuses and exits 1 because on a one-slot machine a run
-# that waits is a run already holding the slot the holder needs in order to
-# finish -- a deadlock rather than a queue. That argument does not survive the
-# second runner: a job waiting here holds its own runner's slot and the holder
-# holds the other one, so the holder can always finish. Neither direction can
-# starve the other, and the longest hold is a guard rather than a build.
-#
-# AND IT STEALS A LOCK THAT IS TOO OLD, WHERE THE TREE LOCK WILL NOT. That is
-# the same difference read the other way. A stale tree lock must be cleared by
-# a person because guessing wrong means a reset landing inside somebody's
-# four-hour build. Guessing wrong here means one guard runs beside another job
-# and may report a latency it should not -- a re-run, not a lost afternoon. A
-# canceled run is the ordinary way this leaks, and `pinned-engine.yml` cancels
-# superseded runs now, so a lock nothing can clear would wedge the every-PR
-# job within a day.
+# Unlike engine-tree-lock.sh, this waits instead of failing: the holder runs on
+# the other runner, so it can always finish. It also steals a lock older than
+# STALE_AFTER, because canceled runs leak it and a wrong steal costs only a
+# re-run.
 set -u
 
 usage() {
@@ -62,46 +32,37 @@ action="${1:-}"
 owner="${2:-}"
 [ -n "$action" ] || usage
 
-# Under /build rather than /tmp, for the reason everything else on this machine
-# is: the runner units set TMPDIR=/build/tmp, but `PrivateTmp` is per-service
-# and /tmp is therefore NOT shared between the two runners -- which is exactly
-# what a lock between them cannot be. /build is a real mount both units have
-# `ReadWritePaths` over. Override for tests, which have no /build.
+# Under /build, because `PrivateTmp` gives each runner unit its own /tmp.
+# Override for tests.
 LOCK="${DOMICILE_RENDER_NODE_LOCK:-/build/.domicile-render-node-lock}"
 
-# How long to wait for the card before giving up, and how old a lock has to be
-# before it is read as abandoned rather than held. The stale bound is above the
-# longest run of guarded steps by a wide margin -- the timed steps are seconds
-# and `pinned-engine.yml`'s guard is ~65s -- so a lock older than this is not a
-# job that is taking its time.
+# How long to wait for the lock, and the age at which it counts as abandoned.
+# The longest guarded step takes about 65s.
 MAX_WAIT="${DOMICILE_RENDER_NODE_MAX_WAIT:-1200}"
 STALE_AFTER="${DOMICILE_RENDER_NODE_STALE_AFTER:-600}"
 
-# Noise: what `noisy` registers and `quiet` waits out. One directory per
-# registration, beside the lock and for the same reason. A registration says it
-# is alive every NOISE_BEAT seconds and is dead after NOISE_STALE without that:
-# a pid cannot say so, because the two runners are two units that need not see
-# each other's processes.
+# `noisy` registers a directory here and `quiet` waits until none are live.
+# Each registration refreshes a timestamp every NOISE_BEAT seconds and is dead
+# after NOISE_STALE without one. Not a pid, because the runner units may not
+# see each other's processes.
 NOISE="${DOMICILE_RENDER_NODE_NOISE:-/build/.domicile-noise}"
 NOISE_BEAT="${DOMICILE_RENDER_NODE_NOISE_BEAT:-10}"
 NOISE_STALE="${DOMICILE_RENDER_NODE_NOISE_STALE:-120}"
-# How long a measurement waits for quiet before saying it did not run.
+# How long a measurement waits for quiet before skipping.
 QUIET_WAIT="${DOMICILE_RENDER_NODE_QUIET_WAIT:-1800}"
 POLL="${DOMICILE_RENDER_NODE_POLL:-5}"
-# Measurements waiting for quiet: a note each, refreshed every poll, so that
-# noise which can stop and resume -- the production build, under
-# engine-yielding-build.sh -- can ask whether anybody is waiting on it with
-# `wanted`. Only a note refreshed in the last FRESH seconds counts, because a
-# killed waiter cannot say it stopped waiting.
+# Each waiting measurement refreshes a note every poll, so a pausable build
+# (engine-yielding-build.sh) can check `wanted`. Notes older than FRESH seconds
+# are ignored, since a killed waiter cannot remove its note.
 WAITING="$LOCK.waiting"
 FRESH="${DOMICILE_RENDER_NODE_FRESH:-60}"
 
 now() { date +%s; }
 
-# The note a waiter leaves, named by a hash because an owner is a sentence.
+# A waiter's note, named by a hash because an owner name is free text.
 note() { echo "$WAITING/$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
 
-# Every fresh note that is not <owner>'s, one owner per line.
+# Print the owner of each fresh note other than <owner>'s.
 waiters() {
   [ -d "$WAITING" ] || return 0
   find "$WAITING" -type f -newermt "-$FRESH seconds" |
@@ -123,9 +84,8 @@ holder() {
   cat "$LOCK/owner" 2>/dev/null || echo "someone who did not write their name in it"
 }
 
-# Seconds the current lock has been held, or nothing when that cannot be read.
-# A lock from the future is a clock that moved rather than a lock held for -3h,
-# and it is treated as ageless so that nothing steals it on the strength of it.
+# Seconds the lock has been held. Fails if unreadable or in the future, so a
+# clock change cannot trigger a steal.
 age_secs() {
   local since secs
   since="$(held_since)" || return 1
@@ -141,12 +101,8 @@ claim() {
   date -Is >"$LOCK/since-human"
 }
 
-# Held. Before waiting on it, decide whether there is anything there to wait
-# for: a lock older than any guard could possibly hold it is a run that was
-# canceled or a machine that went away, and nothing else clears it. Said loudly
-# rather than quietly, because the one case where this is wrong -- a guard
-# genuinely taking ten minutes -- is worth a line in a log that somebody can
-# find afterward. Once per caller, in `stole`.
+# Steal a lock older than any guard holds it, with a warning in case a guard
+# was still running. At most once per caller.
 steal_if_stale() {
   local secs
   [ "$stole" -eq 0 ] || return 1
@@ -157,8 +113,7 @@ steal_if_stale() {
   stole=1
 }
 
-# Held and not abandoned, which is what noise holds off for. An age that cannot
-# be read is held, for the reason `take` will not steal it.
+# Whether the lock is held and not stale. An unreadable age counts as held.
 card_in_use() {
   local secs
   [ -d "$LOCK" ] || return 1
@@ -166,9 +121,8 @@ card_in_use() {
   [ "$secs" -lt "$STALE_AFTER" ]
 }
 
-# The owners of live noise, one per line. A registration that stopped saying
-# it is alive is a run that was killed: cleared, out loud, rather than waited
-# on, or every measurement after it is a skip.
+# Print the owner of each live noise registration. Removes stale ones, which
+# belong to killed runs.
 live_noise() {
   local reg since who
   for reg in "$NOISE"/*; do
@@ -230,12 +184,10 @@ case "$action" in
     done
     ;;
 
-  # `take`, for a guard that times something: the card only once nothing on
-  # the machine is noise, and noise holds off until it is dropped. Look, claim,
-  # look again -- and `noisy` registers, then looks at the card -- so whichever
-  # of the two moves second sees the first. Never while waiting, since a card
-  # held for a compile's length would be stolen at STALE_AFTER and would hold
-  # `pinned-engine.yml` off for as long.
+  # Take the lock once no noise is registered. Check, claim, then check again;
+  # `noisy` registers and then checks the lock, so whichever moves second sees
+  # the other. The lock is not held while waiting, or it could be held for a
+  # whole compile.
   quiet)
     [ -n "$owner" ] || usage
     waited=0
@@ -279,9 +231,8 @@ case "$action" in
     done
     ;;
 
-  # A compile or a guard: the command runs registered as noise, and not while a
-  # measurement holds the card. A heartbeat keeps the registration live and dies
-  # with this wrapper, even one killed outright.
+  # Run the command registered as noise, once no measurement holds the lock.
+  # A heartbeat keeps the registration live and stops when this wrapper dies.
   noisy)
     [ -n "$owner" ] && [ "${3:-}" = "--" ] && [ "$#" -ge 4 ] || usage
     shift 3
@@ -289,8 +240,7 @@ case "$action" in
     waited=0
     said=""
     while :; do
-      # Looked at before registering as well as after, so a registration that
-      # only exists to back off again is rare rather than every poll.
+      # Check before registering too, to avoid registering just to back off.
       if ! card_in_use; then
         staged="$(mktemp -d "$NOISE/.new.XXXXXX")" || exit 1
         printf '%s\n' "$owner" >"$staged/owner"
@@ -335,11 +285,8 @@ case "$action" in
 
   drop)
     [ -n "$owner" ] || usage
-    # ONLY IF IT IS STILL OURS. The step that drops this runs `if: always()`,
-    # so it is also reached by a run that failed to take the lock in the first
-    # place -- and an unconditional `rm` there would hand the card to a third
-    # job in the middle of the holder's timed guard. The tree lock learned this
-    # the same way.
+    # Only drop our own lock. The `if: always()` step also runs when the take
+    # failed.
     if [ ! -d "$LOCK" ]; then
       echo "the render node was not locked"
       exit 0

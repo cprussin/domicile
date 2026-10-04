@@ -1,36 +1,28 @@
 #!/usr/bin/env bash
-# A Chrome extension's content script, reaching a page in a <webview>.
+# Guard: an extension's content script runs in a page in a <webview>.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-content-script.sh /build/chromium/src
 #
-# WHY THIS EXISTS. `docs/architecture/EXTENSIONS.md` rests on it: a browser
-# window is a `WebViewGuest` in the default profile, so an installed
-# extension's content scripts should run in it as in any tab. This is that
-# assumption, asserted before anything is built on it.
+# `docs/architecture/EXTENSIONS.md` assumes this: a browser window is a
+# `WebViewGuest` in the default profile, so content scripts run in it as in a
+# tab. Runs headless with software compositing.
 #
-# Headless and software-composited, as `guard-webview-framing.sh`: what this
-# measures is a page's own colors, so there is no client and no compositor.
+# The extension in `guard-webview-content-script-extension/` paints any
+# `http://127.0.0.1/*` page `COLOR`. The guard asserts `COLOR` appears in the
+# window, with the shell's background as the witness.
 #
-# THE EXTENSION is `guard-webview-content-script-extension/`, unpacked, loaded
-# by `--load-extension`. Its content script matches `http://127.0.0.1/*` and
-# paints the whole page `COLOR`. Current Chromium ignores `--load-extension`
-# unless `DisableLoadExtensionCommandLineSwitch` is disabled, so every run
-# disables it; one `--disable-features` only, since a second would replace it
-# (see `domicile-launch`'s spawn.rs).
+# Chromium ignores `--load-extension` unless
+# `DisableLoadExtensionCommandLineSwitch` is disabled. Pass only one
+# `--disable-features`; a second replaces the first (see `domicile-launch`'s
+# spawn.rs).
 #
-# WHAT IT ASSERTS. That `COLOR` is somewhere in the window, with the shell's
-# background as the witness. Not where.
+# NEGATIVE=1 runs the control:
 #
-# HOW IT CAN FAIL. NEGATIVE=1 runs the control, presence first:
-#
-#   1. `extension`: the served page as the top-level `--app`, extension loaded.
-#      It MUST show `COLOR`. This establishes that the extension loads and
-#      injects in this harness at all.
-#   2. `bare`: the claim's own <webview> page, extension NOT loaded. It MUST
-#      NOT show `COLOR`, and its witness is the served page's own color, so the
-#      absence is read off a guest that drew. This establishes that the color
-#      comes from the content script and from nothing else.
+#   1. `extension`: the page as the top-level `--app` with the extension. Must
+#      show `COLOR`, proving the extension loads and injects.
+#   2. `bare`: the <webview> page without the extension. Must not show
+#      `COLOR`. Its witness is the page's own color, so the guest did draw.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -51,11 +43,10 @@ fi
 
 NEGATIVE="${NEGATIVE:-0}"
 
-# The mark. Fixed rather than overridable: `content.js` paints it, and
-# `scripts/test-webview-content-script-guard.sh` holds the two together.
+# Not overridable: must match `content.js`, which
+# `scripts/test-webview-content-script-guard.sh` checks.
 readonly COLOR="8E24AA"
-# The shell's background, and the served page's own color. No other guard's,
-# and no browser background.
+# Colors no other guard or browser default uses.
 WITNESS="${WITNESS:-2E3A1C}"
 PAGE_COLOR="${PAGE_COLOR:-F9A825}"
 
@@ -96,8 +87,8 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-# One browser, one page, one answer: the probe's own status. The engine is
-# killed on the way out, because the next leg opens the same socket.
+# Runs one engine and returns the color probe's status. Kills the engine after,
+# since the next run reuses the socket.
 measure() { # $1 which run, $2 the URL to open, $3 the witness, $4 "with" or "without" the extension
   local which="$1" url="$2" witness="$3" extension=()
   local engine_log="/tmp/domicile-webview-content-script-$which-engine.log"
@@ -111,8 +102,8 @@ measure() { # $1 which run, $2 the URL to open, $3 the witness, $4 "with" or "wi
   rm -rf "$PROFILE"
   mkdir -p "$PROFILE"
 
-  # The framing guard's flags, plus the extension. The feature is disabled in
-  # every run, so the legs differ in `--load-extension` and nothing else.
+  # The feature is disabled in every run, so runs differ only in
+  # `--load-extension`.
   rm -f "$engine_log"
   "$CHROMIUM/$OUT/chrome" \
     --ozone-platform=headless \
@@ -156,7 +147,7 @@ measure() { # $1 which run, $2 the URL to open, $3 the witness, $4 "with" or "wi
   return "$status"
 }
 
-# 1. The page. Its own server: `crux` reaches no arbitrary host.
+# 1. Serve the page locally; `crux` cannot reach external hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-content-script-server.py" \
   --port 0 --color "$PAGE_COLOR" >"$HTTP_LOG" 2>&1 &
@@ -182,11 +173,8 @@ echo "serving the page at $PAGE"
 
 # 2. The runs.
 #
-#    THE BUDGET is the claim's. `bare` waits for an absence, so it has nothing
-#    to stop it but its budget; the claim is the same <webview> on the same
-#    page, run just before it by `engine_guard_and_control`, and how long its
-#    mark took to show is how long a guest takes to draw here. `extension`
-#    waits for a presence and stops when it arrives.
+#    `bare` waits for an absence, so it runs for the time the positive run
+#    took to see its mark (recorded by `budget_note`).
 if [ "$NEGATIVE" = "1" ]; then
   measure extension "$PAGE" "$PAGE_COLOR" with
   EXTENSION_STATUS=$?
@@ -198,7 +186,7 @@ else
   STARTED_AT="$(date +%s)"
   measure webview "$SHELL_PAGE" "$WITNESS" with
   WEBVIEW_STATUS=$?
-  # Only on a pass: a failed run measured this script's patience, not a guest.
+  # Only on a pass: a failed run's duration is just the timeout.
   if [ "$WEBVIEW_STATUS" -eq 0 ]; then
     budget_note webview-content-script "$(($(date +%s) - STARTED_AT))"
   fi
@@ -208,8 +196,8 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. `scripts/test-webview-content-script-guard.sh` runs this
-# block directly.
+# Turn the statuses into a verdict.
+# `scripts/test-webview-content-script-guard.sh` tests this block.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

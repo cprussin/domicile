@@ -1,23 +1,13 @@
-// The shell guard-shell-shortcuts.sh presses Chrome's own shortcuts at.
+// Shell module for guard-shell-shortcuts.sh. It handles no keys, so every key
+// returns unhandled to the window's WebContentsDelegate, where Chrome's
+// accelerators run.
 //
-// A module rather than a page, because that is what a shell is: the engine
-// writes the document and loads exactly one module into it.
+// Console output, read by the guard from the engine log:
 //
-// IT HANDLES NOTHING, which is the experiment. A key a shell leaves alone
-// comes back to the window's WebContentsDelegate, which is where Chrome ran
-// its accelerators from -- so every key here is one the browser would have
-// acted on, if anything still does.
-//
-// WHAT THIS PAGE SAYS, to the console, which the engine writes to its log:
-//
-//   GUARD loaded           once per document. A second one is a reload
-//   GUARD keydown code=…   a key reached this document, and so came back
-//                          unhandled to the delegate behind it
-//   GUARD popstate         the shell's history moved: Alt+Left went back
-//   GUARD resized          the viewport changed: F11 or a zoom
-//
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+//   GUARD loaded           once per document; a second one is a reload
+//   GUARD keydown code=…   a key reached this document
+//   GUARD popstate         history moved (Alt+Left)
+//   GUARD resized          the viewport changed (F11 or zoom)
 
 export const Shell = () => {
   const say = (what) => {
@@ -34,8 +24,8 @@ export const Shell = () => {
     say("resized");
   });
 
-  // Something for Alt+Left to go back to. Same-document, so a browser that
-  // took the key would fire `popstate` rather than unload the page.
+  // A same-document entry for Alt+Left, so going back fires `popstate`
+  // instead of unloading the page.
   history.pushState({}, "", "#pushed");
   say("loaded");
 };

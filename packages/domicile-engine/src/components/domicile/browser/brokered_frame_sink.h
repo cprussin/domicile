@@ -46,29 +46,23 @@ class HostFrameSinkManager;
 
 namespace domicile {
 
-// A brokered frame sink: the browser's registration of one FrameSinkId with
-// viz, held for as long as the producer wants to submit to it.
+// The browser's viz registration of one FrameSinkId, held while the producer
+// submits to it.
 //
-// This is the non-renderer counterpart of content::EmbeddedFrameSinkImpl, minus
-// the hierarchy at construction: an embedded frame sink knows its parent then
-// because embedder and embedded live in the same renderer, and a brokered one
-// does not. Its parent arrives later, when a page embeds it — see Embed().
+// The non-renderer counterpart of content::EmbeddedFrameSinkImpl. Its parent
+// is unknown at construction and arrives when a page embeds it; see Embed().
 //
-// **It has two shapes, and which one it is settled at construction.** A
-// producer that submits its own CompositorFrames hands over a client and a
-// receiver, and they are forwarded to viz; the browser never sees a frame. A
-// producer with a dmabuf cannot do that — a TransferableResource names a
-// mailbox and minting one needs a GPU channel it deliberately does not have —
-// so it passes neither, the browser holds the sink and viz's client end, and
-// ImportBuffer/SubmitBuffer are how frames get made. See
-// docs/architecture/ENGINE-FORK.md, "Settled: broker the import".
+// Two modes, fixed by CreateCompositorFrameSink():
+// - The producer passes its own client and receiver, which go straight to viz.
+// - The producer has only dmabufs and no GPU channel, so the browser holds the
+//   sink and builds frames via ImportBuffer/SubmitBuffer.
+// See docs/architecture/ENGINE-FORK.md#buffer-import.
 class BrokeredFrameSink : public viz::HostFrameSinkClient,
                           public viz::mojom::CompositorFrameSinkClient {
  public:
-  // How the browser reaches a GPU. Injected rather than reached for, because
-  // the only way to one is aura::Env and this must not depend on //ui/aura —
-  // the same reason the FrameSinkId allocator is injected. Returns null when
-  // there is no GPU, which is every headless run.
+  // Returns the browser's SharedImageInterface, or null with no GPU (headless).
+  // Injected because the only source is aura::Env and this target must not
+  // depend on //ui/aura.
   using SharedImageInterfaceGetter =
       base::RepeatingCallback<gpu::SharedImageInterface*()>;
 
@@ -86,53 +80,39 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
-  // What the producer calls the window this sink is for.
-  //
-  // Load-bearing rather than decorative: it is how a page's <app> element says
-  // *which* window it wants, so a desktop of windows embeds a different
-  // surface in each. It doubles as the viz debug label, which is all it used
-  // to be.
+  // The producer's id for this sink's window. A page's <app> element uses it
+  // to pick which window to embed. Also the viz debug label.
   const std::string& app_id() const { return app_id_; }
 
-  // The FrameSinkBroker connection that asked for this sink. A producer only
-  // gets to destroy its own, and loses all of them when it disconnects.
+  // The FrameSinkBroker connection that created this sink. A producer can only
+  // destroy its own sinks, and loses them all on disconnect.
   mojo::ReceiverId owner() const { return owner_; }
 
-  // Creates the CompositorFrameSink connection to viz for this id. A null
-  // `client` and `receiver` mean the browser keeps both ends, which is what
-  // ImportBuffer and SubmitBuffer need.
+  // Connects this id's CompositorFrameSink to viz. Null `client` and `receiver`
+  // make the browser keep both ends, which ImportBuffer and SubmitBuffer need.
   void CreateCompositorFrameSink(
       mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
       mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver);
 
-  // An embedder — the page — is showing `size` of this sink's surface at
-  // `local_surface_id`, under the frame sink `parent_frame_sink_id`. Registers
-  // the hierarchy so BeginFrames arrive, and tells the producer which surface
-  // it is submitting to.
+  // Records that the page shows `size` of this surface at `local_surface_id`
+  // under `parent_frame_sink_id`. Registers the hierarchy so BeginFrames
+  // arrive, and tells the producer which surface to submit to.
   //
-  // Registering the hierarchy is deliberately here rather than at construction:
-  // until a page embeds, there is no parent to name, and step 2 established
-  // that hierarchy is about BeginFrames rather than about getting drawn.
+  // `scale` is the page's device pixels per CSS pixel. The producer uses it to
+  // convert `size` to the client's logical pixels; each monitor has its own.
   //
-  // `scale` is how many of the page's device pixels `size` counts per CSS
-  // pixel, which the producer needs to turn the box back into the logical
-  // pixels a client is configured in: each monitor's page is at its own.
-  //
-  // A `local_surface_id` older than the one already embedded is ignored: it is
-  // a late arrival, and passing it on would get the sink closed by viz.
+  // Ignores a `local_surface_id` older than the current one, since viz closes
+  // a sink that submits to an older id.
   void Embed(const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale);
 
-  // Imports a dmabuf and returns the id to name it by, or 0. This is the
-  // components/exo/buffer.cc path: a GpuMemoryBufferHandle becomes a
-  // SharedImage, and a SharedImage becomes a TransferableResource the producer
-  // never has to see.
-  // `exported` is filled with something another client can name the same
-  // SharedImage by, so that a producer holding its own sink can submit its own
-  // frames. See ENGINE-FORK.md, "Whether the producer can submit its own
-  // frames".
+  // Imports a dmabuf as a SharedImage and returns its buffer id, or 0 on
+  // failure. Follows components/exo/buffer.cc.
+  //
+  // Fills `exported` so a producer holding its own sink can reference the same
+  // SharedImage. See docs/architecture/ENGINE-FORK.md#buffer-import.
   uint64_t ImportBuffer(gfx::GpuMemoryBufferHandle handle,
                         const gfx::Size& size,
                         uint32_t fourcc,
@@ -142,8 +122,8 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // no surface to submit to yet.
   bool SubmitBuffer(uint64_t buffer_id, const gfx::Rect& damage);
 
-  // Drops an imported buffer. Safe while viz still holds it: the SharedImage
-  // outlives this by its own refcount, and the release never arrives.
+  // Drops an imported buffer. Safe while viz still holds it: the SharedImage is
+  // refcounted, and no release is sent for it.
   void DestroyBuffer(uint64_t buffer_id);
 
   // viz::HostFrameSinkClient implementation.
@@ -186,32 +166,28 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   const viz::FrameSinkId frame_sink_id_;
   const std::string app_id_;
 
-  // Null for a producer that does not want to be told, which is every producer
-  // that will never submit — the sink alone is useless without the surface.
+  // Null when the producer does not need surface or release notifications.
   mojo::Remote<mojom::SurfaceObserver> observer_;
 
   const mojo::ReceiverId owner_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
 
-  // Whichever frame sink this one was last embedded under, invalid until some
-  // page has embedded it.
+  // The frame sink this one was last embedded under. Invalid until embedded.
   viz::FrameSinkId parent_frame_sink_id_;
 
-  // Where the producer's frames go when the browser owns the sink. Unbound when
-  // the producer kept its own.
+  // Bound only when the browser owns the sink.
   mojo::Remote<viz::mojom::CompositorFrameSink> sink_;
   mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
 
-  // What the page last told us to render at. Nothing can be submitted before
-  // this arrives, because a frame needs a LocalSurfaceId to go to.
+  // The page's latest surface id and size. Nothing can be submitted until it
+  // is set.
   viz::LocalSurfaceId local_surface_id_;
   gfx::Size size_;
 
   base::flat_map<uint64_t, ImportedBuffer> buffers_;
   uint64_t next_buffer_id_ = 1;
   viz::ResourceId next_resource_id_{1};
-  // Which buffer each live resource id belongs to, so a returned resource can
-  // be named back to the producer as the buffer it lent us.
+  // Maps each live resource id to its buffer, to report releases by buffer id.
   base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
   viz::FrameTokenGenerator next_frame_token_;
 };

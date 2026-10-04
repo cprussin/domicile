@@ -17,16 +17,16 @@ bool IsSideways(display::Display::Rotation rotation) {
          rotation == display::Display::ROTATE_270;
 }
 
-// The screen as the person sees it: the panel's size, turned.
+// The panel's size as the user sees it, after rotation.
 gfx::Size UprightSize(const PointerScreen& screen) {
   const gfx::Size panel = screen.bounds_in_screen.size();
   return IsSideways(screen.rotation) ? gfx::Size(panel.height(), panel.width())
                                      : panel;
 }
 
-// A panel point, upright. The inverse of `ToPanel`, and turned the same way
-// `CursorController::ApplyCursorConfigForWindow` turns a hand's motion, so a
-// pointer leaves by the edge it was moving toward.
+// Converts a panel point to the upright frame. Inverse of `ToPanel`. Rotates
+// the same way as `CursorController::ApplyCursorConfigForWindow`, so a pointer
+// leaves by the edge it was moving toward.
 gfx::PointF ToUpright(const PointerScreen& screen, const gfx::PointF& panel) {
   const float width = static_cast<float>(screen.bounds_in_screen.width());
   const float height = static_cast<float>(screen.bounds_in_screen.height());
@@ -57,7 +57,7 @@ gfx::PointF ToPanel(const PointerScreen& screen, const gfx::PointF& upright) {
   }
 }
 
-// Where a screen is on the desktop a shell lays out in, in logical pixels.
+// A screen's rectangle on the shell's desktop, in logical pixels.
 struct Desk {
   float x;
   float y;
@@ -75,7 +75,7 @@ struct Desk {
                        std::clamp(point.y(), y, y + height));
   }
 
-  // An upright point on a screen of `size` pixels, onto the desk, and back.
+  // Converts between an upright point on a `size`-pixel screen and the desk.
   gfx::PointF ToDesk(const gfx::PointF& upright, const gfx::Size& size) const {
     return gfx::PointF(
         x + upright.x() * width / static_cast<float>(size.width()),
@@ -88,13 +88,12 @@ struct Desk {
   }
 };
 
-// How far apart two screens a profile meant to touch can be: its positions
-// are rounded outward, so by up to a logical pixel.
+// The largest gap between screens that still counts as touching. Profile
+// positions round outward, by up to one logical pixel.
 constexpr float kSeam = 1.f;
 
-// Where `screen` is on the desk, or nothing for one the layout leaves dark.
-// With no layout at all the hardware decides, and the engine's own desktop is
-// the desk.
+// Returns `screen`'s place on the desk, or nothing if the layout leaves it
+// dark. With an empty layout, the engine's desktop is the desk.
 std::optional<Desk> DeskOf(const PointerScreen& screen,
                            const std::vector<DomicileDisplayLayout>& layout) {
   if (layout.empty()) {

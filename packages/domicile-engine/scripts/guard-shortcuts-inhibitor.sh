@@ -1,89 +1,52 @@
 #!/usr/bin/env bash
-# The request that takes the host compositor's shortcuts away, on the wire.
+# Checks that the engine asks the host compositor to inhibit its shortcuts.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-shortcuts-inhibitor.sh /build/chromium/src
 #
-# WHAT THIS PROVES, AND IT IS ONE SENTENCE. The engine asked the host
-# compositor to stop matching its own keyboard shortcuts while this window has
-# the keyboard — `zwp_keyboard_shortcuts_inhibit_manager_v1.inhibit_shortcuts`,
-# sent over the surface the desktop's window is.
+# Proves one thing: the engine sent
+# `zwp_keyboard_shortcuts_inhibit_manager_v1.inhibit_shortcuts` for the
+# desktop window's surface. It does not prove a key was pressed, that the host
+# honored the request, or that a Meta chord reached the page;
+# `guard-shortcuts-inhibitor-chord.sh` checks that.
 #
-# WHAT IT DOES NOT PROVE, and no wording in it may suggest otherwise: that a
-# key was pressed, that the host honored the inhibitor, that a binding it would
-# have matched went unmatched, or that a shell's Meta chord reached the page.
-# Every one of those needs a key put into the nested compositor and an answer
-# about which side took it, and this reads a request rather than a keystroke.
-# `guard-shortcuts-inhibitor-chord.sh` is that measurement, and it is a guard of
-# its own so that this one's pass goes on meaning exactly one thing.
+# Patch `0038` makes a shell's Meta chords reach a nested desktop. If it breaks,
+# the host keeps its bindings and nothing logs an error. This catches the patch
+# not applying, the switch not being read, or the call moving out of
+# `SetUpShellIntegration()`.
 #
-# WHY A REQUEST IS WORTH GUARDING ANYWAY. Patch `0038` is what makes a shell's
-# Meta chords reach a nested desktop at all, and until this ran, nothing in the
-# repository observed any part of it: a host compositor matches its bindings
-# BEFORE it sends a key to the focused client, so the whole failure is silent
-# on both sides — no log line, no error, a shell that simply looks broken. The
-# engine asking is the first link in that chain and the only one this machine
-# can see. The reading is cheap and the thing it would catch is a patch that
-# stopped being applied, a switch that stopped being read, or a call site that
-# moved out from under `SetUpShellIntegration()`.
-#
-# WHY `WAYLAND_DEBUG` IS THE INSTRUMENT. The request is made by the browser
-# process against the host's connection, and it produces nothing anywhere else:
-# no page can see it, the compositor under test is not a party to it, and the
-# fork logs only the two ways it can FAIL. libwayland writes every message it
-# sends when `WAYLAND_DEBUG` is set —
+# The request is visible only on the wire, so the guard reads libwayland's
+# `WAYLAND_DEBUG` dump, e.g.
 # `zwp_keyboard_shortcuts_inhibit_manager_v1#23.inhibit_shortcuts(new id
-# zwp_keyboard_shortcuts_inhibitor_v1#41, wl_surface#30, wl_seat#14)` — and that
-# dump is the only window onto this conversation from outside it. What the line
-# looks like around the message has moved between libwayland versions, which is a
-# thing this guard has already been caught by; `normalized` and the patterns
-# beside it are where that is dealt with.
+# zwp_keyboard_shortcuts_inhibitor_v1#41, wl_surface#30, wl_seat#14)`. The dump
+# format varies by libwayland version; `normalized` and the patterns handle it.
 #
-# THE SEAT NEEDS A KEYBOARD, WHICH A HEADLESS SESSION HAS NOT GOT. The fork
-# asks `WaylandSeat::keyboard()` before it asks for anything — it drives
-# upstream's `WaylandKeyboard::CreateShortcutsInhibitor` — and sway advertises
-# `WL_SEAT_CAPABILITY_KEYBOARD` only while an input device backs it
-# (`seat_update_capabilities`). `under-wayland.sh` runs the headless backend
-# with `WLR_LIBINPUT_NO_DEVICES=1`, so there is no such device and the engine
-# takes its "no keyboard on the seat" arm instead of asking. So this guard
-# brings one: `wtype` creates a `zwp_virtual_keyboard_v1` on the host's seat
-# and then sleeps, which is what makes the capability appear. It holds the
-# keyboard open for the whole run because the request is made once, where the
-# toplevel is set up, and a capability that arrives afterward is too late.
+# The engine only requests an inhibitor if the seat has a keyboard
+# (`WaylandKeyboard::CreateShortcutsInhibitor`), and sway advertises one only
+# while an input device exists. `under-wayland.sh` runs headless with
+# `WLR_LIBINPUT_NO_DEVICES=1`, so `wtype` adds a `zwp_virtual_keyboard_v1`
+# and holds it open for the whole run. The request is made once, at toplevel
+# setup, so the keyboard must exist first.
 #
-# THE KEY IT PRESSES IS NOT A READING. `wtype` builds the keymap it must upload
-# out of the keys it was asked for, so a run that types nothing uploads an empty
-# one; `-k Shift_L` is what keeps that keymap a keymap. It is pressed before the
-# engine is started, at a compositor with nothing focused, and nothing in this
-# script looks at where it went. A key that arrives somewhere is the measurement
-# this guard does not make.
+# `-k Shift_L` only gives wtype a non-empty keymap to upload. It is pressed
+# before the engine starts and nothing reads where it went.
 #
-# WHAT IT READS, all of it off the engine's own `WAYLAND_DEBUG` capture, and
-# each line only worth anything if the one above it holds:
+# Readings, all from the engine's `WAYLAND_DEBUG` capture, each meaningful only
+# if the ones above it hold:
 #
-#   a wire dump at all            or every grep below answers "no" about a file
-#                                  libwayland never wrote to, which reads as a
-#                                  request that was not made
-#   a toplevel was made           `SetUpShellIntegration()` runs where the
-#                                  toplevel does, so a run with no window in it
-#                                  never reached the call site
+#   a wire dump at all             otherwise every grep reads "no"
+#   a toplevel was made            the request is made at toplevel setup
 #   the host carries the protocol  `zwp_keyboard_shortcuts_inhibit_manager_v1`
-#                                  in the registry, or there is nothing to ask
-#   the seat announced a keyboard  `wl_seat.get_keyboard`, which Chromium sends
-#                                  only on the capability — the virtual
-#                                  keyboard above is what puts it there
-#   `inhibit_shortcuts` was sent   THE CLAIM
+#                                  in the registry
+#   the seat announced a keyboard  `wl_seat.get_keyboard`, sent only once the
+#                                  seat has the keyboard capability
+#   `inhibit_shortcuts` was sent   the claim
 #
-# HOW IT CAN FAIL. `NEGATIVE=1` is the same run with
-# `--domicile-inhibit-host-shortcuts` left off, and the request must then be
-# absent. One switch is the whole difference between the two runs, and that is
-# what makes it a control worth having: it establishes that the grep is reading
-# a request the SWITCH caused rather than one every nested chrome makes —
-# which is the fork's own claim about where the decision lives
-# (`packages/domicile-launch/src/spawn.rs`, and patch `0038`'s header). Its
-# four setup readings are the positive run's, because a control that saw no
-# wire, no window or no keyboard is an absence with nothing behind it.
+# `NEGATIVE=1` omits `--domicile-inhibit-host-shortcuts`; the request must
+# then be absent. This shows the switch causes it (see
+# `packages/domicile-launch/src/spawn.rs` and patch `0038`'s header). The
+# control requires the same four setup readings.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -98,7 +61,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 runs the same thing without the switch. See the header.
+# NEGATIVE=1 runs without the switch. See the header.
 NEGATIVE="${NEGATIVE:-0}"
 
 OUT="${OUT:-out/Domicile}"
@@ -107,81 +70,56 @@ PROFILE="${PROFILE:-/tmp/domicile-shortcuts-inhibitor-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# How long the engine is given to put a toplevel on the host. Generous, because
-# a cold start on a shared machine is most of it and the poll ends the moment
-# the line lands.
+# How long the engine gets to map a toplevel. Generous for cold starts; the
+# poll ends as soon as the line appears.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
 # How long to wait after the toplevel before reading the capture. The request
-# is made in `SetUpShellIntegration()`, on the same call path that creates the
-# toplevel, so this is a flush and not a race — but the control is looking for
-# an ABSENCE, and an absence can only be given time. Both runs pay it once,
-# which is why this needs no `lib-control-budget.sh`.
+# is sent during toplevel setup, so the run needs little time, but the control
+# looks for an absence and must wait. Both runs pay this once, so it does not
+# use `lib-control-budget.sh`.
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 
-# Longer than the whole run, because the virtual keyboard must outlive the
-# moment the window is mapped and a keyboard that goes away mid-run takes the
-# seat's capability with it. `cleanup` is what ends it; this is only the
-# backstop for a guard killed outright, whose trap never runs.
+# Longer than the run: the seat's keyboard capability goes when the keyboard
+# does. `cleanup` ends it; this only covers a guard killed outright.
 KEYBOARD_LIVES_FOR_MS="${KEYBOARD_LIVES_FOR_MS:-300000}"
 
-# A run and its own control are two measurements, so they get two sets of logs.
-# Sharing one means the control's output overwrites the run's and the
-# diagnostics print whichever went last — which, when the two disagree, is
-# exactly the pair worth reading side by side.
+# A run and its control write separate logs so both can be read side by side.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-shortcuts-inhibitor$WHICH-engine.log}"
 KEYBOARD_LOG="${KEYBOARD_LOG:-/tmp/domicile-shortcuts-inhibitor$WHICH-keyboard.log}"
 
-# WHAT EACH READING IS, AS A PATTERN, because a grep that matches nothing
-# answers in the same voice as a request that was never sent. Named rather than
-# written into the greps below, so that
-# `scripts/test-shortcuts-inhibitor-guard.sh` can run them against the shape
-# libwayland writes, in both of the shapes it has written it in.
+# Each reading's pattern, kept separate so
+# `scripts/test-shortcuts-inhibitor-guard.sh` can test them against both dump
+# formats libwayland has used.
 #
-# A MESSAGE NAME RATHER THAN A DIRECTION MARKER, and that is a decision rather
-# than laziness. libwayland marks a request with ` -> ` and an event with
-# nothing, and the marker's spelling has moved between versions — but
-# `get_registry`, `get_toplevel`, `get_keyboard` and `inhibit_shortcuts` are
-# REQUEST names in their protocols and no event anywhere is called any of them,
-# so a line carrying one is a line this client sent. Nothing needs the arrow to
-# know that, and depending on it is how this guard read a capture it was looking
-# straight at as no capture at all.
+# Patterns match request names, not the ` -> ` direction marker, whose spelling
+# has changed. `get_registry`, `get_toplevel`, `get_keyboard` and
+# `inhibit_shortcuts` are request names no event shares.
 #
-# What must still be told apart is the interface NAME from a message on it:
-# binding the manager is what every nested chrome does whatever the switch says,
-# and `zwp_keyboard_shortcuts_inhibitor_v1.active` comes back from the
-# COMPOSITOR. Neither carries `.inhibit_shortcuts`, which is why the claim is
-# spelled with the dot.
+# The claim includes the dot: binding the manager happens regardless of the
+# switch, and `zwp_keyboard_shortcuts_inhibitor_v1.active` is an event.
 #
-# The manager is read as a registry event for a reason the others do not have:
-# `--enable-logging=stderr` puts the engine's own lines in this same file, and
-# the one patch `0038` logs when the host has NOT got the protocol NAMES the
-# protocol. A pattern that took the interface name anywhere would read a missing
-# manager as a present one — and the control would then pass over a host that
-# could not have answered the request at all.
+# The manager is matched as a registry event because patch `0038`'s "host lacks
+# the protocol" log line names the protocol, and must not count as present.
 #
-# `[@#]` because libwayland has spelled an object id both ways: `wl_display@1`
-# in the format every account of `WAYLAND_DEBUG` describes, `wl_display#1` in
-# the one the engine on `crux` writes today.
+# `[@#]`: libwayland has written object ids both ways (`wl_display@1`,
+# `wl_display#1`).
 DISPLAY_ON_THE_WIRE='wl_display[@#]1\.'
 TOPLEVEL_ON_THE_WIRE='\.get_toplevel\('
 MANAGER_ON_THE_WIRE='wl_registry[@#][0-9]+\.global\(.*zwp_keyboard_shortcuts_inhibit_manager_v1'
 KEYBOARD_ON_THE_WIRE='\.get_keyboard\('
 REQUEST_ON_THE_WIRE='\.inhibit_shortcuts\('
 
-# The capture the readings are taken over: the engine's log with libwayland's
-# colors taken out. See `normalized`.
+# The engine's log with libwayland's colors stripped. See `normalized`.
 CAPTURE="$(mktemp)"
 
-# NOT THE PIDS A `&` HANDS BACK, WHICH ARE THE RIGHT ONES FOR NEITHER. The
-# keyboard is `wtype` behind a `nix shell` wrapper and the engine is a browser
-# with a zygote, a GPU process and renderers under it, so killing those two
-# pids and returning left whatever was behind them running into the checks
-# after this one, one of which times things. Everything started here carries
-# `lib-compositor-cleanup.sh`'s marker naming this guard, and all of it is gone
-# before this returns. That library calls anything it marks a compositor.
+# Kill everything this starts before returning. The keyboard (`wtype` behind
+# `nix shell`) and the browser both fork, so the `&` pids are not the live ones
+# and leftovers would disturb later timed checks. Everything carries
+# `lib-compositor-cleanup.sh`'s marker; `kill_compositors` kills everything
+# with it, not only compositors.
 cleanup() {
   kill_compositors "$(compositor_owner)"
   wait
@@ -194,16 +132,14 @@ trap cleanup EXIT
   annotate "guard-shortcuts-inhibitor: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
   exit 1
 }
-# The nested session this is a client of. `under-wayland.sh` exports it, and
-# without one the engine would fall back to another platform entirely and this
-# would measure a browser that never spoke Wayland.
+# Without a Wayland session the engine would use another platform and never
+# speak Wayland. `under-wayland.sh` exports one.
 [ -n "${WAYLAND_DISPLAY:-}" ] || {
   annotate "guard-shortcuts-inhibitor: no WAYLAND_DISPLAY; run this under packages/domicile-engine/scripts/under-wayland.sh"
   exit 1
 }
 
-# `wtype` lives in nixpkgs rather than in either dev shell, and is fetched the
-# way `under-wayland.sh` fetches sway and `guard-shell.sh` fetches kitty.
+# `wtype` comes from nixpkgs, like sway in `under-wayland.sh`.
 if command -v wtype >/dev/null; then
   WTYPE=(wtype)
 elif command -v nix >/dev/null; then
@@ -216,23 +152,17 @@ rm -f "$BROKER"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
-# A capture with libwayland's colors taken out.
+# A capture with libwayland's color escapes stripped.
 #
-# WITHOUT THIS THE PATTERNS ABOVE CANNOT MATCH, and the cost of finding that out
-# was a whole run on `crux`. The dump the engine writes today puts an escape
-# sequence between every token of a message —
-# `wl_display<ESC>[35m#1<ESC>[36m.delete_id` — so `wl_display#1.delete_id` is
-# not in the file as a string at all, however the object id is spelled. Taken
-# out, both of libwayland's shapes are the same line of text, and the
-# diagnostics below are readable by whoever opens the job rather than a smear of
-# escapes.
+# The dump puts an escape between tokens, e.g.
+# `wl_display<ESC>[35m#1<ESC>[36m.delete_id`, so the patterns cannot match
+# without this.
 normalized() { # $1 a capture
   sed "s/$(printf '\033')\[[0-9;]*[a-zA-Z]//g" "$1"
 }
 
-# Waits for `$2` to appear in `$3`, for `$1` seconds, reading it the way the
-# readings do. A second rather than a quarter of one because each pass is a
-# `sed` over a growing capture, and this is a wait for a window to map.
+# Waits up to `$1` seconds for `$2` in `$3`, read as the readings are. Polls
+# each second, since each pass runs `sed` over the whole capture.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     normalized "$3" 2>/dev/null | grep -aqE -- "$2" && return 0
@@ -241,26 +171,16 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. A keyboard on the host's seat, before the engine is started rather than
-#    beside it: the request is made once, where the toplevel is set up, and a
-#    capability that arrives after that is a capability the engine has already
-#    decided without.
+# 1. Put a keyboard on the host seat before starting the engine: the request
+#    is made once, at toplevel setup.
 #
-#    NOT FATAL ON ITS OWN, AND DELIBERATELY. A host that is somebody's real
-#    session — which `under-wayland.sh` uses as-is when it finds one — has a
-#    keyboard already and may carry no virtual-keyboard protocol at all, and a
-#    guard that stopped here would refuse to run in the one configuration a
-#    person has in front of them. What the seat ended up with is read off the
-#    wire below, which is the only end that decides anything; this says loudly
-#    that it did not come up, and the verdict names it.
-#    ONE THAT ENDS FIRST, AND THEN THE ONE THAT STAYS. `wtype` creates the
-#    keyboard, uploads a keymap and then runs what it was asked for, so a run
-#    of it that exits zero has done the whole of that — and the one-millisecond
-#    sleep below is a synchronous answer to "can a keyboard be made on this
-#    host", which nothing else here can ask. It also pays the fetch: a `nix
-#    shell` on a cold machine spends its first seconds on the binary cache, and
-#    a keyboard that appears after the window is mapped is a keyboard the
-#    engine has already decided without.
+#    Not fatal: a real session (which `under-wayland.sh` uses if present)
+#    already has a keyboard and may lack the virtual-keyboard protocol. The
+#    wire readings decide; the verdict names a missing keyboard.
+#
+#    The first wtype run exits after 1ms and checks a keyboard can be made. It
+#    also pays any cold `nix shell` fetch before the engine starts. The second
+#    stays up for the run.
 : >"$KEYBOARD_LOG"
 if [ ${#WTYPE[@]} -eq 0 ]; then
   echo "no wtype and no nix to fetch one, so this run has whatever keyboard the host already had" >&2
@@ -274,20 +194,14 @@ else
   echo "a virtual keyboard is on the host's seat"
 fi
 
-# 2. The engine, nested, on a domicile:// document — the configuration a
-#    desktop runs in, which is the only one where the switch below is passed.
-#    `--app` for the reason every guard here repeats it: a tab strip above the
-#    shell is the difference between a desktop and a browser looking at a page.
+# 2. The engine, nested, on a domicile:// document as in a desktop. `--app`
+#    avoids a tab strip above the shell.
 #
-#    `WAYLAND_DEBUG=1` is the whole instrument. It is set on the engine and
-#    nothing else, so the capture is this browser's own conversation with the
-#    host.
+#    `WAYLAND_DEBUG=1` is set on the engine only, so the capture is its own
+#    conversation with the host.
 #
-#    THE SWITCH IS THE ONE THING THE CONTROL CHANGES. `domicile-launch` passes
-#    it on the wayland platform and nowhere else, and this guard passes it by
-#    hand for the same reason it exists: a guard that runs `chrome
-#    --ozone-platform=wayland` is not a desktop, and the engine does not infer
-#    this from its platform.
+#    The switch is the only thing the control changes. `domicile-launch`
+#    passes it on Wayland; the engine does not infer it from the platform.
 if [ "$NEGATIVE" = "1" ]; then
   SWITCH=()
   echo "starting the engine WITHOUT --domicile-inhibit-host-shortcuts"
@@ -308,16 +222,15 @@ env "$(compositor_env)" WAYLAND_DEBUG=1 "$CHROMIUM/$OUT/chrome" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 
-# 3. The window, which is where the request is made. Not fatal here either —
-#    the verdict says what a run without one measured, and says it once.
+# 3. Wait for the window, where the request is made. Not fatal; the verdict
+#    reports it.
 wait_for_line "$FOR_SECONDS" "$TOPLEVEL_ON_THE_WIRE" "$ENGINE_LOG" ||
   echo "no toplevel was ever made on $WAYLAND_DISPLAY" >&2
 
 sleep "$SETTLE_SECONDS"
 
-# THE READINGS, in the order the header lists them, over one normalization of
-# the capture rather than five. `-a`, because a capture with a binary chunk in it
-# is a capture grep would otherwise refuse to read.
+# The readings, in header order, over one normalized capture. `-a` because
+# grep would otherwise refuse a capture containing binary data.
 normalized "$ENGINE_LOG" >"$CAPTURE" 2>/dev/null
 SAW_WIRE=$(grep -aqE -- "$DISPLAY_ON_THE_WIRE" "$CAPTURE" && echo 1 || echo 0)
 SAW_TOPLEVEL=$(grep -aqE -- "$TOPLEVEL_ON_THE_WIRE" "$CAPTURE" &&
@@ -332,13 +245,9 @@ echo
 echo "wire=$SAW_WIRE toplevel=$SAW_TOPLEVEL manager=$SAW_MANAGER keyboard=$SAW_KEYBOARD asked=$ASKED"
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Five
-# readings and two modes make more answers than a person reading an annotation
-# can be expected to reconstruct, and the failure that matters most — a capture
-# that is not a wire dump — looks from a grep's side exactly like the one the
-# guard exists to report. So they are decided here, in a block
-# `scripts/test-shortcuts-inhibitor-guard.sh` runs directly, rather than
-# inferred from a grep by whoever opens the job.
+# The verdict. `scripts/test-shortcuts-inhibitor-guard.sh` runs this block
+# directly. A capture that is not a wire dump looks like a missing request to
+# grep, so the setup readings are checked first.
 FAILURE=""
 PASSED=""
 if [ "$SAW_WIRE" != "1" ]; then
@@ -398,10 +307,8 @@ if [ -n "$PASSED" ]; then
   exit 0
 fi
 
-# THE ENGINE'S OWN WORDS FIRST, AND KEPT APART FROM THE WIRE'S. Patch 0038 logs
-# the two ways it can decline, and both are one line in a file where every other
-# line has the words `seat` and `shortcuts` in it — a single grep over both would
-# tail twenty wire messages and bury the sentence that explains the run.
+# Print the engine's own decline messages (patch 0038) separately; mixed with
+# the wire lines they would be buried.
 annotate "guard-shortcuts-inhibitor: $FAILURE"
 echo "what the engine said about the inhibitor:" >&2
 grep -aE 'domicile:|ERROR' "$CAPTURE" | tail -10 | cut -c1-200 |
@@ -409,10 +316,8 @@ grep -aE 'domicile:|ERROR' "$CAPTURE" | tail -10 | cut -c1-200 |
 echo "what the wire said about the seat and the protocol:" >&2
 grep -aE 'wl_seat[@#]|shortcuts_inhibit' "$CAPTURE" | tail -10 | cut -c1-200 |
   sed 's/^/  /' >&2
-# BOTH ENDS OF THE CAPTURE, and the first end is the one a wrongly-shaped
-# pattern is diagnosed from: a connection's first messages are at the top, and a
-# run that printed only the tail left the next reader guessing at what the dump
-# looks like. Ten lines of it answers that outright.
+# Print the head of the capture too: it shows the dump's format when a pattern
+# fails to match.
 echo "the first of the capture, which is what its shape looks like:" >&2
 head -10 "$CAPTURE" | cut -c1-200 | sed 's/^/  /' >&2
 echo "the last of it:" >&2

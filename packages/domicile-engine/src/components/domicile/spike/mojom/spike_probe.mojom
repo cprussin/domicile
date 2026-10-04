@@ -5,41 +5,23 @@ module domicile.mojom;
 
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
-// THROWAWAY. The spike's proof, and nothing else.
+// Spike only: lets the producer read back what the display compositor drew.
+// Delete when domicile-compositor submits real buffers.
 //
-// The producer knows what color it submitted. What it cannot see is what the
-// display compositor drew, and that is the only thing worth knowing: whether
-// viz aggregated a frame from a process that is not a renderer into a page's
-// layer tree, because a <canvas> in that page named its SurfaceId.
-//
-// Every method here answers that out of a CopyOutputRequest on the browser
-// window's root layer, which viz serves from the display compositor's draw
-// after the aggregator has resolved every SurfaceDrawQuad in the tree. So a
-// color that comes back is a color viz aggregated, and if it is the
-// producer's then the aggregation happened through the page.
-//
-// Deleted when domicile-compositor submits real buffers.
+// Each method answers from a CopyOutputRequest on the browser window's root
+// layer, served after viz resolves every SurfaceDrawQuad. If the producer's
+// color comes back, viz aggregated its frame into the page.
 interface SpikeProbe {
-  // Steps 2 and 3: the color at the center of the browser's window.
-  //
-  // Fails if there is no window yet, or nothing has been drawn — retry.
+  // The color at the center of the browser's window. Fails if nothing has
+  // been drawn yet; retry.
   SampleWindowCenter() => (bool sampled, uint32 argb);
 
-  // Step 4's CSS parity measurement: the whole window, row-major, as SkColor
-  // (ARGB). `size` is what to index it by.
-  //
-  // The measurement is a diff of one half of the window against the other —
-  // an <app> against an ordinary element laid out identically beside it — so
-  // it needs every pixel rather than a list of points chosen in advance. One
-  // capture of a 1024x768 window is ~3 MB, which is why the polling methods
-  // above and below exist rather than this being the only one.
+  // The whole window for the CSS parity check, row-major SkColor (ARGB),
+  // indexed by `size`. About 3 MB at 1024x768, so polling uses the methods
+  // that return one pixel.
   CaptureWindow() => (bool captured, gfx.mojom.Size size, array<uint32> argb);
 
-  // Step 4's latency measurement: one pixel, so that polling for a color to
-  // appear costs a draw and a round trip rather than a draw, a round trip and
-  // 3 MB.
-  //
-  // `point` outside the window fails rather than clamping: a measurement that
-  // silently samples the wrong pixel is worse than one that stops.
+  // One pixel, for polling cheaply in the latency check. Fails for a `point`
+  // outside the window rather than sampling the wrong pixel.
   SamplePixel(gfx.mojom.Point point) => (bool sampled, uint32 argb);
 };

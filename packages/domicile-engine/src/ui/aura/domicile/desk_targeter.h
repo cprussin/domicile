@@ -14,31 +14,24 @@ namespace aura {
 
 class Window;
 
-// Where in the page a pointer at `at` in the root window is, when the page
-// should have it and aura would not give it: `at` past the root window's
-// `root` size, inside `page_in_root`. `std::nullopt` everywhere else, which
-// is aura's to target as it always does.
+// Returns `at` in page coordinates when it is outside the root window's
+// `root` size but inside `page_in_root`. Otherwise returns `std::nullopt`,
+// leaving the event to aura's normal targeting.
 std::optional<gfx::PointF> DeskPagePoint(const gfx::Size& root,
                                          const gfx::Rect& page_in_root,
                                          const gfx::PointF& at);
 
-// Gives `page` every pointer that reaches `root` from past its edge, or stops
-// when `page` is null.
+// Sends `page` every pointer event that reaches `root` outside its bounds. A
+// null `page` stops this.
 //
-// A POINTER ON ANOTHER MONITOR IS STILL THE PAGE'S. On a tty the desk is one
-// page in the window on the host monitor, laid out over every monitor and
-// offset so the host shows its part (see content/public/browser/
-// domicile_desk.h). Ozone hands that window every pointer event, on whichever
-// monitor, at its place on the page -- so a pointer on the next monitor is at
-// a place past the window's edge. aura's targeter explores a window only where
-// its bounds reach, and the window between the root and the page is the
-// root's size: it found nothing there and gave the event to the root, which
-// does nothing with it. No hover, no click, on every monitor but the host's.
+// On a tty the desk is one page spanning every monitor, shown in the host
+// monitor's window (see content/public/browser/domicile_desk.h). Ozone sends
+// that window pointer events from every monitor, so a pointer on another
+// monitor lands outside the window's bounds. aura only targets within a
+// window's bounds, so without this those events reach the root and are lost.
 //
-// So the root's targeter looks into `page` for anything it would have kept
-// for itself past its edge. What aura targets first is untouched: a pressed
-// button's window and a capture still take every move, which is what lets a
-// drag leave the host monitor and come back.
+// aura's own targeting still runs first: a pressed button's window and a
+// capture keep every move, so a drag can leave the host monitor and return.
 void TargetDeskPage(Window* root, Window* page);
 
 }  // namespace aura

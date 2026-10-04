@@ -1,43 +1,39 @@
 #!/usr/bin/env bash
-# Run one step of the spike: start the engine on a page whose <canvas> embeds an
-# external surface, then run a producer against it and let the producer's exit
-# code be the verdict.
+# Runs one spike step: starts the engine on a page whose <canvas> embeds an
+# external surface, then runs a producer against it. The producer's exit code
+# is the result.
 #
-# Step 3 is the default. Step 4's measurement is guard-css-and-resize.sh, which is this
-# script twice with PRODUCER, PAGE and WINDOW_SIZE set.
+# Runs step 3 by default. guard-css-and-resize.sh runs step 4 by calling this
+# twice with PRODUCER, PAGE and WINDOW_SIZE set.
 #
 #   NIX_SHELL_RUN=".../scripts/spike.sh /build/chromium/src" \
 #     nix-shell /build/chromium/src/tools/nix/shell.nix
 #
-# Inside the toolchain shell, like everything else here: a component build links
-# against that shell's glibc and will not start without it.
+# Must run inside the toolchain shell: a component build links against its
+# glibc.
 #
 #   ... spike.sh /build/chromium/src -- --color=FF00C853
 #
 # Flags before `--` go to the engine, after it to the producer. Exits 0 only if
-# the pixel viz drew where the canvas is is the one the producer sent.
+# viz drew the producer's color where the canvas is.
 #
-# The order matters and is not the obvious one. The page runs first and its
-# request waits in the browser — an <app> element exists before the window
-# behind it does — and the producer that turns up later is what completes it.
-# The socket itself is open from browser startup, so the producer could also
-# have gone first; what it cannot do is arrive before the browser.
+# The page starts first: an <app> element exists before its window, so its
+# request waits in the browser until the producer connects. The socket is open
+# from browser startup, so the producer only has to start after the browser.
 #
-# The engine flags are not incidental, and each is here because it was needed:
+# Engine flags:
 #
-#   --ozone-platform=headless   the default, and the only one that needs no
-#                               compositor. OZONE=wayland runs under a nested
-#                               one instead — see under-wayland.sh, and note
-#                               that headless CANNOT import a dmabuf
-#   --disable-gpu               software compositing, and only by default. See
-#                               GPU=1 below: crux turns out to have a real GPU,
-#                               so this is a choice rather than a constraint
-#   --password-store=basic      without it Chrome blocks on a keyring that is
-#                               not there, and never creates a window
+#   --ozone-platform=headless   default; needs no compositor. OZONE=wayland
+#                               runs nested (see under-wayland.sh); headless
+#                               cannot import a dmabuf
+#   --disable-gpu               software compositing by default; GPU=1 uses
+#                               crux's real GPU
+#   --password-store=basic      otherwise Chrome blocks on a missing keyring
+#                               and never opens a window
 #   --no-sandbox                the producer is not a child process
-#   --enable-blink-features=... canvas.embedExternalSurface() is statusless in
-#                               runtime_enabled_features.json5, so naming it is
-#                               the only way to turn it on
+#   --enable-blink-features=... canvas.embedExternalSurface() has no status in
+#                               runtime_enabled_features.json5, so it must be
+#                               enabled by name
 set -u
 
 CHROMIUM="${1:-}"
@@ -49,31 +45,23 @@ shift
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 PAGE="${PAGE:-$SCRIPTS/spike-page.html}"
-# Appended to the page's URL. Step 4 uses it to tell the page which color its
-# control elements have to be, because there is no channel from the page to the
-# producer and the harness is what makes the two agree.
+# Appended to the page's URL. Step 4 uses it to set the page's control color
+# to match the producer's, since the page and producer cannot talk.
 PAGE_QUERY="${PAGE_QUERY:-}"
 PRODUCER="${PRODUCER:-domicile_solid_color_submitter}"
 WINDOW_SIZE="${WINDOW_SIZE:-1024,768}"
-# The whole URL, when a check needs one this cannot build from a file path —
-# the iframe check is served over HTTP so that its <iframe> can be cross-site.
+# A full URL, overriding PAGE. The iframe check serves its page over HTTP so
+# the <iframe> can be cross-site.
 URL="${URL:-}"
 
-# GPU=1 runs the engine on real hardware instead of software compositing.
-#
-# crux has a GTX 970 on the proprietary driver and Chromium drives it — the
-# renderer string is "ANGLE (NVIDIA Corporation, NVIDIA GeForce GTX 970/PCIe/
-# SSE2, OpenGL ES 3.2)". What kept every earlier measurement on --disable-gpu
-# was not the absence of a GPU but the absence of a library path: ANGLE dlopens
-# libEGL.so.1, which is glvnd's, and Chromium's own toolchain shell does not
-# carry it. GL_LIBS is that path, and it is the Domicile full dev shell's.
-# Which ozone platform to run on. `headless` needs nothing and is the default.
-# `wayland` needs a compositor on $WAYLAND_DISPLAY — under-wayland.sh brings one
-# up — and is the only way to reach a dmabuf import: HeadlessSurfaceFactory does
-# not implement CreateNativePixmapFromHandle, so under headless there is nothing
-# for an imported buffer to become.
+# The ozone platform. `wayland` needs a compositor on $WAYLAND_DISPLAY (see
+# under-wayland.sh) and is required for dmabuf import: HeadlessSurfaceFactory
+# does not implement CreateNativePixmapFromHandle.
 OZONE="${OZONE:-headless}"
 
+# GPU=1 uses hardware compositing (crux has an NVIDIA GTX 970). ANGLE dlopens
+# glvnd's libEGL.so.1, which Chromium's toolchain shell lacks, so GL_LIBS adds
+# the Domicile full dev shell's library path.
 GPU="${GPU:-0}"
 GL_LIBS="${GL_LIBS:-/run/opengl-driver/lib:/nix/store/dwc1r464zf5379jr69vv9gl84h28bzc0-libglvnd-1.7.0/lib:/nix/store/vpfv85fjpjjcx8184a8vhch0kdygchql-mesa-26.2.0/lib:/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib}"
 
@@ -87,13 +75,10 @@ fi
 OUT="${OUT:-out/Domicile}"
 SOCKET="${SOCKET:-/tmp/domicile-spike}"
 PROFILE="${PROFILE:-/tmp/domicile-spike-profile}"
-# Overridable for the same reason the two above are, and it was not. A script
-# that runs this twice — `guard-css-and-resize.sh` does — gave the second run its own
-# socket and profile and let it truncate the first run's browser log. The half
-# that failed is then diagnosed from the half that did not, and the message
-# above pointing at this file points at the wrong run.
+# Overridable so a caller that runs this twice (`guard-css-and-resize.sh`) can
+# keep each run's log.
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-spike-engine.log}"
-# Gone on the way out, because on crux /tmp is RAM that nothing else clears.
+# Remove the profile on exit: on crux /tmp is RAM that nothing else clears.
 # See scripts/test-the-guards-take-their-profiles-with-them.sh.
 trap 'rm -rf "$PROFILE"' EXIT
 
@@ -124,10 +109,9 @@ fi
 rm -f "$SOCKET"
 rm -rf "$PROFILE" && mkdir -p "$PROFILE"
 
-# TMPDIR ON /tmp, because Chrome binds its process singleton's socket under
-# it and CHECKs the path fits a Unix socket's 107 bytes. Run from the CSS
-# guard, TMPDIR is the job's directory with two nix shells nested in it, and
-# that is past 107: every engine died at startup. See test-engine-job-tmp.sh.
+# TMPDIR=/tmp because Chrome binds its singleton socket under it and CHECKs
+# that the path fits in 107 bytes. Nested nix shells in CI make TMPDIR longer
+# than that. See test-engine-job-tmp.sh.
 TMPDIR=/tmp "$OUT/chrome" \
   --ozone-platform="$OZONE" \
   "${GPU_FLAGS[@]}" \
@@ -143,8 +127,8 @@ TMPDIR=/tmp "$OUT/chrome" \
   "$URL" > "$ENGINE_LOG" 2>&1 &
 ENGINE=$!
 
-# The socket appearing is the page having asked to embed, which is the only
-# signal that the renderer half got that far.
+# The socket appears when the page asks to embed; it is the only sign the
+# renderer side got that far.
 for _ in $(seq 1 60); do
   [ -S "$SOCKET" ] && break
   sleep 1

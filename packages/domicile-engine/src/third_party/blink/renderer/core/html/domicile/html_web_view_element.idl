@@ -1,12 +1,8 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// <webview> — web content in a browsing context of its own.
-// See docs/architecture/ENGINE-FORK.md in the Domicile repository.
-//
-// Not a web standard and not proposed as one; it exists in Domicile's engine
-// fork only. The shape is Electron's, because that is what Domicile's shells
-// were written against.
+// <webview>: web content in its own browsing context. Domicile-only; the API
+// follows Electron's. See docs/SHELL-BROWSER-WINDOWS.md.
 
 [
     RuntimeEnabled=DomicileExternalSurface,
@@ -14,124 +10,67 @@
 ] interface HTMLWebViewElement : HTMLElement {
   [HTMLConstructor] constructor();
 
-  // The address showing. Reflected, so a shell's address bar has one value to
-  // read and to write.
+  // The URL the element was last sent to. Reflected.
   [CEReactions, Reflect, URL] attribute USVString src;
 
-  // The four go to the browser, which drives the guest's own
-  // NavigationController -- see html_web_view_element.h. None of them raises:
-  // there is nothing here for a ScriptState to be needed for and nothing a
-  // caller could do about a message it cannot fail to send. A back with
-  // nowhere to go is answered by not navigating, which is what an address bar
-  // that cannot yet gray out its buttons asks for constantly.
+  // Drive the guest's NavigationController. Never throw; a back or forward
+  // with nowhere to go does nothing.
   [CEReactions] undefined goBack();
   [CEReactions] undefined goForward();
   [CEReactions] undefined stop();
   [CEReactions] undefined reload();
 
-  // Whether either of the first two would move the page, so an address bar can
-  // gray out a button that would do nothing.
-  //
-  // READONLY PROPERTIES rather than a `domicile-history-change` event's detail,
-  // and that is the whole design decision: a shell renders from state, so what
-  // it needs is a value it can read at the moment it renders. An availability
-  // carried only by an event is gone for a chrome that mounted after the
-  // guest's first commit, which a React shell always is -- it registers its
-  // listeners in its first effect flush. The event exists beside these and says
-  // only "read them again"; see html_web_view_element.h for what was ruled out.
-  //
-  // Not reflected, because there is no content attribute behind them: these are
-  // the browser's answer about a page in another process, and a content
-  // attribute is the author's to write.
+  // Whether goBack() and goForward() would navigate. Properties so a shell
+  // that mounts late reads the current value; `domicile-history-change`
+  // signals a change.
   readonly attribute boolean canGoBack;
   readonly attribute boolean canGoForward;
 
-  // Whether a page is still arriving, so an address bar can show that it is.
-  //
-  // A READONLY PROPERTY for the reason the pair above are, and more plainly: a
-  // load is a span, so a chrome that mounts in the middle of one is ordinary
-  // rather than a race, and a state carried only by
-  // `domicile-loading-change` would leave that window looking settled until
-  // the next navigation.
-  //
-  // It is the browser's `should_show_loading_ui` and `IsLoading()` already
-  // resolved into one answer -- "a browser would be showing a spinner" -- so
-  // a same-document navigation does not set it. See
-  // components/domicile/browser/web_view_guest.cc.
+  // Whether the browser would show a loading indicator. False for
+  // same-document navigations. `domicile-loading-change` signals a change.
   readonly attribute boolean loading;
 
-  // WHERE THE PAGE ACTUALLY IS, which `src` is not: `src` is the author's
-  // attribute and says where the element was last *sent*, so a link followed
-  // or a redirect taken leaves the two disagreeing. This one is the browser's,
-  // read off the guest's visible entry -- the same entry a browser's own
-  // address bar shows.
-  //
-  // The empty string until the browser has said otherwise, which is a guest
-  // showing the initial entry and not an address anybody can be sent to.
+  // The guest's visible URL. Differs from `src` after a link or redirect.
+  // Empty until the browser reports one.
   readonly attribute USVString url;
 
-  // And what the browser says about the connection behind it. One of
-  // "neutral", "secure", "warning" or "dangerous" -- `security_state`'s own
-  // answer, the one Chrome draws its omnibox lock from, narrowed to the four a
-  // chrome can draw. The empty string until the browser has said anything at
-  // all, which a chrome must not read as "secure".
+  // The security level of `url`: "neutral", "secure", "warning" or
+  // "dangerous", as Chrome's omnibox shows it. Empty until reported; do not
+  // treat empty as secure. Always read it with `url`, which arrives in the
+  // same message. `domicile-page-change` signals a change to either.
   //
-  // READ IT WITH `url` AND NOT ON ITS OWN. They arrive in one message from one
-  // entry so that they always describe the same page; a chrome pairing this
-  // with an address from anywhere else would be drawing a padlock beside an
-  // address it does not belong to.
-  //
-  // A DOMString rather than an IDL enum, which is the shape this would take in
-  // a standards-track API: an enum return type generates a file per enum into
-  // Blink's bindings, and this element deliberately adds none -- see
-  // `scripts/test-the-blink-module-declares-its-files.sh` for what a generated
-  // file costs to register in the fork.
+  // A DOMString because each IDL enum adds a generated file (see
+  // scripts/test-the-blink-module-declares-its-files.sh).
   readonly attribute DOMString security;
 
-  // The page's zoom, as a factor: 1 is 100%. The browser's answer, read off
-  // the guest's site the way Chrome keys it, and announced in
-  // `domicile-zoom-change` -- a readonly property for the reason the others
-  // are, with setZoom beside it because the answer is not this element's to
-  // write.
+  // The page's zoom factor; 1 is 100%. `domicile-zoom-change` signals a
+  // change.
   readonly attribute double zoom;
 
-  // Ask the browser to zoom the page. A factor outside the browser's own
-  // range -- 0.25 to 5 -- is a RangeError rather than a zoom clamped into it,
-  // because a shell that computed one has a bug worth hearing about.
+  // Asks the browser to zoom. Throws RangeError outside 0.25 to 5, since an
+  // out-of-range factor is a shell bug.
   [RaisesException] undefined setZoom(double factor);
 
-  // The icon the page names for itself -- the best of the icons it links, an
-  // SVG before the biggest -- announced in `domicile-favicon-change`. The
-  // empty string for a page that names none, or has not said yet. It is the
-  // page's own word, signed in as the user is, which is what makes it the one
-  // a launcher learns a site's icon from.
+  // The page's favicon URL, preferring SVG then the largest. Empty if none.
+  // `domicile-favicon-change` signals a change.
   readonly attribute USVString favicon;
 
-  // Find `text` in the page and select a match: the next one after the
-  // selection, or the one before it when `backward` is true. The same text
-  // again is "find next" and different text is a new search, as in a
-  // browser's find bar. The empty string is stopFinding() with the selection
-  // cleared rather than kept -- the text in a find bar deleted.
+  // Finds `text` and selects the next match, or the previous one if
+  // `backward`. Repeating the text finds the next match. Empty text stops
+  // finding and clears the selection.
   undefined find(DOMString text, optional boolean backward = false);
 
-  // End the find, leaving the match that was selected selected -- Escape in a
-  // find bar.
+  // Stops finding and keeps the selected match.
   undefined stopFinding();
 
-  // What the find has found: how many matches, and which of them is
-  // selected, counted from 1. Both 0 while there is no find. The browser's
-  // answer, announced in `domicile-find-change` -- readonly properties for the
-  // reason the others are. Every frame in the page is counted, a cross-site
-  // one included.
+  // Match count across all frames, and the selected match's 1-based index.
+  // Both 0 with no find. `domicile-find-change` signals a change.
   readonly attribute long findMatches;
   readonly attribute long findActiveMatch;
 
-  // The size the page's content wants, in CSS pixels: its natural width
-  // (max-content) and its document's height at the width it is laid out at --
-  // what Chrome sizes an extension's popup from. Both 0 until the page has
-  // laid out. The browser's answer, announced in
-  // `domicile-content-size-change` -- readonly properties for the reason the
-  // others are.
+  // The content's natural width (max-content) and document height, in CSS
+  // pixels, as Chrome sizes extension popups. Both 0 before layout.
+  // `domicile-content-size-change` signals a change.
   readonly attribute long contentWidth;
   readonly attribute long contentHeight;
 

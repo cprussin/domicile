@@ -1,14 +1,12 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// The evdev input controller as this platform drives it: owned by the UI
-// thread, told about device removals by a factory on the evdev thread.
+// Tests the evdev input controller as this platform uses it: owned by the UI
+// thread, told about device removals from the evdev thread.
 //
-// HERE, AND NOT IN `events_unittests`, because this is the one suite CI builds
-// and runs (`scripts/engine-drm-unit-tests.sh`), and because the DRM platform
-// is what makes a removal routine: logind revokes every input device on a
-// console switch, and each one comes back through `RemoveInputDevice` and
-// `AddInputDevice` on the evdev thread (see `drm_input_devices.h`).
+// Lives here, not in `events_unittests`, because CI runs only this suite
+// (`scripts/engine-drm-unit-tests.sh`). On DRM, every console switch removes
+// and re-adds every input device (see `drm_input_devices.h`).
 
 #include "ui/events/ozone/evdev/input_controller_evdev.h"
 
@@ -46,7 +44,7 @@ void RunOn(base::Thread& thread, base::OnceClosure task) {
 
 class DrmInputControllerTest : public testing::Test {
  protected:
-  // The controller's own sequence: the browser's UI thread.
+  // The controller's sequence: the browser's UI thread.
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::UI};
 
@@ -59,27 +57,18 @@ class DrmInputControllerTest : public testing::Test {
   InputControllerEvdev controller_{&keyboard_, &mouse_button_map_,
                                    &pointing_stick_button_map_};
 
-  // Where the controller's settings pushes land. Held rather than run, so a
-  // case can ask whether a push was made; which thread made it is what the
-  // case controls by what it has run.
+  // Receives the controller's settings pushes. Held, not run, so a test can
+  // check whether a push was posted.
   scoped_refptr<base::TestSimpleTaskRunner> factory_runner_ =
       base::MakeRefCounted<base::TestSimpleTaskRunner>();
   InputDeviceFactoryEvdevProxy factory_{
       factory_runner_, base::WeakPtr<InputDeviceFactoryEvdev>()};
 };
 
-// THE CRASH THIS PINS. `InputDeviceFactoryEvdev::DetachInputDevice` runs on
-// the evdev thread and calls `OnInputDeviceRemoved`, whose
-// `ScheduleUpdateDeviceSettings` posted a task bound to the controller's
-// WeakPtr to the CURRENT thread -- the evdev one. A console switch removes
-// every device at once, and the evdev thread's task queue then checked that
-// WeakPtr off the UI sequence it is bound to: `DCHECK failed:
-// checker.CalledOnValidSequence(&bound_at)` in `WorkQueue::
-// RemoveCancelledTasks`, and the browser gone.
-//
-// So the removal must not touch the controller on the evdev thread at all:
-// nothing reaches the factory until the controller's own sequence runs, and
-// then the settings push does.
+// `OnInputDeviceRemoved` is called on the evdev thread. A task posted there
+// with the controller's WeakPtr, which is bound to the UI sequence, makes the
+// evdev queue DCHECK in `WorkQueue::RemoveCancelledTasks`. The settings push
+// must wait for the controller's own sequence.
 TEST_F(DrmInputControllerTest,
        ARemovalFromTheEvdevThreadIsHandledOnTheControllersSequence) {
   controller_.SetInputDeviceFactory(&factory_);
@@ -90,7 +79,7 @@ TEST_F(DrmInputControllerTest,
 
   RunOn(evdev, base::BindOnce(&InputControllerEvdev::OnInputDeviceRemoved,
                               base::Unretained(&controller_), 7));
-  // And anything the removal posted to the evdev thread, run there.
+  // Run anything the removal posted to the evdev thread.
   RunOn(evdev, base::DoNothing());
 
   EXPECT_FALSE(factory_runner_->HasPendingTask());

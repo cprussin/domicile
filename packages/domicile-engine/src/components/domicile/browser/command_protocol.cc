@@ -20,15 +20,14 @@
 namespace domicile {
 namespace {
 
-// The commands there are. No dispatch table: three rows are an `if` each.
+// The command names.
 constexpr char kLoadShell[] = "load_shell";
 constexpr char kOpenUrl[] = "open_url";
 constexpr char kScreenshot[] = "screenshot";
 
 std::string Line(base::DictValue reply) {
   std::string line;
-  // An unrepresentable reply is this file having built one out of something
-  // other than the strings it writes, which is a bug rather than a refusal.
+  // Replies hold only strings, so a write failure is a bug.
   CHECK(base::JSONWriter::Write(reply, &line));
   line.push_back('\n');
   return line;
@@ -69,10 +68,8 @@ void AnswerCommand(std::string_view line,
     return;
   }
 
-  // THE VERSION IS READ FIRST, BEFORE THE COMMAND IT QUALIFIES. It says how
-  // the rest of this object is to be read, so a request in a version this
-  // engine does not speak is one whose `type` this engine has no business
-  // believing either.
+  // Check the version before `type`: an unknown version means the rest of the
+  // request cannot be trusted either.
   const std::optional<int> version = request->FindInt("version");
   if (version != kCommandVersion) {
     std::move(reply).Run(RefusedCommand(base::StrCat(
@@ -112,11 +109,8 @@ namespace {
 
 std::string AnswerLoadShell(const base::DictValue& request,
                             LoadShell load_shell) {
-  // BOTH HALVES OR NEITHER. A shell is one module and the directory it is
-  // served out of: a new module name against the old root is a 404 and an old
-  // name against a new root is the wrong desktop. `ShellSource::Set` takes the
-  // pair for the same reason, and this is where a request that carries one of
-  // them stops.
+  // Requires both `root` and `module`: changing only one would serve a 404 or
+  // the wrong shell.
   const std::string* root = request.FindString("root");
   if (root == nullptr || root->empty()) {
     return RefusedCommand(
@@ -139,13 +133,9 @@ std::string AnswerLoadShell(const base::DictValue& request,
         "as a name under \"root\"");
   }
 
-  // Nothing here checks that the root exists or that the module is in it, and
-  // that is deliberate rather than missing. `domicile load-shell` resolves a
-  // path in front of the person who typed it -- `shell_path` in
-  // domicile-launch, which has the rules and the tests -- so a typo is
-  // answered at the terminal it was made at. Beyond that the document the
-  // engine writes reports a module that did not load, on the screen, which is
-  // the same failure a shell can reach without this command at all.
+  // The root and module are not checked here. `domicile load-shell` validates
+  // the path first (`shell_path` in domicile-launch), and the shell document
+  // shows an error if the module fails to load.
   if (!load_shell(shell_root, *module)) {
     return RefusedCommand(
         "this engine has no shell window to load a shell into");
@@ -158,10 +148,8 @@ std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
   if (url == nullptr) {
     return RefusedCommand("open_url needs a \"url\": the address to open");
   }
-  // Parsed here rather than by the shell, because a shell handed an address
-  // that is not one opens a window with nothing in it, and whoever ran the
-  // command is told it worked. `domicile open-url` has already made a path a
-  // `file://` URL in front of them; what reaches here unparseable is theirs.
+  // Validated here so an invalid URL is refused instead of opening an empty
+  // window and reporting success.
   const GURL parsed(*url);
   if (!parsed.is_valid()) {
     return RefusedCommand(
@@ -183,8 +171,7 @@ void AnswerScreenshot(const base::DictValue& request,
     return;
   }
   const base::FilePath path = base::FilePath::FromUTF8Unsafe(*file);
-  // For load_shell's reason: the engine's working directory is not the
-  // sender's.
+  // Must be absolute: the engine's working directory is not the sender's.
   if (!path.IsAbsolute()) {
     std::move(reply).Run(RefusedCommand(
         base::StrCat({"\"", *file, "\" is not an absolute path"})));

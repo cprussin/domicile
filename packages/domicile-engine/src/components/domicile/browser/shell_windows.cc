@@ -9,10 +9,8 @@
 namespace domicile {
 namespace {
 
-// Whether `id` is one of `ids`. `base::Contains` is what this would have been;
-// `base/containers/contains.h` is gone from the tree at our pin, and
-// `std::ranges::find` is what the tree reaches for in its place -- the same
-// substitution `shortcut_registry.h` records for the same reason.
+// Whether `id` is one of `ids`. `base/containers/contains.h` is not in the
+// pinned tree.
 bool Holds(const std::vector<int64_t>& ids, int64_t id) {
   return std::ranges::find(ids, id) != ids.end();
 }
@@ -28,8 +26,7 @@ ShellWindowPlan ShellWindowsFor(const std::vector<display::Display>& displays,
     }
   }
   for (int64_t held : windowed) {
-    // A linear scan each way rather than a set built first: a desk is a
-    // handful of monitors, and the set would cost more to build than it saves.
+    // A linear scan is cheaper than a set for a handful of monitors.
     const bool still_here =
         std::ranges::any_of(displays, [held](const display::Display& display) {
           return display.id() == held;
@@ -38,10 +35,8 @@ ShellWindowPlan ShellWindowsFor(const std::vector<display::Display>& displays,
       plan.close.push_back(held);
     }
   }
-  // The last window is kept when nothing is opening to replace it. Closing it
-  // is the browser exiting and the desktop ending -- see the header -- and the
-  // case is an ordinary one: a lid shut on a laptop with nothing plugged in
-  // reports no displays at all.
+  // Keep the last window if nothing replaces it: closing it exits the browser.
+  // A closed laptop lid with no external monitor reports no displays.
   if (plan.open.empty() && plan.close.size() == windowed.size() &&
       !windowed.empty()) {
     plan.close.erase(plan.close.begin());
@@ -64,9 +59,8 @@ std::vector<int64_t> ShellWindowPlaces::Update(
   std::vector<int64_t> windowed;
   windowed.reserve(live.size());
   for (const SightedShellWindow& one : live) {
-    // The record wins where there is one, which is the whole point: a window
-    // that has been seen is on the display it was seen on, whatever its
-    // rectangle reads as in the middle of a hotplug.
+    // Prefer the recorded display: mid-hotplug, a window's bounds may point at
+    // the wrong one.
     const auto known = placed_.find(one.window);
     const int64_t on =
         known == placed_.end() ? one.nearest : known->second.display;
@@ -80,8 +74,7 @@ std::vector<int64_t> ShellWindowPlaces::Update(
       still_here.insert_or_assign(window, known->second);
     }
   }
-  // Assigned rather than merged, so a window the browser no longer has is
-  // gone from here too.
+  // Replace, not merge, to drop windows the browser no longer has.
   placed_ = std::move(still_here);
   return windowed;
 }

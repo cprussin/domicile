@@ -1,24 +1,17 @@
 // Copyright 2026 Connor Prussin
 // SPDX-License-Identifier: MIT
 
-// THROWAWAY. Steps 2 and 3 of the spike in docs/architecture/ENGINE-FORK.md.
+// Spike: checks that viz draws frames from a producer the browser did not
+// launch. Results are in
+// docs/architecture/ENGINE-FORK-MEASUREMENTS.md#getting-a-surface-on-screen.
 //
-// Runs a domicile::spike::SurfaceProducer — a viz client in a process the
-// browser did not launch — and then asks the browser what color it actually
-// drew at the center of its window. Exits 0 only if that color is the one the
-// producer submitted.
+// Runs a domicile::spike::SurfaceProducer, then reads the color at the center
+// of the browser's window. Exits 0 only if it is the color the producer
+// submitted. The embedder is either a ui::LayerSurface in the browser window
+// or a <canvas> in a web page.
 //
-// In step 2 that answered "does viz aggregate frames from a producer that is
-// not a renderer?", against a ui::LayerSurface in the browser's own window. In
-// step 3 the embedder is a <canvas> in an ordinary web page instead, so the
-// same exit code answers "does a page's cc::SurfaceLayer embed a surface the
-// page did not allocate?".
-//
-// Step 4's measurement is domicile_css_parity, which reads CSS rather than one
-// pixel. This stays because it is the evidence steps 2 and 3 are recorded on.
-//
-// packages/domicile-engine/scripts/spike.sh in the Domicile repository runs
-// both halves and has the engine flags this needs.
+// packages/domicile-engine/scripts/spike.sh runs it with the engine flags it
+// needs.
 
 #include <cinttypes>
 #include <cstdint>
@@ -53,17 +46,14 @@ namespace {
 constexpr char kSocketSwitch[] = "domicile-broker-socket";
 constexpr char kColorSwitch[] = "color";
 
-// How long to wait for a page to embed us. The engine has to start, load a
-// page, and the page has to call canvas.embedExternalSurface(); the producer
-// may well win that race, and waiting here rather than failing keeps the
-// ordering out of the harness.
+// How long to wait for a page to embed the surface. The producer often starts
+// before the page calls canvas.embedExternalSurface(), so waiting here keeps
+// the harness from having to order them.
 constexpr base::TimeDelta kEmbedTimeout = base::Seconds(60);
 
 // If no BeginFrame arrives, sample anyway: the first frame is submitted with a
-// manual ack, so there is something to aggregate whether or not viz ever asks
-// for more. Which of the two happened is the interesting part — hierarchy
-// registration is what makes BeginFrames flow, and in step 3 the page is what
-// asks for it — so it is reported either way.
+// manual ack, so there is something to aggregate. Whether BeginFrames flowed is
+// reported because it shows that the page registered the surface hierarchy.
 constexpr base::TimeDelta kBeginFrameGrace = base::Seconds(3);
 constexpr int kSampleTries = 40;
 constexpr base::TimeDelta kSampleInterval = base::Milliseconds(100);

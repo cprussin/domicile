@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# The files this repository's series would change in a checkout at its pin.
+# List the files this series would change in a checkout at its pin.
 #
 #   .github/scripts/engine-series-diff.sh <chromium/src>
 #
 # Prints checkout-relative paths, one per line, sorted. Exits non-zero when the
 # checkout cannot be read, such as one not at this series' pin.
 #
-# FOR A GUESS, NOT A DECISION: engine-tree-pool.sh `compiles` reads it to guess
-# whether a run's compile is cold, and a wrong guess only picks a slower queue.
-# Nothing here decides what is built; `carries` and the apply do.
+# Only a heuristic: engine-tree-pool.sh `compiles` uses it to guess whether a
+# compile is cold, and a wrong guess only picks a slower queue.
 #
-# FILES, NOT PATCHES, because files are what the compiler sees. A rebased
-# series rewrites every patch and usually changes no file. So a patched file
-# is compared by blob: the post-image hash its last patch's `index` line
-# names against the one at the checkout's HEAD. A file the checkout patches
-# and the series does not goes back to upstream, which changes it. A laid-down
-# file is compared by content. A laid-down file the checkout has and the series
-# dropped is not seen: finding one means walking Chromium's untracked files.
+# Compares files, not patches, since a rebased series rewrites patches without
+# changing files. A patched file is compared by the blob hash in its last
+# patch's `index` line. A file the checkout patches and the series does not
+# counts as changed. Laid-down files are compared by content. A laid-down file
+# the series dropped is not detected.
 set -euo pipefail
 
 CHROMIUM="${1:-}"
@@ -31,9 +28,8 @@ PATCHES="$PACKAGE/patches"
 SERIES="$PACKAGE/src"
 PIN="$(grep -v '^#' "$PACKAGE/CHROMIUM_PIN" | tr -d '[:space:]')"
 
-# Every file the patches touch and its final blob, last patch wins. Neither
-# `xargs` nor `cmp` below: neither is on the runner's PATH (see
-# engine-series-stamp.sh's `same_bytes`).
+# Each file the patches touch and its final blob; the last patch wins. No
+# `xargs` or `cmp`, which the runner lacks.
 patched() {
   find "$PATCHES" -name '*.patch' | LC_ALL=C sort |
     while IFS= read -r patch; do cat "$patch"; done |

@@ -1,97 +1,39 @@
 #!/usr/bin/env bash
-# A click inside a browser window, and whether the shell around it is told.
+# Guard: a click in a browser window's page tells the shell, so it can raise
+# the window.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-click.sh /build/chromium/src
 #
-# No nested compositor and no Wayland client, exactly as guard-webview-framing.sh
-# runs: nothing here is measured in pixels, so `--ozone-platform=headless` with
-# software compositing is the whole of the environment.
+# Runs headless with software compositing; nothing here is measured in pixels.
 #
-# WHY THIS EXISTS. Clicking a window raises it, in every desktop there is, and
-# a browser window is the one kind Domicile cannot raise that way on its own:
-# the page in it is a guest with a browsing context of its own, so no pointer
-# event inside it crosses back out to the shell. Every other window is raised
-# by the compositor saying where the keyboard went; a browser window's page
-# never moves it, because that page is inside the chrome's own window.
+# Blink does not send DOM focus events from a cross-process frame to its owner
+# element, so upstream a click in a guest does not reach the shell. Patch 0011
+# focuses the <webview> element and dispatches `domicile-guest-focus` on it,
+# because Blink suppresses ordinary focus events while the embedder's page is
+# unfocused. `BrowserWindow.tsx` raises the window on that event. Its unit test
+# cannot check this: happy-dom has no nested browsing context.
 #
-# What was left to cross was the focus the press takes — and it does not.
-# Upstream Blink says so in `FocusController::SetFocusedFrame`'s own words:
-# "for cross-origin (remote) frames, DOM focus events do not cross process
-# boundaries to reach the frame owner element in the parent document". A guest
-# is exactly such a frame, so the shell heard nothing, and clicking into a
-# browser window left it under whatever was covering it with the rail still
-# highlighting the window before it.
+# Assertions, each meaningful only if the previous one holds:
 #
-# THE FORK ANSWERS IT IN TWO PARTS, AND THIS GUARD IS WHY IT IS TWO. Patch 0011
-# gives the element the focus its guest took, the way upstream already does for
-# a fenced frame — and the first run of this guard, with only that, still read
-# `reach=0`: focusing the element buys `document.activeElement` and not one
-# event, because `Document::SetFocusedElement` dispatches focus events only
-# while the page is focused ("if page lost focus, event will be dispatched on
-# page focus, don't duplicate") and a guest taking focus is precisely the moment
-# the embedder's page has lost it. So the element says so itself, in an event
-# that is not a focus event, and that is what this asserts.
+#   the shell page ran
+#   a press on the strip reached the shell's document (the harness works)
+#   the guest page loaded
+#   the press in the window landed in the guest
+#   the shell's document got the element's event (the claim)
+#   the element is document.activeElement
 #
-# A UNIT TEST CANNOT MAKE THIS CLAIM, and a unit test is what let the defect
-# ship: there is no nested browsing context in happy-dom, so a test that
-# dispatches the event itself passes in `BrowserWindow.test.tsx` whether or not
-# anything real ever sends one. What that test asserts is the shell's half —
-# that an arriving event raises the window — and only a real engine can be
-# asked whether one arrives.
+# Extra readings, which do not decide a pass, say where a failure is: the shell
+# window's `blur` (only fires if `FocusController::SetFocusedFrame` ran here),
+# the guest window's `focus`, and engine log lines around the fork's focus
+# branch and `HTMLWebViewElement::DispatchGuestFocus`.
 #
-# WHAT IT ASSERTS, in order, because each answer is only worth anything if the
-# one before it holds:
+# NEGATIVE=1 clicks the shell's strip instead of the window. Nothing may then
+# reach the element; otherwise the positive run could be measuring the attach,
+# the load, or the shell focusing its own element.
 #
-#   the shell page ran                 or nothing here was ever set up
-#   a press reached the shell's        the harness can deliver a click to this
-#     document                          document at all. Without it, an absence
-#                                       below is not a measurement
-#   there is a page in the window      that a guest was made, attached and
-#                                       navigated
-#   the press landed in the guest      measured in the window's own page: the
-#                                       hit test crossed into it rather than
-#                                       stopping at the element
-#   the shell's document was told      THE CLAIM: the element saying its guest
-#                                       took focus, which is what
-#                                       `BrowserWindow.tsx` raises a window on
-#   the element is activeElement       the other half of what the patch is for,
-#                                       and what upstream's fenced-frame branch
-#                                       names as its reason
-#
-# AND TWO READINGS THAT ARE NOT ASSERTIONS, which exist so that a FAILING run
-# names a side rather than a symptom. "No focus arrived" has two causes that
-# read identically: the browser never told this renderer that focus moved, or
-# it did and nothing came of it in the element. The shell document's own window
-# `blur` separates them — `FocusController::SetFocusedFrame` dispatches it a
-# dozen lines past the fork's branch, so it cannot happen unless that function
-# ran here with the guest's frame. The guest page's own window `focus` asks the
-# same question from the far end. Neither decides a pass; both decide where the
-# next person looks.
-#
-# AND TWO THE ENGINE WRITES ITSELF, for the layer no listener can report.
-# Every reading above is something a document said, so when the element never
-# announces anything they all go quiet at once — and "SetFocused never ran",
-# "it ran and the page heard nothing" and "a handler never returned" become one
-# symptom in three layers. HTMLWebViewElement::DispatchGuestFocus brackets its
-# dispatch with a line either side, and those two separate all three. Engine
-# run 192 is why they exist: it read the element as activeElement with no event
-# anywhere, which said where the fault was not and nothing about where it was.
-#
-# HOW IT CAN FAIL, which is the part a guard is worth nothing without.
-# NEGATIVE=1 runs the same desktop and clicks the shell's own strip instead of
-# the window below it. Nothing may then be reported from the guest and nothing
-# may reach the element — which separates "a press in the guest crossed out"
-# from "this element ends up focused in this configuration whatever anyone
-# clicks", the second of which would pass the positive run while measuring the
-# attach, the load, or a shell that focuses its own element.
-#
-# NOT AN <iframe> IN THE ELEMENT'S PLACE, which is the control the keyboard
-# guard uses and the wrong one here. An ordinary subframe on a domicile://
-# document loads no http page, so it stays same-process and about:blank — and a
-# same-process frame's focus DOES reach its owner, by the same Blink code that
-# says a remote one's does not. A control that fired every time would decide
-# nothing.
+# The control is not an <iframe>: on a domicile:// page it stays same-process,
+# and a same-process frame's focus does reach its owner.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -108,7 +50,7 @@ if [ -z "$CHROMIUM" ]; then
   exit 1
 fi
 
-# NEGATIVE=1 clicks the shell's strip instead of the window. See the header.
+# NEGATIVE=1 runs the control; see the header.
 NEGATIVE="${NEGATIVE:-0}"
 
 OUT="${OUT:-out/Domicile}"
@@ -117,32 +59,24 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-click-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# The shell's own half of the window, in CSS pixels down from the top. The two
-# points the guard clicks are derived from it rather than written down, so the
-# strip and the presses cannot drift apart: one in the middle of the strip, one
-# well inside the window below it.
+# Height of the shell's strip in CSS pixels. Both click points derive from it
+# so they stay in the strip and in the window below it.
 #
-# NOT `STRIP`, WHICH IS A PROGRAM. This runs inside `nix develop .#full`, and
-# that shell exports the toolchain's own names -- CC, LD, AR, STRIP. `${STRIP:-64}`
-# in such a shell keeps `strip`, and the arithmetic below then dereferences it
-# as a variable and dies under `set -u`, four hours into a job on the shared
-# tree. `scripts/test-webview-guard-startup.sh` is what starts every guard here
-# in that environment so the next one fails on this machine instead.
+# Not named `STRIP`: `nix develop .#full` exports STRIP=strip, which breaks the
+# arithmetic below under `set -u`. `scripts/test-webview-guard-startup.sh`
+# catches this class of bug.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
 CHROME_Y=$((STRIP_HEIGHT / 2))
 WINDOW_X=$((WIDTH / 2))
 WINDOW_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 2))
 
-# How long the shell is given to load, ask for a guest, have one attached and
-# navigated. Generous, because every one of those is asynchronous and this
-# machine is shared.
+# Time allowed for the shell to load and attach and navigate a guest. Generous
+# because the build machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
-# A run and its own negative control are two measurements, so they get two sets
-# of logs. Sharing one file means the control's output overwrites the run's and
-# the diagnostics print whichever went last — which, when the two disagree, is
-# exactly the pair worth reading side by side.
+# Separate logs for the control run, so it does not overwrite the positive
+# run's logs.
 WHICH=""
 [ "$NEGATIVE" = "1" ] && WHICH="-negative"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-click$WHICH-engine.log}"
@@ -169,9 +103,7 @@ command -v python3 >/dev/null || {
 
 rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Waits for `$2` to appear in `$3`, for `$1` quarter-seconds. Every gate in this
-# script is a line in a log, because every one of them is something a page or a
-# browser says rather than a file it creates.
+# Waits up to `$1` quarter-seconds for `$2` to appear in `$3`.
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF "$2" "$3" 2>/dev/null && return 0
@@ -180,8 +112,7 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The page a browser window shows. Its own server rather than a real site,
-#    for the reason the framing guard has one: `crux` reaches no arbitrary host.
+# 1. Serve the window's page locally; `crux` cannot reach external hosts.
 rm -f "$HTTP_LOG"
 python3 "$SCRIPTS/guard-webview-guest-page.py" --port 0 \
   >"$HTTP_LOG" 2>&1 &
@@ -199,14 +130,11 @@ PORT="$(served_port "$HTTP_LOG")" || {
 SUBJECT="http://127.0.0.1:$PORT/page"
 echo "serving a browser window's page at $SUBJECT"
 
-# 2. The engine, on a domicile:// document, because the browser binds
-#    WebViewGuestHost for that origin and no other. `--app` for the reason
-#    `domicile` uses it and every guard here repeats: the guard runs the
-#    configuration the product runs, or it is guarding something else.
+# 2. Start the engine on a domicile:// page, the only origin WebViewGuestHost
+#    is bound for. `--app` matches how `domicile` runs it.
 #
-#    `--remote-debugging-port` is how the click gets in. There is no pointer on
-#    this machine; see guard_webview_devtools.py for why the path it takes is
-#    the one the platform's own press would take.
+#    Clicks go in over `--remote-debugging-port`, since there is no pointer;
+#    see guard_webview_devtools.py.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -235,20 +163,16 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
 }
 echo "the shell is up, with a <webview> under a ${STRIP_HEIGHT}px strip"
 
-# 3. There has to be a page in the window before a click in it means anything.
+# 3. Wait for the guest page.
 wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
   echo "nothing ever loaded in the window" >&2
 
-# A press is routed by hit test, and a hit test is answered from the compositor
-# frames the widgets have submitted. The line above says the guest's page ran,
-# which is not the same as its first frame having reached the browser — so a
-# settle, rather than clicking at the moment the page spoke.
+# Hit testing uses submitted compositor frames, and the guest's first frame may
+# lag its load, so settle before clicking.
 sleep 3
 
-# 4. THE BEFORE. A press on the shell's own strip, which this document must
-#    report — and which is what turns the absences below into measurements: a
-#    run where no click reaches this page at all reads exactly like a run where
-#    one did and nothing crossed.
+# 4. Click the shell's strip first. If this does not arrive, the harness is
+#    broken and later absences mean nothing.
 python3 "$SCRIPTS/guard-webview-click-mouse.py" \
   --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
   >"$CLICK_LOG" 2>&1 ||
@@ -257,8 +181,7 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" \
 wait_for_line 20 "GUARD chrome-mousedown" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first click" >&2
 
-# 5. THE CLICK THIS GUARD IS ABOUT: inside the window, where the guest is. Not
-#    driven at all in the control run — that is the control.
+# 5. Click in the guest. The control run skips this.
 if [ "$NEGATIVE" != "1" ]; then
   python3 "$SCRIPTS/guard-webview-click-mouse.py" \
     --port "$DEBUG_PORT" --x "$WINDOW_X" --y "$WINDOW_Y" \
@@ -266,11 +189,8 @@ if [ "$NEGATIVE" != "1" ]; then
     echo "the click into the window could not be driven; see $CLICK_LOG" >&2
 fi
 
-# The press is answered before it is handled: `Input.dispatchMouseEvent` comes
-# back when the event has been forwarded, and what this reads is what the pages
-# logged afterward. A fixed wait rather than a poll on the line that must
-# appear, because the control's readings are ABSENCES, and an absence cannot be
-# waited for — it can only be given time.
+# `Input.dispatchMouseEvent` returns before the pages handle the event. A fixed
+# wait, not a poll, because the control checks for lines that must not appear.
 sleep 5
 
 saw() { # $1 pattern
@@ -281,44 +201,29 @@ SAW_SHELL=$(saw "GUARD shell-loaded")
 SAW_PAGE=$(saw "GUARD guest-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_GUEST=$(saw "GUARD guest-mousedown")
-# `target=webview` and not merely an event: the strip and the body dispatch
-# nothing, so a reach reported about anything else in this document would be a
-# reading about something other than the window.
+# Require `target=webview` so an event from anything else does not count.
 SAW_REACHED=$(saw "GUARD window-reached target=webview")
-# The ordinary focus event, which upstream suppresses here -- the embedder's
-# page has lost focus by the time the element is focused -- and the fork
-# dispatches anyway. A CLAIM beside the element's own announcement: a shell's
-# focus-out dismissal, focus traps and React's onFocus are all written against
-# `focusin`, and none of them can hear the announcement.
+# The ordinary `focusin`, which upstream suppresses here and the fork sends
+# anyway. Asserted because focus traps, focus-out dismissal and React's onFocus
+# listen for it.
 SAW_FOCUSIN=$(saw "GUARD window-focusin target=webview")
-# The claim's own event heard at the element instead of at the document. Only
-# ever read when the claim is missing, and then it is the whole difference
-# between a dispatch that did not travel and one that did not happen.
+# The same event heard at the element. Read only when the document missed it,
+# to tell "did not bubble" from "never fired".
 SAW_AT_ELEMENT=$(saw "GUARD window-reached-at-element")
 SAW_ACTIVE=$(saw "GUARD window-active")
-# WHICH SIDE OF THE PROCESS BOUNDARY A MISSING REACH IS ON, and the only pair
-# of readings that can say. The shell document's window is blurred by
-# `FocusController::SetFocusedFrame` itself, a dozen lines past the fork's
-# branch -- so a blur means the browser DID tell this renderer that focus moved
-# and the branch is where to look, and no blur means it never told it and no
-# renderer-side patch can be the answer. The guest's own window focus is the
-# same question asked from the far end.
+# Which side of the process boundary a missing event is on. A shell window
+# blur comes from `FocusController::SetFocusedFrame`, so it means the browser
+# told this renderer that focus moved. The guest's window focus asks the same
+# from the other side.
 SAW_BLUR=$(saw "GUARD shell-window-blur")
 SAW_GUEST_FOCUS=$(saw "GUARD guest-window-focus")
-# AND THE ENGINE'S OWN TWO LINES, which are the readings the page cannot give.
-# Every reading above is something a listener in a document said, so all of
-# them go quiet together when the element never announces anything -- and
-# "HTMLWebViewElement::SetFocused never ran" then reads exactly like "it ran
-# and the page heard nothing", in two different layers. These bracket the
-# dispatch: the first is written before it and the second after it.
+# Engine log lines written before and after the dispatch. They tell "never
+# dispatched" from "dispatched and unheard" from "a handler did not return".
 SAW_ANNOUNCING=$(saw "domicile: a <webview>'s guest took focus")
 SAW_ANNOUNCED=$(saw "domicile: announced a <webview>'s guest focus")
-# AND THE TWO STEPS BEFORE THAT, for the same reason one step further back.
-# Run 193 read the element as activeElement with announcing=0, which says
-# SetFocused did not run on this subclass and says nothing about why: the
-# fork's branch in SetFocusedFrame may never have run, the owner may not have
-# cast to a <webview>, Document::SetFocusedElement may have refused, or the
-# override may not be on the path at all. These are the branch saying so.
+# Engine log lines from the fork's branch in SetFocusedFrame, to locate a
+# failure before the dispatch: branch not reached, focus refused, or the
+# SetFocused override not called.
 SAW_BRANCH=$(saw "domicile: focus reached a frame owned by <webview>")
 SAW_FOCUSED_IT=$(saw "domicile: focused the <webview> the guest hangs off: 1")
 SAW_SET_FOCUSED=$(saw "domicile: <webview> SetFocused received=1")
@@ -334,16 +239,9 @@ echo "where focus went, as this document saw it:"
 grep -F "GUARD shell-focus-state" "$ENGINE_LOG" 2>/dev/null | tail -6 | sed 's/^/  /'
 echo
 
-# WHICH END TO BLAME, and it is the whole of this script's judgment. Six
-# readings and two modes make more answers than a person reading an annotation
-# can be expected to reconstruct, and most of the failures read alike and mean
-# different things — so they are decided here, in a block
-# `scripts/test-webview-click-guard.sh` runs directly, rather than inferred from
-# a grep by whoever opens the job.
-#
-# The order is the order the readings depend on each other in: a run where the
-# page never ran has established nothing, and a run where no press reached this
-# document is not a run about what crosses into it.
+# Turn the readings into one verdict naming where the failure is.
+# `scripts/test-webview-click-guard.sh` tests this block. Checks run in
+# dependency order: a later reading means nothing if an earlier one failed.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# chrome://history, asked for in a browser window.
+# Checks that chrome://history in a browser window is refused.
 #
-# A page that took a desktop down: HistoryUI looks its tab up unconditionally,
-# and a <webview>'s guest is in no tab strip. Patch 0083 refuses a guest every
-# page Chrome serves itself. Headless and software-composited like the Escape
-# guard.
+# HistoryUI assumes a tab, and a <webview> guest has none, so it crashes the
+# desktop. Patch 0083 refuses guests every page Chrome serves itself. Headless
+# and software-composited.
 #
-# Its control navigates the same window to an ordinary page instead, which
-# must load and must not be refused.
+# The control navigates to an ordinary page, which must load.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

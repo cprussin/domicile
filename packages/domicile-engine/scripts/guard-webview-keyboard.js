@@ -1,54 +1,40 @@
-// The shell guard-webview-keyboard.sh drives: one browser window, holding the
-// keyboard, with a desktop chord claimed over it.
+// The shell module guard-webview-keyboard.sh loads: one browser window holding
+// the keyboard, with a desktop chord claimed over it.
 //
-// A module rather than a page, because that is what a shell is here — the
-// engine writes the document and loads exactly one module into it, so a guard
-// that shipped its own HTML would be running a configuration the product does
-// not have. See ShellURLLoaderFactory::ShellDocument. It has to be a
-// domicile:// document for two further reasons: the browser binds
-// WebViewGuestHost only for the shell's origin, so a <webview> anywhere else
-// cannot ask for a guest at all, and it binds the control channel the same way,
-// so the desktop is handed to no other page.
+// It must be a domicile:// document: the browser binds WebViewGuestHost and
+// the control channel only for the shell's origin. See
+// ShellURLLoaderFactory::ShellDocument.
 //
-// ?kind= is the experiment, exactly as it is in guard-webview-framing.js.
-// `webview` puts a guest behind the element, which is what makes the browser
-// process the layer above the focused page; `iframe` puts an ordinary subframe
-// there, which takes the keyboard just as thoroughly and has no guest delegate
-// behind it — so the chord must NOT fire, and that is the negative control.
+// ?kind= picks the element, as in guard-webview-framing.js. `webview` puts a
+// guest behind it, so the browser process handles keys above the focused page.
+// `iframe` is the negative control: it takes the keyboard but has no guest
+// delegate, so the chord must not fire.
 //
-// WHAT THIS PAGE SAYS, all of it to the console, which the engine writes to its
-// own log:
+// Console output, which the engine writes to its log:
 //
-//   GUARD claimed                 the chord was claimed, so a run where nothing
-//                                 fires is not a run where nothing was asked
-//   GUARD window-focused          the element is this document's activeElement,
-//                                 so the keyboard has left the shell
+//   GUARD claimed                 the chord was claimed
+//   GUARD window-focused          the element is this document's activeElement
 //   GUARD shortcut keycode=…      a claimed chord came back up the control
-//                                 channel. This is the whole claim of the guard
-//   GUARD modifiers alt=…         the seat's modifiers, which the shell cannot
-//                                 read off a DOM event while a window has the
-//                                 keyboard — Alt-dragging a float is why
-//   GUARD document-keydown code=… a key reached the SHELL's document. Over a
-//                                 browser window this must not happen, and its
-//                                 absence beside the guest page's own
-//                                 `guest-keydown` is what says an unhandled
-//                                 key stops at the window
-//   GUARD guest-chord key=…       a chord the guest's page left alone, handed
-//                                 back to this document on the element as
-//                                 `domicile-guest-keydown` — the only way a
-//                                 browser window's Ctrl+R reaches its chrome.
-//                                 A plain key must never produce one
+//                                 channel
+//   GUARD modifiers alt=…         the seat's modifiers, which the shell
+//                                 cannot read from DOM events while a window
+//                                 has the keyboard (needed to Alt-drag a float)
+//   GUARD document-keydown code=… a key reached the shell's document. Must
+//                                 not happen over a browser window
+//   GUARD guest-chord key=…       a chord the guest page did not handle, sent
+//                                 to the element as `domicile-guest-keydown`.
+//                                 This is how a browser window's Ctrl+R
+//                                 reaches the shell. A plain key must never
+//                                 produce one
 //   GUARD zoom factor=…           the zoom the browser reports after the first
-//                                 guest chord asked for 150%
+//                                 guest chord set 150%
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
-// the module has loaded.
+// The engine's document calls `Shell` once the module loads.
 
 export const Shell = (_root, desktop) => {
   /**
-   * A query parameter this cannot run without. Missing means the guard invoked
-   * this wrongly, and a default would turn that into a measurement of something
-   * nobody asked for.
+   * Reads a required query parameter. No default, so a misconfigured guard
+   * fails instead of measuring the wrong thing.
    */
   const required = (parameters, name) => {
     const value = parameters.get(name);
@@ -60,10 +46,8 @@ export const Shell = (_root, desktop) => {
   };
 
   /**
-   * The element under test. Not `document.createElement(kind)` on whatever the
-   * query said: an unknown tag would become an HTMLUnknownElement with no nested
-   * context at all, and the run would report "no chord fired" about an element
-   * that never took the keyboard in the first place.
+   * Creates the element under test. Rejects unknown kinds, which would become
+   * an HTMLUnknownElement that never takes the keyboard.
    */
   const buildView = (kind) => {
     switch (kind) {
@@ -94,23 +78,19 @@ export const Shell = (_root, desktop) => {
   view.style.blockSize = "100%";
   view.style.border = "0";
 
-  // The shell's own keyboard, which is one of the two paths this is about. It
-  // works today and keeps working over a `<domicile-app>`; over a browser window
-  // it hears nothing, because DOM focus has left this document entirely.
+  // The shell's own keyboard. Over a browser window it hears nothing, because
+  // DOM focus has left this document.
   //
-  // AND IT IS ALSO THE CONTROL FOR THE OTHER HALF. "The shell did not see the
-  // key" means nothing unless this harness can deliver one here at all, so the
-  // guard presses a key BEFORE the window takes focus and this is what must
-  // report it. Taking the keyboard is therefore triggered by that keystroke
-  // rather than done at startup.
+  // It also proves the harness can deliver keys here: the guard presses a key
+  // before the window takes focus, and that keystroke triggers taking the
+  // keyboard.
   document.addEventListener("keydown", (event) => {
     say(`document-keydown code=${event.code} alt=${event.altKey}`);
     takeTheKeyboard();
   });
 
-  // Alt+Tab, in the evdev codes the control channel speaks, and named the way
-  // `Shell.tsx` names it: every modifier, including the three that must not be
-  // held, because the match is on the whole combination.
+  // Alt+Tab as evdev codes, as `Shell.tsx` names it. Lists every modifier
+  // because the match is on the whole combination.
   const ALT_TAB = {
     altKey: true,
     ctrlKey: false,
@@ -121,10 +101,8 @@ export const Shell = (_root, desktop) => {
 
   const host = desktop;
   if (host === null || host === undefined) {
-    // Loud rather than a page that quietly measures nothing: without the control
-    // channel there is no claim to make and no leg for a press to come back on,
-    // and every assertion below would be absent for a reason that is not the one
-    // the guard is asking about.
+    // Without the control channel every reading below would be missing for an
+    // unrelated reason, so fail loudly.
     throw new Error(
       "guard-webview-keyboard: no desktop was handed to Shell, so this document" +
         " was not served by the forked engine",
@@ -145,9 +123,8 @@ export const Shell = (_root, desktop) => {
     );
   });
 
-  // A chord the page did not take for itself, handed back by the guest's
-  // delegate. The first one also zooms the page, so the run can read whether the
-  // zoom arrives — on the element, and as the page's own width changing.
+  // A chord the guest page did not handle, returned by the guest's delegate.
+  // The first one also zooms the page, so the run can check the zoom arrives.
   let zoomed = false;
   view.addEventListener("domicile-guest-keydown", (event) => {
     say(
@@ -167,30 +144,19 @@ export const Shell = (_root, desktop) => {
   host.grabShortcut(ALT_TAB);
   say(`claimed keycode=${ALT_TAB.keycode}`);
 
-  // Last, and this is the order that matters: `src` is what makes a <webview> ask
-  // for a guest, and setting it before the element is in the document would ask
-  // before there is a frame to attach one to.
+  // Set `src` after attaching: it requests a guest, which needs a frame.
   document.body.append(view);
   view.setAttribute("src", required(parameters, "src"));
 
-  // AFTER THE FIRST KEYSTROKE, NOT AT STARTUP. Handing the window the keyboard
-  // is what `BrowserWindow.tsx` does when a browser window becomes the one the
-  // user is working in, and it is the thing under test — so it happens between
-  // the guard's two keystrokes, which is what makes the pair a before and an
-  // after rather than two readings of the same state.
+  // Focuses the window, as `BrowserWindow.tsx` does. Runs between the guard's
+  // two keystrokes so they read before and after.
   //
-  // On an interval once it starts, because there is no moment here that is known
-  // to be after the guest exists: attaching is asynchronous, the element is told
-  // nothing when it finishes, and focusing an element whose page is not there yet
-  // moves nothing.
+  // Repeats on an interval: attaching is asynchronous and signals nothing, and
+  // focusing an element before its page exists does nothing.
   //
-  // `document.activeElement` is what says it landed, and it is asked HERE rather
-  // than answered by the page in the window. A page reports its own focus only
-  // when the browser's window is active, and this browser has no display for a
-  // window to be active on — so a run that waited on the far side would wait for
-  // ever on a keyboard that had in fact arrived. This document's own idea of
-  // where focus went does not depend on any of that, and it is exactly the state
-  // the shell puts the element in.
+  // Checks `document.activeElement` here, not focus in the guest page. A page
+  // reports focus only when the browser window is active, and headless has no
+  // display to make it active.
   let announced = false;
   let taking = false;
   const takeTheKeyboard = () => {
@@ -206,10 +172,7 @@ export const Shell = (_root, desktop) => {
     }
   };
 
-  // And on a timer as well, so that a harness which delivers no key events to
-  // this document at all still reaches the rest of the run. That run establishes
-  // less — the guard says so, in as many words — but establishing less is not the
-  // same as hanging, and the claims about the chord are not the ones that need a
-  // keystroke here.
+  // Also on a timer, so a harness that delivers no keys to this document still
+  // finishes the run. The guard reports that run as weaker.
   setTimeout(takeTheKeyboard, 5000);
 };
